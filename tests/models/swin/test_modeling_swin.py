@@ -175,8 +175,7 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    fx_compatible = True
-    fx_trace_can_be_torchscripted = False
+    fx_compatible = -1
 
     test_pruning = False
     test_resize_embeddings = False

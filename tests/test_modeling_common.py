@@ -714,7 +714,9 @@ class ModelTesterMixin:
         self._create_and_check_torch_fx_tracing(config, inputs_dict, output_loss=True)
 
     def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
-        if not is_torch_fx_available() or not self.fx_compatible:
+        fx_compatible = self.fx_compatible if isinstance(self.fx_compatible, bool) else self.fx_compatible != 0
+        fx_trace_can_be_torchscripted = self.fx_compatible != -1
+        if not is_torch_fx_available() or not fx_compatible:
             return
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
@@ -785,7 +787,7 @@ class ModelTesterMixin:
                 )
 
             # Test that the model can be TorchScripted
-            if self.fx_trace_can_be_torchscripted:
+            if fx_trace_can_be_torchscripted:
                 try:
                     scripted = torch.jit.script(traced_model)
                 except Exception as e:
