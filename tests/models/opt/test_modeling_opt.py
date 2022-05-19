@@ -269,7 +269,6 @@ def _long_tensor(tok_lst):
 class OPTModelIntegrationTests(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
-        # model is not deterministic on GPU, not sure why
         model = OPTModel.from_pretrained("facebook/opt-350m").to(torch_device)
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
 
