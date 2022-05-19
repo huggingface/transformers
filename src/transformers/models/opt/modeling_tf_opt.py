@@ -787,10 +787,10 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            dropout_probability = random.uniform(0, 1)
+            # dropout_probability = random.uniform(0, 1)
 
-            if training and (dropout_probability < self.layerdrop):
-                continue
+            # if training and (dropout_probability < self.layerdrop):
+            #     continue
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
