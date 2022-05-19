@@ -1,7 +1,7 @@
-import types
+from typing import Union
 
 from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging
-from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Dataset, Pipeline
+from .base import PIPELINE_INIT_ARGS, Pipeline
 
 
 if is_vision_available():
@@ -13,59 +13,6 @@ if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING
 
 logger = logging.get_logger(__name__)
-
-
-class VisualQuestionAnsweringArgumentHandler(ArgumentHandler):
-    """
-    VisualQuestionAnsweringPipeline requires the user to provide multiple arguments (i.e. question & image) to be
-    mapped to an input dict of {"image": ..., "question": ...}
-    """
-
-    def __call__(self, *args, **kwargs):
-        # Detect where the actual inputs are
-        if args is not None and len(args) > 0:
-            if len(args) == 1:
-                pipeline_inputs = args[0]
-                if isinstance(pipeline_inputs, Dataset) or isinstance(pipeline_inputs, types.GeneratorType):
-                    return pipeline_inputs
-                elif isinstance(pipeline_inputs, dict):
-                    pipeline_inputs = [pipeline_inputs]
-                for pipeline_input in pipeline_inputs:
-                    if not isinstance(pipeline_input, dict):
-                        raise ValueError("Input is expected to be type `List[Dict[str, Union(str, Image.Image)]]`")
-                    question = pipeline_input.get("question", None)
-                    image = pipeline_input.get("image", None)
-                    if not isinstance(question, str):
-                        raise ValueError(
-                            "`question` is a required key in each input dict and expected value type is `str`"
-                        )
-                    if not (isinstance(image, str) or isinstance(image, Image.Image)):
-                        raise ValueError(
-                            "`image` is a required key in each input dict and expected value type is `str` or"
-                            " `Image.Image`"
-                        )
-            else:
-                raise ValueError("Please use keyword arguments `question` and `image`")
-        elif "question" in kwargs and "image" in kwargs:
-            if isinstance(kwargs["question"], list) and (
-                isinstance(kwargs["image"], str) or isinstance(kwargs["image"], Image.Image)
-            ):
-                pipeline_inputs = [{"question": Q, "image": kwargs["image"]} for Q in kwargs["question"]]
-            elif isinstance(kwargs["question"], str) and isinstance(kwargs["image"], list):
-                pipeline_inputs = [{"question": kwargs["question"], "image": image} for image in kwargs["image"]]
-            elif isinstance(kwargs["question"], list) and isinstance(kwargs["image"], list):
-                if len(kwargs["question"]) != len(kwargs["image"]):
-                    raise ValueError("Questions and images don't have the same lengths")
-                pipeline_inputs = [{"question": Q, "image": C} for Q, C in zip(kwargs["question"], kwargs["image"])]
-            elif isinstance(kwargs["question"], str) and (
-                isinstance(kwargs["image"], str) or isinstance(kwargs["image"], Image.Image)
-            ):
-                pipeline_inputs = [{"question": kwargs["question"], "image": kwargs["image"]}]
-            else:
-                raise ValueError("Arguments can't be understood")
-        else:
-            raise ValueError(f"Unknown arguments {kwargs}")
-        return pipeline_inputs
 
 
 @add_end_docstrings(PIPELINE_INIT_ARGS)
@@ -82,9 +29,8 @@ class VisualQuestionAnsweringPipeline(Pipeline):
     pipeline is added
     """
 
-    def __init__(self, args_parser=VisualQuestionAnsweringArgumentHandler(), *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._args_parser = args_parser
         self.check_model_type(MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING)
 
     def _sanitize_parameters(self, top_k=None, padding=None, truncation=None, **kwargs):
@@ -97,15 +43,12 @@ class VisualQuestionAnsweringPipeline(Pipeline):
             postprocess_params["top_k"] = top_k
         return preprocess_params, {}, postprocess_params
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, image: Union[Image.Image, str], question: str = None, **kwargs):
         r"""
         Answers open-ended questions about images. The pipeline accepts several types of inputs which are detailed
         below:
 
         - `pipeline(image=image, question=question)`
-        - `pipeline(image=[image], question=[question])`
-        - `pipeline(image=[image, image], question=[question])`
-        - `pipeline(image=[image], question=[question, question])`
         - `pipeline({"image": image, "question": question})`
         - `pipeline([{"image": image, "question": question}])`
         - `pipeline([{"image": image, "question": question}, {"image": image, "question": question}])`
@@ -131,15 +74,23 @@ class VisualQuestionAnsweringPipeline(Pipeline):
             - **label** (`str`) -- The label identified by the model.
             - **score** (`int`) -- The score attributed by the model for that label.
         """
-
-        pipeline_inputs = self._args_parser(*args, **kwargs)
-        results = super().__call__(pipeline_inputs, **kwargs)
+        if isinstance(image, (Image.Image, str)) and isinstance(question, str):
+            inputs_ = {"image": image, "question": question}
+        else:
+            """
+            Supports the following format
+            - {"image": image, "question": question}
+            - [{"image": image, "question": question}]
+            - Generator and datasets
+            """
+            inputs_ = image
+        results = super().__call__(inputs_, **kwargs)
         return results
 
-    def preprocess(self, pipeline_input, padding=False, truncation=False):
-        image = load_image(pipeline_input["image"])
+    def preprocess(self, inputs, padding=False, truncation=False):
+        image = load_image(inputs["image"])
         model_inputs = self.tokenizer(
-            pipeline_input["question"], return_tensors=self.framework, padding=padding, truncation=truncation
+            inputs["question"], return_tensors=self.framework, padding=padding, truncation=truncation
         )
         image_features = self.feature_extractor(images=image, return_tensors=self.framework)
         model_inputs.update(image_features)
@@ -161,4 +112,4 @@ class VisualQuestionAnsweringPipeline(Pipeline):
 
         scores = scores.tolist()
         ids = ids.tolist()
-        return [{"score": score, "label": self.model.config.id2label[_id]} for score, _id in zip(scores, ids)]
+        return [{"score": score, "answer": self.model.config.id2label[_id]} for score, _id in zip(scores, ids)]
