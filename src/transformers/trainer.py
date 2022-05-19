@@ -2198,8 +2198,6 @@ class Trainer:
                 ctx_manager = torchdynamo.optimize("eager")
             elif self.args.torchdynamo == "nvfuser":
                 ctx_manager = torchdynamo.optimize(aot_autograd_speedup_strategy)
-            elif self.args.torchdynamo is not None:
-                raise ValueError("torchdynamo training arg can be eager/nvfuser")
         return ctx_manager
 
     def autocast_smart_context_manager(self):
