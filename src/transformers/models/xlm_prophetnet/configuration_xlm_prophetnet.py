@@ -22,14 +22,19 @@ from ..prophetnet.configuration_prophetnet import ProphetNetConfig
 logger = logging.get_logger(__name__)
 
 XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/xprophetnet-large-wiki100-cased": "https://huggingface.co/microsoft/xprophetnet-large-wiki100-cased/resolve/main/config.json",
+    "microsoft/xprophetnet-large-wiki100-cased": (
+        "https://huggingface.co/microsoft/xprophetnet-large-wiki100-cased/resolve/main/config.json"
+    ),
 }
 
 
 class XLMProphetNetConfig(ProphetNetConfig):
     """
     This class overrides [`ProphetNetConfig`]. Please check the superclass for the appropriate documentation alongside
-    usage examples.
+    usage examples. Instantiating a configuration with the defaults will yield a similar configuration to that of the
+    XLMProphetNet
+    [microsoft/xprophetnet-large-wiki100-cased](https://huggingface.co/microsoft/xprophetnet-large-wiki100-cased)
+    architecture.
     """
 
     model_type = "xlm-prophetnet"

@@ -22,6 +22,8 @@ from typing import Dict, Optional, Tuple
 
 import tensorflow as tf
 
+from transformers.tf_utils import stable_softmax
+
 from ...activations_tf import get_tf_activation
 from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, keras_serializable, shape_list, unpack_inputs
 from ...utils import (
@@ -302,7 +304,7 @@ class TFLxmertAttention(tf.keras.layers.Layer):
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
-        attention_probs = tf.nn.softmax(attention_scores, axis=-1)
+        attention_probs = stable_softmax(attention_scores, axis=-1)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
