@@ -1625,6 +1625,50 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss)
 
     @require_torch_gpu
+    @require_torchdynamo
+    def test_torchdynamo_memory(self):
+        class MyModule(torch.nn.Module):
+            """Simple module that does aggressive fusion"""
+
+            def __init__(self):
+                super().__init__()
+
+            def forward(self, x):
+                for _ in range(10):
+                    x = torch.sin(x)
+                return x
+
+        mod = MyModule()
+        a = torch.randn(1024, 1024, device="cuda", requires_grad=True)
+
+        # 1. Default - without TorchDynamo
+        a.grad = None
+        trainer = Trainer(model=mod)
+        peak_mem_at_start = torch.cuda.max_memory_allocated()
+        orig_loss = trainer.training_step(mod, {"x": a})
+        peak_mem_at_end = torch.cuda.max_memory_allocated()
+        orig_peak_mem = peak_mem_at_end - peak_mem_at_start
+        del trainer
+        gc.collect()
+
+        # 2. TorchDynamo nvfuser
+        a.grad = None
+        args = TrainingArguments(output_dir="None", torchdynamo="nvfuser")
+        trainer = Trainer(model=mod, args=args)
+
+        peak_mem_at_start = torch.cuda.max_memory_allocated()
+        loss = trainer.training_step(mod, {"x": a})
+        peak_mem_at_end = torch.cuda.max_memory_allocated()
+        peak_mem = peak_mem_at_end - peak_mem_at_start
+
+        # Functional check
+        self.assertAlmostEqual(loss, orig_loss)
+
+        # AOT Autograd recomputaion and nvfuser recomputation optimization
+        # aggressively fuses the operations and reduce the memory footprint.
+        self.assertGreater(orig_peak_mem, peak_mem * 5)
+
+    @require_torch_gpu
     @require_torch_bf16
     def test_bf16_full_eval(self):
         # note: most of the logic is the same as test_fp16_full_eval
