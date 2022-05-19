@@ -26,6 +26,7 @@ from ..models.m2m_100 import M2M100OnnxConfig
 from ..models.marian import MarianOnnxConfig
 from ..models.mbart import MBartOnnxConfig
 from ..models.mobilebert import MobileBertOnnxConfig
+from ..models.mobilevit import MobileViTOnnxConfig
 from ..models.roberta import RobertaOnnxConfig
 from ..models.roformer import RoFormerOnnxConfig
 from ..models.t5 import T5OnnxConfig
@@ -326,6 +327,9 @@ class FeaturesManager:
             "token-classification",
             "question-answering",
             onnx_config_cls=MobileBertOnnxConfig,
+        ),
+        "mobilevit": supported_features_mapping(
+            "default", "image-classification", onnx_config_cls=MobileViTOnnxConfig
         ),
         "m2m-100": supported_features_mapping(
             "default", "default-with-past", "seq2seq-lm", "seq2seq-lm-with-past", onnx_config_cls=M2M100OnnxConfig

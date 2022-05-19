@@ -241,6 +241,7 @@ _import_structure = {
     "models.mluke": [],
     "models.mmbt": ["MMBTConfig"],
     "models.mobilebert": ["MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileBertConfig", "MobileBertTokenizer"],
+    "models.mobilevit": ["MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileViTConfig"],
     "models.mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetTokenizer"],
     "models.mt5": ["MT5Config"],
     "models.nystromformer": [
@@ -593,6 +594,7 @@ else:
     _import_structure["models.layoutlmv2"].append("LayoutLMv2Processor")
     _import_structure["models.layoutxlm"].append("LayoutXLMProcessor")
     _import_structure["models.maskformer"].append("MaskFormerFeatureExtractor")
+    _import_structure["models.mobilevit"].append("MobileViTFeatureExtractor")
     _import_structure["models.perceiver"].append("PerceiverFeatureExtractor")
     _import_structure["models.poolformer"].append("PoolFormerFeatureExtractor")
     _import_structure["models.segformer"].append("SegformerFeatureExtractor")
@@ -1301,6 +1303,15 @@ else:
             "MobileBertModel",
             "MobileBertPreTrainedModel",
             "load_tf_weights_in_mobilebert",
+        ]
+    )
+    _import_structure["models.mobilevit"].extend(
+        [
+            "MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MobileViTForImageClassification",
+            "MobileViTForSemanticSegmentation",
+            "MobileViTModel",
+            "MobileViTPreTrainedModel",
         ]
     )
     _import_structure["models.mpnet"].extend(
@@ -2771,6 +2782,7 @@ if TYPE_CHECKING:
     from .models.megatron_bert import MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MegatronBertConfig
     from .models.mmbt import MMBTConfig
     from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer
+    from .models.mobilevit import MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileViTConfig
     from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
     from .models.mt5 import MT5Config
     from .models.nystromformer import NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, NystromformerConfig
@@ -3072,6 +3084,7 @@ if TYPE_CHECKING:
         from .models.layoutlmv2 import LayoutLMv2FeatureExtractor, LayoutLMv2Processor
         from .models.layoutxlm import LayoutXLMProcessor
         from .models.maskformer import MaskFormerFeatureExtractor
+        from .models.mobilevit import MobileViTFeatureExtractor
         from .models.perceiver import PerceiverFeatureExtractor
         from .models.poolformer import PoolFormerFeatureExtractor
         from .models.segformer import SegformerFeatureExtractor
@@ -3666,6 +3679,13 @@ if TYPE_CHECKING:
             MobileBertModel,
             MobileBertPreTrainedModel,
             load_tf_weights_in_mobilebert,
+        )
+        from .models.mobilevit import (
+            MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MobileViTForImageClassification,
+            MobileViTForSemanticSegmentation,
+            MobileViTModel,
+            MobileViTPreTrainedModel,
         )
         from .models.mpnet import (
             MPNET_PRETRAINED_MODEL_ARCHIVE_LIST,
