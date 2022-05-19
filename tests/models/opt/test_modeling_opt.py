@@ -268,6 +268,7 @@ def _long_tensor(tok_lst):
 @require_torch
 class OPTModelIntegrationTests(unittest.TestCase):
     @slow
+    @unittest.skipIf(torch_device != "cpu", "Output not deterministic on GPU")
     def test_inference_no_head(self):
         model = OPTModel.from_pretrained("facebook/opt-350m").to(torch_device)
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
@@ -279,7 +280,6 @@ class OPTModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.tensor(
             [[-0.2873, -1.9242, -0.3059], [-1.2738, -0.1333, -0.1877], [0.4116, 0.1192, -1.3107]],
-#            [[-0.2873, -1.9218, -0.3033], [-1.2710, -0.1338, -0.1902], [0.4095, 0.1214, -1.3121]],
             device=torch_device,
         )
         assert_tensors_close(output[0, :3, :3], expected_slice, atol=1e-3)

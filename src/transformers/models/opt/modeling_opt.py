@@ -85,10 +85,10 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
 
 
-def make_positions(mask, padding_idx: int):
+def make_positions(mask):
     """Replace non-padding symbols with their position numbers.
 
-    Position numbers begin at padding_idx+1. Padding symbols are ignored.
+    Position numbers begin at. Padding symbols are ignored.
     """
     # The series of casts and type-conversions here are carefully
     # balanced to both work with ONNX export and XLA. In particular XLA
@@ -105,9 +105,9 @@ class OPTLearnedPositionalEmbedding(nn.Embedding):
     the forward function.
     """
 
-    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int = 1):
+    def __init__(self, num_embeddings: int, embedding_dim: int):
         self.offset = 2
-        super().__init__(num_embeddings + self.offset, embedding_dim, padding_idx)
+        super().__init__(num_embeddings + self.offset, embedding_dim)
 
     def forward(self, attention_mask: Tensor, positions: Optional[Tensor] = None):
         # attention_masks is expected to be of size [batch_size x seq_len].
@@ -115,19 +115,9 @@ class OPTLearnedPositionalEmbedding(nn.Embedding):
             raise ValueError("If positions is pre-computed then padding_idx should not be set.")
 
         if positions is None:
-            attention_mask = attention_mask.long()
-            positions = make_positions(attention_mask, self.padding_idx)
+            positions = make_positions(attention_mask.long())
 
         return super().forward(positions + self.offset)
-#        return F.embedding(
-#            positions,
-#            self.weight,
-#            self.padding_idx,
-#            self.max_norm,
-#            self.norm_type,
-#            self.scale_grad_by_freq,
-#            self.sparse,
-#        )
 
 
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->OPT
@@ -500,9 +490,7 @@ class OPTDecoder(OPTPreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.word_embed_proj_dim, self.padding_idx)
-
-        # OPT is set up so that if padding_idx is specified then offset the embedding ids by 2
-        self.embed_positions = OPTLearnedPositionalEmbedding(config.max_position_embeddings, config.hidden_size, self.padding_idx)
+        self.embed_positions = OPTLearnedPositionalEmbedding(config.max_position_embeddings, config.hidden_size)
 
         if config.word_embed_proj_dim != config.hidden_size:
             self.project_out = nn.Linear(config.hidden_size, config.word_embed_proj_dim, bias=False)
