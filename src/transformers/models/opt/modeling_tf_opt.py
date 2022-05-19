@@ -812,7 +812,7 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
 
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
-            
+
         if not return_dict:
             return tuple(
                 v for v in [hidden_states, present_key_values, all_hidden_states, all_self_attns] if v is not None
@@ -957,8 +957,6 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
             "past": past_key_values,
             "use_cache": use_cache,
         }
-
-
 
     @unpack_inputs
     def call(
