@@ -271,14 +271,25 @@ class OPTModelIntegrationTests(unittest.TestCase):
     def test_inference_no_head(self):
         model = OPTModel.from_pretrained("facebook/opt-350m").to(torch_device)
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
+
         with torch.no_grad():
             output = model(input_ids=input_ids).last_hidden_state
+
         expected_shape = torch.Size((1, 11, 512))
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.tensor(
-            [[-0.2867, -1.9256, -0.3062], [-1.2711, -0.1337, -0.1897], [0.4109, 0.1187, -1.3142]], device=torch_device
+            [[-0.2873, -1.9242, -0.3059], [-1.2738, -0.1333, -0.1877], [0.4116, 0.1192, -1.3107]],
+            device=torch_device,
         )
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-3))
+        # Getting different logits results on GPU depending on PyTorch version (1.10+cu11.0 vs. 1.11+cu11.4)
+        # and results also differ between CPU and GPU. Only on CPU it seems to be deterministic.
+
+        # It's not because the weights are saved & loaded in FP16
+        # checked that the same happens when weights are stored in fp32 and loaded in fp32.
+        # The differences start to creep in in the first linear projection matrix project_in_dim
+        # It however also happens for BART (maybe related to training model in fp16?)
+        atol = 1e-2 if torch_device != "cpu" else 1e-3
+        assert_tensors_close(output[0, :3, :3], expected_slice, atol=atol)
 
 
 @require_torch
