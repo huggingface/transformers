@@ -107,7 +107,7 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeline
         )
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
-            [{"score": 0.8799, "answer": "2"}, {"score": 0.296, "answer": "1"}] * 2,
+            [[{"score": 0.8799, "answer": "2"}, {"score": 0.296, "answer": "1"}]] * 2,
         )
 
     @require_tf

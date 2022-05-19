@@ -43,7 +43,7 @@ class VisualQuestionAnsweringPipeline(Pipeline):
             postprocess_params["top_k"] = top_k
         return preprocess_params, {}, postprocess_params
 
-    def __call__(self, image: Union[Image.Image, str], question: str = None, **kwargs):
+    def __call__(self, image: Union["Image.Image", str], question: str = None, **kwargs):
         r"""
         Answers open-ended questions about images. The pipeline accepts several types of inputs which are detailed
         below:

@@ -123,6 +123,7 @@ logger = logging.get_logger(__name__)
 TASK_ALIASES = {
     "sentiment-analysis": "text-classification",
     "ner": "token-classification",
+    "vqa": "visual-question-answering",
 }
 SUPPORTED_TASKS = {
     "audio-classification": {
