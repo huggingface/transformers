@@ -1525,7 +1525,7 @@ class Trainer:
 
             steps_in_epoch = (
                 len(epoch_iterator)
-                if len_dataloader is not None
+                if not isinstance(self.train_dataset, torch.utils.data.IterableDataset) 
                 else args.max_steps * args.gradient_accumulation_steps
             )
             self.control = self.callback_handler.on_epoch_begin(args, self.state, self.control)
