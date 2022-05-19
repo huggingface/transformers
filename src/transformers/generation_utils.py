@@ -217,8 +217,8 @@ class BeamSearchDecoderOnlyOutput(ModelOutput):
             `(max_length-input_ids.shape[-1],)`-shaped tuple of `torch.FloatTensor` with each tensor of shape
             `(batch_size*num_beams*num_return_sequences, config.vocab_size)`).
         beam_indices (`tuple(tuple(torch.LongTensor))`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
-            Beam indices of generated token id at each generation step. `(batch_size*num_return_sequences)`-shaped
-            tuple of `(max_length-input_ids.shape[-1],)`-shaped tuples of scalar `torch.LongTensor` tensors.
+            Beam indices of generated token id at each generation step. `torch.LongTensor` of shape
+            `(batch_size*num_return_sequences, input_ids.shape[-1])`.
         attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size*num_beams, num_heads, generated_length, sequence_length)`.
@@ -230,7 +230,7 @@ class BeamSearchDecoderOnlyOutput(ModelOutput):
     sequences: torch.LongTensor = None
     sequences_scores: Optional[torch.FloatTensor] = None
     scores: Optional[Tuple[torch.FloatTensor]] = None
-    beam_indices: Optional[Tuple[Tuple[torch.LongTensor]]] = None
+    beam_indices: Optional[torch.LongTensor] = None
     attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
 
@@ -254,8 +254,8 @@ class BeamSearchEncoderDecoderOutput(ModelOutput):
             `(max_length-1,)`-shaped tuple of `torch.FloatTensor` with each tensor of shape `(batch_size*num_beams,
             config.vocab_size)`).
         beam_indices (`tuple(tuple(torch.LongTensor))`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
-            Beam indices of generated token id at each generation step. `(batch_size*num_return_sequences)`-shaped
-            tuple of `(max_length-1,)`-shaped tuples of scalar `torch.LongTensor` tensors.
+            Beam indices of generated token id at each generation step. `torch.LongTensor` of shape
+            `(batch_size*num_return_sequences, max_length-1)`.
         attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
         encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer of the decoder) of shape `(batch_size, num_heads,
@@ -278,7 +278,7 @@ class BeamSearchEncoderDecoderOutput(ModelOutput):
     sequences: torch.LongTensor = None
     sequences_scores: Optional[torch.FloatTensor] = None
     scores: Optional[Tuple[torch.FloatTensor]] = None
-    beam_indices: Optional[Tuple[Tuple[torch.LongTensor]]] = None
+    beam_indices: Optional[torch.LongTensor] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
@@ -303,8 +303,8 @@ class BeamSampleDecoderOnlyOutput(ModelOutput):
             `(max_length-input_ids.shape[-1],)`-shaped tuple of `torch.FloatTensor` with each tensor of shape
             `(batch_size*num_beams*num_return_sequences, config.vocab_size)`).
         beam_indices (`tuple(tuple(torch.LongTensor))`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
-            Beam indices of generated token id at each generation step. `(batch_size*num_return_sequences)`-shaped
-            tuple of `(max_length-input_ids.shape[-1],)`-shaped tuples of scalar `torch.LongTensor` tensors.
+            Beam indices of generated token id at each generation step. `torch.LongTensor` of shape
+            `(batch_size*num_return_sequences, input_ids.shape[-1])`.
         attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size*num_beams, num_heads, generated_length, sequence_length)`.
@@ -316,7 +316,7 @@ class BeamSampleDecoderOnlyOutput(ModelOutput):
     sequences: torch.LongTensor = None
     sequences_scores: Optional[torch.FloatTensor] = None
     scores: Optional[Tuple[torch.FloatTensor]] = None
-    beam_indices: Optional[Tuple[Tuple[torch.LongTensor]]] = None
+    beam_indices: Optional[torch.LongTensor] = None
     attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
 
@@ -339,9 +339,9 @@ class BeamSampleEncoderDecoderOutput(ModelOutput):
             of log probabilities of tokens conditioned on log softmax of previously generated tokens in this beam.
             `(max_length-1,)`-shaped tuple of `torch.FloatTensor` with each tensor of shape `(batch_size*num_beams,
             config.vocab_size)`).
-        beam_indices (`tuple(tuple(torch.LongTensor))`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
-            Beam indices of generated token id at each generation step. `(batch_size*num_return_sequences)`-shaped
-            tuple of `(max_length-1,)`-shaped tuples of scalar `torch.LongTensor` tensors.
+        beam_indices (`torch.LongTensor`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
+            Beam indices of generated token id at each generation step. `torch.LongTensor` of shape
+            `(batch_size*num_return_sequences, max_length-1)`.
         encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer of the decoder) of shape `(batch_size, num_heads,
             sequence_length, sequence_length)`.
@@ -362,7 +362,7 @@ class BeamSampleEncoderDecoderOutput(ModelOutput):
     sequences: torch.LongTensor = None
     sequences_scores: Optional[torch.FloatTensor] = None
     scores: Optional[Tuple[torch.FloatTensor]] = None
-    beam_indices: Optional[Tuple[Tuple[torch.LongTensor]]] = None
+    beam_indices: Optional[torch.LongTensor] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
@@ -811,32 +811,33 @@ class GenerationMixin:
         """compute the transition probabilities of sequences given generation
         scores and beam indices"""
 
-        # reshape scores as [vocab_size * batch_size, # generation steps]
+        # 1. reshape scores as [vocab_size * batch_size, # generation steps]
         # with batch_size being 2 * vocab_size and # generation steps being
         # seq_len - input_length
         scores = torch.stack(scores).reshape(len(scores), -1).transpose(0, 1)
 
-        # start of generated tokens
-        cut_idx = sequences.shape[-1] - scores.shape[-1]
-        # adjust for beam indices
-        beam_sequence_indices = torch.tensor(beam_indices, device=sequences.device) * self.config.vocab_size
-        # compute real indices
-        indices = sequences[:, cut_idx:] + beam_sequence_indices
-        # gather scores and run
-        transition_scores = scores.gather(0, indices)
-        # make sure that if EOS token was used before length of sequence `sequence.shape[-1]`
-        # get first occurence of EOS token
-        eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
+        # 2. cut beam_indices to longest beam length
+        beam_indices_mask = beam_indices < 0
+        max_beam_length = (1 - beam_indices_mask.long()).sum(-1).max()
+        beam_indices = beam_indices[:, :max_beam_length]
+        beam_indices_mask = beam_indices_mask[:, :max_beam_length]
 
-        if eos_token_id is not None:
-            is_eos_token_id = sequences[:, cut_idx:] == eos_token_id
-            # make sure first eos token still contributes to transition probs
-            is_eos_token_id[:, -1] = False
-            is_eos_token_id = is_eos_token_id.roll(1, -1)
-            # all indices after eos shoud be masked
-            zero_transition_prob_mask = is_eos_token_id.cumsum(-1).bool()
-            # zero out padded probs
-            transition_scores.masked_fill_(zero_transition_prob_mask, 0.0)
+        # 3. Set indices of beams that finished early to 0
+        # such indices will be masked correctly afterwards
+        beam_indices[beam_indices_mask] = 0
+
+        # 4. multiply beam_indices with vocab size to gather correctly from scores
+        beam_sequence_indices = beam_indices * self.config.vocab_size
+
+        # 5. Define which indices contributed to scores
+        cut_idx = sequences.shape[-1] - max_beam_length
+        indices = sequences[:, cut_idx:] + beam_sequence_indices
+
+        # 6. Compute scores
+        transition_scores = scores.gather(0, indices)
+
+        # 7. Mask out transition_scores of beams that stopped early
+        transition_scores[beam_indices_mask] = 0
 
         return transition_scores
 
@@ -2256,6 +2257,7 @@ class GenerationMixin:
                 next_indices,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
+                beam_indices=beam_indices,
             )
 
             beam_scores = beam_outputs["next_beam_scores"]
@@ -2290,25 +2292,19 @@ class GenerationMixin:
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
             max_length=stopping_criteria.max_length,
+            beam_indices=beam_indices,
         )
 
         if return_dict_in_generate:
             if not output_scores:
                 sequence_outputs["sequence_scores"] = None
-            else:
-                num_return_sequences = beam_scorer.num_beam_hyps_to_keep
-                # return only as many indices as sequences
-                beam_indices = tuple(
-                    (beam_indices[i * num_beams : i * num_beams + num_return_sequences] for i in range(batch_size))
-                )
-                beam_indices = sum(beam_indices, ())
 
             if self.config.is_encoder_decoder:
                 return BeamSearchEncoderDecoderOutput(
                     sequences=sequence_outputs["sequences"],
                     sequences_scores=sequence_outputs["sequence_scores"],
                     scores=scores,
-                    beam_indices=beam_indices,
+                    beam_indices=sequence_outputs["beam_indices"],
                     encoder_attentions=encoder_attentions,
                     encoder_hidden_states=encoder_hidden_states,
                     decoder_attentions=decoder_attentions,
@@ -2320,7 +2316,7 @@ class GenerationMixin:
                     sequences=sequence_outputs["sequences"],
                     sequences_scores=sequence_outputs["sequence_scores"],
                     scores=scores,
-                    beam_indices=beam_indices,
+                    beam_indices=sequence_outputs["beam_indices"],
                     attentions=decoder_attentions,
                     hidden_states=decoder_hidden_states,
                 )
@@ -2580,6 +2576,7 @@ class GenerationMixin:
                 next_indices,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
+                beam_indices=beam_indices,
             )
             beam_scores = beam_outputs["next_beam_scores"]
             beam_next_tokens = beam_outputs["next_beam_tokens"]
@@ -2613,25 +2610,19 @@ class GenerationMixin:
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
             max_length=stopping_criteria.max_length,
+            beam_indices=beam_indices,
         )
 
         if return_dict_in_generate:
             if not output_scores:
                 sequence_outputs["sequence_scores"] = None
-            else:
-                num_return_sequences = beam_scorer.num_beam_hyps_to_keep
-                # return only as many indices as sequences
-                beam_indices = tuple(
-                    (beam_indices[i * num_beams : i * num_beams + num_return_sequences] for i in range(batch_size))
-                )
-                beam_indices = sum(beam_indices, ())
 
             if self.config.is_encoder_decoder:
                 return BeamSampleEncoderDecoderOutput(
                     sequences=sequence_outputs["sequences"],
                     sequences_scores=sequence_outputs["sequence_scores"],
                     scores=scores,
-                    beam_indices=beam_indices,
+                    beam_indices=sequence_outputs["beam_indices"],
                     encoder_attentions=encoder_attentions,
                     encoder_hidden_states=encoder_hidden_states,
                     decoder_attentions=decoder_attentions,
@@ -2643,7 +2634,7 @@ class GenerationMixin:
                     sequences=sequence_outputs["sequences"],
                     sequences_scores=sequence_outputs["sequence_scores"],
                     scores=scores,
-                    beam_indices=beam_indices,
+                    beam_indices=sequence_outputs["beam_indices"],
                     attentions=decoder_attentions,
                     hidden_states=decoder_hidden_states,
                 )
@@ -2909,6 +2900,7 @@ class GenerationMixin:
                 next_tokens = next_tokens % vocab_size
 
                 # stateless
+                process_beam_indices = sum(beam_indices, ()) if beam_indices is not None else None
                 beam_outputs = beam_scorer.process(
                     group_input_ids,
                     next_token_scores,
@@ -2916,6 +2908,7 @@ class GenerationMixin:
                     next_indices,
                     pad_token_id=pad_token_id,
                     eos_token_id=eos_token_id,
+                    beam_indices=process_beam_indices,
                 )
                 beam_scores[batch_group_indices] = beam_outputs["next_beam_scores"]
                 beam_next_tokens = beam_outputs["next_beam_tokens"]
@@ -2971,6 +2964,7 @@ class GenerationMixin:
                 else:
                     this_peer_finished = True
 
+        final_beam_indices = sum(beam_indices, ()) if beam_indices is not None else None
         sequence_outputs = beam_scorer.finalize(
             input_ids,
             beam_scores,
@@ -2979,26 +2973,19 @@ class GenerationMixin:
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
             max_length=stopping_criteria.max_length,
+            beam_indices=final_beam_indices,
         )
 
         if return_dict_in_generate:
             if not output_scores:
                 sequence_outputs["sequence_scores"] = None
-            else:
-                beam_indices = sum(beam_indices, ())
-                num_return_sequences = beam_scorer.num_beam_hyps_to_keep
-                # return only as many indices as sequences
-                beam_indices = tuple(
-                    (beam_indices[i * num_beams : i * num_beams + num_return_sequences] for i in range(batch_size))
-                )
-                beam_indices = sum(beam_indices, ())
 
             if self.config.is_encoder_decoder:
                 return BeamSearchEncoderDecoderOutput(
                     sequences=sequence_outputs["sequences"],
                     sequences_scores=sequence_outputs["sequence_scores"],
                     scores=scores,
-                    beam_indices=beam_indices,
+                    beam_indices=sequence_outputs["beam_indices"],
                     encoder_attentions=encoder_attentions,
                     encoder_hidden_states=encoder_hidden_states,
                     decoder_attentions=decoder_attentions,
@@ -3010,6 +2997,7 @@ class GenerationMixin:
                     sequences=sequence_outputs["sequences"],
                     sequences_scores=sequence_outputs["sequence_scores"],
                     scores=scores,
+                    beam_indices=sequence_outputs["beam_indices"],
                     attentions=decoder_attentions,
                     hidden_states=decoder_hidden_states,
                 )
