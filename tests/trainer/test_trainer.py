@@ -1598,7 +1598,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     @require_torch_gpu
     @require_torchdynamo
     def test_torchdynamo_full_eval(self):
-        debug = 0
         n_gpus = get_gpu_count()
 
         bs = 8

@@ -377,12 +377,7 @@ def is_torch_tpu_available():
 
 
 def is_torchdynamo_available():
-    try:
-        import torchdynamo
-
-        return True
-    except ImportError:
-        return False
+    return importlib.util.find_spec("torchdynamo") is not None
 
 
 def is_datasets_available():
