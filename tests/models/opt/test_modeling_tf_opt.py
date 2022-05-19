@@ -421,36 +421,3 @@ class FlaxOPTGenerationTest(unittest.TestCase):
         output_sequences = xla_generate(self.prompts).sequences
         output_string = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
         self.assertIsNotNone(output_string, EXPECTED_OUTPUTS)
-
-    # @slow
-    # def test_lm_generate_gpt2_sample_xla(self):
-    #     # NOTE: due to the small numerical differences that are natural when we compile to XLA, sampling the same
-    #     # output out of the same seed is far from guaranteed. We can, however, confirm that the results are sensible
-    #     # and that we can seed both versions.
-
-    #     # forces the generation to happen on CPU, to avoid GPU-related quirks
-    #     with tf.device(":/CPU:0"):
-    #         model = TFOPTForCausalLM.from_pretrained(self.path_model, from_pt=True)
-    #         tokenizer = GPT2Tokenizer.from_pretrained(self.path_model)
-
-    #         tokenizer.pad_token = tokenizer.eos_token
-    #         tokenizer.padding_side = "left"
-
-    #         sentence = ["The dog"]
-    #         expected_output_string = [
-    #             "The dog owner asked why did our vet decide there needed to be extra ventilation inside because most"
-    #             " puppies"
-    #         ]
-    #         expected_output_string_xla = [
-    #             "The dog has been named in connection with the murder of a 20-year-old man in!"
-    #         ]
-    #         input_ids = tokenizer(sentence, return_tensors="tf", padding=True).input_ids
-
-    #         output_ids = model.generate(input_ids, do_sample=True, seed=[7, 0])
-    #         output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
-    #         self.assertListEqual(output_strings, expected_output_string)
-
-    #         xla_generate = tf.function(model.generate, jit_compile=True)
-    #         output_ids = xla_generate(input_ids, do_sample=True, seed=[7, 0])
-    #         output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
-    #         self.assertListEqual(output_strings, expected_output_string_xla)

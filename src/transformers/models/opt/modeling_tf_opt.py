@@ -84,7 +84,7 @@ def make_positions(mask, padding_idx: int):
 
     Position numbers begin at padding_idx+1. Padding symbols are ignored.
     """
-    positions = tf.math.cumsum(mask, axis=1) + padding_idx
+    positions = tf.cast(tf.math.cumsum(mask, axis=1),tf.int64)*mask + padding_idx
     return positions
 
 
@@ -913,9 +913,6 @@ class TFOPTModel(TFPreTrainedModel):
 )
 class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
     config: OPTConfig
-    _keys_to_ignore_on_load_unexpected = [
-        r"decoder.embed_tokens.weight",
-    ]
 
     def __init__(self, config: OPTConfig, load_weight_prefix=None, **kwargs):
         super().__init__(config, **kwargs)
@@ -1029,8 +1026,6 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
                 for more detail.
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-
-        Returns:
 
         Example:
 
