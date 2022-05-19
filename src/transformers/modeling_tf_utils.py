@@ -919,9 +919,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         Args:
             dataset (`Any`):
                 A `datasets.Dataset` to be wrapped as a `tf.data.Dataset`.
-            batch_size (`int`, defaults to *8*):
+            batch_size (`int`, defaults to 8):
                 The size of batches to return.
-            shuffle (`bool`, defaults to *True*):
+            shuffle (`bool`, defaults to `True`):
                 Whether to return samples from the dataset in random order. Usually `True` for training datasets and
                 `False` for validation/test datasets.
             tokenizer ([`PreTrainedTokenizerBase`], *optional*):
