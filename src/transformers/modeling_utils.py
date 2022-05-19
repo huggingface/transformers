@@ -1759,7 +1759,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             offload_folder (`str` or `os.PathLike`, *optional*):
                 If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
             offload_state_dict (`bool`, *optional*, defaults to `False`):
-                If `True`, will temporarily offload the CPU state dict on the hard drive to avoig getting out of CPU
+                If `True`, will temporarily offload the CPU state dict to the hard drive to avoid getting out of CPU
                 RAM if the weight of the CPU state dict + the biggest shard does not fit.
 
             kwargs (remaining dictionary of keyword arguments, *optional*):
