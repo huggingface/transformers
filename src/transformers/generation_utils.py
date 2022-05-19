@@ -1450,7 +1450,6 @@ class GenerationMixin:
             if stopping_criteria.max_length is None:
                 raise ValueError("`max_length` needs to be a stopping_criteria for now.")
 
-
             if log_decoder:
                 logger.info("Running beam search")
 
