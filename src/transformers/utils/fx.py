@@ -756,25 +756,35 @@ class HFTracer(Tracer):
             for name, (_, orig) in self.patched_torch_methods.items():
                 setattr(torch, name, orig)
 
-        if version.parse(importlib_metadata.version("torch")) < version.parse("1.12"):
-            # This is necessary because concrete args are added as input to the traced module since
-            # https://github.com/pytorch/pytorch/pull/55888.
-            for node in self.graph.nodes:
-                if node.op == "placeholder":
-                    # Removing default values for inputs as the forward pass will fail with them.
-                    if node.target in input_names:
-                        node.args = ()
-                        # Without this, torch.jit.script fails because the inputs type is Optional[torch.Tensor].
-                        # It cannot infer on the attributes and methods the input should have, and fails.
-                        node.type = torch.Tensor
-                    # It is a concrete arg so it is not used and should be removed.
-                    else:
-                        self.graph.erase_node(node)
+        # This is necessary because concrete args are added as input to the traced module since
+        # https://github.com/pytorch/pytorch/pull/55888.
+        for node in self.graph.nodes:
+            if node.op == "placeholder":
+                # Removing default values for inputs as the forward pass will fail with them.
+                if node.target in input_names:
+                    node.args = ()
+                    # Without this, torch.jit.script fails because the inputs type is Optional[torch.Tensor].
+                    # It cannot infer on the attributes and methods the input should have, and fails.
+                    node.type = torch.Tensor
+                # It is a concrete arg so it is not used and should be removed.
+                else:
+                    if hasattr(torch.fx._symbolic_trace, "_assert_is_none"):
+                        # Newer versions of torch.fx emit an assert statement
+                        # for concrete arguments; delete those before we delete
+                        # the concrete arg.
+                        to_delete = []
+                        for user in node.users:
+                            if user.target == torch.fx._symbolic_trace._assert_is_none:
+                                to_delete.append(user)
+                        for user in to_delete:
+                            self.graph.erase_node(user)
 
-                # TODO: solves GraphModule creation.
-                # Without this, return type annotation "Tuple" is causing code execution failure.
-                if node.op == "output":
-                    node.type = None
+                    self.graph.erase_node(node)
+
+            # TODO: solves GraphModule creation.
+            # Without this, return type annotation "Tuple" is causing code execution failure.
+            if node.op == "output":
+                node.type = None
 
         return self.graph
 
