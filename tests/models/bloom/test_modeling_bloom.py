@@ -358,9 +358,7 @@ class BloomModelLanguageGenerationTest(unittest.TestCase):
         gradient_checkpointing=False,
         verify_outputs=True,
     ):
-        model = BloomForCausalLM.from_pretrained(
-            "bloom",
-        )
+        model = BloomForCausalLM.from_pretrained("bloom")
         if gradient_checkpointing:
             model.gradient_checkpointing_enable()
         else:
@@ -648,28 +646,9 @@ class BloomEmbeddingTest(unittest.TestCase):
             },
         }
 
-        EXAMPLE_IDS = [
-            3478,
-            368,
-            109586,
-            35433,
-            2,
-            77,
-            132619,
-            3478,
-            368,
-            109586,
-            35433,
-            2,
-            2175,
-            23714,
-            73173,
-            144252,
-            2,
-            77,
-            132619,
-            3478,
-        ]
+        # fmt: off
+        EXAMPLE_IDS = [3478, 368, 109586, 35433, 2, 77, 132619, 3478, 368, 109586, 35433, 2, 2175, 23714, 73173, 144252, 2, 77, 132619, 3478]
+        # fmt: on
 
         EMBEDDINGS_DS_AFTER_LN_MEAN = {
             3478: -6.580352783203125e-05,
@@ -753,31 +732,9 @@ class BloomEmbeddingTest(unittest.TestCase):
         model = BloomModel.from_pretrained(self.path_bigscience_model, use_cache=False).to(device)
         model.eval()
 
-        EXAMPLE_IDS = [
-            3478,
-            368,
-            109586,
-            35433,
-            2,
-            77,
-            132619,
-            3478,
-            368,
-            109586,
-            35433,
-            2,
-            2175,
-            23714,
-            73173,
-            144252,
-            2,
-            77,
-            132619,
-            3478,
-        ]
-
-        # a = torch.randn(1, 1, 20, 20)
-        # ATTN_MASK = (torch.triu(a, diagonal=1) != 0).to(device)
+        # fmt: off
+        EXAMPLE_IDS = [3478, 368, 109586, 35433, 2, 77, 132619, 3478, 368, 109586, 35433, 2, 2175, 23714, 73173, 144252, 2, 77, 132619, 3478]
+        # fmt: on
 
         MEAN_VALUE_LAST_LM = -4.3392181396484375e-05
         MIN_MAX_DICT = {"min": -2.0625, "max": 2.75}
@@ -805,28 +762,9 @@ class BloomEmbeddingTest(unittest.TestCase):
         model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, use_cache=False).to(device)
         model.eval()
 
-        EXAMPLE_IDS = [
-            3478,
-            368,
-            109586,
-            35433,
-            2,
-            77,
-            132619,
-            3478,
-            368,
-            109586,
-            35433,
-            2,
-            2175,
-            23714,
-            73173,
-            144252,
-            2,
-            77,
-            132619,
-            3478,
-        ]
+        # fmt: off
+        EXAMPLE_IDS = [3478, 368, 109586, 35433, 2, 77, 132619, 3478, 368, 109586, 35433, 2, 2175, 23714, 73173, 144252, 2, 77, 132619, 3478]
+        # fmt: on
 
         MEAN_LOGITS_GPU_1 = -1.823902130126953e-05
         MEAN_LOGITS_GPU_2 = 1.9431114196777344e-05
