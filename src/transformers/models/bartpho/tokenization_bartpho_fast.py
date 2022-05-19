@@ -32,11 +32,11 @@ else:
 
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "tokenizer_file": "tokenizer.json"}
+VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model_vi", "tokenizer_file": "tokenizer.json"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "vinai/bartpho-syllable": "https://huggingface.co/vinai/bartpho-syllable/resolve/main/sentencepiece.bpe.model",
+        "vinai/bartpho-syllable": "https://huggingface.co/vinai/bartpho-syllable/resolve/main/sentencepiece.bpe.model_vi",
     },
     "tokenizer_file": {
         "vinai/bartpho-syllable": "https://huggingface.co/vinai/bartpho-syllable/resolve/main/tokenizer.json",
@@ -44,10 +44,6 @@ PRETRAINED_VOCAB_FILES_MAP = {
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"vinai/bartpho-syllable": 1024}
-
-# fmt: off
-FAIRSEQ_LANGUAGE_CODES = ["ar_AR", "cs_CZ", "de_DE", "en_XX", "es_XX", "et_EE", "fi_FI", "fr_XX", "gu_IN", "hi_IN", "it_IT", "ja_XX", "kk_KZ", "ko_KR", "lt_LT", "lv_LV", "my_MM", "ne_NP", "nl_XX", "ro_RO", "ru_RU", "si_LK", "tr_TR", "vi_VN", "zh_CN"]
-# fmt: on
 
 
 class BartphoTokenizerFast(PreTrainedTokenizerFast):
@@ -104,7 +100,6 @@ class BartphoTokenizerFast(PreTrainedTokenizerFast):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = BartphoTokenizer
 
     def __init__(
         self,
@@ -137,10 +132,6 @@ class BartphoTokenizerFast(PreTrainedTokenizerFast):
 
         self.vocab_file = vocab_file
         self.can_save_slow_tokenizer = False if not self.vocab_file else True
-
-        self.lang_code_to_id = {
-            lang_code: self.convert_tokens_to_ids(lang_code) for lang_code in FAIRSEQ_LANGUAGE_CODES
-        }
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None

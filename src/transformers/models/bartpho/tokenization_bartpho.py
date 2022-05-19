@@ -29,19 +29,18 @@ logger = logging.get_logger(__name__)
 
 SPIECE_UNDERLINE = "▁"
 
-VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
+VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "monolingual_vocab_file": "dict.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "vinai/bartpho-syllable": "https://huggingface.co/vinai/bartpho-syllable/resolve/main/sentencepiece.bpe.model",
     },
+    "monolingual_vocab_file": {
+        "vinai/bartpho-syllable": "https://huggingface.co/vinai/bartpho-syllable/resolve/main/dict.txt",
+    },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"vinai/bartpho-syllable": 1024}
-
-# fmt: off
-FAIRSEQ_LANGUAGE_CODES = ["ar_AR", "cs_CZ", "de_DE", "en_XX", "es_XX", "et_EE", "fi_FI", "fr_XX", "gu_IN", "hi_IN", "it_IT", "ja_XX", "kk_KZ", "ko_KR", "lt_LT", "lv_LV", "my_MM", "ne_NP", "nl_XX", "ro_RO", "ru_RU", "si_LK", "tr_TR", "vi_VN", "zh_CN"]
-# fmt: on
 
 
 class BartphoTokenizer(PreTrainedTokenizer):
@@ -53,7 +52,11 @@ class BartphoTokenizer(PreTrainedTokenizer):
 
     Args:
         vocab_file (`str`):
-            Path to the vocabulary file.
+            Path to the vocabulary file. This vocabulary is the pre-trained SentencePiece model available from the
+            multilingual XLM-RoBERTa, also used in mBART, consisting of 250K types.
+        monolingual_vocab_file (`str`):
+            Path to the monolingual vocabulary file. This monolingual vocabulary consists of Vietnamese-specialized
+            types extracted from the multilingual vocabulary vocab_file of 250K types.
         bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
 
@@ -120,6 +123,7 @@ class BartphoTokenizer(PreTrainedTokenizer):
     def __init__(
         self,
         vocab_file,
+        monolingual_vocab_file,
         bos_token="<s>",
         eos_token="</s>",
         sep_token="</s>",
@@ -147,30 +151,27 @@ class BartphoTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
+        self.vocab_file = vocab_file
+        self.monolingual_vocab_file = monolingual_vocab_file
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(str(vocab_file))
-        self.vocab_file = vocab_file
 
-        # Original fairseq vocab and spm vocab must be "aligned":
-        # Vocab    |    0    |    1    |   2    |    3    |  4  |  5  |  6  |   7   |   8   |  9
-        # -------- | ------- | ------- | ------ | ------- | --- | --- | --- | ----- | ----- | ----
-        # fairseq  | '<s>'   | '<pad>' | '</s>' | '<unk>' | ',' | '.' | '▁' | 's'   | '▁de' | '-'
-        # spm      | '<unk>' | '<s>'   | '</s>' | ','     | '.' | '▁' | 's' | '▁de' | '-'   | '▁a'
+        # Load the reduced vocab
 
-        # Mimic fairseq token-to-id alignment for the first 4 token
-        self.fairseq_tokens_to_ids = {"<s>": 0, "<pad>": 1, "</s>": 2, "<unk>": 3}
+        # Keep order of special tokens for backward compatibility
+        self.fairseq_tokens_to_ids = {}
+        cnt = 0
+        for token in [bos_token, pad_token, eos_token, unk_token, sep_token, cls_token]:
+            if str(token) not in self.fairseq_tokens_to_ids:
+                self.fairseq_tokens_to_ids[str(token)] = cnt
+                cnt += 1
+        with open(monolingual_vocab_file, "r", encoding="utf-8") as f:
+            for line in f.readlines():
+                token = line.strip().split()[0]
+                self.fairseq_tokens_to_ids[token] = len(self.fairseq_tokens_to_ids)
+        if str(mask_token) not in self.fairseq_tokens_to_ids:
+            self.fairseq_tokens_to_ids[str(mask_token)] = len(self.fairseq_tokens_to_ids)
 
-        # The first "real" token "," has position 4 in the original fairseq vocab and position 3 in the spm vocab
-        self.fairseq_offset = 1
-
-        self.sp_model_size = len(self.sp_model)
-        self.lang_code_to_id = {
-            code: self.sp_model_size + i + self.fairseq_offset for i, code in enumerate(FAIRSEQ_LANGUAGE_CODES)
-        }
-        self.id_to_lang_code = {v: k for k, v in self.lang_code_to_id.items()}
-        self.fairseq_tokens_to_ids["<mask>"] = len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset
-
-        self.fairseq_tokens_to_ids.update(self.lang_code_to_id)
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
 
     def __getstate__(self):
@@ -194,7 +195,7 @@ class BartphoTokenizer(PreTrainedTokenizer):
     ) -> List[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. A BARTpho sequence has the following format:
+        adding special tokens. An BARTPho sequence has the following format:
 
         - single sequence: `<s> X </s>`
         - pair of sequences: `<s> A </s></s> B </s>`
@@ -247,7 +248,7 @@ class BartphoTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. BARTpho does not
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. BARTPho does not
         make use of token type ids, therefore a list of zeros is returned.
 
         Args:
@@ -270,7 +271,7 @@ class BartphoTokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self):
-        return len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset + 1  # Plus 1 for the mask token
+        return len(self.fairseq_ids_to_tokens)
 
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
@@ -284,16 +285,12 @@ class BartphoTokenizer(PreTrainedTokenizer):
         """Converts a token (str) in an id using the vocab."""
         if token in self.fairseq_tokens_to_ids:
             return self.fairseq_tokens_to_ids[token]
-        spm_id = self.sp_model.PieceToId(token)
-
-        # Need to return unknown token if the SP model returned 0
-        return spm_id + self.fairseq_offset if spm_id else self.unk_token_id
+        else:
+            return self.unk_token_id
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
-        if index in self.fairseq_ids_to_tokens:
-            return self.fairseq_ids_to_tokens[index]
-        return self.sp_model.IdToPiece(index - self.fairseq_offset)
+        return self.fairseq_ids_to_tokens[index]
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (strings for sub-words) in a single string."""
@@ -307,6 +304,10 @@ class BartphoTokenizer(PreTrainedTokenizer):
         out_vocab_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
         )
+        out_monolingual_vocab_file = os.path.join(
+            save_directory,
+            (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["monolingual_vocab_file"],
+        )
 
         if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file) and os.path.isfile(self.vocab_file):
             copyfile(self.vocab_file, out_vocab_file)
@@ -315,4 +316,14 @@ class BartphoTokenizer(PreTrainedTokenizer):
                 content_spiece_model = self.sp_model.serialized_model_proto()
                 fi.write(content_spiece_model)
 
-        return (out_vocab_file,)
+        if os.path.abspath(self.monolingual_vocab_file) != os.path.abspath(
+            out_monolingual_vocab_file
+        ) and os.path.isfile(self.monolingual_vocab_file):
+            copyfile(self.monolingual_vocab_file, out_monolingual_vocab_file)
+        elif not os.path.isfile(self.monolingual_vocab_file):
+            with open(out_monolingual_vocab_file, "w", encoding="utf-8") as fp:
+                for token in self.fairseq_tokens_to_ids:
+                    if token not in self.all_special_tokens:
+                        fp.write(f"{str(token)} \n")
+
+        return out_vocab_file, out_monolingual_vocab_file

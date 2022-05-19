@@ -70,7 +70,10 @@ Tips:
 >>> print(tokenizer.decode(predictions).split())
 ```
 
-- This implementation is only for tokenization.
+- This implementation is only for tokenization: "monolingual_vocab_file" consists of Vietnamese-specialized types
+  extracted from the pre-trained SentencePiece model "vocab_file" that is available from the multilingual XLM-RoBERTa.
+  Other languages, if employing this pre-trained multilingual SentencePiece model "vocab_file" for subword
+  segmentation, can reuse BartphoTokenizer with their own language-specialized "monolingual_vocab_file".
 
 This model was contributed by [dqnguyen](https://huggingface.co/dqnguyen). The original code can be found [here](https://github.com/VinAIResearch/BARTpho).
 
