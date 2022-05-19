@@ -288,10 +288,9 @@ class TFOPTHeadTests(unittest.TestCase):
 @require_sentencepiece
 @require_tf
 class OPTModelIntegrationTests(unittest.TestCase):
-
-    # @slow
+    @slow
     def test_inference_no_head(self):
-        model = TFOPTModel.from_pretrained("facebook/opt-350m", from_pt=True)
+        model = TFOPTModel.from_pretrained("facebook/opt-350m")
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         attention_mask = tf.not_equal(input_ids, model.config.pad_token_id)
         with tf.GradientTape():
@@ -316,12 +315,12 @@ class TFOPTEmbeddingsTest(unittest.TestCase):
 
     def test_load_model(self):
         try:
-            _ = TFOPTForCausalLM.from_pretrained(self.path_model, from_pt=True)
+            _ = TFOPTForCausalLM.from_pretrained(self.path_model)
         except BaseException:
             self.fail("Failed loading model")
 
     def test_logits(self):
-        model = TFOPTForCausalLM.from_pretrained(self.path_model, from_pt=True)
+        model = TFOPTForCausalLM.from_pretrained(self.path_model)
         tokenizer = GPT2Tokenizer.from_pretrained(self.path_model)
 
         prompts = [
