@@ -34,20 +34,23 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"tokenizer_file": "tokenizer.json"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
-    "main_location": {
-        "bigscience/tokenizer": "bigscience/tokenizer",
-    },
     "tokenizer_file": {
-        "bigscience/tokenizer": "https://huggingface.co/bigscience/tokenizer/blob/main/tokenizer.json",
-    },
-    "vocab_file": {"bigscience/tokenizer": ""},
-    "tokenizer_config": {
-        "bigscience/tokenizer": "https://huggingface.co/bigscience/tokenizer/blob/main/tokenizer_config.json",
+        "bigscience/bloom-350m": "https://huggingface.co/bigscience/bloom-350m/blob/main/tokenizer.json",
+        "bigscience/bloom-760m": "https://huggingface.co/bigscience/bloom-760m/blob/main/tokenizer.json",
+        "bigscience/bloom-1b3": "https://huggingface.co/bigscience/bloom-1b3/blob/main/tokenizer.json",
+        "bigscience/bloom-2b5": "https://huggingface.co/bigscience/bloom-2b5/blob/main/tokenizer.json",
+        "bigscience/bloom-6b3": "https://huggingface.co/bigscience/bloom-2b5/blob/main/tokenizer.json",
+        "bigscience/bloom-176b": "https://huggingface.co/bigscience/bloom-176b/blob/main/tokenizer.json",
     },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "bigscience/tokenizer": 1024,
+    "bigscience/bloom-350m": 1024,
+    "bigscience/bloom-760m": 1024,
+    "bigscience/bloom-1b3": 1024,
+    "bigscience/bloom-2b5": 1024,
+    "bigscience/bloom-6b3": 1024,
+    "bigscience/bloom-176b": 1024,
 }
 
 
