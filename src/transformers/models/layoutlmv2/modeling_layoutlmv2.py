@@ -853,7 +853,6 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
 
         >>> last_hidden_states.shape
         torch.Size([1, 342, 768])
-
         ```
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1040,7 +1039,6 @@ class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
         >>> predicted_answer = dataset.info.features["label"].names[4]
         >>> predicted_idx, predicted_answer
         (4, 'advertisement')
-
         ```
         """
 
@@ -1235,7 +1233,6 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
         >>> predicted_tokens_classes = [id2label[t.item()] for t in predicted_token_class_ids[0]]
         >>> predicted_tokens_classes[:5]
         ['B-ANSWER', 'B-HEADER', 'B-HEADER', 'B-HEADER', 'B-HEADER']
-
         ```
         """
 
@@ -1340,7 +1337,8 @@ class LayoutLMv2ForQuestionAnswering(LayoutLMv2PreTrainedModel):
         the following to install them: `python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'`
         `python -m pip install torchvision tesseract`
 
-        In this example below, we give the LayoutLMv2 model an image (of texts) and ask it a question. It will give us a prediction of what it thinks the answer is (the span of the answer within the texts parsed from the image).
+        In this example below, we give the LayoutLMv2 model an image (of texts) and ask it a question. It will give us
+        a prediction of what it thinks the answer is (the span of the answer within the texts parsed from the image).
 
         ```python
         >>> from transformers import LayoutLMv2Processor, LayoutLMv2ForQuestionAnswering, set_seed
@@ -1371,16 +1369,10 @@ class LayoutLMv2ForQuestionAnswering(LayoutLMv2PreTrainedModel):
         ```
 
         ```python
-        >>> target_start_index = torch.tensor([7])
-        >>> target_end_index = torch.tensor([14])
-        >>> outputs = model(**encoding, start_positions=target_start_index, end_positions=target_end_index)
-
-        >>> predicted_answer_span_start = outputs.start_logits.argmax(-1).item()
-        >>> predicted_answer_span_end = outputs.end_logits.argmax(-1).item()
-        >>> predicted_answer_span_start, predicted_answer_span_end
-        (154, 287)
-
-        """
+        >>> target_start_index = torch.tensor([7]) >>> target_end_index = torch.tensor([14]) >>> outputs =
+        model(**encoding, start_positions=target_start_index, end_positions=target_end_index) >>>
+        predicted_answer_span_start = outputs.start_logits.argmax(-1).item() >>> predicted_answer_span_end =
+        outputs.end_logits.argmax(-1).item() >>> predicted_answer_span_start, predicted_answer_span_end (154, 287)"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
