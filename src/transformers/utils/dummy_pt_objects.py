@@ -1219,6 +1219,30 @@ class CTRLPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+CVT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class CvtForImageClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CvtModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CvtPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 DATA2VEC_AUDIO_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -3871,6 +3895,13 @@ class Speech2Text2PreTrainedModel(metaclass=DummyObject):
 SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class SplinterForPreTraining(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class SplinterForQuestionAnswering(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -4022,6 +4053,23 @@ class T5PreTrainedModel(metaclass=DummyObject):
 
 def load_tf_weights_in_t5(*args, **kwargs):
     requires_backends(load_tf_weights_in_t5, ["torch"])
+
+
+TRAJECTORY_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TrajectoryTransformerModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TrajectoryTransformerPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST = None

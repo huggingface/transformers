@@ -40,6 +40,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("beit", "BeitFeatureExtractor"),
         ("clip", "CLIPFeatureExtractor"),
         ("convnext", "ConvNextFeatureExtractor"),
+        ("cvt", "ConvNextFeatureExtractor"),
         ("data2vec-audio", "Wav2Vec2FeatureExtractor"),
         ("data2vec-vision", "BeitFeatureExtractor"),
         ("deit", "DeiTFeatureExtractor"),

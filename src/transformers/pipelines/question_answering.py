@@ -228,8 +228,8 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             max_answer_len (`int`, *optional*, defaults to 15):
                 The maximum length of predicted answers (e.g., only answers with a shorter length are considered).
             max_seq_len (`int`, *optional*, defaults to 384):
-                The maximum length of the total sentence (context + question) after tokenization. The context will be
-                split in several chunks (using `doc_stride`) if needed.
+                The maximum length of the total sentence (context + question) in tokens of each chunk passed to the
+                model. The context will be split in several chunks (using `doc_stride` as overlap) if needed.
             max_question_len (`int`, *optional*, defaults to 64):
                 The maximum length of the question after tokenization. It will be truncated if needed.
             handle_impossible_answer (`bool`, *optional*, defaults to `False`):
