@@ -890,7 +890,7 @@ class TrainingArguments:
             "help": (
                 "Sets up the backend compiler for TorchDynamo. TorchDynamo is a Python level JIT compiler designed to"
                 " make unmodified PyTorch programs faster. TorchDynamo dynamically modifies the Python bytecode right"
-                " before its executed. It rewrites Python bytecode in order to extract sequences of PyTorch operations"
+                " before its executed. It rewrites Python bytecode to extract sequences of PyTorch operations"
                 " and lifts them up into Fx graph. We can then pass these Fx graphs to other backend compilers. There"
                 " are two options - eager and nvfuser. Eager defaults to pytorch eager and is useful for debugging."
                 " nvfuser path uses AOT Autograd and nvfuser compiler to optimize the models."
