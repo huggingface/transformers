@@ -39,30 +39,41 @@ _TOKENIZER_FOR_DOC = "BloomTokenizer"
 
 BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "bigscience/bigscience-small-testing",
+    "bigscience/bloom-350m",
+    "bigscience/bloom-760m",
+    "bigscience/bloom-1b3",
+    "bigscience/bloom-2b5",
+    "bigscience/bloom-6b3",
+    "bigscience/bloom-176b",
 ]
 
 
 # Utility functions below:
-def ensure_divisibility(numerator, denominator):
-    """Ensure that numerator is divisible by the denominator."""
+def divide(numerator, denominator):
+    """
+    Ensure that numerator is divisible by the denominator and return the division value.
+
+
+    Args:
+        numerator ([`int`, `float`], *required*):
+            Numerator to use for the division.
+        denominator ([`int`, `float`], *required*):
+            Denominator to use for the division."""
     if not (numerator % denominator == 0):
         raise ValueError(f"{numerator} is not divisible by {denominator}")
-
-
-def divide(numerator, denominator):
-    """Ensure that numerator is divisible by the denominator and return
-    the division value."""
-    ensure_divisibility(numerator, denominator)
     return numerator // denominator
 
 
 def split_tensor_along_last_dim(tensor, num_partitions, contiguous_split_chunks=False):
     """Split a tensor along its last dimension.
-    Arguments:
-        tensor: input tensor.
-        num_partitions: number of partitions to split the tensor
-        contiguous_split_chunks: If True, make each chunk contiguous
-                                 in memory.
+
+    Args:
+        tensor: ([`torch.tensor`], *required*):
+            input tensor to split
+        num_partitions ([`int`], *required*):
+            number of partitions to split the tensor
+        contiguous_split_chunks ([`bool`], *optional*, default=`False`)::
+            If True, make each chunk contiguous in memory.
     """
     # Get the size and dimension.
     last_dim = tensor.dim() - 1
@@ -216,8 +227,8 @@ class BloomAttention(nn.Module):
             attention_mask_func,
             self.attention_softmax_in_fp32,
             coeff,
-            config.seq_length
-            + config.offset_alibi,  # To avoid cache problems: TODO: chack if this implementation is ok
+            # To avoid cache problems, we use a small offset when creating the alibi positional embeddings
+            config.seq_length + config.offset_alibi,
         )
 
         self.query_key_value = nn.Linear(self.hidden_size, 3 * self.hidden_size, dtype=dtype, bias=True)
@@ -236,8 +247,9 @@ class BloomAttention(nn.Module):
         use_cache=False,
         output_attentions=False,
     ):
-        # hidden_states: [sq, b, h]
-        alibi = alibi.repeat(hidden_states.shape[0], 1, 1).to(hidden_states.device)  # repeat with batch size
+        # hidden_states: [batch_size, seq_length, hidden_size]
+        # repeat alibi tensor with the batch size
+        alibi = alibi.repeat(hidden_states.shape[0], 1, 1).to(hidden_states.device)
 
         bias = self.query_key_value.bias if not self.skip_bias_add_qkv else None
 
@@ -245,11 +257,11 @@ class BloomAttention(nn.Module):
 
         mixed_x_layer = F.linear(hidden_states, self.query_key_value.weight, bias)
 
-        # [sq, b, (np * 3 * hn)] --> [sq, b, np, 3 * hn]
+        # [batch_size, seq_length, 3 x hidden_size] --> [batch_size, seq_length, num_heads, 3 x head_dim]
         new_tensor_shape = mixed_x_layer.size()[:-1] + (self.num_heads, 3 * self.head_dim)
         mixed_x_layer = mixed_x_layer.view(*new_tensor_shape)
 
-        # [sq, b, np, 3 * hn] --> 3 [sq, b, np, hn]
+        # [batch_size, seq_length, num_heads, 3 x head_dim] --> 3  [batch_size, seq_length, num_heads, head_dim]
         (query_layer, key_layer, value_layer) = split_tensor_along_last_dim(mixed_x_layer, 3)
 
         if layer_past is not None:
@@ -261,39 +273,32 @@ class BloomAttention(nn.Module):
             present = (key_layer, value_layer)
         else:
             present = None
-        # ===================================
-        # Raw attention scores. [b, np, s, s]
-        # ===================================
 
-        # [b, np, sq, sk]
+        # [batch_size, head_dim, q_length, k_length]
         output_size = (query_layer.size(0), query_layer.size(2), query_layer.size(1), key_layer.size(1))
 
-        # [sq, b, np, hn] -> [sq, b * np, hn]
+        # [batch_size, q_length, num_heads, head_dim] -> [q_length, batch_size * num_heads, head_dim]
         query_layer = query_layer.contiguous().view(output_size[2], output_size[0] * output_size[1], -1)
-        # [sk, b, np, hn] -> [sk, b * np, hn]
+        # [batch_size, k_length, num_heads, head_dim] -> [k_length, batch_size * num_heads, head_dim]
         key_layer = key_layer.contiguous().view(output_size[3], output_size[0] * output_size[1], -1)
 
         # alibi
         matmul_result = alibi[: output_size[0] * output_size[1], :, : output_size[3]]
 
-        # Raw attention scores. [b * np, sq, sk]
+        # Raw attention scores. [batch_size * num_heads, q_length, k_length]
         beta = 1.0 / self.layer_number
 
         matmul_result = torch.baddbmm(
             matmul_result,
-            query_layer.transpose(1, 0),  # [b * np, sq, hn]
-            key_layer.transpose(1, 0).transpose(1, 2),  # [b * np, hn, sk]
+            query_layer.transpose(1, 0),
+            key_layer.transpose(1, 0).transpose(1, 2),
             beta=beta,
             alpha=(1.0 / self.norm_factor),
         )
 
-        # change view to [b, np, sq, sk]
+        # change view to [batch_size, num_heads, q_length, k_length]
 
         attention_scores = matmul_result.view(*output_size)
-
-        # ===========================
-        # Attention probs and dropout
-        # ===========================
 
         # attention scores and attention mask [b, np, sq, sk]
 
@@ -303,40 +308,32 @@ class BloomAttention(nn.Module):
         if head_mask is not None:
             attention_probs = attention_probs * head_mask
 
-        # =========================
-        # Context layer. [sq, b, hp]
-        # =========================
-
-        # value_layer -> context layer.
-        # [sk, b, np, hn] --> [b, np, sq, hn]
-
-        # context layer shape: [b, np, sq, hn]
+        # context layer shape: [batch_size, num_heads, q_length, head_dim]
         output_size = (value_layer.size(0), value_layer.size(2), query_layer.size(0), value_layer.size(3))
 
-        # change view [sk, b * np, hn]
+        # change view [k_length, batch_size x num_heads, head_dim]
         value_layer = value_layer.contiguous().view(value_layer.size(1), output_size[0] * output_size[1], -1)
 
-        # change view [b * np, sq, sk]
+        # change view [batch_size x num_heads, q_length, k_length]
         attention_probs_reshaped = attention_probs.view(output_size[0] * output_size[1], output_size[2], -1)
 
-        # matmul: [b * np, sq, hn]
+        # matmul: [batch_size * num_heads, q_length, head_dim]
         context_layer = torch.bmm(attention_probs_reshaped, value_layer.transpose(0, 1))
         # context_layer = torch.bmm(attention_probs, value_layer)
 
-        # change view [b, np, sq, hn]
+        # change view [batch_size, num_heads, q_length, head_dim]
         context_layer = context_layer.view(*output_size)
 
-        # [b, np, sq, hn] --> [sq, b, np, hn]
+        # [batchs_size, num_heads, q_length, head_dim] --> [q_length, batch_size, num_heads, head_dim]
         context_layer = context_layer.permute(2, 0, 1, 3).contiguous()
-        # context_layer = context_layer.permute(2, 0, 1, 3).contiguous()
 
-        # [sq, b, np, hn] --> [sq, b, hp]
+        # [q_length, batch_size, num_heads, head_dim] --> [q_length, batch_size, hidden_size]
         new_context_layer_shape = context_layer.size()[:-2] + (self.hidden_size,)
 
         context_layer = context_layer.view(*new_context_layer_shape)
 
         # =================
-        # Output. [sq, b, h]
+        # Output. [q_length, batch_size, hidden_size]
         # =================
 
         # aggregate results across tp ranks. See here: https://github.com/pytorch/pytorch/issues/76232
@@ -362,7 +359,7 @@ class BloomAttention(nn.Module):
         if output_attentions:
             outputs += (attention_probs,)
 
-        return outputs, output_bias  # a, present, (attentions)
+        return outputs, output_bias
 
 
 class BloomMLP(nn.Module):
@@ -446,10 +443,9 @@ class BloomBlock(nn.Module):
                     + get_slopes(2 * closest_power_of_2)[0::2][: n - closest_power_of_2]
                 )
 
-        slopes = torch.Tensor(get_slopes(n_head))
-        alibi = slopes.unsqueeze(1).unsqueeze(1) * torch.arange(max_seq_len).unsqueeze(0).unsqueeze(0).expand(
-            n_head, -1, -1
-        )
+        slopes = torch.Tensor(get_slopes(n_head)).unsqueeze(1).unsqueeze(1)
+        arange_tensor = torch.arange(max_seq_len).unsqueeze(0).unsqueeze(0)
+        alibi = slopes * arange_tensor.expand(n_head, -1, -1)
 
         alibi = alibi.to(dtype)
 
