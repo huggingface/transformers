@@ -36,7 +36,9 @@ VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model_vi", "tokenizer_file
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "vinai/bartpho-syllable": "https://huggingface.co/vinai/bartpho-syllable/resolve/main/sentencepiece.bpe.model_vi",
+        "vinai/bartpho-syllable": (
+            "https://huggingface.co/vinai/bartpho-syllable/resolve/main/sentencepiece.bpe.model_vi"
+        ),
     },
     "tokenizer_file": {
         "vinai/bartpho-syllable": "https://huggingface.co/vinai/bartpho-syllable/resolve/main/tokenizer.json",
@@ -131,6 +133,7 @@ class BartphoTokenizerFast(PreTrainedTokenizerFast):
         )
 
         self.vocab_file = vocab_file
+        self.tokenizer_file = tokenizer_file
         self.can_save_slow_tokenizer = False if not self.vocab_file else True
 
     def build_inputs_with_special_tokens(
@@ -194,11 +197,19 @@ class BartphoTokenizerFast(PreTrainedTokenizerFast):
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory.")
             return
+
         out_vocab_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+        )
+
+        out_tokenizer_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["tokenizer_file"]
         )
 
         if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
             copyfile(self.vocab_file, out_vocab_file)
 
-        return (out_vocab_file,)
+        if os.path.abspath(self.tokenizer_file) != os.path.abspath(out_tokenizer_file):
+            copyfile(self.tokenizer_file, out_tokenizer_file)
+
+        return (out_vocab_file, out_tokenizer_file)
