@@ -1815,7 +1815,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         "there is a file for TensorFlow weights. Use `from_tf=True` to load this model from those "
                         "weights."
                     )
-                elif os.path.join(pretrained_model_name_or_path, FLAX_WEIGHTS_NAME):
+                elif os.path.isfile(os.path.join(pretrained_model_name_or_path, FLAX_WEIGHTS_NAME)):
                     raise EnvironmentError(
                         f"Error no file named {WEIGHTS_NAME} found in directory {pretrained_model_name_or_path} but "
                         "there is a file for Flax weights. Use `from_flax=True` to load this model from those "
