@@ -919,7 +919,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             shuffle (`bool`):
                 Whether to return samples from the dataset in random order. Usually `True` for training datasets and
                 `False` for validation/test datasets.
-            tokenizer (`PreTrainedTokenizer`, *optional*):
+            tokenizer ([`PreTrainedTokenizerBase`], *optional*):
                 A `PreTrainedTokenizer` that will be used to pad samples to create batches. Has no effect if a specific
                 `collate_fn` is passed instead.
             collate_fn (`Callable`, *optional*):
