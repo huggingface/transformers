@@ -38,7 +38,7 @@ def prepare_opt_inputs_dict(
     head_mask=None,
 ):
     if attention_mask is None:
-        attention_mask = tf.cast(tf.math.not_equal(input_ids, config.pad_token_id), tf.int8)
+        attention_mask = tf.cast(tf.math.not_equal(input_ids, config.pad_token_id), tf.int64)
     if head_mask is None:
         head_mask = tf.ones((config.num_hidden_layers, config.num_attention_heads))
     return {
@@ -306,12 +306,8 @@ class OPTModelIntegrationTests(unittest.TestCase):
         output = xla_generate(input_ids, attention_mask)[0]
         self.assertTrue(np.allclose(output[:, :3, :3], expected_slice, atol=4e-2))
 
-
-# TODO add jitted tests
-
-
 @require_tf
-# @slow
+@slow
 class TFOPTEmbeddingsTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
