@@ -235,7 +235,7 @@ class TrainingArguments:
             same seed as `seed`. This can be used to ensure reproducibility of data sampling, independent of the model
             seed.
         jit_mode(`bool`, *optional*, defaults to `False`):
-            Try to use PyTorch jit trace for inference.
+            Whether ot not to use PyTorch jit trace for inference.
         bf16 (`bool`, *optional*, defaults to `False`):
             Whether to use bf16 16-bit (mixed) precision training instead of 32-bit training. Requires Ampere or higher
             NVIDIA architecture. This is an experimental API and it may change.
