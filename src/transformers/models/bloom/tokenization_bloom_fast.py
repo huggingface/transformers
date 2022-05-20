@@ -125,7 +125,6 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
         add_prefix_space=False,
         **kwargs
     ):
-        kwargs.pop("padding_side", None)
         super().__init__(
             vocab_file,
             merges_file,
@@ -135,7 +134,6 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
             eos_token=eos_token,
             pad_token=pad_token,
             add_prefix_space=add_prefix_space,
-            padding_side="left",
             **kwargs,
         )
 

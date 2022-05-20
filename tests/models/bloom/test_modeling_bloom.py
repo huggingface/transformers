@@ -376,7 +376,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         path_350m = "bigscience/bloom-350m"
         model = BloomForCausalLM.from_pretrained(path_350m, dtype="float32")
         model = model.eval()
-        tokenizer = BloomTokenizerFast.from_pretrained(path_350m)
+        tokenizer = BloomTokenizerFast.from_pretrained(path_350m, padding_side="left")
 
         input_sentence = ["I enjoy walking with my cute dog", "Hello my name is"]
         input_sentence_without_pad = "Hello my name is"
