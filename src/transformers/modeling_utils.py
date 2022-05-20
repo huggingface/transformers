@@ -75,7 +75,12 @@ from .utils.versions import require_version_core
 
 if is_accelerate_available():
     from accelerate import dispatch_model, infer_auto_device_map, init_empty_weights
-    from accelerate.utils import set_module_tensor_to_device
+    from accelerate.utils import (
+        load_offloaded_weights,
+        offload_weight,
+        save_offload_index,
+        set_module_tensor_to_device,
+    )
 
 logger = logging.get_logger(__name__)
 
@@ -519,50 +524,6 @@ def _move_model_to_meta(model, loaded_state_dict_keys, start_prefix):
             else:
                 new_val = new_val.to("meta")
             setattr(submodule, param_name, new_val)
-
-
-# Utils function temporarily put here. They will go in Accelerate.
-def offload_weight(weight, weight_name, offload_folder, index=None):
-    array = weight.numpy()
-    tensor_file = os.path.join(offload_folder, f"{weight_name}.dat")
-    if index is not None:
-        index[weight_name] = {"dtype": str(array.dtype), "shape": list(array.shape)}
-    file_array = np.memmap(tensor_file, dtype=array.dtype, mode="w+", shape=array.shape)
-    file_array[:] = array[:]
-    file_array.flush()
-    return index
-
-
-def save_offload_index(index, offload_folder):
-    if index is None or len(index) == 0:
-        # Nothing to save
-        return
-
-    offload_index_file = os.path.join(offload_folder, "index.json")
-    if os.path.isfile(offload_index_file):
-        with open(offload_index_file, "r", encoding="utf-8") as f:
-            current_index = json.load(f)
-    else:
-        current_index = {}
-    current_index.update(index)
-
-    with open(offload_index_file, "w", encoding="utf-8") as f:
-        json.dump(current_index, f, indent=2)
-
-
-def load_offloaded_weights(model, index, offload_folder):
-    if index is None or len(index) == 0:
-        # Nothing to do
-        return
-
-    for param_name, metadata in index.items():
-        tensor_file = os.path.join(offload_folder, f"{param_name}.dat")
-        shape = tuple(metadata["shape"])
-        weight = np.memmap(tensor_file, dtype=metadata["dtype"], mode="r", shape=shape)
-        set_module_tensor_to_device(model, param_name, "cpu", value=torch.tensor(weight))
-
-
-# End of utils that will go in Accelerate
 
 
 def _load_state_dict_into_meta_model(
