@@ -11,6 +11,7 @@ from datasets import load_dataset
 from torch.optim import AdamW
 from torch.utils.data import IterableDataset
 from torch.utils.data.dataloader import DataLoader
+from torch.utils.data.datapipes.iter.combinatorics import ShufflerIterDataPipe
 
 import transformers
 from accelerate import Accelerator, DistributedType
@@ -90,41 +91,8 @@ class ConstantLengthDataset(IterableDataset):
                     self.current_size += 1
                     yield torch.tensor(input_ids)
 
-
-class ShuffleDataset(IterableDataset):
-    """
-    Shuffled version of an Iterable Dataset.
-        Args:
-            dataset (ConstantLengthDataset): Iterable Dataset.
-            buffer_size (int): buffer size for shuffling.
-    """
-
-    def __init__(self, dataset, buffer_size):
-        super().__init__()
-        self.dataset = dataset
-        self.buffer_size = buffer_size
-
-    def __iter__(self):
-        shuffle_buffer = []
-        try:
-            dataset_iter = iter(self.dataset)
-            for i in range(self.buffer_size):
-                shuffle_buffer.append(next(dataset_iter))
-        except StopIteration:
-            self.buffer_size = len(shuffle_buffer)
-        try:
-            while True:
-                try:
-                    item = next(dataset_iter)
-                    evict_idx = random.randint(0, self.buffer_size - 1)
-                    yield shuffle_buffer[evict_idx]
-                    shuffle_buffer[evict_idx] = item
-                except StopIteration:
-                    break
-            while len(shuffle_buffer) > 0:
-                yield shuffle_buffer.pop()
-        except GeneratorExit:
-            pass
+    def shuffle(self, buffer_size=1000):
+        return ShufflerIterDataPipe(self, buffer_size=buffer_size)
 
 
 def setup_logging(args):
@@ -164,9 +132,8 @@ def create_dataloaders(args):
     valid_dataset = ConstantLengthDataset(
         tokenizer, valid_data, infinite=False, seq_length=args.seq_length, tokenized=args.tokenized
     )
-    if args.shuffle_batch:
-        train_dataset = ShuffleDataset(train_dataset, buffer_size=args.batch_shuffle_buffer)
-    train_dataloader = DataLoader(train_dataset, batch_size=args.train_batch_size)
+    train_dataset = train_dataset.shuffle(buffer_size=args.batch_shuffle_buffer)
+    train_dataloader = DataLoader(train_dataset, batch_size=args.train_batch_size, shuffle=True)
     eval_dataloader = DataLoader(valid_dataset, batch_size=args.valid_batch_size)
     return train_dataloader, eval_dataloader
 
