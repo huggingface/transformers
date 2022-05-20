@@ -2117,7 +2117,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if device_map == "auto":
             if model._no_split_modules is None:
-                raise ValueError(f"{self.__class__.__name__} does not support `device_map='auto'` yet.")
+                raise ValueError(f"{model.__class__.__name__} does not support `device_map='auto'` yet.")
             no_split_modules = model._no_split_modules
             device_map = infer_auto_device_map(model, no_split_module_classes=no_split_modules, dtype=torch_dtype)
 
