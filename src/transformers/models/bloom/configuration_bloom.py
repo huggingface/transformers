@@ -90,6 +90,13 @@ class BloomConfig(PretrainedConfig):
         reorder_and_upcast_attn (`bool`, *optional*, defaults to `False`):
             Whether to scale keys (K) prior to computing attention (dot-product) and upcast attention
             dot-product/softmax to float() when training with mixed precision.
+        pretraining_tp (`int`, *optional*, defaults to `1`):
+            Tensor parallelism rank used during pretraining with Megatron. 
+            Please refer to [this blogpost](https://huggingface.co/docs/transformers/parallelism) to understand more about it. This
+            value is necessary to ensure exact reproducibility of the pretraining results. Please refer to [this issue](https://github.com/pytorch/pytorch/issues/76232)
+        pretraining_pp (`int`, *optional*, defaults to `1`):
+            Pipeline parallelism rank used during pretraining with Megatron.
+            Please refer to [this blogpost](https://huggingface.co/docs/transformers/parallelism) to understand more about it.
 
     Example:
 
