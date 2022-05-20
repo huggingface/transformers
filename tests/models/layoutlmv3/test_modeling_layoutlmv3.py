@@ -14,8 +14,10 @@
 # limitations under the License.
 """ Testing suite for the PyTorch LayoutLMv3 model. """
 
+import copy
 import unittest
 
+from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
@@ -27,6 +29,10 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
+        MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+        MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         LayoutLMv3Config,
         LayoutLMv3ForQuestionAnswering,
         LayoutLMv3ForSequenceClassification,
@@ -137,7 +143,7 @@ class LayoutLMv3ModelTester:
         token_labels = None
         if self.use_labels:
             sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            token_labels = ids_tensor([self.batch_size, self.text_seq_length], self.num_labels)
 
         config = LayoutLMv3Config(
             vocab_size=self.vocab_size,
@@ -220,7 +226,7 @@ class LayoutLMv3ModelTester:
             token_type_ids=token_type_ids,
             labels=token_labels,
         )
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.text_seq_length, self.num_labels))
 
     def create_and_check_for_question_answering(
         self, config, input_ids, bbox, pixel_values, token_type_ids, input_mask, sequence_labels, token_labels
@@ -283,6 +289,42 @@ class LayoutLMv3ModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = LayoutLMv3ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=LayoutLMv3Config, hidden_size=37)
+
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = copy.deepcopy(inputs_dict)
+        if model_class in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
+            inputs_dict = {
+                k: v.unsqueeze(1).expand(-1, self.model_tester.num_choices, -1).contiguous()
+                if isinstance(v, torch.Tensor) and v.ndim > 1
+                else v
+                for k, v in inputs_dict.items()
+            }
+        if return_labels:
+            if model_class in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
+                inputs_dict["labels"] = torch.ones(self.model_tester.batch_size, dtype=torch.long, device=torch_device)
+            elif model_class in get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING):
+                inputs_dict["start_positions"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+                inputs_dict["end_positions"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+            elif model_class in [
+                *get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING),
+            ]:
+                inputs_dict["labels"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+            elif model_class in [
+                *get_values(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING),
+            ]:
+                inputs_dict["labels"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.text_seq_length),
+                    dtype=torch.long,
+                    device=torch_device,
+                )
+
+        return inputs_dict
 
     def test_config(self):
         self.config_tester.run_common_tests()
