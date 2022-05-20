@@ -1,6 +1,5 @@
 import logging
 import os
-import random
 import time
 from argparse import Namespace
 from pathlib import Path
