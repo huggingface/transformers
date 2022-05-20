@@ -52,10 +52,12 @@ t0pp = AutoModelForSeq2SeqLM.from_pretrained("bigscience/T0pp", low_cpu_mem_usag
 
 Moreover, you can directly place the model on different devices if it doesn't fully fit in RAM (only works for inference for now). With `device_map="auto"`, Accelerate will determine where to put each layer to maximize the use of your fastest devices (GPUs) and offload the rest on the CPU, or even the hard drive if you don't have enough GPU RAM (or CPU RAM). Even if the model is split across several devices, it will run as you would normally expect.
 
+When passing a `device_map`, `low_cpu_mem_usage` is automatically set to `True`, so you don't need to specify it:
+
 ```py
 from transformers import AutoModelForSeq2SeqLM
 
-t0pp = AutoModelForSeq2SeqLM.from_pretrained("bigscience/T0pp", low_cpu_mem_usage=True, device_map="auto")
+t0pp = AutoModelForSeq2SeqLM.from_pretrained("bigscience/T0pp", device_map="auto")
 ```
 
 You can inspect how the model was split across devices by looking at its `hf_device_map` attribute:
@@ -100,7 +102,7 @@ t0pp.hf_device_map
 You can also write your own device map following the same format (a dictionary layer name to device). It should map all parameters of the model to a given device, but you don't have to detail where all the submosules of one layer go if that layer is entirely on the same device. For instance, the following device map would work properly for T0pp (as long as you have the GPU memory):
 
 ```python
-device_map = {'shared': 0, 'encoder': 0, 'decoder': 1, 'lm_head': 1}
+device_map = {"shared": 0, "encoder": 0, "decoder": 1, "lm_head": 1}
 ```
 
 Another way to minimize the memory impact of your model is to instantiate it at a lower precision dtype (like `torch.float16`).

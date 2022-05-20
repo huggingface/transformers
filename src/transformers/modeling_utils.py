@@ -2286,6 +2286,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "The state dictionary of the model you are trying to load is corrupted. Are you sure it was "
                     "properly saved?"
                 )
+            if device_map is not None:
+                device_map = {k.replace(f"{cls.base_model_prefix}.", ""): v for k, v in device_map.items()}
 
         def _find_mismatched_keys(
             state_dict,
