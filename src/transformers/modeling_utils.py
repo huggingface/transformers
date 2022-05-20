@@ -27,7 +27,6 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
-import numpy as np
 import torch
 from torch import Tensor, device, nn
 from torch.nn import CrossEntropyLoss
@@ -582,8 +581,9 @@ def _load_state_dict_into_meta_model(
             param_name = param_name[len(start_prefix) :]
 
         module_name = param_name
-        if dtype is not None:
-            param = param.to(dtype)
+        # We convert floating dtypes to the `dtype` passed.
+        if dtype is not None and not str(param.dtype).startswith("torch.int"):
+           param = param.to(dtype)
 
         if device_map is None:
             param_device = "cpu"
@@ -2116,7 +2116,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model = cls(config, *model_args, **model_kwargs)
 
         if device_map == "auto":
-            no_split_modules = [] if model._no_split_modules is None else model._no_split_modules
+            if model._no_split_modules is None:
+                raise ValueError(f"{self.__class__.__name__} does not support `device_map='auto'` yet.")
+            no_split_modules = model._no_split_modules
             device_map = infer_auto_device_map(model, no_split_module_classes=no_split_modules, dtype=torch_dtype)
 
         if from_tf:
