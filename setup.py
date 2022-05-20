@@ -104,7 +104,7 @@ _deps = [
     "dataclasses",
     "datasets",
     "deepspeed>=0.6.4",
-    "dill==0.3.1.1",
+    "dill<0.3.5",
     "fairscale>0.3",
     "faiss-cpu",
     "fastapi",
