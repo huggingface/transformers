@@ -91,12 +91,10 @@ class BloomConfig(PretrainedConfig):
             Whether to scale keys (K) prior to computing attention (dot-product) and upcast attention
             dot-product/softmax to float() when training with mixed precision.
         pretraining_tp (`int`, *optional*, defaults to `1`):
-            Tensor parallelism rank used during pretraining with Megatron. 
-            Please refer to [this blogpost](https://huggingface.co/docs/transformers/parallelism) to understand more about it. This
-            value is necessary to ensure exact reproducibility of the pretraining results. Please refer to [this issue](https://github.com/pytorch/pytorch/issues/76232)
-        pretraining_pp (`int`, *optional*, defaults to `1`):
-            Pipeline parallelism rank used during pretraining with Megatron.
-            Please refer to [this blogpost](https://huggingface.co/docs/transformers/parallelism) to understand more about it.
+            Tensor parallelism rank used during pretraining with Megatron. Please refer to [this
+            blogpost](https://huggingface.co/docs/transformers/parallelism) to understand more about it. This value is
+            necessary to ensure exact reproducibility of the pretraining results. Please refer to [this
+            issue](https://github.com/pytorch/pytorch/issues/76232)
 
     Example:
 
@@ -145,7 +143,6 @@ class BloomConfig(PretrainedConfig):
         attention_dropout=0.0,
         attention_softmax_in_fp32=True,
         pretraining_tp=1,  # TP rank used when training with megatron
-        pretraining_pp=1,  # PP rank used when training with megatron
         dtype="bfloat16",
         **kwargs,
     ):
@@ -160,7 +157,6 @@ class BloomConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.use_cache = use_cache
         self.pretraining_tp = pretraining_tp
-        self.pretraining_pp = pretraining_pp
         self.apply_residual_connection_post_layernorm = apply_residual_connection_post_layernorm
         self.bias_dropout_fusion = bias_dropout_fusion
         self.hidden_dropout = hidden_dropout
