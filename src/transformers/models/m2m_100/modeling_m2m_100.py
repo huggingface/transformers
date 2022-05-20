@@ -288,7 +288,8 @@ class M2M100Attention(nn.Module):
 
         if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
             raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
+                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
+                f" {attn_weights.size()}"
             )
 
         if attention_mask is not None:
@@ -304,7 +305,8 @@ class M2M100Attention(nn.Module):
         if layer_head_mask is not None:
             if layer_head_mask.size() != (self.num_heads,):
                 raise ValueError(
-                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
+                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
+                    f" {layer_head_mask.size()}"
                 )
             attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
@@ -325,7 +327,8 @@ class M2M100Attention(nn.Module):
 
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}"
+                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
+                f" {attn_output.size()}"
             )
 
         attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
@@ -565,7 +568,7 @@ M2M_100_START_DOCSTRING = r"""
 """
 
 M2M_100_GENERATION_EXAMPLE = r"""
-    Translation example::
+    Translation example:
 
     ```python
     >>> from transformers import M2M100Tokenizer, M2M100ForConditionalGeneration
@@ -793,7 +796,8 @@ class M2M100Encoder(M2M100PreTrainedModel):
         if head_mask is not None:
             if head_mask.size()[0] != len(self.layers):
                 raise ValueError(
-                    f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+                    f"The head_mask should be specified for {len(self.layers)} layers, but it is for"
+                    f" {head_mask.size()[0]}."
                 )
         deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
 
@@ -1025,7 +1029,8 @@ class M2M100Decoder(M2M100PreTrainedModel):
             if attn_mask is not None:
                 if attn_mask.size()[0] != len(self.layers):
                     raise ValueError(
-                        f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+                        f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for"
+                        f" {head_mask.size()[0]}."
                     )
         deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
 
@@ -1046,7 +1051,8 @@ class M2M100Decoder(M2M100PreTrainedModel):
 
                     if use_cache:
                         logger.warning(
-                            "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                            "`use_cache=True` is incompatible with gradient checkpointing. Setting"
+                            " `use_cache=False`..."
                         )
                         use_cache = False
 
@@ -1299,22 +1305,7 @@ class M2M100ForConditionalGeneration(M2M100PreTrainedModel):
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Returns:
-
-        Example:
-
-        ```python
-        >>> from transformers import M2M100Tokenizer, M2M100ForConditionalGeneration
-
-        >>> model = M2M100ForConditionalGeneration.from_pretrained("facebook/m2m100_418M")
-        >>> tokenizer = M2M100Tokenizer.from_pretrained("facebook/m2m100_418M")
-
-        >>> text_to_translate = "Life is like a box of chocolates"
-        >>> model_inputs = tokenizer(text_to_translate, return_tensors="pt")
-
-        >>> # translate to French
-        >>> gen_tokens = model.generate(**model_inputs, forced_bos_token_id=tokenizer.get_lang_id("fr"))
-        >>> print(tokenizer.batch_decode(gen_tokens, skip_special_tokens=True))
-        ```"""
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:

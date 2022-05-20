@@ -35,13 +35,23 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "google/bigbird-roberta-base": "https://huggingface.co/google/bigbird-roberta-base/resolve/main/spiece.model",
-        "google/bigbird-roberta-large": "https://huggingface.co/google/bigbird-roberta-large/resolve/main/spiece.model",
-        "google/bigbird-base-trivia-itc": "https://huggingface.co/google/bigbird-base-trivia-itc/resolve/main/spiece.model",
+        "google/bigbird-roberta-large": (
+            "https://huggingface.co/google/bigbird-roberta-large/resolve/main/spiece.model"
+        ),
+        "google/bigbird-base-trivia-itc": (
+            "https://huggingface.co/google/bigbird-base-trivia-itc/resolve/main/spiece.model"
+        ),
     },
     "tokenizer_file": {
-        "google/bigbird-roberta-base": "https://huggingface.co/google/bigbird-roberta-base/resolve/main/tokenizer.json",
-        "google/bigbird-roberta-large": "https://huggingface.co/google/bigbird-roberta-large/resolve/main/tokenizer.json",
-        "google/bigbird-base-trivia-itc": "https://huggingface.co/google/bigbird-base-trivia-itc/resolve/main/tokenizer.json",
+        "google/bigbird-roberta-base": (
+            "https://huggingface.co/google/bigbird-roberta-base/resolve/main/tokenizer.json"
+        ),
+        "google/bigbird-roberta-large": (
+            "https://huggingface.co/google/bigbird-roberta-large/resolve/main/tokenizer.json"
+        ),
+        "google/bigbird-base-trivia-itc": (
+            "https://huggingface.co/google/bigbird-base-trivia-itc/resolve/main/tokenizer.json"
+        ),
     },
 }
 

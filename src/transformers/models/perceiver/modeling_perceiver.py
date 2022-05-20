@@ -864,8 +864,8 @@ class PerceiverModel(PerceiverPreTrainedModel):
             inputs_without_pos = None
             if inputs.size()[-1] != self.config.d_model:
                 raise ValueError(
-                    f"Last dimension of the inputs: {inputs.size()[-1]} doesn't correspond to config.d_model: {self.config.d_model}. "
-                    "Make sure to set config.d_model appropriately."
+                    f"Last dimension of the inputs: {inputs.size()[-1]} doesn't correspond to config.d_model:"
+                    f" {self.config.d_model}. Make sure to set config.d_model appropriately."
                 )
 
         batch_size, seq_length, _ = inputs.size()

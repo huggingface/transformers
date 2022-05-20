@@ -171,8 +171,6 @@ def check_min_version(min_version):
         error_message += f" but the version found is {__version__}.\n"
         raise ImportError(
             error_message
-            + (
-                "Check out https://huggingface.co/transformers/examples.html for the examples corresponding to other "
-                "versions of HuggingFace Transformers."
-            )
+            + "Check out https://huggingface.co/transformers/examples.html for the examples corresponding to other "
+            "versions of HuggingFace Transformers."
         )
