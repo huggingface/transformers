@@ -18,7 +18,7 @@ import math
 import unittest
 
 from transformers import BloomConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
 
 from ...generation.test_generation_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -230,7 +230,7 @@ class BloomModelTester:
         next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
 
         output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask)["last_hidden_state"]
+        output_from_past = model(next_tokens, attention_mask=next_mask)["last_hidden_state"]
         self.parent.assertTrue(output_from_past.shape[1] == next_tokens.shape[1])
 
         # select random slice
@@ -334,9 +334,11 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
             self.assertIsNotNone(model)
 
     @slow
+    @require_torch_gpu
     def test_simple_generation(self):
-        path_350m = "ybelkada/bigscience-11e-350m"
-        model = BloomForCausalLM.from_pretrained(path_350m)
+        path_350m = "bigscience/bloom-350m"
+        model = BloomForCausalLM.from_pretrained(path_350m).cuda()
+        model = model.eval()
         tokenizer = BloomTokenizerFast.from_pretrained(path_350m)
 
         input_sentence = "I enjoy walking with my cute dog"
@@ -346,114 +348,49 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         )
 
         input_ids = tokenizer.encode(input_sentence, return_tensors="pt")
-        greedy_output = model.generate(input_ids, max_length=50)
+        greedy_output = model.generate(input_ids.cuda(), max_length=50)
 
         self.assertEqual(tokenizer.decode(greedy_output[0], skip_special_tokens=True), EXPECTED_OUTPUT)
 
+    @slow
+    def test_batch_generation(self):
+        path_350m = "ybelkada/bigscience-11e-350m"
+        model = BloomForCausalLM.from_pretrained(path_350m).float()
+        model = model.eval()
+        tokenizer = BloomTokenizerFast.from_pretrained(path_350m, padding_side="left")
 
-@require_torch
-class BloomModelLanguageGenerationTest(unittest.TestCase):
-    def _test_lm_generate_bloom_helper(
-        self,
-        gradient_checkpointing=False,
-        verify_outputs=True,
-    ):
-        model = BloomForCausalLM.from_pretrained("bloom")
-        if gradient_checkpointing:
-            model.gradient_checkpointing_enable()
-        else:
-            model.gradient_checkpointing_disable()
-        model.to(torch_device)
+        input_sentence = ["I enjoy walking with my cute dog", "I enjoy walking with my cute dog"]
 
-        # The dog
-        input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)
+        input_ids = tokenizer.batch_encode_plus(input_sentence, return_tensors="pt", padding=True)
+        greedy_output = model.generate(
+            input_ids["input_ids"], attention_mask=input_ids["attention_mask"], max_length=50, do_sample=False
+        )
 
-        # The dog was found in a field near the intersection of West and West Streets.\n\nThe dog
-        # fmt: off
-        expected_output_ids = [
-            464, 3290, 373, 1043, 287, 257, 2214, 1474, 262, 16246, 286, 2688, 290, 2688, 27262, 13, 198, 198, 464, 3290,
-        ]
-        # fmt: on
-        output_ids = model.generate(input_ids, do_sample=False)
-        if verify_outputs:
-            self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
+        self.assertEqual(
+            tokenizer.decode(greedy_output[0], skip_special_tokens=True),
+            tokenizer.decode(greedy_output[1], skip_special_tokens=True),
+        )
 
     # @slow
-    # def test_lm_generate_bloom(self):
-    #     self._test_lm_generate_bloom_helper()
+    def test_batch_generation_padd(self):
+        # path_350m = "bigscience/bloom-350m"
+        path_350m = "ybelkada/bigscience-11e-350m"
+        model = BloomForCausalLM.from_pretrained(path_350m).float()
+        model = model.eval()
+        tokenizer = BloomTokenizerFast.from_pretrained(path_350m, padding_side="left")
 
-    # @slow
-    # def test_lm_generate_bloom_with_gradient_checkpointing(self):
-    #     self._test_lm_generate_bloom_helper(gradient_checkpointing=True)
+        input_sentence = ["I enjoy walking with my cute dog", "Hello my name is"]
+        input_sentence_without_pad = "Hello my name is"
 
-    # @slow
-    # def test_bloom_sample(self):
-    #     tokenizer = BloomTokenizerFast.from_pretrained("bloom")
-    #     model = BloomForCausalLM.from_pretrained("bloom")
-    #     model.to(torch_device)
+        input_ids = tokenizer.batch_encode_plus(input_sentence, return_tensors="pt", padding=True)
+        input_ids_without_pad = tokenizer.encode(input_sentence_without_pad, return_tensors="pt")
 
-    #     torch.manual_seed(0)
-    #     tokenized = tokenizer("Today is a nice day and", return_tensors="pt", return_token_type_ids=True)
-    #     input_ids = tokenized.input_ids.to(torch_device)
-    #     output_ids = model.generate(input_ids, do_sample=True)
-    #     output_str = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+        greedy_output = model.generate(
+            input_ids["input_ids"], attention_mask=input_ids["attention_mask"], max_length=50, do_sample=False
+        )
+        greedy_output_without_pad = model.generate(input_ids_without_pad, max_length=50, do_sample=False)
 
-    #     token_type_ids = tokenized.token_type_ids.to(torch_device)
-    #     output_seq = model.generate(input_ids=input_ids, do_sample=True, num_return_sequences=5)
-    #     output_seq_tt = model.generate(
-    #         input_ids=input_ids, token_type_ids=token_type_ids, do_sample=True, num_return_sequences=5
-    #     )
-    #     output_seq_strs = tokenizer.batch_decode(output_seq, skip_special_tokens=True)
-    #     output_seq_tt_strs = tokenizer.batch_decode(output_seq_tt, skip_special_tokens=True)
-
-    #     EXPECTED_OUTPUT_STR = (
-    #         "Today is a nice day and if you don't know anything about the state of play during your holiday"
-    #     )
-    #     self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
-    #     self.assertTrue(
-    #         all([output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs))])
-    #     )  # token_type_ids should change output
-
-    # @slow
-    # def test_bloom_sample_max_time(self):
-    #     tokenizer = BloomTokenizerFast.from_pretrained("bloom")
-    #     model = BloomForCausalLM.from_pretrained("bloom")
-    #     model.to(torch_device)
-
-    #     torch.manual_seed(0)
-    #     tokenized = tokenizer("Today is a nice day and", return_tensors="pt", return_token_type_ids=True)
-    #     input_ids = tokenized.input_ids.to(torch_device)
-
-    #     MAX_TIME = 0.5
-
-    #     start = datetime.datetime.now()
-    #     model.generate(input_ids, do_sample=True, max_time=MAX_TIME, max_length=256)
-    #     duration = datetime.datetime.now() - start
-    #     self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-    #     self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-    #     start = datetime.datetime.now()
-    #     model.generate(input_ids, do_sample=False, max_time=MAX_TIME, max_length=256)
-    #     duration = datetime.datetime.now() - start
-    #     self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-    #     self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-    #     start = datetime.datetime.now()
-    #     model.generate(input_ids, do_sample=False, num_beams=2, max_time=MAX_TIME, max_length=256)
-    #     duration = datetime.datetime.now() - start
-    #     self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-    #     self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-    #     start = datetime.datetime.now()
-    #     model.generate(input_ids, do_sample=True, num_beams=2, max_time=MAX_TIME, max_length=256)
-    #     duration = datetime.datetime.now() - start
-    #     self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-    #     self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-    #     start = datetime.datetime.now()
-    #     model.generate(input_ids, do_sample=False, max_time=None, max_length=256)
-    #     duration = datetime.datetime.now() - start
-    #     self.assertGreater(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
+        self.assertEqual(greedy_output[-1, 3:], greedy_output_without_pad[0, :-3])
 
 
 @require_torch

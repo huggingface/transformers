@@ -64,6 +64,37 @@ def divide(numerator, denominator):
     return numerator // denominator
 
 
+def pre_process_alibi_for_pad(alibi, attention_mask, num_heads):
+    """
+    Pre-process the alibi tensor for padding.
+
+    Args:
+        alibi: ([`torch.tensor`], *required*):
+            alibi tensor to pre-process
+        attention_mask: ([`torch.tensor`], *required*):
+            attention mask to pre-process"""
+    # Remove the padding.
+    index_x, index_y = torch.where(attention_mask == 0.0)
+    batches_to_modify = torch.unique(index_x)
+
+    new_alibi = torch.clone(alibi.detach())
+    for i, index in enumerate(batches_to_modify):
+        slice_to_modify = torch.clone(new_alibi[index * num_heads : (index + 1) * num_heads].detach())
+
+        begin, end = torch.where(index_x == index)[0][0], torch.where(index_x == index)[0][-1]
+        if begin != end:
+            shifted_slice = slice_to_modify[:, :, : -(end - begin + 1)]
+
+            begin_position_to_extract, end_position_to_extract = index_y[begin], index_y[end] + 1
+
+            new_alibi[index * num_heads : (index + 1) * num_heads][:, :, begin_position_to_extract:] = 0.0
+            new_alibi[index * num_heads : (index + 1) * num_heads][:, :, end_position_to_extract:] = shifted_slice[
+                :, :, begin_position_to_extract:
+            ]
+
+    return new_alibi
+
+
 def split_tensor_along_last_dim(tensor, num_partitions, contiguous_split_chunks=False):
     """Split a tensor along its last dimension.
 
@@ -98,12 +129,18 @@ def attention_mask_func(attention_scores, attention_mask, causal_mask):
         attention_mask_bool[:, None, key_length - query_length : key_length, None]
         + ~causal_mask[:, :, key_length - query_length : key_length, :key_length]
     ).bool()
+    index_x, index_y = torch.where(attention_mask == 0)
+    for i, index in enumerate(index_x):
+        padded_causal_mask[index, :, :, index_y[i]] = True
     # Make use of floats
     if padded_causal_mask.dtype == torch.bool:
-        return attention_scores.masked_fill_(padded_causal_mask.expand(-1, n_heads, -1, -1), -10000.0)
+        return (
+            attention_scores.masked_fill_(padded_causal_mask.expand(-1, n_heads, -1, -1), -10000.0),
+            padded_causal_mask,
+        )
     else:
         values_to_attend = 1.0 - padded_causal_mask
-        return (values_to_attend * attention_scores) - 10000.0 * padded_causal_mask
+        return (values_to_attend * attention_scores) - 10000.0 * padded_causal_mask, padded_causal_mask
 
 
 def bias_dropout_add(x, bias, residual, prob, training):
@@ -179,8 +216,15 @@ class ScaledSoftmax(nn.Module):
 
         if self.scale is not None:
             input = input * self.scale
-        mask_output = self.mask_func(input, mask, self.causal_mask) if mask is not None else input
-        probs = torch.nn.Softmax(dim=-1)(mask_output)
+
+        if mask is not None:
+            mask = mask.to(input.device)
+            mask_output, padded_causal_mask = (
+                self.mask_func(input, mask, self.causal_mask) if mask is not None else input
+            )
+            probs = torch.nn.Softmax(dim=-1)(mask_output) * (~padded_causal_mask)
+        else:
+            probs = torch.nn.Softmax(dim=-1)(input)
 
         if self.input_in_float16 and self.softmax_in_fp32:
             if self.input_in_fp16:
@@ -188,7 +232,7 @@ class ScaledSoftmax(nn.Module):
             else:
                 probs = probs.bfloat16()
 
-        return probs
+        return probs.float()
 
 
 class BloomAttention(nn.Module):
@@ -278,9 +322,11 @@ class BloomAttention(nn.Module):
         output_size = (query_layer.size(0), query_layer.size(2), query_layer.size(1), key_layer.size(1))
 
         # [batch_size, q_length, num_heads, head_dim] -> [q_length, batch_size * num_heads, head_dim]
-        query_layer = query_layer.contiguous().view(output_size[2], output_size[0] * output_size[1], -1)
+        # query_layer = query_layer.contiguous().view(output_size[2], output_size[0] * output_size[1], -1)
+        query_layer = query_layer.transpose(1, 0).reshape(output_size[2], output_size[0] * output_size[1], -1)
         # [batch_size, k_length, num_heads, head_dim] -> [k_length, batch_size * num_heads, head_dim]
-        key_layer = key_layer.contiguous().view(output_size[3], output_size[0] * output_size[1], -1)
+        # key_layer = key_layer.contiguous().view(output_size[3], output_size[0] * output_size[1], -1)
+        key_layer = key_layer.transpose(1, 0).reshape(output_size[3], output_size[0] * output_size[1], -1)
 
         # alibi
         matmul_result = alibi[: output_size[0] * output_size[1], :, : output_size[3]]
@@ -312,7 +358,8 @@ class BloomAttention(nn.Module):
         output_size = (value_layer.size(0), value_layer.size(2), query_layer.size(0), value_layer.size(3))
 
         # change view [k_length, batch_size x num_heads, head_dim]
-        value_layer = value_layer.contiguous().view(value_layer.size(1), output_size[0] * output_size[1], -1)
+        value_layer = value_layer.transpose(1, 0).reshape(value_layer.size(1), output_size[0] * output_size[1], -1)
+        # value_layer = value_layer.contiguous().view(value_layer.size(1), output_size[0] * output_size[1], -1)
 
         # change view [batch_size x num_heads, q_length, k_length]
         attention_probs_reshaped = attention_probs.view(output_size[0] * output_size[1], output_size[2], -1)
@@ -822,8 +869,6 @@ class BloomModel(BloomPreTrainedModel):
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
-            # all_hidden_states = all_hidden_states + (hidden_states.view(output_shape),)
-            # all_hidden_states = all_hidden_states + (hidden_states.permute(1, 0, 2),)
 
         hidden_states = hidden_states.view(output_shape)
 

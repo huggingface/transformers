@@ -41,7 +41,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "bigscience/bloom-1b3": "https://huggingface.co/bigscience/bloom-1b3/blob/main/tokenizer.json",
         "bigscience/bloom-2b5": "https://huggingface.co/bigscience/bloom-2b5/blob/main/tokenizer.json",
         "bigscience/bloom-6b3": "https://huggingface.co/bigscience/bloom-2b5/blob/main/tokenizer.json",
-        "bigscience/bloom-176b": "https://huggingface.co/bigscience/bloom-176b/blob/main/tokenizer.json",
+        "bigscience/bloom": "https://huggingface.co/bigscience/bloom/blob/main/tokenizer.json",
     },
 }
 
@@ -52,7 +52,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "bigscience/bloom-1b3": 1024,
     "bigscience/bloom-2b5": 1024,
     "bigscience/bloom-6b3": 1024,
-    "bigscience/bloom-176b": 1024,
+    "bigscience/bloom": 1024,
 }
 
 
