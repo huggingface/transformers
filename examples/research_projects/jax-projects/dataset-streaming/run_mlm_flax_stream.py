@@ -288,8 +288,10 @@ def advance_iter_and_group_samples(train_iterator, num_samples, max_seq_length):
         tokenized_samples = next(train_iterator)
         i += len(tokenized_samples["input_ids"])
 
-        # concatenate tokenized samples to list
-        samples = {k: samples[k] + tokenized_samples[k] for k in tokenized_samples.keys()}
+        # concatenate tokenized samples to list (excluding "id" and "text")
+        samples = {
+            k: samples[k] + tokenized_samples[k] for k in ["input_ids", "attention_mask", "special_tokens_mask"]
+        }
 
     # Concatenated tokens are split to lists of length `max_seq_length`.
     # Note that remainedr of % max_seq_length are thrown away.
@@ -407,10 +409,7 @@ if __name__ == "__main__":
     def tokenize_function(examples):
         return tokenizer(examples[data_args.text_column_name], return_special_tokens_mask=True)
 
-    tokenized_datasets = dataset.map(
-        tokenize_function,
-        batched=True,
-    )
+    tokenized_datasets = dataset.map(tokenize_function, batched=True, remove_columns=list(dataset.features.keys()))
 
     shuffle_seed = training_args.seed
     tokenized_datasets = tokenized_datasets.shuffle(buffer_size=data_args.shuffle_buffer_size, seed=shuffle_seed)

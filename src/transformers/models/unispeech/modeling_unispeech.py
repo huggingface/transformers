@@ -27,7 +27,7 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...deepspeed import is_deepspeed_zero3_enabled
-from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
+from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput, Wav2Vec2BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import torch_int_div
 from ...utils import (
@@ -69,35 +69,6 @@ UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/unispeech-large-multi-lingual-1500h-cv",
     # See all UniSpeech models at https://huggingface.co/models?filter=unispeech
 ]
-
-
-@dataclass
-class UniSpeechBaseModelOutput(ModelOutput):
-    """
-    Output type of [`UniSpeechBaseModelOutput`], with potential hidden states and attentions.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        extract_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, conv_dim[-1])`):
-            Sequence of extracted feature vectors of the last convolutional layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-    """
-
-    last_hidden_state: torch.FloatTensor = None
-    extract_features: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -1158,7 +1129,7 @@ class UniSpeechModel(UniSpeechPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=UniSpeechBaseModelOutput,
+        output_type=Wav2Vec2BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
@@ -1171,7 +1142,7 @@ class UniSpeechModel(UniSpeechPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, UniSpeechBaseModelOutput]:
+    ) -> Union[Tuple, Wav2Vec2BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1203,7 +1174,7 @@ class UniSpeechModel(UniSpeechPreTrainedModel):
         if not return_dict:
             return (hidden_states, extract_features) + encoder_outputs[1:]
 
-        return UniSpeechBaseModelOutput(
+        return Wav2Vec2BaseModelOutput(
             last_hidden_state=hidden_states,
             extract_features=extract_features,
             hidden_states=encoder_outputs.hidden_states,
