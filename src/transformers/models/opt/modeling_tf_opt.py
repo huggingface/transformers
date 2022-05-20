@@ -45,6 +45,8 @@ _CHECKPOINT_FOR_DOC = "facebook/opt-350m"
 _CONFIG_FOR_DOC = "OPTConfig"
 _TOKENIZER_FOR_DOC = "GPT2Tokenizer"
 
+# Base model docstring
+_EXPECTED_OUTPUT_SHAPE = [1, 8, 1024]
 
 LARGE_NEGATIVE = -1e8
 
@@ -77,40 +79,29 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values
 
     return (one_cst - expanded_mask) * LARGE_NEGATIVE
 
-
-def make_positions(mask, padding_idx: int):
-    """Replace non-padding symbols with their position numbers.
-
-    Position numbers begin at padding_idx+1. Padding symbols are ignored.
-    """
-    positions = tf.cast(tf.math.cumsum(mask, axis=1), tf.int64) * mask + padding_idx
-    return positions
-
-
-# TODO Fix position with make_position function
 class TFOPTLearnedPositionalEmbedding(TFSharedEmbeddings):
     """
     This module learns positional embeddings up to a fixed maximum size.
     """
 
-    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int = 1, **kwargs):
-        self.num_embeddings = num_embeddings
-        self.padding_idx = padding_idx
-        super().__init__(num_embeddings, embedding_dim, **kwargs)
-        if self.padding_idx is not None:
-            self.max_positions = self.num_embeddings - self.padding_idx - 1
-        else:
-            self.max_positions = self.num_embeddings
+    def __init__(self, num_embeddings: int, embedding_dim: int, **kwargs):
+        # OPT is set up so that if padding_idx is specified then offset the embedding ids by 2
+        # and adjust num_embeddings appropriately. Other models don't have this hack
+        self.offset = 2
+        super().__init__(num_embeddings + self.offset, embedding_dim, **kwargs)
 
-    def call(self, attention_mask, positions: Optional[tf.Tensor] = None):
-        if not ((positions is None) or (self.padding_idx is None)):
-            raise ValueError("If positions is pre-computed then padding_idx should not be set.")
 
-        if positions is None:
-            attention_mask = tf.cast(attention_mask, tf.int64)
-            positions = make_positions(attention_mask, self.padding_idx)
+    def call(self, attention_mask, past_key_values_length: int = 0):
+        """`input_ids_shape` is expected to be [bsz x seqlen]."""
+        attention_mask = tf.cast(attention_mask, tf.int64)
+        
+        # create positions depending on attention_mask
+        positions = tf.math.cumsum(attention_mask, axis=1) * attention_mask - 1
 
-        return super().call(positions)
+        # cut positions if `past_key_values_length` is > 0
+        positions = positions[:, past_key_values_length:]
+
+        return super().call(positions + self.offset)
 
 
 # Copied from transformers.models.bart.modeling_tf_bart.TFBartAttention with Bart->OPT
@@ -312,13 +303,7 @@ class TFOPTDecoderLayer(tf.keras.layers.Layer):
             hidden_states (`tf.Tensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
             attention_mask (`tf.Tensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            encoder_hidden_states (`tf.Tensor`):
-                cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
-            encoder_attention_mask (`tf.Tensor`): encoder attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (`tf.Tensor`): mask for attention heads in a given layer of size
-                `(decoder_attention_heads,)`
-            cross_attn_layer_head_mask (`tf.Tensor`): mask for heads of the cross-attention module.
                 `(decoder_attention_heads,)`
             past_key_value (`Tuple(tf.Tensor)`): cached past key and value projection states
         """
@@ -420,7 +405,7 @@ class TFOPTPreTrainedModel(TFPreTrainedModel):
     """
 
     config_class = OPTConfig
-    base_model_prefix = "decoder"
+    base_model_prefix = "model"
 
     @property
     def dummy_inputs(self):
@@ -446,38 +431,38 @@ class TFOPTPreTrainedModel(TFPreTrainedModel):
         return self.serving_output(output)
 
 
-OPT_GENERATION_EXAMPLE = r"""
-    Summarization example:
+# OPT_GENERATION_EXAMPLE = r"""
+#     Summarization example:
 
-    ```python
-    >>> from transformers import OPTTokenizer, TFOPTForConditionalGeneration
+#     ```python
+#     >>> from transformers import OPTTokenizer, TFOPTForConditionalGeneration
 
-    >>> model = TFOPTForConditionalGeneration.from_pretrained("facebook/opt-large")
-    >>> tokenizer = OPTTokenizer.from_pretrained("facebook/opt-large")
+#     >>> model = TFOPTForConditionalGeneration.from_pretrained("facebook/opt-large")
+#     >>> tokenizer = OPTTokenizer.from_pretrained("facebook/opt-large")
 
-    >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
-    >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors="tf")
+#     >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
+#     >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors="tf")
 
-    >>> # Generate Summary
-    >>> summary_ids = model.generate(inputs["input_ids"], num_beams=4, max_length=5)
-    >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
-    ```
+#     >>> # Generate Summary
+#     >>> summary_ids = model.generate(inputs["input_ids"], num_beams=4, max_length=5)
+#     >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
+#     ```
 
-    Mask filling example:
+#     Mask filling example:
 
-    ```python
-    >>> from transformers import OPTTokenizer, TFOPTForConditionalGeneration
+#     ```python
+#     >>> from transformers import OPTTokenizer, TFOPTForConditionalGeneration
 
-    >>> tokenizer = OPTTokenizer.from_pretrained("facebook/opt-large")
-    >>> TXT = "My friends are <mask> but they eat too many carbs."
+#     >>> tokenizer = OPTTokenizer.from_pretrained("facebook/opt-large")
+#     >>> TXT = "My friends are <mask> but they eat too many carbs."
 
-    >>> model = TFOPTForConditionalGeneration.from_pretrained("facebook/opt-large")
-    >>> input_ids = tokenizer([TXT], return_tensors="tf")["input_ids"]
-    >>> logits = model(input_ids).logits
-    >>> probs = tf.nn.softmax(logits[0])
-    >>> # probs[5] is associated with the mask token
-    ```
-"""
+#     >>> model = TFOPTForConditionalGeneration.from_pretrained("facebook/opt-large")
+#     >>> input_ids = tokenizer([TXT], return_tensors="tf")["input_ids"]
+#     >>> logits = model(input_ids).logits
+#     >>> probs = tf.nn.softmax(logits[0])
+#     >>> # probs[5] is associated with the mask token
+#     ```
+# """
 
 
 OPT_INPUTS_DOCSTRING = r"""
@@ -496,43 +481,12 @@ OPT_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        decoder_input_ids (`tf.Tensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Indices of decoder input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`OPTTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are decoder input IDs?](../glossary#decoder-input-ids)
-
-            OPT uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
-            is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
-
-            For translation and summarization training, `decoder_input_ids` should be provided. If no
-            `decoder_input_ids` is provided, the model will create this tensor by shifting the `input_ids` to the right
-            for denoising pre-training following the paper.
-        decoder_attention_mask (`tf.Tensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            will be made by default and ignore pad tokens. It is not recommended to set this for most use cases.
         head_mask (`tf.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
-
-        decoder_head_mask (`tf.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        cross_attn_head_mask (`tf.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        encoder_outputs (`tf.FloatTensor`, *optional*):
-            hidden states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-            of shape `(batch_size, sequence_length, hidden_size)` is a sequence of
+            
         past_key_values (`Tuple[Tuple[tf.Tensor]]` of length `config.n_layers`)
             contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
@@ -567,23 +521,16 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
         self.config = config
         self.padding_idx = config.pad_token_id
         self.layerdrop = config.layerdrop
+        num_embeddings = config.max_position_embeddings
 
-        # OPT is set up so that if padding_idx is specified then offset the embedding ids by 2
-        if self.padding_idx is not None:
-            num_embeddings = config.max_position_embeddings + 2
-
+        self.shared = TFSharedEmbeddings(
+            config.vocab_size, config.word_embed_proj_dim, config.pad_token_id, name="decoder.embed_tokens"
+        )
+        
         self.embed_positions = TFOPTLearnedPositionalEmbedding(
             num_embeddings,
             config.hidden_size,
             name="embed_positions",
-        )
-        # if self.embed_tokens == None:
-        #     self.embed_tokens = TFSharedEmbeddings(
-        #         config.vocab_size, config.word_embed_proj_dim,name="embed_tokens",
-        #     )
-
-        self.shared = TFSharedEmbeddings(
-            config.vocab_size, config.word_embed_proj_dim, config.pad_token_id, name="decoder.embed_tokens"
         )
 
         # set tf scope correctly
@@ -680,25 +627,9 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-            encoder_hidden_states (`tf.Tensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
-                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-                of the decoder.
-            encoder_attention_mask (`tf.Tensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
-                Mask to avoid performing cross-attention on padding tokens indices of encoder input_ids. Mask values
-                selected in `[0, 1]`:
 
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
             head_mask (`tf.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
                 Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
-
-            cross_attn_head_mask (`tf.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-                Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
 
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the head is **masked**.
@@ -709,7 +640,8 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
 
                 If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all ``decoder_input_ids``` of shape `(batch_size, sequence_length)`. inputs_embeds (`tf.Tensor` of
+                all ``decoder_input_ids``` of shape `(batch_size, sequence_length)`.    
+            inputs_embeds (`tf.Tensor` of
                 shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
                 `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
                 control over how to convert `input_ids` indices into associated vectors than the model's internal
@@ -722,6 +654,9 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
                 for more detail.
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            training (`bool`, *optional*, defaults to `False`):
+                Whether or not to use the model in training mode (some modules like dropout modules have different
+                behaviors between training and evaluation).
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -749,17 +684,14 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
             # attention_mask = tf.ones_like(input_ids, dtype=tf.bool)
             attention_mask = tf.ones(inputs_embeds.shape[:2], dtype=tf.bool)
 
-        if position_ids is not None:
-            positions = self.embed_positions(position_ids)[:, past_key_values_length:, :]
-        else:
-            positions = self.embed_positions(attention_mask)[:, past_key_values_length:, :]
+        pos_embeds = self.embed_positions(attention_mask,  past_key_values_length)
 
         attention_mask = self._prepare_decoder_attention_mask(attention_mask, input_shape, past_key_values_length)
 
         if self.project_in is not None:
             inputs_embeds = self.project_in(inputs_embeds)
 
-        hidden_states = inputs_embeds + positions
+        hidden_states = inputs_embeds + pos_embeds
         hidden_states = self.dropout(hidden_states, training=training)
 
         # decoder layers
@@ -782,14 +714,8 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
                 )
 
         for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-
-            # dropout_probability = random.uniform(0, 1)
-
-            # if training and (dropout_probability < self.layerdrop):
-            #     continue
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
@@ -841,9 +767,6 @@ class TFOPTModel(TFPreTrainedModel):
 
     def get_input_embeddings(self):
         return self.decoder.shared
-
-    def get_decoder(self):
-        return self.decoder
 
     def set_input_embeddings(self, new_embeddings):
         self.decoder.set_input_embeddings(new_embeddings)
@@ -917,19 +840,10 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
         super().__init__(config, **kwargs)
         self.config = config
 
-        self.decoder = TFOPTMainLayer(config, name="decoder")
+        self.model = TFOPTMainLayer(config, name="model")
 
     def get_output_embeddings(self):
         return self.get_input_embeddings()
-
-    def set_output_embeddings(self, value):
-        self.set_input_embeddings(value)
-
-    def set_decoder(self, decoder):
-        self.decoder = decoder
-
-    def get_decoder(self):
-        return self.decoder
 
     def prepare_inputs_for_generation(self, inputs, past_key_values=None, use_cache=None, use_xla=False, **kwargs):
         # TODO: (Joao) after the TF generator is complete, update GPT2 TF generation to match PT's. NB -- some GPT2
@@ -1029,18 +943,18 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
         Example:
 
         ```python
-        >>> from transformers import GPT2Tokenizer, OPTForCausalLM
+        >>> from transformers import GPT2Tokenizer, TFOPTForCausalLM
 
-        >>> model = OPTForCausalLM.from_pretrained("facebook/opt-350m")
+        >>> model = TFOPTForCausalLM.from_pretrained("facebook/opt-350m")
         >>> tokenizer = GPT2Tokenizer.from_pretrained("facebook/opt-350m")
 
         >>> prompt = "Hey, are you consciours? Can you talk to me?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
+        >>> inputs = tokenizer(prompt, return_tensors="tf")
 
         >>> # Generate
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you consciours? Can you talk to me?\nI'm not consciours, but I can talk to you."
+        'Hey, are you consciours? Can you talk to me?\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n'
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1049,7 +963,7 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.decoder(
+        outputs = self.model(
             input_ids=input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
@@ -1063,7 +977,7 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
             training=training,
         )
 
-        logits = self.decoder.shared(outputs[0], mode="linear")
+        logits = self.model.shared(outputs[0], mode="linear")
 
         loss = None
         if labels is not None:
