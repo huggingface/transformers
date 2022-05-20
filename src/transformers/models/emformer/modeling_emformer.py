@@ -145,16 +145,15 @@ class EmformerTimeReduction(torch.nn.Module):
         super().__init__()
         self.stride = stride
 
-    def forward(self, input: torch.Tensor, lengths: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, input: torch.Tensor):
         batch_size, time_size, feature_size = input.shape
         num_frames = time_size - (time_size % self.stride)
         input = input[:, :num_frames, :]
-        lengths = lengths.div(self.stride, rounding_mode="trunc")
         max_time_size = num_frames // self.stride
 
         output = input.reshape(batch_size, max_time_size, feature_size * self.stride)
         output = output.contiguous()
-        return output, lengths
+        return output
 
 
 class EmformerAttention(torch.nn.Module):
@@ -343,64 +342,6 @@ class EmformerAttention(torch.nn.Module):
         )
         return output, output_mems[:-1]
 
-    @torch.jit.export
-    def infer(
-        self,
-        utterance: torch.Tensor,
-        lengths: torch.Tensor,
-        right_context: torch.Tensor,
-        summary: torch.Tensor,
-        mems: torch.Tensor,
-        left_context_key: torch.Tensor,
-        left_context_val: torch.Tensor,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        r"""Forward pass for inference.
-
-        B: batch size; D: feature dimension of each frame; T: number of utterance frames; R: number of right context
-        frames; S: number of summary elements; M: number of memory elements.
-
-        Args:
-            utterance (torch.Tensor): utterance frames, with shape `(T, B, D)`.
-            lengths (torch.Tensor): with shape `(B,)` and i-th element representing
-                number of valid frames for i-th batch element in ``utterance``.
-            right_context (torch.Tensor): right context frames, with shape `(R, B, D)`.
-            summary (torch.Tensor): summary elements, with shape `(S, B, D)`.
-            mems (torch.Tensor): memory elements, with shape `(M, B, D)`.
-            left_context_key (torch.Tensor): left context attention key computed from preceding invocation.
-            left_context_val (torch.Tensor): left context attention value computed from preceding invocation.
-
-        Returns:
-            (Tensor, Tensor, Tensor, and Tensor):
-                Tensor
-                    output frames corresponding to utterance and right_context, with shape `(T + R, B, D)`.
-                Tensor
-                    updated memory elements, with shape `(M, B, D)`.
-                Tensor
-                    attention key computed for left context and utterance.
-                Tensor
-                    attention value computed for left context and utterance.
-        """
-        query_dim = right_context.size(0) + utterance.size(0) + summary.size(0)
-        key_dim = right_context.size(0) + utterance.size(0) + mems.size(0) + left_context_key.size(0)
-        attention_mask = torch.zeros(query_dim, key_dim).to(dtype=torch.bool, device=utterance.device)
-        attention_mask[-1, : mems.size(0)] = True
-        output, output_mems, key, value = self._forward_impl(
-            utterance,
-            lengths,
-            right_context,
-            summary,
-            mems,
-            attention_mask,
-            left_context_key=left_context_key,
-            left_context_val=left_context_val,
-        )
-        return (
-            output,
-            output_mems,
-            key[mems.size(0) + right_context.size(0) :],
-            value[mems.size(0) + right_context.size(0) :],
-        )
-
 
 class EmformerLayer(torch.nn.Module):
     r"""Emformer layer that constitutes Emformer.
@@ -550,34 +491,6 @@ class EmformerLayer(torch.nn.Module):
         )
         return rc_output, next_m
 
-    def _apply_attention_infer(
-        self,
-        utterance: torch.Tensor,
-        lengths: torch.Tensor,
-        right_context: torch.Tensor,
-        mems: torch.Tensor,
-        state: Optional[List[torch.Tensor]],
-    ) -> Tuple[torch.Tensor, torch.Tensor, List[torch.Tensor]]:
-        if state is None:
-            state = self._init_state(utterance.size(1), device=utterance.device)
-        pre_mems, lc_key, lc_val = self._unpack_state(state)
-        if self.use_mem:
-            summary = self.memory_op(utterance.permute(1, 2, 0)).permute(2, 0, 1)
-            summary = summary[:1]
-        else:
-            summary = torch.empty(0).to(dtype=utterance.dtype, device=utterance.device)
-        rc_output, next_m, next_k, next_v = self.attention.infer(
-            utterance=utterance,
-            lengths=lengths,
-            right_context=right_context,
-            summary=summary,
-            mems=pre_mems,
-            left_context_key=lc_key,
-            left_context_val=lc_val,
-        )
-        state = self._pack_state(next_k, next_v, utterance.size(0), mems, state)
-        return rc_output, next_m, state
-
     def forward(
         self,
         utterance: torch.Tensor,
@@ -628,50 +541,6 @@ class EmformerLayer(torch.nn.Module):
         print("output_utterance", output_utterance.sum(), output_utterance.shape)
         print("output_right_context", output_right_context.sum(), output_right_context.shape)
         return output_utterance, output_right_context, output_mems
-
-    @torch.jit.export
-    def infer(
-        self,
-        utterance: torch.Tensor,
-        lengths: torch.Tensor,
-        right_context: torch.Tensor,
-        state: Optional[List[torch.Tensor]],
-        mems: torch.Tensor,
-    ) -> Tuple[torch.Tensor, torch.Tensor, List[torch.Tensor], torch.Tensor]:
-        r"""Forward pass for inference.
-
-        B: batch size; D: feature dimension of each frame; T: number of utterance frames; R: number of right context
-        frames; M: number of memory elements.
-
-        Args:
-            utterance (torch.Tensor): utterance frames, with shape `(T, B, D)`.
-            lengths (torch.Tensor): with shape `(B,)` and i-th element representing
-                number of valid frames for i-th batch element in ``utterance``.
-            right_context (torch.Tensor): right context frames, with shape `(R, B, D)`.
-            state (List[torch.Tensor] or None): list of tensors representing layer internal state
-                generated in preceding invocation of ``infer``.
-            mems (torch.Tensor): memory elements, with shape `(M, B, D)`.
-
-        Returns:
-            (Tensor, Tensor, List[torch.Tensor], Tensor):
-                Tensor
-                    encoded utterance frames, with shape `(T, B, D)`.
-                Tensor
-                    updated right context frames, with shape `(R, B, D)`.
-                List[Tensor]
-                    list of tensors representing layer internal state generated in current invocation of ``infer``.
-                Tensor
-                    updated memory elements, with shape `(M, B, D)`.
-        """
-        (
-            layer_norm_utterance,
-            layer_norm_right_context,
-        ) = self._apply_pre_attention_layer_norm(utterance, right_context)
-        rc_output, output_mems, output_state = self._apply_attention_infer(
-            layer_norm_utterance, lengths, layer_norm_right_context, mems, state
-        )
-        output_utterance, output_right_context = self._apply_post_attention_ffn(rc_output, utterance, right_context)
-        return output_utterance, output_right_context, output_state, output_mems
 
 
 class Emformer(torch.nn.Module):
@@ -850,26 +719,21 @@ class Emformer(torch.nn.Module):
         attention_mask = (1 - torch.cat([torch.cat(mask) for mask in masks_to_concat])).to(torch.bool)
         return attention_mask
 
-    def forward(self, input: torch.Tensor, lengths: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        r"""Forward pass for training and non-streaming inference.
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        output_attentions=False,
+        output_hidden_states=False,
+        return_dict=True,
+    ):
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attentions = () if output_attentions else None
 
-        B: batch size; T: max number of input frames in batch; D: feature dimension of each frame.
+        # TODO: replace with attention_mask
+        lengths = attention_mask.sum(-1)
 
-        Args:
-            input (torch.Tensor): utterance frames right-padded with right context frames, with
-                shape `(B, T + right_context_length, D)`.
-            lengths (torch.Tensor): with shape `(B,)` and i-th element representing
-                number of valid utterance frames for i-th batch element in ``input``.
-
-        Returns:
-            (Tensor, Tensor):
-                Tensor
-                    output frames, with shape `(B, T, D)`.
-                Tensor
-                    output lengths, with shape `(B,)` and i-th element representing number of valid frames for i-th
-                    batch element in output frames.
-        """
-        input = input.permute(1, 0, 2)
+        input = hidden_states.permute(1, 0, 2)
         right_context = self._gen_right_context(input)
         print("right_context", right_context.sum(), right_context.shape)
         utterance = input[: input.size(0) - self.right_context_length]
@@ -883,67 +747,20 @@ class Emformer(torch.nn.Module):
         output = utterance
         for layer in self.emformer_layers:
             output, right_context, mems = layer(output, lengths, right_context, mems, attention_mask)
-        return output.permute(1, 0, 2), lengths
 
-    @torch.jit.export
-    def infer(
-        self,
-        input: torch.Tensor,
-        lengths: torch.Tensor,
-        states: Optional[List[List[torch.Tensor]]] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor, List[List[torch.Tensor]]]:
-        r"""Forward pass for streaming inference.
+        hidden_states = output.permute(1, 0, 2)
 
-        B: batch size; D: feature dimension of each frame.
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
 
-        Args:
-            input (torch.Tensor): utterance frames right-padded with right context frames, with
-                shape `(B, segment_length + right_context_length, D)`.
-            lengths (torch.Tensor): with shape `(B,)` and i-th element representing
-                number of valid frames for i-th batch element in ``input``.
-            states (List[List[torch.Tensor]] or None, optional): list of lists of tensors
-                representing Emformer internal state generated in preceding invocation of ``infer``. (Default:
-                ``None``)
+        if not return_dict:
+            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
 
-        Returns:
-            (Tensor, Tensor, List[List[Tensor]]):
-                Tensor
-                    output frames, with shape `(B, segment_length, D)`.
-                Tensor
-                    output lengths, with shape `(B,)` and i-th element representing number of valid frames for i-th
-                    batch element in output frames.
-                List[List[Tensor]]
-                    output states; list of lists of tensors representing Emformer internal state generated in current
-                    invocation of ``infer``.
-        """
-        assert input.size(1) == self.segment_length + self.right_context_length, (
-            "Per configured segment_length and right_context_length"
-            f", expected size of {self.segment_length + self.right_context_length} for dimension 1 of input"
-            f", but got {input.size(1)}."
+        return BaseModelOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
         )
-        input = input.permute(1, 0, 2)
-        right_context_start_idx = input.size(0) - self.right_context_length
-        right_context = input[right_context_start_idx:]
-        utterance = input[:right_context_start_idx]
-        output_lengths = torch.clamp(lengths - self.right_context_length, min=0)
-        mems = (
-            self.memory_op(utterance.permute(1, 2, 0)).permute(2, 0, 1)
-            if self.use_mem
-            else torch.empty(0).to(dtype=input.dtype, device=input.device)
-        )
-        output = utterance
-        output_states: List[List[torch.Tensor]] = []
-        for layer_idx, layer in enumerate(self.emformer_layers):
-            output, right_context, output_state, mems = layer.infer(
-                output,
-                output_lengths,
-                right_context,
-                None if states is None else states[layer_idx],
-                mems,
-            )
-            output_states.append(output_state)
-
-        return output.permute(1, 0, 2), output_lengths, output_states
 
 
 class EmformerPreTrainedModel(PreTrainedModel):
@@ -976,45 +793,19 @@ class EmformerPreTrainedModel(PreTrainedModel):
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 nn.init.uniform_(module.bias, a=-k, b=k)
 
-    def _get_feat_extract_output_lengths(
-        self, input_lengths: Union[torch.LongTensor, int], add_adapter: Optional[bool] = None
-    ):
-        """
-        Computes the output length of the convolutional layers
-        """
-
-        add_adapter = self.config.add_adapter if add_adapter is None else add_adapter
-
-        def _conv_out_length(input_length, kernel_size, stride):
-            # 1D convolutional layer output length formula taken
-            # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
-            return torch_int_div(input_length - kernel_size, stride) + 1
-
-        for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
-            input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
-
-        if add_adapter:
-            for _ in range(self.config.num_adapter_layers):
-                input_lengths = _conv_out_length(input_lengths, 1, self.config.adapter_stride)
-
-        return input_lengths
-
-    def _get_feature_vector_attention_mask(
-        self, feature_vector_length: int, attention_mask: torch.LongTensor, add_adapter=None
-    ):
+    def _get_time_reduced_attention_mask(self, feature_vector_length: int, attention_mask: torch.LongTensor):
         # Effectively attention_mask.sum(-1), but not inplace to be able to run
-        # on inference mode.
+        # in inference mode.
         non_padded_lengths = attention_mask.cumsum(dim=-1)[:, -1]
 
-        output_lengths = self._get_feat_extract_output_lengths(non_padded_lengths, add_adapter=add_adapter)
-        output_lengths = output_lengths.to(torch.long)
+        output_lengths = non_padded_lengths.div(self.config.time_reduction_stride, rounding_mode="trunc")
 
         batch_size = attention_mask.shape[0]
 
         attention_mask = torch.zeros(
             (batch_size, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
         )
-        # these two operations makes sure that all values before the output lengths idxs are attended to
+        # these two operations make sure that all values before the output lengths indices are attended to
         attention_mask[(torch.arange(attention_mask.shape[0], device=attention_mask.device), output_lengths - 1)] = 1
         attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
         return attention_mask
@@ -1140,31 +931,33 @@ class EmformerModel(EmformerPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        print("Input", input_features.sum(), input_features.shape)
-        # TODO: replace with attention masks
-        lengths = attention_mask.sum(-1)
-
         hidden_states = self.input_linear(input_features)
-        print("input_linear_out", hidden_states.sum(), hidden_states.shape)
-        hidden_states, reduced_lengths = self.time_reduction(hidden_states, lengths)
-        print("time_reduction_out", hidden_states.sum(), hidden_states.shape)
-        print("time_reduction_lengths", reduced_lengths)
+        hidden_states = self.time_reduction(hidden_states)
 
-        hidden_states, lengths = self.encoder(hidden_states, reduced_lengths)
+        if attention_mask is not None:
+            # compute reduced attention_mask corresponding to feature vectors
+            attention_mask = self._get_time_reduced_attention_mask(hidden_states.shape[1], attention_mask)
 
-        print("transformer_out", hidden_states.sum(), hidden_states.shape)
-        print("transformer_lengths", lengths)
+        encoder_outputs = self.encoder(
+            hidden_states,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        hidden_states = encoder_outputs[0]
 
         hidden_states = self.output_linear(hidden_states)
         hidden_states = self.layer_norm(hidden_states)
 
         if not return_dict:
-            return (hidden_states,)
+            return (hidden_states,) + encoder_outputs[1:]
 
         return BaseModelOutput(
             last_hidden_state=hidden_states,
-            # hidden_states=encoder_outputs.hidden_states,
-            # attentions=encoder_outputs.attentions,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
         )
 
 
@@ -1285,9 +1078,8 @@ class RNNTPredictor(torch.nn.Module):
     def forward(
         self,
         input: torch.Tensor,
-        lengths: torch.Tensor,
         state: Optional[List[List[torch.Tensor]]] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor, List[List[torch.Tensor]]]:
+    ) -> Tuple[torch.Tensor, List[List[torch.Tensor]]]:
         r"""Forward pass.
 
         B: batch size; U: maximum sequence length in batch; D: feature dimension of each input sequence element.
@@ -1324,61 +1116,20 @@ class RNNTPredictor(torch.nn.Module):
 
         linear_out = self.linear(lstm_out)
         output_layer_norm_out = self.output_layer_norm(linear_out)
-        return output_layer_norm_out.permute(1, 0, 2), lengths, state_out
+        return output_layer_norm_out.permute(1, 0, 2), state_out
 
 
 class RNNTJoiner(torch.nn.Module):
-    r"""Recurrent neural network transducer (RNN-T) joint network.
-
-    Args:
-        input_dim (int): source and target input dimension.
-        output_dim (int): output dimension.
-        activation (str, optional): activation function to use in the joiner.
-            Must be one of ("relu", "tanh"). (Default: "relu")
-
-    """
-
     def __init__(self, config: EmformerConfig) -> None:
         super().__init__()
         self.linear = torch.nn.Linear(config.output_dim, config.vocab_size, bias=True)
         self.activation = ACT2FN[config.joiner_activation]
 
-    def forward(
-        self,
-        source_encodings: torch.Tensor,
-        source_lengths: torch.Tensor,
-        target_encodings: torch.Tensor,
-        target_lengths: torch.Tensor,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        r"""Forward pass for training.
-
-        B: batch size; T: maximum source sequence length in batch; U: maximum target sequence length in batch; D:
-        dimension of each source and target sequence encoding.
-
-        Args:
-            source_encodings (torch.Tensor): source encoding sequences, with
-                shape `(B, T, D)`.
-            source_lengths (torch.Tensor): with shape `(B,)` and i-th element representing
-                valid sequence length of i-th batch element in ``source_encodings``.
-            target_encodings (torch.Tensor): target encoding sequences, with shape `(B, U, D)`.
-            target_lengths (torch.Tensor): with shape `(B,)` and i-th element representing
-                valid sequence length of i-th batch element in ``target_encodings``.
-
-        Returns:
-            (torch.Tensor, torch.Tensor, torch.Tensor):
-                torch.Tensor
-                    joint network output, with shape `(B, T, U, output_dim)`.
-                torch.Tensor
-                    output source lengths, with shape `(B,)` and i-th element representing number of valid elements
-                    along dim 1 for i-th batch element in joint network output.
-                torch.Tensor
-                    output target lengths, with shape `(B,)` and i-th element representing number of valid elements
-                    along dim 2 for i-th batch element in joint network output.
-        """
+    def forward(self, source_encodings, target_encodings):
         joint_encodings = source_encodings.unsqueeze(2).contiguous() + target_encodings.unsqueeze(1).contiguous()
-        activation_out = self.activation(joint_encodings)
-        output = self.linear(activation_out)
-        return output, source_lengths, target_lengths
+        joint_encodings = self.activation(joint_encodings)
+        output = self.linear(joint_encodings)
+        return output
 
 
 @add_start_docstrings(
@@ -1389,25 +1140,82 @@ class EmformerForRNNT(EmformerPreTrainedModel):
     def __init__(self, config: EmformerConfig):
         super().__init__(config)
 
-        self.transcriber = EmformerModel(config)
+        self.emformer = EmformerModel(config)
         self.predictor = RNNTPredictor(config)
         self.joiner = RNNTJoiner(config)
 
         self.blank_token_id = config.blank_token_id
+        self.pad_token_id = config.pad_token_id
+        # TODO: parameterize
+        self.max_output_length = 256
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    def _gen_next_token_probs(self, enc_out: torch.Tensor, predictor_out, device: torch.device) -> torch.Tensor:
-        one_tensor = torch.tensor([1], device=device)
-        joined_out, _, _ = self.joiner(
-            enc_out,
-            one_tensor,
-            predictor_out,
-            torch.tensor([1], device=device),
-        )
+    def _gen_next_token_probs(self, encoder_out, predictor_out):
+        joined_out = self.joiner(encoder_out, predictor_out)
         joined_out = torch.nn.functional.log_softmax(joined_out, dim=3)
         return joined_out[:, 0, 0]
+
+    def _greedy_decode(self, encoder_out, encoder_lengths, device):
+        past_rnn_state = None
+        batch_size = encoder_out.shape[0]
+
+        logits = [[] for _ in range(batch_size)]
+
+        last_label = torch.full([batch_size, 1], fill_value=self.blank_token_id, dtype=torch.long, device=device)
+        blank_mask = torch.full([batch_size], fill_value=0, dtype=torch.bool, device=device)
+
+        max_time_len = encoder_out.shape[1]
+        for time_idx in range(max_time_len):
+            encoder_slice = encoder_out.narrow(dim=1, start=time_idx, length=1)
+
+            not_blank = True
+            n_decoded_tokens = 0
+
+            blank_mask *= False
+            time_mask = time_idx >= encoder_lengths
+            blank_mask.bitwise_or_(time_mask)
+
+            while not_blank and (self.max_output_length is None or n_decoded_tokens < self.max_output_length):
+                rnn_out, current_rnn_state = self.predictor(last_label, past_rnn_state)
+                next_token_logits = self._gen_next_token_probs(encoder_slice, rnn_out)
+                next_token_id = next_token_logits.argmax(-1)
+
+                token_is_blank = next_token_id == self.blank_token_id
+                blank_mask.bitwise_or_(token_is_blank)
+
+                if blank_mask.all():
+                    not_blank = False
+                else:
+                    blank_indices = []
+                    if past_rnn_state is not None:
+                        blank_indices = (blank_mask == 1).nonzero(as_tuple=False)
+
+                    if past_rnn_state is not None:
+                        # 3 LSTM layers
+                        for layer_id in range(len(past_rnn_state)):
+                            # 2 states
+                            for state_id in range(len(past_rnn_state[layer_id])):
+                                current_rnn_state[layer_id][state_id][blank_indices, :] = past_rnn_state[layer_id][
+                                    state_id
+                                ][blank_indices, :]
+
+                    next_token_id[blank_indices] = last_label[blank_indices, 0]
+
+                    last_label = next_token_id.clone().view(-1, 1)
+                    past_rnn_state = current_rnn_state
+
+                    next_token_id.masked_fill_(blank_mask, self.blank_token_id)
+                    for batch_idx, (token_id, token_logits) in enumerate(zip(next_token_id, next_token_logits)):
+                        if time_mask[batch_idx] == 0 and token_id != self.blank_token_id:
+                            logits[batch_idx].append(token_logits)
+
+                    n_decoded_tokens += 1
+        for batch_idx, seq_logits in enumerate(logits):
+            logits[batch_idx] = torch.stack(seq_logits, dim=-2)
+
+        return logits
 
     @add_start_docstrings_to_model_forward(EMFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -1437,37 +1245,35 @@ class EmformerForRNNT(EmformerPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        encoder_out = self.transcriber(
+        attention_mask = (
+            attention_mask
+            if attention_mask is not None
+            else torch.ones(input_features.shape[:-1], dtype=torch.long, device=self.device)
+        )
+
+        encoder_outputs = self.emformer(
             input_features,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        n_time_steps = encoder_out[0].shape[-2]
-        device = encoder_out[0].device
+        encoded_frames = encoder_outputs[0]
 
-        rnn_lengths = torch.tensor([1], device=self.device)
-        token = self.blank_token_id
-        predictor_out, _, predictor_state = self.predictor(
-            torch.tensor([[token]], device=self.device), rnn_lengths, None
+        attention_mask = self._get_time_reduced_attention_mask(input_features.shape[1], attention_mask)
+
+        logits = self._greedy_decode(encoded_frames, attention_mask.sum(-1), encoded_frames.device)
+        logits = nn.utils.rnn.pad_sequence(logits, batch_first=True, padding_value=self.pad_token_id)
+
+        # TODO: support RNN-T loss
+        loss = None
+        if not return_dict:
+            output = (logits,) + encoder_outputs[_HIDDEN_STATES_START_POSITION:]
+            return ((loss,) + output) if loss is not None else output
+
+        return CausalLMOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
         )
-
-        logits = []
-        time_step = 0
-        while time_step < n_time_steps:
-            next_token_probs = self._gen_next_token_probs(
-                encoder_out[0][:, time_step : time_step + 1], predictor_out, device
-            )
-            token = next_token_probs.argmax(-1)
-            if token != self.blank_token_id:
-                # if the joiner outputs a real token, then record it and move to the next RNN state
-                logits.append(next_token_probs)
-                predictor_out, _, predictor_state = self.predictor(
-                    torch.tensor([[token]], device=device), rnn_lengths, predictor_state
-                )
-            else:
-                # if the joiner outputs a blank token, then move to the next encoder output frame
-                time_step += 1
-
-        return CausalLMOutput(loss=None, logits=logits, hidden_states=None, attentions=None)

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,14 +20,6 @@ import unittest
 import numpy as np
 from datasets import load_dataset
 
-from tests.test_configuration_common import ConfigTester
-from tests.test_modeling_common import (
-    ModelTesterMixin,
-    _config_zero_init,
-    floats_tensor,
-    ids_tensor,
-    random_attention_mask,
-)
 from transformers import EmformerConfig, is_torch_available
 from transformers.testing_utils import (
     is_pt_flax_cross_test,
@@ -41,29 +33,24 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import (
+    ModelTesterMixin,
+    _config_zero_init,
+    floats_tensor,
+    ids_tensor,
+    random_attention_mask,
+)
+
 
 if is_torch_available():
     import torch
 
-    from transformers import (
-        EmformerForRNNT,
-        EmformerModel,
-        Wav2Vec2FeatureExtractor,
-        Wav2Vec2Processor,
-    )
-    from transformers.models.emformer.modeling_emformer import (
-        EmformerGumbelVectorQuantizer,
-        _compute_mask_indices,
-        _sample_negative_indices,
-    )
+    from transformers import EmformerFeatureExtractor, EmformerForRNNT, EmformerModel, EmformerProcessor
 
 
 if is_torchaudio_available():
     import torchaudio
-
-
-if is_pyctcdecode_available():
-    from transformers import Wav2Vec2ProcessorWithLM
 
 
 class EmformerModelTester:
@@ -191,39 +178,6 @@ class EmformerModelTester:
             result.last_hidden_state.shape, (self.batch_size, self.output_seq_length, self.hidden_size)
         )
 
-    def create_and_check_model_with_adapter(self, config, input_values, attention_mask):
-        config.add_adapter = True
-        model = EmformerModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_values, attention_mask=attention_mask)
-        self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.adapter_output_seq_length, self.hidden_size)
-        )
-
-    def create_and_check_model_with_adapter_for_ctc(self, config, input_values, attention_mask):
-        config.add_adapter = True
-        config.output_hidden_size = 2 * config.hidden_size
-        model = EmformerForCTC(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_values, attention_mask=attention_mask)
-        self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.adapter_output_seq_length, self.vocab_size)
-        )
-
-    def create_and_check_model_with_adapter_proj_dim(self, config, input_values, attention_mask):
-        config.add_adapter = True
-        config.output_hidden_size = 8
-        model = EmformerModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_values, attention_mask=attention_mask)
-        self.parent.assertEqual(
-            result.last_hidden_state.shape,
-            (self.batch_size, self.adapter_output_seq_length, config.output_hidden_size),
-        )
-
     def create_and_check_batch_inference(self, config, input_values, *args):
         # test does not pass for models making use of `group_norm`
         # check: https://github.com/pytorch/fairseq/issues/3227
@@ -250,8 +204,8 @@ class EmformerModelTester:
             batch_output = batch_outputs[i : i + 1, : output.shape[1]]
             self.parent.assertTrue(torch.allclose(output, batch_output, atol=1e-3))
 
-    def check_ctc_loss(self, config, input_values, *args):
-        model = EmformerForCTC(config=config)
+    def check_rnnt_loss(self, config, input_values, *args):
+        model = EmformerForRNNT(config=config)
         model.to(torch_device)
 
         # make sure that dropout is disabled
@@ -278,108 +232,8 @@ class EmformerModelTester:
         self.parent.assertTrue(isinstance(sum_loss, float))
         self.parent.assertTrue(isinstance(mean_loss, float))
 
-    def check_seq_classifier_loss(self, config, input_values, *args):
-        model = EmformerForSequenceClassification(config=config)
-        model.to(torch_device)
-
-        # make sure that dropout is disabled
-        model.eval()
-
-        input_values = input_values[:3]
-        attention_mask = torch.ones(input_values.shape, device=torch_device, dtype=torch.long)
-
-        input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
-        labels = ids_tensor((input_values.shape[0], 1), len(model.config.id2label))
-
-        # pad input
-        for i in range(len(input_lengths)):
-            input_values[i, input_lengths[i] :] = 0.0
-            attention_mask[i, input_lengths[i] :] = 0
-
-        masked_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss.item()
-        unmasked_loss = model(input_values, labels=labels).loss.item()
-
-        self.parent.assertTrue(isinstance(masked_loss, float))
-        self.parent.assertTrue(isinstance(unmasked_loss, float))
-        self.parent.assertTrue(masked_loss != unmasked_loss)
-
-    def check_ctc_training(self, config, input_values, *args):
-        config.ctc_zero_infinity = True
-        model = EmformerForCTC(config=config)
-        model.to(torch_device)
-        model.train()
-
-        # freeze feature encoder
-        model.freeze_feature_encoder()
-
-        input_values = input_values[:3]
-
-        input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
-        max_length_labels = model._get_feat_extract_output_lengths(torch.tensor(input_lengths))
-        labels = ids_tensor((input_values.shape[0], max(max_length_labels) - 2), model.config.vocab_size)
-
-        # pad input
-        for i in range(len(input_lengths)):
-            input_values[i, input_lengths[i] :] = 0.0
-
-            if max_length_labels[i] < labels.shape[-1]:
-                # it's important that we make sure that target lenghts are at least
-                # one shorter than logit lenghts to prevent -inf
-                labels[i, max_length_labels[i] - 1 :] = -100
-
-        loss = model(input_values, labels=labels).loss
-        self.parent.assertFalse(torch.isinf(loss).item())
-
-        loss.backward()
-
-    def check_seq_classifier_training(self, config, input_values, *args):
-        config.ctc_zero_infinity = True
-        model = EmformerForSequenceClassification(config=config)
-        model.to(torch_device)
-        model.train()
-
-        # freeze everything but the classification head
-        model.freeze_base_model()
-
-        input_values = input_values[:3]
-
-        input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
-        labels = ids_tensor((input_values.shape[0], 1), len(model.config.id2label))
-
-        # pad input
-        for i in range(len(input_lengths)):
-            input_values[i, input_lengths[i] :] = 0.0
-
-        loss = model(input_values, labels=labels).loss
-        self.parent.assertFalse(torch.isinf(loss).item())
-
-        loss.backward()
-
-    def check_xvector_training(self, config, input_values, *args):
-        config.ctc_zero_infinity = True
-        model = EmformerForXVector(config=config)
-        model.to(torch_device)
-        model.train()
-
-        # freeze everything but the classification head
-        model.freeze_base_model()
-
-        input_values = input_values[:3]
-
-        input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
-        labels = ids_tensor((input_values.shape[0], 1), len(model.config.id2label))
-
-        # pad input
-        for i in range(len(input_lengths)):
-            input_values[i, input_lengths[i] :] = 0.0
-
-        loss = model(input_values, labels=labels).loss
-        self.parent.assertFalse(torch.isinf(loss).item())
-
-        loss.backward()
-
     def check_labels_out_of_vocab(self, config, input_values, *args):
-        model = EmformerForCTC(config)
+        model = EmformerForRNNT(config)
         model.to(torch_device)
         model.train()
 
@@ -400,11 +254,7 @@ class EmformerModelTester:
 
 @require_torch
 class EmformerModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (EmformerModel, EmformerForRNNT, EmformerForPreTraining)
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (EmformerModel, EmformerForRNNT) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
 
@@ -418,38 +268,6 @@ class EmformerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_model_with_adapter(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model_with_adapter(*config_and_inputs)
-
-    def test_model_with_adapter_for_ctc(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model_with_adapter_for_ctc(*config_and_inputs)
-
-    def test_model_with_adapter_proj_dim(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model_with_adapter_proj_dim(*config_and_inputs)
-
-    def test_ctc_loss_inference(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.check_ctc_loss(*config_and_inputs)
-
-    def test_seq_classifier_loss_inference(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.check_seq_classifier_loss(*config_and_inputs)
-
-    def test_ctc_train(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.check_ctc_training(*config_and_inputs)
-
-    def test_seq_classifier_train(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.check_seq_classifier_training(*config_and_inputs)
-
-    def test_xvector_train(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.check_xvector_training(*config_and_inputs)
 
     def test_labels_out_of_vocab(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -572,52 +390,6 @@ class EmformerModelTest(ModelTesterMixin, unittest.TestCase):
         if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
             module.masked_spec_embed.data.fill_(3)
 
-    def test_mask_feature_prob_ctc(self):
-        model = EmformerForCTC.from_pretrained(
-            "hf-internal-testing/tiny-random-emformer", mask_feature_prob=0.2, mask_feature_length=2
-        )
-        model.to(torch_device).train()
-        processor = Wav2Vec2Processor.from_pretrained(
-            "hf-internal-testing/tiny-random-emformer", return_attention_mask=True
-        )
-
-        batch_duration_in_seconds = [1, 3, 2, 6]
-        input_features = [np.random.random(16_000 * s) for s in batch_duration_in_seconds]
-
-        batch = processor(
-            input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt"
-        )
-
-        logits = model(
-            input_values=batch["input_values"].to(torch_device),
-            attention_mask=batch["attention_mask"].to(torch_device),
-        ).logits
-
-        self.assertEqual(logits.shape, (4, 1498, 32))
-
-    def test_mask_time_prob_ctc(self):
-        model = EmformerForCTC.from_pretrained(
-            "hf-internal-testing/tiny-random-emformer", mask_time_prob=0.2, mask_time_length=2
-        )
-        model.to(torch_device).train()
-        processor = Wav2Vec2Processor.from_pretrained(
-            "hf-internal-testing/tiny-random-emformer", return_attention_mask=True
-        )
-
-        batch_duration_in_seconds = [1, 3, 2, 6]
-        input_features = [np.random.random(16_000 * s) for s in batch_duration_in_seconds]
-
-        batch = processor(
-            input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt"
-        )
-
-        logits = model(
-            input_values=batch["input_values"].to(torch_device),
-            attention_mask=batch["attention_mask"].to(torch_device),
-        ).logits
-
-        self.assertEqual(logits.shape, (4, 1498, 32))
-
     @unittest.skip(reason="Feed forward chunking is not implemented")
     def test_feed_forward_chunking(self):
         pass
@@ -629,196 +401,31 @@ class EmformerModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class EmformerUtilsTest(unittest.TestCase):
-    def test_compute_mask_indices(self):
-        batch_size = 4
-        sequence_length = 60
-        mask_prob = 0.5
-        mask_length = 1
-
-        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
-        mask = torch.from_numpy(mask).to(torch_device)
-
-        self.assertListEqual(mask.sum(axis=-1).tolist(), [mask_prob * sequence_length for _ in range(batch_size)])
-
-    def test_compute_mask_indices_low_prob(self):
-        # with these settings num_masked_spans=0.5, which means probabilistic rounding
-        # ensures that in 5 out of 10 method calls, num_masked_spans=0, and in
-        # the other 5 out of 10, cases num_masked_spans=1
-        n_trials = 100
-        batch_size = 4
-        sequence_length = 100
-        mask_prob = 0.05
-        mask_length = 10
-
-        count_dimensions_masked = 0
-        count_dimensions_not_masked = 0
-
-        for _ in range(n_trials):
-            mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
-            mask = torch.from_numpy(mask).to(torch_device)
-
-            num_masks = torch.sum(mask).item()
-
-            if num_masks > 0:
-                count_dimensions_masked += 1
-            else:
-                count_dimensions_not_masked += 1
-
-        # as we test for at least 10 masked dimension and at least
-        # 10 non-masked dimension, this test could fail with probability:
-        # P(100 coin flips, at most 9 heads) = 1.66e-18
-        self.assertGreater(count_dimensions_masked, int(n_trials * 0.1))
-        self.assertGreater(count_dimensions_not_masked, int(n_trials * 0.1))
-
-    def test_compute_mask_indices_overlap(self):
-        batch_size = 4
-        sequence_length = 80
-        mask_prob = 0.5
-        mask_length = 4
-
-        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
-        mask = torch.from_numpy(mask).to(torch_device)
-
-        # because of overlap mask don't have to add up exactly to `mask_prob * sequence_length`, but have to be smaller or equal
-        for batch_sum in mask.sum(axis=-1):
-            self.assertTrue(int(batch_sum) <= mask_prob * sequence_length)
-
-    def test_compute_mask_indices_attn_mask_overlap(self):
-        batch_size = 4
-        sequence_length = 80
-        mask_prob = 0.5
-        mask_length = 4
-
-        attention_mask = torch.ones((batch_size, sequence_length), dtype=torch.long, device=torch_device)
-        attention_mask[:2, sequence_length // 2 :] = 0
-
-        mask = _compute_mask_indices(
-            (batch_size, sequence_length), mask_prob, mask_length, attention_mask=attention_mask
-        )
-        mask = torch.from_numpy(mask).to(torch_device)
-
-        for batch_sum in mask.sum(axis=-1):
-            self.assertTrue(int(batch_sum) <= mask_prob * sequence_length)
-
-        self.assertTrue(mask[:2, sequence_length // 2 :].sum() == 0)
-
-    def test_compute_mask_indices_short_audio(self):
-        batch_size = 4
-        sequence_length = 100
-        mask_prob = 0.05
-        mask_length = 10
-
-        attention_mask = torch.ones((batch_size, sequence_length), dtype=torch.long, device=torch_device)
-        # force one example to be heavily padded
-        attention_mask[0, 5:] = 0
-
-        mask = _compute_mask_indices(
-            (batch_size, sequence_length), mask_prob, mask_length, attention_mask=attention_mask, min_masks=2
-        )
-
-        # make sure that non-padded examples cannot be padded
-        self.assertFalse(mask[0][attention_mask[0].to(torch.bool).cpu()].any())
-
-    def test_compute_perplexity(self):
-        probs = torch.arange(100, device=torch_device).reshape(2, 5, 10) / 100
-
-        ppl = EmformerGumbelVectorQuantizer._compute_perplexity(probs)
-        self.assertTrue(abs(ppl.item() - 141.4291) < 1e-3)
-
-        # mask half of the input
-        mask = torch.ones((2,), device=torch_device, dtype=torch.bool)
-        mask[0] = 0
-
-        ppl = EmformerGumbelVectorQuantizer._compute_perplexity(probs, mask)
-        self.assertTrue(abs(ppl.item() - 58.6757) < 1e-3)
-
-    def test_sample_negatives(self):
-        batch_size = 2
-        sequence_length = 10
-        hidden_size = 4
-        num_negatives = 3
-
-        features = (torch.arange(sequence_length * hidden_size, device=torch_device) // hidden_size).view(
-            sequence_length, hidden_size
-        )  # each value in vector consits of same value
-        features = features[None, :].expand(batch_size, sequence_length, hidden_size).contiguous()
-
-        # sample negative indices
-        sampled_negative_indices = _sample_negative_indices((batch_size, sequence_length), num_negatives, None)
-        sampled_negative_indices = torch.from_numpy(sampled_negative_indices).to(torch_device)
-        negatives = features.view(-1, hidden_size)[sampled_negative_indices.long().view(-1)]
-        negatives = negatives.view(batch_size, sequence_length, -1, hidden_size).permute(2, 0, 1, 3)
-        self.assertTrue(negatives.shape == (num_negatives, batch_size, sequence_length, hidden_size))
-
-        # make sure no negatively sampled vector is actually a positive one
-        for negative in negatives:
-            self.assertTrue(((negative - features) == 0).sum() == 0.0)
-
-        # make sure that full vectors are sampled and not values of vectors => this means that `unique()` yields a single value for `hidden_size` dim
-        self.assertTrue(negatives.unique(dim=-1).shape, (num_negatives, batch_size, sequence_length, 1))
-
-    def test_sample_negatives_with_mask(self):
-        batch_size = 2
-        sequence_length = 10
-        hidden_size = 4
-        num_negatives = 3
-
-        # second half of last input tensor is padded
-        mask = torch.ones((batch_size, sequence_length), dtype=torch.long, device=torch_device)
-        mask[-1, sequence_length // 2 :] = 0
-
-        features = (torch.arange(sequence_length * hidden_size, device=torch_device) // hidden_size).view(
-            sequence_length, hidden_size
-        )  # each value in vector consits of same value
-        features = features[None, :].expand(batch_size, sequence_length, hidden_size).contiguous()
-
-        # replace masked feature vectors with -100 to test that those are not sampled
-        features = torch.where(mask[:, :, None].expand(features.shape).bool(), features, -100)
-
-        # sample negative indices
-        sampled_negative_indices = _sample_negative_indices(
-            (batch_size, sequence_length), num_negatives, mask.cpu().numpy()
-        )
-        sampled_negative_indices = torch.from_numpy(sampled_negative_indices).to(torch_device)
-        negatives = features.view(-1, hidden_size)[sampled_negative_indices.long().view(-1)]
-        negatives = negatives.view(batch_size, sequence_length, -1, hidden_size).permute(2, 0, 1, 3)
-
-        self.assertTrue((negatives >= 0).all().item())
-
-        self.assertTrue(negatives.shape == (num_negatives, batch_size, sequence_length, hidden_size))
-
-        # make sure no negatively sampled vector is actually a positive one
-        for negative in negatives:
-            self.assertTrue(((negative - features) == 0).sum() == 0.0)
-
-        # make sure that full vectors are sampled and not values of vectors => this means that `unique()` yields a single value for `hidden_size` dim
-        self.assertTrue(negatives.unique(dim=-1).shape, (num_negatives, batch_size, sequence_length, 1))
-
-
-@require_torch
 @require_soundfile
 @slow
 class EmformerModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
-        speech_samples = ds.sort("id").filter(
-            lambda x: x["id"] in [f"1272-141231-000{i}" for i in range(num_samples)]
-        )[:num_samples]["audio"]
+        sample_ids = [f"1272-141231-000{i}" for i in range(num_samples)]
+        speech_samples = ds.sort("id").filter(lambda x: x["id"] in sample_ids)
+        speech_samples = speech_samples["audio"]
 
         return [x["array"] for x in speech_samples]
 
     def test_inference_rnnt(self):
         model = EmformerForRNNT.from_pretrained("anton-l/emformer-base-librispeech")
         model.to(torch_device)
-        processor = EmformerProcessor.from_pretrained("anton-l/emformer-base-librispeech", do_lower_case=True)
+        processor = EmformerProcessor.from_pretrained(
+            "anton-l/emformer-base-librispeech",
+            do_lower_case=True,
+        )
         input_speech = self._load_datasamples(1)
 
-        input_values = processor(input_speech, return_tensors="pt").input_values.to(torch_device)
+        input_features = processor(input_speech, return_tensors="pt").input_features.to(torch_device)
 
         with torch.no_grad():
-            logits = model(input_values).logits
+            logits = model(input_features).logits
 
         predicted_ids = torch.argmax(logits, dim=-1)
         predicted_trans = processor.batch_decode(predicted_ids)
@@ -829,22 +436,25 @@ class EmformerModelIntegrationTest(unittest.TestCase):
     def test_inference_rnnt_batched(self):
         model = EmformerForRNNT.from_pretrained("anton-l/emformer-base-librispeech")
         model.to(torch_device)
-        processor = Wav2Vec2Processor.from_pretrained("anton-l/emformer-base-librispeech", do_lower_case=True)
+        processor = EmformerProcessor.from_pretrained(
+            "anton-l/emformer-base-librispeech",
+            do_lower_case=True,
+        )
 
         input_speech = self._load_datasamples(2)
 
         inputs = processor(input_speech, return_tensors="pt", padding=True)
 
-        input_values = inputs.input_values.to(torch_device)
+        input_features = inputs.input_features.to(torch_device)
 
         with torch.no_grad():
-            logits = model(input_values).logits
+            logits = model(input_features).logits
 
         predicted_ids = torch.argmax(logits, dim=-1)
         predicted_trans = processor.batch_decode(predicted_ids)
 
         EXPECTED_TRANSCRIPTIONS = [
             "a man said to the universe sir i exist",
-            "sweat covered brion's body trickling into the tight lowing cloth that was the only garment he wore",
+            "sweat covered brion's body trickling into the tait loingleness that was the only garment he wore",
         ]
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)

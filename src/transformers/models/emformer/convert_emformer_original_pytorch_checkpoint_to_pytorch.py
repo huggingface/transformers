@@ -24,7 +24,14 @@ import torchaudio
 from torchaudio.pipelines import EMFORMER_RNNT_BASE_LIBRISPEECH, RNNTBundle
 from torchaudio.prototype.pipelines import EMFORMER_RNNT_BASE_MUSTC, EMFORMER_RNNT_BASE_TEDLIUM3
 
-from transformers import EmformerConfig, EmformerFeatureExtractor, EmformerForRNNT, EmformerTokenizer, EmformerProcessor, logging
+from transformers import (
+    EmformerConfig,
+    EmformerFeatureExtractor,
+    EmformerForRNNT,
+    EmformerProcessor,
+    EmformerTokenizer,
+    logging,
+)
 
 
 NAME2BUNDLE = {
@@ -53,7 +60,7 @@ def act2name(activation):
 
 def convert_config(bundle: RNNTBundle):
     cfg = EmformerConfig()
-    decoder = bundle.get_decoder().model
+    decoder = bundle.get_decoder().model.cpu()
     transcriber = decoder.transcriber
     transcriber_layer = transcriber.transformer.emformer_layers[0]
     predictor = decoder.predictor
@@ -83,6 +90,7 @@ def convert_config(bundle: RNNTBundle):
     cfg.joiner_activation = act2name(decoder.joiner.activation)
 
     cfg.blank_token_id = bundle._blank
+    cfg.pad_token_id = bundle.get_token_processor().sp_model.pad_id()
 
     return cfg
 
@@ -113,20 +121,20 @@ def convert_feature_extractor(bundle: RNNTBundle):
 def convert_weights(bundle: RNNTBundle, config: EmformerConfig) -> EmformerForRNNT:
     model = EmformerForRNNT(config)
 
-    decoder = bundle.get_decoder().model
+    decoder = bundle.get_decoder().model.cpu()
     transcriber = decoder.transcriber
     predictor = decoder.predictor
 
-    model.transcriber.input_linear.load_state_dict(transcriber.input_linear.state_dict())
+    model.emformer.input_linear.load_state_dict(transcriber.input_linear.state_dict())
     for i in range(config.num_hidden_layers):
         src_layer = transcriber.transformer.emformer_layers[i]
-        dst_layer = model.transcriber.encoder.emformer_layers[i]
+        dst_layer = model.emformer.encoder.emformer_layers[i]
         dst_layer.attention.load_state_dict(src_layer.attention.state_dict())
         dst_layer.pos_ff.load_state_dict(src_layer.pos_ff.state_dict())
         dst_layer.layer_norm_input.load_state_dict(src_layer.layer_norm_input.state_dict())
         dst_layer.layer_norm_output.load_state_dict(src_layer.layer_norm_output.state_dict())
-    model.transcriber.output_linear.load_state_dict(transcriber.output_linear.state_dict())
-    model.transcriber.layer_norm.load_state_dict(transcriber.layer_norm.state_dict())
+    model.emformer.output_linear.load_state_dict(transcriber.output_linear.state_dict())
+    model.emformer.layer_norm.load_state_dict(transcriber.layer_norm.state_dict())
 
     model.predictor.embedding.load_state_dict(predictor.embedding.state_dict())
     model.predictor.input_layer_norm.load_state_dict(predictor.input_layer_norm.state_dict())
@@ -163,7 +171,7 @@ def convert_emformer_checkpoint(model_name: str, model_output_dir: str):
     features = processor(waveform, return_tensors="pt")
     with torch.no_grad():
         outputs = model(**features)
-    token_ids = torch.stack(outputs.logits, dim=-2).squeeze(0).argmax(-1)
+    token_ids = outputs.logits.squeeze(0).argmax(-1)
     print(processor.decode(token_ids))
 
     tokenizer.save_pretrained(model_output_dir)
@@ -174,7 +182,15 @@ def convert_emformer_checkpoint(model_name: str, model_output_dir: str):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model_name", default=None, type=str, help="Path to the Emformer source model name")
-    parser.add_argument("--model_output_dir", default=None, type=str, help="Path to the output PyTorch model.")
+    # TODO: remove defaults
+    parser.add_argument(
+        "--model_name", default="base_librispeech", type=str, help="Path to the Emformer source model name"
+    )
+    parser.add_argument(
+        "--model_output_dir",
+        default="/home/anton/repos/transformers/src/transformers/models/emformer/emformer-base-librispeech",
+        type=str,
+        help="Path to the output PyTorch model.",
+    )
     args = parser.parse_args()
     convert_emformer_checkpoint(args.model_name, args.model_output_dir)

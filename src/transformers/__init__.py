@@ -200,8 +200,8 @@ _import_structure = {
         "EMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "EmformerConfig",
         "EmformerFeatureExtractor",
-        "EmformerTokenizer",
         "EmformerProcessor",
+        "EmformerTokenizer",
     ],
     "models.encoder_decoder": ["EncoderDecoderConfig"],
     "models.flaubert": ["FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlaubertConfig", "FlaubertTokenizer"],
@@ -2727,8 +2727,8 @@ if TYPE_CHECKING:
         EMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         EmformerConfig,
         EmformerFeatureExtractor,
-        EmformerTokenizer,
         EmformerProcessor,
+        EmformerTokenizer,
     )
     from .models.encoder_decoder import EncoderDecoderConfig
     from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
