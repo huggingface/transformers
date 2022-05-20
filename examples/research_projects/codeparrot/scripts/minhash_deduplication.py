@@ -183,7 +183,7 @@ def deduplicate_dataset(dataset: Type[Dataset]) -> Tuple[Type[Dataset], List[Lis
     duplicate_indices = set(x["base_index"] for cluster in duplicate_clusters for x in cluster)
     # todo: make this multiprocessing, pay attention to memory usage
     extreme_dict = {}
-    extremes_clusters = multipro_find_extremes(duplicate_clusters, dataset)
+    extremes_clusters = find_extremes(duplicate_clusters, dataset)
     for extremes in extremes_clusters:
         for element in extremes:
             extreme_dict[element["base_index"]] = element

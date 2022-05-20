@@ -11,7 +11,6 @@ import numpy as np
 from datasets import load_dataset
 
 from arguments import PreprocessingArguments
-
 from minhash_deduplication import deduplicate_dataset
 from transformers import AutoTokenizer, HfArgumentParser
 
@@ -154,7 +153,7 @@ def compress_file(file_path):
             shutil.copyfileobj(f_in, f_out)
     os.unlink(file_path)
 
-    
+
 # Settings
 parser = HfArgumentParser(PreprocessingArguments)
 args = parser.parse_args()
