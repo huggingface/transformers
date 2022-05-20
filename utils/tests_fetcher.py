@@ -291,7 +291,7 @@ SPECIAL_MODULE_TO_TEST_MAP = {
     "configuration_utils.py": "test_configuration_common.py",
     "convert_graph_to_onnx.py": "onnx/test_onnx.py",
     "data/data_collator.py": "trainer/test_data_collator.py",
-    "deepspeed.py": "deepspeed1/",
+    "deepspeed.py": "deepspeed/",
     "feature_extraction_sequence_utils.py": "test_sequence_feature_extraction_common.py",
     "feature_extraction_utils.py": "test_feature_extraction_common.py",
     "file_utils.py": ["utils/test_file_utils.py", "utils/test_model_output.py"],
