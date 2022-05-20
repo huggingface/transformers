@@ -22,7 +22,7 @@ import unittest
 import timeout_decorator  # noqa
 
 from transformers import OPTConfig, is_torch_available
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_generation_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -250,25 +250,32 @@ def _long_tensor(tok_lst):
 
 
 @require_torch
-@require_sentencepiece
-@require_tokenizers
 class OPTModelIntegrationTests(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
         model = OPTModel.from_pretrained("facebook/opt-350m").to(torch_device)
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        attention_mask = input_ids.ne(model.config.pad_token_id)
+
         with torch.no_grad():
-            output = model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
+            output = model(input_ids=input_ids).last_hidden_state
+
         expected_shape = torch.Size((1, 11, 512))
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.tensor(
-            [[-0.2873, -1.9218, -0.3033], [-1.2710, -0.1338, -0.1902], [0.4095, 0.1214, -1.3121]], device=torch_device
+            [[-0.2873, -1.9242, -0.3059], [-1.2738, -0.1333, -0.1877], [0.4116, 0.1192, -1.3107]],
+            device=torch_device,
         )
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-3))
+        # Getting different logits results on GPU depending on PyTorch version (1.10+cu11.0 vs. 1.11+cu11.4)
+        # and results also differ between CPU and GPU. Only on CPU it seems to be deterministic.
+
+        # It's not because the weights are saved & loaded in FP16
+        # checked that the same happens when weights are stored in fp32 and loaded in fp32.
+        # The differences start to creep in in the first linear projection matrix project_in_dim
+        # It however also happens for BART (maybe related to training model in fp16?)
+        atol = 1e-2 if torch_device != "cpu" else 1e-3
+        assert_tensors_close(output[0, :3, :3], expected_slice, atol=atol)
 
 
-@require_tokenizers
 @require_torch
 @slow
 class OPTEmbeddingsTest(unittest.TestCase):
@@ -342,6 +349,47 @@ class OPTGenerationTest(unittest.TestCase):
             predicted_outputs += generated_string
 
         self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)
+
+    def test_batch_generation(self):
+        model_id = "facebook/opt-350m"
+
+        tokenizer = GPT2Tokenizer.from_pretrained(model_id)
+        model = OPTForCausalLM.from_pretrained(model_id)
+        model.to(torch_device)
+
+        tokenizer.padding_side = "left"
+
+        # use different length sentences to test batching
+        sentences = [
+            "Hello, my dog is a little",
+            "Today, I",
+        ]
+
+        inputs = tokenizer(sentences, return_tensors="pt", padding=True)
+        input_ids = inputs["input_ids"].to(torch_device)
+
+        outputs = model.generate(
+            input_ids=input_ids,
+            attention_mask=inputs["attention_mask"].to(torch_device),
+        )
+
+        inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
+        output_non_padded = model.generate(input_ids=inputs_non_padded)
+
+        num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().cpu().item()
+        inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
+        output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
+
+        batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        non_padded_sentence = tokenizer.decode(output_non_padded[0], skip_special_tokens=True)
+        padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
+
+        expected_output_sentence = [
+            "Hello, my dog is a little bit of a dork.\nI'm a little bit",
+            "Today, I was in the middle of a conversation with a friend about the",
+        ]
+        self.assertListEqual(expected_output_sentence, batch_out_sentence)
+        self.assertListEqual(batch_out_sentence, [non_padded_sentence, padded_sentence])
 
     def test_generation_post_attn_layer_norm(self):
         model_id = "facebook/opt-350m"
