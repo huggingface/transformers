@@ -354,8 +354,8 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
 
     @slow
     def test_batch_generation(self):
-        path_350m = "ybelkada/bigscience-11e-350m"
-        model = BloomForCausalLM.from_pretrained(path_350m).float()
+        path_350m = "bigscience/bloom-350m"
+        model = BloomForCausalLM.from_pretrained(path_350m, dtype="float32")
         model = model.eval()
         tokenizer = BloomTokenizerFast.from_pretrained(path_350m, padding_side="left")
 
@@ -371,13 +371,12 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
             tokenizer.decode(greedy_output[1], skip_special_tokens=True),
         )
 
-    # @slow
+    @slow
     def test_batch_generation_padd(self):
-        # path_350m = "bigscience/bloom-350m"
-        path_350m = "ybelkada/bigscience-11e-350m"
-        model = BloomForCausalLM.from_pretrained(path_350m).float()
+        path_350m = "bigscience/bloom-350m"
+        model = BloomForCausalLM.from_pretrained(path_350m, dtype="float32")
         model = model.eval()
-        tokenizer = BloomTokenizerFast.from_pretrained(path_350m, padding_side="left")
+        tokenizer = BloomTokenizerFast.from_pretrained(path_350m)
 
         input_sentence = ["I enjoy walking with my cute dog", "Hello my name is"]
         input_sentence_without_pad = "Hello my name is"
@@ -390,7 +389,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         )
         greedy_output_without_pad = model.generate(input_ids_without_pad, max_length=50, do_sample=False)
 
-        self.assertEqual(greedy_output[-1, 3:], greedy_output_without_pad[0, :-3])
+        self.assertEqual(greedy_output[-1, 3:].tolist(), greedy_output_without_pad[0, :-3].tolist())
 
 
 @require_torch

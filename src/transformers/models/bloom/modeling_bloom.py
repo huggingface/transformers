@@ -232,7 +232,7 @@ class ScaledSoftmax(nn.Module):
             else:
                 probs = probs.bfloat16()
 
-        return probs.float()
+        return probs
 
 
 class BloomAttention(nn.Module):
@@ -251,6 +251,7 @@ class BloomAttention(nn.Module):
 
         self.fp16 = dtype == torch.float16
         self.bf16 = dtype == torch.bfloat16
+        self.dtype = dtype
 
         if self.head_dim * self.num_heads != self.hidden_size:
             raise ValueError(
@@ -348,7 +349,7 @@ class BloomAttention(nn.Module):
 
         # attention scores and attention mask [b, np, sq, sk]
 
-        attention_probs = self.scale_mask_softmax(attention_scores, attention_mask)
+        attention_probs = self.scale_mask_softmax(attention_scores, attention_mask).to(self.dtype)
         attention_probs = self.attention_dropout(attention_probs)
 
         if head_mask is not None:
