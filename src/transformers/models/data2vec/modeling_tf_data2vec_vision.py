@@ -1079,24 +1079,36 @@ class TFAdaptiveAvgPool1D(tf.keras.layers.Layer):
             return tf.reshape(out, input_dims[:-1].as_list() + [-1])
 
 
+# class TFAdaptiveAvgPool2D(tf.keras.layers.Layer):
+#     def __init__(self, output_shape, mode="dense", **kwargs):
+#         super().__init__(**kwargs)
+#         self.h_pool = TFAdaptiveAvgPool1D(output_shape[0], mode=mode)
+#         self.w_pool = TFAdaptiveAvgPool1D(output_shape[1], mode=mode)
+
+#     def call(self, inputs):
+#         # Rearrange from NHWC -> NCHW
+#         inputs = tf.transpose(inputs, perm=[0, 3, 1, 2])
+#         # Perform W-pooling
+#         inputs = self.w_pool(inputs)
+#         # Rearrange NCHW -> NCWH
+#         inputs = tf.transpose(inputs, perm=[0, 1, 3, 2])
+#         # Perform H-pooling
+#         inputs = self.h_pool(inputs)
+#         # Rearrange from NCWH -> NHWC
+#         inputs = tf.transpose(inputs, perm=[0, 3, 2, 1])
+#         return inputs
+
+
 class TFAdaptiveAvgPool2D(tf.keras.layers.Layer):
     def __init__(self, output_shape, mode="dense", **kwargs):
         super().__init__(**kwargs)
-        self.h_pool = TFAdaptiveAvgPool1D(output_shape[0], mode=mode)
-        self.w_pool = TFAdaptiveAvgPool1D(output_shape[1], mode=mode)
-
+        # self.h_pool = TFAdaptiveAvgPool1D(output_shape[0], mode=mode)
+        # self.w_pool = TFAdaptiveAvgPool1D(output_shape[1], mode=mode)
+        self.output_shape_tuple = output_shape
+    
     def call(self, inputs):
-        # Rearrange from NHWC -> NCHW
-        inputs = tf.transpose(inputs, perm=[0, 3, 1, 2])
-        # Perform W-pooling
-        inputs = self.w_pool(inputs)
-        # Rearrange NCHW -> NCWH
-        inputs = tf.transpose(inputs, perm=[0, 1, 3, 2])
-        # Perform H-pooling
-        inputs = self.h_pool(inputs)
-        # Rearrange from NCWH -> NHWC
-        inputs = tf.transpose(inputs, perm=[0, 3, 2, 1])
-        return inputs
+        output = inputs[:, :self.output_shape_tuple[0], :self.output_shape_tuple[1], :]
+        return output
 
 
 class TFData2VecVisionPyramidPoolingModule(tf.keras.layers.Layer):
