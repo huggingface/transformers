@@ -125,6 +125,7 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
         add_prefix_space=False,
         **kwargs
     ):
+        kwargs.pop("padding_size", None)
         super().__init__(
             vocab_file,
             merges_file,
