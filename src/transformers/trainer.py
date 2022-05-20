@@ -1160,7 +1160,7 @@ class Trainer:
     def ipex_optimize_model(self, model, training=False, dtype=torch.float32):
         if not is_ipex_available():
             raise ImportError(
-                "Using Bf16 with IPEX but IPEX is not installed, please refer to"
+                "Using IPEX but IPEX is not installed, please refer to"
                 " https://github.com/intel/intel-extension-for-pytorch."
             )
 
