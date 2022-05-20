@@ -355,7 +355,6 @@ class FeaturesManager:
         "squeezebert": supported_features_mapping(
             "default",
             "masked-lm",
-            "causal-lm",
             "sequence-classification",
             "multiple-choice",
             "token-classification",
