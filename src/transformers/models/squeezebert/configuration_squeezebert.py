@@ -159,6 +159,7 @@ class SqueezeBertConfig(PretrainedConfig):
         self.output_groups = output_groups
 
 
+# # Copied from transformers.models.bert.configuration_bert.BertOnxxConfig with Bert->SqueezeBert
 class SqueezeBertOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
