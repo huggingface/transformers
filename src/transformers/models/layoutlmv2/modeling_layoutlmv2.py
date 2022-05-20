@@ -13,12 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch LayoutLMv2 model."""
-"""
-LayoutLMv2 depends on detectron2, torchvision and tesseract; passing doctests requires their installation. Run the
-following to install them: `python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'` `python -m
-pip install torchvision tesseract`
-"""
-
 
 import math
 from typing import Optional, Tuple, Union
