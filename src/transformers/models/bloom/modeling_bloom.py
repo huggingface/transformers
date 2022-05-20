@@ -55,9 +55,9 @@ def divide(numerator, denominator):
 
 
     Args:
-        numerator ([`int`, `float`], *required*):
+        numerator (`int` or `float`, *required*):
             Numerator to use for the division.
-        denominator ([`int`, `float`], *required*):
+        denominator (`int` or `float`, *required*):
             Denominator to use for the division."""
     if not (numerator % denominator == 0):
         raise ValueError(f"{numerator} is not divisible by {denominator}")
@@ -173,14 +173,19 @@ class ScaledSoftmax(nn.Module):
     """
     fused operation: scaling + mask + softmax
 
-    Arguments:
-        input_in_fp16: flag to indicate if input in fp16 data format.
-        input_in_bf16: flag to indicate if input in bf16 data format.
-        attn_mask_type: attention mask type (pad or causal)
-        scaled_masked_softmax_fusion: flag to indicate user want to use softmax fusion
-        mask_func: mask function to be applied.
-        softmax_in_fp32: if true, softmax in performed at fp32 precision.
-        scale: scaling factor used in input tensor scaling.
+    Args:
+        input_in_fp16 (`bool`, *required*):
+            flag to indicate if input in fp16 data format.
+        input_in_bf16 (`bool`, *required*):
+            flag to indicate if input in bf16 data format.
+        scaled_masked_softmax_fusion (`bool`, *required*):
+            flag to indicate user want to use softmax fusion
+        mask_func (`function`, *required*):
+            mask function to be applied.
+        softmax_in_fp32 (`bool`, *required*):
+            if true, softmax in performed at fp32 precision.
+        scale (`float`, *required*):
+            scaling factor used in input tensor scaling.
     """
 
     def __init__(
@@ -323,10 +328,9 @@ class BloomAttention(nn.Module):
         output_size = (query_layer.size(0), query_layer.size(2), query_layer.size(1), key_layer.size(1))
 
         # [batch_size, q_length, num_heads, head_dim] -> [q_length, batch_size * num_heads, head_dim]
-        # query_layer = query_layer.contiguous().view(output_size[2], output_size[0] * output_size[1], -1)
         query_layer = query_layer.transpose(1, 0).reshape(output_size[2], output_size[0] * output_size[1], -1)
+
         # [batch_size, k_length, num_heads, head_dim] -> [k_length, batch_size * num_heads, head_dim]
-        # key_layer = key_layer.contiguous().view(output_size[3], output_size[0] * output_size[1], -1)
         key_layer = key_layer.transpose(1, 0).reshape(output_size[3], output_size[0] * output_size[1], -1)
 
         # alibi
@@ -470,11 +474,16 @@ class BloomBlock(nn.Module):
         self.bias_dropout_fusion = config.bias_dropout_fusion
         self.hidden_dropout = config.hidden_dropout
 
-    # alibi tensor is not causal as the original paper mentions, it relies on a translation invariance of softmax for quick implementation: with l being a tensor, and a fixed value `softmax(l+a) = softmax(l)
     @staticmethod
     def _build_alibi_tensor(max_seq_len, n_head, dtype=torch.bfloat16):
-        # Based on https://github.com/ofirpress/attention_with_linear_biases/blob/a35aaca144e0eb6b789dfcb46784c4b8e31b7983/fairseq/models/transformer.py#L742
-        """Returns tensor shaped (n_head, 1, max_seq_len)"""
+        """
+        Alibi tensor is not causal as the original paper mentions, it relies on a translation invariance of softmax for
+        quick implementation: with l being a tensor, and a fixed value `softmax(l+a) = softmax(l) Based on
+        https://github.com/ofirpress/attention_with_linear_biases/blob/a35aaca144e0eb6b789dfcb46784c4b8e31b7983/fairseq/models/transformer.py#L742
+
+        Returns tensor shaped (n_head, 1, max_seq_len)
+
+        """
 
         def get_slopes(n):
             def get_slopes_power_of_2(n):
@@ -788,8 +797,6 @@ class BloomModel(BloomPreTrainedModel):
             inputs_embeds = self.word_embeddings(input_ids)
 
         hidden_states = self.word_embeddings_layernorm(inputs_embeds)
-        # hidden_states = hidden_states.transpose(0, 1)
-        # hidden_states = hidden_states.transpose(0, 1).contiguous()
 
         if token_type_ids is not None:
             token_type_embeds = self.word_embeddings(token_type_ids)
@@ -815,8 +822,6 @@ class BloomModel(BloomPreTrainedModel):
                 if isinstance(head_mask, torch.Tensor):
                     head_mask = head_mask.to(hidden_states.device)
             if output_hidden_states:
-                # all_hidden_states = all_hidden_states + (hidden_states.permute(1, 0, 2),)
-                # all_hidden_states = all_hidden_states + (hidden_states.view(output_shape),)
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
@@ -866,7 +871,6 @@ class BloomModel(BloomPreTrainedModel):
 
         # Add last hidden state
         hidden_states = self.ln_f(hidden_states)
-        # hidden_states = self.ln_f(hidden_states)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
@@ -898,10 +902,6 @@ class BloomForCausalLM(BloomPreTrainedModel):
         super().__init__(config)
         self.transformer = BloomModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
 
         # Initialize weights and apply final processing
         self.post_init()
