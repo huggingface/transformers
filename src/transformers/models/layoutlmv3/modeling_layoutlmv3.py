@@ -1033,9 +1033,14 @@ class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
             return_dict=return_dict,
             pixel_values=pixel_values,
         )
+        if input_ids is not None:
+            input_shape = input_ids.size()
+        else:
+            input_shape = inputs_embeds.size()[:-1]
 
-        sequence_output = outputs[0]
-
+        seq_length = input_shape[1]
+        # only take the text part of the output representations
+        sequence_output = outputs[0][:, :seq_length]
         sequence_output = self.dropout(sequence_output)
         logits = self.classifier(sequence_output)
 

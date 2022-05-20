@@ -128,9 +128,6 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
             CrossEntropyLoss.
         only_label_first_subword (`bool`, *optional*, defaults to `True`):
             Whether or not to only label the first subword, in case word labels are provided.
-        add_visual_labels (`bool`, *optional*, defaults to `True`):
-            Whether or not to also add labels for the visual tokens. Visual tokens will be labeled with
-            `pad_token_label`.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -159,7 +156,6 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         pad_token_box=[0, 0, 0, 0],
         pad_token_label=-100,
         only_label_first_subword=True,
-        add_visual_labels=True,
         **kwargs
     ):
         super().__init__(
@@ -181,7 +177,6 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
             pad_token_box=pad_token_box,
             pad_token_label=pad_token_label,
             only_label_first_subword=only_label_first_subword,
-            add_visual_labels=add_visual_labels,
             **kwargs,
         )
 
@@ -225,7 +220,6 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         self.pad_token_box = pad_token_box
         self.pad_token_label = pad_token_label
         self.only_label_first_subword = only_label_first_subword
-        self.add_visual_labels = add_visual_labels
 
     @add_end_docstrings(LAYOUTLMV3_ENCODE_KWARGS_DOCSTRING, LAYOUTLMV3_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2_fast.LayoutLMv2TokenizerFast.__call__
@@ -514,6 +508,7 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
 
+    # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2_fast.LayoutLMv2TokenizerFast._batch_encode_plus with LayoutLMv2->LayoutLMv3
     def _batch_encode_plus(
         self,
         batch_text_or_text_pairs: Union[
@@ -662,12 +657,6 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
                             labels_example.append(word_labels[original_index][word_id])
                     else:
                         labels_example.append(self.pad_token_label)
-
-                # Add visual labels
-                # We hardcode the number of visual tokens here to (224/16)**2 + 1 = 197
-                if self.add_visual_labels:
-                    labels_example += [self.pad_token_label] * 197
-
                 labels.append(labels_example)
 
             sanitized_tokens["labels"] = labels
