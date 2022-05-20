@@ -358,6 +358,7 @@ class GPTNeoPreTrainedModel(PreTrainedModel):
     load_tf_weights = load_tf_weights_in_gpt_neo
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["GPTNeoBlock"]
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
