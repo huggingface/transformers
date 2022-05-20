@@ -11,9 +11,10 @@ from datasketch import MinHash, MinHashLSH
 from dpu_utils.utils.iterators import ThreadedIterator
 
 
-NUM_PERM = 256
 NON_ALPHA = re.compile("[^A-Za-z_0-9]")
+# parameters used in DuplicationIndex
 MIN_NUM_TOKENS = 10
+NUM_PERM = 256
 
 
 def get_min_hash(tokens: List[str]) -> Optional[MinHash]:
@@ -37,35 +38,32 @@ class DuplicationIndex:
         self,
         *,
         duplication_jaccard_threshold: float = 0.85,
-        num_perm: int = 256,
-        min_num_tokens: int = 10,
     ):
-        self.__duplication_jaccard_threshold = duplication_jaccard_threshold
-        self.__num_perm = num_perm
-        self.__min_num_tokens = min_num_tokens
-        self.__index = MinHashLSH(threshold=self.__duplication_jaccard_threshold, num_perm=self.__num_perm)
+        self._duplication_jaccard_threshold = duplication_jaccard_threshold
+        self._num_perm = NUM_PERM
+        self._index = MinHashLSH(threshold=self._duplication_jaccard_threshold, num_perm=self._num_perm)
 
-        self.__duplicate_clusters = defaultdict(set)
+        self._duplicate_clusters = defaultdict(set)
 
     def add(self, filename: str, min_hash: MinHash) -> None:
-        close_duplicates = self.__index.query(min_hash)
-        if filename in self.__index.keys:
+        close_duplicates = self._index.query(min_hash)
+        if filename in self._index.keys:
             print("Duplicate key %s" % filename)
             return
 
-        self.__index.insert(filename, min_hash)
+        self._index.insert(filename, min_hash)
         if len(close_duplicates) > 0:
 
             for base_duplicate in close_duplicates:
-                if base_duplicate in self.__duplicate_clusters:
-                    self.__duplicate_clusters[base_duplicate].add(filename)
+                if base_duplicate in self._duplicate_clusters:
+                    self._duplicate_clusters[base_duplicate].add(filename)
                     break
             else:
-                self.__duplicate_clusters[close_duplicates[0]].add(filename)
+                self._duplicate_clusters[close_duplicates[0]].add(filename)
 
     def get_duplicate_clusters(self) -> List[List[Dict]]:
         duplicate_clusters = []
-        for base, duplicates in self.__duplicate_clusters.items():
+        for base, duplicates in self._duplicate_clusters.items():
             cluster = [base] + list(duplicates)
             # reformat the cluster to be a list of dict
             cluster = [{"base_index": el[0], "repo_name": el[1], "path": el[2]} for el in cluster]
