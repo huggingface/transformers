@@ -131,6 +131,7 @@ from .utils import (
     CONFIG_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
+    ContextManagers,
     find_labels,
     get_full_repo_name,
     is_apex_available,
@@ -1142,23 +1143,16 @@ class Trainer:
 
     def torch_jit_model(self, model, training=False, dataloader=None):
         if not training:
-            jit_inputs = ()
-            for _, batch in enumerate(dataloader):
-                for _, label in enumerate(batch):
-                    dumpy_tensor = torch.ones_like(batch[label])
-                    L1 = list(jit_inputs)
-                    L1.append(dumpy_tensor)
-                    jit_inputs = tuple(L1)
-                break
+            jit_inputs = []
+            example_batch = list(dataloader)[0]
+            for _, key in enumerate(example_batch):
+                example_tensor = torch.ones_like(example_batch[key])
+                jit_inputs.append(example_tensor)
+            jit_inputs = tuple(jit_inputs)
             try:
-                if self.args.bf16:
-                    with self.autocast_smart_context_manager(), torch.no_grad():
-                        model = torch.jit.trace(model, jit_inputs, strict=False)
-                    model = torch.jit.freeze(model)
-                else:
-                    with torch.no_grad():
-                        model = torch.jit.trace(model, jit_inputs, strict=False)
-                    model = torch.jit.freeze(model)
+                with ContextManagers([self.autocast_smart_context_manager(), torch.no_grad()]):
+                    model = torch.jit.trace(model, jit_inputs, strict=False)
+                model = torch.jit.freeze(model)
             except RuntimeError:
                 logger.info("fail to use PyTorch jit mode")
                 pass
