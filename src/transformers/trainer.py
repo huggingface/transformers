@@ -158,9 +158,6 @@ if is_in_notebook():
 if is_apex_available():
     from apex import amp
 
-if is_ipex_available() and "--use_ipex" in sys.argv:
-    import intel_extension_for_pytorch as ipex
-
 if version.parse(torch.__version__) >= version.parse("1.6"):
     _is_torch_generator_available = True
     _is_native_cuda_amp_available = True
@@ -501,15 +498,7 @@ class Trainer:
                     "Please do not set arguments related to `mixed_precision`"
                 )
             if args.half_precision_backend == "auto":
-                if args.device == torch.device("cuda"):
-                    if _is_native_cuda_amp_available:
-                        args.half_precision_backend = "cuda_amp"
-                    else:
-                        if args.bf16:
-                            raise ValueError("Tried to use `bf16` but native amp is not available")
-                        else:
-                            args.half_precision_backend = "apex"
-                elif args.device == torch.device("cpu"):
+                if args.device == torch.device("cpu"):
                     if args.fp16:
                         raise ValueError("Tried to use `fp16` but it is not supported on cpu")
                     else:
@@ -518,7 +507,14 @@ class Trainer:
                         else:
                             raise ValueError("Tried to use cpu amp but native cpu amp is not available")
                 else:
-                    raise ValueError("Tried to use amp but no supported device is available")
+                    if _is_native_cuda_amp_available:
+                        args.half_precision_backend = "cuda_amp"
+                    else:
+                        if args.bf16:
+                            raise ValueError("Tried to use `bf16` but native amp is not available")
+                        else:
+                            args.half_precision_backend = "apex"
+
             logger.info(f"Using {args.half_precision_backend} half precision backend")
 
         self.do_grad_scaling = False
@@ -540,12 +536,6 @@ class Trainer:
             elif args.half_precision_backend == "cpu_amp":
                 self.use_cpu_amp = True
                 self.amp_dtype = torch.bfloat16
-                if args.use_ipex:
-                    if not is_ipex_available():
-                        raise ImportError(
-                            "Using Bf16 with IPEX but IPEX is not installed, please refer to"
-                            " https://github.com/intel/intel-extension-for-pytorch."
-                        )
             else:
                 if not is_apex_available():
                     raise ImportError(
@@ -1168,6 +1158,14 @@ class Trainer:
         return model
 
     def ipex_optimize_model(self, model, training=False, dtype=torch.float32):
+        if not is_ipex_available():
+            raise ImportError(
+                "Using Bf16 with IPEX but IPEX is not installed, please refer to"
+                " https://github.com/intel/intel-extension-for-pytorch."
+            )
+
+        import intel_extension_for_pytorch as ipex
+
         if not training:
             model = ipex.optimize(model, dtype=dtype, level="O1")
         else:
