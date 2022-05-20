@@ -4753,6 +4753,37 @@ class VanPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class VideoMAEForPreTraining(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VideoMAELayer(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VideoMAEModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VideoMAEPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 VILT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 

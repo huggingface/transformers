@@ -341,6 +341,7 @@ _import_structure = {
         "UniSpeechSatConfig",
     ],
     "models.van": ["VAN_PRETRAINED_CONFIG_ARCHIVE_MAP", "VanConfig"],
+    "models.videomae": ["VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "VideoMAEConfig"],
     "models.vilt": ["VILT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViltConfig", "ViltFeatureExtractor", "ViltProcessor"],
     "models.vision_encoder_decoder": ["VisionEncoderDecoderConfig"],
     "models.vision_text_dual_encoder": ["VisionTextDualEncoderConfig", "VisionTextDualEncoderProcessor"],
@@ -1871,6 +1872,15 @@ else:
             "ViTMAEPreTrainedModel",
         ]
     )
+    _import_structure["models.videomae"].extend(
+        [
+            "VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VideoMAEForPreTraining",
+            "VideoMAELayer",
+            "VideoMAEModel",
+            "VideoMAEPreTrainedModel",
+        ]
+    )
     _import_structure["models.wav2vec2"].extend(
         [
             "WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2535,6 +2545,13 @@ else:
             "TFViTMAEPreTrainedModel",
         ]
     )
+    _import_structure["models.videomae"].extend(
+        [
+            "TFVideoMAEForPreTraining",
+            "TFVideoMAEModel",
+            "TFVideoMAEPreTrainedModel",
+        ]
+    )
     _import_structure["models.wav2vec2"].extend(
         [
             "TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3100,6 +3117,7 @@ if TYPE_CHECKING:
     from .models.unispeech import UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechConfig
     from .models.unispeech_sat import UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechSatConfig
     from .models.van import VAN_PRETRAINED_CONFIG_ARCHIVE_MAP, VanConfig
+    from .models.videomae import VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP, VideoMAEConfig
     from .models.vilt import VILT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViltConfig, ViltFeatureExtractor, ViltProcessor
     from .models.vision_encoder_decoder import VisionEncoderDecoderConfig
     from .models.vision_text_dual_encoder import VisionTextDualEncoderConfig, VisionTextDualEncoderProcessor
@@ -4337,6 +4355,13 @@ if TYPE_CHECKING:
             VanForImageClassification,
             VanModel,
             VanPreTrainedModel,
+        )
+        from .models.videomae import (
+            VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VideoMAEForPreTraining,
+            VideoMAELayer,
+            VideoMAEModel,
+            VideoMAEPreTrainedModel,
         )
         from .models.vilt import (
             VILT_PRETRAINED_MODEL_ARCHIVE_LIST,
