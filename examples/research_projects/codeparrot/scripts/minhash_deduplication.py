@@ -55,7 +55,6 @@ class DuplicationIndex:
 
         self.__index.insert(filename, min_hash)
         if len(close_duplicates) > 0:
-            # print("`%s` duplicate of: %s" % (filename, close_duplicates))
 
             for base_duplicate in close_duplicates:
                 if base_duplicate in self.__duplicate_clusters:
@@ -136,7 +135,7 @@ def _find_cluster_extremes_shared(cluster):
     return extremes
 
 
-def multipro_find_extremes(cluster_list, dataset):
+def find_extremes(cluster_list, dataset):
     global _shared_dataset
     _shared_dataset = dataset
     extremes_list = []
@@ -198,8 +197,8 @@ def deduplicate_dataset(dataset: Type[Dataset]) -> Tuple[Type[Dataset], List[Lis
             if element["is_extreme"]:
                 element["copies"] = extreme_dict[element["base_index"]]["copies"]
 
-    print("Orginal dataset size: %d" % len(dataset))
-    print("Duplicate cluster: %d" % len(duplicate_clusters))
+    print(f"Original dataset size: {len(dataset)}")
+    print(f"Number of duplicate clusters: {len(duplicate_clusters)}")
     print("Files in duplicate cluster: %d" % len(duplicate_indices))
     print("Unique files in duplicate cluster: %d" % len(extreme_dict))
     print("Filtered dataset size: %d" % len(ds_filter))
