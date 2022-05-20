@@ -1179,10 +1179,8 @@ class Trainer:
 
     def _wrap_model(self, model, training=True):
         if self.args.use_ipex:
-            if self.use_cpu_amp:
-                model = self.ipex_optimize_model(model, training, dtype=torch.bfloat16)
-            else:
-                model = self.ipex_optimize_model(model, training, dtype=torch.float32)
+            dtype = torch.bfloat16 if self.use_cpu_amp else torch.float32
+            model = self.ipex_optimize_model(model, training, dtype=dtype)
 
         if is_sagemaker_mp_enabled():
             # Wrapping the base model twice in a DistributedModel will raise an error.
