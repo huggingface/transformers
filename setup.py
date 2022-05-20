@@ -285,6 +285,7 @@ extras["testing"] = (
         "parameterized",
         "psutil",
         "datasets",
+        "dill",
         "pytest-timeout",
         "black",
         "sacrebleu",
