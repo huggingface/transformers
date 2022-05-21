@@ -28,7 +28,11 @@ _import_structure = {
 if is_tokenizers_available():
     _import_structure["tokenization_gpt_neox_fast"] = ["GPTNeoXTokenizerFast"]
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
     _import_structure["modeling_gpt_neox"] = [
         "GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST",
         "GPTNeoXForCausalLM",
