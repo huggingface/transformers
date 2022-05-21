@@ -18,6 +18,7 @@
 from typing import TYPE_CHECKING
 
 from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_available
+from ...utils import OptionalDependencyNotAvailable
 
 
 _import_structure = {
@@ -43,7 +44,12 @@ if TYPE_CHECKING:
     if is_tokenizers_available():
         from .tokenization_gpt_neox_fast import GPTNeoXTokenizerFast
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_gpt_neox import (
             GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPTNeoXForCausalLM,
