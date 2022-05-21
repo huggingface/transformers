@@ -326,12 +326,7 @@ class TFT5Attention(tf.keras.layers.Layer):
             assert (
                 len(past_key_value) == 2
             ), f"past_key_value should have 2 past states: keys and values. Got {len(past_key_value)} past states"
-            # real_past_length gets the length for the past, even when it is zero-padded
-            real_past_length = tf.cast(
-                tf.math.reduce_max(tf.where(past_key_value[0][0, 0, :, 0] != 0.0)) + 1 if query_length is None else query_length,
-                dtype=tf.int32
-            )
-            real_seq_length += real_past_length
+            real_seq_length += shape_list(past_key_value[0])[2] if query_length is None else query_length
 
         key_length = real_seq_length if key_value_states is None else shape_list(key_value_states)[1]
 
@@ -360,7 +355,7 @@ class TFT5Attention(tf.keras.layers.Layer):
                 if key_value_states is None:
                     # self-attn
                     # (batch_size, n_heads, key_length, dim_per_head)
-                    hidden_states = tf.concat([past_key_value[:, :, :real_past_length, :], hidden_states], axis=2)
+                    hidden_states = tf.concat([past_key_value, hidden_states], axis=2)
                 else:
                     # cross-attn
                     hidden_states = past_key_value
@@ -400,9 +395,6 @@ class TFT5Attention(tf.keras.layers.Layer):
 
             if mask is not None:
                 position_bias = tf.cast(position_bias, dtype=mask.dtype)
-                if past_key_value is not None and key_value_states is None:
-                    # self attention -- handles the cases with padded a mask while decoding
-                    mask = mask[:, :, :, :real_seq_length]
                 position_bias = position_bias + mask  # (batch_size, n_heads, query_length, key_length)
 
         scores += position_bias
@@ -1497,6 +1489,28 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         if past is not None:
             input_ids = input_ids[:, -1:]
 
+            # if the past is padded, gather the unpadded values
+            real_past_length = tf.cast(tf.math.reduce_max(tf.where(past[0][0] != 0.0)[:, 2]) + 1, dtype=tf.int32)
+
+            def maybe_remove_past_padding(remove_padding):
+                if remove_padding:
+                    unpadded_past = ()
+                    for past_layer in past:
+                        new_past_layer = list(past_layer)
+                        for i in range(len(new_past_layer[:2])):
+                            new_past_layer[i] = past_layer[i][:, :, :real_past_length, :]
+                        unpadded_past += (tuple(new_past_layer),)
+                    return unpadded_past
+                else:
+                    return past
+
+            # if/else compatible with graph-mode
+            past = tf.cond(
+                real_past_length != past[0][0].shape[2],
+                lambda: maybe_remove_past_padding(remove_padding=True),
+                lambda: maybe_remove_past_padding(remove_padding=False)
+            )
+
         return {
             "input_ids": None,  # needs to be passed to make Keras.layer.__call__ happy
             "decoder_input_ids": input_ids,
@@ -1529,12 +1543,6 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
                     new_past_layer[i] = tf.pad(past_layer[i], padding_values)
                 new_past += (tuple(new_past_layer),)
 
-            # Note that usually one would have to put 0's in the attention_mask for x > input_ids.shape[-1] and
-            # x < cache_length. But since the decoder uses a causal mask (based on filled `past` entries),
-            # those positions are masked anyways. A full dimention input is still needed for shape verification.
-            batch_size = past[0][0].shape[0]
-            decoder_attention_mask = tf.ones((batch_size, max_length), dtype=tf.int32)
-            model_kwargs["decoder_attention_mask"] = decoder_attention_mask
         else:
             # updates the old (padded) past with the new values
             index_to_update = current_pos - 1
@@ -1549,7 +1557,9 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
                     )
                 new_past += (tuple(new_past_layer),)
 
+        # set `past`
         model_kwargs["past"] = new_past
+
         return model_kwargs
 
     def prepare_decoder_input_ids_from_labels(self, labels: tf.Tensor):
