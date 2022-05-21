@@ -67,6 +67,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("glpn", "GLPNConfig"),
         ("gpt2", "GPT2Config"),
         ("gpt_neo", "GPTNeoConfig"),
+        ("gpt_neox", "GPTNeoXConfig"),
         ("gptj", "GPTJConfig"),
         ("hubert", "HubertConfig"),
         ("ibert", "IBertConfig"),
