@@ -550,6 +550,32 @@ class BarthezConverter(SpmConverter):
             ],
         )
 
+class BartphoConverter(SpmConverter):
+    def vocab(self, proto):
+
+        dict = {piece.piece : piece.score for piece in proto.pieces[3:]}
+
+        vocab = [(k, dict[k] if k in dict.keys() else 0.0) for k, v in self.original_tokenizer.fairseq_tokens_to_ids.items()]
+
+        for piece in proto.pieces[3:]:
+            if piece.piece not in self.original_tokenizer.fairseq_tokens_to_ids.keys():
+                vocab += [(piece.piece, piece.score)]
+
+        return vocab
+
+    def unk_id(self, proto):
+        unk_id = 3
+        return unk_id
+
+    def post_processor(self):
+        return processors.TemplateProcessing(
+            single="<s> $A </s>",
+            pair="<s> $A </s> </s> $B </s>",
+            special_tokens=[
+                ("<s>", self.original_tokenizer.convert_tokens_to_ids("<s>")),
+                ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
+            ],
+        )
 
 class CamembertConverter(SpmConverter):
     def vocab(self, proto):
@@ -1004,6 +1030,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "AlbertTokenizer": AlbertConverter,
     "BartTokenizer": RobertaConverter,
     "BarthezTokenizer": BarthezConverter,
+    "BartphoTokenizer": BartphoConverter,
     "BertTokenizer": BertConverter,
     "BigBirdTokenizer": BigBirdConverter,
     "BlenderbotTokenizer": BlenderbotConverter,
