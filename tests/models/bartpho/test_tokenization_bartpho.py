@@ -26,6 +26,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece_bpe.model")
 
+
 @require_sentencepiece
 @require_tokenizers
 class BartphoTokenizerTest(TokenizerTesterMixin, unittest.TestCase):

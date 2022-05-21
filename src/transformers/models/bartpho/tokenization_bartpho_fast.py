@@ -171,7 +171,7 @@ class BartphoTokenizerFast(PreTrainedTokenizerFast):
 
         encoding_dict = defaultdict(list)
         for e in encodings:
-            #encoding_dict["input_ids"].append(e.ids)
+            # encoding_dict["input_ids"].append(e.ids)
             ids = [id if id <= self.mask_token_id else self.unk_token_id for id in e.ids]
             encoding_dict["input_ids"].append(ids)
 
@@ -184,7 +184,7 @@ class BartphoTokenizerFast(PreTrainedTokenizerFast):
             if return_offsets_mapping:
                 encoding_dict["offset_mapping"].append(e.offsets)
             if return_length:
-                #encoding_dict["length"].append(len(e.ids))
+                # encoding_dict["length"].append(len(e.ids))
                 encoding_dict["length"].append(len(ids))
 
         return encoding_dict, encodings

@@ -550,12 +550,15 @@ class BarthezConverter(SpmConverter):
             ],
         )
 
+
 class BartphoConverter(SpmConverter):
     def vocab(self, proto):
 
-        dict = {piece.piece : piece.score for piece in proto.pieces[3:]}
+        dict = {piece.piece: piece.score for piece in proto.pieces[3:]}
 
-        vocab = [(k, dict[k] if k in dict.keys() else 0.0) for k, v in self.original_tokenizer.fairseq_tokens_to_ids.items()]
+        vocab = [
+            (k, dict[k] if k in dict.keys() else 0.0) for k, v in self.original_tokenizer.fairseq_tokens_to_ids.items()
+        ]
 
         for piece in proto.pieces[3:]:
             if piece.piece not in self.original_tokenizer.fairseq_tokens_to_ids.keys():
@@ -576,6 +579,7 @@ class BartphoConverter(SpmConverter):
                 ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
             ],
         )
+
 
 class CamembertConverter(SpmConverter):
     def vocab(self, proto):
