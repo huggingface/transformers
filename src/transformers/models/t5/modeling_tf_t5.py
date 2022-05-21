@@ -1530,10 +1530,11 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         past = outputs.past_key_values  # unpadded
         old_past = model_kwargs.pop("past", None)  # padded (when it exists)
         is_past_initialized = old_past is not None
+        index_to_update = current_pos - 1
 
         if not is_past_initialized:
             # computes the padding past needs to have a constant shape (needed for XLA), then applies it
-            num_padding_values = tf.cast(max_length - past[0][0].shape[2] - 1, dtype=tf.int32)
+            num_padding_values = tf.cast(max_length - index_to_update, dtype=tf.int32)
             padding_values = tf.scatter_nd(indices=[[2, 1]], updates=[num_padding_values], shape=(4, 2))
 
             new_past = ()
@@ -1545,7 +1546,6 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
 
         else:
             # updates the old (padded) past with the new values
-            index_to_update = current_pos - 1
             new_past = ()
             for i, past_layer in enumerate(past):
                 new_past_layer = list(past_layer)
