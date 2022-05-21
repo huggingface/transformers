@@ -1372,6 +1372,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        use_cache: Optional[bool] = None,  # delete after depreciation warning is removed
     ) -> Union[Tuple, XLNetLMHeadModelOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, num_predict)`, *optional*):
@@ -1457,6 +1458,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            use_cache=use_cache,
         )
 
         logits = self.lm_loss(transformer_outputs[0])
@@ -1532,6 +1534,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        use_cache: Optional[bool] = None,  # delete after depreciation warning is removed
     ) -> Union[Tuple, XLNetForSequenceClassificationOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1555,6 +1558,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            use_cache=use_cache,
         )
         output = transformer_outputs[0]
 
@@ -1638,6 +1642,7 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        use_cache: Optional[bool] = None,  # delete after depreciation warning is removed
     ) -> Union[Tuple, XLNetForTokenClassificationOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1725,6 +1730,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        use_cache: Optional[bool] = None,  # delete after depreciation warning is removed
     ) -> Union[Tuple, XLNetForMultipleChoiceOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1760,6 +1766,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            use_cache=use_cache
         )
 
         output = transformer_outputs[0]
@@ -1828,6 +1835,7 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        use_cache: Optional[bool] = None,  # delete after depreciation warning is removed
     ) -> Union[Tuple, XLNetForQuestionAnsweringSimpleOutput]:
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1855,6 +1863,7 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            use_cache=use_cache
         )
 
         sequence_output = outputs[0]
@@ -1938,6 +1947,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        use_cache: Optional[bool] = None,  # delete after depreciation warning is removed
     ) -> Union[Tuple, XLNetForQuestionAnsweringOutput]:
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1993,6 +2003,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            use_cache=use_cache
         )
         hidden_states = transformer_outputs[0]
         start_logits = self.start_logits(hidden_states, p_mask=p_mask)
