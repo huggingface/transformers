@@ -23,7 +23,7 @@ from typing import Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
-from tensorflow.compiler.tf2xla.python.xla import dynamic_update_slice
+from tensorflow.compiler.tf2xla.python.xla import dynamic_slice, dynamic_update_slice
 
 from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import (
@@ -326,7 +326,12 @@ class TFT5Attention(tf.keras.layers.Layer):
             assert (
                 len(past_key_value) == 2
             ), f"past_key_value should have 2 past states: keys and values. Got {len(past_key_value)} past states"
-            real_seq_length += shape_list(past_key_value[0])[2] if query_length is None else query_length
+            # real_past_length gets the length for the past, even when it is zero-padded
+            real_past_length = tf.cast(
+                tf.math.reduce_max(tf.where(past_key_value[0][0, 0, :, 0] != 0.0)) + 1 if query_length is None else query_length,
+                dtype=tf.int32
+            )
+            real_seq_length += real_past_length
 
         key_length = real_seq_length if key_value_states is None else shape_list(key_value_states)[1]
 
@@ -355,7 +360,7 @@ class TFT5Attention(tf.keras.layers.Layer):
                 if key_value_states is None:
                     # self-attn
                     # (batch_size, n_heads, key_length, dim_per_head)
-                    hidden_states = tf.concat([past_key_value, hidden_states], axis=2)
+                    hidden_states = tf.concat([past_key_value[:, :, :real_past_length, :], hidden_states], axis=2)
                 else:
                     # cross-attn
                     hidden_states = past_key_value
@@ -395,6 +400,9 @@ class TFT5Attention(tf.keras.layers.Layer):
 
             if mask is not None:
                 position_bias = tf.cast(position_bias, dtype=mask.dtype)
+                if past_key_value is not None and key_value_states is None:
+                    # self attention -- handles the cases with padded a mask while decoding
+                    mask = mask[:, :, :, :real_seq_length]
                 position_bias = position_bias + mask  # (batch_size, n_heads, query_length, key_length)
 
         scores += position_bias
@@ -698,8 +706,6 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         # ourselves in which case we just need to make it broadcastable to all heads.
         attention_mask = tf.cast(attention_mask, dtype=inputs_embeds.dtype)
         num_dims_attention_mask = len(shape_list(attention_mask))
-        if self.is_decoder:
-            breakpoint()
         if num_dims_attention_mask == 3:
             extended_attention_mask = attention_mask[:, None, :, :]
         elif num_dims_attention_mask == 2:
@@ -1506,21 +1512,15 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
     def _update_model_kwargs_for_xla_generation(self, outputs, model_kwargs, current_pos, max_length):
         # TODO(Pvp, Joao, Matt) - this function can be cleaned a bit and refactored
         # quite some duplicated code patterns it seems
-        # also the `attention_mask` is currently used in a somewhat hacky to
-        # correctly influence the `past_key_values` - not sure if this is the way to go
-        # Let's keep that for a future PR.
-        past = outputs.past_key_values
-        is_past_initialized = model_kwargs.pop("past", None) is not None
-        decoder_attention_mask = model_kwargs.pop("decoder_attention_mask", None)
-        batch_size = past[0][0].shape[0]
+
+        past = outputs.past_key_values  # unpadded
+        old_past = model_kwargs.pop("past", None)  # padded (when it exists)
+        is_past_initialized = old_past is not None
 
         if not is_past_initialized:
-            # past[0].shape[2] is seq_length of prompt
-            num_padding_values = max_length - past[0][0].shape[2] - 1
-
-            padding_values = np.zeros((4, 2), dtype=np.int32)
-            padding_values[2, 1] = num_padding_values
-            padding_values = tf.constant(padding_values)
+            # computes the padding past needs to have a constant shape (needed for XLA), then applies it
+            num_padding_values = tf.cast(max_length - past[0][0].shape[2] - 1, dtype=tf.int32)
+            padding_values = tf.scatter_nd(indices=[[2, 1]], updates=[num_padding_values], shape=(4, 2))
 
             new_past = ()
             for past_layer in past:
@@ -1529,41 +1529,27 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
                     new_past_layer[i] = tf.pad(past_layer[i], padding_values)
                 new_past += (tuple(new_past_layer),)
 
-            # 1 one for decoder_start_token_id, Zeros for the currently-unfilled locations in the past tensor, ones for the actual input_ids
-            decoder_attention_mask = tf.concat(
-                [
-                    tf.ones((batch_size, max_length), dtype=tf.int32),
-                    # tf.zeros((batch_size, num_padding_values), dtype=tf.int32),
-                ],
-                axis=1,
-            )
+            # Note that usually one would have to put 0's in the attention_mask for x > input_ids.shape[-1] and
+            # x < cache_length. But since the decoder uses a causal mask (based on filled `past` entries),
+            # those positions are masked anyways. A full dimention input is still needed for shape verification.
+            batch_size = past[0][0].shape[0]
+            decoder_attention_mask = tf.ones((batch_size, max_length), dtype=tf.int32)
+            model_kwargs["decoder_attention_mask"] = decoder_attention_mask
         else:
-            slice_start_base = tf.constant([0, 0, 1, 0])
-            decoder_attention_mask_update_slice = tf.ones((batch_size, 1), dtype=decoder_attention_mask.dtype)
-            # correct 5 here
-            new_past_index = current_pos - 1
-
+            # updates the old (padded) past with the new values
+            index_to_update = current_pos - 1
             new_past = ()
-            for past_layer in past:
+            for i, past_layer in enumerate(past):
                 new_past_layer = list(past_layer)
-                for i in range(len(new_past_layer[:2])):
-                    update_slice = past_layer[i][:, :, -1:]
-                    # Write the last slice to the first open location in the padded past array
-                    # and then truncate the last slice off the array
-                    new_past_layer[i] = dynamic_update_slice(
-                        past_layer[i][:, :, :-1], update_slice, slice_start_base * new_past_index
+                for j in range(len(new_past_layer[:2])):
+                    new_past_layer[j] = dynamic_update_slice(
+                        input=old_past[i][j],
+                        update=new_past_layer[j][:, :, -1:, :],
+                        indices=[0, 0, index_to_update, 0]
                     )
                 new_past += (tuple(new_past_layer),)
 
-            update_start = tf.constant([0, 1], dtype=tf.int32) * (new_past_index + 1)
-            decoder_attention_mask = dynamic_update_slice(
-                decoder_attention_mask, decoder_attention_mask_update_slice, update_start
-            )
-
-        # set `attention_mask` and `past`
-        model_kwargs["decoder_attention_mask"] = decoder_attention_mask
         model_kwargs["past"] = new_past
-
         return model_kwargs
 
     def prepare_decoder_input_ids_from_labels(self, labels: tf.Tensor):
