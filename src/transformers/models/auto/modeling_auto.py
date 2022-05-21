@@ -456,7 +456,6 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("funnel", "FunnelForSequenceClassification"),
         ("gpt2", "GPT2ForSequenceClassification"),
         ("gpt_neo", "GPTNeoForSequenceClassification"),
-        ("gpt_neox", "GPTNeoXForSequenceClassification"),
         ("gptj", "GPTJForSequenceClassification"),
         ("ibert", "IBertForSequenceClassification"),
         ("layoutlm", "LayoutLMForSequenceClassification"),
