@@ -33,6 +33,7 @@ try:
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
+else:
     _import_structure["modeling_gpt_neox"] = [
         "GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST",
         "GPTNeoXForCausalLM",
