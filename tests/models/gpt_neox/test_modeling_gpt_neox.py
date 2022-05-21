@@ -17,11 +17,10 @@
 
 import unittest
 
-from transformers import GPTNeoXConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
-
 from tests.test_configuration_common import ConfigTester
 from tests.test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from transformers import GPTNeoXConfig, is_torch_available
+from transformers.testing_utils import require_torch, slow, torch_device
 
 
 if is_torch_available():

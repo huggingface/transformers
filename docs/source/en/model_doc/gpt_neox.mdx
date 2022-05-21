@@ -44,9 +44,7 @@ The `generate()` method can be used to generate text using GPT Neo model.
 >>> model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b")
 >>> tokenizer = GPTNeoXTokenizerFast.from_pretrained("EleutherAI/gpt-neox-20b")
 
->>> prompt = (
-...     "GPTNeoX20B is a 20B-parameter autoregressive Transformer model developed by EleutherAI."
-... )
+>>> prompt = "GPTNeoX20B is a 20B-parameter autoregressive Transformer model developed by EleutherAI."
 
 >>> input_ids = tokenizer(prompt, return_tensors="pt").input_ids
 
