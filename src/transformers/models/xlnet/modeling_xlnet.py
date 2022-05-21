@@ -1766,7 +1766,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            use_cache=use_cache
+            use_cache=use_cache,
         )
 
         output = transformer_outputs[0]
@@ -1863,7 +1863,7 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            use_cache=use_cache
+            use_cache=use_cache,
         )
 
         sequence_output = outputs[0]
@@ -2003,7 +2003,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            use_cache=use_cache
+            use_cache=use_cache,
         )
         hidden_states = transformer_outputs[0]
         start_logits = self.start_logits(hidden_states, p_mask=p_mask)

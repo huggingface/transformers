@@ -84,6 +84,7 @@ jobs:
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
             - run: pip install tensorflow_probability
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
+            - run: pip install git+https://github.com/huggingface/accelerate
             - save_cache:
                 key: v0.4-{{ checksum "setup.py" }}
                 paths:
@@ -122,6 +123,7 @@ jobs:
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
             - run: pip install tensorflow_probability
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
+            - run: pip install git+https://github.com/huggingface/accelerate
             - save_cache:
                 key: v0.4-{{ checksum "setup.py" }}
                 paths:
@@ -154,6 +156,7 @@ jobs:
             - run: pip install .[sklearn,flax,torch,testing,sentencepiece,torch-speech,vision]
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
+            - run: pip install git+https://github.com/huggingface/accelerate
             - save_cache:
                 key: v0.4-{{ checksum "setup.py" }}
                 paths:
@@ -191,6 +194,7 @@ jobs:
             - run: pip install .[sklearn,flax,torch,testing,sentencepiece,torch-speech,vision]
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
+            - run: pip install git+https://github.com/huggingface/accelerate
             - save_cache:
                 key: v0.4-{{ checksum "setup.py" }}
                 paths:
@@ -222,6 +226,7 @@ jobs:
             - run: pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
+            - run: pip install git+https://github.com/huggingface/accelerate
             - save_cache:
                   key: v0.4-torch-{{ checksum "setup.py" }}
                   paths:
@@ -258,6 +263,7 @@ jobs:
             - run: pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
+            - run: pip install git+https://github.com/huggingface/accelerate
             - save_cache:
                   key: v0.4-torch-{{ checksum "setup.py" }}
                   paths:
@@ -549,7 +555,7 @@ jobs:
                       - v0.4-custom_tokenizers-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install .[ja,testing,sentencepiece,jieba,spacy,ftfy]
+            - run: pip install .[ja,testing,sentencepiece,jieba,spacy,ftfy,rjieba]
             - run: python -m unidic download
             - save_cache:
                   key: v0.4-custom_tokenizers-{{ checksum "setup.py" }}
@@ -587,7 +593,6 @@ jobs:
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,sentencepiece,testing,torch-speech]
             - run: pip install -r examples/pytorch/_tests_requirements.txt
-            - run: pip install git+https://github.com/huggingface/accelerate
             - save_cache:
                   key: v0.4-torch_examples-{{ checksum "setup.py" }}
                   paths:
@@ -623,7 +628,6 @@ jobs:
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,sentencepiece,testing,torch-speech]
             - run: pip install -r examples/pytorch/_tests_requirements.txt
-            - run: pip install git+https://github.com/huggingface/accelerate
             - save_cache:
                   key: v0.4-torch_examples-{{ checksum "setup.py" }}
                   paths:
@@ -785,7 +789,7 @@ jobs:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install .[torch,testing,sentencepiece,onnxruntime,vision]
+            - run: pip install .[torch,testing,sentencepiece,onnxruntime,vision,rjieba]
             - save_cache:
                   key: v0.4-onnx-{{ checksum "setup.py" }}
                   paths:
@@ -850,9 +854,10 @@ jobs:
                   key: v0.4-code_quality-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: black --check examples tests src utils
+            - run: black --check --preview examples tests src utils
             - run: isort --check-only examples tests src utils
             - run: python utils/custom_init_isort.py --check_only
+            - run: python utils/sort_auto_mappings.py --check_only
             - run: flake8 examples tests src utils
             - run: doc-builder style src/transformers docs/source --max_len 119 --check_only --path_to_docs docs/source
 

@@ -15,7 +15,7 @@
 
 import collections
 import os
-from typing import List, Optional, Tuple
+from typing import Iterable, List, Optional, Tuple
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
@@ -28,7 +28,9 @@ VOCAB_FILES_NAMES = {"vocab_file": "prophetnet.tokenizer"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "microsoft/prophetnet-large-uncased": "https://huggingface.co/microsoft/prophetnet-large-uncased/resolve/main/prophetnet.tokenizer",
+        "microsoft/prophetnet-large-uncased": (
+            "https://huggingface.co/microsoft/prophetnet-large-uncased/resolve/main/prophetnet.tokenizer"
+        ),
     }
 }
 
@@ -109,17 +111,17 @@ class ProphetNetTokenizer(PreTrainedTokenizer):
 
     def __init__(
         self,
-        vocab_file,
-        do_lower_case=True,
-        do_basic_tokenize=True,
-        never_split=None,
-        unk_token="[UNK]",
-        sep_token="[SEP]",
-        x_sep_token="[X_SEP]",
-        pad_token="[PAD]",
-        mask_token="[MASK]",
-        tokenize_chinese_chars=True,
-        strip_accents=None,
+        vocab_file: str,
+        do_lower_case: Optional[bool] = True,
+        do_basic_tokenize: Optional[bool] = True,
+        never_split: Optional[Iterable] = None,
+        unk_token: Optional[str] = "[UNK]",
+        sep_token: Optional[str] = "[SEP]",
+        x_sep_token: Optional[str] = "[X_SEP]",
+        pad_token: Optional[str] = "[PAD]",
+        mask_token: Optional[str] = "[MASK]",
+        tokenize_chinese_chars: Optional[bool] = True,
+        strip_accents: Optional[bool] = None,
         **kwargs
     ):
         super().__init__(
@@ -139,8 +141,8 @@ class ProphetNetTokenizer(PreTrainedTokenizer):
 
         if not os.path.isfile(vocab_file):
             raise ValueError(
-                f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained "
-                "model use `tokenizer = AutoTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
+                f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
+                " model use `tokenizer = AutoTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         self.vocab = load_vocab(vocab_file)
         self.ids_to_tokens = collections.OrderedDict([(ids, tok) for tok, ids in self.vocab.items()])
@@ -175,21 +177,24 @@ class ProphetNetTokenizer(PreTrainedTokenizer):
             split_tokens = self.wordpiece_tokenizer.tokenize(text)
         return split_tokens
 
-    def _convert_token_to_id(self, token):
+    def _convert_token_to_id(self, token: str):
         """Converts a token (str) in an id using the vocab."""
         return self.vocab.get(token, self.vocab.get(self.unk_token))
 
-    def _convert_id_to_token(self, index):
+    def _convert_id_to_token(self, index: int):
         """Converts an index (integer) in a token (str) using the vocab."""
         return self.ids_to_tokens.get(index, self.unk_token)
 
-    def convert_tokens_to_string(self, tokens):
+    def convert_tokens_to_string(self, tokens: str):
         """Converts a sequence of tokens (string) in a single string."""
         out_string = " ".join(tokens).replace(" ##", "").strip()
         return out_string
 
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+        self,
+        token_ids_0: List[int],
+        token_ids_1: Optional[List[int]] = None,
+        already_has_special_tokens: Optional[bool] = False,
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding

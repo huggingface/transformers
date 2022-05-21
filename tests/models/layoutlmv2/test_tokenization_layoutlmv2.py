@@ -181,7 +181,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "want", "##want", "##ed", "wa", "un", "runn", "##ing"]
 
         vocab = {}
-        for (i, token) in enumerate(vocab_tokens):
+        for i, token in enumerate(vocab_tokens):
             vocab[token] = i
         tokenizer = WordpieceTokenizer(vocab=vocab, unk_token="[UNK]")
 
@@ -1634,11 +1634,9 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         break
                 self.assertTrue(
                     find,
-                    (
-                        f"'{new_special_token_str}' doesn't appear in the list "
-                        f"'{new_tokenizer.all_special_tokens_extended}' as an AddedToken with the same parameters as "
-                        f"'{special_token}' in the list {tokenizer.all_special_tokens_extended}"
-                    ),
+                    f"'{new_special_token_str}' doesn't appear in the list "
+                    f"'{new_tokenizer.all_special_tokens_extended}' as an AddedToken with the same parameters as "
+                    f"'{special_token}' in the list {tokenizer.all_special_tokens_extended}",
                 )
             elif special_token not in special_tokens_map:
                 # The special token must appear identically in the list of the new tokenizer.
@@ -1923,7 +1921,8 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         self.assertEqual(len(cm.records), 1)
                         self.assertTrue(
                             cm.records[0].message.startswith(
-                                "Token indices sequence length is longer than the specified maximum sequence length for this model"
+                                "Token indices sequence length is longer than the specified maximum sequence length"
+                                " for this model"
                             )
                         )
 
@@ -1937,7 +1936,8 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         self.assertEqual(len(cm.records), 1)
                         self.assertTrue(
                             cm.records[0].message.startswith(
-                                "Token indices sequence length is longer than the specified maximum sequence length for this model"
+                                "Token indices sequence length is longer than the specified maximum sequence length"
+                                " for this model"
                             )
                         )
                 # Check the order of Sequence of input ids, overflowing tokens and bbox sequence with truncation
@@ -2232,7 +2232,8 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         self.assertEqual(len(cm.records), 1)
                         self.assertTrue(
                             cm.records[0].message.startswith(
-                                "Token indices sequence length is longer than the specified maximum sequence length for this model"
+                                "Token indices sequence length is longer than the specified maximum sequence length"
+                                " for this model"
                             )
                         )
 
@@ -2244,7 +2245,8 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         self.assertEqual(len(cm.records), 1)
                         self.assertTrue(
                             cm.records[0].message.startswith(
-                                "Token indices sequence length is longer than the specified maximum sequence length for this model"
+                                "Token indices sequence length is longer than the specified maximum sequence length"
+                                " for this model"
                             )
                         )
                 # Check the order of Sequence of input ids, overflowing tokens and bbox sequence with truncation

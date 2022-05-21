@@ -98,8 +98,9 @@ def dicts_to_sum(objects: Union[Dict[str, Dict], List[dict]]):
 
 
 class Message:
-    def __init__(self, title: str, model_results: Dict, additional_results: Dict):
+    def __init__(self, title: str, ci_title: str, model_results: Dict, additional_results: Dict):
         self.title = title
+        self.ci_title = ci_title
 
         # Failures and success of the modeling tests
         self.n_model_success = sum(r["success"] for r in model_results.values())
@@ -159,6 +160,10 @@ class Message:
         return {"type": "header", "text": {"type": "plain_text", "text": self.title}}
 
     @property
+    def ci_title_section(self) -> Dict:
+        return {"type": "section", "text": {"type": "mrkdwn", "text": self.ci_title}}
+
+    @property
     def no_failures(self) -> Dict:
         return {
             "type": "section",
@@ -180,7 +185,10 @@ class Message:
             "type": "section",
             "text": {
                 "type": "plain_text",
-                "text": f"There were {self.n_failures} failures, out of {self.n_tests} tests.\nThe suite ran in {self.time}.",
+                "text": (
+                    f"There were {self.n_failures} failures, out of {self.n_tests} tests.\nThe suite ran in"
+                    f" {self.time}."
+                ),
                 "emoji": True,
             },
             "accessory": {
@@ -343,6 +351,9 @@ class Message:
     def payload(self) -> str:
         blocks = [self.header]
 
+        if self.ci_title:
+            blocks.append(self.ci_title_section)
+
         if self.n_model_failures > 0 or self.n_additional_failures > 0:
             blocks.append(self.failures)
 
@@ -378,7 +389,7 @@ class Message:
         print(json.dumps({"blocks": json.loads(payload)}))
 
         client.chat_postMessage(
-            channel=os.environ["CI_SLACK_CHANNEL_ID_DAILY"],
+            channel=os.environ["CI_SLACK_REPORT_CHANNEL_ID"],
             text="There was an issue running the tests.",
             blocks=payload,
         )
@@ -390,7 +401,7 @@ class Message:
         text = f"{self.n_failures} failures out of {self.n_tests} tests," if self.n_failures else "All tests passed."
 
         self.thread_ts = client.chat_postMessage(
-            channel=os.environ["CI_SLACK_CHANNEL_ID_DAILY"],
+            channel=os.environ["CI_SLACK_REPORT_CHANNEL_ID"],
             blocks=self.payload,
             text=text,
         )
@@ -436,7 +447,7 @@ class Message:
                     print(json.dumps({"blocks": blocks}))
 
                     client.chat_postMessage(
-                        channel=os.environ["CI_SLACK_CHANNEL_ID_DAILY"],
+                        channel=os.environ["CI_SLACK_REPORT_CHANNEL_ID"],
                         text=f"Results for {job}",
                         blocks=blocks,
                         thread_ts=self.thread_ts["ts"],
@@ -459,7 +470,7 @@ class Message:
                     print(json.dumps({"blocks": blocks}))
 
                     client.chat_postMessage(
-                        channel=os.environ["CI_SLACK_CHANNEL_ID_DAILY"],
+                        channel=os.environ["CI_SLACK_REPORT_CHANNEL_ID"],
                         text=f"Results for {job}",
                         blocks=blocks,
                         thread_ts=self.thread_ts["ts"],
@@ -494,7 +505,7 @@ def retrieve_artifact(name: str, gpu: Optional[str]):
         raise ValueError(f"Invalid GPU for artifact. Passed GPU: `{gpu}`.")
 
     if gpu is not None:
-        name = f"{gpu}-gpu-docker_{name}"
+        name = f"{gpu}-gpu_{name}"
 
     _artifact = {}
 
@@ -528,8 +539,8 @@ def retrieve_available_artifacts():
 
     directories = filter(os.path.isdir, os.listdir())
     for directory in directories:
-        if directory.startswith("single-gpu-docker"):
-            artifact_name = directory[len("single-gpu-docker") + 1 :]
+        if directory.startswith("single-gpu"):
+            artifact_name = directory[len("single-gpu") + 1 :]
 
             if artifact_name in _available_artifacts:
                 _available_artifacts[artifact_name].single_gpu = True
@@ -538,8 +549,8 @@ def retrieve_available_artifacts():
 
             _available_artifacts[artifact_name].add_path(directory, gpu="single")
 
-        elif directory.startswith("multi-gpu-docker"):
-            artifact_name = directory[len("multi-gpu-docker") + 1 :]
+        elif directory.startswith("multi-gpu"):
+            artifact_name = directory[len("multi-gpu") + 1 :]
 
             if artifact_name in _available_artifacts:
                 _available_artifacts[artifact_name].multi_gpu = True
@@ -558,6 +569,10 @@ def retrieve_available_artifacts():
 
 
 if __name__ == "__main__":
+
+    # This env. variable is set in workflow file (under the job `send_results`).
+    ci_event = os.environ["CI_EVENT"]
+
     arguments = sys.argv[1:][0]
     try:
         models = ast.literal_eval(arguments)
@@ -606,7 +621,8 @@ if __name__ == "__main__":
             if "stats" in artifact:
                 # Link to the GitHub Action job
                 model_results[model]["job_link"] = github_actions_job_links.get(
-                    f"Model tests ({model}, {artifact_path['gpu']}-gpu-docker)"
+                    # The job names use `matrix.folder` which contain things like `models/bert` instead of `models_bert`
+                    f"Model tests ({model.replace('models_', 'models/')}, {artifact_path['gpu']}-gpu)"
                 )
 
                 failed, success, time_spent = handle_test_results(artifact["stats"])
@@ -628,10 +644,10 @@ if __name__ == "__main__":
                             artifact_path["gpu"]
                         ] += f"*{line}*\n_{stacktraces.pop(0)}_\n\n"
 
-                        if re.search("_tf_", line):
+                        if re.search("test_modeling_tf_", line):
                             model_results[model]["failed"]["TensorFlow"][artifact_path["gpu"]] += 1
 
-                        elif re.search("_flax_", line):
+                        elif re.search("test_modeling_flax_", line):
                             model_results[model]["failed"]["Flax"][artifact_path["gpu"]] += 1
 
                         elif re.search("test_modeling", line):
@@ -664,6 +680,11 @@ if __name__ == "__main__":
         "Torch CUDA extension tests": "run_tests_torch_cuda_extensions_gpu_test_reports",
     }
 
+    if ci_event == "push":
+        del additional_files["Examples directory"]
+        del additional_files["PyTorch pipelines"]
+        del additional_files["TensorFlow pipelines"]
+
     additional_results = {
         key: {
             "failed": {"unclassified": 0, "single": 0, "multi": 0},
@@ -686,7 +707,7 @@ if __name__ == "__main__":
         for artifact_path in available_artifacts[additional_files[key]].paths:
             if artifact_path["gpu"] is not None:
                 additional_results[key]["job_link"] = github_actions_job_links.get(
-                    f"{key} ({artifact_path['gpu']}-gpu-docker)"
+                    f"{key} ({artifact_path['gpu']}-gpu)"
                 )
             artifact = retrieve_artifact(artifact_path["name"], artifact_path["gpu"])
             stacktraces = handle_stacktraces(artifact["failures_line"])
@@ -712,7 +733,48 @@ if __name__ == "__main__":
                             artifact_path["gpu"]
                         ] += f"*{line}*\n_{stacktraces.pop(0)}_\n\n"
 
-    message = Message("🤗 Results of the scheduled tests.", model_results, additional_results)
+    # To find the PR number in a commit title, for example, `Add AwesomeFormer model (#99999)`
+    pr_number_re = re.compile(r"\(#(\d+)\)$")
 
-    message.post()
-    message.post_reply()
+    title = f"🤗 Results of the {ci_event} tests."
+    # Add PR title with a link for push CI
+    ci_title = os.environ.get("CI_TITLE")
+    ci_url = os.environ.get("CI_COMMIT_URL")
+
+    if ci_title is not None:
+        assert ci_url is not None
+        ci_title = ci_title.strip().split("\n")[0].strip()
+
+        # Retrieve the PR title and author login to complete the report
+        commit_number = ci_url.split("/")[-1]
+        ci_detail_url = f"https://api.github.com/repos/huggingface/transformers/commits/{commit_number}"
+        ci_details = requests.get(ci_detail_url).json()
+        ci_author = ci_details["author"]["login"]
+
+        merged_by = None
+        # Find the PR number (if any) and change the url to the actual PR page.
+        numbers = pr_number_re.findall(ci_title)
+        if len(numbers) > 0:
+            pr_number = numbers[0]
+            ci_detail_url = f"https://api.github.com/repos/huggingface/transformers/pulls/{pr_number}"
+            ci_details = requests.get(ci_detail_url).json()
+
+            ci_author = ci_details["user"]["login"]
+            ci_url = f"https://github.com/huggingface/transformers/pull/{pr_number}"
+
+            merged_by = ci_details["merged_by"]["login"]
+
+        if merged_by is None:
+            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: {ci_author}"
+        else:
+            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: {ci_author} | Merged by: {merged_by}"
+
+    else:
+        ci_title = ""
+
+    message = Message(title, ci_title, model_results, additional_results)
+
+    # send report only if there is any failure
+    if message.n_failures:
+        message.post()
+        message.post_reply()

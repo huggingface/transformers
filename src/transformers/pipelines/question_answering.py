@@ -228,8 +228,8 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             max_answer_len (`int`, *optional*, defaults to 15):
                 The maximum length of predicted answers (e.g., only answers with a shorter length are considered).
             max_seq_len (`int`, *optional*, defaults to 384):
-                The maximum length of the total sentence (context + question) after tokenization. The context will be
-                split in several chunks (using `doc_stride`) if needed.
+                The maximum length of the total sentence (context + question) in tokens of each chunk passed to the
+                model. The context will be split in several chunks (using `doc_stride` as overlap) if needed.
             max_question_len (`int`, *optional*, defaults to 64):
                 The maximum length of the question after tokenization. It will be truncated if needed.
             handle_impossible_answer (`bool`, *optional*, defaults to `False`):
@@ -398,8 +398,11 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             end_ = np.where(undesired_tokens_mask, -10000.0, end_)
 
             # Normalize logits and spans to retrieve the answer
-            start_ = np.exp(start_ - np.log(np.sum(np.exp(start_), axis=-1, keepdims=True)))
-            end_ = np.exp(end_ - np.log(np.sum(np.exp(end_), axis=-1, keepdims=True)))
+            start_ = np.exp(start_ - start_.max(axis=-1, keepdims=True))
+            start_ = start_ / start_.sum()
+
+            end_ = np.exp(end_ - end_.max(axis=-1, keepdims=True))
+            end_ = end_ / end_.sum()
 
             if handle_impossible_answer:
                 min_null_score = min(min_null_score, (start_[0, 0] * end_[0, 0]).item())

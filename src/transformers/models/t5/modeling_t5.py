@@ -408,16 +408,16 @@ class T5Attention(nn.Module):
         is_small = relative_position < max_exact
 
         # The other half of the buckets are for logarithmically bigger bins in positions up to max_distance
-        relative_postion_if_large = max_exact + (
+        relative_position_if_large = max_exact + (
             torch.log(relative_position.float() / max_exact)
             / math.log(max_distance / max_exact)
             * (num_buckets - max_exact)
         ).to(torch.long)
-        relative_postion_if_large = torch.min(
-            relative_postion_if_large, torch.full_like(relative_postion_if_large, num_buckets - 1)
+        relative_position_if_large = torch.min(
+            relative_position_if_large, torch.full_like(relative_position_if_large, num_buckets - 1)
         )
 
-        relative_buckets += torch.where(is_small, relative_position, relative_postion_if_large)
+        relative_buckets += torch.where(is_small, relative_position, relative_position_if_large)
         return relative_buckets
 
     def compute_bias(self, query_length, key_length):
@@ -768,6 +768,8 @@ class T5PreTrainedModel(PreTrainedModel):
             # Mesh TensorFlow embeddings initialization
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
             module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
+            if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
+                module.lm_head.weight.data.normal_(mean=0.0, std=factor * 1.0)
         elif isinstance(module, T5DenseReluDense):
             # Mesh TensorFlow FF initialization
             # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
@@ -809,9 +811,10 @@ class T5PreTrainedModel(PreTrainedModel):
         decoder_start_token_id = self.config.decoder_start_token_id
         pad_token_id = self.config.pad_token_id
 
-        assert (
-            decoder_start_token_id is not None
-        ), "self.model.config.decoder_start_token_id has to be defined. In T5 it is usually set to the pad_token_id. See T5 docs for more information"
+        assert decoder_start_token_id is not None, (
+            "self.model.config.decoder_start_token_id has to be defined. In T5 it is usually set to the pad_token_id."
+            " See T5 docs for more information"
+        )
 
         # shift inputs to the right
         if is_torch_fx_proxy(input_ids):

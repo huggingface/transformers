@@ -22,13 +22,14 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.19.0.dev0"
+__version__ = "4.20.0.dev0"
 
 from typing import TYPE_CHECKING
 
 # Check the dependencies satisfy the minimal versions required.
 from . import dependency_versions_check
 from .utils import (
+    OptionalDependencyNotAvailable,
     _LazyModule,
     is_flax_available,
     is_scatter_available,
@@ -170,6 +171,7 @@ _import_structure = {
     "models.convnext": ["CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNextConfig"],
     "models.cpm": [],
     "models.ctrl": ["CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CTRLConfig", "CTRLTokenizer"],
+    "models.cvt": ["CVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CvtConfig"],
     "models.data2vec": [
         "DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -197,6 +199,14 @@ _import_structure = {
     "models.electra": ["ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "ElectraConfig", "ElectraTokenizer"],
     "models.encoder_decoder": ["EncoderDecoderConfig"],
     "models.flaubert": ["FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlaubertConfig", "FlaubertTokenizer"],
+    "models.flava": [
+        "FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "FlavaConfig",
+        "FlavaImageCodebookConfig",
+        "FlavaImageConfig",
+        "FlavaMultimodalConfig",
+        "FlavaTextConfig",
+    ],
     "models.fnet": ["FNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "FNetConfig"],
     "models.fsmt": ["FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FSMTConfig", "FSMTTokenizer"],
     "models.funnel": ["FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP", "FunnelConfig", "FunnelTokenizer"],
@@ -238,6 +248,7 @@ _import_structure = {
         "NystromformerConfig",
     ],
     "models.openai": ["OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OpenAIGPTConfig", "OpenAIGPTTokenizer"],
+    "models.opt": ["OPTConfig"],
     "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
     "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
     "models.phobert": ["PhobertTokenizer"],
@@ -274,6 +285,10 @@ _import_structure = {
     "models.t5": ["T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "T5Config"],
     "models.tapas": ["TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP", "TapasConfig", "TapasTokenizer"],
     "models.tapex": ["TapexTokenizer"],
+    "models.trajectory_transformer": [
+        "TRAJECTORY_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "TrajectoryTransformerConfig",
+    ],
     "models.transfo_xl": [
         "TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TransfoXLConfig",
@@ -307,6 +322,10 @@ _import_structure = {
         "Wav2Vec2FeatureExtractor",
         "Wav2Vec2Processor",
         "Wav2Vec2Tokenizer",
+    ],
+    "models.wav2vec2_conformer": [
+        "WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Wav2Vec2ConformerConfig",
     ],
     "models.wav2vec2_phoneme": ["Wav2Vec2PhonemeCTCTokenizer"],
     "models.wav2vec2_with_lm": ["Wav2Vec2ProcessorWithLM"],
@@ -371,7 +390,7 @@ _import_structure = {
         "TrainerControl",
         "TrainerState",
     ],
-    "trainer_utils": ["EvalPrediction", "IntervalStrategy", "SchedulerType", "set_seed"],
+    "trainer_utils": ["EvalPrediction", "IntervalStrategy", "SchedulerType", "enable_full_determinism", "set_seed"],
     "training_args": ["TrainingArguments"],
     "training_args_seq2seq": ["Seq2SeqTrainingArguments"],
     "training_args_tf": ["TFTrainingArguments"],
@@ -412,7 +431,16 @@ _import_structure = {
 }
 
 # sentencepiece-backed objects
-if is_sentencepiece_available():
+try:
+    if not is_sentencepiece_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    from .utils import dummy_sentencepiece_objects
+
+    _import_structure["utils.dummy_sentencepiece_objects"] = [
+        name for name in dir(dummy_sentencepiece_objects) if not name.startswith("_")
+    ]
+else:
     _import_structure["models.albert"].append("AlbertTokenizer")
     _import_structure["models.barthez"].append("BarthezTokenizer")
     _import_structure["models.bartpho"].append("BartphoTokenizer")
@@ -439,16 +467,19 @@ if is_sentencepiece_available():
     _import_structure["models.xlm_prophetnet"].append("XLMProphetNetTokenizer")
     _import_structure["models.xlm_roberta"].append("XLMRobertaTokenizer")
     _import_structure["models.xlnet"].append("XLNetTokenizer")
-else:
-    from .utils import dummy_sentencepiece_objects
-
-    _import_structure["utils.dummy_sentencepiece_objects"] = [
-        name for name in dir(dummy_sentencepiece_objects) if not name.startswith("_")
-    ]
 
 # tokenizers-backed objects
-if is_tokenizers_available():
-    # Fast tokenizers
+try:
+    if not is_tokenizers_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    from .utils import dummy_tokenizers_objects
+
+    _import_structure["utils.dummy_tokenizers_objects"] = [
+        name for name in dir(dummy_tokenizers_objects) if not name.startswith("_")
+    ]
+else:
+    # Fast tokenizers structure
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
@@ -498,43 +529,55 @@ if is_tokenizers_available():
     _import_structure["models.xlnet"].append("XLNetTokenizerFast")
     _import_structure["tokenization_utils_fast"] = ["PreTrainedTokenizerFast"]
 
-else:
-    from .utils import dummy_tokenizers_objects
 
-    _import_structure["utils.dummy_tokenizers_objects"] = [
-        name for name in dir(dummy_tokenizers_objects) if not name.startswith("_")
-    ]
-
-if is_sentencepiece_available() and is_tokenizers_available():
-    _import_structure["convert_slow_tokenizer"] = ["SLOW_TO_FAST_CONVERTERS", "convert_slow_tokenizer"]
-else:
+try:
+    if not (is_sentencepiece_available() and is_tokenizers_available()):
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
     from .utils import dummy_sentencepiece_and_tokenizers_objects
 
     _import_structure["utils.dummy_sentencepiece_and_tokenizers_objects"] = [
         name for name in dir(dummy_sentencepiece_and_tokenizers_objects) if not name.startswith("_")
     ]
+else:
+    _import_structure["convert_slow_tokenizer"] = ["SLOW_TO_FAST_CONVERTERS", "convert_slow_tokenizer"]
 
 # Speech-specific objects
-if is_speech_available():
-    _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
-else:
+try:
+    if not is_speech_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
     from .utils import dummy_speech_objects
 
     _import_structure["utils.dummy_speech_objects"] = [
         name for name in dir(dummy_speech_objects) if not name.startswith("_")
     ]
-
-if is_sentencepiece_available() and is_speech_available():
-    _import_structure["models.speech_to_text"].append("Speech2TextProcessor")
 else:
+    _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
+
+try:
+    if not (is_sentencepiece_available() and is_speech_available()):
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
     from .utils import dummy_sentencepiece_and_speech_objects
 
     _import_structure["utils.dummy_sentencepiece_and_speech_objects"] = [
         name for name in dir(dummy_sentencepiece_and_speech_objects) if not name.startswith("_")
     ]
+else:
+    _import_structure["models.speech_to_text"].append("Speech2TextProcessor")
 
 # Vision-specific objects
-if is_vision_available():
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    from .utils import dummy_vision_objects
+
+    _import_structure["utils.dummy_vision_objects"] = [
+        name for name in dir(dummy_vision_objects) if not name.startswith("_")
+    ]
+else:
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
     _import_structure["models.beit"].append("BeitFeatureExtractor")
     _import_structure["models.clip"].append("CLIPFeatureExtractor")
@@ -543,6 +586,7 @@ if is_vision_available():
     _import_structure["models.deit"].append("DeiTFeatureExtractor")
     _import_structure["models.detr"].append("DetrFeatureExtractor")
     _import_structure["models.dpt"].append("DPTFeatureExtractor")
+    _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaProcessor"])
     _import_structure["models.glpn"].append("GLPNFeatureExtractor")
     _import_structure["models.imagegpt"].append("ImageGPTFeatureExtractor")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2FeatureExtractor")
@@ -556,15 +600,18 @@ if is_vision_available():
     _import_structure["models.vilt"].append("ViltProcessor")
     _import_structure["models.vit"].append("ViTFeatureExtractor")
     _import_structure["models.yolos"].append("YolosFeatureExtractor")
-else:
-    from .utils import dummy_vision_objects
-
-    _import_structure["utils.dummy_vision_objects"] = [
-        name for name in dir(dummy_vision_objects) if not name.startswith("_")
-    ]
 
 # Timm-backed objects
-if is_timm_available() and is_vision_available():
+try:
+    if not (is_timm_available() and is_vision_available()):
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    from .utils import dummy_timm_objects
+
+    _import_structure["utils.dummy_timm_objects"] = [
+        name for name in dir(dummy_timm_objects) if not name.startswith("_")
+    ]
+else:
     _import_structure["models.detr"].extend(
         [
             "DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -574,14 +621,17 @@ if is_timm_available() and is_vision_available():
             "DetrPreTrainedModel",
         ]
     )
-else:
-    from .utils import dummy_timm_objects
 
-    _import_structure["utils.dummy_timm_objects"] = [
-        name for name in dir(dummy_timm_objects) if not name.startswith("_")
+try:
+    if not is_scatter_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    from .utils import dummy_scatter_objects
+
+    _import_structure["utils.dummy_scatter_objects"] = [
+        name for name in dir(dummy_scatter_objects) if not name.startswith("_")
     ]
-
-if is_scatter_available():
+else:
     _import_structure["models.tapas"].extend(
         [
             "TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -593,16 +643,17 @@ if is_scatter_available():
             "load_tf_weights_in_tapas",
         ]
     )
-else:
-    from .utils import dummy_scatter_objects
-
-    _import_structure["utils.dummy_scatter_objects"] = [
-        name for name in dir(dummy_scatter_objects) if not name.startswith("_")
-    ]
 
 
 # PyTorch-backed objects
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    from .utils import dummy_pt_objects
+
+    _import_structure["utils.dummy_pt_objects"] = [name for name in dir(dummy_pt_objects) if not name.startswith("_")]
+else:
     _import_structure["activations"] = []
     _import_structure["benchmark.benchmark"] = ["PyTorchBenchmark"]
     _import_structure["benchmark.benchmark_args"] = ["PyTorchBenchmarkArguments"]
@@ -876,6 +927,14 @@ if is_torch_available():
             "CTRLPreTrainedModel",
         ]
     )
+    _import_structure["models.cvt"].extend(
+        [
+            "CVT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CvtForImageClassification",
+            "CvtModel",
+            "CvtPreTrainedModel",
+        ]
+    )
     _import_structure["models.data2vec"].extend(
         [
             "DATA2VEC_AUDIO_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -916,6 +975,7 @@ if is_torch_available():
         [
             "DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
             "DebertaV2ForMaskedLM",
+            "DebertaV2ForMultipleChoice",
             "DebertaV2ForQuestionAnswering",
             "DebertaV2ForSequenceClassification",
             "DebertaV2ForTokenClassification",
@@ -1003,6 +1063,18 @@ if is_torch_available():
             "FlaubertForTokenClassification",
             "FlaubertModel",
             "FlaubertWithLMHeadModel",
+        ]
+    )
+    _import_structure["models.flava"].extend(
+        [
+            "FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "FlavaForPreTraining",
+            "FlavaImageCodebook",
+            "FlavaImageModel",
+            "FlavaModel",
+            "FlavaMultimodalModel",
+            "FlavaPreTrainedModel",
+            "FlavaTextModel",
         ]
     )
     _import_structure["models.fnet"].extend(
@@ -1269,6 +1341,14 @@ if is_torch_available():
             "load_tf_weights_in_openai_gpt",
         ]
     )
+    _import_structure["models.opt"].extend(
+        [
+            "OPT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "OPTForCausalLM",
+            "OPTModel",
+            "OPTPreTrainedModel",
+        ]
+    )
     _import_structure["models.pegasus"].extend(
         ["PegasusForCausalLM", "PegasusForConditionalGeneration", "PegasusModel", "PegasusPreTrainedModel"]
     )
@@ -1465,6 +1545,7 @@ if is_torch_available():
     _import_structure["models.splinter"].extend(
         [
             "SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SplinterForPreTraining",
             "SplinterForQuestionAnswering",
             "SplinterLayer",
             "SplinterModel",
@@ -1501,6 +1582,13 @@ if is_torch_available():
             "T5Model",
             "T5PreTrainedModel",
             "load_tf_weights_in_t5",
+        ]
+    )
+    _import_structure["models.trajectory_transformer"].extend(
+        [
+            "TRAJECTORY_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TrajectoryTransformerModel",
+            "TrajectoryTransformerPreTrainedModel",
         ]
     )
     _import_structure["models.transfo_xl"].extend(
@@ -1603,6 +1691,18 @@ if is_torch_available():
             "Wav2Vec2ForXVector",
             "Wav2Vec2Model",
             "Wav2Vec2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.wav2vec2_conformer"].extend(
+        [
+            "WAV2VEC2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Wav2Vec2ConformerForAudioFrameClassification",
+            "Wav2Vec2ConformerForCTC",
+            "Wav2Vec2ConformerForPreTraining",
+            "Wav2Vec2ConformerForSequenceClassification",
+            "Wav2Vec2ConformerForXVector",
+            "Wav2Vec2ConformerModel",
+            "Wav2Vec2ConformerPreTrainedModel",
         ]
     )
     _import_structure["models.wavlm"].extend(
@@ -1723,13 +1823,16 @@ if is_torch_available():
     _import_structure["trainer"] = ["Trainer"]
     _import_structure["trainer_pt_utils"] = ["torch_distributed_zero_first"]
     _import_structure["trainer_seq2seq"] = ["Seq2SeqTrainer"]
-else:
-    from .utils import dummy_pt_objects
-
-    _import_structure["utils.dummy_pt_objects"] = [name for name in dir(dummy_pt_objects) if not name.startswith("_")]
 
 # TensorFlow-backed objects
-if is_tf_available():
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    from .utils import dummy_tf_objects
+
+    _import_structure["utils.dummy_tf_objects"] = [name for name in dir(dummy_tf_objects) if not name.startswith("_")]
+else:
     _import_structure["activations_tf"] = []
     _import_structure["benchmark.benchmark_args_tf"] = ["TensorFlowBenchmarkArguments"]
     _import_structure["benchmark.benchmark_tf"] = ["TensorFlowBenchmark"]
@@ -1775,6 +1878,7 @@ if is_tf_available():
         [
             "TF_MODEL_FOR_CAUSAL_LM_MAPPING",
             "TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
+            "TF_MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING",
             "TF_MODEL_FOR_MASKED_LM_MAPPING",
             "TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING",
             "TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING",
@@ -1793,6 +1897,7 @@ if is_tf_available():
             "TFAutoModelForImageClassification",
             "TFAutoModelForMaskedLM",
             "TFAutoModelForMultipleChoice",
+            "TFAutoModelForNextSentencePrediction",
             "TFAutoModelForPreTraining",
             "TFAutoModelForQuestionAnswering",
             "TFAutoModelForSeq2SeqLM",
@@ -1876,6 +1981,13 @@ if is_tf_available():
             "TFCTRLLMHeadModel",
             "TFCTRLModel",
             "TFCTRLPreTrainedModel",
+        ]
+    )
+    _import_structure["models.data2vec"].extend(
+        [
+            "TFData2VecVisionForImageClassification",
+            "TFData2VecVisionModel",
+            "TFData2VecVisionPreTrainedModel",
         ]
     )
     _import_structure["models.deberta"].extend(
@@ -2134,6 +2246,15 @@ if is_tf_available():
             "TFSpeech2TextPreTrainedModel",
         ]
     )
+    _import_structure["models.swin"].extend(
+        [
+            "TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFSwinForImageClassification",
+            "TFSwinForMaskedImageModeling",
+            "TFSwinModel",
+            "TFSwinPreTrainedModel",
+        ]
+    )
     _import_structure["models.t5"].extend(
         [
             "TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2228,13 +2349,18 @@ if is_tf_available():
     _import_structure["tf_utils"] = []
     _import_structure["trainer_tf"] = ["TFTrainer"]
 
-else:
-    from .utils import dummy_tf_objects
-
-    _import_structure["utils.dummy_tf_objects"] = [name for name in dir(dummy_tf_objects) if not name.startswith("_")]
 
 # FLAX-backed objects
-if is_flax_available():
+try:
+    if not is_flax_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    from .utils import dummy_flax_objects
+
+    _import_structure["utils.dummy_flax_objects"] = [
+        name for name in dir(dummy_flax_objects) if not name.startswith("_")
+    ]
+else:
     _import_structure["generation_flax_logits_process"] = [
         "FlaxForcedBOSTokenLogitsProcessor",
         "FlaxForcedEOSTokenLogitsProcessor",
@@ -2303,7 +2429,6 @@ if is_flax_available():
             "FlaxBartPreTrainedModel",
         ]
     )
-
     _import_structure["models.beit"].extend(
         [
             "FlaxBeitForImageClassification",
@@ -2312,6 +2437,7 @@ if is_flax_available():
             "FlaxBeitPreTrainedModel",
         ]
     )
+
     _import_structure["models.bert"].extend(
         [
             "FlaxBertForCausalLM",
@@ -2461,12 +2587,6 @@ if is_flax_available():
             "FlaxXLMRobertaModel",
         ]
     )
-else:
-    from .utils import dummy_flax_objects
-
-    _import_structure["utils.dummy_flax_objects"] = [
-        name for name in dir(dummy_flax_objects) if not name.startswith("_")
-    ]
 
 
 # Direct imports for type-checking
@@ -2583,6 +2703,7 @@ if TYPE_CHECKING:
     from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
     from .models.convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
+    from .models.cvt import CVT_PRETRAINED_CONFIG_ARCHIVE_MAP, CvtConfig
     from .models.data2vec import (
         DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -2611,6 +2732,14 @@ if TYPE_CHECKING:
     from .models.electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraTokenizer
     from .models.encoder_decoder import EncoderDecoderConfig
     from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
+    from .models.flava import (
+        FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        FlavaConfig,
+        FlavaImageCodebookConfig,
+        FlavaImageConfig,
+        FlavaMultimodalConfig,
+        FlavaTextConfig,
+    )
     from .models.fnet import FNET_PRETRAINED_CONFIG_ARCHIVE_MAP, FNetConfig
     from .models.fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig, FSMTTokenizer
     from .models.funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig, FunnelTokenizer
@@ -2646,6 +2775,7 @@ if TYPE_CHECKING:
     from .models.mt5 import MT5Config
     from .models.nystromformer import NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, NystromformerConfig
     from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
+    from .models.opt import OPTConfig
     from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
     from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
     from .models.phobert import PhobertTokenizer
@@ -2679,6 +2809,10 @@ if TYPE_CHECKING:
     from .models.t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
     from .models.tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig, TapasTokenizer
     from .models.tapex import TapexTokenizer
+    from .models.trajectory_transformer import (
+        TRAJECTORY_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        TrajectoryTransformerConfig,
+    )
     from .models.transfo_xl import (
         TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TransfoXLConfig,
@@ -2703,6 +2837,7 @@ if TYPE_CHECKING:
         Wav2Vec2Processor,
         Wav2Vec2Tokenizer,
     )
+    from .models.wav2vec2_conformer import WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, Wav2Vec2ConformerConfig
     from .models.wav2vec2_phoneme import Wav2Vec2PhonemeCTCTokenizer
     from .models.wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
     from .models.wavlm import WAVLM_PRETRAINED_CONFIG_ARCHIVE_MAP, WavLMConfig
@@ -2767,7 +2902,7 @@ if TYPE_CHECKING:
         TrainerControl,
         TrainerState,
     )
-    from .trainer_utils import EvalPrediction, IntervalStrategy, SchedulerType, set_seed
+    from .trainer_utils import EvalPrediction, IntervalStrategy, SchedulerType, enable_full_determinism, set_seed
     from .training_args import TrainingArguments
     from .training_args_seq2seq import Seq2SeqTrainingArguments
     from .training_args_tf import TFTrainingArguments
@@ -2808,7 +2943,12 @@ if TYPE_CHECKING:
         logging,
     )
 
-    if is_sentencepiece_available():
+    try:
+        if not is_sentencepiece_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        from .utils.dummy_sentencepiece_objects import *
+    else:
         from .models.albert import AlbertTokenizer
         from .models.barthez import BarthezTokenizer
         from .models.bartpho import BartphoTokenizer
@@ -2834,10 +2974,14 @@ if TYPE_CHECKING:
         from .models.xlm_prophetnet import XLMProphetNetTokenizer
         from .models.xlm_roberta import XLMRobertaTokenizer
         from .models.xlnet import XLNetTokenizer
-    else:
-        from .utils.dummy_sentencepiece_objects import *
 
-    if is_tokenizers_available():
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        from .utils.dummy_tokenizers_objects import *
+    else:
+        # Fast tokenizers imports
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -2885,25 +3029,36 @@ if TYPE_CHECKING:
         from .models.xlnet import XLNetTokenizerFast
         from .tokenization_utils_fast import PreTrainedTokenizerFast
 
-    else:
-        from .utils.dummy_tokenizers_objects import *
-
-    if is_sentencepiece_available() and is_tokenizers_available():
-        from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS, convert_slow_tokenizer
-    else:
+    try:
+        if not (is_sentencepiece_available() and is_tokenizers_available()):
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
         from .utils.dummies_sentencepiece_and_tokenizers_objects import *
-
-    if is_speech_available():
-        from .models.speech_to_text import Speech2TextFeatureExtractor
     else:
+        from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS, convert_slow_tokenizer
+
+    try:
+        if not is_speech_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
         from .utils.dummy_speech_objects import *
-
-    if is_speech_available() and is_sentencepiece_available():
-        from .models.speech_to_text import Speech2TextProcessor
     else:
-        from .utils.dummy_sentencepiece_and_speech_objects import *
+        from .models.speech_to_text import Speech2TextFeatureExtractor
 
-    if is_vision_available():
+    try:
+        if not (is_speech_available() and is_sentencepiece_available()):
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        from .utils.dummy_sentencepiece_and_speech_objects import *
+    else:
+        from .models.speech_to_text import Speech2TextProcessor
+
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        from .utils.dummy_vision_objects import *
+    else:
         from .image_utils import ImageFeatureExtractionMixin
         from .models.beit import BeitFeatureExtractor
         from .models.clip import CLIPFeatureExtractor, CLIPProcessor
@@ -2911,6 +3066,7 @@ if TYPE_CHECKING:
         from .models.deit import DeiTFeatureExtractor
         from .models.detr import DetrFeatureExtractor
         from .models.dpt import DPTFeatureExtractor
+        from .models.flava import FlavaFeatureExtractor, FlavaProcessor
         from .models.glpn import GLPNFeatureExtractor
         from .models.imagegpt import ImageGPTFeatureExtractor
         from .models.layoutlmv2 import LayoutLMv2FeatureExtractor, LayoutLMv2Processor
@@ -2922,11 +3078,14 @@ if TYPE_CHECKING:
         from .models.vilt import ViltFeatureExtractor, ViltProcessor
         from .models.vit import ViTFeatureExtractor
         from .models.yolos import YolosFeatureExtractor
-    else:
-        from .utils.dummy_vision_objects import *
 
     # Modeling
-    if is_timm_available() and is_vision_available():
+    try:
+        if not (is_timm_available() and is_vision_available()):
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        from .utils.dummy_timm_objects import *
+    else:
         from .models.detr import (
             DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
             DetrForObjectDetection,
@@ -2934,10 +3093,13 @@ if TYPE_CHECKING:
             DetrModel,
             DetrPreTrainedModel,
         )
-    else:
-        from .utils.dummy_timm_objects import *
 
-    if is_scatter_available():
+    try:
+        if not is_scatter_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        from .utils.dummy_scatter_objects import *
+    else:
         from .models.tapas import (
             TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST,
             TapasForMaskedLM,
@@ -2947,10 +3109,13 @@ if TYPE_CHECKING:
             TapasPreTrainedModel,
             load_tf_weights_in_tapas,
         )
-    else:
-        from .utils.dummy_scatter_objects import *
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        from .utils.dummy_pt_objects import *
+    else:
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
@@ -2997,6 +3162,8 @@ if TYPE_CHECKING:
         )
         from .generation_utils import top_k_top_p_filtering
         from .modeling_utils import PreTrainedModel
+
+        # PyTorch model imports
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlbertForMaskedLM,
@@ -3188,6 +3355,12 @@ if TYPE_CHECKING:
             CTRLModel,
             CTRLPreTrainedModel,
         )
+        from .models.cvt import (
+            CVT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CvtForImageClassification,
+            CvtModel,
+            CvtPreTrainedModel,
+        )
         from .models.data2vec import (
             DATA2VEC_AUDIO_PRETRAINED_MODEL_ARCHIVE_LIST,
             DATA2VEC_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -3223,6 +3396,7 @@ if TYPE_CHECKING:
         from .models.deberta_v2 import (
             DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
             DebertaV2ForMaskedLM,
+            DebertaV2ForMultipleChoice,
             DebertaV2ForQuestionAnswering,
             DebertaV2ForSequenceClassification,
             DebertaV2ForTokenClassification,
@@ -3296,6 +3470,16 @@ if TYPE_CHECKING:
             FlaubertForTokenClassification,
             FlaubertModel,
             FlaubertWithLMHeadModel,
+        )
+        from .models.flava import (
+            FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            FlavaForPreTraining,
+            FlavaImageCodebook,
+            FlavaImageModel,
+            FlavaModel,
+            FlavaMultimodalModel,
+            FlavaPreTrainedModel,
+            FlavaTextModel,
         )
         from .models.fnet import (
             FNET_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -3515,6 +3699,7 @@ if TYPE_CHECKING:
             OpenAIGPTPreTrainedModel,
             load_tf_weights_in_openai_gpt,
         )
+        from .models.opt import OPT_PRETRAINED_MODEL_ARCHIVE_LIST, OPTForCausalLM, OPTModel, OPTPreTrainedModel
         from .models.pegasus import (
             PegasusForCausalLM,
             PegasusForConditionalGeneration,
@@ -3677,6 +3862,7 @@ if TYPE_CHECKING:
         from .models.speech_to_text_2 import Speech2Text2ForCausalLM, Speech2Text2PreTrainedModel
         from .models.splinter import (
             SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SplinterForPreTraining,
             SplinterForQuestionAnswering,
             SplinterLayer,
             SplinterModel,
@@ -3707,6 +3893,11 @@ if TYPE_CHECKING:
             T5Model,
             T5PreTrainedModel,
             load_tf_weights_in_t5,
+        )
+        from .models.trajectory_transformer import (
+            TRAJECTORY_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TrajectoryTransformerModel,
+            TrajectoryTransformerPreTrainedModel,
         )
         from .models.transfo_xl import (
             TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -3789,6 +3980,16 @@ if TYPE_CHECKING:
             Wav2Vec2ForXVector,
             Wav2Vec2Model,
             Wav2Vec2PreTrainedModel,
+        )
+        from .models.wav2vec2_conformer import (
+            WAV2VEC2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Wav2Vec2ConformerForAudioFrameClassification,
+            Wav2Vec2ConformerForCTC,
+            Wav2Vec2ConformerForPreTraining,
+            Wav2Vec2ConformerForSequenceClassification,
+            Wav2Vec2ConformerForXVector,
+            Wav2Vec2ConformerModel,
+            Wav2Vec2ConformerPreTrainedModel,
         )
         from .models.wavlm import (
             WAVLM_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -3888,12 +4089,16 @@ if TYPE_CHECKING:
         from .trainer import Trainer
         from .trainer_pt_utils import torch_distributed_zero_first
         from .trainer_seq2seq import Seq2SeqTrainer
-    else:
-        from .utils.dummy_pt_objects import *
 
     # TensorFlow
-    if is_tf_available():
-
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        # Import the same objects as dummies to get them in the namespace.
+        # They will raise an import error if the user tries to instantiate / use them.
+        from .utils.dummy_tf_objects import *
+    else:
         from .benchmark.benchmark_args_tf import TensorFlowBenchmarkArguments
 
         # Benchmarks
@@ -3924,6 +4129,8 @@ if TYPE_CHECKING:
             TFLayoutLMPreTrainedModel,
         )
         from .modeling_tf_utils import TFPreTrainedModel, TFSequenceSummary, TFSharedEmbeddings, shape_list
+
+        # TensorFlow model imports
         from .models.albert import (
             TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFAlbertForMaskedLM,
@@ -3939,6 +4146,7 @@ if TYPE_CHECKING:
         from .models.auto import (
             TF_MODEL_FOR_CAUSAL_LM_MAPPING,
             TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
+            TF_MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
             TF_MODEL_FOR_MASKED_LM_MAPPING,
             TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
             TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
@@ -3957,6 +4165,7 @@ if TYPE_CHECKING:
             TFAutoModelForImageClassification,
             TFAutoModelForMaskedLM,
             TFAutoModelForMultipleChoice,
+            TFAutoModelForNextSentencePrediction,
             TFAutoModelForPreTraining,
             TFAutoModelForQuestionAnswering,
             TFAutoModelForSeq2SeqLM,
@@ -4028,6 +4237,11 @@ if TYPE_CHECKING:
             TFCTRLLMHeadModel,
             TFCTRLModel,
             TFCTRLPreTrainedModel,
+        )
+        from .models.data2vec import (
+            TFData2VecVisionForImageClassification,
+            TFData2VecVisionModel,
+            TFData2VecVisionPreTrainedModel,
         )
         from .models.deberta import (
             TF_DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -4225,6 +4439,13 @@ if TYPE_CHECKING:
             TFSpeech2TextModel,
             TFSpeech2TextPreTrainedModel,
         )
+        from .models.swin import (
+            TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFSwinForImageClassification,
+            TFSwinForMaskedImageModeling,
+            TFSwinModel,
+            TFSwinPreTrainedModel,
+        )
         from .models.t5 import (
             TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFT5EncoderModel,
@@ -4296,13 +4517,14 @@ if TYPE_CHECKING:
         # Trainer
         from .trainer_tf import TFTrainer
 
-    else:
+    try:
+        if not is_flax_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
         # Import the same objects as dummies to get them in the namespace.
         # They will raise an import error if the user tries to instantiate / use them.
-        from .utils.dummy_tf_objects import *
-
-    if is_flax_available():
-
+        from .utils.dummy_flax_objects import *
+    else:
         from .generation_flax_logits_process import (
             FlaxForcedBOSTokenLogitsProcessor,
             FlaxForcedEOSTokenLogitsProcessor,
@@ -4315,6 +4537,8 @@ if TYPE_CHECKING:
             FlaxTopPLogitsWarper,
         )
         from .modeling_flax_utils import FlaxPreTrainedModel
+
+        # Flax model imports
         from .models.albert import (
             FlaxAlbertForMaskedLM,
             FlaxAlbertForMultipleChoice,
@@ -4480,10 +4704,6 @@ if TYPE_CHECKING:
             FlaxXLMRobertaForTokenClassification,
             FlaxXLMRobertaModel,
         )
-    else:
-        # Import the same objects as dummies to get them in the namespace.
-        # They will raise an import error if the user tries to instantiate / use them.
-        from .utils.dummy_flax_objects import *
 
 else:
     import sys

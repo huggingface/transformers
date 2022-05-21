@@ -62,7 +62,10 @@ def parse_args():
         "--dataset_name",
         type=str,
         default="cifar10",
-        help="The name of the Dataset (from the HuggingFace hub) to train on (could be your own, possibly private, dataset).",
+        help=(
+            "The name of the Dataset (from the HuggingFace hub) to train on (could be your own, possibly private,"
+            " dataset)."
+        ),
     )
     parser.add_argument("--train_dir", type=str, default=None, help="A folder containing the training data.")
     parser.add_argument("--validation_dir", type=str, default=None, help="A folder containing the validation data.")
@@ -70,15 +73,19 @@ def parse_args():
         "--max_train_samples",
         type=int,
         default=None,
-        help="For debugging purposes or quicker training, truncate the number of training examples to this "
-        "value if set.",
+        help=(
+            "For debugging purposes or quicker training, truncate the number of training examples to this "
+            "value if set."
+        ),
     )
     parser.add_argument(
         "--max_eval_samples",
         type=int,
         default=None,
-        help="For debugging purposes or quicker training, truncate the number of evaluation examples to this "
-        "value if set.",
+        help=(
+            "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
+            "value if set."
+        ),
     )
     parser.add_argument(
         "--train_val_split",
@@ -157,6 +164,11 @@ def parse_args():
         "--with_tracking",
         action="store_true",
         help="Whether to load in all available experiment trackers from the environment and use them for logging.",
+    )
+    parser.add_argument(
+        "--ignore_mismatched_sizes",
+        action="store_true",
+        help="Whether or not to enable to load a pretrained model whose head dimensions are different.",
     )
     args = parser.parse_args()
 
@@ -271,6 +283,7 @@ def main():
         args.model_name_or_path,
         from_tf=bool(".ckpt" in args.model_name_or_path),
         config=config,
+        ignore_mismatched_sizes=args.ignore_mismatched_sizes,
     )
 
     # Preprocessing the datasets
@@ -476,7 +489,7 @@ def main():
             predictions, references = accelerator.gather((predictions, batch["labels"]))
             # If we are in a multiprocess environment, the last batch has duplicates
             if accelerator.num_processes > 1:
-                if step == len(eval_dataloader):
+                if step == len(eval_dataloader) - 1:
                     predictions = predictions[: len(eval_dataloader.dataset) - samples_seen]
                     references = references[: len(eval_dataloader.dataset) - samples_seen]
                 else:
