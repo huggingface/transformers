@@ -401,13 +401,13 @@ class FlaxOPTGenerationTest(unittest.TestCase):
         inputs_non_padded = tokenizer(sentences[0], return_tensors="jax").input_ids
         output_non_padded = model.generate(input_ids=inputs_non_padded)
 
-        num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().cpu().item()
+        num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].sum().cpu()
         inputs_padded = tokenizer(sentences[1], return_tensors="jax").input_ids
         output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
 
-        batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        non_padded_sentence = tokenizer.decode(output_non_padded[0], skip_special_tokens=True)
-        padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
+        batch_out_sentence = tokenizer.batch_decode(outputs[0], skip_special_tokens=True)
+        non_padded_sentence = tokenizer.decode(output_non_padded[0][0], skip_special_tokens=True)
+        padded_sentence = tokenizer.decode(output_padded[0][0], skip_special_tokens=True)
 
         expected_output_sentence = [
             "Hello, my dog is a little bit of a dork.\nI'm a little bit",
