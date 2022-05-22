@@ -429,41 +429,7 @@ class TFOPTPreTrainedModel(TFPreTrainedModel):
         output = self.call(inputs)
 
         return self.serving_output(output)
-
-
-# OPT_GENERATION_EXAMPLE = r"""
-#     Summarization example:
-
-#     ```python
-#     >>> from transformers import OPTTokenizer, TFOPTForConditionalGeneration
-
-#     >>> model = TFOPTForConditionalGeneration.from_pretrained("facebook/opt-large")
-#     >>> tokenizer = OPTTokenizer.from_pretrained("facebook/opt-large")
-
-#     >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
-#     >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors="tf")
-
-#     >>> # Generate Summary
-#     >>> summary_ids = model.generate(inputs["input_ids"], num_beams=4, max_length=5)
-#     >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
-#     ```
-
-#     Mask filling example:
-
-#     ```python
-#     >>> from transformers import OPTTokenizer, TFOPTForConditionalGeneration
-
-#     >>> tokenizer = OPTTokenizer.from_pretrained("facebook/opt-large")
-#     >>> TXT = "My friends are <mask> but they eat too many carbs."
-
-#     >>> model = TFOPTForConditionalGeneration.from_pretrained("facebook/opt-large")
-#     >>> input_ids = tokenizer([TXT], return_tensors="tf")["input_ids"]
-#     >>> logits = model(input_ids).logits
-#     >>> probs = tf.nn.softmax(logits[0])
-#     >>> # probs[5] is associated with the mask token
-#     ```
-# """
-
+    
 
 OPT_INPUTS_DOCSTRING = r"""
     Args:
@@ -757,7 +723,7 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
     OPT_START_DOCSTRING,
 )
 @keras_serializable
-class TFOPTModel(TFPreTrainedModel):
+class TFOPTModel(TFOPTPreTrainedModel):
     config_class = OPTConfig
 
     def __init__(self, config: OPTConfig, **kwargs):
