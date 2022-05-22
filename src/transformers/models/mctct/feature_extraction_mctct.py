@@ -327,7 +327,7 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
             max_length=max_length,
             truncation=truncation,
             pad_to_multiple_of=pad_to_multiple_of,
-            return_attention_mask=return_attention_mask,
+            return_attention_mask=True,
             **kwargs,
         )
         # make sure list is in array format
@@ -343,6 +343,7 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
             attention_mask = (
                 np.array(attention_mask, dtype=np.int32)
                 if self._get_padding_strategies(padding, max_length=max_length) is not PaddingStrategy.DO_NOT_PAD
+                and padding
                 else None
             )
             padded_inputs["input_features"] = self.normalize(
