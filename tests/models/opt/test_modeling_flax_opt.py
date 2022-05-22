@@ -327,8 +327,6 @@ class FlaxOPTGenerationTest(unittest.TestCase):
 
         self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)
 
-        
-        
     @slow
     def test_generation_post_attn_layer_norm(self):
         model_id = "facebook/opt-350m"
@@ -398,10 +396,7 @@ class FlaxOPTGenerationTest(unittest.TestCase):
         inputs = tokenizer(sentences, return_tensors="jax", padding=True)
         input_ids = inputs["input_ids"]
 
-        outputs = model.generate(
-            input_ids=input_ids,
-            attention_mask=inputs["attention_mask"]
-        )
+        outputs = model.generate(input_ids=input_ids, attention_mask=inputs["attention_mask"])
 
         inputs_non_padded = tokenizer(sentences[0], return_tensors="jax").input_ids
         output_non_padded = model.generate(input_ids=inputs_non_padded)

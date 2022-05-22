@@ -79,6 +79,7 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values
 
     return (one_cst - expanded_mask) * LARGE_NEGATIVE
 
+
 class TFOPTLearnedPositionalEmbedding(TFSharedEmbeddings):
     """
     This module learns positional embeddings up to a fixed maximum size.
@@ -90,11 +91,10 @@ class TFOPTLearnedPositionalEmbedding(TFSharedEmbeddings):
         self.offset = 2
         super().__init__(num_embeddings + self.offset, embedding_dim, **kwargs)
 
-
     def call(self, attention_mask, past_key_values_length: int = 0):
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
         attention_mask = tf.cast(attention_mask, tf.int64)
-        
+
         # create positions depending on attention_mask
         positions = tf.math.cumsum(attention_mask, axis=1) * attention_mask - 1
 
@@ -429,7 +429,7 @@ class TFOPTPreTrainedModel(TFPreTrainedModel):
         output = self.call(inputs)
 
         return self.serving_output(output)
-    
+
 
 OPT_INPUTS_DOCSTRING = r"""
     Args:
@@ -492,7 +492,7 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
         self.shared = TFSharedEmbeddings(
             config.vocab_size, config.word_embed_proj_dim, config.pad_token_id, name="decoder.embed_tokens"
         )
-        
+
         self.embed_positions = TFOPTLearnedPositionalEmbedding(
             num_embeddings,
             config.hidden_size,
@@ -606,7 +606,7 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
 
                 If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all ``decoder_input_ids``` of shape `(batch_size, sequence_length)`.    
+                all ``decoder_input_ids``` of shape `(batch_size, sequence_length)`.
             inputs_embeds (`tf.Tensor` of
                 shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
                 `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
@@ -650,7 +650,7 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
             # attention_mask = tf.ones_like(input_ids, dtype=tf.bool)
             attention_mask = tf.ones(inputs_embeds.shape[:2], dtype=tf.bool)
 
-        pos_embeds = self.embed_positions(attention_mask,  past_key_values_length)
+        pos_embeds = self.embed_positions(attention_mask, past_key_values_length)
 
         attention_mask = self._prepare_decoder_attention_mask(attention_mask, input_shape, past_key_values_length)
 
