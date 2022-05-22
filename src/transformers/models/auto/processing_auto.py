@@ -41,17 +41,18 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("flava", "FLAVAProcessor"),
         ("layoutlmv2", "LayoutLMv2Processor"),
         ("layoutxlm", "LayoutXLMProcessor"),
+        ("sew", "Wav2Vec2Processor"),
+        ("sew-d", "Wav2Vec2Processor"),
         ("speech_to_text", "Speech2TextProcessor"),
         ("speech_to_text_2", "Speech2Text2Processor"),
         ("trocr", "TrOCRProcessor"),
-        ("wav2vec2", "Wav2Vec2Processor"),
-        ("wav2vec2_with_lm", "Wav2Vec2ProcessorWithLM"),
-        ("vision-text-dual-encoder", "VisionTextDualEncoderProcessor"),
         ("unispeech", "Wav2Vec2Processor"),
         ("unispeech-sat", "Wav2Vec2Processor"),
-        ("sew", "Wav2Vec2Processor"),
-        ("sew-d", "Wav2Vec2Processor"),
         ("vilt", "ViltProcessor"),
+        ("vision-text-dual-encoder", "VisionTextDualEncoderProcessor"),
+        ("wav2vec2", "Wav2Vec2Processor"),
+        ("wav2vec2-conformer", "Wav2Vec2Processor"),
+        ("wav2vec2_with_lm", "Wav2Vec2ProcessorWithLM"),
         ("wavlm", "Wav2Vec2Processor"),
     ]
 )
@@ -65,11 +66,20 @@ def processor_class_from_name(class_name: str):
             module_name = model_type_to_module_name(module_name)
 
             module = importlib.import_module(f".{module_name}", "transformers.models")
-            return getattr(module, class_name)
+            try:
+                return getattr(module, class_name)
+            except AttributeError:
+                continue
 
     for processor in PROCESSOR_MAPPING._extra_content.values():
         if getattr(processor, "__name__", None) == class_name:
             return processor
+
+    # We did not fine the class, but maybe it's because a dep is missing. In that case, the class will be in the main
+    # init and we return the proper dummy to get an appropriate error message.
+    main_module = importlib.import_module("transformers")
+    if hasattr(main_module, class_name):
+        return getattr(main_module, class_name)
 
     return None
 

@@ -223,6 +223,11 @@ def parse_args():
         action="store_true",
         help="Whether to load in all available experiment trackers from the environment and use them for logging.",
     )
+    parser.add_argument(
+        "--ignore_mismatched_sizes",
+        action="store_true",
+        help="Whether or not to enable to load a pretrained model whose head dimensions are different.",
+    )
     args = parser.parse_args()
 
     # Sanity checks
@@ -383,6 +388,7 @@ def main():
             args.model_name_or_path,
             from_tf=bool(".ckpt" in args.model_name_or_path),
             config=config,
+            ignore_mismatched_sizes=args.ignore_mismatched_sizes,
         )
     else:
         logger.info("Training new model from scratch")
@@ -677,7 +683,7 @@ def main():
             predictions_gathered, labels_gathered = accelerator.gather((predictions, labels))
             # If we are in a multiprocess environment, the last batch has duplicates
             if accelerator.num_processes > 1:
-                if step == len(eval_dataloader):
+                if step == len(eval_dataloader) - 1:
                     predictions_gathered = predictions_gathered[: len(eval_dataloader.dataset) - samples_seen]
                     labels_gathered = labels_gathered[: len(eval_dataloader.dataset) - samples_seen]
                 else:

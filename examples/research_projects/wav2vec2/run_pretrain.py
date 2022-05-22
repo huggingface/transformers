@@ -202,7 +202,6 @@ class DataCollatorForWav2Vec2Pretraining:
             (batch_size, mask_indices_seq_length),
             self.model.config.mask_time_prob,
             self.model.config.mask_time_length,
-            device=batch["input_values"].device,
             attention_mask=attention_mask,
             min_masks=2,
         )
