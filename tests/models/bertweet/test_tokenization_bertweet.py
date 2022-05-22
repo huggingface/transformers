@@ -28,7 +28,7 @@ from transformers import (
 )
 from transformers.models.bertweet.tokenization_bertweet import VOCAB_FILES_NAMES
 from transformers.models.bertweet.tokenization_bertweet_fast import VOCAB_FILES_NAMES as VOCAB_FILES_NAMES_F
-from transformers.testing_utils import require_tokenizers
+from transformers.testing_utils import require_tokenizers, require_torch
 from transformers.tokenization_utils import AddedToken
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -284,6 +284,7 @@ class BertweetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                     self.tokenizer_class.from_pretrained(tmp_dir_1)
 
+    @require_torch
     def test_saving_tokenizer_trainer(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
