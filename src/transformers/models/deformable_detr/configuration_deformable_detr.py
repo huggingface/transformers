@@ -205,6 +205,8 @@ class DeformableDetrConfig(PretrainedConfig):
         self.two_stage = two_stage
         self.two_stage_num_proposals = two_stage_num_proposals
         self.with_box_refine = with_box_refine
+        if two_stage is True and with_box_refine is False:
+            raise ValueError("If two_stage is True, with_box_refine must be True.")
         # Hungarian matcher
         self.class_cost = class_cost
         self.bbox_cost = bbox_cost
