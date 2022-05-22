@@ -1260,6 +1260,7 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
                 Indexes for the start of each feature level. In range `[0, sequence_length]`.
             valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`, *optional*):
                 Ratio of valid area in each feature level.
+
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -1334,7 +1335,10 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
                     new_reference_points = tmp + inverse_sigmoid(reference_points)
                     new_reference_points = new_reference_points.sigmoid()
                 else:
-                    assert reference_points.shape[-1] == 2
+                    if reference_points.shape[-1] != 2:
+                        raise ValueError(
+                            f"Reference points' last dimension must be of size 2, but is {reference_points.shape[-1]}"
+                        )
                     new_reference_points = tmp
                     new_reference_points[..., :2] = tmp[..., :2] + inverse_sigmoid(reference_points)
                     new_reference_points = new_reference_points.sigmoid()
@@ -1442,13 +1446,13 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         else:
             self.reference_points = nn.Linear(config.d_model, 2)
 
-        # Initialize weights and apply final processing
-        if not config.two_stage:
+        self.post_init()
+
+    def _init_weights(self, module):
+        if not self.config.two_stage:
             nn.init.xavier_uniform_(self.reference_points.weight.data, gain=1.0)
             nn.init.constant_(self.reference_points.bias.data, 0.0)
         nn.init.normal_(self.level_embed)
-
-        self.post_init()
 
     def get_encoder(self):
         return self.encoder
@@ -1679,9 +1683,9 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
             # hack implementation for two-stage Deformable DETR
             # apply a detection head to each pixel (A.4 in paper)
             # linear projection for bounding box binary classification (i.e. foreground and background)
-            enc_outputs_class = self.decoder.class_embed[self.config.decoder_layers](object_query_embedding)
+            enc_outputs_class = self.decoder.class_embed[-1](object_query_embedding)
             # 3-layer FFN to predict bounding boxes coordinates (bbox regression branch)
-            delta_bbox = self.decoder.bbox_embed[self.config.decoder_layers](object_query_embedding)
+            delta_bbox = self.decoder.bbox_embed[-1](object_query_embedding)
             enc_outputs_coord_logits = delta_bbox + output_proposals
 
             # only keep top scoring `config.two_stage_num_proposals` proposals
@@ -1869,13 +1873,15 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
                 reference = inter_references[level - 1]
             reference = inverse_sigmoid(reference)
             outputs_class = self.class_embed[level](hidden_states[level])
-            tmp = self.bbox_embed[lvl](hs[lvl])
+            delta_bbox = self.bbox_embed[level](hidden_states[level])
             if reference.shape[-1] == 4:
-                tmp += reference
+                outputs_coord_logits = delta_bbox + reference
+            elif reference.shape[-1] == 2:
+                delta_bbox[..., :2] += reference
+                outputs_coord_logits = delta_bbox
             else:
-                assert reference.shape[-1] == 2
-                tmp[..., :2] += reference
-            outputs_coord = tmp.sigmoid()
+                raise ValueError("reference.shape[-1] should be 4 or 2, but got {}".format(reference.shape[-1]))
+            outputs_coord = outputs_coord_logits.sigmoid()
             outputs_classes.append(outputs_class)
             outputs_coords.append(outputs_coord)
         outputs_class = torch.stack(outputs_classes)
@@ -2347,8 +2353,10 @@ def generalized_box_iou(boxes1, boxes2):
     """
     # degenerate boxes gives inf / nan results
     # so do an early check
-    assert (boxes1[:, 2:] >= boxes1[:, :2]).all()
-    assert (boxes2[:, 2:] >= boxes2[:, :2]).all()
+    if not (boxes1[:, 2:] >= boxes1[:, :2]).all():
+        raise ValueError(f"boxes1 must be in [x0, y0, x1, y1] (corner) format, but got {boxes1}")
+    if not (boxes2[:, 2:] >= boxes2[:, :2]).all():
+        raise ValueError(f"boxes2 must be in [x0, y0, x1, y1] (corner) format, but got {boxes2}")
     iou, union = box_iou(boxes1, boxes2)
 
     lt = torch.min(boxes1[:, None, :2], boxes2[:, :2])
