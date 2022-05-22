@@ -17,11 +17,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import (
-    OptionalDependencyNotAvailable,
-    _LazyModule,
-    is_torch_available,
-)
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
 _import_structure = {
@@ -40,6 +36,7 @@ else:
         "VideoMAELayer",
         "VideoMAEModel",
         "VideoMAEPreTrainedModel",
+        "VideoMAEForVideoClassification",
     ]
 
 if TYPE_CHECKING:
@@ -54,6 +51,7 @@ if TYPE_CHECKING:
         from .modeling_videomae import (
             VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST,
             VideoMAEForPreTraining,
+            VideoMAEForVideoClassification,
             VideoMAELayer,
             VideoMAEModel,
             VideoMAEPreTrainedModel,

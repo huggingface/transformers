@@ -17,33 +17,33 @@
 import argparse
 
 import torch
-from PIL import Image
 
-import requests
-from transformers import VideoMAEConfig, VideoMAEFeatureExtractor, VideoMAEForPreTraining
+from transformers import VideoMAEConfig, VideoMAEForVideoClassification
 
 
 def rename_key(name):
     if "cls_token" in name:
-        name = name.replace("cls_token", "vit.embeddings.cls_token")
+        name = name.replace("cls_token", "videomae.embeddings.cls_token")
     if "mask_token" in name:
         name = name.replace("mask_token", "decoder.mask_token")
     if "decoder_pos_embed" in name:
         name = name.replace("decoder_pos_embed", "decoder.decoder_pos_embed")
     if "pos_embed" in name and "decoder" not in name:
-        name = name.replace("pos_embed", "vit.embeddings.position_embeddings")
+        name = name.replace("pos_embed", "videomae.embeddings.position_embeddings")
     if "patch_embed.proj" in name:
-        name = name.replace("patch_embed.proj", "vit.embeddings.patch_embeddings.projection")
+        name = name.replace("patch_embed.proj", "videomae.embeddings.patch_embeddings.projection")
     if "patch_embed.norm" in name:
-        name = name.replace("patch_embed.norm", "vit.embeddings.norm")
+        name = name.replace("patch_embed.norm", "videomae.embeddings.norm")
     if "decoder_blocks" in name:
         name = name.replace("decoder_blocks", "decoder.decoder_layers")
     if "blocks" in name:
-        name = name.replace("blocks", "vit.encoder.layer")
+        name = name.replace("blocks", "videomae.encoder.layer")
     if "attn.proj" in name:
         name = name.replace("attn.proj", "attention.output.dense")
-    if "attn" in name:
+    if "attn" in name and "bias" not in name:
         name = name.replace("attn", "attention.self")
+    if "attn" in name:
+        name = name.replace("attn", "attention.attention")
     if "norm1" in name:
         name = name.replace("norm1", "layernorm_before")
     if "norm2" in name:
@@ -58,10 +58,12 @@ def rename_key(name):
         name = name.replace("decoder_norm", "decoder.decoder_norm")
     if "decoder_pred" in name:
         name = name.replace("decoder_pred", "decoder.decoder_pred")
-    if "norm.weight" in name and "decoder" not in name:
-        name = name.replace("norm.weight", "vit.layernorm.weight")
-    if "norm.bias" in name and "decoder" not in name:
-        name = name.replace("norm.bias", "vit.layernorm.bias")
+    if "norm.weight" in name and "decoder" not in name and "fc" not in name:
+        name = name.replace("norm.weight", "videomae.layernorm.weight")
+    if "norm.bias" in name and "decoder" not in name and "fc" not in name:
+        name = name.replace("norm.bias", "videomae.layernorm.bias")
+    if "head" in name:
+        name = name.replace("head", "classifier")
 
     return name
 
@@ -80,21 +82,22 @@ def convert_state_dict(orig_state_dict, config):
                     orig_state_dict[f"{prefix}{layer_num}.attention.attention.query.weight"] = val[:dim, :]
                     orig_state_dict[f"{prefix}{layer_num}.attention.attention.key.weight"] = val[dim : dim * 2, :]
                     orig_state_dict[f"{prefix}{layer_num}.attention.attention.value.weight"] = val[-dim:, :]
-                elif "bias" in key:
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.query.bias"] = val[:dim]
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.key.bias"] = val[dim : dim * 2]
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.value.bias"] = val[-dim:]
+                # elif "bias" in key:
+                #     orig_state_dict[f"{prefix}{layer_num}.attention.attention.query.bias"] = val[:dim]
+                #     orig_state_dict[f"{prefix}{layer_num}.attention.attention.key.bias"] = val[dim : dim * 2]
+                #     orig_state_dict[f"{prefix}{layer_num}.attention.attention.value.bias"] = val[-dim:]
             else:
                 dim = config.hidden_size
-                prefix = "vit.encoder.layer."
+                prefix = "videomae.encoder.layer."
                 if "weight" in key:
                     orig_state_dict[f"{prefix}{layer_num}.attention.attention.query.weight"] = val[:dim, :]
                     orig_state_dict[f"{prefix}{layer_num}.attention.attention.key.weight"] = val[dim : dim * 2, :]
                     orig_state_dict[f"{prefix}{layer_num}.attention.attention.value.weight"] = val[-dim:, :]
-                elif "bias" in key:
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.query.bias"] = val[:dim]
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.key.bias"] = val[dim : dim * 2]
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.value.bias"] = val[-dim:]
+                # elif "bias" in key:
+                #     print("hello we're here")
+                #     orig_state_dict[f"{prefix}{layer_num}.attention.attention.query.bias"] = val[:dim]
+                #     orig_state_dict[f"{prefix}{layer_num}.attention.attention.key.bias"] = val[dim : dim * 2]
+                #     orig_state_dict[f"{prefix}{layer_num}.attention.attention.value.bias"] = val[-dim:]
 
         else:
             orig_state_dict[rename_key(key)] = val
@@ -116,49 +119,42 @@ def convert_videomae_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         config.num_hidden_layers = 32
         config.num_attention_heads = 16
 
-    model = VideoMAEForPreTraining(config)
+    config.num_labels = 400
 
-    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["model"]
+    model = VideoMAEForVideoClassification(config)
 
-    feature_extractor = VideoMAEFeatureExtractor(size=config.image_size)
-
+    state_dict = torch.load(checkpoint_url, map_location="cpu")["module"]
     new_state_dict = convert_state_dict(state_dict, config)
 
     model.load_state_dict(new_state_dict)
     model.eval()
 
-    url = "https://user-images.githubusercontent.com/11435359/147738734-196fd92f-9260-48d5-ba7e-bf103d29364d.jpg"
+    # # forward pass
+    # torch.manual_seed(2)
+    # outputs = model(**inputs)
+    # logits = outputs.logits
 
-    image = Image.open(requests.get(url, stream=True).raw)
-    feature_extractor = VideoMAEFeatureExtractor(size=config.image_size)
-    inputs = feature_extractor(images=image, return_tensors="pt")
+    # if "large" in checkpoint_url:
+    #     expected_slice = torch.tensor(
+    #         [[-0.7309, -0.7128, -1.0169], [-1.0161, -0.9058, -1.1878], [-1.0478, -0.9411, -1.1911]]
+    #     )
+    # elif "huge" in checkpoint_url:
+    #     expected_slice = torch.tensor(
+    #         [[-1.1599, -0.9199, -1.2221], [-1.1952, -0.9269, -1.2307], [-1.2143, -0.9337, -1.2262]]
+    #     )
+    # else:
+    #     expected_slice = torch.tensor(
+    #         [[-0.9192, -0.8481, -1.1259], [-1.1349, -1.0034, -1.2599], [-1.1757, -1.0429, -1.2726]]
+    #     )
 
-    # forward pass
-    torch.manual_seed(2)
-    outputs = model(**inputs)
-    logits = outputs.logits
+    # # verify logits
+    # assert torch.allclose(logits[0, :3, :3], expected_slice, atol=1e-4)
 
-    if "large" in checkpoint_url:
-        expected_slice = torch.tensor(
-            [[-0.7309, -0.7128, -1.0169], [-1.0161, -0.9058, -1.1878], [-1.0478, -0.9411, -1.1911]]
-        )
-    elif "huge" in checkpoint_url:
-        expected_slice = torch.tensor(
-            [[-1.1599, -0.9199, -1.2221], [-1.1952, -0.9269, -1.2307], [-1.2143, -0.9337, -1.2262]]
-        )
-    else:
-        expected_slice = torch.tensor(
-            [[-0.9192, -0.8481, -1.1259], [-1.1349, -1.0034, -1.2599], [-1.1757, -1.0429, -1.2726]]
-        )
+    # print(f"Saving model to {pytorch_dump_folder_path}")
+    # model.save_pretrained(pytorch_dump_folder_path)
 
-    # verify logits
-    assert torch.allclose(logits[0, :3, :3], expected_slice, atol=1e-4)
-
-    print(f"Saving model to {pytorch_dump_folder_path}")
-    model.save_pretrained(pytorch_dump_folder_path)
-
-    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    # print(f"Saving feature extractor to {pytorch_dump_folder_path}")
+    # feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":
@@ -166,9 +162,9 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--checkpoint_url",
-        default="https://dl.fbaipublicfiles.com/mae/visualize/mae_visualize_vit_base.pth",
+        default="/Users/nielsrogge/Documents/VideoMAE/Original checkpoints/checkpoint.pth",
         type=str,
-        help="URL of the checkpoint you'd like to convert.",
+        help="Path of the original PyTorch checkpoint you'd like to convert.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."

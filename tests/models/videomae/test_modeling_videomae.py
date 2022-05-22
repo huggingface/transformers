@@ -34,7 +34,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import VideoMAEForPreTraining, VideoMAEModel
+    from transformers import VideoMAEForPreTraining, VideoMAEForVideoClassification, VideoMAEModel
     from transformers.models.vit.modeling_vit import VIT_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
 
 
@@ -151,7 +151,9 @@ class VideoMAEModelTest(ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (VideoMAEModel, VideoMAEForPreTraining) if is_torch_available() else ()
+    all_model_classes = (
+        (VideoMAEModel, VideoMAEForPreTraining, VideoMAEForVideoClassification) if is_torch_available() else ()
+    )
 
     test_pruning = False
     test_torchscript = False

@@ -1879,6 +1879,7 @@ else:
             "VideoMAELayer",
             "VideoMAEModel",
             "VideoMAEPreTrainedModel",
+            "VideoMAEForVideoClassification",
         ]
     )
     _import_structure["models.wav2vec2"].extend(
@@ -2543,13 +2544,6 @@ else:
             "TFViTMAEForPreTraining",
             "TFViTMAEModel",
             "TFViTMAEPreTrainedModel",
-        ]
-    )
-    _import_structure["models.videomae"].extend(
-        [
-            "TFVideoMAEForPreTraining",
-            "TFVideoMAEModel",
-            "TFVideoMAEPreTrainedModel",
         ]
     )
     _import_structure["models.wav2vec2"].extend(
@@ -4359,6 +4353,7 @@ if TYPE_CHECKING:
         from .models.videomae import (
             VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST,
             VideoMAEForPreTraining,
+            VideoMAEForVideoClassification,
             VideoMAELayer,
             VideoMAEModel,
             VideoMAEPreTrainedModel,

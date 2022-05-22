@@ -25,7 +25,6 @@ VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class VideoMAEConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`VideoMAEModel`]. It is used to instantiate an ViT
@@ -65,6 +64,8 @@ class VideoMAEConfig(PretrainedConfig):
             The number of input channels.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
+        use_mean_pooling (`bool`, *optional*, defaults to `True`):
+            Whether to mean pool the final hidden states instead of using the final hidden state of the [CLS] token.
         decoder_num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the decoder.
         decoder_hidden_size (`int`, *optional*, defaults to 512):
@@ -111,6 +112,7 @@ class VideoMAEConfig(PretrainedConfig):
         patch_size=16,
         num_channels=3,
         qkv_bias=True,
+        use_mean_pooling=True,
         decoder_num_attention_heads=16,
         decoder_hidden_size=512,
         decoder_num_hidden_layers=8,
@@ -134,6 +136,7 @@ class VideoMAEConfig(PretrainedConfig):
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
+        self.use_mean_pooling = use_mean_pooling
         self.decoder_num_attention_heads = decoder_num_attention_heads
         self.decoder_hidden_size = decoder_hidden_size
         self.decoder_num_hidden_layers = decoder_num_hidden_layers

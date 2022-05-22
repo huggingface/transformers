@@ -4763,6 +4763,13 @@ class VideoMAEForPreTraining(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class VideoMAEForVideoClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class VideoMAELayer(metaclass=DummyObject):
     _backends = ["torch"]
 
