@@ -608,7 +608,7 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.video_mae(
+        outputs = self.videomae(
             pixel_values,
             head_mask=head_mask,
             output_attentions=output_attentions,
@@ -619,11 +619,11 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
         sequence_output = outputs[0]
 
         if self.fc_norm is not None:
-            return self.fc_norm(sequence_output.mean(1))
+            sequence_output = self.fc_norm(sequence_output.mean(1))
         else:
-            return sequence_output[:, 0]
+            sequence_output = sequence_output[:, 0]
 
-        logits = self.classifier(sequence_output[:, 0, :])
+        logits = self.classifier(sequence_output)
 
         loss = None
         if labels is not None:

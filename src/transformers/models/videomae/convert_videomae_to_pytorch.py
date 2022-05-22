@@ -15,11 +15,32 @@
 """Convert ViT MAE checkpoints from the original repository: https://github.com/facebookresearch/mae"""
 
 import argparse
+import json
 
 import torch
 
 from transformers import VideoMAEConfig, VideoMAEForVideoClassification
 
+from huggingface_hub import hf_hub_download
+
+def get_videomae_config(checkpoint_path):
+    config = VideoMAEConfig()
+    
+    if "large" in checkpoint_path:
+        config.hidden_size = 1024
+        config.intermediate_size = 4096
+        config.num_hidden_layers = 24
+        config.num_attention_heads = 16
+
+    config.num_labels = 400
+    repo_id = "datasets/huggingface/label-files"
+    filename = "kinetics400-id2label.json"
+    id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
+    id2label = {int(k): v for k, v in id2label.items()}
+    config.id2label = id2label
+    config.label2id = {v: k for k, v in id2label.items()}
+
+    return config
 
 def rename_key(name):
     if "cls_token" in name:
@@ -105,34 +126,24 @@ def convert_state_dict(orig_state_dict, config):
     return orig_state_dict
 
 
-def convert_videomae_checkpoint(checkpoint_url, pytorch_dump_folder_path):
-    config = VideoMAEConfig()
-    if "large" in checkpoint_url:
-        config.hidden_size = 1024
-        config.intermediate_size = 4096
-        config.num_hidden_layers = 24
-        config.num_attention_heads = 16
-    elif "huge" in checkpoint_url:
-        config.patch_size = 14
-        config.hidden_size = 1280
-        config.intermediate_size = 5120
-        config.num_hidden_layers = 32
-        config.num_attention_heads = 16
-
-    config.num_labels = 400
+def convert_videomae_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_to_hub):
+    config = get_videomae_config(checkpoint_path)
 
     model = VideoMAEForVideoClassification(config)
 
-    state_dict = torch.load(checkpoint_url, map_location="cpu")["module"]
+    state_dict = torch.load(checkpoint_path, map_location="cpu")["module"]
     new_state_dict = convert_state_dict(state_dict, config)
 
     model.load_state_dict(new_state_dict)
     model.eval()
 
-    # # forward pass
-    # torch.manual_seed(2)
-    # outputs = model(**inputs)
-    # logits = outputs.logits
+    # forward pass
+    pixel_values = torch.load("/Users/nielsrogge/Documents/VideoMAE/Original checkpoints/eating_spaghetti_video.pt")
+    outputs = model(pixel_values)
+    logits = outputs.logits
+
+    predicted_class_idx = logits.argmax(-1).item()
+    print("Predicted class:", model.config.id2label[predicted_class_idx])
 
     # if "large" in checkpoint_url:
     #     expected_slice = torch.tensor(
@@ -156,12 +167,17 @@ def convert_videomae_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     # print(f"Saving feature extractor to {pytorch_dump_folder_path}")
     # feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
+    if push_to_hub:
+        print("Pushing to the hub...")
+        model_name = "nielsr/videomae-base"
+        model.push_to_hub(model_name, organization="hustvl")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--checkpoint_url",
+        "--checkpoint_path",
         default="/Users/nielsrogge/Documents/VideoMAE/Original checkpoints/checkpoint.pth",
         type=str,
         help="Path of the original PyTorch checkpoint you'd like to convert.",
@@ -169,6 +185,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
+    parser.add_argument(
+        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+    )
 
     args = parser.parse_args()
-    convert_videomae_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path)
+    convert_videomae_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub)
