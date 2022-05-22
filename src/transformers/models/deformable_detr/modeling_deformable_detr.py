@@ -534,7 +534,7 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
         super().__init__()
         if embed_dim % num_heads != 0:
             raise ValueError(
-                "embed_dim (d_model) must be divisible by num_heads, but got {} and {}".format(embed_dim, num_heads)
+                f"embed_dim (d_model) must be divisible by num_heads, but got {embed_dim} and {num_heads}"
             )
         _d_per_head = embed_dim // num_heads
         if not _is_power_of_2(_d_per_head):
@@ -630,9 +630,7 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
                 + sampling_offsets / self.n_points * reference_points[:, :, None, :, None, 2:] * 0.5
             )
         else:
-            raise ValueError(
-                "Last dim of reference_points must be 2 or 4, but get {} instead.".format(reference_points.shape[-1])
-            )
+            raise ValueError(f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
         output = MultiScaleDeformableAttentionFunction.apply(
             value,
             spatial_shapes,
@@ -1880,7 +1878,7 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
                 delta_bbox[..., :2] += reference
                 outputs_coord_logits = delta_bbox
             else:
-                raise ValueError("reference.shape[-1] should be 4 or 2, but got {}".format(reference.shape[-1]))
+                raise ValueError(f"reference.shape[-1] should be 4 or 2, but got {reference.shape[-1]}")
             outputs_coord = outputs_coord_logits.sigmoid()
             outputs_classes.append(outputs_class)
             outputs_coords.append(outputs_coord)
