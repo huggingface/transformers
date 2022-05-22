@@ -18,7 +18,7 @@ def get_dataset():
 class MakeDuplicateClustersTest(TestCase):
     def test_make_duplicate_clusters(self):
         ds = get_dataset()
-        duplicate_clusters = make_duplicate_clusters(ds)
+        duplicate_clusters = make_duplicate_clusters(ds, 0.85)
         self.assertEqual(len(duplicate_clusters[0]), 2)
 
     def test_deduplicate_dataset(self):

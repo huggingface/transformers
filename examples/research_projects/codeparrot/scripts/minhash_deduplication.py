@@ -1,5 +1,6 @@
 import json
 import multiprocessing as mp
+from functools import partial
 import re
 from collections import defaultdict
 from typing import Dict, List, Optional, Set, Tuple, Type
@@ -94,9 +95,9 @@ def minhash_iter(dataset_iterator: Type[Dataset]):
                 yield data
 
 
-def make_duplicate_clusters(dataset_iterator: Type[Dataset]):
+def make_duplicate_clusters(dataset_iterator: Type[Dataset], jaccard_threshold: float):
     """This function will be rewritten with dataset map"""
-    di = DuplicationIndex()
+    di = DuplicationIndex(duplication_jaccard_threshold=jaccard_threshold)
 
     for filename, min_hash in tqdm(ThreadedIterator(minhash_iter(enumerate(dataset_iterator)), max_queue_size=100)):
         di.add(filename, min_hash)
@@ -115,7 +116,7 @@ def jaccard_similarity(code1: str, code2: str) -> float:
 _shared_dataset = None
 
 
-def _find_cluster_extremes_shared(cluster):
+def _find_cluster_extremes_shared(cluster, jaccard_threshold):
     """
     Find a reduced cluster such that each code in the origin cluster is similar to at least one code in the reduced cluster.
     """
@@ -124,7 +125,7 @@ def _find_cluster_extremes_shared(cluster):
         code1 = _shared_dataset[element1["base_index"]]["content"]
         for element2 in extremes:
             code2 = _shared_dataset[element2["base_index"]]["content"]
-            if jaccard_similarity(code1, code2) >= 0.85:
+            if jaccard_similarity(code1, code2) >= jaccard_threshold:
                 element2["copies"] += 1
                 break
         else:
@@ -133,14 +134,15 @@ def _find_cluster_extremes_shared(cluster):
     return extremes
 
 
-def find_extremes(cluster_list, dataset):
+def find_extremes(cluster_list, dataset, jaccard_threshold):
     global _shared_dataset
     _shared_dataset = dataset
     extremes_list = []
+    f = partial(_find_cluster_extremes_shared, jaccard_threshold=jaccard_threshold)
     with mp.Pool() as pool:
         for extremes in tqdm(
             pool.imap_unordered(
-                _find_cluster_extremes_shared,
+                f,
                 cluster_list,
             ),
             total=len(cluster_list),
@@ -149,38 +151,40 @@ def find_extremes(cluster_list, dataset):
     return extremes_list
 
 
-def deduplicate_dataset(dataset: Type[Dataset]) -> Tuple[Type[Dataset], List[List[Dict]]]:
+def deduplicate_dataset(
+    dataset: Type[Dataset],
+    jaccard_threshold: float=0.85) -> Tuple[Type[Dataset], List[List[Dict]]]:
     """Deduplicate the dataset using minhash and jaccard similarity.
     This function first generate duplicate clusters, then each cluster
     is reduced to the extremes that are similar to the other elements in the cluster.
-    Codes are called similar if their Jaccard similarity is greater than 0.85.
+    Codes are called similar if their Jaccard similarity is greater than jaccard_threshold (0.85 default).
 
-    Parameters
-    ----------
-    dataset : Type[Dataset]
-        The dataset to deduplicate.
+    Args
+        dataset (Type[Dataset])
+            The dataset to deduplicate.
+        jaccard_threshold (float, default=0.85)
+            jaccard threshold to determine if two codes are similar
 
     Returns
-    -------
-    ds_dedup : Type[Dataset]
-        The deduplicated dataset.
-    duplicate_clusters : List[List[Dict]]
-        The list of duplicate clusters.
-        Each cluster is a list of dicts with the following keys:
-        - base_index : int
-            The index of the code in the original dataset.
-        - repo_name : str
-        - path : str
-        - copies : int
-            The number of copies of the code in the cluster. (find_cluster_extremes)
-        - is_extreme : bool
-            Whether the code is an extreme in the cluster.
-        All the codes in the cluster are removed from the dataset except the extremes.
+        ds_dedup (Type[Dataset])
+            The deduplicated dataset.
+        duplicate_clusters (List[List[Dict]])
+            The list of duplicate clusters.
+            Each cluster is a list of dicts with the following keys:
+            - base_index : int
+                The index of the code in the original dataset.
+            - repo_name : str
+            - path : str
+            - copies : int
+                The number of copies of the code in the cluster. (find_cluster_extremes)
+            - is_extreme : bool
+                Whether the code is an extreme in the cluster.
+            All the codes in the cluster are removed from the dataset except the extremes.
     """
-    duplicate_clusters = make_duplicate_clusters(dataset)
+    duplicate_clusters = make_duplicate_clusters(dataset, jaccard_threshold)
     duplicate_indices = set(x["base_index"] for cluster in duplicate_clusters for x in cluster)
     extreme_dict = {}
-    extremes_clusters = find_extremes(duplicate_clusters, dataset)
+    extremes_clusters = find_extremes(duplicate_clusters, dataset, jaccard_threshold)
     for extremes in extremes_clusters:
         for element in extremes:
             extreme_dict[element["base_index"]] = element
