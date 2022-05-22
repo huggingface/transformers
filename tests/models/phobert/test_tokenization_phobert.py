@@ -18,15 +18,24 @@ import shutil
 import tempfile
 import unittest
 
-from torch import nn
-
-from transformers import PhobertTokenizer, PhobertTokenizerFast, Trainer, TrainingArguments, convert_slow_tokenizer
+from transformers import (
+    PhobertTokenizer,
+    PhobertTokenizerFast,
+    Trainer,
+    TrainingArguments,
+    convert_slow_tokenizer,
+    is_torch_available,
+)
 from transformers.models.phobert.tokenization_phobert import VOCAB_FILES_NAMES
 from transformers.models.phobert.tokenization_phobert_fast import VOCAB_FILES_NAMES as VOCAB_FILES_NAMES_F
 from transformers.testing_utils import require_tokenizers
 from transformers.tokenization_utils import AddedToken
 
 from ...test_tokenization_common import TokenizerTesterMixin
+
+
+if is_torch_available():
+    import torch.nn as nn
 
 
 @require_tokenizers
