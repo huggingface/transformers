@@ -110,7 +110,6 @@ Utiliza [`DefaultDataCollator`] para crear un batch de ejemplos. A diferencia de
 ```
 
 ## Entrena
-
 Carga ViT con [`AutoModelForImageClassification`]. Especifica el número de labels, y pasa al modelo el mapping entre el número de label y la clase de label:
 
 ```py
@@ -126,15 +125,15 @@ Carga ViT con [`AutoModelForImageClassification`]. Especifica el número de labe
 
 <Tip>
 
-If you aren't familiar with fine-tuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#finetune-with-trainer)!
+Si no estás familiarizado con el fine-tuning de un modelo con el [`Trainer`], echa un vistazo al tutorial básico [aquí](../training#finetune-with-trainer)!
 
 </Tip>
 
-At this point, only three steps remain:
+Llegados a este punto, sólo quedan tres pasos:
 
-1. Define your training hyperparameters in [`TrainingArguments`]. It is important you don't remove unused columns because this will drop the `image` column. Without the `image` column, you can't create `pixel_values`. Set `remove_unused_columns=False` to prevent this behavior!
-2. Pass the training arguments to [`Trainer`] along with the model, datasets, tokenizer, and data collator.
-3. Call [`~Trainer.train`] to fine-tune your model.
+1. Define tus hiperparámetros de entrenamiento en [`TrainingArguments`]. Es importante que no elimines las columnas que no se utilicen, ya que esto hará que desaparezca la columna `image`. Sin la columna `image`, no puedes crear `pixel_values`. Establece `remove_unused_columns=False` para evitar este comportamiento.
+2. Pasa los training arguments al [`Trainer`] junto con el modelo, los datasets, tokenizer y data collator.
+3. Llama [`~Trainer.train`] para hacer fine-tune de tu modelo.
 
 ```py
 >>> training_args = TrainingArguments(
@@ -162,11 +161,9 @@ At this point, only three steps remain:
 
 >>> trainer.train()
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
-For a more in-depth example of how to fine-tune a model for image classification, take a look at the corresponding [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
+Para ver un ejemplo más en profundidad de cómo hacer fine-tune a un modelo para clasificación de imágenes, echa un vistazo al correspondiente [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
 
 </Tip>
