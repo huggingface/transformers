@@ -1,5 +1,6 @@
 # coding=utf-8
-# Copyright 2021 VinAI Research and the HuggingFace Inc. team.
+# Copyright (c) 2020, VinAI Research and the HuggingFace Inc. team.
+# Copyright 2018 The Open AI Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,110 +12,79 @@
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
-# limitations under the License
-""" Tokenization classes for BARTpho-syllable model."""
+# limitations under the License.
+""" Tokenization classes for PhoBERT"""
 
 import os
 from collections import defaultdict
 from shutil import copyfile
 from typing import Any, Dict, List, Optional, Tuple
 
-from ...tokenization_utils import AddedToken
-from ...tokenization_utils_base import EncodingFast
+from transformers.tokenization_utils_base import EncodingFast
+
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
-from ...utils import is_sentencepiece_available, logging
-
-
-if is_sentencepiece_available():
-    from .tokenization_bartpho import BartphoTokenizer
-else:
-    BartphoTokenizer = None
+from ...utils import logging
+from .tokenization_phobert import PhobertTokenizer
 
 
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {
-    "vocab_file": "sentencepiece.bpe.model",
-    "monolingual_vocab_file": "dict.txt",
+    "vocab_file": "vocab.txt",
+    "merges_file": "bpe.codes",
     "tokenizer_file": "tokenizer.json",
 }
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "vinai/bartpho-syllable": (
-            "https://huggingface.co/vinai/bartpho-syllable/resolve/main/sentencepiece.bpe.model"
-        ),
+        "vinai/phobert-base": "https://huggingface.co/vinai/phobert-base/resolve/main/vocab.txt",
+        "vinai/phobert-large": "https://huggingface.co/vinai/phobert-large/resolve/main/vocab.txt",
     },
-    "monolingual_vocab_file": {
-        "vinai/bartpho-syllable": "https://huggingface.co/vinai/bartpho-syllable/resolve/main/dict.txt",
+    "merges_file": {
+        "vinai/phobert-base": "https://huggingface.co/vinai/phobert-base/resolve/main/bpe.codes",
+        "vinai/phobert-large": "https://huggingface.co/vinai/phobert-large/resolve/main/bpe.codes",
     },
     "tokenizer_file": {
-        "vinai/bartpho-syllable": "https://huggingface.co/vinai/bartpho-syllable/resolve/main/tokenizer.json",
+        "vinai/phobert-base": "https://huggingface.co/vinai/phobert-base/resolve/main/tokenizer.json",
+        "vinai/phobert-large": "https://huggingface.co/vinai/phobert-large/resolve/main/tokenizer.json",
     },
 }
 
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"vinai/bartpho-syllable": 1024}
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
+    "vinai/phobert-base": 256,
+    "vinai/phobert-large": 256,
+}
 
 
-class BartphoTokenizerFast(PreTrainedTokenizerFast):
+class PhobertTokenizerFast(PreTrainedTokenizerFast):
     """
-    Construct a "fast" BARTpho tokenizer (backed by HuggingFace's *tokenizers* library). Adapted from
-    [`XLMRobertaTokenizerFast`]. Based on [SentencePiece](https://github.com/google/sentencepiece).
+    Construct a "Fast" BPE tokenizer for PhoBERT (backed by HuggingFace's *tokenizers* library).
 
-    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
-    refer to this superclass for more information regarding those methods.
+    Peculiarities:
+
+    - uses BERT's pre-tokenizer: BertPreTokenizer splits tokens on spaces, and also on punctuation. Each occurrence of
+      a punctuation character will be treated separately.
+
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the methods. Users should refer to the
+    superclass for more information regarding methods.
 
     Args:
         vocab_file (`str`):
             Path to the vocabulary file.
-        bos_token (`str`, *optional*, defaults to `"<s>"`):
-            The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
-
-            <Tip>
-
-            When building a sequence using special tokens, this is not the token that is used for the beginning of
-            sequence. The token used is the `cls_token`.
-
-            </Tip>
-
-        eos_token (`str`, *optional*, defaults to `"</s>"`):
-            The end of sequence token.
-
-            <Tip>
-
-            When building a sequence using special tokens, this is not the token that is used for the end of sequence.
-            The token used is the `sep_token`.
-
-            </Tip>
-
-        sep_token (`str`, *optional*, defaults to `"</s>"`):
-            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
-            sequence classification or for a text and a question for question answering. It is also used as the last
-            token of a sequence built with special tokens.
-        cls_token (`str`, *optional*, defaults to `"<s>"`):
-            The classifier token which is used when doing sequence classification (classification of the whole sequence
-            instead of per-token classification). It is the first token of the sequence when built with special tokens.
-        unk_token (`str`, *optional*, defaults to `"<unk>"`):
-            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
-            token instead.
-        pad_token (`str`, *optional*, defaults to `"<pad>"`):
-            The token used for padding, for example when batching sequences of different lengths.
-        mask_token (`str`, *optional*, defaults to `"<mask>"`):
-            The token used for masking values. This is the token used when training this model with masked language
-            modeling. This is the token which the model will try to predict.
-        additional_special_tokens (`List[str]`, *optional*, defaults to `["<s>NOTUSED", "</s>NOTUSED"]`):
-            Additional special tokens used by the tokenizer.
+        merges_file (`str`):
+            Path to the merges file.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = BartphoTokenizer
+    slow_tokenizer_class = PhobertTokenizer
 
     def __init__(
         self,
         vocab_file=None,
+        merges_file=None,
         tokenizer_file=None,
         bos_token="<s>",
         eos_token="</s>",
@@ -125,11 +95,9 @@ class BartphoTokenizerFast(PreTrainedTokenizerFast):
         mask_token="<mask>",
         **kwargs
     ):
-        # Mask token behave like a normal word, i.e. include the space before it
-        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
-
         super().__init__(
             vocab_file,
+            merges_file,
             tokenizer_file=tokenizer_file,
             bos_token=bos_token,
             eos_token=eos_token,
@@ -142,8 +110,8 @@ class BartphoTokenizerFast(PreTrainedTokenizerFast):
         )
 
         self.vocab_file = vocab_file
+        self.merges_file = merges_file
         self.tokenizer_file = tokenizer_file
-        self.can_save_slow_tokenizer = False if not self.vocab_file else True
 
     def _convert_encoding(
         self,
@@ -200,7 +168,7 @@ class BartphoTokenizerFast(PreTrainedTokenizerFast):
     ) -> List[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. A BARTpho sequence has the following format:
+        adding special tokens. A PhoBERT sequence has the following format:
 
         - single sequence: `<s> X </s>`
         - pair of sequences: `<s> A </s></s> B </s>`
@@ -221,11 +189,39 @@ class BartphoTokenizerFast(PreTrainedTokenizerFast):
         sep = [self.sep_token_id]
         return cls + token_ids_0 + sep + sep + token_ids_1 + sep
 
+    def get_special_tokens_mask(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+    ) -> List[int]:
+        """
+        Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
+        special tokens using the tokenizer `prepare_for_model` method.
+
+        Args:
+            token_ids_0 (`List[int]`):
+                List of IDs.
+            token_ids_1 (`List[int]`, *optional*):
+                Optional second list of IDs for sequence pairs.
+            already_has_special_tokens (`bool`, *optional*, defaults to `False`):
+                Whether or not the token list is already formatted with special tokens for the model.
+
+        Returns:
+            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+        """
+
+        if already_has_special_tokens:
+            return super().get_special_tokens_mask(
+                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
+            )
+
+        if token_ids_1 is None:
+            return [1] + ([0] * len(token_ids_0)) + [1]
+        return [1] + ([0] * len(token_ids_0)) + [1, 1] + ([0] * len(token_ids_1)) + [1]
+
     def create_token_type_ids_from_sequences(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. BARTpho does not
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. PhoBERT does not
         make use of token type ids, therefore a list of zeros is returned.
 
         Args:
@@ -249,8 +245,8 @@ class BartphoTokenizerFast(PreTrainedTokenizerFast):
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not self.can_save_slow_tokenizer:
             raise ValueError(
-                "Your fast tokenizer does not have the necessary information to save the vocabulary for a "
-                "slow tokenizer."
+                "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
+                "tokenizer."
             )
 
         if not os.path.isdir(save_directory):
@@ -258,19 +254,24 @@ class BartphoTokenizerFast(PreTrainedTokenizerFast):
             return
 
         out_vocab_file = os.path.join(
-            save_directory,
-            (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"],
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+        )
+
+        out_merges_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["merges_file"]
         )
 
         out_tokenizer_file = os.path.join(
-            save_directory,
-            (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["tokenizer_file"],
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["tokenizer_file"]
         )
 
         if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
             copyfile(self.vocab_file, out_vocab_file)
 
+        if os.path.abspath(self.merges_file) != os.path.abspath(out_merges_file):
+            copyfile(self.merges_file, out_merges_file)
+
         if os.path.abspath(self.tokenizer_file) != os.path.abspath(out_tokenizer_file):
             copyfile(self.tokenizer_file, out_tokenizer_file)
 
-        return (out_vocab_file, out_tokenizer_file)
+        return (out_vocab_file, out_merges_file, out_tokenizer_file)

@@ -119,6 +119,7 @@ class BertweetTokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
         self,
@@ -167,6 +168,7 @@ class BertweetTokenizer(PreTrainedTokenizer):
         self.encoder[self.unk_token] = 3
 
         self.add_from_file(vocab_file)
+        self.encoder[self.mask_token] = len(self.encoder)
 
         self.decoder = {v: k for k, v in self.encoder.items()}
 
