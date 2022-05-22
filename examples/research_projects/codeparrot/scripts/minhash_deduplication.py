@@ -1,8 +1,8 @@
 import json
 import multiprocessing as mp
-from functools import partial
 import re
 from collections import defaultdict
+from functools import partial
 from typing import Dict, List, Optional, Set, Tuple, Type
 
 from datasets import Dataset
@@ -152,8 +152,8 @@ def find_extremes(cluster_list, dataset, jaccard_threshold):
 
 
 def deduplicate_dataset(
-    dataset: Type[Dataset],
-    jaccard_threshold: float=0.85) -> Tuple[Type[Dataset], List[List[Dict]]]:
+    dataset: Type[Dataset], jaccard_threshold: float = 0.85
+) -> Tuple[Type[Dataset], List[List[Dict]]]:
     """Deduplicate the dataset using minhash and jaccard similarity.
     This function first generate duplicate clusters, then each cluster
     is reduced to the extremes that are similar to the other elements in the cluster.
