@@ -19,13 +19,13 @@ import json
 
 import torch
 
+from huggingface_hub import hf_hub_download
 from transformers import VideoMAEConfig, VideoMAEForVideoClassification
 
-from huggingface_hub import hf_hub_download
 
 def get_videomae_config(checkpoint_path):
     config = VideoMAEConfig()
-    
+
     if "large" in checkpoint_path:
         config.hidden_size = 1024
         config.intermediate_size = 4096
@@ -41,6 +41,7 @@ def get_videomae_config(checkpoint_path):
     config.label2id = {v: k for k, v in id2label.items()}
 
     return config
+
 
 def rename_key(name):
     if "cls_token" in name:

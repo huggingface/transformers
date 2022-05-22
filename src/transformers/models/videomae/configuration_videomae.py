@@ -37,6 +37,16 @@ class VideoMAEConfig(PretrainedConfig):
 
 
     Args:
+        image_size (`int`, *optional*, defaults to 224):
+            The size (resolution) of each image.
+        patch_size (`int`, *optional*, defaults to 16):
+            The size (resolution) of each patch.
+        num_channels (`int`, *optional*, defaults to 3):
+            The number of input channels.
+        num_frames (`int`, *optional*, defaults to 16):
+            The number of frames in each video.
+        tubelet_size (`int`, *optional*, defaults to 2):
+            The number of tubelets.
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -56,29 +66,18 @@ class VideoMAEConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 16):
-            The size (resolution) of each patch.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
         use_mean_pooling (`bool`, *optional*, defaults to `True`):
             Whether to mean pool the final hidden states instead of using the final hidden state of the [CLS] token.
-        decoder_num_attention_heads (`int`, *optional*, defaults to 12):
+        decoder_num_attention_heads (`int`, *optional*, defaults to 6):
             Number of attention heads for each attention layer in the decoder.
-        decoder_hidden_size (`int`, *optional*, defaults to 512):
+        decoder_hidden_size (`int`, *optional*, defaults to 384):
             Dimensionality of the decoder.
-        decoder_num_hidden_layers (`int`, *optional*, defaults to 8):
+        decoder_num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the decoder.
-        decoder_intermediate_size (`int`, *optional*, defaults to 2048):
+        decoder_intermediate_size (`int`, *optional*, defaults to 1536):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the decoder.
-        mask_ratio (`float`, *optional*, defaults to 0.75):
-            The ratio of the number of masked tokens in the input sequence.
-        norm_pix_loss (`bool`, *optional*, defaults to `False`):
-            Whether or not to train with normalized pixels (see Table 3 in the paper). Using normalized pixels improved
-            representation quality in the experiments of the authors.
 
     Example:
 
@@ -98,6 +97,11 @@ class VideoMAEConfig(PretrainedConfig):
 
     def __init__(
         self,
+        image_size=224,
+        patch_size=16,
+        num_channels=3,
+        num_frames=16,
+        tubelet_size=2,
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
@@ -107,21 +111,21 @@ class VideoMAEConfig(PretrainedConfig):
         attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        is_encoder_decoder=False,
-        image_size=224,
-        patch_size=16,
-        num_channels=3,
         qkv_bias=True,
         use_mean_pooling=True,
-        decoder_num_attention_heads=16,
-        decoder_hidden_size=512,
-        decoder_num_hidden_layers=8,
-        decoder_intermediate_size=2048,
-        mask_ratio=0.75,
-        norm_pix_loss=False,
+        decoder_num_attention_heads=6,
+        decoder_hidden_size=384,
+        decoder_num_hidden_layers=12,
+        decoder_intermediate_size=1536,
         **kwargs
     ):
         super().__init__(**kwargs)
+
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.num_channels = num_channels
+        self.num_frames = num_frames
+        self.tubelet_size = tubelet_size
 
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -132,14 +136,10 @@ class VideoMAEConfig(PretrainedConfig):
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
         self.qkv_bias = qkv_bias
         self.use_mean_pooling = use_mean_pooling
+
         self.decoder_num_attention_heads = decoder_num_attention_heads
         self.decoder_hidden_size = decoder_hidden_size
         self.decoder_num_hidden_layers = decoder_num_hidden_layers
         self.decoder_intermediate_size = decoder_intermediate_size
-        self.mask_ratio = mask_ratio
-        self.norm_pix_loss = norm_pix_loss
