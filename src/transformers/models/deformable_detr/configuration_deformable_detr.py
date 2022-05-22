@@ -41,6 +41,7 @@ class DeformableDetrConfig(PretrainedConfig):
         num_queries (`int`, *optional*, defaults to 300):
             Number of object queries, i.e. detection slots. This is the maximal number of objects
             [`DeformableDetrModel`] can detect in a single image.
+            In case `two_stage` is set to `True`, we use `two_stage_num_proposals` instead.
         d_model (`int`, *optional*, defaults to 256):
             Dimension of the layers.
         encoder_layers (`int`, *optional*, defaults to 6):
