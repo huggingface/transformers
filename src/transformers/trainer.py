@@ -1590,6 +1590,7 @@ class Trainer:
                     # Gradient clipping
                     if args.max_grad_norm is not None and args.max_grad_norm > 0 and not self.deepspeed:
                         # deepspeed does its own clipping
+                        
                         if self.do_grad_scaling:
                             # Reduce gradients first for XLA
                             if is_torch_tpu_available():
