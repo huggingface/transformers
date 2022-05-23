@@ -96,10 +96,10 @@ def minhash_iter(dataset_iterator: Type[Dataset]):
 
 def make_duplicate_clusters(dataset_iterator: Type[Dataset], jaccard_threshold: float):
     """Find duplicate clusters in the dataset in two steps:
-        1. Compute MinHash for each code snippet. MinHash is a tool for fast jaccard similarity estimation.
-        This step is computed using an asynchronous multiprocessing pool, minhash_iter
-        2. Find duplicate clusters. The computed MinHash is added sequentially to the DuplicationIndex.
-        This step cannot be parallelized. So using asynchronous thread in the previous step helps to speed up the process.
+    1. Compute MinHash for each code snippet. MinHash is a tool for fast jaccard similarity estimation.
+    This step is computed using an asynchronous multiprocessing pool, minhash_iter
+    2. Find duplicate clusters. The computed MinHash is added sequentially to the DuplicationIndex.
+    This step cannot be parallelized. So using asynchronous thread in the previous step helps to speed up the process.
     """
     di = DuplicationIndex(duplication_jaccard_threshold=jaccard_threshold)
 
@@ -134,7 +134,7 @@ def _find_cluster_extremes_shared(cluster, jaccard_threshold):
         jaccard_threshold (float):
             threshold for Jaccard similarity.
             Two codes are similar if their Jaccard similarity is above the threshold.
-    
+
     Returns:
         extremes (List[dict]):
             A reduced representation of the cluster. The field copies is added to each dict.
@@ -156,7 +156,7 @@ def _find_cluster_extremes_shared(cluster, jaccard_threshold):
 
 def find_extremes(cluster_list, dataset, jaccard_threshold):
     """Call the _find_cluster_extremes_shared function in a parallel fashion.
-    
+
     Args:
         cluster_list (List[List[Dict]]):
             each cluster is a list of dicts with the key base_index,
@@ -168,11 +168,11 @@ def find_extremes(cluster_list, dataset, jaccard_threshold):
             otherwise the multi processing is not speeded up.
         jaccard_threshold (float):
             the threshold for the jaccard similarity. The default value is 0.85
-    
+
     Returns:
         extremes_list (List[Dict]):
             Each cluster is reduced to extremes.
-            See _find_cluster_extremes_shared for the definition of extremes.       
+            See _find_cluster_extremes_shared for the definition of extremes.
     """
     global _shared_dataset
     _shared_dataset = dataset
