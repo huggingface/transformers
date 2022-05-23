@@ -197,9 +197,12 @@ output_dir.mkdir(exist_ok=True)
 with open(output_dir / "duplicate_clusters.json", "w") as f:
     json.dump(duplicate_clusters, f)
 
+data_dir = output_dir / "data"
+data_dir.mkdir(exist_ok=True)
+
 t_start = time.time()
 for file_number, index in enumerate(range(0, len(ds_dedup), args.samples_per_file)):
-    file_path = f"{args.output_dir}/file-{file_number+1:012}.json"
+    file_path = str(data_dir / f"file-{file_number+1:012}.json")
     end_index = min(len(ds_dedup), index + args.samples_per_file)
     ds_dedup.select(list(range(index, end_index))).to_json(file_path)
     compress_file(file_path)
