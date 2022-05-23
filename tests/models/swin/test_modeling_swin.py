@@ -478,6 +478,7 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
                         f"serialized model {i}th output doesn't match model {i}th output for {model_class}",
                     )
 
+
 @require_vision
 @require_torch
 class SwinModelIntegrationTest(unittest.TestCase):
