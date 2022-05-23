@@ -131,7 +131,7 @@ def create_dataloaders(args):
     valid_dataset = ConstantLengthDataset(
         tokenizer, valid_data, infinite=False, seq_length=args.seq_length, tokenized=args.tokenized
     )
-    train_dataset = train_dataset.shuffle(buffer_size=args.batch_shuffle_buffer)
+    train_dataset = train_dataset.shuffle(buffer_size=args.shuffle_buffer)
     train_dataloader = DataLoader(train_dataset, batch_size=args.train_batch_size, shuffle=True)
     eval_dataloader = DataLoader(valid_dataset, batch_size=args.valid_batch_size)
     return train_dataloader, eval_dataloader
