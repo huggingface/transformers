@@ -49,21 +49,6 @@ BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 # Utility functions below:
-def divide(numerator, denominator):
-    """
-    Ensure that numerator is divisible by the denominator and return the division value.
-
-
-    Args:
-        numerator (`int` or `float`, *required*):
-            Numerator to use for the division.
-        denominator (`int` or `float`, *required*):
-            Denominator to use for the division."""
-    if not (numerator % denominator == 0):
-        raise ValueError(f"{numerator} is not divisible by {denominator}")
-    return numerator // denominator
-
-
 def pre_process_alibi_for_pad(alibi, attention_mask, num_heads):
     """
     Pre-process the alibi tensor for padding.
@@ -108,7 +93,10 @@ def split_tensor_along_last_dim(tensor, num_partitions, contiguous_split_chunks=
     """
     # Get the size and dimension.
     last_dim = tensor.dim() - 1
-    last_dim_size = divide(tensor.size()[last_dim], num_partitions)
+    numerator, denominator = tensor.size()[last_dim], num_partitions
+    if not (numerator % denominator == 0):
+        raise ValueError(f"{numerator} is not divisible by {denominator}")
+    last_dim_size = numerator // denominator
     # Split.
     tensor_list = torch.split(tensor, last_dim_size, dim=last_dim)
     # Note: torch.split does not create contiguous tensors by default.
