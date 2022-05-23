@@ -135,6 +135,9 @@ class SymbolEncoder:
         Token is either a arpabet or a symbol
         """
         return self._symbol_to_id[token]
+    
+    def decode_id_to_token(self,index:int)->str:
+        return self._id_to_symbol[index]
 
     def match_arpabet(self,text:str)->Tuple[bool,str,str,str]:
         matches = self._curly_re.match(text)
@@ -253,8 +256,8 @@ class FastPitchTokenizer(PreTrainedTokenizer):
 
     def _convert_id_to_token(self, index):
         """Converts an index id in a token (str) using the vocab."""
-        #TODO Fill this out need state to fill this out for arpa
-        pass
+        token = self.symbol_encoder.decode_id_to_token(index)
+        return token
 
     def convert_tokens_to_string(self, tokens:List[str])->str:
         """Converts a sequence of tokens (string) in a single string.
