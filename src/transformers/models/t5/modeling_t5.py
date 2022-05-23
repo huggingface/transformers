@@ -747,6 +747,7 @@ class T5PreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     is_parallelizable = True
     supports_gradient_checkpointing = True
+    _no_split_modules = ["T5Block"]
 
     @property
     def dummy_inputs(self):
