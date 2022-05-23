@@ -75,8 +75,8 @@ def make_divisible(
     v: Union[float, int], divisor: Optional[int] = 8, min_value: Optional[Union[float, int]] = None
 ) -> Union[float, int]:
     """
-    Ensure that all layers have a channel number that is divisible by 8 This function is taken from the original tf
-    repo. It can be seen here:
+    Ensure that all layers have a channel number that is divisible by 8. This function is taken from the original
+    TensorFlow repo. It can be seen here:
     https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet/mobilenet.py
     """
     if min_value is None:
@@ -184,14 +184,14 @@ class MobileViTInvertedResidual(nn.Module):
             use_act=False,
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        res = x
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        residual = features
 
-        x = self.expand_1x1(x)
-        x = self.conv_3x3(x)
-        x = self.reduce_1x1(x)
+        features = self.expand_1x1(features)
+        features = self.conv_3x3(features)
+        features = self.reduce_1x1(features)
 
-        return res + x if self.use_residual else x
+        return residual + features if self.use_residual else features
 
 
 class MobileViTSelfAttention(nn.Module):
@@ -392,11 +392,11 @@ class MobileViTLayer(nn.Module):
             kernel_size=config.conv_kernel_size,
         )
 
-    def unfolding(self, x: torch.Tensor) -> Tuple[torch.Tensor, Dict]:
+    def unfolding(self, features: torch.Tensor) -> Tuple[torch.Tensor, Dict]:
         patch_w, patch_h = self.patch_w, self.patch_h
         patch_area = int(patch_w * patch_h)  # P
 
-        batch_size, channels, orig_h, orig_w = x.shape  # B, C, H, W
+        batch_size, channels, orig_h, orig_w = features.shape  # B, C, H, W
 
         new_h = int(math.ceil(orig_h / patch_h) * patch_h)
         new_w = int(math.ceil(orig_w / patch_w) * patch_w)
@@ -404,7 +404,7 @@ class MobileViTLayer(nn.Module):
         interpolate = False
         if new_w != orig_w or new_h != orig_h:
             # Note: Padding can be done, but then it needs to be handled in attention function.
-            x = nn.functional.interpolate(x, size=(new_h, new_w), mode="bilinear", align_corners=False)
+            features = nn.functional.interpolate(features, size=(new_h, new_w), mode="bilinear", align_corners=False)
             interpolate = True
 
         # number of patches along width and height
@@ -413,19 +413,19 @@ class MobileViTLayer(nn.Module):
         num_patches = num_patch_h * num_patch_w  # N
 
         # [B, C, H, W] --> [B * C * num_h, patch_h, num_w, patch_w]
-        x = x.reshape(batch_size * channels * num_patch_h, patch_h, num_patch_w, patch_w)
+        patches = features.reshape(batch_size * channels * num_patch_h, patch_h, num_patch_w, patch_w)
 
         # --> [B * C * num_h, num_w, patch_h, patch_w]
-        x = x.transpose(1, 2)
+        patches = patches.transpose(1, 2)
 
         # --> [B, C, N, P] where P = patch_h * patch_w and N = num_h * num_w
-        x = x.reshape(batch_size, channels, num_patches, patch_area)
+        patches = patches.reshape(batch_size, channels, num_patches, patch_area)
 
         # --> [B, P, N, C]
-        x = x.transpose(1, 3)
+        patches = patches.transpose(1, 3)
 
         # --> [B * P, N, C]
-        x = x.reshape(batch_size * patch_area, num_patches, -1)
+        patches = patches.reshape(batch_size * patch_area, num_patches, -1)
 
         info_dict = {
             "orig_size": (orig_h, orig_w),
@@ -435,56 +435,56 @@ class MobileViTLayer(nn.Module):
             "num_patches_w": num_patch_w,
             "num_patches_h": num_patch_h,
         }
-        return x, info_dict
+        return patches, info_dict
 
-    def folding(self, x: torch.Tensor, info_dict: Dict) -> torch.Tensor:
+    def folding(self, patches: torch.Tensor, info_dict: Dict) -> torch.Tensor:
         patch_w, patch_h = self.patch_w, self.patch_h
         patch_area = int(patch_w * patch_h)  # P
 
         # [B * P, N, C] --> [B, P, N, C]
-        x = x.contiguous().view(info_dict["batch_size"], patch_area, info_dict["total_patches"], -1)
+        patches = patches.contiguous().view(info_dict["batch_size"], patch_area, info_dict["total_patches"], -1)
 
-        batch_size, pixels, num_patches, channels = x.size()  # B, P, N, C
+        batch_size, pixels, num_patches, channels = patches.size()  # B, P, N, C
         num_patch_h = info_dict["num_patches_h"]  # num_h
         num_patch_w = info_dict["num_patches_w"]  # num_w
 
         # [B, P, N, C] --> [B, C, N, P]
-        x = x.transpose(1, 3)
+        features = patches.transpose(1, 3)
 
         # --> [B * C * num_h, num_w, patch_h, patch_w]
-        x = x.reshape(batch_size * channels * num_patch_h, num_patch_w, patch_h, patch_w)
+        features = features.reshape(batch_size * channels * num_patch_h, num_patch_w, patch_h, patch_w)
 
         # --> [B * C * num_h, patch_h, num_w, patch_w]
-        x = x.transpose(1, 2)
+        features = features.transpose(1, 2)
 
         # --> [B, C, H, W]
-        x = x.reshape(batch_size, channels, num_patch_h * patch_h, num_patch_w * patch_w)
+        features = features.reshape(batch_size, channels, num_patch_h * patch_h, num_patch_w * patch_w)
 
         if info_dict["interpolate"]:
-            x = nn.functional.interpolate(x, size=info_dict["orig_size"], mode="bilinear", align_corners=False)
+            features = nn.functional.interpolate(features, size=info_dict["orig_size"], mode="bilinear", align_corners=False)
 
-        return x
+        return features
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        res = x
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        residual = features
 
         # local representation
-        x = self.conv_kxk(x)
-        x = self.conv_1x1(x)
+        features = self.conv_kxk(features)
+        features = self.conv_1x1(features)
 
         # convert feature map to patches
-        x, info_dict = self.unfolding(x)
+        patches, info_dict = self.unfolding(features)
 
         # learn global representations
-        x = self.transformer(x)
-        x = self.layernorm(x)
+        patches = self.transformer(patches)
+        patches = self.layernorm(patches)
 
         # convert patches back to feature maps
-        x = self.folding(x, info_dict)
+        features = self.folding(patches, info_dict)
 
-        x = self.conv_proj(x)
-        x = self.fusion(torch.cat((res, x), dim=1))
-        return x
+        features = self.conv_proj(features)
+        features = self.fusion(torch.cat((residual, features), dim=1))
+        return features
 
 
 class MobileViTEncoder(nn.Module):
@@ -893,11 +893,11 @@ class MobileViTASPPPooling(nn.Module):
             ),
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x_size = x.shape[-2:]
-        x = self.aspp_pool(x)
-        x = nn.functional.interpolate(x, size=x_size, mode="bilinear", align_corners=False)
-        return x
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        spatial_size = features.shape[-2:]
+        features = self.aspp_pool(features)
+        features = nn.functional.interpolate(features, size=spatial_size, mode="bilinear", align_corners=False)
+        return features
 
 
 class MobileViTASPP(nn.Module):
@@ -946,14 +946,15 @@ class MobileViTASPP(nn.Module):
 
         self.dropout = nn.Dropout(p=config.aspp_dropout_prob)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        out = []
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        pyramid = []
         for conv in self.convs:
-            out.append(conv(x))
-        out = torch.cat(out, dim=1)
-        out = self.project(out)
-        out = self.dropout(out)
-        return out
+            pyramid.append(conv(features))
+        pyramid = torch.cat(pyramid, dim=1)
+
+        pooled_features = self.project(pyramid)
+        pooled_features = self.dropout(pooled_features)
+        return pooled_features
 
 
 class MobileViTDeeplabV3(nn.Module):
@@ -980,10 +981,10 @@ class MobileViTDeeplabV3(nn.Module):
             ),
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.aspp(x[-1])
-        x = self.classifier(x)
-        return x
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        features = self.aspp(hidden_states[-1])
+        features = self.classifier(features)
+        return features
 
 
 @add_start_docstrings(
