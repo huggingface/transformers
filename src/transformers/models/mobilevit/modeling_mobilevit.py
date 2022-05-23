@@ -316,7 +316,7 @@ class MobileViTOutput(nn.Module):
         return hidden_states
 
 
-class MobileViTTransformer(nn.Module):
+class MobileViTTransformerLayer(nn.Module):
     def __init__(self, config: MobileViTConfig, hidden_size: int, intermediate_size: int) -> None:
         super().__init__()
         self.attention = MobileViTAttention(config, hidden_size)
@@ -369,7 +369,7 @@ class MobileViTLayer(nn.Module):
 
         self.transformer = nn.Sequential()
         for block_idx in range(num_stages):
-            transformer = MobileViTTransformer(
+            transformer = MobileViTTransformerLayer(
                 config,
                 hidden_size=hidden_size,
                 intermediate_size=int(hidden_size * config.mlp_ratio),
