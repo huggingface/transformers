@@ -317,8 +317,6 @@ SPECIAL_MODULE_TO_TEST_MAP = {
         "models/gpt2/test_modeling_gpt2.py",
         "models/megatron_gpt2/test_modeling_megatron_gpt2.py",
     ],
-    "models/bloom/modeling_bloom.py": "models/bloom/test_modeling_bloom.py",
-    "models/bloom/tokenization_bloom.py": "models/bloom/test_tokenization_bloom.py",
     "optimization.py": "optimization/test_optimization.py",
     "optimization_tf.py": "optimization/test_optimization_tf.py",
     "pipelines/base.py": "pipelines/test_pipelines_*.py",
