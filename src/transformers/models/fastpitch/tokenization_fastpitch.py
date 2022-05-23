@@ -19,9 +19,11 @@
     from https://github.com/NVIDIA/DeepLearningExamples/blob/master/PyTorch/SpeechSynthesis/FastPitch/common/text/cmudict.py d0d427d357816d565b9732b6c40275a2a46d00e7
     Adapted for Hugging Face
 """
+from lib2to3.pgen2 import token
 from posixpath import split
 import re
 from pathlib import Path
+from tkinter.tix import Tree
 from typing import Union,Dict,Tuple
 from typing_extensions import NotRequired
 
@@ -262,7 +264,23 @@ class FastPitchTokenizer(PreTrainedTokenizer):
     def convert_tokens_to_string(self, tokens:List[str])->str:
         """Converts a sequence of tokens (string) in a single string.
         """ 
-        pass
+        result = ''
+        open_state = False
+        for i,token in enumerate(tokens):
+            if '@' in token:
+                token = token.replace("@"," ")
+                if open_state == False:
+                    token = token.replace(" ","")
+                    open_state = True
+                    result += "{"
+            else:
+                if open_state == True:
+                    open_state = False
+                    result += "}"
+            result += token
+        if open_state == True:
+                result += "}"
+        return result
 
     def save_vocabulary(self, save_directory):
         """
