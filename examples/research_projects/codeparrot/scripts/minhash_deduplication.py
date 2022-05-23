@@ -45,23 +45,41 @@ class DuplicationIndex:
 
         self._duplicate_clusters = defaultdict(set)
 
-    def add(self, filename: str, min_hash: MinHash) -> None:
+    def add(self, code_key: Tuple, min_hash: MinHash) -> None:
+        """Add a key to _index (MinHashLSH)
+        the min_hash is used to query closest matches based on the jaccard_threshold.
+        The new key is either added to a existing cluster of one close match,
+        or a new cluster is created. The clusters created in this way, depend on the order of add.
+
+        Args:
+            code_key (Tuple of (index, repo_name, path)):
+                Theoritically any hasbale key. Here we use a tuple to retrieve the information later.
+            min_hash: MinHash of the code_key.
+        """
         close_duplicates = self._index.query(min_hash)
-        if filename in self._index.keys:
-            print("Duplicate key %s" % filename)
+        if code_key in self._index.keys:
+            print("Duplicate key %s" % code_key)
             return
 
-        self._index.insert(filename, min_hash)
+        self._index.insert(code_key, min_hash)
         if len(close_duplicates) > 0:
 
             for base_duplicate in close_duplicates:
                 if base_duplicate in self._duplicate_clusters:
-                    self._duplicate_clusters[base_duplicate].add(filename)
+                    self._duplicate_clusters[base_duplicate].add(code_key)
                     break
             else:
-                self._duplicate_clusters[close_duplicates[0]].add(filename)
+                self._duplicate_clusters[close_duplicates[0]].add(code_key)
 
     def get_duplicate_clusters(self) -> List[List[Dict]]:
+        """Export the duplicate clusters.
+        For each cluster, the first element is the base element of the cluster.
+        The base element has an estimation jaccard similarity higher than the threshold with all the other elements.
+
+        Returns:
+            duplicate_clusters (List[List[Dict]]):
+                List of duplicate clusters.
+        """
         duplicate_clusters = []
         for base, duplicates in self._duplicate_clusters.items():
             cluster = [base] + list(duplicates)
