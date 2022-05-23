@@ -1,16 +1,9 @@
 name: Model templates runner
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    paths:
-      - "src/**"
-      - "tests/**"
-      - ".github/**"
-      - "templates/**"
-    types: [assigned, opened, synchronize, reopened]
+  repository_dispatch:
+  schedule:
+    - cron: "0 2 * * *"
 
 jobs:
   run_tests_templates:

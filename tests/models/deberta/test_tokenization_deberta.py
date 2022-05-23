@@ -88,6 +88,12 @@ class DebertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         input_bpe_tokens = [0, 1, 2, 15, 10, 9, 3, 2, 15, 19]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
+    def test_token_type_ids(self):
+        tokenizer = self.get_tokenizer()
+        tokd = tokenizer("Hello", "World")
+        expected_token_type_ids = [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1]
+        self.assertListEqual(tokd["token_type_ids"], expected_token_type_ids)
+
     @slow
     def test_sequence_builders(self):
         tokenizer = self.tokenizer_class.from_pretrained("microsoft/deberta-base")
@@ -120,7 +126,9 @@ class DebertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             sequences = [
                 "ALBERT: A Lite BERT for Self-supervised Learning of Language Representations",
                 "ALBERT incorporates two parameter reduction techniques",
-                "The first one is a factorized embedding parameterization. By decomposing the large vocabulary embedding matrix into two small matrices, we separate the size of the hidden layers from the size of vocabulary embedding.",
+                "The first one is a factorized embedding parameterization. By decomposing the large vocabulary"
+                " embedding matrix into two small matrices, we separate the size of the hidden layers from the size of"
+                " vocabulary embedding.",
             ]
 
             encoding = tokenizer(sequences, padding=True)
@@ -149,7 +157,9 @@ class DebertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             expected_decoded_sequence = [
                 "ALBERT: A Lite BERT for Self-supervised Learning of Language Representations",
                 "ALBERT incorporates two parameter reduction techniques",
-                "The first one is a factorized embedding parameterization. By decomposing the large vocabulary embedding matrix into two small matrices, we separate the size of the hidden layers from the size of vocabulary embedding.",
+                "The first one is a factorized embedding parameterization. By decomposing the large vocabulary"
+                " embedding matrix into two small matrices, we separate the size of the hidden layers from the size of"
+                " vocabulary embedding.",
             ]
 
             self.assertDictEqual(encoding.data, expected_encoding)

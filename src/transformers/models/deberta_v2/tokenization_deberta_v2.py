@@ -28,8 +28,12 @@ PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "microsoft/deberta-v2-xlarge": "https://huggingface.co/microsoft/deberta-v2-xlarge/resolve/main/spm.model",
         "microsoft/deberta-v2-xxlarge": "https://huggingface.co/microsoft/deberta-v2-xxlarge/resolve/main/spm.model",
-        "microsoft/deberta-v2-xlarge-mnli": "https://huggingface.co/microsoft/deberta-v2-xlarge-mnli/resolve/main/spm.model",
-        "microsoft/deberta-v2-xxlarge-mnli": "https://huggingface.co/microsoft/deberta-v2-xxlarge-mnli/resolve/main/spm.model",
+        "microsoft/deberta-v2-xlarge-mnli": (
+            "https://huggingface.co/microsoft/deberta-v2-xlarge-mnli/resolve/main/spm.model"
+        ),
+        "microsoft/deberta-v2-xxlarge-mnli": (
+            "https://huggingface.co/microsoft/deberta-v2-xxlarge-mnli/resolve/main/spm.model"
+        ),
     }
 }
 
@@ -137,8 +141,8 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
 
         if not os.path.isfile(vocab_file):
             raise ValueError(
-                f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained "
-                "model use `tokenizer = AutoTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
+                f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
+                " model use `tokenizer = AutoTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         self.do_lower_case = do_lower_case
         self.split_by_punct = split_by_punct

@@ -94,8 +94,9 @@ class TextClassificationPipeline(Pipeline):
         Classify the text(s) given as inputs.
 
         Args:
-            args (`str` or `List[str]`):
-                One or several texts (or one list of prompts) to classify.
+            args (`str` or `List[str]` or `Dict[str]`, or `List[Dict[str]]`):
+                One or several texts to classify. In order to use text pairs for your classification, you can send a
+                dictionnary containing `{"text", "text_pair"}` keys, or a list of those.
             return_all_scores (`bool`, *optional*, defaults to `False`):
                 Whether to return scores for all labels.
             function_to_apply (`str`, *optional*, defaults to `"default"`):
@@ -131,6 +132,19 @@ class TextClassificationPipeline(Pipeline):
 
     def preprocess(self, inputs, **tokenizer_kwargs) -> Dict[str, GenericTensor]:
         return_tensors = self.framework
+        if isinstance(inputs, dict):
+            return self.tokenizer(**inputs, return_tensors=return_tensors, **tokenizer_kwargs)
+        elif isinstance(inputs, list) and len(inputs) == 1 and isinstance(inputs[0], list) and len(inputs[0]) == 2:
+            # It used to be valid to use a list of list of list for text pairs, keeping this path for BC
+            return self.tokenizer(
+                text=inputs[0][0], text_pair=inputs[0][1], return_tensors=return_tensors, **tokenizer_kwargs
+            )
+        elif isinstance(inputs, list):
+            # This is likely an invalid usage of the pipeline attempting to pass text pairs.
+            raise ValueError(
+                "The pipeline received invalid inputs, if you are trying to send text pairs, you can try to send a"
+                ' dictionnary `{"text": "My text", "text_pair": "My pair"}` in order to send a text pair.'
+            )
         return self.tokenizer(inputs, return_tensors=return_tensors, **tokenizer_kwargs)
 
     def _forward(self, model_inputs):

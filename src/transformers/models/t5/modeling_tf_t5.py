@@ -406,7 +406,10 @@ class TFT5Attention(tf.keras.layers.Layer):
             tf.debugging.assert_equal(
                 shape_list(layer_head_mask),
                 [self.n_heads],
-                message=f"Head mask for a single layer should be of size {(self.n_heads)}, but is {shape_list(layer_head_mask)}",
+                message=(
+                    f"Head mask for a single layer should be of size {(self.n_heads)}, but is"
+                    f" {shape_list(layer_head_mask)}"
+                ),
             )
             weights = tf.reshape(layer_head_mask, (1, -1, 1, 1)) * weights
 
@@ -899,9 +902,10 @@ class TFT5PreTrainedModel(TFPreTrainedModel):
         decoder_start_token_id = self.config.decoder_start_token_id
         pad_token_id = self.config.pad_token_id
 
-        assert (
-            decoder_start_token_id is not None
-        ), "self.model.config.decoder_start_token_id has to be defined. In TF T5 it is usually set to the pad_token_id. See T5 docs for more information"
+        assert decoder_start_token_id is not None, (
+            "self.model.config.decoder_start_token_id has to be defined. In TF T5 it is usually set to the"
+            " pad_token_id. See T5 docs for more information"
+        )
 
         start_tokens = tf.fill((shape_list(input_ids)[0], 1), decoder_start_token_id)
         start_tokens = tf.cast(start_tokens, input_ids.dtype)  # Ensure compatible dtypes for concatenation
@@ -1102,13 +1106,15 @@ num_heads))`.
 
 
 @add_start_docstrings(
-    "The bare T5 Model transformer outputting raw hidden-states" "without any specific head on top.",
+    "The bare T5 Model transformer outputting raw hidden-stateswithout any specific head on top.",
     T5_START_DOCSTRING,
 )
 class TFT5Model(TFT5PreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, name="shared")
+        self.shared = TFSharedEmbeddings(
+            config.vocab_size, config.d_model, name="shared", initializer_range=self.config.initializer_factor
+        )
 
         # retrieve correct absolute scope for embed token wrapper
         with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
@@ -1255,8 +1261,9 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.model_dim = config.d_model
-
-        self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, name="shared")
+        self.shared = TFSharedEmbeddings(
+            config.vocab_size, config.d_model, name="shared", initializer_range=self.config.initializer_factor
+        )
 
         # retrieve correct absolute scope for embed token wrapper
         with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
@@ -1590,13 +1597,15 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
 
 
 @add_start_docstrings(
-    "The bare T5 Model transformer outputting encoder's raw hidden-states" "without any specific head on top.",
+    "The bare T5 Model transformer outputting encoder's raw hidden-stateswithout any specific head on top.",
     T5_START_DOCSTRING,
 )
 class TFT5EncoderModel(TFT5PreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, name="shared")
+        self.shared = TFSharedEmbeddings(
+            config.vocab_size, config.d_model, name="shared", initializer_range=self.config.initializer_factor
+        )
 
         # retrieve correct absolute scope for embed token wrapper
         with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
