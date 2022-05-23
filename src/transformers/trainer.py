@@ -502,14 +502,6 @@ class Trainer:
                     f"setting to {smp.state.cfg.fp16}"
                 )
                 args.fp16 = smp.state.cfg.fp16
-            
-
-        
-        # FP16 + model parallelism in SageMaker: need to provide fp16 to SM_HP_MP_PARAMETERS
-        if is_sagemaker_mp_enabled() and args.fp16 and not smp.state.cfg.fp16:
-            raise ValueError(
-                "Using FP16 with SageMaker Model Parallelism needx to have 'fp16: True' in SM_HP_MP_PARAMETERS"
-            )
 
         if args.fp16 or args.bf16:
             if self.fsdp is not None:
@@ -528,14 +520,12 @@ class Trainer:
             logger.info(f"Using {args.half_precision_backend} half precision backend")
 
         self.do_grad_scaling = False
-        if (args.fp16 or args.bf16) and not args.deepspeed:  # deepspeed manages its own half precision
+        if (args.fp16 or args.bf16) and not (args.deepspeed or is_sagemaker_mp_enabled()):  # deepspeed and SageMaker Model Parallel manage their own half precision
             if args.half_precision_backend == "amp":
                 self.use_amp = True
                 self.amp_dtype = torch.float16 if args.fp16 else torch.bfloat16
                 self.do_grad_scaling = True
-                if is_sagemaker_mp_enabled():
-                    self.scaler = smp.amp.GradScaler()
-                elif self.sharded_ddp is not None:
+                if self.sharded_ddp is not None:
                     self.scaler = ShardedGradScaler()
                 elif is_torch_tpu_available():
                     from torch_xla.amp import GradScaler
@@ -1611,11 +1601,7 @@ class Trainer:
                                 gradients = xm._fetch_gradients(self.optimizer)
                                 xm.all_reduce("sum", gradients, scale=1.0 / xm.xrt_world_size())
                             # AMP: gradients need unscaling
-                            if is_sagemaker_mp_enabled():
-                                if step_done or smp.pp_rank() == 0:
-                                    self.scaler.unscale_(self.optimizer)
-                            else:
-                                self.scaler.unscale_(self.optimizer)
+                            self.scaler.unscale_(self.optimizer)
 
                         if is_sagemaker_mp_enabled() and args.fp16:
                             self.optimizer.clip_master_grads(args.max_grad_norm)
@@ -2234,8 +2220,7 @@ class Trainer:
         inputs = self._prepare_inputs(inputs)
 
         if is_sagemaker_mp_enabled():
-            scaler = self.scaler if self.do_grad_scaling else None
-            loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps, scaler=scaler)
+            loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps)
             return loss_mb.reduce_mean().detach().to(self.args.device)
 
         with self.autocast_smart_context_manager():
