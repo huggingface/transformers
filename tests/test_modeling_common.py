@@ -713,9 +713,7 @@ class ModelTesterMixin:
         self._create_and_check_torch_fx_tracing(config, inputs_dict, output_loss=True)
 
     def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
-        fx_compatible = self.fx_compatible if isinstance(self.fx_compatible, bool) else self.fx_compatible != 0
-        fx_trace_can_be_torchscripted = self.fx_compatible != -1
-        if not is_torch_fx_available() or not fx_compatible:
+        if not is_torch_fx_available() or not self.fx_compatible:
             return
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
@@ -786,19 +784,18 @@ class ModelTesterMixin:
                 )
 
             # Test that the model can be TorchScripted
-            if fx_trace_can_be_torchscripted:
-                try:
-                    scripted = torch.jit.script(traced_model)
-                except Exception as e:
-                    self.fail(f"Could not TorchScript the traced model: {e}")
-                scripted_output = scripted(**filtered_inputs)
-                scripted_output = flatten_output(scripted_output)
+            try:
+                scripted = torch.jit.script(traced_model)
+            except Exception as e:
+                self.fail(f"Could not TorchScript the traced model: {e}")
+            scripted_output = scripted(**filtered_inputs)
+            scripted_output = flatten_output(scripted_output)
 
-                for i in range(num_outputs):
-                    self.assertTrue(
-                        torch.allclose(model_output[i], scripted_output[i]),
-                        f"scripted {i}th output doesn't match model {i}th output for {model_class}",
-                    )
+            for i in range(num_outputs):
+                self.assertTrue(
+                    torch.allclose(model_output[i], scripted_output[i]),
+                    f"scripted {i}th output doesn't match model {i}th output for {model_class}",
+                )
 
             # Test that the model can be serialized and restored properly
             with tempfile.TemporaryDirectory() as tmp_dir_name:
