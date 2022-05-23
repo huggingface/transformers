@@ -69,7 +69,7 @@ def fixed_pos_embedding(x, seq_dim=1, seq_len=None):
 def rotate_every_two(x):
     x1 = x[:, :, :, ::2]
     x2 = x[:, :, :, 1::2]
-    x = torch.stack((-x2, x1), axis=-1)
+    x = torch.stack((-x2, x1), dim=-1)
     return x.flatten(-2)  # in einsum notation: rearrange(x, '... d j -> ... (d j)')
 
 
@@ -163,7 +163,7 @@ class GPTJAttention(nn.Module):
 
         # compute causal mask from causal mask buffer
         query_length, key_length = query.size(-2), key.size(-2)
-        causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].bool()
+        causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].to(torch.bool)
 
         # Keep the attention weights computation in fp32 to avoid overflow issues
         query = query.to(torch.float32)
@@ -971,7 +971,7 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
                     "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )
 
-        pooled_logits = logits[torch.arange(batch_size, device=self.device), sequence_lengths]
+        pooled_logits = logits[torch.arange(batch_size, device=logits.device), sequence_lengths]
 
         loss = None
         if labels is not None:
