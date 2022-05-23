@@ -153,8 +153,8 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @unittest.skip(reason="GroupViT does not use inputs_embeds")
     def test_inputs_embeds(self):
-        # GROUPVIT does not use inputs_embeds
         pass
 
     def test_model_common_attributes(self):
@@ -289,13 +289,11 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         pass
 
-    # skip this test as GroupViTVisionModel has no base class and is
-    # not available in MODEL_MAPPING
+    @unittest.skip(reason="GroupViTVisionModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    # skip this test as GroupViTVisionModel has no base class and is
-    # not available in MODEL_MAPPING
+    @unittest.skip(reason="sGroupViTVisionModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
 
@@ -479,13 +477,11 @@ class GroupViTTextModelTest(ModelTesterMixin, unittest.TestCase):
         # GROUPVIT does not use inputs_embeds
         pass
 
-    # skip this test as GroupViTTextModel has no base class and is
-    # not available in MODEL_MAPPING
+    @unittest.skip(reason="GroupViTTextModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    # skip this test as GroupViTTextModel has no base class and is
-    # not available in MODEL_MAPPING
+    @unittest.skip(reason="GroupViTTextModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
 
@@ -554,19 +550,19 @@ class GroupViTModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    # hidden_states are tested in individual model tests
+    @unittest.skip(reason="hidden_states are tested in individual model tests")
     def test_hidden_states_output(self):
         pass
 
-    # input_embeds are tested in individual model tests
+    @unittest.skip(reason="input_embeds are tested in individual model tests")
     def test_inputs_embeds(self):
         pass
 
-    # tested in individual model tests
+    @unittest.skip(reason="tested in individual model tests")
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    # GroupViTModel does not have input/output embeddings
+    @unittest.skip(reason="GroupViTModel does not have input/output embeddings")
     def test_model_common_attributes(self):
         pass
 

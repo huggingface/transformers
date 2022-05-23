@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The NVIDIA and The HuggingFace Team. All rights reserved.
+# Copyright 2022 NVIDIA and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -108,7 +108,7 @@ def gumbel_softmax(logits: torch.Tensor, tau: float = 1, hard: bool = False, dim
     return ret
 
 
-def resize_attn_map(attentions, height, width, align_corners=False):
+def resize_attention_map(attentions, height, width, align_corners=False):
     """
 
     Args:
@@ -161,11 +161,11 @@ def get_grouping_from_attentions(attentions, hw_shape):
                 prev_attn_masks = attn_masks
             else:
                 prev_attn_masks = prev_attn_masks @ attn_masks
-            # [B, HxW, G] -> [B, G, HxW] -> [B, G, H, W]
+            # [batch_size, heightxwidth, num_groups] -> [batch_size, num_groups, heightxwidth] -> [batch_size, num_groups, height, width]
             cur_attn_map = resize_attn_map(prev_attn_masks.permute(0, 2, 1).contiguous(), *hw_shape)
             attn_maps.append(cur_attn_map)
 
-    # [B, G, H, W]
+    # [batch_size, num_groups, height, width]
     final_grouping = attn_maps[-1]
 
     return final_grouping
@@ -224,7 +224,7 @@ class GroupViTAttention(nn.Module):
         return out
 
 
-class GroupViTCrossAttentionBlock(nn.Module):
+class GroupViTCrossAttentionLayer(nn.Module):
     def __init__(self, config: GroupViTVisionConfig):
         super().__init__()
         self.attn = GroupViTAttention(config)
@@ -294,14 +294,8 @@ class GroupViTAssignAttention(nn.Module):
 
 
 class GroupViTTokenAssign(nn.Module):
-    def __init__(
-        self,
-        config: GroupViTVisionConfig,
-        *,
-        num_group_token,
-        num_output_group,
-    ):
-        super(GroupViTTokenAssign, self).__init__()
+    def __init__(self, config: GroupViTVisionConfig, num_group_token, num_output_group):
+        super().__init__()
         self.num_output_group = num_output_group
         # norm on group_tokens
         self.norm_tokens = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -489,11 +483,7 @@ class GroupViTVisionEmbeddings(nn.Module):
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return patch_pos_embed
 
-    def forward(
-        self,
-        pixel_values: torch.Tensor,
-        interpolate_pos_encoding: bool = False,
-    ) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
         embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
 
@@ -805,8 +795,6 @@ class GroupViTVisionOutput(nn.Module):
 
 
 class GroupViTVisionLayer(nn.Module):
-    """This corresponds to the Block class in the timm implementation."""
-
     def __init__(self, config: GroupViTVisionConfig) -> None:
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -1222,16 +1210,14 @@ class GroupViTVisionEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_groupings] if v is not None)
         return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_groupings,
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_groupings
         )
 
 
 class GroupViTTextEncoder(nn.Module):
     """
-    Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
-    [`GroupViTEncoderLayer`].
+    Transformer encoder consisting of `config.num_hidden_layers` self-attention layers. Each layer is a
+    [`GroupViTTextEncoderLayer`].
 
     Args:
         config: GroupViTConfig
@@ -1557,8 +1543,8 @@ class GroupViTVisionModel(GroupViTPreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, GroupViTVisionModel
 
-        >>> model = GroupViTVisionModel.from_pretrained("nvidia/groupvit-gccyfcc")
         >>> processor = AutoPProcessor.from_pretrained("nvidia/groupvit-gccyfcc")
+        >>> model = GroupViTVisionModel.from_pretrained("nvidia/groupvit-gccyfcc")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)

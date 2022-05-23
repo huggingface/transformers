@@ -31,14 +31,13 @@ GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class GroupViTTextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GroupViTModel`]. It is used to instantiate an
+    This is the configuration class to store the configuration of a [`GroupViTTextModel `]. It is used to instantiate an
     GroupViT model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the GroupViT
     [nvidia/groupvit-gccyfcc](https://huggingface.co/nvidia/groupvit-gccyfcc) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
-
 
     Args:
         vocab_size (`int`, *optional*, defaults to 49408):
@@ -57,22 +56,23 @@ class GroupViTTextConfig(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported. layer_norm_eps (`float`, *optional*,
-            defaults to 1e-5): The epsilon used by the layer normalization layers.
+            `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+            The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         dropout (`float`, *optional*, defaults to 0.0):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float``, *optional*, defaults to 1):
+        initializer_factor (`float`, *optional*, defaults to 1):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
 
     Example:
 
     ```python
-    >>> from transformers import GroupViTTextModel, GroupViTTextConfig
+    >>> from transformers import GroupViTTextConfig, GroupViTTextModel
 
     >>> # Initializing a GroupViTTextModel with nvidia/groupvit-gccyfcc style configuration
     >>> configuration = GroupViTTextConfig()
@@ -139,7 +139,7 @@ class GroupViTTextConfig(PretrainedConfig):
 
 class GroupViTVisionConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GroupViTModel`]. It is used to instantiate an
+    This is the configuration class to store the configuration of a [`GroupViTVisionModel `]. It is used to instantiate an
     GroupViT model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the GroupViT
     [nvidia/groupvit-gccyfcc](https://huggingface.co/nvidia/groupvit-gccyfcc) architecture.
@@ -169,22 +169,23 @@ class GroupViTVisionConfig(PretrainedConfig):
             The size (resolution) of each patch.
         hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported. layer_norm_eps (`float`, *optional*,
-            defaults to 1e-5): The epsilon used by the layer normalization layers.
+            `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+            The epsilon used by the layer normalization layers.
         dropout (`float`, *optional*, defaults to 0.0):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float``, *optional*, defaults to 1):
+        initializer_factor (`float`, *optional*, defaults to 1):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
 
     Example:
 
     ```python
-    >>> from transformers import GroupViTVisionModel, GroupViTVisionConfig
+    >>> from transformers import GroupViTVisionConfig, GroupViTVisionModel
 
     >>> # Initializing a GroupViTVisionModel with nvidia/groupvit-gccyfcc style configuration
     >>> configuration = GroupViTVisionConfig()
@@ -269,7 +270,7 @@ class GroupViTVisionConfig(PretrainedConfig):
 class GroupViTConfig(PretrainedConfig):
     r"""
     [`GroupViTConfig`] is the configuration class to store the configuration of a [`GroupViTModel`]. It is used to
-    instantiate GroupViT model according to the specified arguments, defining the text model and vision model configs.
+    instantiate a GroupViT model according to the specified arguments, defining the text model and vision model configs.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -282,7 +283,7 @@ class GroupViTConfig(PretrainedConfig):
         projection_dim (`int`, *optional*, defaults to 512):
             Dimentionality of text and vision projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The inital value of the *logit_scale* paramter. Default is used as per the original GroupViT
+            The inital value of the *logit_scale* parameter. Default is used as per the original GroupViT
             implementation.
         kwargs (*optional*):
             Dictionary of keyword arguments.
