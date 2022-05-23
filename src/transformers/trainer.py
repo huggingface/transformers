@@ -502,11 +502,10 @@ class Trainer:
                 if args.device == torch.device("cpu"):
                     if args.fp16:
                         raise ValueError("Tried to use `fp16` but it is not supported on cpu")
+                    elif _is_native_cpu_amp_available:
+                        args.half_precision_backend = "cpu_amp"
                     else:
-                        if _is_native_cpu_amp_available:
-                            args.half_precision_backend = "cpu_amp"
-                        else:
-                            raise ValueError("Tried to use cpu amp but native cpu amp is not available")
+                        raise ValueError("Tried to use cpu amp but native cpu amp is not available")
                 else:
                     if _is_native_cuda_amp_available:
                         args.half_precision_backend = "cuda_amp"
