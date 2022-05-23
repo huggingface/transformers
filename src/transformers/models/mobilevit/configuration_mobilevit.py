@@ -53,7 +53,6 @@ class MobileViTConfig(PretrainedConfig):
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
-
     Args:
         num_channels (`int`, *optional*, defaults to `3`):
             The number of input channels.
