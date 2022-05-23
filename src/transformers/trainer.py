@@ -510,10 +510,10 @@ class Trainer:
                     if _is_native_cuda_amp_available:
                         args.half_precision_backend = "cuda_amp"
                     else:
-                        if args.bf16:
-                            raise ValueError("Tried to use `bf16` but native amp is not available")
-                        else:
-                            args.half_precision_backend = "apex"
+                    elif args.bf16:
+                        raise ValueError("Tried to use `bf16` but native amp is not available")
+                    else:
+                        args.half_precision_backend = "apex"
 
             logger.info(f"Using {args.half_precision_backend} half precision backend")
 
