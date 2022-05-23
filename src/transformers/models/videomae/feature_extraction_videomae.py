@@ -14,20 +14,13 @@
 # limitations under the License.
 """Feature extractor class for VideoMAE."""
 
-from turtle import width
 from typing import Optional, Union
 
 import numpy as np
 from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
-    ImageFeatureExtractionMixin,
-    ImageInput,
-    is_torch_tensor,
-)
+from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ImageFeatureExtractionMixin, ImageInput
 from ...utils import TensorType, logging
 
 
@@ -84,7 +77,7 @@ class VideoMAEFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
 
-    def resize_video(self, video, size, resample='bilinear'):
+    def resize_video(self, video, size, resample="bilinear"):
         return [self.resize(frame, size, resample) for frame in video]
 
     def crop_video(self, video, size):
@@ -92,7 +85,7 @@ class VideoMAEFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
 
     def normalize_video(self, video, mean, std):
         return [self.normalize(frame, mean, std) for frame in video]
-    
+
     def __call__(
         self, videos: ImageInput, return_tensors: Optional[Union[str, TensorType]] = None, **kwargs
     ) -> BatchFeature:
@@ -133,9 +126,7 @@ class VideoMAEFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
         if isinstance(videos, (list, tuple)):
             if isinstance(videos[0], (Image.Image, np.ndarray)):
                 valid_videos = True
-            elif isinstance(videos[0], (list, tuple)) and isinstance(
-                videos[0][0], (Image.Image, np.ndarray)
-            ):
+            elif isinstance(videos[0], (list, tuple)) and isinstance(videos[0][0], (Image.Image, np.ndarray)):
                 valid_videos = True
                 is_batched = True
 
@@ -154,7 +145,7 @@ class VideoMAEFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
         if self.do_center_crop and self.size is not None:
             videos = [self.crop_video(video, size=self.size) for video in videos]
         if self.do_normalize:
-            videos = [self.normalize_video(image=video, mean=self.image_mean, std=self.image_std) for video in videos]
+            videos = [self.normalize_video(video, mean=self.image_mean, std=self.image_std) for video in videos]
 
         # return as BatchFeature
         data = {"pixel_values": videos}
