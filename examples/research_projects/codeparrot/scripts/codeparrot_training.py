@@ -280,7 +280,6 @@ for step, batch in enumerate(train_dataloader, start=1):
         else:
             accelerator.backward(loss)
     else:
-        loss_tracking = loss_tracking / args.gradient_accumulation_steps
         lr = get_lr()
         accelerator.backward(loss)
         accelerator.clip_grad_norm_(model.parameters(), 1.0)
