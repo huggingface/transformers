@@ -487,6 +487,30 @@ class Trainer:
         self.use_apex = False
         self.use_amp = False
 
+        # Mixed precision setup for SageMaker Model Parallel
+        if is_sagemaker_mp_enabled():
+            # BF16 + model parallelism in SageMaker: currently not supported, raise an error
+            if args.bf16:
+                raise ValueError(
+                    "SageMaker Model Parallelism does not support BF16 yet. Please use FP16 instead "
+                )
+            # When there's mismatch between SMP config and trainer argument, use SMP config as truth
+            if args.fp16 != smp.state.cfg.fp16:
+                logger.warning(
+                    f"FP16 provided in SM_HP_MP_PARAMETERS is {smp.state.cfg.fp16},"
+                    f"but FP16 provided in trainer argument is {args.fp16}",
+                    f"setting to {smp.state.cfg.fp16}"
+                )
+                args.fp16 = smp.state.cfg.fp16
+            
+
+        
+        # FP16 + model parallelism in SageMaker: need to provide fp16 to SM_HP_MP_PARAMETERS
+        if is_sagemaker_mp_enabled() and args.fp16 and not smp.state.cfg.fp16:
+            raise ValueError(
+                "Using FP16 with SageMaker Model Parallelism needx to have 'fp16: True' in SM_HP_MP_PARAMETERS"
+            )
+
         if args.fp16 or args.bf16:
             if self.fsdp is not None:
                 raise ValueError(
@@ -526,16 +550,6 @@ class Trainer:
                         " https://www.github.com/nvidia/apex."
                     )
                 self.use_apex = True
-        #BF16 + model parallelism in SageMaker: currently not supported, raise an error
-        if is_sagemaker_mp_enabled() and args.bf16:
-            raise ValueError(
-                "SageMaker Model Parallelism does not support BF16 yet. Please use FP16 instead "
-            )
-        #FP16 + model parallelism in SageMaker: need to provide fp16 to SM_HP_MP_PARAMETERS
-        if is_sagemaker_mp_enabled() and args.fp16 and not smp.state.cfg.fp16:
-            raise ValueError(
-                "Using FP16 with SageMaker Model Parallelism needx to have 'fp16: True' in SM_HP_MP_PARAMETERS"
-            )
 
         # Label smoothing
         if self.args.label_smoothing_factor != 0:
