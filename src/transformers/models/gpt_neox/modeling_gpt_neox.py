@@ -39,7 +39,7 @@ _CONFIG_FOR_DOC = "GPTNeoXConfig"
 _TOKENIZER_FOR_DOC = "GPTNeoXTokenizerFast"
 
 GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "gpt-neox-20b",
+    "EleutherAI/gpt-neox-20b",
     # See all GPTNeoX models at https://huggingface.co/models?filter=gpt_neox
 ]
 
@@ -88,15 +88,9 @@ class GPTNeoXAttention(nn.Module):
             ),
         )
         self.register_buffer("masked_bias", torch.tensor(-1e9))
-        self.rotary_emb = RotaryEmbedding(
-            self.rotary_ndims,
-            base=config.rotary_emb_base,
-        )
+        self.rotary_emb = RotaryEmbedding(self.rotary_ndims, base=config.rotary_emb_base)
         self.norm_factor = torch.sqrt(torch.tensor(self.head_size, dtype=torch.float32)).to(torch.get_default_dtype())
-        self.query_key_value = nn.Linear(
-            config.hidden_size,
-            3 * config.hidden_size,
-        )
+        self.query_key_value = nn.Linear(config.hidden_size, 3 * config.hidden_size)
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
 
     def forward(
@@ -111,10 +105,12 @@ class GPTNeoXAttention(nn.Module):
         has_layer_past = layer_past is not None
 
         # Compute QKV
-        # Attention heads [b, sq, h] --> [b, sq, (np * 3 * hn)]
+        # Attention heads [batch, seq_len, hidden_size]
+        #   --> [batch, seq_len, (np * 3 * head_size)]
         qkv = self.query_key_value(hidden_states)
 
-        # [b, sq, (np * 3 * hn)] --> [b, sq, np, 3 * hn]
+        # [batch, seq_len, (num_heads * 3 * head_size)]
+        #   --> [batch, seq_len, num_heads, 3 * head_size]
         new_qkv_shape = qkv.size()[:-1] + (self.num_attention_heads, 3 * self.head_size)
         qkv = qkv.view(*new_qkv_shape)
 
@@ -146,22 +142,14 @@ class GPTNeoXAttention(nn.Module):
             past_value = layer_past[1]
             key = torch.cat((past_key, key), dim=-2)
             value = torch.cat((past_value, value), dim=-2)
-        if use_cache:
-            present = (key, value)
-        else:
-            present = None
+        present = None if use_cache else (key, value)
 
         # Compute attention
         attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
-        if torch.isnan(attn_output).any():
-            raise RuntimeError()
 
         # Reshape outputs
         attn_output = self._merge_heads(attn_output, self.num_attention_heads, self.head_size)
         attn_output = self.dense(attn_output)
-
-        if torch.isnan(attn_output).any():
-            raise RuntimeError()
 
         outputs = (attn_output, present)
         if output_attentions:
@@ -264,7 +252,6 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-# @torch.jit.script
 def apply_rotary_pos_emb(q, k, cos, sin, offset: int = 0):
     cos = cos[..., offset : q.shape[-2] + offset, :]
     sin = sin[..., offset : q.shape[-2] + offset, :]

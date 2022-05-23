@@ -147,23 +147,14 @@ class GPTNeoXModelTester:
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
-    def create_and_check_decoder_model_past_large_inputs(
-        self,
-        config,
-        input_ids,
-        input_mask,
-    ):
+    def create_and_check_decoder_model_past_large_inputs(self, config, input_ids, input_mask):
         config.is_decoder = True
         model = GPTNeoXForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
 
         # first forward pass
-        outputs = model(
-            input_ids,
-            attention_mask=input_mask,
-            use_cache=True,
-        )
+        outputs = model(input_ids, attention_mask=input_mask, use_cache=True)
         past_key_values = outputs.past_key_values
 
         # create hypothetical multiple next token and extent to next_input_ids
@@ -174,9 +165,8 @@ class GPTNeoXModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
 
-        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask, output_hidden_states=True,)[
-            "hidden_states"
-        ][0]
+        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask, output_hidden_states=True)
+        output_from_no_past = output_from_no_past["hidden_states"][0]
         output_from_past = model(
             next_tokens,
             attention_mask=next_attention_mask,
@@ -245,17 +235,15 @@ class GPTNeoXModelTest(ModelTesterMixin, unittest.TestCase):
 class GPTNeoXModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
-        model = GPTNeoXForCausalLM.from_pretrained("Eleuther/gpt-neox-20b")
+        model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b")
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
 
-        # TODO Replace vocab size
-        vocab_size = 50432
+        vocab_size = model.config.vocab_size
 
         expected_shape = torch.Size((1, 6, vocab_size))
         self.assertEqual(output.shape, expected_shape)
 
-        # TODO Replace values below with what was printed above.
         expected_slice = torch.tensor(
             [[[33.8045, 2.3958, 34.2816], [63.7805, 4.8332, 63.5882], [66.9116, 5.2198, 63.1185]]]
         )
