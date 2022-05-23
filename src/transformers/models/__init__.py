@@ -127,6 +127,7 @@ from . import (
     splinter,
     squeezebert,
     swin,
+    swinv2,
     t5,
     tapas,
     tapex,
