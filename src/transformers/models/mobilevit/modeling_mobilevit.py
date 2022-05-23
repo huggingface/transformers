@@ -470,7 +470,9 @@ class MobileViTLayer(nn.Module):
         features = features.reshape(batch_size, channels, num_patch_h * patch_h, num_patch_w * patch_w)
 
         if info_dict["interpolate"]:
-            features = nn.functional.interpolate(features, size=info_dict["orig_size"], mode="bilinear", align_corners=False)
+            features = nn.functional.interpolate(
+                features, size=info_dict["orig_size"], mode="bilinear", align_corners=False
+            )
 
         return features
 
