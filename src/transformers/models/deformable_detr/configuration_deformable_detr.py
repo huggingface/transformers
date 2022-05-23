@@ -40,8 +40,8 @@ class DeformableDetrConfig(PretrainedConfig):
     Args:
         num_queries (`int`, *optional*, defaults to 300):
             Number of object queries, i.e. detection slots. This is the maximal number of objects
-            [`DeformableDetrModel`] can detect in a single image.
-            In case `two_stage` is set to `True`, we use `two_stage_num_proposals` instead.
+            [`DeformableDetrModel`] can detect in a single image. In case `two_stage` is set to `True`, we use
+            `two_stage_num_proposals` instead.
         d_model (`int`, *optional*, defaults to 256):
             Dimension of the layers.
         encoder_layers (`int`, *optional*, defaults to 6):
@@ -113,8 +113,8 @@ class DeformableDetrConfig(PretrainedConfig):
         two_stage_num_proposals (`int`, *optional*, defaults to 300):
             The number of region proposals to be generated, in case `two_stage` is set to `True`.
         with_box_refine (`bool`, *optional*, defaults to `False`):
-            Whether to apply iterative bounding box refinement, where each decoder layer refines the
-            bounding boxes based on the predictions from the previous layer.
+            Whether to apply iterative bounding box refinement, where each decoder layer refines the bounding boxes
+            based on the predictions from the previous layer.
 
     Examples:
 
