@@ -162,7 +162,7 @@ def get_grouping_from_attentions(attentions, hw_shape):
             else:
                 prev_attn_masks = prev_attn_masks @ attn_masks
             # [batch_size, heightxwidth, num_groups] -> [batch_size, num_groups, heightxwidth] -> [batch_size, num_groups, height, width]
-            cur_attn_map = resize_attn_map(prev_attn_masks.permute(0, 2, 1).contiguous(), *hw_shape)
+            cur_attn_map = resize_attention_map(prev_attn_masks.permute(0, 2, 1).contiguous(), *hw_shape)
             attn_maps.append(cur_attn_map)
 
     # [batch_size, num_groups, height, width]
@@ -1215,7 +1215,7 @@ class GroupViTTextEncoder(nn.Module):
     [`GroupViTTextEncoderLayer`].
 
     Args:
-        config: GroupViTConfig
+        config: GroupViTTextConfig
     """
 
     def __init__(self, config: GroupViTTextConfig):
@@ -1312,6 +1312,7 @@ class GroupViTTextEncoder(nn.Module):
         )
 
 
+# Copied from transformers.models.clip.modeling_clip.CLIPTextTransformer with CLIPText->GroupViTText, CLIPEncoder->GroupViTTextEncoder, CLIP_TEXT->GROUPVIT_TEXT
 class GroupViTTextTransformer(nn.Module):
     def __init__(self, config: GroupViTTextConfig):
         super().__init__()
@@ -1351,8 +1352,8 @@ class GroupViTTextTransformer(nn.Module):
         hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids)
 
         bsz, seq_len = input_shape
-        # GROUPVIT's text model uses causal mask, prepare it here.
-        # https://github.com/openai/GROUPVIT/blob/cfcffb90e69f37bf2ff1e988237a0fbe41f33c04/groupvit/model.py#L324
+        # CLIP's text model uses causal mask, prepare it here.
+        # https://github.com/openai/CLIP/blob/cfcffb90e69f37bf2ff1e988237a0fbe41f33c04/clip/model.py#L324
         causal_attention_mask = self._build_causal_attention_mask(bsz, seq_len).to(hidden_states.device)
         # expand attention_mask
         if attention_mask is not None:
