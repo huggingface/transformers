@@ -378,8 +378,6 @@ class FlaxOPTDecoderLayerCollection(nn.Module):
         init_cache: bool = False,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-        return_dict: bool = True,
-        project_out: nn.Module = None,
     ):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -388,11 +386,7 @@ class FlaxOPTDecoderLayerCollection(nn.Module):
         for decoder_layer in self.layers:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-                # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            # dropout_probability = random.uniform(0, 1)
-            # if not deterministic and (dropout_probability < self.layerdrop):
-            #     layer_outputs = (None, None, None)
-            # else:
+
             layer_outputs = decoder_layer(
                 hidden_states,
                 attention_mask=attention_mask,
@@ -418,6 +412,21 @@ def make_positions(mask, padding_idx: int):
     return positions
 
 
+class FlaxOPTLearnedPositionalEmbedding(nn.Embed):
+    
+    
+    def setup(self):
+        self.offset = 2
+        self.embedding = self.param('embedding',
+                                    self.embedding_init,
+                                    (self.num_embeddings+self.offset, self.features),
+                                    self.param_dtype)
+        
+    def __call__(self,positions):
+        """`input_ids_shape` is expected to be [bsz x seqlen]."""
+        
+        return super().__call__(positions + self.offset)
+    
 class FlaxOPTDecoder(nn.Module):
     config: OPTConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -430,21 +439,18 @@ class FlaxOPTDecoder(nn.Module):
         self.padding_idx = self.config.pad_token_id
         self.max_target_positions = self.config.max_position_embeddings
 
-        # OPT is set up so that if padding_idx is specified then offset the embedding ids by 2
-        # and adjust num_embeddings appropriately. Other models don't have this hack
         self.embed_tokens = nn.Embed(
             self.config.vocab_size,
             self.config.word_embed_proj_dim,
             embedding_init=jax.nn.initializers.normal(self.config.init_std),
         )
-        # TODO Check if that needs reimplemetation similar to OPTLearnedPositionalEmbedding
-        # should take attention mask as inputs ?
-        self.embed_positions = nn.Embed(
-            self.config.max_position_embeddings + self.offset,
+
+        self.embed_positions = FlaxOPTLearnedPositionalEmbedding(
+            self.config.max_position_embeddings,
             embed_dim,
             embedding_init=jax.nn.initializers.normal(self.config.init_std),
         )
-
+        
         if self.config.word_embed_proj_dim != self.config.hidden_size:
             self.project_in = nn.Dense(self.config.hidden_size, use_bias=False)
             self.project_out = nn.Dense(self.config.word_embed_proj_dim, use_bias=False)
@@ -460,7 +466,6 @@ class FlaxOPTDecoder(nn.Module):
         input_ids,
         attention_mask,
         position_ids,
-        head_mask=None,
         init_cache: bool = False,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -487,7 +492,6 @@ class FlaxOPTDecoder(nn.Module):
             init_cache=init_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
         if self.project_out is not None:
@@ -555,8 +559,6 @@ class FlaxOPTPreTrainedModel(FlaxPreTrainedModel):
         else:
             return random_params
 
-        return module_init_outputs["params"]
-
     def init_cache(self, batch_size, max_length):
         r"""
         Args:
@@ -583,7 +585,6 @@ class FlaxOPTPreTrainedModel(FlaxPreTrainedModel):
         position_ids: Optional[jnp.ndarray] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        head_mask: Optional[jnp.ndarray] = None,
         return_dict: Optional[bool] = None,
         params: dict = None,
         past_key_values: dict = None,
@@ -600,9 +601,7 @@ class FlaxOPTPreTrainedModel(FlaxPreTrainedModel):
             attention_mask = jnp.ones_like(input_ids)
 
         if position_ids is None:
-            position_ids = make_positions(attention_mask, self.config.pad_token_id)
-        else:
-            position_ids += 2
+            position_ids = attention_mask.cumsum(axis=1) - 1
 
         # Handle any PRNG if needed
         rngs = {"dropout": dropout_rng} if dropout_rng is not None else {}
@@ -658,7 +657,6 @@ class FlaxOPTModule(nn.Module):
         input_ids,
         attention_mask,
         position_ids,
-        head_mask: Optional[jnp.ndarray] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -721,7 +719,6 @@ class FlaxOPTForCausalLMModule(nn.Module):
         input_ids,
         attention_mask,
         position_ids,
-        head_mask: Optional[jnp.ndarray] = None,  # TODO Properly handle headmasks
         init_cache: bool = False,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -733,7 +730,6 @@ class FlaxOPTForCausalLMModule(nn.Module):
             input_ids,
             attention_mask,
             position_ids,
-            head_mask,
             deterministic=deterministic,
             init_cache=init_cache,
             output_attentions=output_attentions,
