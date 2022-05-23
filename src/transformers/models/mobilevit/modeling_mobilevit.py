@@ -88,7 +88,7 @@ def make_divisible(
     return new_v
 
 
-class MobileViTConvLayer(nn.Sequential):
+class MobileViTConvLayer(nn.Module):
     def __init__(
         self,
         config: MobileViTConfig,
@@ -110,7 +110,7 @@ class MobileViTConvLayer(nn.Sequential):
         if out_channels % groups != 0:
             raise ValueError(f"Output channels ({out_channels}) are not divisible by {groups} groups.")
 
-        conv_layer = nn.Conv2d(
+        self.conv = nn.Conv2d(
             in_channels=in_channels,
             out_channels=out_channels,
             kernel_size=kernel_size,
@@ -121,26 +121,35 @@ class MobileViTConvLayer(nn.Sequential):
             bias=bias,
             padding_mode="zeros",
         )
-        self.add_module(name="conv", module=conv_layer)
 
         if use_norm:
-            norm_layer = nn.BatchNorm2d(
+            self.norm = nn.BatchNorm2d(
                 num_features=out_channels,
                 eps=1e-5,
                 momentum=0.1,
                 affine=True,
                 track_running_stats=True,
             )
-            self.add_module(name="norm", module=norm_layer)
+        else:
+            self.norm = None
 
         if use_act:
             if isinstance(use_act, str):
-                act_layer = ACT2FN[use_act]
+                self.act = ACT2FN[use_act]
             elif isinstance(config.hidden_act, str):
-                act_layer = ACT2FN[config.hidden_act]
+                self.act = ACT2FN[config.hidden_act]
             else:
-                act_layer = config.hidden_act
-            self.add_module(name="act", module=act_layer)
+                self.act = config.hidden_act
+        else:
+            self.act = None
+
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        features = self.conv(features)
+        if self.norm is not None:
+            features = self.norm(features)
+        if self.act is not None:
+            features = self.act(features)
+        return features
 
 
 class MobileViTInvertedResidual(nn.Module):
