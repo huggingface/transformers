@@ -57,13 +57,13 @@ def create_rename_keys_for_vision_model(config, hf_model, pt_model):
         if config.num_group_tokens[d] > 0:
             rename_keys.extend(
                 [
-                    (f"img_encoder.layers.{d}.group_token", f"vision_model.encoder.layer.{d}.group_token"),
+                    (f"img_encoder.layers.{d}.group_token", f"vision_model.encoder.stage.{d}.group_token"),
                 ]
             )
             for module_name in ["downsample", "group_projector"]:
                 for name, _ in pt_model.named_parameters():
                     if name.startswith(f"img_encoder.layers.{d}.{module_name}"):
-                        rename_keys.append((name, name.replace("img_encoder.layers.", "vision_model.encoder.layer.")))
+                        rename_keys.append((name, name.replace("img_encoder.layers.", "vision_model.encoder.stage.")))
 
         for i in range(depth):
             for suffix in ["weight", "bias"]:
@@ -71,23 +71,23 @@ def create_rename_keys_for_vision_model(config, hf_model, pt_model):
                     [
                         (
                             f"img_encoder.layers.{d}.blocks.{i}.norm1.{suffix}",
-                            f"vision_model.encoder.layer.{d}.blocks.{i}.layernorm_before.{suffix}",
+                            f"vision_model.encoder.stage.{d}.layers.{i}.layernorm_before.{suffix}",
                         ),
                         (
                             f"img_encoder.layers.{d}.blocks.{i}.attn.proj.{suffix}",
-                            f"vision_model.encoder.layer.{d}.blocks.{i}.attention.output.dense.{suffix}",
+                            f"vision_model.encoder.stage.{d}.layers.{i}.attention.output.dense.{suffix}",
                         ),
                         (
                             f"img_encoder.layers.{d}.blocks.{i}.norm2.{suffix}",
-                            f"vision_model.encoder.layer.{d}.blocks.{i}.layernorm_after.{suffix}",
+                            f"vision_model.encoder.stage.{d}.layers.{i}.layernorm_after.{suffix}",
                         ),
                         (
                             f"img_encoder.layers.{d}.blocks.{i}.mlp.fc1.{suffix}",
-                            f"vision_model.encoder.layer.{d}.blocks.{i}.intermediate.dense.{suffix}",
+                            f"vision_model.encoder.stage.{d}.layers.{i}.intermediate.dense.{suffix}",
                         ),
                         (
                             f"img_encoder.layers.{d}.blocks.{i}.mlp.fc2.{suffix}",
-                            f"vision_model.encoder.layer.{d}.blocks.{i}.output.dense.{suffix}",
+                            f"vision_model.encoder.stage.{d}.layers.{i}.output.dense.{suffix}",
                         ),
                     ]
                 )
@@ -173,22 +173,22 @@ def format_shape_for_vision_model(state_dict, config):
             in_proj_weight = state_dict.pop(f"img_encoder.layers.{d}.blocks.{i}.attn.qkv.weight")
             in_proj_bias = state_dict.pop(f"img_encoder.layers.{d}.blocks.{i}.attn.qkv.bias")
             # next, add query, keys and values (in that order) to the state dict
-            state_dict[f"vision_model.encoder.layer.{d}.blocks.{i}.attention.attention.query.weight"] = in_proj_weight[
+            state_dict[f"vision_model.encoder.stage.{d}.layers.{i}.attention.attention.query.weight"] = in_proj_weight[
                 : config.hidden_size, :
             ]
-            state_dict[f"vision_model.encoder.layer.{d}.blocks.{i}.attention.attention.query.bias"] = in_proj_bias[
+            state_dict[f"vision_model.encoder.stage.{d}.layers.{i}.attention.attention.query.bias"] = in_proj_bias[
                 : config.hidden_size
             ]
-            state_dict[f"vision_model.encoder.layer.{d}.blocks.{i}.attention.attention.key.weight"] = in_proj_weight[
+            state_dict[f"vision_model.encoder.stage.{d}.layers.{i}.attention.attention.key.weight"] = in_proj_weight[
                 config.hidden_size : config.hidden_size * 2, :
             ]
-            state_dict[f"vision_model.encoder.layer.{d}.blocks.{i}.attention.attention.key.bias"] = in_proj_bias[
+            state_dict[f"vision_model.encoder.stage.{d}.layers.{i}.attention.attention.key.bias"] = in_proj_bias[
                 config.hidden_size : config.hidden_size * 2
             ]
-            state_dict[f"vision_model.encoder.layer.{d}.blocks.{i}.attention.attention.value.weight"] = in_proj_weight[
+            state_dict[f"vision_model.encoder.stage.{d}.layers.{i}.attention.attention.value.weight"] = in_proj_weight[
                 -config.hidden_size :, :
             ]
-            state_dict[f"vision_model.encoder.layer.{d}.blocks.{i}.attention.attention.value.bias"] = in_proj_bias[
+            state_dict[f"vision_model.encoder.stage.{d}.layers.{i}.attention.attention.value.bias"] = in_proj_bias[
                 -config.hidden_size :
             ]
     state_dict["visual_projection.0.weight"] = state_dict["visual_projection.0.weight"].squeeze()

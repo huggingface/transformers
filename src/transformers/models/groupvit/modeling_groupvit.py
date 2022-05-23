@@ -268,16 +268,16 @@ class GroupViTAssignAttention(nn.Module):
         value = key
         key_length = key.size(1)
         # [batch_size, query_length, channels]
-        q = self.q_proj(query)
+        query = self.q_proj(query)
 
         # [batch_size, key_length, channels]
-        k = self.k_proj(key)
+        key = self.k_proj(key)
 
         # [batch_size, key_length, channels]
-        v = self.v_proj(value)
+        value = self.v_proj(value)
 
         # [batch_size, query_length, key_length]
-        raw_attn = (q @ k.transpose(-2, -1)) * self.scale
+        raw_attn = (query @ key.transpose(-2, -1)) * self.scale
 
         attn = self.get_attn(raw_attn)
         soft_attn = self.get_attn(raw_attn, gumbel=False, hard=False)
@@ -286,7 +286,7 @@ class GroupViTAssignAttention(nn.Module):
 
         assert attn.shape == (batch_size, query_length, key_length)
 
-        out = attn @ v
+        out = attn @ value
 
         out = self.proj(out)
 
@@ -309,7 +309,7 @@ class GroupViTTokenAssign(nn.Module):
         self.norm_post_tokens = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         # norm on x
         self.norm_x = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.pre_assign_attn = GroupViTCrossAttentionBlock(config)
+        self.pre_assign_attn = GroupViTCrossAttentionLayer(config)
 
         self.assign = GroupViTAssignAttention(config)
         self.norm_new_x = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -318,37 +318,34 @@ class GroupViTTokenAssign(nn.Module):
     def project_group_token(self, group_tokens):
         """
         Args:
-            group_tokens (torch.Tensor): group tokens, [B, S_1, C]
-
-        inter_weight (torch.Tensor): [B, S_2, S_1], S_2 is the new number of
-            group tokens, it's already softmaxed along dim=-1
+            group_tokens (torch.Tensor): group tokens, [batch_size, num_group_tokens, channels]
 
         Returns:
-            projected_group_tokens (torch.Tensor): [B, S_2, C]
+            projected_group_tokens (torch.Tensor): [batch_size, num_output_groups, channels]
         """
         # [B, S_2, C] <- [B, S_1, C]
         projected_group_tokens = self.mlp_inter(group_tokens)
         projected_group_tokens = self.norm_post_tokens(projected_group_tokens)
         return projected_group_tokens
 
-    def forward(self, x, group_tokens):
+    def forward(self, image_tokens, group_tokens):
         """
         Args:
-            x (`torch.Tensor`): image tokens, of shape [batch_size, input_length, channels]
+            image_tokens (`torch.Tensor`): image tokens, of shape [batch_size, input_length, channels]
             group_tokens (`torch.Tensor`): group tokens, [batch_size, num_group_tokens, channels]
         """
 
         group_tokens = self.norm_tokens(group_tokens)
-        x = self.norm_x(x)
-        # [B, S_2, C]
+        image_tokens = self.norm_x(image_tokens)
+        # [batch_size, num_output_groups, channels]
         projected_group_tokens = self.project_group_token(group_tokens)
-        projected_group_tokens = self.pre_assign_attn(projected_group_tokens, x)
-        new_x, attention = self.assign(projected_group_tokens, x)
-        new_x += projected_group_tokens
+        projected_group_tokens = self.pre_assign_attn(projected_group_tokens, image_tokens)
+        new_image_tokens, attention = self.assign(projected_group_tokens, image_tokens)
+        new_image_tokens += projected_group_tokens
 
-        new_x = new_x + self.mlp_channels(self.norm_new_x(new_x))
+        new_image_tokens = new_image_tokens + self.mlp_channels(self.norm_new_x(new_image_tokens))
 
-        return new_x, attention
+        return new_image_tokens, attention
 
 
 @dataclass
@@ -853,7 +850,7 @@ class GroupViTStage(nn.Module):
         else:
             self.group_token = None
         self.gradient_checkpointing = False
-        self.blocks = nn.ModuleList([GroupViTVisionLayer(config) for _ in range(depth)])
+        self.layers = nn.ModuleList([GroupViTVisionLayer(config) for _ in range(depth)])
 
         if num_group_token > 0:
             self.downsample = GroupViTTokenAssign(
@@ -912,7 +909,7 @@ class GroupViTStage(nn.Module):
         x = hidden_states
 
         cat_x = self.concat_x(x, group_token)
-        for blk in self.blocks:
+        for blk in self.layers:
             blk_out = blk(cat_x)
             cat_x = blk_out[0]
 
@@ -1159,7 +1156,7 @@ class GroupViTVisionEncoder(nn.Module):
     def __init__(self, config: GroupViTVisionConfig) -> None:
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList(
+        self.stage = nn.ModuleList(
             [
                 GroupViTStage(
                     config=config,
@@ -1192,7 +1189,7 @@ class GroupViTVisionEncoder(nn.Module):
 
         group_tokens = None
 
-        for i, layer_module in enumerate(self.layer):
+        for i, layer_module in enumerate(self.stage):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
