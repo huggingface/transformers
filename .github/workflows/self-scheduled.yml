@@ -335,7 +335,7 @@ jobs:
           nvidia-smi
 
       - name: GPU visibility
-        working-directory: /transformers
+        working-directory: /workspace/transformers
         run: |
           echo $(python3 -c 'import transformers; version = "transformers version:" + " " + transformers.__version__; print(version)')
           utils/print_env_pt.py
