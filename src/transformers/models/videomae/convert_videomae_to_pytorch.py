@@ -170,8 +170,8 @@ def convert_videomae_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_
 
     if push_to_hub:
         print("Pushing to the hub...")
-        model_name = "nielsr/videomae-base"
-        model.push_to_hub(model_name, organization="hustvl")
+        model_name = "videomae-base"
+        model.push_to_hub(model_name, organization="nielsr")
 
 
 if __name__ == "__main__":
