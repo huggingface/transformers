@@ -498,7 +498,7 @@ class Trainer:
             if args.fp16 != smp.state.cfg.fp16:
                 logger.warning(
                     f"FP16 provided in SM_HP_MP_PARAMETERS is {smp.state.cfg.fp16},"
-                    f"but FP16 provided in trainer argument is {args.fp16}",
+                    f"but FP16 provided in trainer argument is {args.fp16},"
                     f"setting to {smp.state.cfg.fp16}"
                 )
                 args.fp16 = smp.state.cfg.fp16
