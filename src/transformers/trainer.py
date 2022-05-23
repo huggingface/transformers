@@ -1146,7 +1146,7 @@ class Trainer:
             jit_inputs = []
             for example_batch in dataloader:
                 break
-            for _, key in enumerate(example_batch):
+            for key in example_batch:
                 example_tensor = torch.ones_like(example_batch[key])
                 jit_inputs.append(example_tensor)
             jit_inputs = tuple(jit_inputs)
