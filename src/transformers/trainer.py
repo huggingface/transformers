@@ -502,14 +502,6 @@ class Trainer:
                     f"setting to {smp.state.cfg.fp16}"
                 )
                 args.fp16 = smp.state.cfg.fp16
-            
-
-        
-        # FP16 + model parallelism in SageMaker: need to provide fp16 to SM_HP_MP_PARAMETERS
-        if is_sagemaker_mp_enabled() and args.fp16 and not smp.state.cfg.fp16:
-            raise ValueError(
-                "Using FP16 with SageMaker Model Parallelism needx to have 'fp16: True' in SM_HP_MP_PARAMETERS"
-            )
 
         if args.fp16 or args.bf16:
             if self.fsdp is not None:
