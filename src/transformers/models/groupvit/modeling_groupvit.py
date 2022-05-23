@@ -108,44 +108,47 @@ def gumbel_softmax(logits: torch.Tensor, tau: float = 1, hard: bool = False, dim
     return ret
 
 
-def resize_attn_map(attentions, h, w, align_corners=False):
+def resize_attn_map(attentions, height, width, align_corners=False):
     """
 
     Args:
-        attentions: shape [B, groups, H*W]
-        h: height
-        w: width
+        attentions (`torch.Tensor`): attention map of shape [batch_size, groups, feat_height*feat_width]
+        height (`int`): height of the output attention map
+        width (`int`): width of the output attention map
+        align_corners (`bool`, *optional*): the `align_corner` argument for `nn.functional.interpolate`.
 
     Returns:
-        attentions: shape [B, groups, H, W]
-
+        `torch.Tensor`: resized attention map of shape [batch_size, groups, height, width]
     """
 
-    scale = (h * w // attentions.shape[2]) ** 0.5
-    if h > w:
-        w_featmap = int(np.round(w / scale))
-        h_featmap = attentions.shape[2] // w_featmap
+    scale = (height * width // attentions.shape[2]) ** 0.5
+    if height > width:
+        feat_width = int(np.round(width / scale))
+        feat_height = attentions.shape[2] // feat_width
     else:
-        h_featmap = int(np.round(h / scale))
-        w_featmap = attentions.shape[2] // h_featmap
+        feat_height = int(np.round(height / scale))
+        feat_width = attentions.shape[2] // feat_height
     assert (
-        attentions.shape[2] == h_featmap * w_featmap
-    ), f"{attentions.shape[2]} = {h_featmap} x {w_featmap}, h={h}, w={w}"
+        attentions.shape[2] == feat_height * feat_width
+    ), f"{attentions.shape[2]} = {feat_height} x {feat_width}, height={height}, width={width}"
 
-    bs = attentions.shape[0]
+    batch_size = attentions.shape[0]
     groups = attentions.shape[1]  # number of group token
-    # [bs, groups, h*w, groups] -> [bs, groups, h, w]
-    attentions = attentions.reshape(bs, groups, h_featmap, w_featmap)
-    attentions = nn.functional.interpolate(attentions, size=(h, w), mode="bilinear", align_corners=align_corners)
+    # [batch_size, groups, height*width, groups] -> [batch_size, groups, height, width]
+    attentions = attentions.reshape(batch_size, groups, feat_height, feat_width)
+    attentions = nn.functional.interpolate(
+        attentions, size=(height, width), mode="bilinear", align_corners=align_corners
+    )
     return attentions
 
 
-def get_grouping_from_attentions(attentions, hw_shape, rescale=False, align_corners=False):
+def get_grouping_from_attentions(attentions, hw_shape):
     """
     Args:
-        attentions (`tuple(torch.FloatTensor)`
+        attentions (`tuple(torch.FloatTensor)`: tuple of attention maps returned by `GroupViTVisionTransformer`
+        hw_shape (`tuple(int)`): height and width of the output attention map
     Returns:
-        grouping: list[Tensor], attention map of shape [B, groups, H, W]
+        `torch.Tensor`: the attention map of shape [batch_size, groups, height, width]
     """
 
     attn_maps = []
@@ -164,10 +167,6 @@ def get_grouping_from_attentions(attentions, hw_shape, rescale=False, align_corn
 
     # [B, G, H, W]
     final_grouping = attn_maps[-1]
-    if rescale:
-        final_grouping = nn.functional.interpolate(
-            final_grouping, size=hw_shape, mode="bilinear", align_corners=align_corners
-        )
 
     return final_grouping
 
@@ -185,25 +184,42 @@ class GroupViTAttention(nn.Module):
         self.proj = nn.Linear(config.hidden_size, config.hidden_size)
 
     def forward(self, query, key=None):
-        B, N, C = query.shape
+        batch_size, query_length, channels = query.shape
         if key is None:
             key = query
-        S = key.size(1)
+        key_length = key.size(1)
 
-        # [B, nh, N, C//nh]
-        q = self.q_proj(query).reshape(B, N, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
-        # [B, nh, S, C//nh]
-        k = self.k_proj(key).reshape(B, S, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
-        # [B, nh, S, C//nh]
-        v = self.v_proj(key).reshape(B, S, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
+        # [batch_size, num_heads, query_length, channels//num_heads]
+        q = (
+            self.q_proj(query)
+            .reshape(batch_size, query_length, self.num_heads, channels // self.num_heads)
+            .permute(0, 2, 1, 3)
+        )
+        # [batch_size, num_heads, key_length, channels//num_heads]
+        k = (
+            self.k_proj(key)
+            .reshape(batch_size, key_length, self.num_heads, channels // self.num_heads)
+            .permute(0, 2, 1, 3)
+        )
+        # [batch_size, num_heads, key_length, channels//num_heads]
+        v = (
+            self.v_proj(key)
+            .reshape(batch_size, key_length, self.num_heads, channels // self.num_heads)
+            .permute(0, 2, 1, 3)
+        )
 
-        # [B, nh, N, S]
+        # [batch_size, num_heads, query_length, key_length]
         attn = (q @ k.transpose(-2, -1)) * self.scale
         attn = attn.softmax(dim=-1)
-        assert attn.shape == (B, self.num_heads, N, S), f"{attn.shape} vs {(B, self.num_heads, N, S)}"
+        assert attn.shape == (
+            batch_size,
+            self.num_heads,
+            query_length,
+            key_length,
+        ), f"{attn.shape} vs {(batch_size, self.num_heads, query_length, key_length)}"
 
-        # [B, nh, N, C//nh] -> [B, N, C]
-        out = (attn @ v).transpose(1, 2).reshape(B, N, C)
+        # [batch_size, num_heads, query_length, channels//num_heads] -> [batch_size, query_length, channels]
+        out = (attn @ v).transpose(1, 2).reshape(batch_size, query_length, channels)
         out = self.proj(out)
         return out
 
@@ -248,19 +264,19 @@ class GroupViTAssignAttention(nn.Module):
         return attn
 
     def forward(self, query, key):
-        B, N, C = query.shape
+        batch_size, query_length, channels = query.shape
         value = key
-        S = key.size(1)
-        # [B, N, C]
+        key_length = key.size(1)
+        # [batch_size, query_length, channels]
         q = self.q_proj(query)
 
-        # [B, S, C]
+        # [batch_size, key_length, channels]
         k = self.k_proj(key)
 
-        # [B, S, C]
+        # [batch_size, key_length, channels]
         v = self.v_proj(value)
 
-        # [B, N, S]
+        # [batch_size, query_length, key_length]
         raw_attn = (q @ k.transpose(-2, -1)) * self.scale
 
         attn = self.get_attn(raw_attn)
@@ -268,7 +284,7 @@ class GroupViTAssignAttention(nn.Module):
 
         attn = attn / (attn.sum(dim=-1, keepdim=True) + self.assign_eps)
 
-        assert attn.shape == (B, N, S)
+        assert attn.shape == (batch_size, query_length, key_length)
 
         out = attn @ v
 
@@ -324,13 +340,10 @@ class GroupViTTokenAssign(nn.Module):
     def forward(self, x, group_tokens):
         """
         Args:
-            x (torch.Tensor): image tokens, [B, L, C]
-            group_tokens (torch.Tensor): group tokens, [B, S_1, C]
-
-        Returns:
-            new_x (torch.Tensor): [B, S_2, C], S_2 is the new number of
-                group tokens
+            x (`torch.Tensor`): image tokens, of shape [batch_size, input_length, channels]
+            group_tokens (`torch.Tensor`): group tokens, [batch_size, num_group_tokens, channels]
         """
+
         group_tokens = self.norm_tokens(group_tokens)
         x = self.norm_x(x)
         # [B, S_2, C]
@@ -1800,7 +1813,7 @@ class GroupViTModel(GroupViTPreTrainedModel):
             else:
                 attentions = vision_outputs[2]
             # [batch_size_image, num_group, height, width]
-            grouping = get_grouping_from_attentions(attentions, pixel_values.shape[2:], rescale=True)
+            grouping = get_grouping_from_attentions(attentions, pixel_values.shape[2:])
 
             # normalized features
             image_group_embeds = image_group_embeds / image_group_embeds.norm(dim=-1, keepdim=True)

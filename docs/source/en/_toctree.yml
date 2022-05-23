@@ -282,6 +282,8 @@
       title: GPT-J
     - local: model_doc/gpt_neo
       title: GPT Neo
+    - local: model_doc/groupvit
+      title: GroupViT
     - local: model_doc/hubert
       title: Hubert
     - local: model_doc/perceiver
