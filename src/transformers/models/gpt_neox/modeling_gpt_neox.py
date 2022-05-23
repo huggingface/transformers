@@ -277,14 +277,8 @@ class GPTNeoXMLP(nn.Module):
 class GPTNeoXLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.input_layernorm = nn.LayerNorm(
-            config.hidden_size,
-            eps=config.layer_norm_eps,
-        )
-        self.post_attention_layernorm = nn.LayerNorm(
-            config.hidden_size,
-            eps=config.layer_norm_eps,
-        )
+        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attention = GPTNeoXAttention(config)
         self.mlp = GPTNeoXMLP(config)
 
@@ -299,8 +293,6 @@ class GPTNeoXLayer(nn.Module):
     ):
         residual = hidden_states
         ln_out = self.input_layernorm(hidden_states)
-        if torch.isnan(ln_out).any():
-            raise RuntimeError()
         attention_layer_outputs = self.attention(
             ln_out,
             attention_mask=attention_mask,
@@ -309,14 +301,10 @@ class GPTNeoXLayer(nn.Module):
             use_cache=use_cache,
             output_attentions=output_attentions,
         )
-        if torch.isnan(attention_layer_outputs[0]).any():
-            raise RuntimeError()
         attn_output = attention_layer_outputs[0]  # output_attn: a, present, (attentions)
         outputs = attention_layer_outputs[1:]
 
         mlp_output = self.mlp(self.post_attention_layernorm(hidden_states))
-        if torch.isnan(mlp_output).any():
-            raise RuntimeError()
         hidden_states = mlp_output + attn_output + residual
 
         if use_cache:

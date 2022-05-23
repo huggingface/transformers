@@ -134,13 +134,7 @@ class GPTNeoXModelTester:
         result = model(input_ids, attention_mask=input_mask)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    def create_and_check_for_causal_lm(
-        self,
-        config,
-        input_ids,
-        input_mask,
-        token_labels,
-    ):
+    def create_and_check_for_causal_lm(self, config, input_ids, input_mask, token_labels):
         model = GPTNeoXForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
