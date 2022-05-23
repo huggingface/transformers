@@ -19,6 +19,7 @@ NUM_PERM = 256
 
 
 def get_min_hash(tokens: List[str]) -> Optional[MinHash]:
+    """Compute the MinHash of a code snippet."""
     if len(tokens) < MIN_NUM_TOKENS:
         return None
     min_hash = MinHash(num_perm=NUM_PERM)
@@ -28,9 +29,7 @@ def get_min_hash(tokens: List[str]) -> Optional[MinHash]:
 
 
 def get_tokens(code: str) -> Set[str]:
-    """
-    Tokenize a code snippet.
-    """
+    """Tokenize a code snippet."""
     return set([t for t in NON_ALPHA.split(code) if len(t.strip()) > 0])
 
 
@@ -77,7 +76,7 @@ class DuplicationIndex:
             json.dump(duplicate_clusters, f)
 
 
-def compute_min_hash(element):
+def _compute_min_hash(element):
     index, data = element
     min_hash = get_min_hash([t for t in NON_ALPHA.split(data["content"]) if len(t.strip()) > 0])
     if min_hash is not None:
@@ -87,7 +86,7 @@ def compute_min_hash(element):
 def minhash_iter(dataset_iterator: Type[Dataset]):
     with mp.Pool() as pool:
         for data in pool.imap_unordered(
-            compute_min_hash,
+            _compute_min_hash,
             ThreadedIterator(dataset_iterator, max_queue_size=10000),
             chunksize=100,
         ):
@@ -96,7 +95,12 @@ def minhash_iter(dataset_iterator: Type[Dataset]):
 
 
 def make_duplicate_clusters(dataset_iterator: Type[Dataset], jaccard_threshold: float):
-    """This function will be rewritten with dataset map"""
+    """Find duplicate clusters in the dataset in two steps:
+        1. Compute MinHash for each code snippet. MinHash is a tool for fast jaccard similarity estimation.
+        This step is computed using an asynchronous multiprocessing pool, minhash_iter
+        2. Find duplicate clusters. The computed MinHash is added sequentially to the DuplicationIndex.
+        This step cannot be parallelized. So using asynchronous thread in the previous step helps to speed up the process.
+    """
     di = DuplicationIndex(duplication_jaccard_threshold=jaccard_threshold)
 
     for filename, min_hash in tqdm(ThreadedIterator(minhash_iter(enumerate(dataset_iterator)), max_queue_size=100)):
@@ -117,8 +121,24 @@ _shared_dataset = None
 
 
 def _find_cluster_extremes_shared(cluster, jaccard_threshold):
-    """
-    Find a reduced cluster such that each code in the origin cluster is similar to at least one code in the reduced cluster.
+    """Find a reduced cluster such that each code in the origin cluster is similar to at least one code in the reduced cluster.
+    Two codes are similar if their Jaccard similarity is above the threshold.
+
+    Args:
+        cluster (List[dict]):
+           cluster is a list of dict, each dict contains the following keys:
+                - base_index
+                - repo_name
+                - path
+            This is a typical output of DuplicationIndex.get_duplicate_clusters()
+        jaccard_threshold (float):
+            threshold for Jaccard similarity.
+            Two codes are similar if their Jaccard similarity is above the threshold.
+    
+    Returns:
+        extremes (List[dict]):
+            A reduced representation of the cluster. The field copies is added to each dict.
+            The copies field indicates the number of similar codes in the cluster for a extreme.
     """
     extremes = []
     for element1 in cluster:
@@ -135,6 +155,25 @@ def _find_cluster_extremes_shared(cluster, jaccard_threshold):
 
 
 def find_extremes(cluster_list, dataset, jaccard_threshold):
+    """Call the _find_cluster_extremes_shared function in a parallel fashion.
+    
+    Args:
+        cluster_list (List[List[Dict]]):
+            each cluster is a list of dicts with the key base_index,
+            referring to the index of the base code in the dataset.
+        dataset (Type[Dataset]):
+            dataset is used to access the content of the code snippets,
+            using the base_index from the cluster_list.
+            dataset is shared between all the processes using a glabal variable (any other way to share the dataset?),
+            otherwise the multi processing is not speeded up.
+        jaccard_threshold (float):
+            the threshold for the jaccard similarity. The default value is 0.85
+    
+    Returns:
+        extremes_list (List[Dict]):
+            Each cluster is reduced to extremes.
+            See _find_cluster_extremes_shared for the definition of extremes.       
+    """
     global _shared_dataset
     _shared_dataset = dataset
     extremes_list = []
@@ -160,15 +199,15 @@ def deduplicate_dataset(
     Codes are called similar if their Jaccard similarity is greater than jaccard_threshold (0.85 default).
 
     Args
-        dataset (Type[Dataset])
+        dataset (Type[Dataset]):
             The dataset to deduplicate.
-        jaccard_threshold (float, default=0.85)
+        jaccard_threshold (float, default=0.85):
             jaccard threshold to determine if two codes are similar
 
     Returns
-        ds_dedup (Type[Dataset])
+        ds_dedup (Type[Dataset]):
             The deduplicated dataset.
-        duplicate_clusters (List[List[Dict]])
+        duplicate_clusters (List[List[Dict]]):
             The list of duplicate clusters.
             Each cluster is a list of dicts with the following keys:
             - base_index : int
