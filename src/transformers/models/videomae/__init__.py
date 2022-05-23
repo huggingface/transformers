@@ -17,7 +17,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
 _import_structure = {
@@ -33,11 +33,18 @@ else:
     _import_structure["modeling_videomae"] = [
         "VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST",
         "VideoMAEForPreTraining",
-        "VideoMAELayer",
         "VideoMAEModel",
         "VideoMAEPreTrainedModel",
         "VideoMAEForVideoClassification",
     ]
+
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["feature_extraction_videomae"] = ["VideoMAEFeatureExtractor"]
 
 if TYPE_CHECKING:
     from .configuration_videomae import VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP, VideoMAEConfig
@@ -52,10 +59,17 @@ if TYPE_CHECKING:
             VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST,
             VideoMAEForPreTraining,
             VideoMAEForVideoClassification,
-            VideoMAELayer,
             VideoMAEModel,
             VideoMAEPreTrainedModel,
         )
+
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .feature_extraction_videomae import VideoMAEFeatureExtractor
 
 else:
     import sys
