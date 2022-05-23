@@ -216,13 +216,13 @@ def deduplicate_dataset(
     is reduced to the extremes that are similar to the other elements in the cluster.
     Codes are called similar if their Jaccard similarity is greater than jaccard_threshold (0.85 default).
 
-    Args
+    Args:
         dataset (Type[Dataset]):
             The dataset to deduplicate.
         jaccard_threshold (float, default=0.85):
             jaccard threshold to determine if two codes are similar
 
-    Returns
+    Returns:
         ds_dedup (Type[Dataset]):
             The deduplicated dataset.
         duplicate_clusters (List[List[Dict]]):
@@ -237,6 +237,12 @@ def deduplicate_dataset(
             - is_extreme : bool
                 Whether the code is an extreme in the cluster.
             All the codes in the cluster are removed from the dataset except the extremes.
+
+    Example:
+        >>> from datasets import load_dataset
+        >>> from minhash_deduplication import deduplicate_dataset
+        >>> ds = load_dataset("lvwerra/codeparrot-clean", split="train")
+        >>> ds_dedup, duplicate_clusters = deduplicate_dataset(ds, jaccard_threshold=0.85)
     """
     duplicate_clusters = make_duplicate_clusters(dataset, jaccard_threshold)
     duplicate_indices = set(x["base_index"] for cluster in duplicate_clusters for x in cluster)
