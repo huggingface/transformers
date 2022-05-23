@@ -1541,7 +1541,6 @@ class Trainer:
                 self._load_rng_state(resume_from_checkpoint)
 
             step = -1
-            step_done = False
             for step, inputs in enumerate(epoch_iterator):
 
                 # Skip past any already trained steps if resuming training
@@ -1631,7 +1630,6 @@ class Trainer:
                     elif self.do_grad_scaling:
                         scale_before = self.scaler.get_scale()
                         self.scaler.step(self.optimizer)
-                        step_done = True
                         self.scaler.update()
                         scale_after = self.scaler.get_scale()
                         optimizer_was_run = scale_before <= scale_after
