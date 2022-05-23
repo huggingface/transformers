@@ -22,7 +22,7 @@
 from posixpath import split
 import re
 from pathlib import Path
-from typing import Union
+from typing import Union,Dict,Tuple
 from typing_extensions import NotRequired
 
 from defusedxml import NotSupportedError
@@ -116,8 +116,7 @@ class CMUDict:
 
 class SymbolEncoder:
     arpabet = ['@' + s for s in CMUDict.valid_symbols]
-
-    def __init__(self,arpabet_mode:int ='',symbol_set:str='english_basic', file_or_path:str="./cmudict-0.7b.txt", heteronyms_path:str = "./heteronyms"):
+    def __init__(self,symbol_set:str='english_basic', file_or_path:str="./cmudict-0.7b.txt", heteronyms_path:str = "./heteronyms"):
         self.cmudict = CMUDict(file_or_path=file_or_path,heteronyms_path=heteronyms_path)
         # Regular expression matching text enclosed in curly braces for encoding
         self._curly_re = re.compile(r'(.*?)\{(.+?)\}(.*)')
@@ -131,87 +130,19 @@ class SymbolEncoder:
         self._symbol_to_id = {s: i for i, s in enumerate(self.symbols)}
         self._id_to_symbol = {i: s for i, s in enumerate(self.symbols)}
     
-    def encode(self,token)->str:
-        pass 
+    def encode_token_to_id(self,token:str)->str:
+        """
+        Token is either a arpabet or a symbol
+        """
+        return self._symbol_to_id[token]
 
-    def decode(self,token)->str:
-        pass
-
-    def _get_arpabet(self,token):
-        arpabet_suffix = ''
-        word = token
-
-        # Todo ask why you would want this 
-        # e.g tire and tire sound the same different meaning 
-        # I guess they want this to be learned from not arpa?
-        
-        if word.lower() in self.cmudict.heteronyms:
-            return word
-
-        if len(word) > 2 and word.endswith("'s"):
-            arpabet = self.cmudict.lookup(word)
-            if arpabet is None:
-                arpabet = self.get_arpabet(word[:-2])
-                arpabet_suffix = ' Z'
-        elif len(word) > 1 and word.endswith("s"):
-            arpabet = self.cmudict.lookup(word)
-            if arpabet is None:
-                arpabet = self.get_arpabet(word[:-1])
-                arpabet_suffix = ' Z'
+    def match_arpabet(self,text:str)->Tuple[bool,str,str,str]:
+        matches = self._curly_re.match(text)
+        # Regular Symbols # Arpabet # Remaining Text
+        if not matches:
+            return False, "","",""
         else:
-            arpabet = self.cmudict.lookup(word)
-
-        if arpabet is None:
-            return word
-        elif arpabet[0] == '{':
-            arpabet = [arpabet[1:-1]]
-
-        # XXX arpabet might not be a list here
-        if type(arpabet) is not list:
-            print("arpabet not a list item")
-            return word
-
-        # if len(arpabet) > 1:
-        #     if self.handle_arpabet_ambiguous == 'first':
-        #         arpabet = arpabet[0]
-        #     elif self.handle_arpabet_ambiguous == 'random':
-        #         arpabet = np.random.choice(arpabet)
-        #     elif self.handle_arpabet_ambiguous == 'ignore':
-        #         return word
-        # else:
-        arpabet = arpabet[0]
-
-        arpabet = "{" + arpabet + arpabet_suffix + "}"
-
-        return arpabet
-    
-    def _arpabet_word_to_ids(self,arpabet_word:str)->int:
-        arpabet_word_encoding = ''.join(['@' + s for s in arpabet_word.split()])
-        print(arpabet_word_encoding)
-        return self._word_to_ids(arpabet_word_encoding)
-
-    def _ids_to_string(self,ids:List[int])->str:
-        result = ''
-        for symbol_id in ids:
-            if symbol_id in self._id_to_symbol:
-                s = self._id_to_symbol[symbol_id]
-                # Enclose ARPAbet back in curly braces: # This is buggy...
-                if len(s) > 1 and s[0] == '@':
-                    s = '{%s}' % s[1:]
-                result += s
-        return result.replace('}{', ' ')
-
-    def _word_to_ids(self,word:str)->List[int]:
-        """
-        Takes word converts them to character ids list
-        """
-        result:List[int] = []
-        for letter in word:
-            if letter in self._symbol_to_id:
-                s = self._symbol_to_id[letter] 
-                # print(f'{letter}->{s}')
-                result.append(s) 
-        return result
+            return True, matches.group(1),matches.group(2),matches.group(3)
 
     def _get_symbols(self,symbol_set='english_basic'):
         """ 
@@ -286,15 +217,10 @@ class FastPitchTokenizer(PreTrainedTokenizer):
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
-        self,p_arpabet_dist:int,unk_token="<|endoftext|>", bos_token="<|endoftext|>", eos_token="<|endoftext|>", **kwargs
+        self,unk_token="<|endoftext|>", bos_token="<|endoftext|>", eos_token="<|endoftext|>", **kwargs
     ):
-        # if p is 0-1.0 
-        # use the pathes for now.
         super().__init__(bos_token=bos_token, eos_token=eos_token, unk_token=unk_token, **kwargs)
-        # requires cmudict backend TODO determine if we should load this at run time use as default parameters though
-        # tokenizer doesn't need to add a prefix space
         self.add_prefix_space = False
-        # use arpabet to clean up sounds
         self.symbol_encoder = SymbolEncoder()
 
     def vocab_size(self) -> int:
@@ -307,30 +233,33 @@ class FastPitchTokenizer(PreTrainedTokenizer):
 
     def _tokenize(self, text)->List[str]:
         """Returns a tokenized string."""
-        pass
+        tokenized_string = []
 
+        while len(text):
+            success, symbols, arpabet, remainder = self.symbol_encoder.match_arpabet(text)
+            if success:
+                tokenized_string.extend(symbols)
+                tokenized_string.extend(['@'+ arpabet for arpabet in arpabet.split(' ')]) 
+                text = remainder
+            else:
+                tokenized_string.extend(text)
+                break
+        return tokenized_string
+       
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an symbols using the vocab."""
-        # check if the token is an arpabet based one if so convert correctly
-       
-        pass
+        symbol_id = self.symbol_encoder.encode_token_to_id(token)
+        return symbol_id
 
     def _convert_id_to_token(self, index):
         """Converts an index id in a token (str) using the vocab."""
-        # check if id is an arpabet based one convert back to token
+        #TODO Fill this out need state to fill this out for arpa
         pass
 
     def convert_tokens_to_string(self, tokens:List[str])->str:
         """Converts a sequence of tokens (string) in a single string.
-           Convert Arpabet back to single string.
         """ 
-        result = []
-        if self.use_arpabet:
-            for token in tokens:
-                result.append(self.cmudict.arpabet_token_lookup(token))
-            return ' '.join(result)
-        else:
-            return ' '.join(tokens)
+        pass
 
     def save_vocabulary(self, save_directory):
         """
@@ -364,11 +293,7 @@ class FastPitchTokenizer(PreTrainedTokenizer):
         Returns:
             `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
-        if token_ids_1 is None:
-            return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
-        cls = [self.cls_token_id]
-        sep = [self.sep_token_id]
-        return cls + token_ids_0 + sep + sep + token_ids_1 + sep
+        return token_ids_0 
 
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
@@ -413,12 +338,7 @@ class FastPitchTokenizer(PreTrainedTokenizer):
         Returns:
             `List[int]`: List of zeros.
         """
-        sep = [self.sep_token_id]
-        cls = [self.cls_token_id]
-
-        if token_ids_1 is None:
-            return len(cls + token_ids_0 + sep) * [0]
-        return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
+        return len(token_ids_0) * [0]
 
     def prepare_for_tokenization(self, text, is_split_into_words=False, **kwargs):
         return (text, kwargs)
