@@ -509,7 +509,6 @@ class Trainer:
                 else:
                     if _is_native_cuda_amp_available:
                         args.half_precision_backend = "cuda_amp"
-                    else:
                     elif args.bf16:
                         raise ValueError("Tried to use `bf16` but native amp is not available")
                     else:
