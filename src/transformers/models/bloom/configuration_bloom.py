@@ -21,8 +21,12 @@ logger = logging.get_logger(__name__)
 
 BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "bigscience/bloom": "https://huggingface.co/bigscience/bloom/resolve/main/config.json",
+    "bigscience/bloom-350m": "https://huggingface.co/bigscience/bloom-350m/blob/main/config.json",
+    "bigscience/bloom-760m": "https://huggingface.co/bigscience/bloom-760m/blob/main/config.json",
+    "bigscience/bloom-1b3": "https://huggingface.co/bigscience/bloom-1b3/blob/main/config.json",
+    "bigscience/bloom-2b5": "https://huggingface.co/bigscience/bloom-2b5/blob/main/config.json",
+    "bigscience/bloom-6b3": "https://huggingface.co/bigscience/bloom-6b3/blob/main/config.json",
 }
-BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 
 class BloomConfig(PretrainedConfig):
