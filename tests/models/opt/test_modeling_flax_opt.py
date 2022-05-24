@@ -376,6 +376,7 @@ class FlaxOPTGenerationTest(unittest.TestCase):
 
         self.assertIsNotNone(output_string, EXPECTED_OUTPUTS)
 
+    @slow
     def test_batch_generation(self):
         model_id = "facebook/opt-350m"
 
