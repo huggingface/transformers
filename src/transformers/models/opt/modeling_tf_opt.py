@@ -717,9 +717,10 @@ class TFOPTDecoder(tf.keras.layers.Layer):
                 attentions=all_self_attns,
             )
 
+
 class TFOPTMainLayer(tf.keras.layers.Layer):
     config_class = OPTConfig
-    
+
     def __init__(self, config: OPTConfig, **kwargs):
         super().__init__(**kwargs)
         self.config = config
@@ -784,7 +785,6 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
             hidden_states=hs,
             attentions=attns,
         )
-
 
 
 @add_start_docstrings(
@@ -874,16 +874,16 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
     def __init__(self, config: OPTConfig, load_weight_prefix=None, **kwargs):
         super().__init__(config, **kwargs)
         self.config = config
-        
+
         # Setting the name to decoder for weight loading compatibility
         self.model = TFOPTMainLayer(config, name="decoder")
 
     def get_output_embeddings(self):
         return self.get_input_embeddings()
 
-    def prepare_inputs_for_generation(self, inputs, past = None, use_cache=None, use_xla=False, **kwargs):
+    def prepare_inputs_for_generation(self, inputs, past=None, use_cache=None, use_xla=False, **kwargs):
         attention_mask = kwargs.get("attention_mask", None)
-        
+
         # only last token for inputs_ids if past is defined in kwargs
         if past:
             inputs = tf.expand_dims(inputs[:, -1], -1)
@@ -944,9 +944,9 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
                 Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
                 cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
 
-                If `past_key_values` are used, the user can optionally input only the last `input_ids` (those
-                that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+                If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that
+                don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
+                `decoder_input_ids` of shape `(batch_size, sequence_length)`.
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
                 Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
                 This is useful if you want more control over how to convert `input_ids` indices into associated vectors

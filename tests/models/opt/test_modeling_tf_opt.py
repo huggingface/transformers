@@ -395,7 +395,7 @@ class FlaxOPTGenerationTest(unittest.TestCase):
 
         tokenizer = GPT2Tokenizer.from_pretrained(model_id)
         model = TFOPTForCausalLM.from_pretrained(model_id)
-        
+
         tokenizer.padding_side = "left"
 
         # use different length sentences to test batching
@@ -412,7 +412,9 @@ class FlaxOPTGenerationTest(unittest.TestCase):
         inputs_non_padded = tokenizer(sentences[0], return_tensors="tf").input_ids
         output_non_padded = model.generate(input_ids=inputs_non_padded)
 
-        num_paddings = inputs_non_padded.shape[-1] - tf.math.reduce_sum(tf.cast(inputs["attention_mask"][-1], tf.int64))
+        num_paddings = inputs_non_padded.shape[-1] - tf.math.reduce_sum(
+            tf.cast(inputs["attention_mask"][-1], tf.int64)
+        )
         inputs_padded = tokenizer(sentences[1], return_tensors="tf").input_ids
         output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
 

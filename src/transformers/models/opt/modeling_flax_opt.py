@@ -346,7 +346,7 @@ class FlaxOPTDecoderLayer(nn.Module):
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
 
         hidden_states = (residual + hidden_states).reshape(hidden_states_shape)
-        # hidden_states = residual + hidden_states
+
         # 350m applies layer norm AFTER attention
         if not self.do_layer_norm_before:
             hidden_states = self.final_layer_norm(hidden_states)
@@ -407,19 +407,19 @@ class FlaxOPTLearnedPositionalEmbedding(nn.Embed):
     """
     This module learns positional embeddings up to a fixed maximum size.
     """
-    
+
     def setup(self):
         self.offset = 2
-        self.embedding = self.param('embedding',
-                                    self.embedding_init,
-                                    (self.num_embeddings+self.offset, self.features),
-                                    self.param_dtype)
-        
-    def __call__(self,positions):
+        self.embedding = self.param(
+            "embedding", self.embedding_init, (self.num_embeddings + self.offset, self.features), self.param_dtype
+        )
+
+    def __call__(self, positions):
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
-        
+
         return super().__call__(positions + self.offset)
-    
+
+
 class FlaxOPTDecoder(nn.Module):
     config: OPTConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -443,7 +443,7 @@ class FlaxOPTDecoder(nn.Module):
             embed_dim,
             embedding_init=jax.nn.initializers.normal(self.config.init_std),
         )
-        
+
         if self.config.word_embed_proj_dim != self.config.hidden_size:
             self.project_in = nn.Dense(self.config.hidden_size, use_bias=False)
             self.project_out = nn.Dense(self.config.word_embed_proj_dim, use_bias=False)
@@ -540,7 +540,7 @@ class FlaxOPTPreTrainedModel(FlaxPreTrainedModel):
             position_ids,
             return_dict=False,
         )
-    
+
         random_params = module_init_outputs["params"]
         if params is not None:
             random_params = flatten_dict(unfreeze(random_params))
