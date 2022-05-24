@@ -895,6 +895,7 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
             "use_cache": use_cache,
         }
 
+    
     @unpack_inputs
     def call(
         self,
@@ -1023,4 +1024,17 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+        )
+
+    def serving_output(self, output):
+        pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFCausalLMOutputWithPast(
+            past_key_values=pkv,
+            hidden_states=hs,
+            attentions=attns,
+            loss=output.loss,
+            logits=output.logits,
         )

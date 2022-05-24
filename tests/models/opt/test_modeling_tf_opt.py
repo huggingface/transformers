@@ -240,6 +240,10 @@ class TFOPTModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCa
                             models_equal = False
                     self.assertTrue(models_equal)
 
+    def check_pt_tf_models(self, tf_model, pt_model, tf_inputs_dict):
+        tf_model.decoder.embed_positions.weights = pt_model.decoder.embed_position.weight
+        super().check_pt_tf_models(self, tf_model, pt_model, tf_inputs_dict)
+    
     def test_saved_model_creation(self):
         # This test is too long (>30sec) and makes fail the CI
         pass
@@ -349,7 +353,7 @@ class TFOPTEmbeddingsTest(unittest.TestCase):
 
 
 @require_tf
-class FlaxOPTGenerationTest(unittest.TestCase):
+class TFOPTGenerationTest(unittest.TestCase):
     @property
     def prompts(self):
         return [
@@ -359,15 +363,15 @@ class FlaxOPTGenerationTest(unittest.TestCase):
             "Computers and mobile phones have taken",
         ]
 
-    @slow
+    # @slow
     def test_generation_pre_attn_layer_norm(self):
         model_id = "facebook/opt-125m"
 
         EXPECTED_OUTPUTS = [
-            "Today is a beautiful day and I want to thank",
-            "In the city of Rome Canaver Canaver Canaver Canaver",
-            "Paris is the capital of France and Parisdylib",
-            "Computers and mobile phones have taken precedence over",
+            "Today is a beautiful day and I want to thank everyone",
+            "In the city of Rome Canaver Canaver Canaver Canaver Canaver",
+            "Paris is the capital of France and Parisdylibdylibdylib",
+            "Computers and mobile phones have taken precedence over humansruciating",
         ]
 
         predicted_outputs = []
@@ -377,7 +381,7 @@ class FlaxOPTGenerationTest(unittest.TestCase):
         for prompt in self.prompts:
             input_ids = tokenizer(prompt, return_tensors="tf").input_ids
 
-            generated_ids = model.generate(input_ids, max_length=10)
+            generated_ids = model.generate(input_ids, max_length=12)
 
             generated_string = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
             predicted_outputs += generated_string
@@ -385,7 +389,7 @@ class FlaxOPTGenerationTest(unittest.TestCase):
         self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)
 
         xla_generate = tf.function(model.generate, jit_compile=True)
-        output_sequences = xla_generate(self.prompts).sequences
+        output_sequences = xla_generate(tokenizer(self.prompts, return_tensors="tf",padding=True).input_ids).sequences
         output_string = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
         self.assertIsNotNone(output_string, EXPECTED_OUTPUTS)
 
@@ -455,6 +459,6 @@ class FlaxOPTGenerationTest(unittest.TestCase):
         self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)
 
         xla_generate = tf.function(model.generate, jit_compile=True)
-        output_sequences = xla_generate(self.prompts).sequences
+        output_sequences = xla_generate(tokenizer(self.prompts, return_tensors="tf",padding = True).input_ids).sequences
         output_string = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
         self.assertIsNotNone(output_string, EXPECTED_OUTPUTS)
