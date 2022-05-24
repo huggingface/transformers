@@ -1618,6 +1618,7 @@ class TFOpenAIGPTPreTrainedModel(metaclass=DummyObject):
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
 
+
 class TFOPTForCausalLM(metaclass=DummyObject):
     _backends = ["tf"]
 
@@ -1637,6 +1638,7 @@ class TFOPTPreTrainedModel(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
+
 
 class TFPegasusForConditionalGeneration(metaclass=DummyObject):
     _backends = ["tf"]
