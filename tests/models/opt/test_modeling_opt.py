@@ -286,7 +286,7 @@ class OPTModelIntegrationTests(unittest.TestCase):
             ],
             device=torch_device,
         )
-        assert_tensors_close(output[0, :3, :3], expected_slice, atol=1e-3)
+        assert_tensors_close(output[0, :3, :3], expected_slice, atol=5e-5)
 
 
 @require_torch
