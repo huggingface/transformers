@@ -89,7 +89,7 @@ class VideoMAEModelTester:
 
         # in VideoMAE, the number of tokens equals num_frames/2 * num_patches
         num_patches = (image_size // patch_size) ** 2
-        self.seq_length = (num_frames // 2) * num_patches
+        self.seq_length = (num_frames // tubelet_size) * num_patches
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor(

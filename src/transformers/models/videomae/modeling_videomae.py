@@ -24,7 +24,7 @@ from typing import Optional, Set, Tuple, Union
 import numpy as np
 import torch
 import torch.utils.checkpoint
-from torch import embedding, nn
+from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
@@ -146,11 +146,10 @@ class VideoMAEEmbeddings(nn.Module):
         embeddings = embeddings + self.position_embeddings.type_as(embeddings).to(embeddings.device).clone().detach()
 
         # only keep visible patches
+        # ~bool_masked_pos means visible
         if bool_masked_pos is not None:
             batch_size, _, num_channels = embeddings.shape
-            embeddings = embeddings[~bool_masked_pos].reshape(
-                batch_size, -1, num_channels
-            )  # ~bool_masked_pos means visible
+            embeddings = embeddings[~bool_masked_pos].reshape(batch_size, -1, num_channels)
 
         return embeddings
 
@@ -180,11 +179,13 @@ class PatchEmbeddings(nn.Module):
         )
 
     def forward(self, pixel_values):
-        batch_size, num_channels, time, height, width = pixel_values.shape
+        batch_size, num_frames, num_channels, height, width = pixel_values.shape
         if height != self.image_size[0] or width != self.image_size[1]:
             raise ValueError(
                 f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
             )
+        # permute to (batch_size, num_channels, num_frames, height, width)
+        pixel_values = pixel_values.permute(0, 2, 1, 3, 4)
         embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
         return embeddings
 

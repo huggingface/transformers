@@ -140,6 +140,7 @@ def convert_videomae_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_
 
     # forward pass
     pixel_values = torch.load("/Users/nielsrogge/Documents/VideoMAE/Original checkpoints/eating_spaghetti_video.pt")
+    pixel_values = pixel_values.permute(0, 2, 1, 3, 4)
     outputs = model(pixel_values)
     logits = outputs.logits
 
