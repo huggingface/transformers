@@ -91,7 +91,7 @@ jobs:
       - name: GPU visibility
         working-directory: /transformers
         run: |
-          utils/print_env.py
+          python3 utils/print_env.py
 
       - name: Run all tests on GPU
         working-directory: /transformers
@@ -144,7 +144,7 @@ jobs:
       - name: GPU visibility
         working-directory: /transformers
         run: |
-          utils/print_env.py
+          python3 utils/print_env.py
 
       - name: Run all tests on GPU
         working-directory: /transformers
@@ -181,7 +181,7 @@ jobs:
       - name: GPU visibility
         working-directory: /transformers
         run: |
-          utils/print_env.py
+          python3 utils/print_env.py
 
       - name: Run examples tests on GPU
         working-directory: /transformers
@@ -224,7 +224,7 @@ jobs:
       - name: GPU visibility
         working-directory: /transformers
         run: |
-          utils/print_env.py
+          python3 utils/print_env.py
 
       - name: Run all pipeline tests on GPU
         working-directory: /transformers
@@ -269,7 +269,7 @@ jobs:
       - name: GPU visibility
         working-directory: /transformers
         run: |
-          utils/print_env.py
+          python3 utils/print_env.py
 
       - name: Run all pipeline tests on GPU
         working-directory: /transformers
@@ -321,7 +321,7 @@ jobs:
       - name: GPU visibility
         working-directory: /workspace/transformers
         run: |
-          utils/print_env.py
+          python utils/print_env.py
 
       - name: Run all tests on GPU
         working-directory: /workspace/transformers
