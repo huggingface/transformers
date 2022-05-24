@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch ViT MAE (masked autoencoder) model."""
+""" PyTorch VideoMAE (masked autoencoder) model."""
 
 
 import collections.abc
@@ -75,6 +75,32 @@ class VideoMAEDecoderOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
+@dataclass
+class VideoMAEForPreTrainingOutput(ModelOutput):
+    """
+    Class for VideoMAEForPreTraining's outputs, with potential hidden states and attentions.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`):
+            Pixel reconstruction loss.
+        logits (`torch.FloatTensor` of shape `(batch_size, patch_size ** 2 * num_channels)`):
+            Pixel reconstruction logits.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
+            plus the initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+            the self-attention heads.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
 # sin-cos position encoding
 # https://github.com/jadore801120/attention-is-all-you-need-pytorch/blob/master/transformer/Models.py#L31
 def get_sinusoid_encoding_table(n_position, d_hid):
@@ -112,12 +138,19 @@ class VideoMAEEmbeddings(nn.Module):
         self.position_embeddings = get_sinusoid_encoding_table(self.num_patches, config.hidden_size)
         self.config = config
 
-    def forward(self, pixel_values):
+    def forward(self, pixel_values, bool_masked_pos):
         # create patch embeddings
         embeddings = self.patch_embeddings(pixel_values)
 
         # add position embeddings
         embeddings = embeddings + self.position_embeddings.type_as(embeddings).to(embeddings.device).clone().detach()
+
+        # only keep visible patches
+        if bool_masked_pos is not None:
+            batch_size, _, num_channels = embeddings.shape
+            embeddings = embeddings[~bool_masked_pos].reshape(
+                batch_size, -1, num_channels
+            )  # ~bool_masked_pos means visible
 
         return embeddings
 
@@ -522,7 +555,7 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
     def forward(
         self,
         pixel_values=None,
-        noise=None,
+        bool_masked_pos=None,
         head_mask=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -564,7 +597,7 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        embedding_output = self.embeddings(pixel_values)
+        embedding_output = self.embeddings(pixel_values, bool_masked_pos)
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -684,11 +717,11 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(VIDEOMAE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=VideoMAEForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        pixel_values=None,
-        bool_masked_pos=None,
+        pixel_values,
+        bool_masked_pos,
         head_mask=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -720,6 +753,7 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
 
         outputs = self.videomae(
             pixel_values,
+            bool_masked_pos=bool_masked_pos,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -727,6 +761,7 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
         )
 
         sequence_output = outputs[0]
+        sequence_output = self.encoder_to_decoder(sequence_output)  # [B, N_vis, C_d]
         batch_size, seq_len, num_channels = sequence_output.shape
 
         # we don't unshuffle the correct visible token order,
@@ -736,6 +771,7 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
         expanded_position_embeddings = expanded_position_embeddings.to(pixel_values.device).clone().detach()
         pos_emd_vis = expanded_position_embeddings[~bool_masked_pos].reshape(batch_size, -1, num_channels)
         pos_emd_mask = expanded_position_embeddings[bool_masked_pos].reshape(batch_size, -1, num_channels)
+
         x_full = torch.cat([sequence_output + pos_emd_vis, self.mask_token + pos_emd_mask], dim=1)  # [B, N, C_d]
 
         decoder_outputs = self.decoder(x_full, pos_emd_mask.shape[1])  # [B, N_mask, 3 * 16 * 16]
@@ -748,7 +784,7 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return BaseModelOutput(
+        return VideoMAEForPreTrainingOutput(
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
