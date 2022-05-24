@@ -24,7 +24,7 @@ from typing import Optional, Set, Tuple, Union
 import numpy as np
 import torch
 import torch.utils.checkpoint
-from torch import embedding, nn
+from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
@@ -153,13 +153,11 @@ class VideoMAEEmbeddings(nn.Module):
         # ~bool_masked_pos means visible
         if bool_masked_pos is not None:
             batch_size, _, num_channels = embeddings.shape
-            print("Shape of bool_masked_pos:", bool_masked_pos.shape)
             embeddings = embeddings[~bool_masked_pos]
-            print("Shape of filtered embeddings:", embeddings.shape)
             embeddings = embeddings.reshape(batch_size, -1, num_channels)
 
         print("Shape of final embeddings:", embeddings.shape)
-        
+
         return embeddings
 
 
@@ -758,8 +756,6 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
 
         >>> outputs = model(**inputs)
         >>> loss = outputs.loss
-        >>> mask = outputs.mask
-        >>> ids_restore = outputs.ids_restore
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -859,7 +855,7 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
 
         print("Shape of logits:", logits.shape)
         print("Shape of labels:", labels.shape)
-        
+
         loss_fct = MSELoss()
         loss = loss_fct(logits, labels)
 
