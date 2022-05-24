@@ -183,10 +183,11 @@ print(f"Time to filter dataset: {time.time()-t_start:.2f}")
 print(f"Size of filtered dataset: {len(ds_filter)}")
 
 # Deduplicate with minhash and jaccard similarity
-t_start = time.time()
-ds_dedup, duplicate_clusters = deduplicate_dataset(ds_filter)
-print(f"Time to deduplicate dataset: {time.time()-t_start:.2f}")
-print(f"Size of deduplicate dataset: {len(ds_dedup)}")
+if args.near_deduplication:
+    t_start = time.time()
+    ds_filter, duplicate_clusters = deduplicate_dataset(ds_filter, args.jaccard_threshold)
+    print(f"Time to deduplicate dataset: {time.time()-t_start:.2f}")
+    print(f"Size of deduplicate dataset: {len(ds_filter)}")
 
 # Save data in batches of samples_per_file
 output_dir = Path(args.output_dir)
@@ -194,16 +195,17 @@ output_dir.mkdir(exist_ok=True)
 
 # save duplicate_clusters in the output_dir as artifacts
 # not sure it is the right place the save it
-with open(output_dir / "duplicate_clusters.json", "w") as f:
-    json.dump(duplicate_clusters, f)
+if args.near_deduplication:
+    with open(output_dir / "duplicate_clusters.json", "w") as f:
+        json.dump(duplicate_clusters, f)
 
 data_dir = output_dir / "data"
 data_dir.mkdir(exist_ok=True)
 
 t_start = time.time()
-for file_number, index in enumerate(range(0, len(ds_dedup), args.samples_per_file)):
+for file_number, index in enumerate(range(0, len(ds_filter), args.samples_per_file)):
     file_path = str(data_dir / f"file-{file_number+1:012}.json")
-    end_index = min(len(ds_dedup), index + args.samples_per_file)
-    ds_dedup.select(list(range(index, end_index))).to_json(file_path)
+    end_index = min(len(ds_filter), index + args.samples_per_file)
+    ds_filter.select(list(range(index, end_index))).to_json(file_path)
     compress_file(file_path)
 print(f"Time to save dataset: {time.time()-t_start:.2f}")
