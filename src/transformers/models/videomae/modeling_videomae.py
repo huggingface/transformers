@@ -147,16 +147,12 @@ class VideoMAEEmbeddings(nn.Module):
         # add position embeddings
         embeddings = embeddings + self.position_embeddings.type_as(embeddings).to(embeddings.device).clone().detach()
 
-        print("Shape of embeddings:", embeddings.shape)
-
         # only keep visible patches
         # ~bool_masked_pos means visible
         if bool_masked_pos is not None:
             batch_size, _, num_channels = embeddings.shape
             embeddings = embeddings[~bool_masked_pos]
             embeddings = embeddings.reshape(batch_size, -1, num_channels)
-
-        print("Shape of final embeddings:", embeddings.shape)
 
         return embeddings
 
@@ -478,10 +474,9 @@ class VideoMAEPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
-    # Copied from transformers.models.vit.modeling_vit.ViTPreTrainedModel._init_weights
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
+        if isinstance(module, (nn.Linear, nn.Conv3d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -853,14 +848,11 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
             batch_size, _, num_channels = videos_patch.shape
             labels = videos_patch[bool_masked_pos].reshape(batch_size, -1, num_channels)
 
-        print("Shape of logits:", logits.shape)
-        print("Shape of labels:", labels.shape)
-
         loss_fct = MSELoss()
         loss = loss_fct(logits, labels)
 
         if not return_dict:
-            output = (logits,) + outputs[2:]
+            output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return VideoMAEForPreTrainingOutput(

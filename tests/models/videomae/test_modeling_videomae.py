@@ -96,6 +96,9 @@ class VideoMAEModelTester:
         self.num_patches_per_frame = (image_size // patch_size) ** 2
         self.seq_length = (num_frames // tubelet_size) * self.num_patches_per_frame
 
+        # use this variable to define bool_masked_pos
+        self.num_masks = int(mask_ratio * self.seq_length)
+
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor(
             [self.batch_size, self.num_frames, self.num_channels, self.image_size, self.image_size]
@@ -140,10 +143,10 @@ class VideoMAEModelTester:
         model.eval()
         # important: each video needs to have the same number of masked patches
         # hence we define a single mask, which we then repeat for each example in the batch
-        mask = torch.randint(0, 2, (self.seq_length,), dtype=torch.bool)
-        # num_masks_per_frame = int(self.mask_ratio * self.num_patches_per_frame)
-        # mask = torch.cat([torch.zeros(self.seq_length - self.num_masks_per_frame), torch.ones(self.mask_ratio * self.seq_length)], dtype=torch.bool)
-        bool_masked_pos = mask.expand(self.batch_size, -1)
+        mask = torch.ones((self.num_masks,))
+        mask = torch.cat([mask, torch.zeros(self.seq_length - mask.size(0))])
+        bool_masked_pos = mask.expand(self.batch_size, -1).bool()
+
         result = model(pixel_values, bool_masked_pos)
         # model only returns predictions for masked patches
         num_masked_patches = mask.sum().item()
@@ -181,9 +184,12 @@ class VideoMAEModelTest(ModelTesterMixin, unittest.TestCase):
         inputs_dict = copy.deepcopy(inputs_dict)
 
         if model_class == VideoMAEForPreTraining:
-            inputs_dict["bool_masked_pos"] = torch.ones(
-                (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.bool, device=torch_device
-            )
+            # important: each video needs to have the same number of masked patches
+            # hence we define a single mask, which we then repeat for each example in the batch
+            mask = torch.ones((self.model_tester.num_masks,))
+            mask = torch.cat([mask, torch.zeros(self.model_tester.seq_length - mask.size(0))])
+            bool_masked_pos = mask.expand(self.model_tester.batch_size, -1).bool()
+            inputs_dict["bool_masked_pos"] = bool_masked_pos.to(torch_device)
 
         if return_labels:
             if model_class in [
@@ -237,6 +243,67 @@ class VideoMAEModelTest(ModelTesterMixin, unittest.TestCase):
             model = VideoMAEModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    def test_attention_outputs(self):
+        if not self.has_attentions:
+            pass
+
+        else:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.return_dict = True
+
+            for model_class in self.all_model_classes:
+                num_visible_patches = self.model_tester.seq_length - self.model_tester.num_masks
+                seq_len = (
+                    num_visible_patches if model_class == VideoMAEForPreTraining else self.model_tester.seq_length
+                )
+
+                inputs_dict["output_attentions"] = True
+                inputs_dict["output_hidden_states"] = False
+                config.return_dict = True
+                model = model_class(config)
+                model.to(torch_device)
+                model.eval()
+                with torch.no_grad():
+                    outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+                attentions = outputs.attentions
+                self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+                # check that output_attentions also work using config
+                del inputs_dict["output_attentions"]
+                config.output_attentions = True
+                model = model_class(config)
+                model.to(torch_device)
+                model.eval()
+                with torch.no_grad():
+                    outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+                attentions = outputs.attentions
+                self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+                self.assertListEqual(
+                    list(attentions[0].shape[-3:]),
+                    [self.model_tester.num_attention_heads, seq_len, seq_len],
+                )
+                out_len = len(outputs)
+
+                # Check attention is always last and order is fine
+                inputs_dict["output_attentions"] = True
+                inputs_dict["output_hidden_states"] = True
+                model = model_class(config)
+                model.to(torch_device)
+                model.eval()
+                with torch.no_grad():
+                    outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+                self.assertEqual(out_len + 1, len(outputs))
+
+                self_attentions = outputs.attentions
+
+                self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
+                self.assertListEqual(
+                    list(self_attentions[0].shape[-3:]),
+                    [self.model_tester.num_attention_heads, seq_len, seq_len],
+                )
+
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
@@ -246,42 +313,21 @@ class VideoMAEModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
-
-            expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
-            )
+            hidden_states = outputs.hidden_states
+            expected_num_layers = self.model_tester.num_hidden_layers + 1
             self.assertEqual(len(hidden_states), expected_num_layers)
 
-            if hasattr(self.model_tester, "encoder_seq_length"):
-                seq_length = self.model_tester.encoder_seq_length
-                if hasattr(self.model_tester, "chunk_length") and self.model_tester.chunk_length > 1:
-                    seq_length = seq_length * self.model_tester.chunk_length
-            else:
-                seq_length = self.model_tester.seq_length
+            num_visible_patches = self.model_tester.seq_length - self.model_tester.num_masks
+            seq_length = num_visible_patches if model_class == VideoMAEForPreTraining else self.model_tester.seq_length
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
                 [seq_length, self.model_tester.hidden_size],
             )
 
-            if config.is_encoder_decoder:
-                hidden_states = outputs.decoder_hidden_states
-
-                self.assertIsInstance(hidden_states, (list, tuple))
-                self.assertEqual(len(hidden_states), expected_num_layers)
-                seq_len = getattr(self.model_tester, "seq_length", None)
-                decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
-
-                self.assertListEqual(
-                    list(hidden_states[0].shape[-2:]),
-                    [decoder_seq_length, self.model_tester.hidden_size],
-                )
-
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            print("Model class:", model_class)
             inputs_dict["output_hidden_states"] = True
             check_hidden_states_output(inputs_dict, config, model_class)
 
