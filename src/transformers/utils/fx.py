@@ -94,8 +94,9 @@ def _generate_supported_model_classes(
 
 _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "albert",
-    "bert",
     "bart",
+    "mbart",
+    "bert",
     "distilbert",
     "mobilebert",
     "electra",
@@ -104,6 +105,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "gptj",
     "gpt_neo",
     "t5",
+    "mt5",
     "roberta",
     "vit",
     "swin",
@@ -133,7 +135,9 @@ def torch_nn_embedding(self, input):
     return torch.empty(*input.shape, self.weight.shape[-1], device="meta")
 
 
-def torch_nn_functional_embedding(input, weight, padding_idx=None, max_norm=None, norm_type=2.0, scale_grad_by_freq=False, sparse=False):
+def torch_nn_functional_embedding(
+    input, weight, padding_idx=None, max_norm=None, norm_type=2.0, scale_grad_by_freq=False, sparse=False
+):
     return torch.empty(*input.shape, weight.shape[-1], device="meta")
 
 
@@ -388,6 +392,7 @@ def operator_getitem(a, b):
         if isinstance(t, torch.Tensor):
             return torch.ones_like(t, device="cpu")
         return t
+
     if isinstance(a, torch.Tensor):
         # TODO: infer shape without performing the computation.
         if isinstance(b, tuple):
