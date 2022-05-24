@@ -200,7 +200,7 @@ class EmformerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=32,
+        vocab_size=4096,
         hidden_size=768,
         num_hidden_layers=20,
         num_attention_heads=8,
@@ -213,6 +213,7 @@ class EmformerConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         blank_token_id=4096,
+        pad_token_id=1,
         input_dim=80,
         time_reduction_input_dim=128,
         time_reduction_stride=4,
@@ -259,6 +260,7 @@ class EmformerConfig(PretrainedConfig):
         self.joiner_activation = joiner_activation
 
         self.blank_token_id = blank_token_id
+        self.pad_token_id = pad_token_id
 
     @property
     def inputs_to_logits_ratio(self):

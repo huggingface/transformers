@@ -125,7 +125,7 @@ def _get_weight_init_gains(weight_init_scale_strategy: Optional[str], num_layers
 def _gen_attention_mask_block(
     col_widths: List[int], col_mask: List[bool], num_rows: int, device: torch.device
 ) -> torch.Tensor:
-    assert len(col_widths) == len(col_mask), "Length of col_widths must match that of col_mask"
+    # assert len(col_widths) == len(col_mask), "Length of col_widths must match that of col_mask"
 
     mask_block = [
         torch.ones(num_rows, col_width, device=device)
@@ -234,22 +234,21 @@ class EmformerAttention(torch.nn.Module):
         summary: torch.Tensor,
         mems: torch.Tensor,
         attention_mask: torch.Tensor,
+        output_attentions: bool = False,
         left_context_key: Optional[torch.Tensor] = None,
         left_context_val: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        B = utterance.size(1)
-        T = right_context.size(0) + utterance.size(0) + summary.size(0)
+        batch_size = utterance.size(1)
+        time_length = right_context.size(0) + utterance.size(0) + summary.size(0)
 
         # Compute query with [right context, utterance, summary].
         query = self.emb_to_query(torch.cat([right_context, utterance, summary]))
-        print("query", query.sum())
 
         # Compute key and value with [mems, right context, utterance].
         key, value = self.emb_to_key_value(torch.cat([mems, right_context, utterance])).chunk(chunks=2, dim=2)
-        print("key, value", key.sum(), value.sum())
 
         if left_context_key is not None and left_context_val is not None:
-            right_context_blocks_length = T - torch.max(lengths).int() - summary.size(0)
+            right_context_blocks_length = time_length - torch.max(lengths).int() - summary.size(0)
             key = torch.cat(
                 [
                     key[: mems.size(0) + right_context_blocks_length],
@@ -267,42 +266,43 @@ class EmformerAttention(torch.nn.Module):
 
         # Compute attention weights from query, key, and value.
         reshaped_query, reshaped_key, reshaped_value = [
-            tensor.contiguous().view(-1, B * self.num_heads, self.input_dim // self.num_heads).transpose(0, 1)
+            tensor.contiguous().view(-1, batch_size * self.num_heads, self.input_dim // self.num_heads).transpose(0, 1)
             for tensor in [query, key, value]
         ]
         attention_weights = torch.bmm(reshaped_query * self.scaling, reshaped_key.transpose(1, 2))
-        print("attention_weights", attention_weights.sum())
 
         # Compute padding mask.
         padding_mask = _gen_padding_mask(utterance, right_context, summary, lengths, mems, left_context_key)
 
         # Compute attention probabilities.
-        print("attention_mask", attention_mask.sum())
         attention_probs = self._gen_attention_probs(attention_weights, attention_mask, padding_mask)
-        print("attention_probs", attention_probs.sum())
+        if output_attentions:
+            # this operation is a bit awkward, but it's required to
+            # make sure that attn_weights keeps its gradient.
+            # In order to do so, attn_weights have to be reshaped
+            # twice and have to be reused in the following
+            attention_probs_reshaped = attention_probs.view(batch_size, self.num_heads, time_length, time_length)
+            attention_probs = attention_probs_reshaped.view(batch_size * self.num_heads, time_length, time_length)
+        else:
+            attention_probs_reshaped = None
 
         # Compute attention.
         attention = torch.bmm(attention_probs, reshaped_value)
-        assert attention.shape == (
-            B * self.num_heads,
-            T,
-            self.input_dim // self.num_heads,
-        )
-        attention = attention.transpose(0, 1).contiguous().view(T, B, self.input_dim)
-        print("attention", attention.sum())
+        # attention.shape == (batch_size * self.num_heads, time_length, self.input_dim // self.num_heads)
+        attention = attention.transpose(0, 1).contiguous().view(time_length, batch_size, self.input_dim)
 
         # Apply output projection.
         output_right_context_mems = self.out_proj(attention)
 
         summary_length = summary.size(0)
-        output_right_context = output_right_context_mems[: T - summary_length]
-        output_mems = output_right_context_mems[T - summary_length :]
+        output_right_context = output_right_context_mems[: time_length - summary_length]
+        output_mems = output_right_context_mems[time_length - summary_length :]
         if self.tanh_on_mem:
             output_mems = torch.tanh(output_mems)
         else:
             output_mems = torch.clamp(output_mems, min=-10, max=10)
 
-        return output_right_context, output_mems, key, value
+        return output_right_context, output_mems, key, value, attention_probs_reshaped
 
     def forward(
         self,
@@ -312,6 +312,7 @@ class EmformerAttention(torch.nn.Module):
         summary: torch.Tensor,
         mems: torch.Tensor,
         attention_mask: torch.Tensor,
+        output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         r"""Forward pass for training.
 
@@ -334,13 +335,10 @@ class EmformerAttention(torch.nn.Module):
                 Tensor
                     updated memory elements, with shape `(M, B, D)`.
         """
-        print("emb_to_key_value", self.emb_to_key_value.weight.sum())
-        print("emb_to_query", self.emb_to_query.weight.sum())
-        print("out_proj", self.out_proj.weight.sum())
-        output, output_mems, _, _ = self._forward_impl(
-            utterance, lengths, right_context, summary, mems, attention_mask
+        output, output_mems, _, _, attention_probs = self._forward_impl(
+            utterance, lengths, right_context, summary, mems, attention_mask, output_attentions
         )
-        return output, output_mems[:-1]
+        return output, output_mems[:-1], attention_probs
 
 
 class EmformerLayer(torch.nn.Module):
@@ -473,6 +471,7 @@ class EmformerLayer(torch.nn.Module):
         right_context: torch.Tensor,
         mems: torch.Tensor,
         attention_mask: Optional[torch.Tensor],
+        output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         if attention_mask is None:
             raise ValueError("attention_mask must be not None when for_inference is False")
@@ -481,15 +480,16 @@ class EmformerLayer(torch.nn.Module):
             summary = self.memory_op(utterance.permute(1, 2, 0)).permute(2, 0, 1)
         else:
             summary = torch.empty(0).to(dtype=utterance.dtype, device=utterance.device)
-        rc_output, next_m = self.attention(
+        rc_output, next_m, attention_probs = self.attention(
             utterance=utterance,
             lengths=lengths,
             right_context=right_context,
             summary=summary,
             mems=mems,
             attention_mask=attention_mask,
+            output_attentions=output_attentions,
         )
-        return rc_output, next_m
+        return rc_output, next_m, attention_probs
 
     def forward(
         self,
@@ -498,6 +498,7 @@ class EmformerLayer(torch.nn.Module):
         right_context: torch.Tensor,
         mems: torch.Tensor,
         attention_mask: torch.Tensor,
+        output_attentions: bool
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         r"""Forward pass for training.
 
@@ -525,22 +526,17 @@ class EmformerLayer(torch.nn.Module):
             layer_norm_utterance,
             layer_norm_right_context,
         ) = self._apply_pre_attention_layer_norm(utterance, right_context)
-        print("NEWLAYER")
-        print("layer_norm_utterance", layer_norm_utterance.sum(), layer_norm_utterance.shape)
-        print("layer_norm_right_context", layer_norm_right_context.sum(), layer_norm_right_context.shape)
 
-        rc_output, output_mems = self._apply_attention_forward(
+        rc_output, output_mems, attention_probs = self._apply_attention_forward(
             layer_norm_utterance,
             lengths,
             layer_norm_right_context,
             mems,
             attention_mask,
+            output_attentions
         )
-        print("rc_output", rc_output.sum(), rc_output.shape)
         output_utterance, output_right_context = self._apply_post_attention_ffn(rc_output, utterance, right_context)
-        print("output_utterance", output_utterance.sum(), output_utterance.shape)
-        print("output_right_context", output_right_context.sum(), output_right_context.shape)
-        return output_utterance, output_right_context, output_mems
+        return output_utterance, output_right_context, output_mems, attention_probs
 
 
 class Emformer(torch.nn.Module):
@@ -621,8 +617,6 @@ class Emformer(torch.nn.Module):
         self.right_context_length = right_context_length
         self.segment_length = segment_length
         self.max_memory_size = max_memory_size
-
-        print("context_params", left_context_length, right_context_length, segment_length, max_memory_size)
 
     def _gen_right_context(self, input: torch.Tensor) -> torch.Tensor:
         T = input.shape[0]
@@ -735,20 +729,24 @@ class Emformer(torch.nn.Module):
 
         input = hidden_states.permute(1, 0, 2)
         right_context = self._gen_right_context(input)
-        print("right_context", right_context.sum(), right_context.shape)
         utterance = input[: input.size(0) - self.right_context_length]
-        print("utterance", utterance.sum(), utterance.shape)
         attention_mask = self._gen_attention_mask(utterance)
         mems = (
             self.memory_op(utterance.permute(1, 2, 0)).permute(2, 0, 1)[:-1]
             if self.use_mem
             else torch.empty(0).to(dtype=input.dtype, device=input.device)
         )
-        output = utterance
+        hidden_states = utterance
         for layer in self.emformer_layers:
-            output, right_context, mems = layer(output, lengths, right_context, mems, attention_mask)
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
 
-        hidden_states = output.permute(1, 0, 2)
+            hidden_states, right_context, mems, attention_probs = layer(hidden_states, lengths, right_context, mems, attention_mask, output_attentions)
+
+            if output_attentions:
+                all_self_attentions = all_self_attentions + (attention_probs,)
+
+        hidden_states = hidden_states.permute(1, 0, 2)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
