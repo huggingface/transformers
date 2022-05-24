@@ -54,6 +54,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("decision_transformer_gpt2", "DecisionTransformerGPT2Model"),
         ("deit", "DeiTModel"),
         ("detr", "DetrModel"),
+<<<<<<< HEAD
         ("distilbert", "DistilBertModel"),
         ("dpr", "DPRQuestionEncoder"),
         ("dpt", "DPTModel"),
@@ -65,6 +66,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("funnel", ("FunnelModel", "FunnelBaseModel")),
         ("glpn", "GLPNModel"),
         ("gpt2", "GPT2Model"),
+=======
+>>>>>>> ec1931d6a3474ae01ab13f8c45d0ba18d57bf2ef
         ("conditional_detr", "ConditionalDETRModel"),
         ("gpt_neo", "GPTNeoModel"),
         ("gptj", "GPTJModel"),
