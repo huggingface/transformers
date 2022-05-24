@@ -17,6 +17,20 @@ class TensorFlowBenchmark(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+class TFForcedBOSTokenLogitsProcessor(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFForcedEOSTokenLogitsProcessor(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 class TFLogitsProcessor(metaclass=DummyObject):
     _backends = ["tf"]
 
@@ -247,6 +261,9 @@ TF_MODEL_FOR_CAUSAL_LM_MAPPING = None
 TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = None
 
 
+TF_MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING = None
+
+
 TF_MODEL_FOR_MASKED_LM_MAPPING = None
 
 
@@ -315,6 +332,13 @@ class TFAutoModelForMaskedLM(metaclass=DummyObject):
 
 
 class TFAutoModelForMultipleChoice(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFAutoModelForNextSentencePrediction(metaclass=DummyObject):
     _backends = ["tf"]
 
     def __init__(self, *args, **kwargs):
@@ -722,6 +746,27 @@ class TFCTRLModel(metaclass=DummyObject):
 
 
 class TFCTRLPreTrainedModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFData2VecVisionForImageClassification(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFData2VecVisionModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFData2VecVisionPreTrainedModel(metaclass=DummyObject):
     _backends = ["tf"]
 
     def __init__(self, *args, **kwargs):
@@ -1845,6 +1890,37 @@ class TFSpeech2TextPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFSwinForImageClassification(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFSwinForMaskedImageModeling(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFSwinModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFSwinPreTrainedModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -1981,6 +2057,27 @@ class TFViTModel(metaclass=DummyObject):
 
 
 class TFViTPreTrainedModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFViTMAEForPreTraining(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFViTMAEModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFViTMAEPreTrainedModel(metaclass=DummyObject):
     _backends = ["tf"]
 
     def __init__(self, *args, **kwargs):

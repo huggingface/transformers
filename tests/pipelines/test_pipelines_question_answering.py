@@ -106,16 +106,73 @@ class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
         )
         self.assertEqual(outputs, {"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)})
 
+        # Using batch is OK
+        new_outputs = question_answerer(
+            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris." * 20, batch_size=2
+        )
+        self.assertEqual(new_outputs, {"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)})
+        self.assertEqual(outputs, new_outputs)
+
     @require_torch
     def test_small_model_pt(self):
         question_answerer = pipeline(
             "question-answering", model="sshleifer/tiny-distilbert-base-cased-distilled-squad"
         )
+
         outputs = question_answerer(
             question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
         )
 
         self.assertEqual(nested_simplify(outputs), {"score": 0.01, "start": 0, "end": 11, "answer": "HuggingFace"})
+
+    @require_torch
+    def test_small_model_pt_softmax_trick(self):
+        question_answerer = pipeline(
+            "question-answering", model="sshleifer/tiny-distilbert-base-cased-distilled-squad"
+        )
+
+        real_postprocess = question_answerer.postprocess
+
+        # Tweak start and stop to make sure we encounter the softmax logits
+        # bug.
+        def ensure_large_logits_postprocess(
+            model_outputs,
+            top_k=1,
+            handle_impossible_answer=False,
+            max_answer_len=15,
+        ):
+            for output in model_outputs:
+                output["start"] = output["start"] * 1e6
+                output["end"] = output["end"] * 1e6
+            return real_postprocess(
+                model_outputs,
+                top_k=top_k,
+                handle_impossible_answer=handle_impossible_answer,
+                max_answer_len=max_answer_len,
+            )
+
+        question_answerer.postprocess = ensure_large_logits_postprocess
+
+        outputs = question_answerer(
+            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
+        )
+
+        self.assertEqual(nested_simplify(outputs), {"score": 0.028, "start": 0, "end": 11, "answer": "HuggingFace"})
+
+    @slow
+    @require_torch
+    def test_small_model_long_context_cls_slow(self):
+        question_answerer = pipeline(
+            "question-answering",
+            model="deepset/roberta-base-squad2",
+            handle_impossible_answer=True,
+            max_seq_length=512,
+        )
+        outputs = question_answerer(
+            question="What country is Paris the capital of?",
+            context="""London is the capital and largest city of England and the United Kingdom. It stands on the River Thames in south-east England at the head of a 50-mile (80 km) estuary down to the North Sea, and has been a major settlement for two millennia. The City of London, its ancient core and financial centre, was founded by the Romans as Londinium and retains boundaries close to its medieval ones. Since the 19th century, \"London\" has also referred to the metropolis around this core, historically split between the counties of Middlesex, Essex, Surrey, Kent, and Hertfordshire, which largely comprises Greater London, governed by the Greater London Authority. The City of Westminster, to the west of the City of London, has for centuries held the national government and parliament. As one of the world's global cities, London exerts strong influence on its arts, commerce, education, entertainment, fashion, finance, health care, media, tourism, and communications, and has sometimes been called the capital of the world. Its GDP (€801.66 billion in 2017) makes it the biggest urban economy in Europe, and it is one of the major financial centres in the world. In 2019 it had the second-highest number of ultra high-net-worth individuals in Europe after Paris and the second-highest number of billionaires in Europe after Moscow. As of 2021, London has the most millionaires of any city. With Europe's largest concentration of higher education institutions, it includes Imperial College London in natural and applied sciences, the London School of Economics in social sciences, and the comprehensive University College London. The city is home to the most 5-star hotels of any city in the world. In 2012, London became the first city to host three Summer Olympic Games. London is the capital and largest city of England and the United Kingdom. It stands on the River Thames in south-east England at the head of a 50-mile (80 km) estuary down to the North Sea, and has been a major settlement for two millennia. The City of London, its ancient core and financial centre, was founded by the Romans as Londinium and retains boundaries close to its medieval ones. Since the 19th century, \"London\" has also referred to the metropolis around this core, historically split between the counties of Middlesex, Essex, Surrey, Kent, and Hertfordshire, which largely comprises Greater London, governed by the Greater London Authority. The City of Westminster, to the west of the City of London, has for centuries held the national government and parliament. As one of the world's global cities, London exerts strong influence on its arts, commerce, education, entertainment, fashion, finance, health care, media, tourism, and communications, and has sometimes been called the capital of the world. Its GDP (€801.66 billion in 2017) makes it the biggest urban economy in Europe, and it is one of the major financial centres in the world. In 2019 it had the second-highest number of ultra high-net-worth individuals in Europe after Paris and the second-highest number of billionaires in Europe after Moscow. As of 2021, London has the most millionaires of any city. With Europe's largest concentration of higher education institutions, it includes Imperial College London in natural and applied sciences, the London School of Economics in social sciences, and the comprehensive University College London. The city is home to the most 5-star hotels of any city in the world. In 2012, London became the first city to host three Summer Olympic Games.""",
+        )
+        self.assertEqual(nested_simplify(outputs), {"score": 0.988, "start": 0, "end": 0, "answer": ""})
 
     @require_tf
     def test_small_model_tf(self):
@@ -149,7 +206,42 @@ class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
         )
         outputs = qa_pipeline(
             {
-                "context": "Yes Bank founder Rana Kapoor has approached the Bombay High Court, challenging a special court's order from August this year that had remanded him in police custody for a week in a multi-crore loan fraud case. Kapoor, who is currently lodged in Taloja Jail, is an accused in the loan fraud case and some related matters being probed by the CBI and Enforcement Directorate. A single bench presided over by Justice S K Shinde on Tuesday posted the plea for further hearing on October 14. In his plea filed through advocate Vijay Agarwal, Kapoor claimed that the special court's order permitting the CBI's request for police custody on August 14 was illegal and in breach of the due process of law. Therefore, his police custody and subsequent judicial custody in the case were all illegal. Kapoor has urged the High Court to quash and set aside the special court's order dated August 14. As per his plea, in August this year, the CBI had moved two applications before the special court, one seeking permission to arrest Kapoor, who was already in judicial custody at the time in another case, and the other, seeking his police custody. While the special court refused to grant permission to the CBI to arrest Kapoor, it granted the central agency's plea for his custody. Kapoor, however, said in his plea that before filing an application for his arrest, the CBI had not followed the process of issuing him a notice under Section 41 of the CrPC for appearance before it. He further said that the CBI had not taken prior sanction as mandated under section 17 A of the Prevention of Corruption Act for prosecuting him. The special court, however, had said in its order at the time that as Kapoor was already in judicial custody in another case and was not a free man the procedure mandated under Section 41 of the CrPC need not have been adhered to as far as issuing a prior notice of appearance was concerned. ADVERTISING It had also said that case records showed that the investigating officer had taken an approval from a managing director of Yes Bank before beginning the proceedings against Kapoor and such a permission was a valid sanction. However, Kapoor in his plea said that the above order was bad in law and sought that it be quashed and set aside. The law mandated that if initial action was not in consonance with legal procedures, then all subsequent actions must be held as illegal, he said, urging the High Court to declare the CBI remand and custody and all subsequent proceedings including the further custody as illegal and void ab-initio. In a separate plea before the High Court, Kapoor's daughter Rakhee Kapoor-Tandon has sought exemption from in-person appearance before a special PMLA court. Rakhee has stated that she is a resident of the United Kingdom and is unable to travel to India owing to restrictions imposed due to the COVID-19 pandemic. According to the CBI, in the present case, Kapoor had obtained a gratification or pecuniary advantage of ₹ 307 crore, and thereby caused Yes Bank a loss of ₹ 1,800 crore by extending credit facilities to Avantha Group, when it was not eligible for the same",
+                "context": (
+                    "Yes Bank founder Rana Kapoor has approached the Bombay High Court, challenging a special court's"
+                    " order from August this year that had remanded him in police custody for a week in a multi-crore"
+                    " loan fraud case. Kapoor, who is currently lodged in Taloja Jail, is an accused in the loan fraud"
+                    " case and some related matters being probed by the CBI and Enforcement Directorate. A single"
+                    " bench presided over by Justice S K Shinde on Tuesday posted the plea for further hearing on"
+                    " October 14. In his plea filed through advocate Vijay Agarwal, Kapoor claimed that the special"
+                    " court's order permitting the CBI's request for police custody on August 14 was illegal and in"
+                    " breach of the due process of law. Therefore, his police custody and subsequent judicial custody"
+                    " in the case were all illegal. Kapoor has urged the High Court to quash and set aside the special"
+                    " court's order dated August 14. As per his plea, in August this year, the CBI had moved two"
+                    " applications before the special court, one seeking permission to arrest Kapoor, who was already"
+                    " in judicial custody at the time in another case, and the other, seeking his police custody."
+                    " While the special court refused to grant permission to the CBI to arrest Kapoor, it granted the"
+                    " central agency's plea for his custody. Kapoor, however, said in his plea that before filing an"
+                    " application for his arrest, the CBI had not followed the process of issuing him a notice under"
+                    " Section 41 of the CrPC for appearance before it. He further said that the CBI had not taken"
+                    " prior sanction as mandated under section 17 A of the Prevention of Corruption Act for"
+                    " prosecuting him. The special court, however, had said in its order at the time that as Kapoor"
+                    " was already in judicial custody in another case and was not a free man the procedure mandated"
+                    " under Section 41 of the CrPC need not have been adhered to as far as issuing a prior notice of"
+                    " appearance was concerned. ADVERTISING It had also said that case records showed that the"
+                    " investigating officer had taken an approval from a managing director of Yes Bank before"
+                    " beginning the proceedings against Kapoor and such a permission was a valid sanction. However,"
+                    " Kapoor in his plea said that the above order was bad in law and sought that it be quashed and"
+                    " set aside. The law mandated that if initial action was not in consonance with legal procedures,"
+                    " then all subsequent actions must be held as illegal, he said, urging the High Court to declare"
+                    " the CBI remand and custody and all subsequent proceedings including the further custody as"
+                    " illegal and void ab-initio. In a separate plea before the High Court, Kapoor's daughter Rakhee"
+                    " Kapoor-Tandon has sought exemption from in-person appearance before a special PMLA court. Rakhee"
+                    " has stated that she is a resident of the United Kingdom and is unable to travel to India owing"
+                    " to restrictions imposed due to the COVID-19 pandemic. According to the CBI, in the present case,"
+                    " Kapoor had obtained a gratification or pecuniary advantage of ₹ 307 crore, and thereby caused"
+                    " Yes Bank a loss of ₹ 1,800 crore by extending credit facilities to Avantha Group, when it was"
+                    " not eligible for the same"
+                ),
                 "question": "Is this person invovled in fraud?",
             }
         )

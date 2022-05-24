@@ -175,7 +175,19 @@ class ModelArguments:
     dtype: Optional[str] = field(
         default="float32",
         metadata={
-            "help": "Floating-point format in which the model weights should be initialized and trained. Choose one of `[float32, float16, bfloat16]`."
+            "help": (
+                "Floating-point format in which the model weights should be initialized and trained. Choose one of"
+                " `[float32, float16, bfloat16]`."
+            )
+        },
+    )
+    use_auth_token: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "with private models)."
+            )
         },
     )
 
@@ -215,38 +227,48 @@ class DataTrainingArguments:
     max_target_length: Optional[int] = field(
         default=128,
         metadata={
-            "help": "The maximum total sequence length for target text after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded."
+            "help": (
+                "The maximum total sequence length for target text after tokenization. Sequences longer "
+                "than this will be truncated, sequences shorter will be padded."
+            )
         },
     )
     val_max_target_length: Optional[int] = field(
         default=None,
         metadata={
-            "help": "The maximum total sequence length for validation target text after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded. Will default to `max_target_length`."
-            "This argument is also used to override the `max_length` param of `model.generate`, which is used "
-            "during evaluation."
+            "help": (
+                "The maximum total sequence length for validation target text after tokenization. Sequences longer "
+                "than this will be truncated, sequences shorter will be padded. Will default to `max_target_length`."
+                "This argument is also used to override the `max_length` param of `model.generate`, which is used "
+                "during evaluation."
+            )
         },
     )
     max_train_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of training examples to this "
+                "value if set."
+            )
         },
     )
     max_eval_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
+                "value if set."
+            )
         },
     )
     max_predict_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of prediction examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of prediction examples to this "
+                "value if set."
+            )
         },
     )
     preprocessing_num_workers: Optional[int] = field(
@@ -259,8 +281,10 @@ class DataTrainingArguments:
     num_beams: Optional[int] = field(
         default=None,
         metadata={
-            "help": "Number of beams to use for evaluation. This argument will be passed to `model.generate`, "
-            "which is used during evaluation."
+            "help": (
+                "Number of beams to use for evaluation. This argument will be passed to `model.generate`, "
+                "which is used during evaluation."
+            )
         },
     )
     overwrite_cache: bool = field(
@@ -418,6 +442,7 @@ def main():
             cache_dir=model_args.cache_dir,
             keep_in_memory=False,
             data_dir=data_args.data_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
         )
     else:
         data_files = {}
@@ -430,7 +455,12 @@ def main():
         if data_args.test_file is not None:
             data_files["test"] = data_args.test_file
             extension = data_args.test_file.split(".")[-1]
-        dataset = load_dataset(extension, data_files=data_files, cache_dir=model_args.cache_dir)
+        dataset = load_dataset(
+            extension,
+            data_files=data_files,
+            cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
@@ -439,12 +469,18 @@ def main():
         model_args.model_name_or_path,
         seed=training_args.seed,
         dtype=getattr(jnp, model_args.dtype),
+        use_auth_token=True if model_args.use_auth_token else None,
     )
     feature_extractor = AutoFeatureExtractor.from_pretrained(
-        model_args.model_name_or_path, cache_dir=model_args.cache_dir
+        model_args.model_name_or_path,
+        cache_dir=model_args.cache_dir,
+        use_auth_token=True if model_args.use_auth_token else None,
     )
     tokenizer = AutoTokenizer.from_pretrained(
-        model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
+        model_args.model_name_or_path,
+        cache_dir=model_args.cache_dir,
+        use_fast=model_args.use_fast_tokenizer,
+        use_auth_token=True if model_args.use_auth_token else None,
     )
     tokenizer.pad_token = tokenizer.convert_ids_to_tokens(model.config.pad_token_id)
 
@@ -604,7 +640,7 @@ def main():
     eval_batch_size = int(training_args.per_device_eval_batch_size) * jax.device_count()
     if training_args.block_size % train_batch_size > 0 or training_args.block_size % eval_batch_size > 0:
         raise ValueError(
-            f"`training_args.block_size` needs to be a multiple of the global train/eval batch size."
+            "`training_args.block_size` needs to be a multiple of the global train/eval batch size."
             f"Got {training_args.block_size}, {train_batch_size} and {eval_batch_size} respectively instead."
         )
 
@@ -613,7 +649,8 @@ def main():
             raise ValueError("--do_train requires a train dataset")
         train_dataset = dataset["train"]
         if data_args.max_train_samples is not None:
-            train_dataset = train_dataset.select(range(data_args.max_train_samples))
+            max_train_samples = min(len(train_dataset), data_args.max_train_samples)
+            train_dataset = train_dataset.select(range(max_train_samples))
         # remove problematic examples
         # (if feature extraction is performed at the beginning, the filtering is done during preprocessing below
         # instead here.)
@@ -646,7 +683,8 @@ def main():
             raise ValueError("--do_eval requires a validation dataset")
         eval_dataset = dataset["validation"]
         if data_args.max_eval_samples is not None:
-            eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
+            max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
+            eval_dataset = eval_dataset.select(range(max_eval_samples))
         # remove problematic examples
         # (if feature extraction is performed at the beginning, the filtering is done during preprocessing below
         # instead here.)
@@ -675,7 +713,8 @@ def main():
             raise ValueError("--do_predict requires a test dataset")
         predict_dataset = dataset["test"]
         if data_args.max_predict_samples is not None:
-            predict_dataset = predict_dataset.select(range(data_args.max_predict_samples))
+            max_predict_samples = min(len(predict_dataset), data_args.max_predict_samples)
+            predict_dataset = predict_dataset.select(range(max_predict_samples))
         # remove problematic examples
         # (if feature extraction is performed at the beginning, the filtering is done during preprocessing below
         # instead here.)
@@ -1114,7 +1153,7 @@ def main():
             )
 
             # train
-            for (batch_idx, _) in enumerate(tqdm(range(steps_per_epoch), desc="Training...", position=1, leave=False)):
+            for batch_idx, _ in enumerate(tqdm(range(steps_per_epoch), desc="Training...", position=1, leave=False)):
 
                 cur_step += 1
                 batch = next(train_batches)
@@ -1128,7 +1167,10 @@ def main():
                 if training_args.logging_steps > 0 and cur_step % training_args.logging_steps == 0:
 
                     _train_metric = unreplicate(train_metric)
-                    desc = f"Epoch... ({epoch + 1}/{num_epochs} | Step: {cur_step} | Loss: {_train_metric['loss']} | Learning Rate: {_train_metric['learning_rate']} | Time per step: {time_per_step})"
+                    desc = (
+                        f"Epoch... ({epoch + 1}/{num_epochs} | Step: {cur_step} | Loss: {_train_metric['loss']} |"
+                        f" Learning Rate: {_train_metric['learning_rate']} | Time per step: {time_per_step})"
+                    )
                     epochs.desc = desc
                     epochs.write(desc)
 

@@ -29,6 +29,7 @@ from requests import HTTPError
 from .dynamic_module_utils import custom_object_save
 from .utils import (
     FEATURE_EXTRACTOR_NAME,
+    HUGGINGFACE_CO_RESOLVE_ENDPOINT,
     EntryNotFoundError,
     PushToHubMixin,
     RepositoryNotFoundError,
@@ -433,10 +434,11 @@ class FeatureExtractionMixin(PushToHubMixin):
             )
         except ValueError:
             raise EnvironmentError(
-                "We couldn't connect to 'https://huggingface.co/' to load this model, couldn't find it in the cached "
-                f"files and it looks like {pretrained_model_name_or_path} is not the path to a directory containing a "
-                f"{FEATURE_EXTRACTOR_NAME} file.\nCheckout your internet connection or see how to run the library in "
-                "offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'."
+                f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this model, couldn't find it in"
+                f" the cached files and it looks like {pretrained_model_name_or_path} is not the path to a directory"
+                f" containing a {FEATURE_EXTRACTOR_NAME} file.\nCheckout your internet connection or see how to run"
+                " the library in offline mode at"
+                " 'https://huggingface.co/docs/transformers/installation#offline-mode'."
             )
         except EnvironmentError:
             raise EnvironmentError(
@@ -461,7 +463,8 @@ class FeatureExtractionMixin(PushToHubMixin):
             logger.info(f"loading feature extractor configuration file {feature_extractor_file}")
         else:
             logger.info(
-                f"loading feature extractor configuration file {feature_extractor_file} from cache at {resolved_feature_extractor_file}"
+                f"loading feature extractor configuration file {feature_extractor_file} from cache at"
+                f" {resolved_feature_extractor_file}"
             )
 
         return feature_extractor_dict, kwargs

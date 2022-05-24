@@ -29,32 +29,56 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.jso
 
 CONTEXT_ENCODER_PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "facebook/dpr-ctx_encoder-single-nq-base": "https://huggingface.co/facebook/dpr-ctx_encoder-single-nq-base/resolve/main/vocab.txt",
-        "facebook/dpr-ctx_encoder-multiset-base": "https://huggingface.co/facebook/dpr-ctx_encoder-multiset-base/resolve/main/vocab.txt",
+        "facebook/dpr-ctx_encoder-single-nq-base": (
+            "https://huggingface.co/facebook/dpr-ctx_encoder-single-nq-base/resolve/main/vocab.txt"
+        ),
+        "facebook/dpr-ctx_encoder-multiset-base": (
+            "https://huggingface.co/facebook/dpr-ctx_encoder-multiset-base/resolve/main/vocab.txt"
+        ),
     },
     "tokenizer_file": {
-        "facebook/dpr-ctx_encoder-single-nq-base": "https://huggingface.co/facebook/dpr-ctx_encoder-single-nq-base/resolve/main/tokenizer.json",
-        "facebook/dpr-ctx_encoder-multiset-base": "https://huggingface.co/facebook/dpr-ctx_encoder-multiset-base/resolve/main/tokenizer.json",
+        "facebook/dpr-ctx_encoder-single-nq-base": (
+            "https://huggingface.co/facebook/dpr-ctx_encoder-single-nq-base/resolve/main/tokenizer.json"
+        ),
+        "facebook/dpr-ctx_encoder-multiset-base": (
+            "https://huggingface.co/facebook/dpr-ctx_encoder-multiset-base/resolve/main/tokenizer.json"
+        ),
     },
 }
 QUESTION_ENCODER_PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "facebook/dpr-question_encoder-single-nq-base": "https://huggingface.co/facebook/dpr-question_encoder-single-nq-base/resolve/main/vocab.txt",
-        "facebook/dpr-question_encoder-multiset-base": "https://huggingface.co/facebook/dpr-question_encoder-multiset-base/resolve/main/vocab.txt",
+        "facebook/dpr-question_encoder-single-nq-base": (
+            "https://huggingface.co/facebook/dpr-question_encoder-single-nq-base/resolve/main/vocab.txt"
+        ),
+        "facebook/dpr-question_encoder-multiset-base": (
+            "https://huggingface.co/facebook/dpr-question_encoder-multiset-base/resolve/main/vocab.txt"
+        ),
     },
     "tokenizer_file": {
-        "facebook/dpr-question_encoder-single-nq-base": "https://huggingface.co/facebook/dpr-question_encoder-single-nq-base/resolve/main/tokenizer.json",
-        "facebook/dpr-question_encoder-multiset-base": "https://huggingface.co/facebook/dpr-question_encoder-multiset-base/resolve/main/tokenizer.json",
+        "facebook/dpr-question_encoder-single-nq-base": (
+            "https://huggingface.co/facebook/dpr-question_encoder-single-nq-base/resolve/main/tokenizer.json"
+        ),
+        "facebook/dpr-question_encoder-multiset-base": (
+            "https://huggingface.co/facebook/dpr-question_encoder-multiset-base/resolve/main/tokenizer.json"
+        ),
     },
 }
 READER_PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "facebook/dpr-reader-single-nq-base": "https://huggingface.co/facebook/dpr-reader-single-nq-base/resolve/main/vocab.txt",
-        "facebook/dpr-reader-multiset-base": "https://huggingface.co/facebook/dpr-reader-multiset-base/resolve/main/vocab.txt",
+        "facebook/dpr-reader-single-nq-base": (
+            "https://huggingface.co/facebook/dpr-reader-single-nq-base/resolve/main/vocab.txt"
+        ),
+        "facebook/dpr-reader-multiset-base": (
+            "https://huggingface.co/facebook/dpr-reader-multiset-base/resolve/main/vocab.txt"
+        ),
     },
     "tokenizer_file": {
-        "facebook/dpr-reader-single-nq-base": "https://huggingface.co/facebook/dpr-reader-single-nq-base/resolve/main/tokenizer.json",
-        "facebook/dpr-reader-multiset-base": "https://huggingface.co/facebook/dpr-reader-multiset-base/resolve/main/tokenizer.json",
+        "facebook/dpr-reader-single-nq-base": (
+            "https://huggingface.co/facebook/dpr-reader-single-nq-base/resolve/main/tokenizer.json"
+        ),
+        "facebook/dpr-reader-multiset-base": (
+            "https://huggingface.co/facebook/dpr-reader-multiset-base/resolve/main/tokenizer.json"
+        ),
     },
 }
 
@@ -234,9 +258,10 @@ class CustomDPRReaderTokenizerMixin:
         texts = texts if not isinstance(texts, str) else [texts]
         n_passages = len(titles)
         questions = questions if not isinstance(questions, str) else [questions] * n_passages
-        assert len(titles) == len(
-            texts
-        ), f"There should be as many titles than texts but got {len(titles)} titles and {len(texts)} texts."
+        if len(titles) != len(texts):
+            raise ValueError(
+                f"There should be as many titles than texts but got {len(titles)} titles and {len(texts)} texts."
+            )
         encoded_question_and_titles = super().__call__(questions, titles, padding=False, truncation=False)["input_ids"]
         encoded_texts = super().__call__(texts, add_special_tokens=False, padding=False, truncation=False)["input_ids"]
         encoded_inputs = {
@@ -341,15 +366,17 @@ class CustomDPRReaderTokenizerMixin:
         `span_score` order and keeping max `top_spans` spans. Spans longer that `max_answer_length` are ignored.
         """
         scores = []
-        for (start_index, start_score) in enumerate(start_logits):
-            for (answer_length, end_score) in enumerate(end_logits[start_index : start_index + max_answer_length]):
+        for start_index, start_score in enumerate(start_logits):
+            for answer_length, end_score in enumerate(end_logits[start_index : start_index + max_answer_length]):
                 scores.append(((start_index, start_index + answer_length), start_score + end_score))
         scores = sorted(scores, key=lambda x: x[1], reverse=True)
         chosen_span_intervals = []
         for (start_index, end_index), score in scores:
-            assert start_index <= end_index, f"Wrong span indices: [{start_index}:{end_index}]"
+            if start_index > end_index:
+                raise ValueError(f"Wrong span indices: [{start_index}:{end_index}]")
             length = end_index - start_index + 1
-            assert length <= max_answer_length, f"Span is too long: {length} > {max_answer_length}"
+            if length > max_answer_length:
+                raise ValueError(f"Span is too long: {length} > {max_answer_length}")
             if any(
                 [
                     start_index <= prev_start_index <= prev_end_index <= end_index

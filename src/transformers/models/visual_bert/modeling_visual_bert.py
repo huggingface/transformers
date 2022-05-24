@@ -17,7 +17,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -31,12 +31,8 @@ from ...modeling_outputs import (
     MultipleChoiceModelOutput,
     SequenceClassifierOutput,
 )
-from ...modeling_utils import (
-    PreTrainedModel,
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
-)
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -162,7 +158,8 @@ class VisualBertEmbeddings(nn.Module):
                 if (image_text_alignment_mask == 0).sum() != 0:
                     image_text_alignment_mask[image_text_alignment_mask == 0] = 1  # Avoid divide by zero error
                     logger.warning(
-                        "Found 0 values in `image_text_alignment_mask`. Setting them to 1 to avoid divide-by-zero error."
+                        "Found 0 values in `image_text_alignment_mask`. Setting them to 1 to avoid divide-by-zero"
+                        " error."
                     )
                 visual_position_embeddings = visual_position_embeddings / image_text_alignment_mask.unsqueeze(-1)
 
@@ -720,20 +717,20 @@ class VisualBertModel(VisualBertPreTrainedModel):
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        visual_embeds=None,
-        visual_attention_mask=None,
-        visual_token_type_ids=None,
-        image_text_alignment=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        visual_embeds: Optional[torch.FloatTensor] = None,
+        visual_attention_mask: Optional[torch.LongTensor] = None,
+        visual_token_type_ids: Optional[torch.LongTensor] = None,
+        image_text_alignment: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPooling]:
         r"""
 
         Returns:
@@ -798,12 +795,12 @@ class VisualBertModel(VisualBertPreTrainedModel):
         if visual_embeds is not None:
             combined_attention_mask = torch.cat((attention_mask, visual_attention_mask), dim=-1)
             extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
-                combined_attention_mask, [batch_size, input_shape + visual_input_shape], device
+                combined_attention_mask, (batch_size, input_shape + visual_input_shape)
             )
 
         else:
             extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
-                attention_mask, [batch_size, input_shape], device
+                attention_mask, (batch_size, input_shape)
             )
 
         # Prepare head mask if needed
@@ -893,22 +890,22 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
     @replace_return_docstrings(output_type=VisualBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        visual_embeds=None,
-        visual_attention_mask=None,
-        visual_token_type_ids=None,
-        image_text_alignment=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-        sentence_image_labels=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        visual_embeds: Optional[torch.FloatTensor] = None,
+        visual_attention_mask: Optional[torch.LongTensor] = None,
+        visual_token_type_ids: Optional[torch.LongTensor] = None,
+        image_text_alignment: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[torch.LongTensor] = None,
+        sentence_image_labels: Optional[torch.LongTensor] = None,
+    ) -> Union[Tuple[torch.Tensor], VisualBertForPreTrainingOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, total_sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -982,7 +979,7 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
             total_size = attention_mask.size(-1) + visual_attention_mask.size(-1)
             if labels.size(-1) != total_size:
                 raise ValueError(
-                    f"The labels provided should have same sequence length as total attention mask. "
+                    "The labels provided should have same sequence length as total attention mask. "
                     f"Found labels with sequence length {labels.size(-1)}, expected {total_size}."
                 )
 
@@ -995,7 +992,7 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
             total_size = attention_mask.size(-1) + visual_attention_mask.size(-1)
             if labels.size(-1) != total_size:
                 raise ValueError(
-                    f"The labels provided should have same sequence length as total attention mask. "
+                    "The labels provided should have same sequence length as total attention mask. "
                     f"Found labels with sequence length {labels.size(-1)}, expected {total_size}."
                 )
 
@@ -1039,21 +1036,21 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
     @replace_return_docstrings(output_type=MultipleChoiceModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        visual_embeds=None,
-        visual_attention_mask=None,
-        visual_token_type_ids=None,
-        image_text_alignment=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        visual_embeds: Optional[torch.FloatTensor] = None,
+        visual_attention_mask: Optional[torch.LongTensor] = None,
+        visual_token_type_ids: Optional[torch.LongTensor] = None,
+        image_text_alignment: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[torch.LongTensor] = None,
+    ) -> Union[Tuple[torch.Tensor], MultipleChoiceModelOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
@@ -1191,21 +1188,21 @@ class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        visual_embeds=None,
-        visual_attention_mask=None,
-        visual_token_type_ids=None,
-        image_text_alignment=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        visual_embeds: Optional[torch.FloatTensor] = None,
+        visual_attention_mask: Optional[torch.LongTensor] = None,
+        visual_token_type_ids: Optional[torch.LongTensor] = None,
+        image_text_alignment: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[torch.LongTensor] = None,
+    ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, total_sequence_length)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1317,21 +1314,21 @@ class VisualBertForVisualReasoning(VisualBertPreTrainedModel):
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        visual_embeds=None,
-        visual_attention_mask=None,
-        visual_token_type_ids=None,
-        image_text_alignment=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        visual_embeds: Optional[torch.FloatTensor] = None,
+        visual_attention_mask: Optional[torch.LongTensor] = None,
+        visual_token_type_ids: Optional[torch.LongTensor] = None,
+        image_text_alignment: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[torch.LongTensor] = None,
+    ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1477,22 +1474,22 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        visual_embeds=None,
-        visual_attention_mask=None,
-        visual_token_type_ids=None,
-        image_text_alignment=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        region_to_phrase_position=None,
-        labels=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        visual_embeds: Optional[torch.FloatTensor] = None,
+        visual_attention_mask: Optional[torch.LongTensor] = None,
+        visual_token_type_ids: Optional[torch.LongTensor] = None,
+        image_text_alignment: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        region_to_phrase_position: Optional[torch.LongTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+    ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
         r"""
         region_to_phrase_position (`torch.LongTensor` of shape `(batch_size, total_sequence_length)`, *optional*):
             The positions depicting the position of the image embedding corresponding to the textual tokens.

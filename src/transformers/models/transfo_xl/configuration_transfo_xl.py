@@ -30,8 +30,8 @@ class TransfoXLConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`TransfoXLModel`] or a [`TFTransfoXLModel`]. It is
     used to instantiate a Transformer-XL model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the [Transformer
-    XL](https://huggingface.co/transfo-xl-wt103) architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the TransfoXL
+    [transfo-xl-wt103](https://huggingface.co/transfo-xl-wt103) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

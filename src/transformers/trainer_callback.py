@@ -473,7 +473,7 @@ class ProgressCallback(TrainerCallback):
             self.current_step = state.global_step
 
     def on_prediction_step(self, args, state, control, eval_dataloader=None, **kwargs):
-        if state.is_local_process_zero and has_length(eval_dataloader.dataset):
+        if state.is_local_process_zero and has_length(eval_dataloader):
             if self.prediction_bar is None:
                 self.prediction_bar = tqdm(total=len(eval_dataloader), leave=self.training_bar is None)
             self.prediction_bar.update(1)
@@ -556,7 +556,8 @@ class EarlyStoppingCallback(TrainerCallback):
 
         if metric_value is None:
             logger.warning(
-                f"early stopping required metric_for_best_model, but did not find {metric_to_check} so early stopping is disabled"
+                f"early stopping required metric_for_best_model, but did not find {metric_to_check} so early stopping"
+                " is disabled"
             )
             return
 

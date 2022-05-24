@@ -42,7 +42,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list
+from ...tf_utils import shape_list, stable_softmax
 from ...utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
     ModelOutput,
@@ -84,7 +84,7 @@ class TFFunnelEmbeddings(tf.keras.layers.Layer):
 
         self.vocab_size = config.vocab_size
         self.hidden_size = config.hidden_size
-        self.initializer_range = config.initializer_range
+        self.initializer_std = 1.0 if config.initializer_std is None else config.initializer_std
 
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout)
@@ -94,7 +94,7 @@ class TFFunnelEmbeddings(tf.keras.layers.Layer):
             self.weight = self.add_weight(
                 name="weight",
                 shape=[self.vocab_size, self.hidden_size],
-                initializer=get_initializer(initializer_range=self.initializer_range),
+                initializer=get_initializer(initializer_range=self.initializer_std),
             )
 
         super().build(input_shape)
@@ -530,7 +530,7 @@ class TFFunnelRelMultiheadAttention(tf.keras.layers.Layer):
             attn_score = attn_score - (INF * (1 - attention_mask[:, None, None]))
 
         # attention probability
-        attn_prob = tf.nn.softmax(attn_score, axis=-1)
+        attn_prob = stable_softmax(attn_score, axis=-1)
         attn_prob = self.attention_dropout(attn_prob, training=training)
 
         # attention output, shape batch_size x seq_len x n_head x d_head
@@ -623,7 +623,7 @@ class TFFunnelEncoder(tf.keras.layers.Layer):
                     hidden, attention_inputs
                 )
 
-            for (layer_index, layer) in enumerate(block):
+            for layer_index, layer in enumerate(block):
                 for repeat_index in range(self.block_repeats[block_index]):
                     do_pooling = (repeat_index == 0) and (layer_index == 0) and pooling_flag
                     if do_pooling:
@@ -761,7 +761,6 @@ class TFFunnelBaseLayer(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ):
 
         if input_ids is not None and inputs_embeds is not None:
@@ -835,7 +834,6 @@ class TFFunnelMainLayer(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -1117,7 +1115,6 @@ class TFFunnelBaseModel(TFFunnelPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[Tuple[tf.Tensor], TFBaseModelOutput]:
         return self.funnel(
             input_ids=input_ids,
@@ -1165,7 +1162,6 @@ class TFFunnelModel(TFFunnelPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[Tuple[tf.Tensor], TFBaseModelOutput]:
 
         return self.funnel(
@@ -1293,7 +1289,6 @@ class TFFunnelForMaskedLM(TFFunnelPreTrainedModel, TFMaskedLanguageModelingLoss)
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[Tuple[tf.Tensor], TFMaskedLMOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1369,7 +1364,6 @@ class TFFunnelForSequenceClassification(TFFunnelPreTrainedModel, TFSequenceClass
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[Tuple[tf.Tensor], TFSequenceClassifierOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
@@ -1455,7 +1449,6 @@ class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[Tuple[tf.Tensor], TFMultipleChoiceModelOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
@@ -1566,7 +1559,6 @@ class TFFunnelForTokenClassification(TFFunnelPreTrainedModel, TFTokenClassificat
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[Tuple[tf.Tensor], TFTokenClassifierOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1645,7 +1637,6 @@ class TFFunnelForQuestionAnswering(TFFunnelPreTrainedModel, TFQuestionAnsweringL
         start_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
         end_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[Tuple[tf.Tensor], TFQuestionAnsweringModelOutput]:
         r"""
         start_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):

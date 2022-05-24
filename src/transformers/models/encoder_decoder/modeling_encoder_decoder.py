@@ -15,14 +15,14 @@
 """ Classes to support Encoder-Decoder architectures"""
 
 import warnings
-from typing import Optional
+from typing import Optional, Tuple, Union
 
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...configuration_utils import PretrainedConfig
-from ...modeling_outputs import Seq2SeqLMOutput
+from ...modeling_outputs import BaseModelOutput, Seq2SeqLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from ..auto.configuration_auto import AutoConfig
@@ -35,10 +35,10 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "EncoderDecoderConfig"
 
 DEPRECATION_WARNING = (
-    "Version v4.12.0 introduces a better way to train encoder-decoder models by computing the loss inside the "
-    "encoder-decoder framework rather than in the decoder itself. You may observe training discrepancies if fine-tuning "
-    "a model trained with versions anterior to 4.12.0. The decoder_input_ids are now created based on the labels, no "
-    "need to pass them yourself anymore."
+    "Version v4.12.0 introduces a better way to train encoder-decoder models by computing the loss inside the"
+    " encoder-decoder framework rather than in the decoder itself. You may observe training discrepancies if"
+    " fine-tuning a model trained with versions anterior to 4.12.0. The decoder_input_ids are now created based on the"
+    " labels, no need to pass them yourself anymore."
 )
 
 ENCODER_DECODER_START_DOCSTRING = r"""
@@ -189,10 +189,10 @@ class EncoderDecoderModel(PreTrainedModel):
         if config.decoder.cross_attention_hidden_size is not None:
             if config.decoder.cross_attention_hidden_size != config.encoder.hidden_size:
                 raise ValueError(
-                    "If `cross_attention_hidden_size` is specified in the decoder's configuration, "
-                    "it has to be equal to the encoder's `hidden_size`. "
-                    f"Got {config.decoder.cross_attention_hidden_size} for `config.decoder.cross_attention_hidden_size` "
-                    f"and {config.encoder.hidden_size} for `config.encoder.hidden_size`."
+                    "If `cross_attention_hidden_size` is specified in the decoder's configuration, it has to be equal"
+                    f" to the encoder's `hidden_size`. Got {config.decoder.cross_attention_hidden_size} for"
+                    f" `config.decoder.cross_attention_hidden_size` and {config.encoder.hidden_size} for"
+                    " `config.encoder.hidden_size`."
                 )
 
         # initialize with config
@@ -213,11 +213,13 @@ class EncoderDecoderModel(PreTrainedModel):
 
         if self.encoder.config.to_dict() != self.config.encoder.to_dict():
             logger.warning(
-                f"Config of the encoder: {self.encoder.__class__} is overwritten by shared encoder config: {self.config.encoder}"
+                f"Config of the encoder: {self.encoder.__class__} is overwritten by shared encoder config:"
+                f" {self.config.encoder}"
             )
         if self.decoder.config.to_dict() != self.config.decoder.to_dict():
             logger.warning(
-                f"Config of the decoder: {self.decoder.__class__} is overwritten by shared decoder config: {self.config.decoder}"
+                f"Config of the decoder: {self.decoder.__class__} is overwritten by shared decoder config:"
+                f" {self.config.decoder}"
             )
 
         # make sure that the individual model's config refers to the shared config
@@ -401,10 +403,9 @@ class EncoderDecoderModel(PreTrainedModel):
 
                 if decoder_config.is_decoder is False or decoder_config.add_cross_attention is False:
                     logger.info(
-                        f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model. "
-                        f"Cross attention layers are added to {decoder_pretrained_model_name_or_path} "
-                        f"and randomly initialized if {decoder_pretrained_model_name_or_path}'s architecture allows for "
-                        "cross attention layers."
+                        f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model. Cross attention"
+                        f" layers are added to {decoder_pretrained_model_name_or_path} and randomly initialized if"
+                        f" {decoder_pretrained_model_name_or_path}'s architecture allows for cross attention layers."
                     )
                     decoder_config.is_decoder = True
                     decoder_config.add_cross_attention = True
@@ -430,21 +431,21 @@ class EncoderDecoderModel(PreTrainedModel):
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        encoder_outputs=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.BoolTensor] = None,
+        encoder_outputs: Optional[Tuple[torch.FloatTensor]] = None,
+        past_key_values: Tuple[Tuple[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         **kwargs,
-    ):
+    ) -> Union[Tuple, Seq2SeqLMOutput]:
         r"""
         Returns:
 
@@ -457,7 +458,7 @@ class EncoderDecoderModel(PreTrainedModel):
         >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
         >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained(
         ...     "bert-base-uncased", "bert-base-uncased"
-        >>> )  # initialize Bert2Bert from pre-trained checkpoints
+        ... )  # initialize Bert2Bert from pre-trained checkpoints
 
         >>> # training
         >>> model.config.decoder_start_token_id = tokenizer.cls_token_id
@@ -494,6 +495,8 @@ class EncoderDecoderModel(PreTrainedModel):
                 return_dict=return_dict,
                 **kwargs_encoder,
             )
+        elif isinstance(encoder_outputs, tuple):
+            encoder_outputs = BaseModelOutput(*encoder_outputs)
 
         encoder_hidden_states = encoder_outputs[0]
 
@@ -570,8 +573,9 @@ class EncoderDecoderModel(PreTrainedModel):
 
     def resize_token_embeddings(self, *args, **kwargs):
         raise NotImplementedError(
-            "Resizing the embedding layers via the EncoderDecoderModel directly is not supported. "
-            "Please use the respective methods of the wrapped objects (model.encoder.resize_token_embeddings(...) or model.decoder.resize_token_embeddings(...))"
+            "Resizing the embedding layers via the EncoderDecoderModel directly is not supported. Please use the"
+            " respective methods of the wrapped objects (model.encoder.resize_token_embeddings(...) or"
+            " model.decoder.resize_token_embeddings(...))"
         )
 
     def _reorder_cache(self, past, beam_idx):

@@ -25,8 +25,9 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput, SequenceClassifierOutput
-from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput, MaskedLMOutput
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -185,7 +186,8 @@ class PatchEmbeddings(nn.Module):
         if not interpolate_pos_encoding:
             if height != self.image_size[0] or width != self.image_size[1]:
                 raise ValueError(
-                    f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
+                    f"Input image size ({height}*{width}) doesn't match model"
+                    f" ({self.image_size[0]}*{self.image_size[1]})."
                 )
         x = self.projection(pixel_values).flatten(2).transpose(1, 2)
         return x
@@ -212,7 +214,7 @@ class ViTSelfAttention(nn.Module):
 
     def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(*new_x_shape)
+        x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
     def forward(
@@ -244,7 +246,7 @@ class ViTSelfAttention(nn.Module):
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(*new_context_layer_shape)
+        context_layer = context_layer.view(new_context_layer_shape)
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
@@ -584,7 +586,8 @@ class ViTModel(ViTPreTrainedModel):
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
+            head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
+            return head_outputs + encoder_outputs[1:]
 
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
@@ -610,7 +613,8 @@ class ViTPooler(nn.Module):
 
 
 @add_start_docstrings(
-    "ViT Model with a decoder on top for masked image modeling, as proposed in `SimMIM <https://arxiv.org/abs/2111.09886>`__.",
+    "ViT Model with a decoder on top for masked image modeling, as proposed in `SimMIM"
+    " <https://arxiv.org/abs/2111.09886>`__.",
     VIT_START_DOCSTRING,
 )
 class ViTForMaskedImageModeling(ViTPreTrainedModel):
@@ -685,7 +689,7 @@ class ViTForMaskedImageModeling(ViTPreTrainedModel):
         # Reshape to (batch_size, num_channels, height, width)
         sequence_output = sequence_output[:, 1:]
         batch_size, sequence_length, num_channels = sequence_output.shape
-        height = width = int(sequence_length**0.5)
+        height = width = math.floor(sequence_length**0.5)
         sequence_output = sequence_output.permute(0, 2, 1).reshape(batch_size, num_channels, height, width)
 
         # Reconstruct pixel values
@@ -705,7 +709,7 @@ class ViTForMaskedImageModeling(ViTPreTrainedModel):
             masked_im_loss = (reconstruction_loss * mask).sum() / (mask.sum() + 1e-5) / self.config.num_channels
 
         if not return_dict:
-            output = (reconstructed_pixel_values,) + outputs[2:]
+            output = (reconstructed_pixel_values,) + outputs[1:]
             return ((masked_im_loss,) + output) if masked_im_loss is not None else output
 
         return MaskedLMOutput(
@@ -740,7 +744,7 @@ class ViTForImageClassification(ViTPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=SequenceClassifierOutput,
+        output_type=ImageClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
     )
@@ -753,7 +757,7 @@ class ViTForImageClassification(ViTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[tuple, SequenceClassifierOutput]:
+    ) -> Union[tuple, ImageClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -797,11 +801,12 @@ class ViTForImageClassification(ViTPreTrainedModel):
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)
+
         if not return_dict:
-            output = (logits,) + outputs[2:]
+            output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
-        return SequenceClassifierOutput(
+        return ImageClassifierOutput(
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,

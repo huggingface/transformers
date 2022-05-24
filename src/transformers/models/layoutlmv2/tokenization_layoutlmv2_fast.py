@@ -23,17 +23,22 @@ from typing import Dict, List, Optional, Tuple, Union
 from tokenizers import normalizers
 
 from ...tokenization_utils_base import (
-    ENCODE_KWARGS_DOCSTRING,
     BatchEncoding,
     EncodedInput,
+    PaddingStrategy,
     PreTokenizedInput,
+    TensorType,
     TextInput,
     TextInputPair,
     TruncationStrategy,
 )
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
-from ...utils import PaddingStrategy, TensorType, add_end_docstrings, logging
-from .tokenization_layoutlmv2 import LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING, LayoutLMv2Tokenizer
+from ...utils import add_end_docstrings, logging
+from .tokenization_layoutlmv2 import (
+    LAYOUTLMV2_ENCODE_KWARGS_DOCSTRING,
+    LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING,
+    LayoutLMv2Tokenizer,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -42,10 +47,14 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.jso
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "microsoft/layoutlmv2-base-uncased": "https://huggingface.co/microsoft/layoutlmv2-base-uncased/resolve/main/vocab.txt",
+        "microsoft/layoutlmv2-base-uncased": (
+            "https://huggingface.co/microsoft/layoutlmv2-base-uncased/resolve/main/vocab.txt"
+        ),
     },
     "tokenizer_file": {
-        "microsoft/layoutlmv2-base-uncased": "https://huggingface.co/microsoft/layoutlmv2-base-uncased/resolve/main/tokenizer.json",
+        "microsoft/layoutlmv2-base-uncased": (
+            "https://huggingface.co/microsoft/layoutlmv2-base-uncased/resolve/main/tokenizer.json"
+        ),
     },
 }
 
@@ -167,7 +176,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         self.pad_token_label = pad_token_label
         self.only_label_first_subword = only_label_first_subword
 
-    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    @add_end_docstrings(LAYOUTLMV2_ENCODE_KWARGS_DOCSTRING, LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
@@ -251,20 +260,23 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
             is_batched = isinstance(text, (list, tuple)) and text and isinstance(text[0], (list, tuple))
 
         words = text if text_pair is None else text_pair
-        assert boxes is not None, "You must provide corresponding bounding boxes"
+        if boxes is None:
+            raise ValueError("You must provide corresponding bounding boxes")
         if is_batched:
-            assert len(words) == len(boxes), "You must provide words and boxes for an equal amount of examples"
+            if len(words) != len(boxes):
+                raise ValueError("You must provide words and boxes for an equal amount of examples")
             for words_example, boxes_example in zip(words, boxes):
-                assert len(words_example) == len(
-                    boxes_example
-                ), "You must provide as many words as there are bounding boxes"
+                if len(words_example) != len(boxes_example):
+                    raise ValueError("You must provide as many words as there are bounding boxes")
         else:
-            assert len(words) == len(boxes), "You must provide as many words as there are bounding boxes"
+            if len(words) != len(boxes):
+                raise ValueError("You must provide as many words as there are bounding boxes")
 
         if is_batched:
             if text_pair is not None and len(text) != len(text_pair):
                 raise ValueError(
-                    f"batch length of `text`: {len(text)} does not match batch length of `text_pair`: {len(text_pair)}."
+                    f"batch length of `text`: {len(text)} does not match batch length of `text_pair`:"
+                    f" {len(text_pair)}."
                 )
             batch_text_or_text_pairs = list(zip(text, text_pair)) if text_pair is not None else text
             is_pair = bool(text_pair is not None)
@@ -312,7 +324,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
                 **kwargs,
             )
 
-    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    @add_end_docstrings(LAYOUTLMV2_ENCODE_KWARGS_DOCSTRING, LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def batch_encode_plus(
         self,
         batch_text_or_text_pairs: Union[
@@ -380,7 +392,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
 
         return encodings[0].tokens
 
-    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    @add_end_docstrings(LAYOUTLMV2_ENCODE_KWARGS_DOCSTRING, LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def encode_plus(
         self,
         text: Union[TextInput, PreTokenizedInput],

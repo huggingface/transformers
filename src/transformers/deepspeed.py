@@ -250,7 +250,7 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         self.fill_match("bf16.enabled", (args.bf16 or args.bf16_full_eval), "bf16|bf16_full_eval")
 
         # deepspeed's default mode is fp16 unless there is a config that says differently
-        if self.is_true("bfoat16.enabled"):
+        if self.is_true("bf16.enabled"):
             self._dtype = torch.bfloat16
         elif self.is_false("fp16.enabled"):
             self._dtype = torch.float32
@@ -261,13 +261,13 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         """
         This stage is run after we have the model and know num_training_steps.
 
-        Now we we can complete the configuration process.
+        Now we can complete the configuration process.
         """
         # zero
+        hidden_size = model.config.hidden_size
+        self.fill_only("zero_optimization.reduce_bucket_size", hidden_size * hidden_size)
         if self.is_zero3():
             # automatically assign the optimal config values based on model config
-            hidden_size = model.config.hidden_size
-            self.fill_only("zero_optimization.reduce_bucket_size", hidden_size * hidden_size)
             self.fill_only("zero_optimization.stage3_prefetch_bucket_size", 0.9 * hidden_size * hidden_size)
             self.fill_only("zero_optimization.stage3_param_persistence_threshold", 10 * hidden_size)
 
@@ -278,8 +278,8 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         if len(self.mismatches) > 0:
             mismatches = "\n".join(self.mismatches)
             raise ValueError(
-                f"Please correct the following DeepSpeed config values that mismatch TrainingArguments values:\n{mismatches}\n"
-                "The easiest method is to set these DeepSpeed config values to 'auto'."
+                "Please correct the following DeepSpeed config values that mismatch TrainingArguments"
+                f" values:\n{mismatches}\nThe easiest method is to set these DeepSpeed config values to 'auto'."
             )
 
 
@@ -340,7 +340,8 @@ def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps
     else:
         if hf_deepspeed_config.is_offload():
             logger.info(
-                "Detected ZeRO Offload and non-DeepSpeed optimizers: This combination should work as long as the custom optimizer has both CPU and GPU implementation (except LAMB)"
+                "Detected ZeRO Offload and non-DeepSpeed optimizers: This combination should work as long as the"
+                " custom optimizer has both CPU and GPU implementation (except LAMB)"
             )
 
         # ds supports Adam, OneBitAdam, and Lamb optimizers and can import other optimizers from torch.

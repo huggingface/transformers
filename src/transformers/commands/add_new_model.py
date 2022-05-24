@@ -15,6 +15,7 @@
 import json
 import os
 import shutil
+import warnings
 from argparse import ArgumentParser, Namespace
 from pathlib import Path
 from typing import List
@@ -54,6 +55,11 @@ class AddNewModelCommand(BaseTransformersCLICommand):
         self._path = path
 
     def run(self):
+        warnings.warn(
+            "The command `transformers-cli add-new-model` is deprecated and will be removed in v5 of Transformers. "
+            "It is not actively maintained anymore, so might give a result that won't pass all tests and quality "
+            "checks, you should use `transformers-cli add-new-model-like` instead."
+        )
         if not _has_cookiecutter:
             raise ImportError(
                 "Model creation dependencies are required to use the `add_new_model` command. Install them by running "
@@ -102,10 +108,10 @@ class AddNewModelCommand(BaseTransformersCLICommand):
 
         model_dir = f"{path_to_transformer_root}/src/transformers/models/{lowercase_model_name}"
         os.makedirs(model_dir, exist_ok=True)
-        os.makedirs(f"{path_to_transformer_root}/tests/{lowercase_model_name}", exist_ok=True)
+        os.makedirs(f"{path_to_transformer_root}/tests/models/{lowercase_model_name}", exist_ok=True)
 
         # Tests require submodules as they have parent imports
-        with open(f"{path_to_transformer_root}/tests/{lowercase_model_name}/__init__.py", "w"):
+        with open(f"{path_to_transformer_root}/tests/models/{lowercase_model_name}/__init__.py", "w"):
             pass
 
         shutil.move(
@@ -136,7 +142,7 @@ class AddNewModelCommand(BaseTransformersCLICommand):
 
             shutil.move(
                 f"{directory}/test_modeling_{lowercase_model_name}.py",
-                f"{path_to_transformer_root}/tests/{lowercase_model_name}/test_modeling_{lowercase_model_name}.py",
+                f"{path_to_transformer_root}/tests/models/{lowercase_model_name}/test_modeling_{lowercase_model_name}.py",
             )
         else:
             os.remove(f"{directory}/modeling_{lowercase_model_name}.py")
@@ -153,7 +159,7 @@ class AddNewModelCommand(BaseTransformersCLICommand):
 
             shutil.move(
                 f"{directory}/test_modeling_tf_{lowercase_model_name}.py",
-                f"{path_to_transformer_root}/tests/{lowercase_model_name}/test_modeling_tf_{lowercase_model_name}.py",
+                f"{path_to_transformer_root}/tests/models/{lowercase_model_name}/test_modeling_tf_{lowercase_model_name}.py",
             )
         else:
             os.remove(f"{directory}/modeling_tf_{lowercase_model_name}.py")
@@ -170,7 +176,7 @@ class AddNewModelCommand(BaseTransformersCLICommand):
 
             shutil.move(
                 f"{directory}/test_modeling_flax_{lowercase_model_name}.py",
-                f"{path_to_transformer_root}/tests/{lowercase_model_name}/test_modeling_flax_{lowercase_model_name}.py",
+                f"{path_to_transformer_root}/tests/models/{lowercase_model_name}/test_modeling_flax_{lowercase_model_name}.py",
             )
         else:
             os.remove(f"{directory}/modeling_flax_{lowercase_model_name}.py")
@@ -178,7 +184,7 @@ class AddNewModelCommand(BaseTransformersCLICommand):
 
         shutil.move(
             f"{directory}/{lowercase_model_name}.mdx",
-            f"{path_to_transformer_root}/docs/source/model_doc/{lowercase_model_name}.mdx",
+            f"{path_to_transformer_root}/docs/source/en/model_doc/{lowercase_model_name}.mdx",
         )
 
         shutil.move(

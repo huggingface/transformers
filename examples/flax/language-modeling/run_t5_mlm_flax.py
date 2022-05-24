@@ -135,8 +135,9 @@ class ModelArguments:
     model_name_or_path: Optional[str] = field(
         default=None,
         metadata={
-            "help": "The model checkpoint for weights initialization."
-            "Don't set if you want to train a model from scratch."
+            "help": (
+                "The model checkpoint for weights initialization.Don't set if you want to train a model from scratch."
+            )
         },
     )
     model_type: Optional[str] = field(
@@ -159,7 +160,19 @@ class ModelArguments:
     dtype: Optional[str] = field(
         default="float32",
         metadata={
-            "help": "Floating-point format in which the model weights should be initialized and trained. Choose one of `[float32, float16, bfloat16]`."
+            "help": (
+                "Floating-point format in which the model weights should be initialized and trained. Choose one of"
+                " `[float32, float16, bfloat16]`."
+            )
+        },
+    )
+    use_auth_token: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "with private models)."
+            )
         },
     )
 
@@ -201,7 +214,10 @@ class DataTrainingArguments:
     max_seq_length: Optional[int] = field(
         default=None,
         metadata={
-            "help": "The maximum total input sequence length after tokenization and masking. Sequences longer than this will be truncated. Default to the max input length of the model."
+            "help": (
+                "The maximum total input sequence length after tokenization and masking. Sequences longer than this"
+                " will be truncated. Default to the max input length of the model."
+            )
         },
     )
     preprocessing_num_workers: Optional[int] = field(
@@ -330,15 +346,17 @@ class FlaxDataCollatorForT5MLM:
 
         if batch["input_ids"].shape[-1] != self.input_length:
             raise ValueError(
-                f"`input_ids` are incorrectly preprocessed. `input_ids` length is {batch['input_ids'].shape[-1]}, but should be {self.target_length}."
+                f"`input_ids` are incorrectly preprocessed. `input_ids` length is {batch['input_ids'].shape[-1]}, but"
+                f" should be {self.target_length}."
             )
 
         if batch["labels"].shape[-1] != self.target_length:
             raise ValueError(
-                f"`labels` are incorrectly preprocessed. `labels` length is {batch['labels'].shape[-1]}, but should be {self.target_length}."
+                f"`labels` are incorrectly preprocessed. `labels` length is {batch['labels'].shape[-1]}, but should be"
+                f" {self.target_length}."
             )
 
-        # to check that tokens are correctly proprocessed, one can run `self.tokenizer.batch_decode(input_ids)` and `self.tokenizer.batch_decode(labels)` here...
+        # to check that tokens are correctly preprocessed, one can run `self.tokenizer.batch_decode(input_ids)` and `self.tokenizer.batch_decode(labels)` here...
         batch["decoder_input_ids"] = shift_tokens_right(
             batch["labels"], self.pad_token_id, self.decoder_start_token_id
         )
@@ -525,7 +543,12 @@ def main():
     # 'text' is found. You can easily tweak this behavior (see below).
     if data_args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
-        datasets = load_dataset(data_args.dataset_name, data_args.dataset_config_name, cache_dir=model_args.cache_dir)
+        datasets = load_dataset(
+            data_args.dataset_name,
+            data_args.dataset_config_name,
+            cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
 
         if "validation" not in datasets.keys():
             datasets["validation"] = load_dataset(
@@ -533,12 +556,14 @@ def main():
                 data_args.dataset_config_name,
                 split=f"train[:{data_args.validation_split_percentage}%]",
                 cache_dir=model_args.cache_dir,
+                use_auth_token=True if model_args.use_auth_token else None,
             )
             datasets["train"] = load_dataset(
                 data_args.dataset_name,
                 data_args.dataset_config_name,
                 split=f"train[{data_args.validation_split_percentage}%:]",
                 cache_dir=model_args.cache_dir,
+                use_auth_token=True if model_args.use_auth_token else None,
             )
     else:
         data_files = {}
@@ -549,7 +574,12 @@ def main():
         extension = data_args.train_file.split(".")[-1]
         if extension == "txt":
             extension = "text"
-        datasets = load_dataset(extension, data_files=data_files, cache_dir=model_args.cache_dir)
+        datasets = load_dataset(
+            extension,
+            data_files=data_files,
+            cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
 
         if "validation" not in datasets.keys():
             datasets["validation"] = load_dataset(
@@ -557,12 +587,14 @@ def main():
                 data_files=data_files,
                 split=f"train[:{data_args.validation_split_percentage}%]",
                 cache_dir=model_args.cache_dir,
+                use_auth_token=True if model_args.use_auth_token else None,
             )
             datasets["train"] = load_dataset(
                 extension,
                 data_files=data_files,
                 split=f"train[{data_args.validation_split_percentage}%:]",
                 cache_dir=model_args.cache_dir,
+                use_auth_token=True if model_args.use_auth_token else None,
             )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
@@ -571,11 +603,17 @@ def main():
 
     if model_args.tokenizer_name:
         tokenizer = AutoTokenizer.from_pretrained(
-            model_args.tokenizer_name, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
+            model_args.tokenizer_name,
+            cache_dir=model_args.cache_dir,
+            use_fast=model_args.use_fast_tokenizer,
+            use_auth_token=True if model_args.use_auth_token else None,
         )
     elif model_args.model_name_or_path:
         tokenizer = AutoTokenizer.from_pretrained(
-            model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
+            model_args.model_name_or_path,
+            cache_dir=model_args.cache_dir,
+            use_fast=model_args.use_fast_tokenizer,
+            use_auth_token=True if model_args.use_auth_token else None,
         )
     else:
         raise ValueError(
@@ -585,10 +623,17 @@ def main():
 
     if model_args.config_name:
         config = T5Config.from_pretrained(
-            model_args.config_name, cache_dir=model_args.cache_dir, vocab_size=len(tokenizer)
+            model_args.config_name,
+            cache_dir=model_args.cache_dir,
+            vocab_size=len(tokenizer),
+            use_auth_token=True if model_args.use_auth_token else None,
         )
     elif model_args.model_name_or_path:
-        config = T5Config.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
+        config = T5Config.from_pretrained(
+            model_args.model_name_or_path,
+            cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
         logger.warning("You are instantiating a new config instance from scratch.")
@@ -678,11 +723,20 @@ def main():
 
     if model_args.model_name_or_path:
         model = FlaxT5ForConditionalGeneration.from_pretrained(
-            model_args.model_name_or_path, config=config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype)
+            model_args.model_name_or_path,
+            config=config,
+            seed=training_args.seed,
+            dtype=getattr(jnp, model_args.dtype),
+            use_auth_token=True if model_args.use_auth_token else None,
         )
     else:
         config.vocab_size = len(tokenizer)
-        model = FlaxT5ForConditionalGeneration(config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype))
+        model = FlaxT5ForConditionalGeneration(
+            config,
+            seed=training_args.seed,
+            dtype=getattr(jnp, model_args.dtype),
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
 
     # Data collator
     # This one will take care of randomly masking the tokens.
@@ -702,6 +756,9 @@ def main():
     eval_batch_size = int(training_args.per_device_eval_batch_size) * jax.device_count()
 
     num_train_steps = len(tokenized_datasets["train"]) // train_batch_size * num_epochs
+
+    num_of_hosts = jax.process_count()
+    current_host_idx = jax.process_index()
 
     # Create learning rate schedule
     warmup_fn = optax.linear_schedule(
@@ -818,8 +875,13 @@ def main():
             samples = [tokenized_datasets["train"][int(idx)] for idx in batch_idx]
             model_inputs = data_collator(samples)
 
+            local_host_model_inputs = {
+                key: np.split(model_inputs.data[key], num_of_hosts, axis=0)[current_host_idx]
+                for key, value in model_inputs.data.items()
+            }
+
             # Model forward
-            model_inputs = shard(model_inputs.data)
+            model_inputs = shard(local_host_model_inputs)
             state, train_metric, dropout_rngs = p_train_step(state, model_inputs, dropout_rngs)
             train_metrics.append(train_metric)
 
@@ -833,7 +895,8 @@ def main():
                     write_train_metric(summary_writer, train_metrics, train_time, cur_step)
 
                 epochs.write(
-                    f"Step... ({cur_step} | Loss: {train_metric['loss'].mean()}, Learning Rate: {train_metric['learning_rate'].mean()})"
+                    f"Step... ({cur_step} | Loss: {train_metric['loss'].mean()}, Learning Rate:"
+                    f" {train_metric['learning_rate'].mean()})"
                 )
 
                 train_metrics = []

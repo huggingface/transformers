@@ -29,11 +29,12 @@ from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
+    ImageClassifierOutput,
     MaskedLMOutput,
     SemanticSegmenterOutput,
-    SequenceClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -701,7 +702,8 @@ class BeitModel(BeitPreTrainedModel):
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
+            head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
+            return head_outputs + encoder_outputs[1:]
 
         return BeitModelOutputWithPooling(
             last_hidden_state=sequence_output,
@@ -712,7 +714,7 @@ class BeitModel(BeitPreTrainedModel):
 
 
 class BeitPooler(nn.Module):
-    def __init__(self, config: BeitModel) -> None:
+    def __init__(self, config: BeitConfig) -> None:
         super().__init__()
         self.layernorm = (
             nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) if config.use_mean_pooling else None
@@ -731,11 +733,14 @@ class BeitPooler(nn.Module):
 
 
 @add_start_docstrings(
-    "Beit Model transformer with a 'language' modeling head on top (to predict visual tokens).",
+    """Beit Model transformer with a 'language' modeling head on top. BEiT does masked image modeling by predicting
+    visual tokens of a Vector-Quantize Variational Autoencoder (VQ-VAE), whereas other vision models like ViT and DeiT
+    predict RGB pixel values. As a result, this class is incompatible with [`AutoModelForMaskedImageModeling`], so you
+    will need to use [`BeitForMaskedImageModeling`] directly if you wish to do masked image modeling with BEiT.""",
     BEIT_START_DOCSTRING,
 )
 class BeitForMaskedImageModeling(BeitPreTrainedModel):
-    def __init__(self, config: BeitModel) -> None:
+    def __init__(self, config: BeitConfig) -> None:
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -816,7 +821,7 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
             masked_lm_loss = loss_fct(prediction_scores[bool_masked_pos], labels)
 
         if not return_dict:
-            output = (prediction_scores,) + outputs[2:]
+            output = (prediction_scores,) + outputs[1:]
             return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
         return MaskedLMOutput(
@@ -835,7 +840,7 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
     BEIT_START_DOCSTRING,
 )
 class BeitForImageClassification(BeitPreTrainedModel):
-    def __init__(self, config: BeitModel) -> None:
+    def __init__(self, config: BeitConfig) -> None:
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -851,7 +856,7 @@ class BeitForImageClassification(BeitPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=SequenceClassifierOutput,
+        output_type=ImageClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
     )
@@ -863,7 +868,7 @@ class BeitForImageClassification(BeitPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[tuple, SequenceClassifierOutput]:
+    ) -> Union[tuple, ImageClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -909,7 +914,7 @@ class BeitForImageClassification(BeitPreTrainedModel):
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return SequenceClassifierOutput(
+        return ImageClassifierOutput(
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
@@ -1208,14 +1213,14 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import BeitFeatureExtractor, BeitForSemanticSegmentation
+        >>> from transformers import AutoFeatureExtractor, BeitForSemanticSegmentation
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = BeitFeatureExtractor.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
         >>> model = BeitForSemanticSegmentation.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
@@ -1236,7 +1241,7 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
             return_dict=return_dict,
         )
 
-        encoder_hidden_states = outputs.hidden_states if return_dict else outputs[2]
+        encoder_hidden_states = outputs.hidden_states if return_dict else outputs[1]
 
         # only keep certain features, and reshape
         # note that we do +1 as the encoder_hidden_states also includes the initial embeddings
@@ -1267,9 +1272,9 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
 
         if not return_dict:
             if output_hidden_states:
-                output = (logits,) + outputs[2:]
+                output = (logits,) + outputs[1:]
             else:
-                output = (logits,) + outputs[3:]
+                output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return SemanticSegmenterOutput(

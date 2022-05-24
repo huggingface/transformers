@@ -58,9 +58,8 @@ def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right):
         chunk = inputs[i : i + chunk_len]
         processed = feature_extractor(chunk, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt")
         _stride_left = 0 if i == 0 else stride_left
-        is_last = i + step >= inputs_len
+        is_last = i + step + stride_left >= inputs_len
         _stride_right = 0 if is_last else stride_right
-
         if chunk.shape[0] > _stride_left:
             yield {"is_last": is_last, "stride": (chunk.shape[0], _stride_left, _stride_right), **processed}
 
@@ -71,38 +70,54 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
     The input can be either a raw waveform or a audio file. In case of the audio file, ffmpeg should be installed for
     to support multiple audio formats
+
+    Arguments:
+        model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
+            The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
+            [`PreTrainedModel`] for PyTorch and [`TFPreTrainedModel`] for TensorFlow.
+        tokenizer ([`PreTrainedTokenizer`]):
+            The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
+            [`PreTrainedTokenizer`].
+        feature_extractor ([`SequenceFeatureExtractor`]):
+            The feature extractor that will be used by the pipeline to encode waveform for the model.
+        chunk_length_s (`float`, *optional*, defaults to 0):
+            The input length for in each chunk. If `chunk_length_s = 0` then chunking is disabled (default). Only
+            available for CTC models, e.g. [`Wav2Vec2ForCTC`].
+
+            <Tip>
+
+            For more information on how to effectively use `chunk_length_s`, please have a look at the [ASR chunking
+            blog post](https://huggingface.co/blog/asr-chunking).
+
+            </Tip>
+
+        stride_length_s (`float`, *optional*, defaults to `chunk_length_s / 6`):
+            The length of stride on the left and right of each chunk. Used only with `chunk_length_s > 0`. This enables
+            the model to *see* more context and infer letters better than without this context but the pipeline
+            discards the stride bits at the end to make the final reconstitution as perfect as possible.
+
+            <Tip>
+
+            For more information on how to effectively use `stride_length_s`, please have a look at the [ASR chunking
+            blog post](https://huggingface.co/blog/asr-chunking).
+
+            </Tip>
+
+        framework (`str`, *optional*):
+            The framework to use, either `"pt"` for PyTorch or `"tf"` for TensorFlow. The specified framework must be
+            installed. If no framework is specified, will default to the one currently installed. If no framework is
+            specified and both frameworks are installed, will default to the framework of the `model`, or to PyTorch if
+            no model is provided.
+        device (`int`, *optional*, defaults to -1):
+            Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the model on
+            the associated CUDA device id.
+        decoder (`pyctcdecode.BeamSearchDecoderCTC`, *optional*):
+            [PyCTCDecode's
+            BeamSearchDecoderCTC](https://github.com/kensho-technologies/pyctcdecode/blob/2fd33dc37c4111417e08d89ccd23d28e9b308d19/pyctcdecode/decoder.py#L180)
+            can be passed for language model boosted decoding. See [`Wav2Vec2ProcessorWithLM`] for more information.
     """
 
     def __init__(self, feature_extractor: Union["SequenceFeatureExtractor", str], *args, **kwargs):
-        """
-        Arguments:
-            model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
-                The model that will be used by the pipeline to make predictions. This needs to be a model inheriting
-                from [`PreTrainedModel`] for PyTorch and [`TFPreTrainedModel`] for TensorFlow.
-            tokenizer ([`PreTrainedTokenizer`]):
-                The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
-                [`PreTrainedTokenizer`].
-            feature_extractor ([`SequenceFeatureExtractor`]):
-                The feature extractor that will be used by the pipeline to encode waveform for the model.
-            chunk_length_s (`float`, *optional*, defaults to 0):
-                The input length for in each chunk. If `0` then chunking is disabled (default). Only available for CTC
-                models.
-            stride_length_s (`float`, *optional*, defaults to `chunk_length_s / 6`):
-                The length of stride on the left and right of each chunk. Used only with `chunk_length_s > 0`. This
-                enables the model to *see* more context and infer letters better than without this context but the
-                pipeline discards the stride bits at the end to make the final reconstitution as perfect as possible.
-            framework (`str`, *optional*):
-                The framework to use, either `"pt"` for PyTorch or `"tf"` for TensorFlow. The specified framework must
-                be installed.
-
-                If no framework is specified, will default to the one currently installed. If no framework is specified
-                and both frameworks are installed, will default to the framework of the `model`, or to PyTorch if no
-                model is provided.
-            device (`int`, *optional*, defaults to -1):
-                Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the
-                model on the associated CUDA device id.
-        """
-
         super().__init__(*args, **kwargs)
         self.feature_extractor = feature_extractor
 
@@ -194,7 +209,18 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         extra = {}
         if isinstance(inputs, dict):
             stride = inputs.pop("stride", None)
-            _inputs = inputs.pop("raw")
+            # Accepting `"array"` which is the key defined in `datasets` for
+            # better integration
+            if not ("sampling_rate" in inputs and ("raw" in inputs or "array" in inputs)):
+                raise ValueError(
+                    "When passing a dictionnary to AutomaticSpeechRecognitionPipeline, the dict needs to contain a "
+                    '"raw" key containing the numpy array representing the audio and a "sampling_rate" key, '
+                    "containing the sampling_rate associated with that array"
+                )
+
+            _inputs = inputs.pop("raw", None)
+            if _inputs is None:
+                _inputs = inputs.pop("array", None)
             in_sampling_rate = inputs.pop("sampling_rate")
             extra = inputs
             inputs = _inputs

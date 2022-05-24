@@ -28,8 +28,12 @@ PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "microsoft/deberta-v2-xlarge": "https://huggingface.co/microsoft/deberta-v2-xlarge/resolve/main/spm.model",
         "microsoft/deberta-v2-xxlarge": "https://huggingface.co/microsoft/deberta-v2-xxlarge/resolve/main/spm.model",
-        "microsoft/deberta-v2-xlarge-mnli": "https://huggingface.co/microsoft/deberta-v2-xlarge-mnli/resolve/main/spm.model",
-        "microsoft/deberta-v2-xxlarge-mnli": "https://huggingface.co/microsoft/deberta-v2-xxlarge-mnli/resolve/main/spm.model",
+        "microsoft/deberta-v2-xlarge-mnli": (
+            "https://huggingface.co/microsoft/deberta-v2-xlarge-mnli/resolve/main/spm.model"
+        ),
+        "microsoft/deberta-v2-xxlarge-mnli": (
+            "https://huggingface.co/microsoft/deberta-v2-xxlarge-mnli/resolve/main/spm.model"
+        ),
     }
 }
 
@@ -60,11 +64,11 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
             contains the vocabulary necessary to instantiate a tokenizer.
         do_lower_case (`bool`, *optional*, defaults to `False`):
             Whether or not to lowercase the input when tokenizing.
-        bos_token (`string`, *optional*, defaults to "[CLS]"):
+        bos_token (`string`, *optional*, defaults to `"[CLS]"`):
             The beginning of sequence token that was used during pre-training. Can be used a sequence classifier token.
             When building a sequence using special tokens, this is not the token that is used for the beginning of
             sequence. The token used is the `cls_token`.
-        eos_token (`string`, *optional*, defaults to "[SEP]"):
+        eos_token (`string`, *optional*, defaults to `"[SEP]"`):
             The end of sequence token. When building a sequence using special tokens, this is not the token that is
             used for the end of sequence. The token used is the `sep_token`.
         unk_token (`str`, *optional*, defaults to `"[UNK]"`):
@@ -137,11 +141,12 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
 
         if not os.path.isfile(vocab_file):
             raise ValueError(
-                f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained "
-                "model use `tokenizer = AutoTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
+                f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
+                " model use `tokenizer = AutoTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         self.do_lower_case = do_lower_case
         self.split_by_punct = split_by_punct
+        self.vocab_file = vocab_file
         self._tokenizer = SPMTokenizer(vocab_file, split_by_punct=split_by_punct, sp_model_kwargs=self.sp_model_kwargs)
 
     @property
@@ -292,7 +297,8 @@ class SPMTokenizer:
         self.vocab_file = vocab_file
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
         spm = sp.SentencePieceProcessor(**self.sp_model_kwargs)
-        assert os.path.exists(vocab_file)
+        if not os.path.exists(vocab_file):
+            raise FileNotFoundError(f"{vocab_file} does not exist!")
         spm.load(vocab_file)
         bpe_vocab_size = spm.GetPieceSize()
         # Token map
@@ -324,16 +330,7 @@ class SPMTokenizer:
         self.spm.Load(self.vocab_file)
 
     def tokenize(self, text):
-        pieces = self._encode_as_pieces(text)
-
-        def _norm(x):
-            if x not in self.vocab or x == "<unk>":
-                return "[UNK]"
-            else:
-                return x
-
-        pieces = [_norm(p) for p in pieces]
-        return pieces
+        return self._encode_as_pieces(text)
 
     def convert_ids_to_tokens(self, ids):
         tokens = []

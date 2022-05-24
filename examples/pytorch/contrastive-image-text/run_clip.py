@@ -54,7 +54,7 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.18.0.dev0")
+check_min_version("4.20.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/contrastive-image-text/requirements.txt")
 
@@ -89,8 +89,10 @@ class ModelArguments:
     use_auth_token: bool = field(
         default=False,
         metadata={
-            "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
-            "with private models)."
+            "help": (
+                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "with private models)."
+            )
         },
     )
     freeze_vision_model: bool = field(
@@ -132,22 +134,28 @@ class DataTrainingArguments:
     max_seq_length: Optional[int] = field(
         default=128,
         metadata={
-            "help": "The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded."
+            "help": (
+                "The maximum total input sequence length after tokenization. Sequences longer "
+                "than this will be truncated, sequences shorter will be padded."
+            )
         },
     )
     max_train_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of training examples to this "
+                "value if set."
+            )
         },
     )
     max_eval_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
+                "value if set."
+            )
         },
     )
     overwrite_cache: bool = field(
@@ -276,6 +284,7 @@ def main():
             cache_dir=model_args.cache_dir,
             keep_in_memory=False,
             data_dir=data_args.data_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
         )
     else:
         data_files = {}
@@ -288,7 +297,12 @@ def main():
         if data_args.test_file is not None:
             data_files["test"] = data_args.test_file
             extension = data_args.test_file.split(".")[-1]
-        dataset = load_dataset(extension, data_files=data_files, cache_dir=model_args.cache_dir)
+        dataset = load_dataset(
+            extension,
+            data_files=data_files,
+            cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
@@ -404,7 +418,8 @@ def main():
             raise ValueError("--do_train requires a train dataset")
         train_dataset = dataset["train"]
         if data_args.max_train_samples is not None:
-            train_dataset = train_dataset.select(range(data_args.max_train_samples))
+            max_train_samples = min(len(train_dataset), data_args.max_train_samples)
+            train_dataset = train_dataset.select(range(max_train_samples))
 
         train_dataset = train_dataset.filter(
             filter_corrupt_images, batched=True, num_proc=data_args.preprocessing_num_workers
@@ -426,7 +441,8 @@ def main():
             raise ValueError("--do_eval requires a train validation")
         eval_dataset = dataset["validation"]
         if data_args.max_eval_samples is not None:
-            eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
+            max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
+            eval_dataset = eval_dataset.select(range(max_eval_samples))
 
         eval_dataset = eval_dataset.filter(
             filter_corrupt_images, batched=True, num_proc=data_args.preprocessing_num_workers
@@ -448,7 +464,8 @@ def main():
             raise ValueError("--do_predict requires a test dataset")
         test_dataset = dataset["test"]
         if data_args.max_eval_samples is not None:
-            test_dataset = test_dataset.select(range(data_args.max_eval_samples))
+            max_eval_samples = min(len(test_dataset), data_args.max_eval_samples)
+            test_dataset = test_dataset.select(range(max_eval_samples))
 
         test_dataset = test_dataset.filter(
             filter_corrupt_images, batched=True, num_proc=data_args.preprocessing_num_workers

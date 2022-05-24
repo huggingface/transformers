@@ -14,6 +14,7 @@
 # limitations under the License.
 """ ProphetNet model configuration"""
 
+from typing import Callable, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -22,14 +23,18 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/prophetnet-large-uncased": "https://huggingface.co/microsoft/prophetnet-large-uncased/resolve/main/config.json",
+    "microsoft/prophetnet-large-uncased": (
+        "https://huggingface.co/microsoft/prophetnet-large-uncased/resolve/main/config.json"
+    ),
 }
 
 
 class ProphetNetConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ProphetNetModel`]. It is used to instantiate a
-    ProphetNet model according to the specified arguments, defining the model architecture.
+    ProphetNet model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the ProphetNet
+    [microsoft/prophetnet-large-uncased](https://huggingface.co/microsoft/prophetnet-large-uncased) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -101,32 +106,32 @@ class ProphetNetConfig(PretrainedConfig):
 
     def __init__(
         self,
-        activation_dropout=0.1,
-        activation_function="gelu",
-        vocab_size=30522,
-        hidden_size=1024,
-        encoder_ffn_dim=4096,
-        num_encoder_layers=12,
-        num_encoder_attention_heads=16,
-        decoder_ffn_dim=4096,
-        num_decoder_layers=12,
-        num_decoder_attention_heads=16,
-        attention_dropout=0.1,
-        dropout=0.1,
-        max_position_embeddings=512,
-        init_std=0.02,
-        is_encoder_decoder=True,
-        add_cross_attention=True,
-        decoder_start_token_id=0,
-        ngram=2,
-        num_buckets=32,
-        relative_max_distance=128,
-        disable_ngram_loss=False,
-        eps=0.0,
-        use_cache=True,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
+        activation_dropout: Optional[float] = 0.1,
+        activation_function: Optional[Union[str, Callable]] = "gelu",
+        vocab_size: Optional[int] = 30522,
+        hidden_size: Optional[int] = 1024,
+        encoder_ffn_dim: Optional[int] = 4096,
+        num_encoder_layers: Optional[int] = 12,
+        num_encoder_attention_heads: Optional[int] = 16,
+        decoder_ffn_dim: Optional[int] = 4096,
+        num_decoder_layers: Optional[int] = 12,
+        num_decoder_attention_heads: Optional[int] = 16,
+        attention_dropout: Optional[float] = 0.1,
+        dropout: Optional[float] = 0.1,
+        max_position_embeddings: Optional[int] = 512,
+        init_std: Optional[float] = 0.02,
+        is_encoder_decoder: Optional[bool] = True,
+        add_cross_attention: Optional[bool] = True,
+        decoder_start_token_id: Optional[int] = 0,
+        ngram: Optional[int] = 2,
+        num_buckets: Optional[int] = 32,
+        relative_max_distance: Optional[int] = 128,
+        disable_ngram_loss: Optional[bool] = False,
+        eps: Optional[float] = 0.0,
+        use_cache: Optional[bool] = True,
+        pad_token_id: Optional[int] = 0,
+        bos_token_id: Optional[int] = 1,
+        eos_token_id: Optional[int] = 2,
         **kwargs
     ):
         self.vocab_size = vocab_size
@@ -172,5 +177,6 @@ class ProphetNetConfig(PretrainedConfig):
     @num_hidden_layers.setter
     def num_hidden_layers(self, value):
         raise NotImplementedError(
-            "This model does not support the setting of `num_hidden_layers`. Please set `num_encoder_layers` and `num_decoder_layers`."
+            "This model does not support the setting of `num_hidden_layers`. Please set `num_encoder_layers` and"
+            " `num_decoder_layers`."
         )

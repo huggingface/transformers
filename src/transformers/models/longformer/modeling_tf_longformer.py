@@ -34,7 +34,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list
+from ...tf_utils import shape_list, stable_softmax
 from ...utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
     ModelOutput,
@@ -775,7 +775,10 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
             tf.debugging.assert_equal(
                 shape_list(attn_scores),
                 [batch_size, seq_len, self.num_heads, self.one_sided_attn_window_size * 2 + 1],
-                message=f"attn_probs should be of size ({batch_size}, {seq_len}, {self.num_heads}, {self.one_sided_attn_window_size * 2 + 1}), but is of size {shape_list(attn_scores)}",
+                message=(
+                    f"attn_probs should be of size ({batch_size}, {seq_len}, {self.num_heads},"
+                    f" {self.one_sided_attn_window_size * 2 + 1}), but is of size {shape_list(attn_scores)}"
+                ),
             )
 
         # compute global attn indices required through out forward fn
@@ -800,7 +803,7 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
             ),
             lambda: attn_scores,
         )
-        attn_probs = tf.nn.softmax(attn_scores, axis=-1)
+        attn_probs = stable_softmax(attn_scores, axis=-1)
 
         # softmax sometimes inserts NaN if all positions are masked, replace them with 0
         # Make sure to create a mask with the proper shape:
@@ -828,7 +831,10 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
                 tf.debugging.assert_equal(
                     shape_list(layer_head_mask),
                     [self.num_heads],
-                    message=f"Head mask for a single layer should be of size {(self.num_heads)}, but is {shape_list(layer_head_mask)}",
+                    message=(
+                        f"Head mask for a single layer should be of size {(self.num_heads)}, but is"
+                        f" {shape_list(layer_head_mask)}"
+                    ),
                 )
 
             attn_probs = tf.reshape(layer_head_mask, (1, 1, -1, 1)) * attn_probs
@@ -921,7 +927,10 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
             tf.debugging.assert_equal(
                 shape_list(query),
                 shape_list(key),
-                message=f"Shape of query and key should be equal, but got query: {shape_list(query)} and key: {shape_list(key)}",
+                message=(
+                    f"Shape of query and key should be equal, but got query: {shape_list(query)} and key:"
+                    f" {shape_list(key)}"
+                ),
             )
 
         chunks_count = seq_len // window_overlap - 1
@@ -1206,7 +1215,10 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
             tf.debugging.assert_equal(
                 shape_list(chunked_hidden_states),
                 [batch_size, num_output_chunks, frame_size],
-                message=f"Make sure chunking is correctly applied. `Chunked hidden states should have output  dimension {[batch_size, frame_size, num_output_chunks]}, but got {shape_list(chunked_hidden_states)}.",
+                message=(
+                    "Make sure chunking is correctly applied. `Chunked hidden states should have output  dimension"
+                    f" {[batch_size, frame_size, num_output_chunks]}, but got {shape_list(chunked_hidden_states)}."
+                ),
             )
 
         chunked_hidden_states = tf.reshape(
@@ -1384,7 +1396,11 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
             tf.debugging.assert_equal(
                 shape_list(global_attn_scores),
                 [batch_size * self.num_heads, max_num_global_attn_indices, seq_len],
-                message=f"global_attn_scores have the wrong size. Size should be {(batch_size * self.num_heads, max_num_global_attn_indices, seq_len)}, but is {shape_list(global_attn_scores)}.",
+                message=(
+                    "global_attn_scores have the wrong size. Size should be"
+                    f" {(batch_size * self.num_heads, max_num_global_attn_indices, seq_len)}, but is"
+                    f" {shape_list(global_attn_scores)}."
+                ),
             )
 
         global_attn_scores = tf.reshape(
@@ -1415,7 +1431,7 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         )
 
         # compute global attn probs
-        global_attn_probs_float = tf.nn.softmax(global_attn_scores, axis=-1)
+        global_attn_probs_float = stable_softmax(global_attn_scores, axis=-1)
 
         # apply layer head masking
         if layer_head_mask is not None:
@@ -1423,7 +1439,10 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
                 tf.debugging.assert_equal(
                     shape_list(layer_head_mask),
                     [self.num_heads],
-                    message=f"Head mask for a single layer should be of size {(self.num_heads)}, but is {shape_list(layer_head_mask)}",
+                    message=(
+                        f"Head mask for a single layer should be of size {(self.num_heads)}, but is"
+                        f" {shape_list(layer_head_mask)}"
+                    ),
                 )
             global_attn_probs_float = tf.reshape(layer_head_mask, (1, -1, 1, 1)) * tf.reshape(
                 global_attn_probs_float, (batch_size, self.num_heads, max_num_global_attn_indices, seq_len)
@@ -1442,7 +1461,11 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
             tf.debugging.assert_equal(
                 shape_list(global_attn_output),
                 [batch_size * self.num_heads, max_num_global_attn_indices, self.head_dim],
-                message=f"global_attn_output tensor has the wrong size. Size should be {(batch_size * self.num_heads, max_num_global_attn_indices, self.head_dim)}, but is {shape_list(global_attn_output)}.",
+                message=(
+                    "global_attn_output tensor has the wrong size. Size should be"
+                    f" {(batch_size * self.num_heads, max_num_global_attn_indices, self.head_dim)}, but is"
+                    f" {shape_list(global_attn_output)}."
+                ),
             )
 
         global_attn_output = tf.reshape(
@@ -1676,7 +1699,6 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ):
 
         if input_ids is not None and inputs_embeds is not None:
@@ -2023,7 +2045,6 @@ class TFLongformerModel(TFLongformerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFLongformerBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
 
         outputs = self.longformer(
@@ -2081,10 +2102,12 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint="allenai/longformer-base-4096",
         output_type=TFLongformerMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
         mask="<mask>",
+        expected_output="' Paris'",
+        expected_loss=0.44,
     )
     def call(
         self,
@@ -2100,7 +2123,6 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFLongformerMaskedLMOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -2178,6 +2200,8 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
         checkpoint="allenai/longformer-large-4096-finetuned-triviaqa",
         output_type=TFLongformerQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output="' puppet'",
+        expected_loss=0.96,
     )
     def call(
         self,
@@ -2194,7 +2218,6 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
         start_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
         end_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFLongformerQuestionAnsweringModelOutput, Tuple[tf.Tensor]]:
         r"""
         start_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):
@@ -2211,7 +2234,10 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
         if global_attention_mask is None and input_ids is not None:
             if shape_list(tf.where(input_ids == self.config.sep_token_id))[0] != 3 * shape_list(input_ids)[0]:
                 logger.warning(
-                    f"There should be exactly three separator tokens: {self.config.sep_token_id} in every sample for questions answering. You might also consider to set `global_attention_mask` manually in the forward function to avoid this. This is most likely an error. The global attention is disabled for this forward pass."
+                    f"There should be exactly three separator tokens: {self.config.sep_token_id} in every sample for"
+                    " questions answering. You might also consider to set `global_attention_mask` manually in the"
+                    " forward function to avoid this. This is most likely an error. The global attention is disabled"
+                    " for this forward pass."
                 )
                 global_attention_mask = tf.fill(shape_list(input_ids), value=0)
             else:
@@ -2322,9 +2348,11 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint="hf-internal-testing/tiny-random-longformer",
         output_type=TFLongformerSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output="'LABEL_1'",
+        expected_loss=0.69,
     )
     def call(
         self,
@@ -2340,7 +2368,6 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFLongformerSequenceClassifierOutput, Tuple[tf.Tensor]]:
 
         if global_attention_mask is None and input_ids is not None:
@@ -2450,7 +2477,6 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFLongformerMultipleChoiceModelOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
@@ -2562,9 +2588,15 @@ class TFLongformerForTokenClassification(TFLongformerPreTrainedModel, TFTokenCla
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint="hf-internal-testing/tiny-random-longformer",
         output_type=TFLongformerTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=(
+            "['LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1',"
+            " 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1',"
+            " 'LABEL_1', 'LABEL_1']"
+        ),
+        expected_loss=0.59,
     )
     def call(
         self,
@@ -2580,7 +2612,6 @@ class TFLongformerForTokenClassification(TFLongformerPreTrainedModel, TFTokenCla
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.array, tf.Tensor]] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFLongformerTokenClassifierOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):

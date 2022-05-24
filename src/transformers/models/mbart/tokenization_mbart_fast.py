@@ -38,8 +38,12 @@ VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "tokenizer_file": 
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "facebook/mbart-large-en-ro": "https://huggingface.co/facebook/mbart-large-en-ro/resolve/main/sentencepiece.bpe.model",
-        "facebook/mbart-large-cc25": "https://huggingface.co/facebook/mbart-large-cc25/resolve/main/sentencepiece.bpe.model",
+        "facebook/mbart-large-en-ro": (
+            "https://huggingface.co/facebook/mbart-large-en-ro/resolve/main/sentencepiece.bpe.model"
+        ),
+        "facebook/mbart-large-cc25": (
+            "https://huggingface.co/facebook/mbart-large-cc25/resolve/main/sentencepiece.bpe.model"
+        ),
     },
     "tokenizer_file": {
         "facebook/mbart-large-en-ro": "https://huggingface.co/facebook/mbart-large-en-ro/resolve/main/tokenizer.json",
@@ -62,9 +66,8 @@ class MBartTokenizerFast(PreTrainedTokenizerFast):
     Construct a "fast" MBART tokenizer (backed by HuggingFace's *tokenizers* library). Based on
     [BPE](https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=BPE#models).
 
-    [`MBartTokenizerFast`] is a subclass of [`XLMRobertaTokenizerFast`]. Refer to superclass
-    [`XLMRobertaTokenizerFast`] for usage examples and documentation concerning the initialization parameters and other
-    methods.
+    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
+    refer to this superclass for more information regarding those methods.
 
     The tokenization method is `<tokens> <eos> <language code>` for source language documents, and ``<language code>
     <tokens> <eos>``` for target language documents.

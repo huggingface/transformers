@@ -102,7 +102,7 @@ class GenerationTesterMixin:
         diversity_penalty=None,
     ):
         process_kwargs = {
-            "min_length": input_length + 1,
+            "min_length": input_length + 1 if max_length is None else max_length - 1,
             "bad_words_ids": [[1, 0]],
             "no_repeat_ngram_size": 2,
             "repetition_penalty": 1.2,
@@ -1654,8 +1654,12 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertListEqual(
             generated_text,
             [
-                "The couple announced the birth of their son, Silas Randall Timberlake, in a statement. Silas was the middle name of Timberlake's maternal grandfather Bill Bomar. Randall is the musician's own middle name, as well as his father's first. It is the first baby for both of them.",
-                "Justin Timberlake and Jessica Biel have a son. The baby is named Silas Randall Timberlake. It is the first child for both. The couple announced the pregnancy in January. The name Silas is the middle name of Timberlake's maternal grandfather. It's also his own middle name.",
+                "The couple announced the birth of their son, Silas Randall Timberlake, in a statement. Silas was the"
+                " middle name of Timberlake's maternal grandfather Bill Bomar. Randall is the musician's own middle"
+                " name, as well as his father's first. It is the first baby for both of them.",
+                "Justin Timberlake and Jessica Biel have a son. The baby is named Silas Randall Timberlake. It is the"
+                " first child for both. The couple announced the pregnancy in January. The name Silas is the middle"
+                " name of Timberlake's maternal grandfather. It's also his own middle name.",
             ],
         )
 
@@ -2319,6 +2323,94 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(transition_scores_sum, outputs.sequences_scores, atol=1e-3))
 
     @slow
+    def test_transition_scores_early_stopping(self):
+        # This is an aggressive test that makes sure that `beam_search's`
+        # transition scores are computed correctly for varying `num_return_sequences`,
+        # `num_beams` and `batch_size > 1`
+        # 2 x input_ids for "question: How are you? \n context: I had a long day, "
+        input_ids = torch.tensor(2 * [[822, 10, 571, 33, 25, 58, 2625, 10, 27, 141, 3, 9, 307, 239, 6, 1]]).to(
+            torch_device
+        )
+
+        model = AutoModelForSeq2SeqLM.from_pretrained("t5-small").to(torch_device)
+
+        result = model.generate(
+            input_ids,
+            max_length=10,
+            return_dict_in_generate=True,
+            output_scores=True,
+            forced_eos_token_id=model.config.eos_token_id,
+            num_beams=4,
+            do_sample=False,
+            num_return_sequences=3,
+            length_penalty=0.0,
+        )
+
+        transition_scores = model.compute_transition_beam_scores(
+            sequences=result.sequences, scores=result.scores, beam_indices=result.beam_indices
+        )
+
+        sum_transition_scores = torch.sum(transition_scores, dim=1)
+
+        self.assertListEqual(sum_transition_scores.cpu().tolist(), result.sequences_scores.cpu().tolist())
+
+    def test_log_scores_sample_decoder_only(self):
+        articles = ["I need input_ids to generate", "Short and"]
+        tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        tokenizer.padding_side = "left"
+        tokenizer.pad_token = tokenizer.eos_token
+
+        model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+
+        inputs = tokenizer(articles, return_tensors="pt", padding=True).to(torch_device)
+
+        result = model.generate(
+            **inputs,
+            max_length=15,
+            return_dict_in_generate=True,
+            do_sample=False,
+            output_scores=True,
+        )
+
+        # decoder-only starts generating from `input_ids`
+        begin_generation = inputs.input_ids.shape[-1]
+
+        gen_sequences = result.sequences[:, begin_generation:]
+        probs = torch.stack(result.scores, dim=1).softmax(-1)
+
+        gen_probs = torch.gather(probs, 2, gen_sequences[:, :, None]).squeeze(-1)
+        expected_probs = torch.tensor([[0.0014, 0.0015], [0.0014, 0.0014]])
+
+        self.assertTrue(torch.allclose(gen_probs.cpu(), expected_probs, atol=1e-3))
+
+    def test_log_scores_sample_encoder_decoder(self):
+        articles = ["I need input_ids to generate", "Short and"]
+        tokenizer = BartTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
+        model = BartForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-bart").to(torch_device)
+
+        inputs = tokenizer(articles, return_tensors="pt", padding=True).to(torch_device)
+
+        result = model.generate(
+            **inputs,
+            max_length=3,
+            return_dict_in_generate=True,
+            do_sample=False,
+            num_beams=1,
+            output_scores=True,
+        )
+
+        # encoder-decoder has one decoder_start_token_id by default
+        begin_generation = 1
+
+        gen_sequences = result.sequences[:, begin_generation:]
+        probs = torch.stack(result.scores, dim=1).softmax(-1)
+
+        gen_probs = torch.gather(probs, 2, gen_sequences[:, :, None]).squeeze(-1)
+        expected_probs = torch.tensor([[0.0013, 1.0000], [0.0013, 1.0000]])
+
+        self.assertTrue(torch.allclose(gen_probs.cpu(), expected_probs, atol=1e-3))
+
+    @slow
     def test_beam_search_example_integration(self):
         # exactly the example provided in the docstrings of beam search, which previously
         # failed after directly copying from it. Refer to PR #15555
@@ -2362,8 +2454,8 @@ class GenerationIntegrationTests(unittest.TestCase):
 
     @slow
     def test_constrained_beam_search(self):
-        model = GPT2LMHeadModel.from_pretrained("../gpt2").to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("../gpt2")
+        model = GPT2LMHeadModel.from_pretrained("gpt2").to(torch_device)
+        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 
         force_tokens = tokenizer("scared", add_prefix_space=True, add_special_tokens=False).input_ids
         force_tokens_2 = tokenizer("big weapons", add_prefix_space=True, add_special_tokens=False).input_ids
@@ -2392,14 +2484,15 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertListEqual(
             generated_text,
             [
-                "The soldiers were not prepared and didn't know how big the big weapons would be, so they scared them off. They had no idea what to do",
+                "The soldiers were not prepared and didn't know how big the big weapons would be, so they scared them"
+                " off. They had no idea what to do",
             ],
         )
 
     @slow
     def test_constrained_beam_search_mixed(self):
-        model = GPT2LMHeadModel.from_pretrained("../gpt2").to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("../gpt2")
+        model = GPT2LMHeadModel.from_pretrained("gpt2").to(torch_device)
+        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 
         force_phrase = tokenizer("scared", add_prefix_space=True, add_special_tokens=False).input_ids
         flexible_phrases = tokenizer(
@@ -2437,8 +2530,8 @@ class GenerationIntegrationTests(unittest.TestCase):
 
     @slow
     def test_constrained_beam_search_mixed_mixin(self):
-        model = GPT2LMHeadModel.from_pretrained("../gpt2").to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("../gpt2")
+        model = GPT2LMHeadModel.from_pretrained("gpt2").to(torch_device)
+        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 
         force_word = "scared"
         force_flexible = ["scream", "screams", "screaming", "screamed"]

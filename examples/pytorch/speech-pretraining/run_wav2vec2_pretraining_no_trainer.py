@@ -16,7 +16,6 @@
 """ Pre-Training a 🤗 Wav2Vec2 model on unlabeled audio data """
 
 import argparse
-import logging
 import math
 import os
 from dataclasses import dataclass
@@ -31,6 +30,7 @@ from tqdm.auto import tqdm
 
 import transformers
 from accelerate import Accelerator
+from accelerate.logging import get_logger
 from huggingface_hub import Repository
 from transformers import (
     AdamW,
@@ -46,7 +46,7 @@ from transformers.models.wav2vec2.modeling_wav2vec2 import _compute_mask_indices
 from transformers.utils import get_full_repo_name
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def parse_args():
@@ -219,7 +219,10 @@ def parse_args():
         "--pad_to_multiple_of",
         type=int,
         default=None,
-        help="If set will pad the sequence to a multiple of the provided value. This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).",
+        help=(
+            "If set will pad the sequence to a multiple of the provided value. This is especially useful to enable the"
+            " use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta)."
+        ),
     )
     parser.add_argument(
         "--adam_beta1",
@@ -362,11 +365,7 @@ def main():
 
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
     accelerator = Accelerator()
-    logger.info(accelerator.state)
-
-    # Setup logging, we only want one process per machine to log things on the screen.
-    # accelerator.is_local_main_process is only True for one process per machine.
-    logger.setLevel(logging.INFO if accelerator.is_local_main_process else logging.ERROR)
+    logger.info(accelerator.state, main_process_only=False)
     if accelerator.is_local_main_process:
         datasets.utils.logging.set_verbosity_warning()
         transformers.utils.logging.set_verbosity_info()
@@ -403,7 +402,10 @@ def main():
     for dataset_config_name, train_split_name in zip(args.dataset_config_names, args.dataset_split_names):
         # load dataset
         dataset_split = load_dataset(
-            args.dataset_name, dataset_config_name, split=train_split_name, cache_dir=args.cache_dir
+            args.dataset_name,
+            dataset_config_name,
+            split=train_split_name,
+            cache_dir=args.cache_dir,
         )
         datasets_splits.append(dataset_split)
 
@@ -441,7 +443,7 @@ def main():
     # only normalized-inputs-training is supported
     if not feature_extractor.do_normalize:
         raise ValueError(
-            "Training is only supported for normalized inputs. " "Make sure ``feature_extractor.do_normalize == True``"
+            "Training is only supported for normalized inputs. Make sure ``feature_extractor.do_normalize == True``"
         )
 
     # set max & min audio length in number of samples
@@ -497,7 +499,8 @@ def main():
     # apply_spec_augment has to be True, mask_feature_prob has to be 0.0
     if not config.do_stable_layer_norm or config.feat_extract_norm != "layer":
         raise ValueError(
-            "PreTraining is only supported for ``config.do_stable_layer_norm=True`` and ``config.feat_extract_norm='layer'"
+            "PreTraining is only supported for ``config.do_stable_layer_norm=True`` and"
+            " ``config.feat_extract_norm='layer'"
         )
 
     # initialize random model
@@ -560,11 +563,13 @@ def main():
     logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
     logger.info(f"  Total optimization steps = {args.max_train_steps}")
     completed_steps = 0
+    starting_epoch = 0
 
     # Only show the progress bar once on each machine.
     progress_bar = tqdm(range(args.max_train_steps), disable=not accelerator.is_local_main_process)
     completed_steps = 0
-    for epoch in range(args.num_train_epochs):
+    starting_epoch = 0
+    for epoch in range(starting_epoch, args.num_train_epochs):
         model.train()
         for step, batch in enumerate(train_dataloader):
             # compute num of losses
@@ -614,7 +619,7 @@ def main():
                     lr_scheduler.step()
                 elif accelerator.is_local_main_process:
                     progress_bar.write(
-                        "Gradients have overflown - skipping update step... " f"Updating gradient scale to {scale}..."
+                        f"Gradients have overflown - skipping update step... Updating gradient scale to {scale}..."
                     )
 
                 # update gumbel temperature
@@ -666,7 +671,9 @@ def main():
                 if (args.push_to_hub and epoch < args.num_train_epochs - 1) or args.output_dir is not None:
                     accelerator.wait_for_everyone()
                     unwrapped_model = accelerator.unwrap_model(model)
-                    unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
+                    unwrapped_model.save_pretrained(
+                        args.output_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save
+                    )
 
                 if (args.push_to_hub and epoch < args.num_train_epochs - 1) and accelerator.is_main_process:
                     repo.push_to_hub(
@@ -717,7 +724,9 @@ def main():
         if args.output_dir is not None:
             accelerator.wait_for_everyone()
             unwrapped_model = accelerator.unwrap_model(model)
-            unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
+            unwrapped_model.save_pretrained(
+                args.output_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save
+            )
             if accelerator.is_main_process:
                 if args.push_to_hub:
                     repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)

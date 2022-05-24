@@ -23,7 +23,7 @@ import tensorflow as tf
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_tf_outputs import TFBaseModelOutput, TFSeq2SeqLMOutput
-from ...modeling_tf_utils import TFCausalLanguageModelingLoss, TFPreTrainedModel, get_initializer, input_processing
+from ...modeling_tf_utils import TFCausalLanguageModelingLoss, TFPreTrainedModel, get_initializer, unpack_inputs
 from ...tf_utils import shape_list
 from ...utils import (
     DUMMY_INPUTS,
@@ -43,10 +43,10 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "VisionEncoderDecoderConfig"
 
 DEPRECATION_WARNING = (
-    "Version v4.17.0 introduces a better way to train encoder-decoder models by computing the loss inside the "
-    "encoder-decoder framework rather than in the decoder itself. You may observe training discrepancies if fine-tuning "
-    "a model trained with versions anterior to 4.17.0. The decoder_input_ids are now created based on the labels, no "
-    "need to pass them yourself anymore."
+    "Version v4.17.0 introduces a better way to train encoder-decoder models by computing the loss inside the"
+    " encoder-decoder framework rather than in the decoder itself. You may observe training discrepancies if"
+    " fine-tuning a model trained with versions anterior to 4.17.0. The decoder_input_ids are now created based on the"
+    " labels, no need to pass them yourself anymore."
 )
 
 VISION_ENCODER_DECODER_START_DOCSTRING = r"""
@@ -202,10 +202,10 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         if config.decoder.cross_attention_hidden_size is not None:
             if config.decoder.cross_attention_hidden_size != config.encoder.hidden_size:
                 raise ValueError(
-                    "If `cross_attention_hidden_size` is specified in the decoder's configuration, "
-                    "it has to be equal to the encoder's `hidden_size`. "
-                    f"Got {config.decoder.cross_attention_hidden_size} for `config.decoder.cross_attention_hidden_size` "
-                    f"and {config.encoder.hidden_size} for `config.encoder.hidden_size`."
+                    "If `cross_attention_hidden_size` is specified in the decoder's configuration, it has to be equal"
+                    f" to the encoder's `hidden_size`. Got {config.decoder.cross_attention_hidden_size} for"
+                    f" `config.decoder.cross_attention_hidden_size` and {config.encoder.hidden_size} for"
+                    " `config.encoder.hidden_size`."
                 )
 
         # initialize with config
@@ -222,11 +222,13 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
 
         if self.encoder.config.to_dict() != self.config.encoder.to_dict():
             logger.warning(
-                f"Config of the encoder: {self.encoder.__class__} is overwritten by shared encoder config: {self.config.encoder}"
+                f"Config of the encoder: {self.encoder.__class__} is overwritten by shared encoder config:"
+                f" {self.config.encoder}"
             )
         if self.decoder.config.to_dict() != self.config.decoder.to_dict():
             logger.warning(
-                f"Config of the decoder: {self.decoder.__class__} is overwritten by shared decoder config: {self.config.decoder}"
+                f"Config of the decoder: {self.decoder.__class__} is overwritten by shared decoder config:"
+                f" {self.config.decoder}"
             )
 
         # make sure that the individual model's config refers to the shared config
@@ -326,7 +328,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
 
         >>> output_ids = model.generate(
         ...     pixel_values, max_length=16, num_beams=4, return_dict_in_generate=True
-        >>> ).sequences
+        ... ).sequences
 
         >>> preds = decoder_tokenizer.batch_decode(output_ids, skip_special_tokens=True)
         >>> preds = [pred.strip() for pred in preds]
@@ -337,10 +339,10 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         from_pt = kwargs.pop("from_pt", False)
         if from_pt:
             raise ValueError(
-                "Initializing `TFVisionEncoderDecoderModel` from a pytorch checkpoint is not supported currently. "
-                "Use a tensorflow checkpoint instead. If only the pytorch checkpoints are available, "
-                "create the encoder and decoder models separately, and use them to initialize `TFVisionEncoderDecoderModel`. "
-                "Check `TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained()` for more details."
+                "Initializing `TFVisionEncoderDecoderModel` from a pytorch checkpoint is not supported currently. Use"
+                " a tensorflow checkpoint instead. If only the pytorch checkpoints are available, create the encoder"
+                " and decoder models separately, and use them to initialize `TFVisionEncoderDecoderModel`. Check"
+                " `TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained()` for more details."
             )
 
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
@@ -469,10 +471,9 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
                 decoder_config = AutoConfig.from_pretrained(decoder_pretrained_model_name_or_path)
                 if decoder_config.is_decoder is False or decoder_config.add_cross_attention is False:
                     logger.info(
-                        f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model. "
-                        f"Cross attention layers are added to {decoder_pretrained_model_name_or_path} "
-                        f"and randomly initialized if {decoder_pretrained_model_name_or_path}'s architecture allows for "
-                        "cross attention layers."
+                        f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model. Cross attention"
+                        f" layers are added to {decoder_pretrained_model_name_or_path} and randomly initialized if"
+                        f" {decoder_pretrained_model_name_or_path}'s architecture allows for cross attention layers."
                     )
                     decoder_config.is_decoder = True
                     decoder_config.add_cross_attention = True
@@ -510,6 +511,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         config = VisionEncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config, **kwargs)
         return cls(encoder=encoder, decoder=decoder, config=config)
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(
         VISION_ENCODER_DECODER_INPUTS_DOCSTRING.format("batch_size, sequence_length")
     )
@@ -585,22 +587,16 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
 
         if encoder_outputs is None:
 
-            encoder_processing_inputs = {
-                "func": self.encoder.call,
-                "config": self.encoder.config,
+            encoder_inputs = {
                 "input_ids": pixel_values,
                 "output_attentions": output_attentions,
                 "output_hidden_states": output_hidden_states,
                 "return_dict": return_dict,
                 "training": training,
-                "kwargs_call": kwargs_encoder,
             }
 
             # Add arguments to encoder from `kwargs_encoder`
-            encoder_processing_inputs.update(kwargs_encoder)
-            kwargs_encoder = {}
-
-            encoder_inputs = input_processing(**encoder_processing_inputs)
+            encoder_inputs.update(kwargs_encoder)
 
             if "input_ids" in encoder_inputs:
                 encoder_inputs["pixel_values"] = encoder_inputs.pop("input_ids")
@@ -640,9 +636,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         batch_size, sequence_length = shape_list(encoder_hidden_states)[:2]
         encoder_attention_mask = tf.ones(shape=(batch_size, sequence_length), dtype=tf.int32)
 
-        decoder_processing_inputs = {
-            "func": self.decoder.call,
-            "config": self.decoder.config,
+        decoder_inputs = {
             "input_ids": decoder_input_ids,
             "attention_mask": decoder_attention_mask,
             "encoder_hidden_states": encoder_hidden_states,
@@ -654,14 +648,11 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
             "past_key_values": past_key_values,
             "return_dict": return_dict,
             "training": training,
-            "kwargs_call": kwargs_decoder,
         }
 
         # Add arguments to decoder from `kwargs_decoder`
-        decoder_processing_inputs.update(kwargs_decoder)
-        kwargs_decoder = {}
+        decoder_inputs.update(kwargs_decoder)
 
-        decoder_inputs = input_processing(**decoder_processing_inputs)
         decoder_outputs = self.decoder(**decoder_inputs)
 
         logits = decoder_outputs[0]

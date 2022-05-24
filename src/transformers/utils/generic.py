@@ -15,7 +15,9 @@
 Generic utilities
 """
 
+import inspect
 from collections import OrderedDict, UserDict
+from collections.abc import MutableMapping
 from contextlib import ExitStack
 from dataclasses import fields
 from enum import Enum
@@ -289,3 +291,37 @@ class ContextManagers:
 
     def __exit__(self, *args, **kwargs):
         self.stack.__exit__(*args, **kwargs)
+
+
+def find_labels(model_class):
+    """
+    Find the labels used by a given model.
+
+    Args:
+        model_class (`type`): The class of the model.
+    """
+    model_name = model_class.__name__
+    if model_name.startswith("TF"):
+        signature = inspect.signature(model_class.call)
+    elif model_name.startswith("Flax"):
+        signature = inspect.signature(model_class.__call__)
+    else:
+        signature = inspect.signature(model_class.forward)
+    if "QuestionAnswering" in model_name:
+        return [p for p in signature.parameters if "label" in p or p in ("start_positions", "end_positions")]
+    else:
+        return [p for p in signature.parameters if "label" in p]
+
+
+def flatten_dict(d: MutableMapping, parent_key: str = "", delimiter: str = "."):
+    """Flatten a nested dict into a single level dict."""
+
+    def _flatten_dict(d, parent_key="", delimiter="."):
+        for k, v in d.items():
+            key = str(parent_key) + delimiter + str(k) if parent_key else k
+            if v and isinstance(v, MutableMapping):
+                yield from flatten_dict(v, key, delimiter=delimiter).items()
+            else:
+                yield key, v
+
+    return dict(_flatten_dict(d, parent_key, delimiter))

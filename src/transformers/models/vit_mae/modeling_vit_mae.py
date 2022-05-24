@@ -28,7 +28,8 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput
-from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -240,18 +241,21 @@ class ViTMAEEmbeddings(nn.Module):
         # timm's trunc_normal_(std=.02) is effectively normal_(std=0.02) as cutoff is too big (2.)
         torch.nn.init.normal_(self.cls_token, std=self.config.initializer_range)
 
-    def random_masking(self, sequence):
+    def random_masking(self, sequence, noise=None):
         """
         Perform per-sample random masking by per-sample shuffling. Per-sample shuffling is done by argsort random
         noise.
 
         Args:
             sequence (`torch.LongTensor` of shape `(batch_size, sequence_length, dim)`)
+            noise (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*) which is
+                mainly used for testing purposes to control randomness and maintain the reproducibility
         """
         batch_size, seq_length, dim = sequence.shape
         len_keep = int(seq_length * (1 - self.config.mask_ratio))
 
-        noise = torch.rand(batch_size, seq_length, device=sequence.device)  # noise in [0, 1]
+        if noise is None:
+            noise = torch.rand(batch_size, seq_length, device=sequence.device)  # noise in [0, 1]
 
         # sort noise for each sample
         ids_shuffle = torch.argsort(noise, dim=1)  # ascend: small is keep, large is remove
@@ -269,7 +273,7 @@ class ViTMAEEmbeddings(nn.Module):
 
         return sequence_masked, mask, ids_restore
 
-    def forward(self, pixel_values):
+    def forward(self, pixel_values, noise=None):
         batch_size, num_channels, height, width = pixel_values.shape
         embeddings = self.patch_embeddings(pixel_values)
 
@@ -277,7 +281,7 @@ class ViTMAEEmbeddings(nn.Module):
         embeddings = embeddings + self.position_embeddings[:, 1:, :]
 
         # masking: length -> length * config.mask_ratio
-        embeddings, mask, ids_restore = self.random_masking(embeddings)
+        embeddings, mask, ids_restore = self.random_masking(embeddings, noise)
 
         # append cls token
         cls_token = self.cls_token + self.position_embeddings[:, :1, :]
@@ -338,7 +342,7 @@ class ViTMAESelfAttention(nn.Module):
 
     def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(*new_x_shape)
+        x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
     def forward(
@@ -370,7 +374,7 @@ class ViTMAESelfAttention(nn.Module):
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(*new_context_layer_shape)
+        context_layer = context_layer.view(new_context_layer_shape)
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
@@ -668,6 +672,7 @@ class ViTMAEModel(ViTMAEPreTrainedModel):
     def forward(
         self,
         pixel_values=None,
+        noise=None,
         head_mask=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -709,7 +714,7 @@ class ViTMAEModel(ViTMAEPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        embedding_output, mask, ids_restore = self.embeddings(pixel_values)
+        embedding_output, mask, ids_restore = self.embeddings(pixel_values, noise=noise)
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -751,7 +756,7 @@ class ViTMAEDecoder(nn.Module):
             [ViTMAELayer(decoder_config) for _ in range(config.decoder_num_hidden_layers)]
         )
 
-        self.decoder_norm = nn.LayerNorm(config.decoder_hidden_size)
+        self.decoder_norm = nn.LayerNorm(config.decoder_hidden_size, eps=config.layer_norm_eps)
         self.decoder_pred = nn.Linear(
             config.decoder_hidden_size, config.patch_size**2 * config.num_channels, bias=True
         )  # encoder to decoder
@@ -910,6 +915,7 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
     def forward(
         self,
         pixel_values=None,
+        noise=None,
         head_mask=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -941,6 +947,7 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
 
         outputs = self.vit(
             pixel_values,
+            noise=noise,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,

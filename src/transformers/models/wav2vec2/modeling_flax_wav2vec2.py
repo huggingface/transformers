@@ -23,8 +23,9 @@ import flax
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-from flax.core.frozen_dict import FrozenDict
+from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen.attention import dot_product_attention_weights
+from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
 
 from ...modeling_flax_outputs import FlaxBaseModelOutput, FlaxCausalLMOutput
@@ -136,7 +137,8 @@ def _compute_mask_indices(
 
     if mask_length > sequence_length:
         raise ValueError(
-            f"`mask_length` has to be smaller than `sequence_length`, but got `mask_length`: {mask_length} and `sequence_length`: {sequence_length}`"
+            f"`mask_length` has to be smaller than `sequence_length`, but got `mask_length`: {mask_length} and"
+            f" `sequence_length`: {sequence_length}`"
         )
 
     # compute number of masked spans in batch
@@ -185,7 +187,7 @@ def _sample_negative_indices(features_shape: Tuple, num_negatives: int, attentio
     batch_size, sequence_length, hidden_size = features_shape
     if sequence_length <= 1:
         raise ValueError(
-            f"`features should have `sequence_length` > 1, but are of shape "
+            "`features should have `sequence_length` > 1, but are of shape "
             f"(batch_size, sequence_length, hidden_size) = ({batch_size, sequence_length, hidden_size})."
         )
 
@@ -385,7 +387,8 @@ class FlaxConvLayersCollection(nn.Module):
             raise NotImplementedError("At the moment only ``config.feat_extact_norm == 'layer'`` is supported")
         else:
             raise ValueError(
-                f"`config.feat_extract_norm` is {self.config.feat_extract_norm}, but has to be one of ['group', 'layer']"
+                f"`config.feat_extract_norm` is {self.config.feat_extract_norm}, but has to be one of ['group',"
+                " 'layer']"
             )
 
     def __call__(self, hidden_states):
@@ -443,7 +446,8 @@ class FlaxWav2Vec2Attention(nn.Module):
         self.head_dim = self.embed_dim // self.num_heads
         if self.head_dim * self.num_heads != self.embed_dim:
             raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {self.num_heads})."
             )
 
         dense = partial(
@@ -858,19 +862,30 @@ class FlaxWav2Vec2PreTrainedModel(FlaxPreTrainedModel):
         input_shape: Tuple = (1, 1024),
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
+        _do_init: bool = True,
         **kwargs,
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
-        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
+        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         input_values = jnp.zeros(input_shape, dtype="i4")
         attention_mask = jnp.ones_like(input_values)
         params_rng, dropout_rng = jax.random.split(rng, 2)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        return self.module.init(rngs, input_values, attention_mask, return_dict=False)["params"]
+        random_params = self.module.init(rngs, input_values, attention_mask, return_dict=False)["params"]
+
+        if params is not None:
+            random_params = flatten_dict(unfreeze(random_params))
+            params = flatten_dict(unfreeze(params))
+            for missing_key in self._missing_keys:
+                params[missing_key] = random_params[missing_key]
+            self._missing_keys = set()
+            return freeze(unflatten_dict(params))
+        else:
+            return random_params
 
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     def __call__(
@@ -920,7 +935,7 @@ class FlaxWav2Vec2PreTrainedModel(FlaxPreTrainedModel):
     def _get_feat_extract_output_lengths(
         self, input_lengths: Union[jnp.ndarray, int], add_adapter: Optional[bool] = None
     ):
-        return self.module._get_feat_extract_output_lengths(input_lengths)
+        return self.module._get_feat_extract_output_lengths(input_lengths, add_adapter=add_adapter)
 
 
 class FlaxWav2Vec2Module(nn.Module):
@@ -956,15 +971,10 @@ class FlaxWav2Vec2Module(nn.Module):
 
         # make sure that no loss is computed on padded inputs
         if attention_mask is not None:
-            # compute real output lengths according to convolution formula
-            output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1).astype("i4"))
-
-            attention_mask = jnp.zeros(extract_features.shape[:2], dtype=self.dtype)
-
-            # these two operations makes sure that all values
-            # before the output lengths indices are attended to
-            attention_mask = attention_mask.at[jnp.arange(attention_mask.shape[0]), output_lengths - 1].set(1)
-            attention_mask = jnp.flip(jnp.flip(attention_mask, -1).cumsum(-1), -1).astype("bool")
+            # compute reduced attention_mask corresponding to feature vectors
+            attention_mask = self._get_feature_vector_attention_mask(
+                extract_features.shape[1], attention_mask, add_adapter=False
+            )
 
         hidden_states, extract_features = self.feature_projection(extract_features, deterministic=deterministic)
         if mask_time_indices is not None:  # apply SpecAugment along time axis with given indices
@@ -1034,12 +1044,10 @@ class FlaxWav2Vec2Module(nn.Module):
         batch_size = attention_mask.shape[0]
 
         attention_mask = jnp.zeros((batch_size, feature_vector_length), dtype=attention_mask.dtype)
-        # these two operations makes sure that all values before the output lengths idxs are attended to
-        idx = (jnp.arange(attention_mask.shape[0]), output_lengths - 1)
-        attention_mask = attention_mask.at[idx].set(1)
-        attention_mask = jnp.flip(jnp.flip(attention_mask, axis=-1).cumsum(axis=-1), axis=-1)
-
-        attention_mask = jnp.array(attention_mask, dtype=bool)
+        # these two operations makes sure that all values
+        # before the output lengths indices are attended to
+        attention_mask = attention_mask.at[jnp.arange(attention_mask.shape[0]), output_lengths - 1].set(1)
+        attention_mask = jnp.flip(jnp.flip(attention_mask, -1).cumsum(-1), -1).astype("bool")
         return attention_mask
 
 
@@ -1076,7 +1084,7 @@ FLAX_WAV2VEC2_MODEL_DOCSTRING = """
 
     >>> input_values = processor(
     ...     ds["speech"][0], sampling_rate=16_000, return_tensors="np"
-    >>> ).input_values  # Batch size 1
+    ... ).input_values  # Batch size 1
     >>> hidden_states = model(input_values).last_hidden_state
     ```
 """
@@ -1195,7 +1203,7 @@ FLAX_WAV2VEC2_FOR_CTC_DOCSTRING = """
 
     >>> input_values = processor(
     ...     ds["speech"][0], sampling_rate=16_000, return_tensors="np"
-    >>> ).input_values  # Batch size 1
+    ... ).input_values  # Batch size 1
     >>> logits = model(input_values).logits
     >>> predicted_ids = jnp.argmax(logits, axis=-1)
 
@@ -1286,10 +1294,14 @@ class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
             attentions=outputs.attentions,
         )
 
-    def _get_feat_extract_output_lengths(self, input_lengths: Union[jnp.ndarray, int]):
+    def _get_feat_extract_output_lengths(
+        self, input_lengths: Union[jnp.ndarray, int], add_adapter: Optional[bool] = None
+    ):
         """
         Computes the output length of the convolutional layers
         """
+
+        add_adapter = self.config.add_adapter if add_adapter is None else add_adapter
 
         def _conv_out_length(input_length, kernel_size, stride):
             # 1D convolutional layer output length formula taken
@@ -1298,6 +1310,10 @@ class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
 
         for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
             input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
+
+        if add_adapter:
+            for _ in range(self.config.num_adapter_layers):
+                input_lengths = _conv_out_length(input_lengths, 1, self.config.adapter_stride)
 
         return input_lengths
 

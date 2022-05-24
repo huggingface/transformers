@@ -136,7 +136,7 @@ SQuAD or a similar dataset, the main difference is that this script exposes the 
 You can use the script normally after installing it:
 
 ```bash
-pip install accelerate
+pip install git+https://github.com/huggingface/accelerate
 ```
 
 then

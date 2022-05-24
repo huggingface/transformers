@@ -803,7 +803,7 @@ LXMERT_START_DOCSTRING = r"""
 
     The LXMERT model was proposed in [LXMERT: Learning Cross-Modality Encoder Representations from
     Transformers](https://arxiv.org/abs/1908.07490) by Hao Tan and Mohit Bansal. It's a vision and language transformer
-    model, pretrained on a variety of multi-modal datasets comprising of GQA, VQAv2.0, MCSCOCO captions, and Visual
+    model, pretrained on a variety of multi-modal datasets comprising of GQA, VQAv2.0, MSCOCO captions, and Visual
     genome, using a combination of masked language modeling, region of interest feature regression, cross entropy loss
     for question answering attribute prediction, and object tag prediction.
 
@@ -1193,7 +1193,8 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
 
         if "masked_lm_labels" in kwargs:
             warnings.warn(
-                "The `masked_lm_labels` argument is deprecated and will be removed in a future version, use `labels` instead.",
+                "The `masked_lm_labels` argument is deprecated and will be removed in a future version, use `labels`"
+                " instead.",
                 FutureWarning,
             )
             labels = kwargs.pop("masked_lm_labels")

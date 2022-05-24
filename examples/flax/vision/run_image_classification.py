@@ -134,8 +134,9 @@ class ModelArguments:
     model_name_or_path: Optional[str] = field(
         default=None,
         metadata={
-            "help": "The model checkpoint for weights initialization."
-            "Don't set if you want to train a model from scratch."
+            "help": (
+                "The model checkpoint for weights initialization.Don't set if you want to train a model from scratch."
+            )
         },
     )
     model_type: Optional[str] = field(
@@ -151,7 +152,19 @@ class ModelArguments:
     dtype: Optional[str] = field(
         default="float32",
         metadata={
-            "help": "Floating-point format in which the model weights should be initialized and trained. Choose one of `[float32, float16, bfloat16]`."
+            "help": (
+                "Floating-point format in which the model weights should be initialized and trained. Choose one of"
+                " `[float32, float16, bfloat16]`."
+            )
+        },
+    )
+    use_auth_token: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "with private models)."
+            )
         },
     )
 
@@ -172,15 +185,19 @@ class DataTrainingArguments:
     max_train_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of training examples to this "
+                "value if set."
+            )
         },
     )
     max_eval_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
+                "value if set."
+            )
         },
     )
     overwrite_cache: bool = field(
@@ -315,6 +332,7 @@ def main():
             num_labels=len(train_dataset.classes),
             image_size=data_args.image_size,
             cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
         )
     elif model_args.model_name_or_path:
         config = AutoConfig.from_pretrained(
@@ -322,6 +340,7 @@ def main():
             num_labels=len(train_dataset.classes),
             image_size=data_args.image_size,
             cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
         )
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
@@ -329,11 +348,18 @@ def main():
 
     if model_args.model_name_or_path:
         model = FlaxAutoModelForImageClassification.from_pretrained(
-            model_args.model_name_or_path, config=config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype)
+            model_args.model_name_or_path,
+            config=config,
+            seed=training_args.seed,
+            dtype=getattr(jnp, model_args.dtype),
+            use_auth_token=True if model_args.use_auth_token else None,
         )
     else:
         model = FlaxAutoModelForImageClassification.from_config(
-            config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype)
+            config,
+            seed=training_args.seed,
+            dtype=getattr(jnp, model_args.dtype),
+            use_auth_token=True if model_args.use_auth_token else None,
         )
 
     # Store some constant
@@ -493,7 +519,8 @@ def main():
 
         train_step_progress_bar.close()
         epochs.write(
-            f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {train_metric['loss']}, Learning Rate: {train_metric['learning_rate']})"
+            f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {train_metric['loss']}, Learning Rate:"
+            f" {train_metric['learning_rate']})"
         )
 
         # ======================== Evaluating ==============================

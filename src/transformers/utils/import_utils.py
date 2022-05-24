@@ -325,7 +325,7 @@ torch_version = None
 _torch_fx_available = _torch_onnx_dict_inputs_support_available = False
 if _torch_available:
     torch_version = version.parse(importlib_metadata.version("torch"))
-    _torch_fx_available = (torch_version.major, torch_version.minor) == (
+    _torch_fx_available = (torch_version.major, torch_version.minor) >= (
         TORCH_FX_REQUIRED_VERSION.major,
         TORCH_FX_REQUIRED_VERSION.minor,
     )
@@ -400,6 +400,10 @@ def is_apex_available():
     return importlib.util.find_spec("apex") is not None
 
 
+def is_bitsandbytes_available():
+    return importlib.util.find_spec("bitsandbytes") is not None
+
+
 def is_faiss_available():
     return _faiss_available
 
@@ -422,6 +426,10 @@ def is_protobuf_available():
     if importlib.util.find_spec("google") is None:
         return False
     return importlib.util.find_spec("google.protobuf") is not None
+
+
+def is_accelerate_available():
+    return importlib.util.find_spec("accelerate") is not None
 
 
 def is_tokenizers_available():
@@ -721,6 +729,12 @@ PYCTCDECODE_IMPORT_ERROR = """
 `pip install pyctcdecode`
 """
 
+# docstyle-ignore
+ACCELERATE_IMPORT_ERROR = """
+{0} requires the accelerate library but it was not found in your environment. You can install it with pip:
+`pip install accelerate`
+"""
+
 
 BACKENDS_MAPPING = OrderedDict(
     [
@@ -746,6 +760,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("torch", (is_torch_available, PYTORCH_IMPORT_ERROR)),
         ("vision", (is_vision_available, VISION_IMPORT_ERROR)),
         ("scipy", (is_scipy_available, SCIPY_IMPORT_ERROR)),
+        ("accelerate", (is_accelerate_available, ACCELERATE_IMPORT_ERROR)),
     ]
 )
 
@@ -857,8 +872,13 @@ class _LazyModule(ModuleType):
             return importlib.import_module("." + module_name, self.__name__)
         except Exception as e:
             raise RuntimeError(
-                f"Failed to import {self.__name__}.{module_name} because of the following error (look up to see its traceback):\n{e}"
+                f"Failed to import {self.__name__}.{module_name} because of the following error (look up to see its"
+                f" traceback):\n{e}"
             ) from e
 
     def __reduce__(self):
         return (self.__class__, (self._name, self.__file__, self._import_structure))
+
+
+class OptionalDependencyNotAvailable(BaseException):
+    """Internally used error class for signalling an optional dependency was not found."""

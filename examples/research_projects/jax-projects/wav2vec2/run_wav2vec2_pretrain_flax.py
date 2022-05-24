@@ -64,7 +64,10 @@ class ModelArguments:
     dtype: Optional[str] = field(
         default="float32",
         metadata={
-            "help": "Floating-point format in which the model weights should be initialized and trained. Choose one of `[float32, float16, bfloat16]`."
+            "help": (
+                "Floating-point format in which the model weights should be initialized and trained. Choose one of"
+                " `[float32, float16, bfloat16]`."
+            )
         },
     )
 
@@ -94,7 +97,9 @@ class DataTrainingArguments:
     validation_split_name: Optional[str] = field(
         default="validation",
         metadata={
-            "help": "The name of the validation data set split to use (via the datasets library). Defaults to 'validation'"
+            "help": (
+                "The name of the validation data set split to use (via the datasets library). Defaults to 'validation'"
+            )
         },
     )
     speech_file_column: Optional[str] = field(
@@ -120,7 +125,10 @@ class DataTrainingArguments:
     pad_to_multiple_of: Optional[int] = field(
         default=1024,
         metadata={
-            "help": "If set will pad the sequence to a multiple of the provided value. This is important to avoid triggering recompilations on TPU"
+            "help": (
+                "If set will pad the sequence to a multiple of the provided value. This is important to avoid"
+                " triggering recompilations on TPU"
+            )
         },
     )
 
@@ -357,7 +365,8 @@ def main():
 
     if not config.do_stable_layer_norm or config.feat_extract_norm != "layer":
         raise ValueError(
-            "PreTraining is only supported for ``config.do_stable_layer_norm=True`` and ``config.feat_extract_norm='layer'"
+            "PreTraining is only supported for ``config.do_stable_layer_norm=True`` and"
+            " ``config.feat_extract_norm='layer'"
         )
 
     model = FlaxWav2Vec2ForPreTraining(config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype))
@@ -557,7 +566,8 @@ def main():
                     write_train_metric(summary_writer, train_metrics, train_time, cur_step)
 
                 epochs.write(
-                    f"Step... ({cur_step} | Loss: {train_metric['loss'].mean()}, Learning Rate: {train_metric['learning_rate'].mean()})"
+                    f"Step... ({cur_step} | Loss: {train_metric['loss'].mean()}, Learning Rate:"
+                    f" {train_metric['learning_rate'].mean()})"
                 )
 
                 train_metrics = []
@@ -583,7 +593,8 @@ def main():
 
         # Update progress bar
         epochs.write(
-            f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {eval_metrics['loss']}, Perplexity: {eval_metrics['codevector_perplexity']})"
+            f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {eval_metrics['loss']}, Perplexity:"
+            f" {eval_metrics['codevector_perplexity']})"
         )
 
         # Save metrics
