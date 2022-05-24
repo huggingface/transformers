@@ -2,7 +2,7 @@
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
-# Copyright 2021 The HuggingFace Team. All rights reserved.
+# Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -28,9 +28,9 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_layoutlmv2": ["LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMv2Config"],
-    "processing_layoutlmv2": ["LayoutLMv2Processor"],
-    "tokenization_layoutlmv2": ["LayoutLMv2Tokenizer"],
+    "configuration_layoutlmv3": ["LAYOUTLMV3_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMv3Config"],
+    "processing_layoutlmv3": ["LayoutLMv3Processor"],
+    "tokenization_layoutlmv3": ["LayoutLMv3Tokenizer"],
 }
 
 try:
@@ -39,15 +39,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["tokenization_layoutlmv2_fast"] = ["LayoutLMv2TokenizerFast"]
-
-try:
-    if not is_vision_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["feature_extraction_layoutlmv2"] = ["LayoutLMv2FeatureExtractor"]
+    _import_structure["tokenization_layoutlmv3_fast"] = ["LayoutLMv3TokenizerFast"]
 
 try:
     if not is_torch_available():
@@ -55,20 +47,28 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_layoutlmv2"] = [
-        "LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "LayoutLMv2ForQuestionAnswering",
-        "LayoutLMv2ForSequenceClassification",
-        "LayoutLMv2ForTokenClassification",
-        "LayoutLMv2Layer",
-        "LayoutLMv2Model",
-        "LayoutLMv2PreTrainedModel",
+    _import_structure["modeling_layoutlmv3"] = [
+        "LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "LayoutLMv3ForQuestionAnswering",
+        "LayoutLMv3ForSequenceClassification",
+        "LayoutLMv3ForTokenClassification",
+        "LayoutLMv3Model",
+        "LayoutLMv3PreTrainedModel",
     ]
 
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["feature_extraction_layoutlmv3"] = ["LayoutLMv3FeatureExtractor"]
+
+
 if TYPE_CHECKING:
-    from .configuration_layoutlmv2 import LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMv2Config
-    from .processing_layoutlmv2 import LayoutLMv2Processor
-    from .tokenization_layoutlmv2 import LayoutLMv2Tokenizer
+    from .configuration_layoutlmv3 import LAYOUTLMV3_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMv3Config
+    from .processing_layoutlmv3 import LayoutLMv3Processor
+    from .tokenization_layoutlmv3 import LayoutLMv3Tokenizer
 
     try:
         if not is_tokenizers_available():
@@ -76,15 +76,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .tokenization_layoutlmv2_fast import LayoutLMv2TokenizerFast
-
-    try:
-        if not is_vision_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .feature_extraction_layoutlmv2 import LayoutLMv2FeatureExtractor
+        from .tokenization_layoutlmv3_fast import LayoutLMv3TokenizerFast
 
     try:
         if not is_torch_available():
@@ -92,15 +84,23 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_layoutlmv2 import (
-            LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST,
-            LayoutLMv2ForQuestionAnswering,
-            LayoutLMv2ForSequenceClassification,
-            LayoutLMv2ForTokenClassification,
-            LayoutLMv2Layer,
-            LayoutLMv2Model,
-            LayoutLMv2PreTrainedModel,
+        from .modeling_layoutlmv3 import (
+            LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST,
+            LayoutLMv3ForQuestionAnswering,
+            LayoutLMv3ForSequenceClassification,
+            LayoutLMv3ForTokenClassification,
+            LayoutLMv3Model,
+            LayoutLMv3PreTrainedModel,
         )
+
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .feature_extraction_layoutlmv3 import LayoutLMv3FeatureExtractor
+
 else:
     import sys
 

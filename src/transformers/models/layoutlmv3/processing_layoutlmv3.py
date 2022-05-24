@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team.
+# Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Processor class for LayoutXLM.
+Processor class for LayoutLMv3.
 """
 from typing import List, Optional, Union
 
@@ -22,27 +22,27 @@ from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokeni
 from ...utils import TensorType
 
 
-class LayoutXLMProcessor(ProcessorMixin):
+class LayoutLMv3Processor(ProcessorMixin):
     r"""
-    Constructs a LayoutXLM processor which combines a LayoutXLM feature extractor and a LayoutXLM tokenizer into a
+    Constructs a LayoutLMv3 processor which combines a LayoutLMv3 feature extractor and a LayoutLMv3 tokenizer into a
     single processor.
 
-    [`LayoutXLMProcessor`] offers all the functionalities you need to prepare data for the model.
+    [`LayoutLMv3Processor`] offers all the functionalities you need to prepare data for the model.
 
-    It first uses [`LayoutLMv2FeatureExtractor`] to resize document images to a fixed size, and optionally applies OCR
-    to get words and normalized bounding boxes. These are then provided to [`LayoutXLMTokenizer`] or
-    [`LayoutXLMTokenizerFast`], which turns the words and bounding boxes into token-level `input_ids`,
+    It first uses [`LayoutLMv3FeatureExtractor`] to resize and normalize document images, and optionally applies OCR to
+    get words and normalized bounding boxes. These are then provided to [`LayoutLMv3Tokenizer`] or
+    [`LayoutLMv3TokenizerFast`], which turns the words and bounding boxes into token-level `input_ids`,
     `attention_mask`, `token_type_ids`, `bbox`. Optionally, one can provide integer `word_labels`, which are turned
     into token-level `labels` for token classification tasks (such as FUNSD, CORD).
 
     Args:
-        feature_extractor (`LayoutLMv2FeatureExtractor`):
-            An instance of [`LayoutLMv2FeatureExtractor`]. The feature extractor is a required input.
-        tokenizer (`LayoutXLMTokenizer` or `LayoutXLMTokenizerFast`):
-            An instance of [`LayoutXLMTokenizer`] or [`LayoutXLMTokenizerFast`]. The tokenizer is a required input.
+        feature_extractor (`LayoutLMv3FeatureExtractor`):
+            An instance of [`LayoutLMv3FeatureExtractor`]. The feature extractor is a required input.
+        tokenizer (`LayoutLMv3Tokenizer` or `LayoutLMv3TokenizerFast`):
+            An instance of [`LayoutLMv3Tokenizer`] or [`LayoutLMv3TokenizerFast`]. The tokenizer is a required input.
     """
-    feature_extractor_class = "LayoutLMv2FeatureExtractor"
-    tokenizer_class = ("LayoutXLMTokenizer", "LayoutXLMTokenizerFast")
+    feature_extractor_class = "LayoutLMv3FeatureExtractor"
+    tokenizer_class = ("LayoutLMv3Tokenizer", "LayoutLMv3TokenizerFast")
 
     def __call__(
         self,
@@ -68,12 +68,13 @@ class LayoutXLMProcessor(ProcessorMixin):
         **kwargs
     ) -> BatchEncoding:
         """
-        This method first forwards the `images` argument to [`~LayoutLMv2FeatureExtractor.__call__`]. In case
-        [`LayoutLMv2FeatureExtractor`] was initialized with `apply_ocr` set to `True`, it passes the obtained words and
-        bounding boxes along with the additional arguments to [`~LayoutXLMTokenizer.__call__`] and returns the output,
-        together with resized `images`. In case [`LayoutLMv2FeatureExtractor`] was initialized with `apply_ocr` set to
-        `False`, it passes the words (`text`/``text_pair`) and `boxes` specified by the user along with the additional
-        arguments to [`~LayoutXLMTokenizer.__call__`] and returns the output, together with resized `images``.
+        This method first forwards the `images` argument to [`~LayoutLMv3FeatureExtractor.__call__`]. In case
+        [`LayoutLMv3FeatureExtractor`] was initialized with `apply_ocr` set to `True`, it passes the obtained words and
+        bounding boxes along with the additional arguments to [`~LayoutLMv3Tokenizer.__call__`] and returns the output,
+        together with resized and normalized `pixel_values`. In case [`LayoutLMv3FeatureExtractor`] was initialized
+        with `apply_ocr` set to `False`, it passes the words (`text`/``text_pair`) and `boxes` specified by the user
+        along with the additional arguments to [`~LayoutLMv3Tokenizer.__call__`] and returns the output, together with
+        resized and normalized `pixel_values`.
 
         Please refer to the docstring of the above two methods for more information.
         """
@@ -124,7 +125,7 @@ class LayoutXLMProcessor(ProcessorMixin):
         images = features.pop("pixel_values")
         if return_overflowing_tokens is True:
             images = self.get_overflowing_images(images, encoded_inputs["overflow_to_sample_mapping"])
-        encoded_inputs["image"] = images
+        encoded_inputs["pixel_values"] = images
 
         return encoded_inputs
 
