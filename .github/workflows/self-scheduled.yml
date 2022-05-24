@@ -91,11 +91,7 @@ jobs:
       - name: GPU visibility
         working-directory: /transformers
         run: |
-          echo $(python3 -c 'import transformers; version = "transformers version:" + " " + transformers.__version__; print(version)')
           utils/print_env_pt.py
-          echo $(python3 -c 'import tensorflow as tf; version = "TensorFlow version:" + " " + tf.__version__; print(version)')
-          TF_CPP_MIN_LOG_LEVEL=3 python3 -c "import tensorflow as tf; print('TF GPUs available:', bool(tf.config.list_physical_devices('GPU')))"
-          TF_CPP_MIN_LOG_LEVEL=3 python3 -c "import tensorflow as tf; print('Number of TF GPUs available:', len(tf.config.list_physical_devices('GPU')))"
 
       - name: Run all tests on GPU
         working-directory: /transformers
@@ -148,11 +144,7 @@ jobs:
       - name: GPU visibility
         working-directory: /transformers
         run: |
-          echo $(python3 -c 'import transformers; version = "transformers version:" + " " + transformers.__version__; print(version)')
           utils/print_env_pt.py
-          echo $(python3 -c 'import tensorflow as tf; version = "TensorFlow version:" + " " + tf.__version__; print(version)')
-          TF_CPP_MIN_LOG_LEVEL=3 python3 -c "import tensorflow as tf; print('TF GPUs available:', bool(tf.config.list_physical_devices('GPU')))"
-          TF_CPP_MIN_LOG_LEVEL=3 python3 -c "import tensorflow as tf; print('Number of TF GPUs available:', len(tf.config.list_physical_devices('GPU')))"
 
       - name: Run all tests on GPU
         working-directory: /transformers
@@ -189,11 +181,7 @@ jobs:
       - name: GPU visibility
         working-directory: /transformers
         run: |
-          echo $(python3 -c 'import transformers; version = "transformers version:" + " " + transformers.__version__; print(version)')
           utils/print_env_pt.py
-          echo $(python3 -c 'import tensorflow as tf; version = "TensorFlow version:" + " " + tf.__version__; print(version)')
-          TF_CPP_MIN_LOG_LEVEL=3 python3 -c "import tensorflow as tf; print('TF GPUs available:', bool(tf.config.list_physical_devices('GPU')))"
-          TF_CPP_MIN_LOG_LEVEL=3 python3 -c "import tensorflow as tf; print('Number of TF GPUs available:', len(tf.config.list_physical_devices('GPU')))"
 
       - name: Run examples tests on GPU
         working-directory: /transformers
@@ -236,7 +224,6 @@ jobs:
       - name: GPU visibility
         working-directory: /transformers
         run: |
-          echo $(python3 -c 'import transformers; version = "transformers version:" + " " + transformers.__version__; print(version)')
           utils/print_env_pt.py
 
       - name: Run all pipeline tests on GPU
@@ -282,10 +269,7 @@ jobs:
       - name: GPU visibility
         working-directory: /transformers
         run: |
-          echo $(python3 -c 'import transformers; version = "transformers version:" + " " + transformers.__version__; print(version)')
-          echo $(python3 -c 'import tensorflow as tf; version = "TensorFlow version:" + " " + tf.__version__; print(version)')
-          TF_CPP_MIN_LOG_LEVEL=3 python3 -c "import tensorflow as tf; print('TF GPUs available:', bool(tf.config.list_physical_devices('GPU')))"
-          TF_CPP_MIN_LOG_LEVEL=3 python3 -c "import tensorflow as tf; print('Number of TF GPUs available:', len(tf.config.list_physical_devices('GPU')))"
+          utils/print_env_pt.py
 
       - name: Run all pipeline tests on GPU
         working-directory: /transformers
@@ -337,9 +321,7 @@ jobs:
       - name: GPU visibility
         working-directory: /workspace/transformers
         run: |
-          echo $(python3 -c 'import transformers; version = "transformers version:" + " " + transformers.__version__; print(version)')
           utils/print_env_pt.py
-          echo $(python3 -c 'import deepspeed; version = "DeepSpeed version:" + " " + deepspeed.__version__; print(version)')
 
       - name: Run all tests on GPU
         working-directory: /workspace/transformers
