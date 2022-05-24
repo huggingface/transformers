@@ -171,6 +171,13 @@ class LayoutLMv2TokenizerFast(metaclass=DummyObject):
         requires_backends(self, ["tokenizers"])
 
 
+class LayoutLMv3TokenizerFast(metaclass=DummyObject):
+    _backends = ["tokenizers"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+
 class LayoutXLMTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 

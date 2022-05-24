@@ -226,6 +226,13 @@ _import_structure = {
         "LayoutLMv2Processor",
         "LayoutLMv2Tokenizer",
     ],
+    "models.layoutlmv3": [
+        "LAYOUTLMV3_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "LayoutLMv3Config",
+        "LayoutLMv3FeatureExtractor",
+        "LayoutLMv3Processor",
+        "LayoutLMv3Tokenizer",
+    ],
     "models.layoutxlm": ["LayoutXLMProcessor"],
     "models.led": ["LED_PRETRAINED_CONFIG_ARCHIVE_MAP", "LEDConfig", "LEDTokenizer"],
     "models.longformer": ["LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongformerConfig", "LongformerTokenizer"],
@@ -504,6 +511,7 @@ else:
     _import_structure["models.herbert"].append("HerbertTokenizerFast")
     _import_structure["models.layoutlm"].append("LayoutLMTokenizerFast")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2TokenizerFast")
+    _import_structure["models.layoutlmv3"].append("LayoutLMv3TokenizerFast")
     _import_structure["models.layoutxlm"].append("LayoutXLMTokenizerFast")
     _import_structure["models.led"].append("LEDTokenizerFast")
     _import_structure["models.longformer"].append("LongformerTokenizerFast")
@@ -590,8 +598,7 @@ else:
     _import_structure["models.glpn"].append("GLPNFeatureExtractor")
     _import_structure["models.imagegpt"].append("ImageGPTFeatureExtractor")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2FeatureExtractor")
-    _import_structure["models.layoutlmv2"].append("LayoutLMv2Processor")
-    _import_structure["models.layoutxlm"].append("LayoutXLMProcessor")
+    _import_structure["models.layoutlmv3"].append("LayoutLMv3FeatureExtractor")
     _import_structure["models.maskformer"].append("MaskFormerFeatureExtractor")
     _import_structure["models.perceiver"].append("PerceiverFeatureExtractor")
     _import_structure["models.poolformer"].append("PoolFormerFeatureExtractor")
@@ -1197,6 +1204,16 @@ else:
             "LayoutLMv2ForTokenClassification",
             "LayoutLMv2Model",
             "LayoutLMv2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.layoutlmv3"].extend(
+        [
+            "LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "LayoutLMv3ForQuestionAnswering",
+            "LayoutLMv3ForSequenceClassification",
+            "LayoutLMv3ForTokenClassification",
+            "LayoutLMv3Model",
+            "LayoutLMv3PreTrainedModel",
         ]
     )
     _import_structure["models.led"].extend(
@@ -2759,6 +2776,13 @@ if TYPE_CHECKING:
         LayoutLMv2Processor,
         LayoutLMv2Tokenizer,
     )
+    from .models.layoutlmv3 import (
+        LAYOUTLMV3_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        LayoutLMv3Config,
+        LayoutLMv3FeatureExtractor,
+        LayoutLMv3Processor,
+        LayoutLMv3Tokenizer,
+    )
     from .models.layoutxlm import LayoutXLMProcessor
     from .models.led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig, LEDTokenizer
     from .models.longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig, LongformerTokenizer
@@ -3004,6 +3028,7 @@ if TYPE_CHECKING:
         from .models.herbert import HerbertTokenizerFast
         from .models.layoutlm import LayoutLMTokenizerFast
         from .models.layoutlmv2 import LayoutLMv2TokenizerFast
+        from .models.layoutlmv3 import LayoutLMv3TokenizerFast
         from .models.layoutxlm import LayoutXLMTokenizerFast
         from .models.led import LEDTokenizerFast
         from .models.longformer import LongformerTokenizerFast
@@ -3069,8 +3094,8 @@ if TYPE_CHECKING:
         from .models.flava import FlavaFeatureExtractor, FlavaProcessor
         from .models.glpn import GLPNFeatureExtractor
         from .models.imagegpt import ImageGPTFeatureExtractor
-        from .models.layoutlmv2 import LayoutLMv2FeatureExtractor, LayoutLMv2Processor
-        from .models.layoutxlm import LayoutXLMProcessor
+        from .models.layoutlmv2 import LayoutLMv2FeatureExtractor
+        from .models.layoutlmv3 import LayoutLMv3FeatureExtractor
         from .models.maskformer import MaskFormerFeatureExtractor
         from .models.perceiver import PerceiverFeatureExtractor
         from .models.poolformer import PoolFormerFeatureExtractor
@@ -3580,6 +3605,14 @@ if TYPE_CHECKING:
             LayoutLMv2ForTokenClassification,
             LayoutLMv2Model,
             LayoutLMv2PreTrainedModel,
+        )
+        from .models.layoutlmv3 import (
+            LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST,
+            LayoutLMv3ForQuestionAnswering,
+            LayoutLMv3ForSequenceClassification,
+            LayoutLMv3ForTokenClassification,
+            LayoutLMv3Model,
+            LayoutLMv3PreTrainedModel,
         )
         from .models.led import (
             LED_PRETRAINED_MODEL_ARCHIVE_LIST,
