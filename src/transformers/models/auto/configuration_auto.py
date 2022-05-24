@@ -286,7 +286,6 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("decision_transformer", "Decision Transformer"),
         ("deit", "DeiT"),
         ("detr", "DETR"),
-<<<<<<< HEAD
         ("dialogpt", "DialoGPT"),
         ("distilbert", "DistilBERT"),
         ("dit", "DiT"),
@@ -301,8 +300,6 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("funnel", "Funnel Transformer"),
         ("glpn", "GLPN"),
         ("gpt2", "OpenAI GPT-2"),
-=======
->>>>>>> ec1931d6a3474ae01ab13f8c45d0ba18d57bf2ef
         ("conditional_detr", "conditional_detr"),
         ("gpt_neo", "GPT Neo"),
         ("gptj", "GPT-J"),
