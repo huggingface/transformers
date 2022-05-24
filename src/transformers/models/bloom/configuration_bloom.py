@@ -133,8 +133,6 @@ class BloomConfig(PretrainedConfig):
         eos_token_id=2,
         apply_residual_connection_post_layernorm=False,
         bias_dropout_fusion=True,
-        skip_bias_add=True,
-        skip_bias_add_qkv=False,
         hidden_dropout=0.0,
         attention_dropout=0.0,
         attention_softmax_in_fp32=True,
@@ -155,8 +153,6 @@ class BloomConfig(PretrainedConfig):
         self.apply_residual_connection_post_layernorm = apply_residual_connection_post_layernorm
         self.bias_dropout_fusion = bias_dropout_fusion
         self.hidden_dropout = hidden_dropout
-        self.skip_bias_add = skip_bias_add
-        self.skip_bias_add_qkv = skip_bias_add_qkv
         self.attention_dropout = attention_dropout
         self.attention_softmax_in_fp32 = attention_softmax_in_fp32
 
