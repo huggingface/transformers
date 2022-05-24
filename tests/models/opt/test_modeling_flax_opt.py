@@ -44,12 +44,9 @@ def prepare_opt_inputs_dict(
 ):
     if attention_mask is None:
         attention_mask = np.where(input_ids != config.pad_token_id, 1, 0)
-    if head_mask is None:
-        head_mask = np.ones((config.num_hidden_layers, config.num_attention_heads))
     return {
         "input_ids": input_ids,
         "attention_mask": attention_mask,
-        "head_mask": head_mask,
     }
 
 
@@ -345,7 +342,7 @@ class FlaxOPTGenerationTest(unittest.TestCase):
         for prompt in self.prompts:
             input_ids = tokenizer(prompt, return_tensors="jax").input_ids
 
-            generated_ids = model.generate(input_ids, max_length=10)
+            generated_ids = model.generate(input_ids, max_length=12)
 
             generated_string = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
             predicted_outputs += generated_string
@@ -396,12 +393,12 @@ class FlaxOPTGenerationTest(unittest.TestCase):
         inputs = tokenizer(sentences, return_tensors="jax", padding=True)
         input_ids = inputs["input_ids"]
 
-        outputs = model.generate(input_ids=input_ids, attention_mask=inputs["attention_mask"])
+        outputs = model.generate(input_ids=input_ids, attention_mask=inputs["attention_mask"],trace = False)
 
         inputs_non_padded = tokenizer(sentences[0], return_tensors="jax").input_ids
         output_non_padded = model.generate(input_ids=inputs_non_padded)
 
-        num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].sum().cpu()
+        num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].sum()
         inputs_padded = tokenizer(sentences[1], return_tensors="jax").input_ids
         output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
 
