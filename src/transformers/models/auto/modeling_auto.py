@@ -111,6 +111,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("tapas", "TapasModel"),
         ("trajectory_transformer", "TrajectoryTransformerModel"),
         ("transfo-xl", "TransfoXLModel"),
+        ("trillson_efficient", "Trillson_efficientModel"),
         ("unispeech", "UniSpeechModel"),
         ("unispeech-sat", "UniSpeechSatModel"),
         ("van", "VanModel"),
@@ -228,6 +229,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("t5", "T5ForConditionalGeneration"),
         ("tapas", "TapasForMaskedLM"),
         ("transfo-xl", "TransfoXLLMHeadModel"),
+        ("trillson_efficient", "Trillson_efficientForConditionalGeneration"),
         ("wav2vec2", "Wav2Vec2ForMaskedLM"),
         ("xlm", "XLMWithLMHeadModel"),
         ("xlm-roberta", "XLMRobertaForMaskedLM"),
@@ -269,6 +271,8 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("roformer", "RoFormerForCausalLM"),
         ("speech_to_text_2", "Speech2Text2ForCausalLM"),
         ("transfo-xl", "TransfoXLLMHeadModel"),
+        ("trillson_efficient", "Trillson_efficientForCausalLM"),
+        ("trillson_efficient", "Trillson_efficientForCausalLM"),
         ("trocr", "TrOCRForCausalLM"),
         ("xglm", "XGLMForCausalLM"),
         ("xlm", "XLMWithLMHeadModel"),
@@ -428,6 +432,7 @@ MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
     [
         ("speech-encoder-decoder", "SpeechEncoderDecoderModel"),
         ("speech_to_text", "Speech2TextForConditionalGeneration"),
+        ("trillson_efficient", "Trillson_efficientForConditionalGeneration"),
     ]
 )
 
