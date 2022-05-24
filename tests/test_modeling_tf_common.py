@@ -691,7 +691,7 @@ class TFModelTesterMixin:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname, saved_model=False)
                 model = model_class.from_pretrained(tmpdirname)
-
+            print(f"From test_compile_tf_model() with {model_class.__name__}:")
             outputs_dict = model(inputs)
             hidden_states = outputs_dict[0]
 

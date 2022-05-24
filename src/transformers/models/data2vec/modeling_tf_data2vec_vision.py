@@ -1099,7 +1099,6 @@ class TFAdaptiveAvgPool2D(tf.keras.layers.Layer):
         return inputs
 
 
-
 class TFData2VecVisionPyramidPoolingModule(tf.keras.layers.Layer):
     """
     Pyramid Pooling Module (PPM) used in PSPNet.
@@ -1163,9 +1162,11 @@ class TFData2VecVisionUperHead(tf.keras.layers.Layer):
         # FPN Module
         self.lateral_convs = []
         self.fpn_convs = []
-        for _, idx in enumerate(self.in_channels[:-1]):  # skip the top layer
+        for idx, _ in enumerate(self.in_channels[:-1]):  # skip the top layer
             l_conv = TFData2VecVisionConvModule(out_channels=self.channels, kernel_size=1, name=f"l_conv_{idx}")
-            fpn_conv = TFData2VecVisionConvModule(out_channels=self.channels, kernel_size=3, padding="same", name=f"fpn_conv_{idx}")
+            fpn_conv = TFData2VecVisionConvModule(
+                out_channels=self.channels, kernel_size=3, padding="same", name=f"fpn_conv_{idx}"
+            )
             self.lateral_convs.append(l_conv)
             self.fpn_convs.append(fpn_conv)
 
@@ -1240,7 +1241,11 @@ class TFData2VecVisionFCNHead(tf.keras.layers.Layer):
         convs = []
         convs.append(
             TFData2VecVisionConvModule(
-                out_channels=self.channels, kernel_size=kernel_size, padding="same", dilation=dilation, name="conv_module_1"
+                out_channels=self.channels,
+                kernel_size=kernel_size,
+                padding="same",
+                dilation=dilation,
+                name="conv_module_1",
             )
         )
         for i in range(self.num_convs - 1):
@@ -1385,8 +1390,9 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
             output_hidden_states=True,  # we need the intermediate hidden states
             return_dict=return_dict,
         )
-
+        print(f"From TFData2VecVisionForSemanticSegmentation outputs: {outputs}")
         encoder_hidden_states = outputs.hidden_states if return_dict else outputs[1]
+        print(f"From TFData2VecVisionForSemanticSegmentation encoder_hidden_states: {encoder_hidden_states}")
 
         # only keep certain features, and reshape
         # note that we do +1 as the encoder_hidden_states also includes the initial embeddings
