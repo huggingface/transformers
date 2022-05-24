@@ -187,30 +187,30 @@ class GroupViTAttention(nn.Module):
         key_length = key.size(1)
 
         # [batch_size, num_heads, query_length, channels//num_heads]
-        query = (
+        projected_query = (
             self.q_proj(query)
             .reshape(batch_size, query_length, self.num_heads, channels // self.num_heads)
             .permute(0, 2, 1, 3)
         )
         # [batch_size, num_heads, key_length, channels//num_heads]
-        key = (
+        projected_key = (
             self.k_proj(key)
             .reshape(batch_size, key_length, self.num_heads, channels // self.num_heads)
             .permute(0, 2, 1, 3)
         )
         # [batch_size, num_heads, key_length, channels//num_heads]
-        value = (
+        projected_value = (
             self.v_proj(key)
             .reshape(batch_size, key_length, self.num_heads, channels // self.num_heads)
             .permute(0, 2, 1, 3)
         )
 
         # [batch_size, num_heads, query_length, key_length]
-        attn = (query @ key.transpose(-2, -1)) * self.scale
+        attn = (projected_query @ projected_key.transpose(-2, -1)) * self.scale
         attn = attn.softmax(dim=-1)
 
         # [batch_size, num_heads, query_length, channels//num_heads] -> [batch_size, query_length, channels]
-        out = (attn @ value).transpose(1, 2).reshape(batch_size, query_length, channels)
+        out = (attn @ projected_value).transpose(1, 2).reshape(batch_size, query_length, channels)
         out = self.proj(out)
         return out
 
@@ -274,8 +274,6 @@ class GroupViTAssignAttention(nn.Module):
         soft_attn = self.get_attn(raw_attn, gumbel=False, hard=False)
 
         attn = attn / (attn.sum(dim=-1, keepdim=True) + self.assign_eps)
-
-        assert attn.shape == (batch_size, query_length, key_length)
 
         out = attn @ value
 
@@ -454,6 +452,7 @@ class GroupViTVisionEmbeddings(nn.Module):
         if npatch == self.position_embeddings.shape[1] and height == width:
             return self.position_embeddings
         patch_pos_embed = self.position_embeddings
+        num_original_pos_embed = patch_pos_embed.shape[1]
         dim = embeddings.shape[-1]
         feat_height = height // self.config.patch_size
         feat_width = width // self.config.patch_size
@@ -463,18 +462,17 @@ class GroupViTVisionEmbeddings(nn.Module):
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed.reshape(
                 1,
-                int(math.sqrt(self.position_embeddings.shape[1])),
-                int(math.sqrt(self.position_embeddings.shape[1])),
+                int(math.sqrt(num_original_pos_embed)),
+                int(math.sqrt(num_original_pos_embed)),
                 dim,
             ).permute(0, 3, 1, 2),
             scale_factor=(
-                feat_height / math.sqrt(self.position_embeddings.shape[1]),
-                feat_width / math.sqrt(self.position_embeddings.shape[1]),
+                feat_height / math.sqrt(num_original_pos_embed),
+                feat_width / math.sqrt(num_original_pos_embed),
             ),
             mode="bicubic",
             align_corners=False,
         )
-        assert int(feat_height) == patch_pos_embed.shape[-2] and int(feat_width) == patch_pos_embed.shape[-1]
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return patch_pos_embed
 
