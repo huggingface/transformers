@@ -770,8 +770,10 @@ class Speech2TextModelIntegrationTests(unittest.TestCase):
         EXPECTED_TRANSCRIPTIONS = [
             "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel",
             "nor is mister cultar's manner less interesting than his matter",
-            "he tells us that at this festive season of the year with christmas and roast beef looming before us similes drawn from eating and its results occur most readily to the mind",
-            "he has grave doubts whether sir frederick leyton's work is really greek after all and can discover in it but little of rocky ithaca",
+            "he tells us that at this festive season of the year with christmas and roast beef looming before us"
+            " similes drawn from eating and its results occur most readily to the mind",
+            "he has grave doubts whether sir frederick leyton's work is really greek after all and can discover in it"
+            " but little of rocky ithaca",
         ]
 
         self.assertListEqual(generated_transcripts, EXPECTED_TRANSCRIPTIONS)

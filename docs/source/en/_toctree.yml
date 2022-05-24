@@ -1,4 +1,4 @@
-- sections: 
+- sections:
   - local: index
     title: 🤗 Transformers
   - local: quicktour
@@ -60,11 +60,9 @@
   - local: serialization
     title: Export 🤗 Transformers models
   - local: performance
-    title: 'Performance and Scalability: How To Fit a Bigger Model and Train It Faster'
+    title: Performance and scalability
   - local: big_models
     title: Instantiating a big model
-  - local: parallelism
-    title: Model Parallelism
   - local: benchmarks
     title: Benchmarks
   - local: migration
@@ -83,6 +81,12 @@
     title: "How to add a model to 🤗 Transformers?"
   - local: add_new_pipeline
     title: "How to add a pipeline to 🤗 Transformers?"
+  - local: perf_train_gpu_one
+    title: Training on one GPU
+  - local: perf_train_gpu_many
+    title: Training on many GPUs
+  - local: perf_hardware
+    title: Custom hardware for training
   - local: testing
     title: Testing
   - local: pr_checks
@@ -188,6 +192,8 @@
       title: CPM
     - local: model_doc/ctrl
       title: CTRL
+    - local: model_doc/cvt
+      title: CvT
     - local: model_doc/data2vec
       title: Data2Vec
     - local: model_doc/deberta
@@ -216,6 +222,8 @@
       title: Encoder Decoder Models
     - local: model_doc/flaubert
       title: FlauBERT
+    - local: model_doc/flava
+      title: FLAVA
     - local: model_doc/fnet
       title: FNet
     - local: model_doc/fsmt
@@ -234,6 +242,8 @@
       title: LayoutLM
     - local: model_doc/layoutlmv2
       title: LayoutLMV2
+    - local: model_doc/layoutlmv3
+      title: LayoutLMV3
     - local: model_doc/layoutxlm
       title: LayoutXLM
     - local: model_doc/led
@@ -270,12 +280,16 @@
       title: Nyströmformer
     - local: model_doc/openai-gpt
       title: OpenAI GPT
+    - local: model_doc/opt
+      title: OPT
     - local: model_doc/gpt2
       title: OpenAI GPT2
     - local: model_doc/gptj
       title: GPT-J
     - local: model_doc/gpt_neo
       title: GPT Neo
+    - local: model_doc/gpt_neox
+      title: GPT NeoX
     - local: model_doc/hubert
       title: Hubert
     - local: model_doc/perceiver
@@ -336,6 +350,8 @@
       title: TAPAS
     - local: model_doc/tapex
       title: TAPEX
+    - local: model_doc/trajectory_transformer
+      title: Trajectory Transformer
     - local: model_doc/transfo-xl
       title: Transformer XL
     - local: model_doc/trocr
@@ -360,6 +376,8 @@
       title: VisualBERT
     - local: model_doc/wav2vec2
       title: Wav2Vec2
+    - local: model_doc/wav2vec2-conformer
+      title: Wav2Vec2-Conformer
     - local: model_doc/wav2vec2_phoneme
       title: Wav2Vec2Phoneme
     - local: model_doc/wavlm

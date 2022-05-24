@@ -197,7 +197,7 @@ if is_tf_available():
             self.features = hans_convert_examples_to_features(examples, label_list, max_seq_length, tokenizer)
 
             def gen():
-                for (ex_index, ex) in tqdm.tqdm(enumerate(self.features), desc="convert examples to features"):
+                for ex_index, ex in tqdm.tqdm(enumerate(self.features), desc="convert examples to features"):
                     if ex_index % 10000 == 0:
                         logger.info("Writing example %d of %d" % (ex_index, len(examples)))
 
@@ -268,7 +268,7 @@ class HansProcessor(DataProcessor):
     def _create_examples(self, lines, set_type):
         """Creates examples for the training and dev sets."""
         examples = []
-        for (i, line) in enumerate(lines):
+        for i, line in enumerate(lines):
             if i == 0:
                 continue
             guid = "%s-%s" % (set_type, line[0])
@@ -303,7 +303,7 @@ def hans_convert_examples_to_features(
     label_map = {label: i for i, label in enumerate(label_list)}
 
     features = []
-    for (ex_index, example) in tqdm.tqdm(enumerate(examples), desc="convert examples to features"):
+    for ex_index, example in tqdm.tqdm(enumerate(examples), desc="convert examples to features"):
         if ex_index % 10000 == 0:
             logger.info("Writing example %d" % (ex_index))
 

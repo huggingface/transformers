@@ -354,7 +354,9 @@ class M2M100ModelIntegrationTests(unittest.TestCase):
         src_fr = [
             "L'affaire NSA souligne l'absence totale de débat sur le renseignement",
             "Selon moi, il y a deux niveaux de réponse de la part du gouvernement français.",
-            "Lorsque François Hollande téléphone à Barack Obama ou quand le ministre des affaires étrangères Laurent Fabius convoque l'ambassadeur des Etats-Unis, ils réagissent à une vraie découverte, qui est celle de l'ampleur de la surveillance américaine sur l'ensemble des communications en France.",
+            "Lorsque François Hollande téléphone à Barack Obama ou quand le ministre des affaires étrangères Laurent"
+            " Fabius convoque l'ambassadeur des Etats-Unis, ils réagissent à une vraie découverte, qui est celle de"
+            " l'ampleur de la surveillance américaine sur l'ensemble des communications en France.",
         ]
 
         # The below article tests that we don't add any hypotheses outside of the top n_beams
@@ -370,7 +372,9 @@ class M2M100ModelIntegrationTests(unittest.TestCase):
         expected_en = [
             "The NSA case highlights the total absence of intelligence debate",
             "I think there are two levels of response from the French government.",
-            "When François Hollande calls Barack Obama or when Foreign Minister Laurent Fabius calls the U.S. Ambassador, they respond to a real discovery, which is that of the scale of U.S. surveillance on all communications in France.",
+            "When François Hollande calls Barack Obama or when Foreign Minister Laurent Fabius calls the U.S."
+            " Ambassador, they respond to a real discovery, which is that of the scale of U.S. surveillance on all"
+            " communications in France.",
         ]
 
         generated = tokenizer.batch_decode(

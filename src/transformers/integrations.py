@@ -23,7 +23,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from .utils import is_datasets_available, logging
+from .utils import flatten_dict, is_datasets_available, logging
 
 
 logger = logging.get_logger(__name__)
@@ -389,7 +389,8 @@ def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> Bes
             format_metrics = rewrite_logs(metrics)
             if metric not in format_metrics:
                 logger.warning(
-                    f"Provided metric {metric} not found. This might result in unexpected sweeps charts. The available metrics are {format_metrics.keys()}"
+                    f"Provided metric {metric} not found. This might result in unexpected sweeps charts. The available"
+                    f" metrics are {format_metrics.keys()}"
                 )
         best_score = False
         if best_trial["run_id"] is not None:
@@ -458,7 +459,8 @@ class TensorBoardCallback(TrainerCallback):
         has_tensorboard = is_tensorboard_available()
         if not has_tensorboard:
             raise RuntimeError(
-                "TensorBoardCallback requires tensorboard to be installed. Either update your PyTorch version or install tensorboardX."
+                "TensorBoardCallback requires tensorboard to be installed. Either update your PyTorch version or"
+                " install tensorboardX."
             )
         if has_tensorboard:
             try:
@@ -727,12 +729,13 @@ class CometCallback(TrainerCallback):
     def on_train_end(self, args, state, control, **kwargs):
         if self._initialized and state.is_world_process_zero:
             experiment = comet_ml.config.get_global_experiment()
-            if (experiment is not None) and (self._log_assets is True):
-                logger.info("Logging checkpoints. This may take time.")
-                experiment.log_asset_folder(
-                    args.output_dir, recursive=True, log_file_name=True, step=state.global_step
-                )
-            experiment.end()
+            if experiment is not None:
+                if self._log_assets is True:
+                    logger.info("Logging checkpoints. This may take time.")
+                    experiment.log_asset_folder(
+                        args.output_dir, recursive=True, log_file_name=True, step=state.global_step
+                    )
+                experiment.end()
 
 
 class AzureMLCallback(TrainerCallback):
@@ -802,13 +805,17 @@ class MLflowCallback(TrainerCallback):
                 Allow to reattach to an existing run which can be usefull when resuming training from a checkpoint.
                 When MLFLOW_RUN_ID environment variable is set, start_run attempts to resume a run with the specified
                 run ID and other parameters are ignored.
+            MLFLOW_FLATTEN_PARAMS (`str`, *optional*):
+                Whether to flatten the parameters dictionary before logging. Default to `False`.
         """
         self._log_artifacts = os.getenv("HF_MLFLOW_LOG_ARTIFACTS", "FALSE").upper() in ENV_VARS_TRUE_VALUES
         self._nested_run = os.getenv("MLFLOW_NESTED_RUN", "FALSE").upper() in ENV_VARS_TRUE_VALUES
         self._experiment_name = os.getenv("MLFLOW_EXPERIMENT_NAME", None)
+        self._flatten_params = os.getenv("MLFLOW_FLATTEN_PARAMS", "FALSE").upper() in ENV_VARS_TRUE_VALUES
         self._run_id = os.getenv("MLFLOW_RUN_ID", None)
         logger.debug(
-            f"MLflow experiment_name={self._experiment_name}, run_name={args.run_name}, nested={self._nested_run}, tags={self._nested_run}"
+            f"MLflow experiment_name={self._experiment_name}, run_name={args.run_name}, nested={self._nested_run},"
+            f" tags={self._nested_run}"
         )
         if state.is_world_process_zero:
             if self._ml_flow.active_run() is None or self._nested_run or self._run_id:
@@ -822,15 +829,16 @@ class MLflowCallback(TrainerCallback):
             if hasattr(model, "config") and model.config is not None:
                 model_config = model.config.to_dict()
                 combined_dict = {**model_config, **combined_dict}
+            combined_dict = flatten_dict(combined_dict) if self._flatten_params else combined_dict
             # remove params that are too long for MLflow
             for name, value in list(combined_dict.items()):
                 # internally, all values are converted to str in MLflow
                 if len(str(value)) > self._MAX_PARAM_VAL_LENGTH:
                     logger.warning(
-                        f"Trainer is attempting to log a value of "
-                        f'"{value}" for key "{name}" as a parameter. '
-                        f"MLflow's log_param() only accepts values no longer than "
-                        f"250 characters so we dropped this attribute."
+                        f'Trainer is attempting to log a value of "{value}" for key "{name}" as a parameter. MLflow\'s'
+                        " log_param() only accepts values no longer than 250 characters so we dropped this attribute."
+                        " You can use `MLFLOW_FLATTEN_PARAMS` environment variable to flatten the parameters and"
+                        " avoid this message."
                     )
                     del combined_dict[name]
             # MLflow cannot log more than 100 values in one go, so we have to split it
@@ -857,10 +865,8 @@ class MLflowCallback(TrainerCallback):
                     metrics[k] = v
                 else:
                     logger.warning(
-                        f"Trainer is attempting to log a value of "
-                        f'"{v}" of type {type(v)} for key "{k}" as a metric. '
-                        f"MLflow's log_metric() only accepts float and "
-                        f"int types so we dropped this attribute."
+                        f'Trainer is attempting to log a value of "{v}" of type {type(v)} for key "{k}" as a metric. '
+                        "MLflow's log_metric() only accepts float and int types so we dropped this attribute."
                     )
             self._ml_flow.log_metrics(metrics=metrics, step=state.global_step)
 
@@ -875,7 +881,11 @@ class MLflowCallback(TrainerCallback):
     def __del__(self):
         # if the previous run is not terminated correctly, the fluent API will
         # not let you start a new run before the previous one is killed
-        if self._auto_end_run and self._ml_flow.active_run() is not None:
+        if (
+            self._auto_end_run
+            and callable(getattr(self._ml_flow, "active_run", None))
+            and self._ml_flow.active_run() is not None
+        ):
             self._ml_flow.end_run()
 
 

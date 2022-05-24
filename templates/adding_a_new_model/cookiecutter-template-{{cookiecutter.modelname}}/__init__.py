@@ -169,7 +169,7 @@ if TYPE_CHECKING:
     from .tokenization_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.camelcase_modelname}}Tokenizer
 
     try:
-        if not is_torch_available():
+        if not is_tokenizers_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass
