@@ -126,7 +126,8 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
     def _apply_preemphasis_inplace(frames, window_length, preemphasis_coeff):
         if frames.size % window_length != 0:
             raise ValueError(
-                f"`frames` is supposed to have length divisble by `window_length`, but is {frames.size} with window_length={window_length}."
+                f"`frames` is supposed to have length divisble by `window_length`, but is {frames.size} with"
+                f" window_length={window_length}."
             )
 
         n_frames = frames.size // window_length
@@ -140,7 +141,8 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
     def _windowing(frames, window_length, window):
         if frames.size % window_length != 0:
             raise ValueError(
-                f"`frames` is supposed to have length divisble by `window_length`, but is {frames.size} with window_length={window_length}."
+                f"`frames` is supposed to have length divisble by `window_length`, but is {frames.size} with"
+                f" window_length={window_length}."
             )
 
         shaped = frames.reshape(-1, window_length)
@@ -290,8 +292,9 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
                 raise ValueError(
-                    f"The model corresponding to this feature extractor: {self} was trained using a sampling rate of {self.sampling_rate}. "
-                    f"Please make sure that the provided `raw_speech` input was sampled with {self.sampling_rate} and not {sampling_rate}."
+                    f"The model corresponding to this feature extractor: {self} was trained using a sampling rate of"
+                    f" {self.sampling_rate}. Please make sure that the provided `raw_speech` input was sampled with"
+                    f" {self.sampling_rate} and not {sampling_rate}."
                 )
         else:
             logger.warning(

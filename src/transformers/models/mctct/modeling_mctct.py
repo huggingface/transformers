@@ -94,7 +94,8 @@ class MCTCTConv1dSubsampler(nn.Module):
         if self.num_layers > 1:
             if config.conv_channels is None:
                 raise ValueError(
-                    "Need to specify `conv_channels` configuration in `MCTCTConfig` to use multiple convolution layers."
+                    "Need to specify `conv_channels` configuration in `MCTCTConfig` to use multiple convolution"
+                    " layers."
                 )
 
             self.mid_channels = config.conv_channels
