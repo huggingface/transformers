@@ -748,7 +748,7 @@ class ModelTesterMixin:
                     traced_model = symbolic_trace(model, input_names)
                     traced_output = traced_model(**filtered_inputs)
                 else:
-                    input_names = ["input_ids", "attention_mask", "token_type_ids", "pixel_values"]
+                    input_names = ["input_ids", "attention_mask", "token_type_ids", "pixel_values", "bbox"]
 
                     labels = inputs.get("labels", None)
                     start_positions = inputs.get("start_positions", None)

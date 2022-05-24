@@ -95,6 +95,7 @@ def _generate_supported_model_classes(
 _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "albert",
     "bert",
+    "bart",
     "distilbert",
     "mobilebert",
     "electra",
@@ -106,8 +107,8 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "roberta",
     "vit",
     "swin",
+    "layoutlm",
     # TODO: add support for them as it should be quite easy to do so (small blocking issues).
-    # "layoutlm",
     # "xlnet",
 ]
 
@@ -130,6 +131,10 @@ _SUPPORTED_MODELS = tuple(
 
 def torch_nn_embedding(self, input):
     return torch.empty(*input.shape, self.weight.shape[-1], device="meta")
+
+
+def torch_nn_functional_embedding(input, weight, padding_idx=None, max_norm=None, norm_type=2.0, scale_grad_by_freq=False, sparse=False):
+    return torch.empty(*input.shape, weight.shape[-1], device="meta")
 
 
 def torch_nn_layernorm(self, input):
@@ -176,6 +181,12 @@ def torch_arange(*args, **kwargs):
         start, end = args
     else:
         start, end, step = args
+    if isinstance(start, float):
+        start = int(start)
+    if isinstance(end, float):
+        start = int(end)
+    if isinstance(step, float):
+        step = int(step)
     step = kwargs.get("step", step)
     dtype = kwargs.get("dtype")
     return torch.empty((end - start) // step, dtype=dtype, device="meta")
@@ -265,6 +276,14 @@ def torch_matmul(input, other, *, out=None):
     return torch.empty(*shape, device="meta")
 
 
+def torch_bmm(input, mat2, *, out=None):
+    if out is not None:
+        raise ValueError("Don't support in-place abs for MetaTensor analysis")
+    batch_size, n, m = input.shape
+    _, _, p = mat2.shape
+    return torch.empty(batch_size, n, p, device="meta")
+
+
 def torch_einsum(equation, *operands):
     # TODO: infer shape without performing the computation, this might be quite hard.
     concrete_operands = (torch.empty_like(operand, device="cpu") for operand in operands)
@@ -325,6 +344,21 @@ def torch_tensor_unsqueeze(self, dim):
     return torch_unsqueeze(self, dim)
 
 
+def torch_unique_consecutive(input, **kwargs):
+    output = torch.unique_consecutive(torch.zeros_like(input, device="cpu"), **kwargs)
+    if isinstance(output, torch.Tensor):
+        return output.to("meta")
+    else:
+        return tuple(map(output, lambda x: x.to("meta")))
+
+
+def torch_nn_functional_one_hot(tensor, num_classes=-1):
+    if num_classes < 0:
+        raise ValueError("Don't support automatic num_classes inference for MetaTensor analysis")
+    shape = list(tensor.shape) + [num_classes]
+    return torch.empty(shape, device="meta")
+
+
 def torch_nn_mseloss(self, input, target):
     if self.reduction == "none":
         shape = target.shape
@@ -350,14 +384,23 @@ def torch_nn_bcewithlogitsloss(self, input, target):
 
 
 def operator_getitem(a, b):
+    def to_concrete(t):
+        if isinstance(t, torch.Tensor):
+            return torch.ones_like(t, device="cpu")
+        return t
     if isinstance(a, torch.Tensor):
         # TODO: infer shape without performing the computation.
+        if isinstance(b, tuple):
+            b = tuple(map(to_concrete, b))
+        else:
+            b = to_concrete(b)
         return operator.getitem(torch.empty_like(a, device="cpu"), b).to("meta")
     return operator.getitem(a, b)
 
 
 _MANUAL_META_OVERRIDES: Dict[Callable, Callable] = {
     torch.nn.Embedding: torch_nn_embedding,
+    torch.nn.functional.embedding: torch_nn_functional_embedding,
     torch.nn.LayerNorm: torch_nn_layernorm,
     torch.nn.Linear: torch_nn_linear,
     torch.relu: torch_relu,
@@ -372,15 +415,17 @@ _MANUAL_META_OVERRIDES: Dict[Callable, Callable] = {
     torch.mul: torch_mul,
     torch.Tensor.mul: torch_tensor_mul,
     torch.matmul: torch_matmul,
+    torch.bmm: torch_bmm,
     torch.einsum: torch_einsum,
     torch.Tensor.repeat: torch_tensor_repeat,
     torch.roll: torch_roll,
-    # TODO: those might not be needed.
-    # torch.index_select: torch_index_select,
-    # torch.Tensor.index_select: torch_tensor_index_select,
+    torch.index_select: torch_index_select,
+    torch.Tensor.index_select: torch_tensor_index_select,
     torch.nn.Conv2d: torch_nn_conv2d,
     torch.unsqueeze: torch_unsqueeze,
     torch.Tensor.unsqueeze: torch_tensor_unsqueeze,
+    torch.unique_consecutive: torch_unique_consecutive,
+    torch.nn.functional.one_hot: torch_nn_functional_one_hot,
     torch.nn.MSELoss: torch_nn_mseloss,
     torch.nn.CrossEntropyLoss: torch_nn_crossentropyloss,
     torch.nn.BCEWithLogitsLoss: torch_nn_bcewithlogitsloss,
@@ -513,7 +558,7 @@ class HFTracer(Tracer):
     # Feature flag for proxying accesses to buffer values
     proxy_buffer_attributes: bool = True
     allow_insert_stateless_mods: bool = True
-    _TORCH_METHODS_TO_PATCH = ["arange", "zeros", "ones", "full_like", "eye"]
+    _TORCH_METHODS_TO_PATCH = ["arange", "zeros", "ones", "full", "full_like", "eye"]
 
     def __init__(self, autowrap_modules=(math,), autowrap_functions=()):
 
@@ -596,7 +641,8 @@ class HFTracer(Tracer):
             inputs_dict[input_name] = torch.zeros(
                 batch_size, model.config.num_channels, height, width, dtype=torch.float32, device=device
             )
-
+        elif "bbox" in input_name:
+            inputs_dict[input_name] = torch.zeros(*shape, 4, dtype=torch.float, device=device)
         elif "mask" in input_name or "ids" in input_name:
             inputs_dict[input_name] = torch.zeros(shape, dtype=torch.long, device=device)
         else:
@@ -628,6 +674,8 @@ class HFTracer(Tracer):
             if kind == "call_function":
                 meta_target = _MANUAL_META_OVERRIDES.get(target, target)
                 meta_out = meta_target(*args_metas, **kwargs_metas)
+                if isinstance(meta_out, torch.Tensor):
+                    meta_out = meta_out.to(device="meta")
             elif kind == "call_method":
                 method = getattr(args_metas[0].__class__, target)
                 meta_target = _MANUAL_META_OVERRIDES.get(method, method)
@@ -873,11 +921,11 @@ def symbolic_trace(
     sig = inspect.signature(model.forward)
     concrete_args = {p.name: p.default for p in sig.parameters.values() if p.name not in input_names}
 
-    if not isinstance(model, _SUPPORTED_MODELS):
-        supported_model_names = ", ".join((cls.__name__ for cls in _SUPPORTED_MODELS))
-        raise NotImplementedError(
-            f"Model {model.__class__.__name__} is not supported yet, supported models: {supported_model_names}"
-        )
+    # if not isinstance(model, _SUPPORTED_MODELS):
+    #     supported_model_names = ", ".join((cls.__name__ for cls in _SUPPORTED_MODELS))
+    #     raise NotImplementedError(
+    #         f"Model {model.__class__.__name__} is not supported yet, supported models: {supported_model_names}"
+    #     )
 
     # Tracing.
     tracer = HFTracer()
