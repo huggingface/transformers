@@ -790,18 +790,16 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
 )
 @keras_serializable
 class TFOPTModel(TFOPTPreTrainedModel):
-    config_class = OPTConfig
-
     def __init__(self, config: OPTConfig, **kwargs):
         super().__init__(config, **kwargs)
         self.config = config
-        self.decoder = TFOPTMainLayer(config, name="decoder")
+        self.model = TFOPTMainLayer(config, name="model")
 
     def get_input_embeddings(self):
-        return self.decoder.shared
+        return self.model.decoder.shared
 
     def set_input_embeddings(self, new_embeddings):
-        self.decoder.set_input_embeddings(new_embeddings)
+        self.model.set_input_embeddings(new_embeddings)
 
     @unpack_inputs
     def call(
@@ -830,7 +828,7 @@ class TFOPTModel(TFOPTPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
-        outputs = self.decoder(
+        outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
             head_mask=head_mask,
