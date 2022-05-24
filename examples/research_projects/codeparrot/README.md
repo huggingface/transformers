@@ -40,6 +40,7 @@ The source of the dataset is the GitHub dump available on Google's [BigQuery](ht
 The raw dataset contains many duplicates. We deduplicated and filtered the dataset using the heuristics proposed in OpenAI's Codex [paper](https://arxiv.org/abs/2107.03374) and some new ones:
 
 - exact deduplication using each file's hash
+- near deduplication using MinHash and Jaccard similarity. MinHash with a Jaccard threshold 0.85 is first used to create duplicate clusters. Then these clusters are then reduced to unique files based on the exact Jaccard similarity. See `minhash_deduplication.deduplicate_dataset` for detailed description.
 - filtering files with max line length > 1000
 - filtering files with mean line length > 100
 - fraction of alphanumeric characters < 0.25
@@ -49,7 +50,6 @@ The raw dataset contains many duplicates. We deduplicated and filtered the datas
 - filtering with a probability of 0.7  of files without a mention of the keywords `def` , `for`, `while`  and `class`
 - filtering files that use the assignment operator `=` less than 5 times 
 - filtering files with ratio between number of characters and number of tokens after tokenization < 1.5 (the average ratio is 3.6)
-- near deduplication using MinHash and Jaccard similarity. MinHash with a Jaccard threshold 0.85 is first used to create duplicate clusters. Then these clusters are then reduced to unique files based on the exact Jaccard similarity. See `minhash_deduplication.deduplicate_dataset` for detailed description.
 
 The script to process the full dataset can be found in `scripts/preprocessing.py`. Executing the script on 16 vCPUs takes roughly 3h and removes 70% of the original dataset. The cleaned [train](https://huggingface.co/datasets/loubnabnl/codeparrot-clean-train-v2) and [validation](https://huggingface.co/datasets/loubnabnl/codeparrot-clean-valid-v2) splits are also available on the Hub if you want to skip this step or use the data for another project.
 
