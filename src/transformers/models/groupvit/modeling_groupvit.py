@@ -184,33 +184,34 @@ class GroupViTAttention(nn.Module):
         batch_size, query_length, channels = query.shape
         if key is None:
             key = query
+        value = key
         key_length = key.size(1)
 
         # [batch_size, num_heads, query_length, channels//num_heads]
-        projected_query = (
+        query = (
             self.q_proj(query)
             .reshape(batch_size, query_length, self.num_heads, channels // self.num_heads)
             .permute(0, 2, 1, 3)
         )
         # [batch_size, num_heads, key_length, channels//num_heads]
-        projected_key = (
+        key = (
             self.k_proj(key)
             .reshape(batch_size, key_length, self.num_heads, channels // self.num_heads)
             .permute(0, 2, 1, 3)
         )
         # [batch_size, num_heads, key_length, channels//num_heads]
-        projected_value = (
-            self.v_proj(key)
+        value = (
+            self.v_proj(value)
             .reshape(batch_size, key_length, self.num_heads, channels // self.num_heads)
             .permute(0, 2, 1, 3)
         )
 
         # [batch_size, num_heads, query_length, key_length]
-        attn = (projected_query @ projected_key.transpose(-2, -1)) * self.scale
+        attn = (query @ key.transpose(-2, -1)) * self.scale
         attn = attn.softmax(dim=-1)
 
         # [batch_size, num_heads, query_length, channels//num_heads] -> [batch_size, query_length, channels]
-        out = (attn @ projected_value).transpose(1, 2).reshape(batch_size, query_length, channels)
+        out = (attn @ value).transpose(1, 2).reshape(batch_size, query_length, channels)
         out = self.proj(out)
         return out
 
@@ -255,9 +256,7 @@ class GroupViTAssignAttention(nn.Module):
         return attn
 
     def forward(self, query, key):
-        batch_size, query_length, channels = query.shape
         value = key
-        key_length = key.size(1)
         # [batch_size, query_length, channels]
         query = self.q_proj(query)
 
