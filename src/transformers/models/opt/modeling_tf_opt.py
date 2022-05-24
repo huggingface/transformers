@@ -79,7 +79,6 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values
 
     return (one_cst - expanded_mask) * LARGE_NEGATIVE
 
-
 class TFOPTLearnedPositionalEmbedding(TFSharedEmbeddings):
     """
     This module learns positional embeddings up to a fixed maximum size.
@@ -102,7 +101,6 @@ class TFOPTLearnedPositionalEmbedding(TFSharedEmbeddings):
         positions = positions[:, past_key_values_length:]
 
         return super().call(positions + self.offset)
-
 
 # Copied from transformers.models.bart.modeling_tf_bart.TFBartAttention with Bart->OPT
 class TFOPTAttention(tf.keras.layers.Layer):
@@ -268,7 +266,6 @@ class TFOPTAttention(tf.keras.layers.Layer):
         attn_weights: tf.Tensor = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len))
 
         return attn_output, attn_weights, past_key_value
-
 
 class TFOPTDecoderLayer(tf.keras.layers.Layer):
     def __init__(self, config: OPTConfig, **kwargs):
@@ -717,7 +714,7 @@ class TFOPTDecoder(tf.keras.layers.Layer):
                 attentions=all_self_attns,
             )
 
-
+@keras_serializable
 class TFOPTMainLayer(tf.keras.layers.Layer):
     config_class = OPTConfig
 
@@ -798,7 +795,7 @@ class TFOPTModel(TFOPTPreTrainedModel):
     def __init__(self, config: OPTConfig, **kwargs):
         super().__init__(config, **kwargs)
         self.config = config
-        self.decoder = TFOPTDecoder(config, name="decoder")
+        self.decoder = TFOPTMainLayer(config, name="decoder")
 
     def get_input_embeddings(self):
         return self.decoder.shared
@@ -876,7 +873,7 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
         self.config = config
 
         # Setting the name to decoder for weight loading compatibility
-        self.model = TFOPTMainLayer(config, name="decoder")
+        self.model = TFOPTMainLayer(config, name="model")
 
     def get_output_embeddings(self):
         return self.get_input_embeddings()
