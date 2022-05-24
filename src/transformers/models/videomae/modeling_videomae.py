@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Facebook AI and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 Multimedia Computing Group, Nanjing University and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
@@ -156,7 +157,11 @@ class VideoMAEEmbeddings(nn.Module):
 
 class PatchEmbeddings(nn.Module):
     """
-    Video to Patch Embedding.
+    Video to Patch Embedding. This module turns a batch of videos of shape (batch_size, num_frames, num_channels,
+    height, width) into a tensor of shape (batch_size, seq_len, hidden_size) to be consumed by a Transformer encoder.
+
+    The seq_len (the number of patches) equals (number of frames // tubelet_size) * (height // patch_size) * (width //
+    patch_size).
 
     """
 
@@ -498,9 +503,9 @@ VIDEOMAE_START_DOCSTRING = r"""
 
 VIDEOMAE_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
-            [`AutoFeatureExtractor.__call__`] for details.
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`VideoMAEFeatureExtractor`]. See
+            [`VideoMAEFeatureExtractor.__call__`] for details.
 
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
@@ -553,7 +558,7 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        pixel_values=None,
+        pixel_values,
         bool_masked_pos=None,
         head_mask=None,
         output_attentions=None,
@@ -566,14 +571,14 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoFeatureExtractor, VideoMAEModel
+        >>> from transformers import VideoMAEFeatureExtractor, VideoMAEModel
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("nanjing/videomae-base")
+        >>> feature_extractor = VideoMAEFeatureExtractor.from_pretrained("nanjing/videomae-base")
         >>> model = VideoMAEModel.from_pretrained("nanjing/videomae-base")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
@@ -585,9 +590,6 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -644,6 +646,7 @@ class VideoMAEDecoder(nn.Module):
     def forward(
         self,
         hidden_states,
+        return_token_num,
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
@@ -679,9 +682,11 @@ class VideoMAEDecoder(nn.Module):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        hidden_states = self.decoder_norm(hidden_states)
+        if return_token_num > 0:
+            hidden_states = hidden_states[:, -return_token_num:]
 
         # predictor projection
+        hidden_states = self.decoder_norm(hidden_states)
         logits = self.decoder_pred(hidden_states)
 
         if not return_dict:
@@ -731,15 +736,15 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
 
         Examples:
         ```python
-        >>> from transformers import AutoFeatureExtractor, VideoMAEForPreTraining
+        >>> from transformers import VideoMAEFeatureExtractor, VideoMAEForPreTraining
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/vit-mae-base")
-        >>> model = VideoMAEForPreTraining.from_pretrained("facebook/vit-mae-base")
+        >>> feature_extractor = VideoMAEFeatureExtractor.from_pretrained("nanjing/vit-mae-base")
+        >>> model = VideoMAEForPreTraining.from_pretrained("nanjing/vit-mae-base")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
 
@@ -777,7 +782,74 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
         logits = decoder_outputs.logits
 
         # TODO compute loss
+        # TODO check correct format of videos! (B, T, C, H, W)
         loss = None
+        with torch.no_grad():
+            # calculate the labels to be predicted
+            # first, unnormalize the frames
+            device = pixel_values.device
+            mean = torch.as_tensor(IMAGENET_DEFAULT_MEAN).to(device)[None, None, :, None, None]
+            std = torch.as_tensor(IMAGENET_DEFAULT_STD).to(device)[None, None, :, None, None]
+            frames = pixel_values * std + mean  # in [0, 1]
+
+            batch_size, time, num_channels, height, width = frames.shape
+            tubelet_size, patch_size = self.config.tubelet_size, self.config.patch_size
+            if self.config.norm_pix_loss:
+                # step 1: split up dimensions (time by tubelet_size, height by patch_size, width by patch_size)
+                frames = frames.view(
+                    batch_size,
+                    time // tubelet_size,
+                    tubelet_size,
+                    num_channels,
+                    height // patch_size,
+                    patch_size,
+                    width // patch_size,
+                    patch_size,
+                )
+                # step 2: move dimensions to concatenate: (batch_size, T//ts, H//ps, W//ps, ts, ps, ps, C)
+                frames = frames.permute(0, 1, 4, 6, 2, 5, 7, 3).contiguous()
+                # step 3: concatenate: (batch_size, T//ts, H//bs, W//bs, ts*bs*bs, C)
+                frames = frames.view(
+                    batch_size,
+                    time // tubelet_size * height // patch_size * width // patch_size,
+                    tubelet_size * patch_size * patch_size,
+                    num_channels,
+                )
+                # step 4: normalize. The authors find that the mean is about 0.48 and standard deviation is about 0.08.
+                frames_norm = (frames - frames.mean(dim=-2, keepdim=True)) / (
+                    frames.var(dim=-2, unbiased=True, keepdim=True).sqrt() + 1e-6
+                )
+                # step 5: reshape to (batch_size, T//ts * H//ps * W//ps, ts * ps * ps * C)
+                videos_patch = frames_norm.view(
+                    batch_size,
+                    time // tubelet_size * height // patch_size * width // patch_size,
+                    tubelet_size * patch_size * patch_size * num_channels,
+                )
+            else:
+                # step 1: split up dimensions (time by tubelet_size, height by patch_size, width by patch_size)
+                frames = frames.view(
+                    batch_size,
+                    time // tubelet_size,
+                    tubelet_size,
+                    num_channels,
+                    height // patch_size,
+                    patch_size,
+                    width // patch_size,
+                    patch_size,
+                )
+                # step 2: move dimensions to concatenate: (batch_size, T//ts, H//ps, W//ps, ts, ps, ps, C)
+                frames = frames.permute(0, 1, 4, 6, 2, 5, 7, 3).contiguous()
+                # step 3: concatenate
+                videos_patch = frames.view(
+                    batch_size,
+                    time // tubelet_size * height // patch_size * width // patch_size,
+                    tubelet_size * patch_size * patch_size * num_channels,
+                )
+
+            batch_size, _, num_channels = videos_patch.shape
+            labels = videos_patch[bool_masked_pos].reshape(batch_size, -1, num_channels)
+            loss_fct = MSELoss()
+            loss = loss_fct(logits, labels)
 
         if not return_dict:
             output = (logits,) + outputs[2:]
@@ -832,14 +904,14 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoFeatureExtractor, VideoMAEForVideoClassification
+        >>> from transformers import VideoMAEFeatureExtractor, VideoMAEForVideoClassification
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("nanjing/videomae-base")
+        >>> feature_extractor = VideoMAEFeatureExtractor.from_pretrained("nanjing/videomae-base")
         >>> model = VideoMAEForVideoClassification.from_pretrained("nanjing/videomae-base")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")

@@ -78,6 +78,8 @@ class VideoMAEConfig(PretrainedConfig):
             Number of hidden layers in the decoder.
         decoder_intermediate_size (`int`, *optional*, defaults to 1536):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the decoder.
+        norm_pix_loss (`bool`, *optional*, defaults to `True`):
+            Whether to normalize the target patch pixels.
 
     Example:
 
@@ -117,6 +119,7 @@ class VideoMAEConfig(PretrainedConfig):
         decoder_hidden_size=384,
         decoder_num_hidden_layers=12,
         decoder_intermediate_size=1536,
+        norm_pix_loss=True,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -143,3 +146,4 @@ class VideoMAEConfig(PretrainedConfig):
         self.decoder_hidden_size = decoder_hidden_size
         self.decoder_num_hidden_layers = decoder_num_hidden_layers
         self.decoder_intermediate_size = decoder_intermediate_size
+        self.norm_pix_loss = norm_pix_loss

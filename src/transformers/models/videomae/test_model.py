@@ -38,12 +38,13 @@ masked_position_generator = TubeMaskingGenerator(input_size=window_size, mask_ra
 
 # test model
 
-model = VideoMAEForPreTraining(VideoMAEConfig())
+model = VideoMAEForPreTraining(VideoMAEConfig(norm_pix_loss=True))
 
-pixel_values = torch.randn(1, 3, 16, 224, 224)
+pixel_values = torch.randn(1, 16, 3, 224, 224)
 
 bool_masked_pos = masked_position_generator()
 print("Shape of bool masked pos:", bool_masked_pos.shape)
+print("Number of masked frames:", np.sum(bool_masked_pos))
 
 bool_masked_pos = torch.from_numpy(bool_masked_pos)
 bool_masked_pos = bool_masked_pos.unsqueeze(0)
