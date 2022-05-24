@@ -479,7 +479,7 @@ OPT_INPUTS_DOCSTRING = r"""
 
 
 @keras_serializable
-class TFOPTMainLayer(tf.keras.layers.Layer):
+class TFOPTDecoder(tf.keras.layers.Layer):
     config_class = OPTConfig
 
     def __init__(self, config: OPTConfig, load_weight_prefix=None, **kwargs):
@@ -717,6 +717,75 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
                 attentions=all_self_attns,
             )
 
+class TFOPTMainLayer(tf.keras.layers.Layer):
+    config_class = OPTConfig
+    
+    def __init__(self, config: OPTConfig, **kwargs):
+        super().__init__(**kwargs)
+        self.config = config
+        self.decoder = TFOPTDecoder(config, name="decoder")
+
+    def get_input_embeddings(self):
+        return self.decoder.shared
+
+    def set_input_embeddings(self, new_embeddings):
+        self.decoder.set_input_embeddings(new_embeddings)
+
+    @unpack_inputs
+    def call(
+        self,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: Optional[bool] = False,
+        **kwargs
+    ) -> Union[TFBaseModelOutputWithPast, Tuple[tf.Tensor]]:
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
+        outputs = self.decoder(
+            input_ids,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+        )
+
+        return outputs
+
+    def serving_output(self, output):
+        pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFBaseModelOutputWithPast(
+            last_hidden_state=output.last_hidden_state,
+            past_key_values=pkv,
+            hidden_states=hs,
+            attentions=attns,
+        )
+
+
 
 @add_start_docstrings(
     "The bare TF OPT Model outputting raw hidden-states without any specific head on top.",
@@ -729,7 +798,7 @@ class TFOPTModel(TFOPTPreTrainedModel):
     def __init__(self, config: OPTConfig, **kwargs):
         super().__init__(config, **kwargs)
         self.config = config
-        self.decoder = TFOPTMainLayer(config, name="decoder")
+        self.decoder = TFOPTDecoder(config, name="decoder")
 
     def get_input_embeddings(self):
         return self.decoder.shared
@@ -805,32 +874,24 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
     def __init__(self, config: OPTConfig, load_weight_prefix=None, **kwargs):
         super().__init__(config, **kwargs)
         self.config = config
-
-        self.model = TFOPTMainLayer(config, name="model")
+        
+        # Setting the name to decoder for weight loading compatibility
+        self.model = TFOPTMainLayer(config, name="decoder")
 
     def get_output_embeddings(self):
         return self.get_input_embeddings()
 
-    def prepare_inputs_for_generation(self, inputs, past_key_values=None, use_cache=None, use_xla=False, **kwargs):
-        # TODO: (Joao) after the TF generator is complete, update GPT2 TF generation to match PT's. NB -- some GPT2
-        # tests will need to be fixed after the change
-
+    def prepare_inputs_for_generation(self, inputs, past = None, use_cache=None, use_xla=False, **kwargs):
+        attention_mask = kwargs.get("attention_mask", None)
+        
         # only last token for inputs_ids if past is defined in kwargs
-        if past_key_values:
+        if past:
             inputs = tf.expand_dims(inputs[:, -1], -1)
-
-        # TODO(pvp, Joao) - this `if use_xla` statement can be removed, but is left
-        # for a future PR to not change too many things for now.
-        # All statements in this if case apply for both xla and non-xla (as they already do in PyTorch)
-
-        attention_mask = None
-        if use_xla:
-            attention_mask = kwargs.get("attention_mask", None)
 
         return {
             "input_ids": inputs,
             "attention_mask": attention_mask,
-            "past": past_key_values,
+            "past_key_values": past,
             "use_cache": use_cache,
         }
 
@@ -883,7 +944,7 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
                 Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
                 cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
 
-                If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
+                If `past_key_values` are used, the user can optionally input only the last `input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
                 all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -929,7 +990,7 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.model(
+        outputs = self.model.decoder(
             input_ids=input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
@@ -943,7 +1004,7 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
             training=training,
         )
 
-        logits = self.model.shared(outputs[0], mode="linear")
+        logits = self.model.decoder.shared(outputs[0], mode="linear")
 
         loss = None
         if labels is not None:

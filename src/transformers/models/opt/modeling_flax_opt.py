@@ -35,7 +35,7 @@ from .configuration_opt import OPTConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = ""
+_CHECKPOINT_FOR_DOC = "facebook/opt-350m"
 _CONFIG_FOR_DOC = "OPTConfig"
 _TOKENIZER_FOR_DOC = "GPT2Tokenizer"
 
@@ -403,17 +403,10 @@ class FlaxOPTDecoderLayerCollection(nn.Module):
         return outputs
 
 
-def make_positions(mask, padding_idx: int):
-    """Replace non-padding symbols with their position numbers.
-
-    Position numbers begin at padding_idx+1. Padding symbols are ignored.
-    """
-    positions = jnp.cumsum(mask, axis=1).astype(jnp.int32) + padding_idx
-    return positions
-
-
 class FlaxOPTLearnedPositionalEmbedding(nn.Embed):
-    
+    """
+    This module learns positional embeddings up to a fixed maximum size.
+    """
     
     def setup(self):
         self.offset = 2
@@ -547,7 +540,7 @@ class FlaxOPTPreTrainedModel(FlaxPreTrainedModel):
             position_ids,
             return_dict=False,
         )
-
+    
         random_params = module_init_outputs["params"]
         if params is not None:
             random_params = flatten_dict(unfreeze(random_params))
@@ -730,11 +723,11 @@ class FlaxOPTForCausalLMModule(nn.Module):
             input_ids,
             attention_mask,
             position_ids,
-            deterministic=deterministic,
             init_cache=init_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            deterministic=deterministic,
         )
 
         hidden_states = outputs[0]

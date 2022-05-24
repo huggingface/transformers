@@ -300,7 +300,7 @@ class OPTModelIntegrationTests(unittest.TestCase):
         expected_slice = tf.constant(
             [[-0.2873, -1.9218, -0.3033], [-1.2710, -0.1338, -0.1902], [0.4095, 0.1214, -1.3121]]
         )
-        self.assertTrue(np.allclose(output[:, :3, :3], expected_slice, atol=4e-2))
+        self.assertTrue(np.allclose(output[:, :3, :3], expected_slice, atol=4e-3))
 
         xla_generate = tf.function(model, jit_compile=True)
         output = xla_generate(input_ids, attention_mask)[0]
@@ -389,12 +389,13 @@ class FlaxOPTGenerationTest(unittest.TestCase):
         output_string = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
         self.assertIsNotNone(output_string, EXPECTED_OUTPUTS)
 
+    @slow
     def test_batch_generation(self):
         model_id = "facebook/opt-350m"
 
         tokenizer = GPT2Tokenizer.from_pretrained(model_id)
         model = TFOPTForCausalLM.from_pretrained(model_id)
-
+        
         tokenizer.padding_side = "left"
 
         # use different length sentences to test batching
@@ -431,10 +432,10 @@ class FlaxOPTGenerationTest(unittest.TestCase):
         model_id = "facebook/opt-350m"
 
         EXPECTED_OUTPUTS = [
-            "Today is a beautiful day and I want to share",
-            "In the city of San Francisco, the city",
-            "Paris is the capital of France and the capital",
-            "Computers and mobile phones have taken over the",
+            "Today is a beautiful day and I want to share it",
+            "In the city of San Francisco, the city’",
+            "Paris is the capital of France and the capital of the",
+            "Computers and mobile phones have taken over the world.",
         ]
 
         predicted_outputs = []
@@ -444,7 +445,7 @@ class FlaxOPTGenerationTest(unittest.TestCase):
         for prompt in self.prompts:
             input_ids = tokenizer(prompt, return_tensors="tf").input_ids
 
-            generated_ids = model.generate(input_ids, max_length=10)
+            generated_ids = model.generate(input_ids, max_length=12)
 
             generated_string = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
             predicted_outputs += generated_string
