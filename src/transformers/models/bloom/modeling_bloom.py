@@ -452,7 +452,7 @@ class BloomBlock(nn.Module):
         dtype = getattr(torch, config.dtype)
 
         self.input_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon).to(dtype)
-        self.alibi = self._build_alibi_tensor(config.seq_length + config.offset_alibi, config.n_head, dtype=dtype)
+        self.n_head = config.n_head
         self.self_attention = BloomAttention(config, layer_number=layer_number)
         self.post_attention_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon).to(dtype)
 
@@ -510,12 +510,15 @@ class BloomBlock(nn.Module):
         # Layer norm at the beginning of the transformer layer.
         layernorm_output = self.input_layernorm(hidden_states)
 
+        # Compute alibi tensor
+        alibi = self._build_alibi_tensor(hidden_states.shape[1], self.n_head)
+
         # Self attention.
         attn_outputs, attention_bias = self.self_attention(
             layernorm_output,
             layer_past=layer_past,
             attention_mask=attention_mask,
-            alibi=self.alibi,
+            alibi=alibi,
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
