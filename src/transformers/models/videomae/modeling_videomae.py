@@ -24,7 +24,7 @@ from typing import Optional, Set, Tuple, Union
 import numpy as np
 import torch
 import torch.utils.checkpoint
-from torch import nn
+from torch import embedding, nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
@@ -185,9 +185,8 @@ class PatchEmbeddings(nn.Module):
             raise ValueError(
                 f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
             )
-        x = self.projection(pixel_values).flatten(2).transpose(1, 2)
-        print("Shape of embeddings:", x.shape)
-        return x
+        embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
+        return embeddings
 
 
 class VideoMAESelfAttention(nn.Module):
@@ -456,7 +455,6 @@ class VideoMAEEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.vit_mae.modeling_vit_mae.ViTMAEPreTrainedModel with ViTMAE->VideoMAE
 class VideoMAEPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -464,7 +462,7 @@ class VideoMAEPreTrainedModel(PreTrainedModel):
     """
 
     config_class = VideoMAEConfig
-    base_model_prefix = "vit"
+    base_model_prefix = "videomae"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
