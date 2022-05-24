@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 Facebook AI Research The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 Attn4Vis and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch CONDITIONAL_DETR model."""
+""" PyTorch Conditional DETR model."""
 
 
 import math
@@ -66,7 +66,7 @@ CONDITIONAL_DETR_PRETRAINED_MODEL_ARCHIVE_LIST = [
 @dataclass
 class ConditionalDETRDecoderOutput(BaseModelOutputWithCrossAttentions):
     """
-    Base class for outputs of the CONDITIONAL_DETR decoder. This class adds one attribute to BaseModelOutputWithCrossAttentions,
+    Base class for outputs of the Conditional DETR decoder. This class adds one attribute to BaseModelOutputWithCrossAttentions,
     namely an optional stack of intermediate decoder activations, i.e. the output of each decoder layer, each of them
     gone through a layernorm. This is useful when training the model with auxiliary decoding losses.
 
@@ -97,7 +97,7 @@ class ConditionalDETRDecoderOutput(BaseModelOutputWithCrossAttentions):
 @dataclass
 class ConditionalDETRModelOutput(Seq2SeqModelOutput):
     """
-    Base class for outputs of the CONDITIONAL_DETR encoder-decoder model. This class adds one attribute to Seq2SeqModelOutput,
+    Base class for outputs of the Conditional DETR encoder-decoder model. This class adds one attribute to Seq2SeqModelOutput,
     namely an optional stack of intermediate decoder activations, i.e. the output of each decoder layer, each of them
     gone through a layernorm. This is useful when training the model with auxiliary decoding losses.
 
@@ -389,7 +389,7 @@ class ConditionalDETRConvModel(nn.Module):
 
         return out, pos
 
-
+# Copied from transformers.models.detr.modeling_detr._expand_mask with Detr->ConditionalDETR
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
@@ -659,18 +659,12 @@ class ConditionalDETRAttention(nn.Module):
             )
         self.scaling = self.head_dim**-0.5
 
-        # self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        # self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        # self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(out_dim, out_dim, bias=bias)
 
     def _qk_shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
     def _v_shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.v_head_dim).transpose(1, 2).contiguous()
-
-    # def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
-    #     return tensor if position_embeddings is None else tensor + position_embeddings
 
     def forward(
         self,
@@ -682,10 +676,7 @@ class ConditionalDETRAttention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
-        # if key_value_states are provided this layer is used as a cross-attention layer
-        # for the decoder
-        is_cross_attention = True
-        bsz, tgt_len, embed_dim = hidden_states.size()
+        bsz, tgt_len, _ = hidden_states.size()
 
         # get query proj
         query_states = hidden_states * self.scaling
