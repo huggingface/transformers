@@ -90,6 +90,10 @@ class GroupViTVisionModelTester:
         self.initializer_range = initializer_range
         self.scope = scope
 
+        num_patches = (image_size // patch_size) ** 2
+        # no [CLS] token for GroupViT
+        self.seq_length = num_patches
+
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         config = self.get_config()
@@ -186,11 +190,9 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
-        # in GROUPVIT, the seq_len equals the number of patches
-        image_size = (self.model_tester.image_size, self.model_tester.image_size)
-        patch_size = (self.model_tester.patch_size, self.model_tester.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        seq_len = num_patches
+        seq_len = getattr(self.model_tester, "seq_length", None)
+
+        expected_num_attention_outputs = sum(g > 0 for g in self.model_tester.num_group_tokens)
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -202,6 +204,7 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
+            # GroupViT returns attention grouping of each stage
             self.assertEqual(len(attentions), sum(g > 0 for g in self.model_tester.num_group_tokens))
 
             # check that output_attentions also work using config
@@ -213,7 +216,8 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
-            self.assertEqual(len(attentions), sum(g > 0 for g in self.model_tester.num_group_tokens))
+            # GroupViT returns attention grouping of each stage
+            self.assertEqual(len(attentions), expected_num_attention_outputs)
 
             out_len = len(outputs)
 
@@ -231,7 +235,8 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
             self_attentions = outputs.attentions
 
-            self.assertEqual(len(self_attentions), sum(g > 0 for g in self.model_tester.num_group_tokens))
+            # GroupViT returns attention grouping of each stage
+            self.assertEqual(len(self_attentions), expected_num_attention_outputs)
             for i, self_attn in enumerate(self_attentions):
                 if self_attn is None:
                     continue
@@ -243,45 +248,6 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
                         self.model_tester.num_output_groups[i - 1] if i > 0 else seq_len,
                     ],
                 )
-
-    def test_hidden_states_output(self):
-        def check_hidden_states_output(inputs_dict, config, model_class):
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
-
-            expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
-            )
-            self.assertEqual(len(hidden_states), expected_num_layers)
-
-            # GROUPVIT has a different seq_length
-            image_size = (self.model_tester.image_size, self.model_tester.image_size)
-            patch_size = (self.model_tester.patch_size, self.model_tester.patch_size)
-            num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-            seq_length = num_patches
-
-            self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
-                [seq_length, self.model_tester.hidden_size],
-            )
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_hidden_states"] = True
-            check_hidden_states_output(inputs_dict, config, model_class)
-
-            # check that output_hidden_states also work using config
-            del inputs_dict["output_hidden_states"]
-            config.output_hidden_states = True
-
-            check_hidden_states_output(inputs_dict, config, model_class)
 
     def test_training(self):
         pass
