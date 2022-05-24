@@ -17,7 +17,7 @@ import numpy as np
 import timeout_decorator  # noqa
 
 from transformers import GPT2Tokenizer, OPTConfig, is_flax_available
-from transformers.testing_utils import require_flax, slow
+from transformers.testing_utils import require_flax, require_tokenizers, slow
 
 from ...generation.test_generation_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
@@ -287,7 +287,7 @@ class FlaxOPTEmbeddingsTest(unittest.TestCase):
         logits = model(inputs.input_ids, attention_mask=inputs.attention_mask)[0].mean(axis=-1)
         self.assertTrue(jnp.allclose(logits, logits_meta, atol=1e-4))
 
-
+@require_tokenizers
 @require_flax
 class FlaxOPTGenerationTest(unittest.TestCase):
     @property
