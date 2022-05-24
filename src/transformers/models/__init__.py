@@ -62,6 +62,7 @@ from . import (
     glpn,
     gpt2,
     gpt_neo,
+    gpt_neox,
     gptj,
     herbert,
     hubert,
