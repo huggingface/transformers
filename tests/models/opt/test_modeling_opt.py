@@ -331,7 +331,7 @@ class OPTEmbeddingsTest(unittest.TestCase):
         assert torch.allclose(logits, logits_meta, atol=1e-4)
 
 
-#@slow
+# @slow
 class OPTGenerationTest(unittest.TestCase):
     @property
     def prompts(self):

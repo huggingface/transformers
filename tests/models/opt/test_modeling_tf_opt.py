@@ -243,7 +243,7 @@ class TFOPTModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCa
     def check_pt_tf_models(self, tf_model, pt_model, tf_inputs_dict):
         tf_model.decoder.embed_positions.weights = pt_model.decoder.embed_position.weight
         super().check_pt_tf_models(self, tf_model, pt_model, tf_inputs_dict)
-    
+
     def test_saved_model_creation(self):
         # This test is too long (>30sec) and makes fail the CI
         pass
@@ -389,7 +389,7 @@ class TFOPTGenerationTest(unittest.TestCase):
         self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)
 
         xla_generate = tf.function(model.generate, jit_compile=True)
-        output_sequences = xla_generate(tokenizer(self.prompts, return_tensors="tf",padding=True).input_ids).sequences
+        output_sequences = xla_generate(tokenizer(self.prompts, return_tensors="tf", padding=True).input_ids).sequences
         output_string = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
         self.assertIsNotNone(output_string, EXPECTED_OUTPUTS)
 
@@ -459,6 +459,6 @@ class TFOPTGenerationTest(unittest.TestCase):
         self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)
 
         xla_generate = tf.function(model.generate, jit_compile=True)
-        output_sequences = xla_generate(tokenizer(self.prompts, return_tensors="tf",padding = True).input_ids).sequences
+        output_sequences = xla_generate(tokenizer(self.prompts, return_tensors="tf", padding=True).input_ids).sequences
         output_string = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
         self.assertIsNotNone(output_string, EXPECTED_OUTPUTS)

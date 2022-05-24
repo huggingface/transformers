@@ -895,7 +895,6 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
             "use_cache": use_cache,
         }
 
-    
     @unpack_inputs
     def call(
         self,
