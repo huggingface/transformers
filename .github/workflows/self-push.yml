@@ -110,7 +110,7 @@ jobs:
       - name: GPU visibility
         working-directory: /transformers
         run: |
-          utils/print_env_pt.py
+          utils/print_env.py
 
       - name: Run all non-slow selected tests on GPU
         working-directory: /transformers
@@ -167,7 +167,7 @@ jobs:
       - name: GPU visibility
         working-directory: /transformers
         run: |
-          utils/print_env_pt.py
+          utils/print_env.py
 
       - name: Run all non-slow selected tests on GPU
         env:
@@ -218,7 +218,7 @@ jobs:
 
       - name: GPU visibility
         run: |
-          utils/print_env_pt.py
+          utils/print_env.py
 
       - name: Run all non-slow selected tests on GPU
         # TODO: Here we pass all tests in the 2 folders for simplicity. It's better to pass only the identified tests.
@@ -268,7 +268,7 @@ jobs:
 
       - name: GPU visibility
         run: |
-          utils/print_env_pt.py
+          utils/print_env.py
 
       - name: Run all non-slow selected tests on GPU
         # TODO: Here we pass all tests in the 2 folders for simplicity. It's better to pass only the identified tests.
