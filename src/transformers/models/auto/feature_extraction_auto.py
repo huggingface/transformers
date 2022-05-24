@@ -50,6 +50,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("flava", "FlavaFeatureExtractor"),
         ("glpn", "GLPNFeatureExtractor"),
         ("hubert", "Wav2Vec2FeatureExtractor"),
+        ("imagegpt", "ImageGPTFeatureExtractor"),
         ("layoutlmv2", "LayoutLMv2FeatureExtractor"),
         ("layoutlmv3", "LayoutLMv3FeatureExtractor"),
         ("maskformer", "MaskFormerFeatureExtractor"),
