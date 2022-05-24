@@ -15,13 +15,12 @@
 """ Testing suite for the PyTorch VideoMAE model. """
 
 
+import copy
 import inspect
-import tempfile
 import unittest
 
-import numpy as np
-
 from transformers import VideoMAEConfig
+from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
@@ -33,8 +32,13 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import VideoMAEForPreTraining, VideoMAEForVideoClassification, VideoMAEModel
-    from transformers.models.vit.modeling_vit import VIT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers import (
+        MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING,
+        VideoMAEForPreTraining,
+        VideoMAEForVideoClassification,
+        VideoMAEModel,
+    )
+    from transformers.models.videomae.modeling_videomae import VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -48,11 +52,11 @@ class VideoMAEModelTester:
         self,
         parent,
         batch_size=13,
-        image_size=30,
+        image_size=10,
         num_channels=3,
         patch_size=2,
         tubelet_size=2,
-        num_frames=16,
+        num_frames=2,
         is_training=True,
         use_labels=True,
         hidden_size=32,
@@ -87,13 +91,13 @@ class VideoMAEModelTester:
         self.initializer_range = initializer_range
         self.scope = scope
 
-        # in VideoMAE, the number of tokens equals num_frames/2 * num_patches
+        # in VideoMAE, the number of tokens equals num_frames/tubelet_size * num_patches
         num_patches = (image_size // patch_size) ** 2
         self.seq_length = (num_frames // tubelet_size) * num_patches
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor(
-            [self.batch_size, self.num_channels, self.num_frames, self.image_size, self.image_size]
+            [self.batch_size, self.num_frames, self.num_channels, self.image_size, self.image_size]
         )
 
         labels = None
@@ -133,9 +137,9 @@ class VideoMAEModelTester:
         model = VideoMAEForPreTraining(config)
         model.to(torch_device)
         model.eval()
-        result = model(pixel_values)
-        print(result)
-        assert False
+        bool_masked_pos = torch.randint(0, 2, (self.batch_size, self.seq_length), dtype=torch.bool)
+        result = model(pixel_values, bool_masked_pos)
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -164,11 +168,29 @@ class VideoMAEModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester = VideoMAEModelTester(self)
         self.config_tester = ConfigTester(self, config_class=VideoMAEConfig, has_text_modality=False, hidden_size=37)
 
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = copy.deepcopy(inputs_dict)
+
+        if model_class == VideoMAEForPreTraining:
+            inputs_dict["bool_masked_pos"] = torch.zeros(
+                (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
+            )
+        
+        if return_labels:
+            if model_class in [
+                *get_values(MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING),
+            ]:
+                inputs_dict["labels"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+
+        return inputs_dict
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @unittest.skip(reason="VideoMAE does not use inputs_embeds")
     def test_inputs_embeds(self):
-        # VideoMAE does not use inputs_embeds
         pass
 
     def test_model_common_attributes(self):
@@ -200,65 +222,9 @@ class VideoMAEModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_pretraining(*config_and_inputs)
 
-    def test_save_load(self):
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            # make random mask reproducible
-            torch.manual_seed(2)
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            out_2 = outputs[0].cpu().numpy()
-            out_2[np.isnan(out_2)] = 0
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname)
-                model.to(torch_device)
-                # make random mask reproducible
-                torch.manual_seed(2)
-                with torch.no_grad():
-                    after_outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-                # Make sure we don't have nans
-                out_1 = after_outputs[0].cpu().numpy()
-                out_1[np.isnan(out_1)] = 0
-                max_diff = np.amax(np.abs(out_1 - out_2))
-                self.assertLessEqual(max_diff, 1e-5)
-
-    @unittest.skip(
-        reason="""VideoMAE returns a random mask + ids_restore in each forward pass. See test_save_load
-    to get deterministic results."""
-    )
-    def test_determinism(self):
-        pass
-
-    @unittest.skip(
-        reason="""VideoMAE returns a random mask + ids_restore in each forward pass. See test_save_load
-    to get deterministic results."""
-    )
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(
-        reason="""VideoMAE returns a random mask + ids_restore in each forward pass. See test_save_load
-    to get deterministic results."""
-    )
-    def test_save_load_fast_init_to_base(self):
-        pass
-
-    @unittest.skip(reason="""VideoMAE returns a random mask + ids_restore in each forward pass. See test_save_load""")
-    def test_model_outputs_equivalence(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
-        for model_name in VIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = VideoMAEModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 

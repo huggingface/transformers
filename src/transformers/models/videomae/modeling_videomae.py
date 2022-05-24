@@ -24,7 +24,7 @@ from typing import Optional, Set, Tuple, Union
 import numpy as np
 import torch
 import torch.utils.checkpoint
-from torch import nn
+from torch import embedding, nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
@@ -48,7 +48,8 @@ _CONFIG_FOR_DOC = "VideoMAEConfig"
 _CHECKPOINT_FOR_DOC = "nanjing/videomae-base"
 
 VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "nanjing/videomae-base",
+    # TODO rename to organization
+    "nielsr/videomae-base",
     # See all VideoMAE models at https://huggingface.co/models?filter=videomae
 ]
 
@@ -146,12 +147,19 @@ class VideoMAEEmbeddings(nn.Module):
         # add position embeddings
         embeddings = embeddings + self.position_embeddings.type_as(embeddings).to(embeddings.device).clone().detach()
 
+        print("Shape of embeddings:", embeddings.shape)
+
         # only keep visible patches
         # ~bool_masked_pos means visible
         if bool_masked_pos is not None:
             batch_size, _, num_channels = embeddings.shape
-            embeddings = embeddings[~bool_masked_pos].reshape(batch_size, -1, num_channels)
+            print("Shape of bool_masked_pos:", bool_masked_pos.shape)
+            embeddings = embeddings[~bool_masked_pos]
+            print("Shape of filtered embeddings:", embeddings.shape)
+            embeddings = embeddings.reshape(batch_size, -1, num_channels)
 
+        print("Shape of final embeddings:", embeddings.shape)
+        
         return embeddings
 
 
@@ -848,8 +856,12 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
 
             batch_size, _, num_channels = videos_patch.shape
             labels = videos_patch[bool_masked_pos].reshape(batch_size, -1, num_channels)
-            loss_fct = MSELoss()
-            loss = loss_fct(logits, labels)
+
+        print("Shape of logits:", logits.shape)
+        print("Shape of labels:", labels.shape)
+        
+        loss_fct = MSELoss()
+        loss = loss_fct(logits, labels)
 
         if not return_dict:
             output = (logits,) + outputs[2:]
