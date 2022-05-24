@@ -2367,6 +2367,44 @@ class LayoutLMv2PreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class LayoutLMv3ForQuestionAnswering(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LayoutLMv3ForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LayoutLMv3ForTokenClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LayoutLMv3Model(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LayoutLMv3PreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 LED_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 

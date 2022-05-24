@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team.
+# Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,14 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Fast tokenization class for LayoutLMv2. It overwrites 2 methods of the slow tokenizer class, namely _batch_encode_plus
+Fast tokenization class for LayoutLMv3. It overwrites 2 methods of the slow tokenizer class, namely _batch_encode_plus
 and _encode_plus, in which the Rust tokenizer is used.
 """
 
 import json
 from typing import Dict, List, Optional, Tuple, Union
 
-from tokenizers import normalizers
+from tokenizers import pre_tokenizers, processors
 
 from ...tokenization_utils_base import (
     BatchEncoding,
@@ -34,69 +34,92 @@ from ...tokenization_utils_base import (
 )
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import add_end_docstrings, logging
-from .tokenization_layoutlmv2 import (
-    LAYOUTLMV2_ENCODE_KWARGS_DOCSTRING,
-    LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING,
-    LayoutLMv2Tokenizer,
+from .tokenization_layoutlmv3 import (
+    LAYOUTLMV3_ENCODE_KWARGS_DOCSTRING,
+    LAYOUTLMV3_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING,
+    LayoutLMv3Tokenizer,
 )
 
 
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.json"}
+VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "microsoft/layoutlmv2-base-uncased": (
-            "https://huggingface.co/microsoft/layoutlmv2-base-uncased/resolve/main/vocab.txt"
-        ),
+        "microsoft/layoutlmv3-base": "https://huggingface.co/microsoft/layoutlmv3-base/raw/main/vocab.json",
+        "microsoft/layoutlmv3-large": "https://huggingface.co/microsoft/layoutlmv3-large/raw/main/vocab.json",
     },
-    "tokenizer_file": {
-        "microsoft/layoutlmv2-base-uncased": (
-            "https://huggingface.co/microsoft/layoutlmv2-base-uncased/resolve/main/tokenizer.json"
-        ),
+    "merges_file": {
+        "microsoft/layoutlmv3-base": "https://huggingface.co/microsoft/layoutlmv3-base/raw/main/merges.txt",
+        "microsoft/layoutlmv3-large": "https://huggingface.co/microsoft/layoutlmv3-large/raw/main/merges.txt",
     },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "microsoft/layoutlmv2-base-uncased": 512,
-}
-
-PRETRAINED_INIT_CONFIGURATION = {
-    "microsoft/layoutlmv2-base-uncased": {"do_lower_case": True},
+    "microsoft/layoutlmv3-base": 512,
+    "microsoft/layoutlmv3-large": 512,
 }
 
 
-class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
+class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
     r"""
-    Construct a "fast" LayoutLMv2 tokenizer (backed by HuggingFace's *tokenizers* library). Based on WordPiece.
+    Construct a "fast" LayoutLMv3 tokenizer (backed by HuggingFace's *tokenizers* library). Based on BPE.
 
     This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
     refer to this superclass for more information regarding those methods.
 
     Args:
         vocab_file (`str`):
-            File containing the vocabulary.
-        do_lower_case (`bool`, *optional*, defaults to `True`):
-            Whether or not to lowercase the input when tokenizing.
-        unk_token (`str`, *optional*, defaults to `"[UNK]"`):
-            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
-            token instead.
-        sep_token (`str`, *optional*, defaults to `"[SEP]"`):
+            Path to the vocabulary file.
+        merges_file (`str`):
+            Path to the merges file.
+        errors (`str`, *optional*, defaults to `"replace"`):
+            Paradigm to follow when decoding bytes to UTF-8. See
+            [bytes.decode](https://docs.python.org/3/library/stdtypes.html#bytes.decode) for more information.
+        bos_token (`str`, *optional*, defaults to `"<s>"`):
+            The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
+
+            <Tip>
+
+            When building a sequence using special tokens, this is not the token that is used for the beginning of
+            sequence. The token used is the `cls_token`.
+
+            </Tip>
+
+        eos_token (`str`, *optional*, defaults to `"</s>"`):
+            The end of sequence token.
+
+            <Tip>
+
+            When building a sequence using special tokens, this is not the token that is used for the end of sequence.
+            The token used is the `sep_token`.
+
+            </Tip>
+
+        sep_token (`str`, *optional*, defaults to `"</s>"`):
             The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
             sequence classification or for a text and a question for question answering. It is also used as the last
             token of a sequence built with special tokens.
-        pad_token (`str`, *optional*, defaults to `"[PAD]"`):
-            The token used for padding, for example when batching sequences of different lengths.
-        cls_token (`str`, *optional*, defaults to `"[CLS]"`):
+        cls_token (`str`, *optional*, defaults to `"<s>"`):
             The classifier token which is used when doing sequence classification (classification of the whole sequence
             instead of per-token classification). It is the first token of the sequence when built with special tokens.
-        mask_token (`str`, *optional*, defaults to `"[MASK]"`):
+        unk_token (`str`, *optional*, defaults to `"<unk>"`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+        pad_token (`str`, *optional*, defaults to `"<pad>"`):
+            The token used for padding, for example when batching sequences of different lengths.
+        mask_token (`str`, *optional*, defaults to `"<mask>"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
+        add_prefix_space (`bool`, *optional*, defaults to `False`):
+            Whether or not to add an initial space to the input. This allows to treat the leading word just as any
+            other word. (RoBERTa tokenizer detect beginning of words by the preceding space).
+        trim_offsets (`bool`, *optional*, defaults to `True`):
+            Whether the post processing step should trim offsets to avoid including whitespaces.
         cls_token_box (`List[int]`, *optional*, defaults to `[0, 0, 0, 0]`):
             The bounding box to use for the special [CLS] token.
-        sep_token_box (`List[int]`, *optional*, defaults to `[1000, 1000, 1000, 1000]`):
+        sep_token_box (`List[int]`, *optional*, defaults to `[0, 0, 0, 0]`):
             The bounding box to use for the special [SEP] token.
         pad_token_box (`List[int]`, *optional*, defaults to `[0, 0, 0, 0]`):
             The bounding box to use for the special [PAD] token.
@@ -105,69 +128,91 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
             CrossEntropyLoss.
         only_label_first_subword (`bool`, *optional*, defaults to `True`):
             Whether or not to only label the first subword, in case word labels are provided.
-        tokenize_chinese_chars (`bool`, *optional*, defaults to `True`):
-            Whether or not to tokenize Chinese characters. This should likely be deactivated for Japanese (see [this
-            issue](https://github.com/huggingface/transformers/issues/328)).
-        strip_accents: (`bool`, *optional*):
-            Whether or not to strip all accents. If this option is not specified, then it will be determined by the
-            value for `lowercase` (as in the original LayoutLMv2).
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    slow_tokenizer_class = LayoutLMv2Tokenizer
+    model_input_names = ["input_ids", "attention_mask"]
+    slow_tokenizer_class = LayoutLMv3Tokenizer
 
     def __init__(
         self,
         vocab_file=None,
+        merges_file=None,
         tokenizer_file=None,
-        do_lower_case=True,
-        unk_token="[UNK]",
-        sep_token="[SEP]",
-        pad_token="[PAD]",
-        cls_token="[CLS]",
-        mask_token="[MASK]",
+        errors="replace",
+        bos_token="<s>",
+        eos_token="</s>",
+        sep_token="</s>",
+        cls_token="<s>",
+        unk_token="<unk>",
+        pad_token="<pad>",
+        mask_token="<mask>",
+        add_prefix_space=True,
+        trim_offsets=True,
         cls_token_box=[0, 0, 0, 0],
-        sep_token_box=[1000, 1000, 1000, 1000],
+        sep_token_box=[0, 0, 0, 0],
         pad_token_box=[0, 0, 0, 0],
         pad_token_label=-100,
         only_label_first_subword=True,
-        tokenize_chinese_chars=True,
-        strip_accents=None,
         **kwargs
     ):
         super().__init__(
             vocab_file,
+            merges_file,
             tokenizer_file=tokenizer_file,
-            do_lower_case=do_lower_case,
-            unk_token=unk_token,
+            errors=errors,
+            bos_token=bos_token,
+            eos_token=eos_token,
             sep_token=sep_token,
-            pad_token=pad_token,
             cls_token=cls_token,
+            unk_token=unk_token,
+            pad_token=pad_token,
             mask_token=mask_token,
+            add_prefix_space=add_prefix_space,
+            trim_offsets=trim_offsets,
             cls_token_box=cls_token_box,
             sep_token_box=sep_token_box,
             pad_token_box=pad_token_box,
             pad_token_label=pad_token_label,
             only_label_first_subword=only_label_first_subword,
-            tokenize_chinese_chars=tokenize_chinese_chars,
-            strip_accents=strip_accents,
             **kwargs,
         )
 
-        pre_tok_state = json.loads(self.backend_tokenizer.normalizer.__getstate__())
-        if (
-            pre_tok_state.get("lowercase", do_lower_case) != do_lower_case
-            or pre_tok_state.get("strip_accents", strip_accents) != strip_accents
-        ):
-            pre_tok_class = getattr(normalizers, pre_tok_state.pop("type"))
-            pre_tok_state["lowercase"] = do_lower_case
-            pre_tok_state["strip_accents"] = strip_accents
-            self.backend_tokenizer.normalizer = pre_tok_class(**pre_tok_state)
+        pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
+        if pre_tok_state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
+            pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop("type"))
+            pre_tok_state["add_prefix_space"] = add_prefix_space
+            self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
 
-        self.do_lower_case = do_lower_case
+        self.add_prefix_space = add_prefix_space
+
+        tokenizer_component = "post_processor"
+        tokenizer_component_instance = getattr(self.backend_tokenizer, tokenizer_component, None)
+        if tokenizer_component_instance:
+            state = json.loads(tokenizer_component_instance.__getstate__())
+
+            # The lists 'sep' and 'cls' must be cased in tuples for the object `post_processor_class`
+            if "sep" in state:
+                state["sep"] = tuple(state["sep"])
+            if "cls" in state:
+                state["cls"] = tuple(state["cls"])
+
+            changes_to_apply = False
+
+            if state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
+                state["add_prefix_space"] = add_prefix_space
+                changes_to_apply = True
+
+            if state.get("trim_offsets", trim_offsets) != trim_offsets:
+                state["trim_offsets"] = trim_offsets
+                changes_to_apply = True
+
+            if changes_to_apply:
+                component_class = getattr(processors, state.pop("type"))
+                new_value = component_class(**state)
+                setattr(self.backend_tokenizer, tokenizer_component, new_value)
 
         # additional properties
         self.cls_token_box = cls_token_box
@@ -176,7 +221,8 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         self.pad_token_label = pad_token_label
         self.only_label_first_subword = only_label_first_subword
 
-    @add_end_docstrings(LAYOUTLMV2_ENCODE_KWARGS_DOCSTRING, LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    @add_end_docstrings(LAYOUTLMV3_ENCODE_KWARGS_DOCSTRING, LAYOUTLMV3_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2_fast.LayoutLMv2TokenizerFast.__call__
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
@@ -324,7 +370,8 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
                 **kwargs,
             )
 
-    @add_end_docstrings(LAYOUTLMV2_ENCODE_KWARGS_DOCSTRING, LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    @add_end_docstrings(LAYOUTLMV3_ENCODE_KWARGS_DOCSTRING, LAYOUTLMV3_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2_fast.LayoutLMv2TokenizerFast.batch_encode_plus
     def batch_encode_plus(
         self,
         batch_text_or_text_pairs: Union[
@@ -384,6 +431,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
 
+    # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2_fast.LayoutLMv2TokenizerFast.tokenize
     def tokenize(self, text: str, pair: Optional[str] = None, add_special_tokens: bool = False, **kwargs) -> List[str]:
         batched_input = [(text, pair)] if pair else [text]
         encodings = self._tokenizer.encode_batch(
@@ -392,7 +440,8 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
 
         return encodings[0].tokens
 
-    @add_end_docstrings(LAYOUTLMV2_ENCODE_KWARGS_DOCSTRING, LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    @add_end_docstrings(LAYOUTLMV3_ENCODE_KWARGS_DOCSTRING, LAYOUTLMV3_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2_fast.LayoutLMv2TokenizerFast.encode_plus
     def encode_plus(
         self,
         text: Union[TextInput, PreTokenizedInput],
@@ -459,6 +508,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
 
+    # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2_fast.LayoutLMv2TokenizerFast._batch_encode_plus with LayoutLMv2->LayoutLMv3
     def _batch_encode_plus(
         self,
         batch_text_or_text_pairs: Union[
@@ -503,7 +553,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         encodings = self._tokenizer.encode_batch(
             batch_text_or_text_pairs,
             add_special_tokens=add_special_tokens,
-            is_pretokenized=True,  # we set this to True as LayoutLMv2 always expects pretokenized inputs
+            is_pretokenized=True,  # we set this to True as LayoutLMv3 always expects pretokenized inputs
         )
 
         # Convert encoding to dict
@@ -616,6 +666,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
 
         return BatchEncoding(sanitized_tokens, sanitized_encodings, tensor_type=return_tensors)
 
+    # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2_fast.LayoutLMv2TokenizerFast._encode_plus
     def _encode_plus(
         self,
         text: Union[TextInput, PreTokenizedInput],
@@ -683,6 +734,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
 
         return batched_output
 
+    # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2_fast.LayoutLMv2TokenizerFast._pad
     def _pad(
         self,
         encoded_inputs: Union[Dict[str, EncodedInput], BatchEncoding],
@@ -767,53 +819,35 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
 
         return encoded_inputs
 
+    # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2_fast.LayoutLMv2TokenizerFast.save_vocabulary
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        files = self._tokenizer.model.save(save_directory, name=filename_prefix)
+        return tuple(files)
+
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
-        """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. A BERT sequence has the following format:
+        output = [self.bos_token_id] + token_ids_0 + [self.eos_token_id]
+        if token_ids_1 is None:
+            return output
 
-        - single sequence: `[CLS] X [SEP]`
-        - pair of sequences: `[CLS] A [SEP] B [SEP]`
-
-        Args:
-            token_ids_0 (`List[int]`):
-                List of IDs to which the special tokens will be added.
-            token_ids_1 (`List[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
-        """
-        output = [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
-
-        if token_ids_1:
-            output += token_ids_1 + [self.sep_token_id]
-
-        return output
+        return output + [self.eos_token_id] + token_ids_1 + [self.eos_token_id]
 
     def create_token_type_ids_from_sequences(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A BERT sequence
-        pair mask has the following format: :: 0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 | first sequence | second
-        sequence | If `token_ids_1` is `None`, this method only returns the first portion of the mask (0s).
-
         Args:
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. RoBERTa does not:
+        make use of token type ids, therefore a list of zeros is returned.
             token_ids_0 (`List[int]`):
                 List of IDs.
             token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
-
         Returns:
-            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
+            `List[int]`: List of zeros.
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
+
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
-        return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
-
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        files = self._tokenizer.model.save(save_directory, name=filename_prefix)
-        return tuple(files)
+        return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
