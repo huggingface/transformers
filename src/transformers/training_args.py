@@ -451,8 +451,8 @@ class TrainingArguments:
             If `True`, [`enable_full_determinism`] is called instead of [`set_seed`] to ensure reproducible results in
             distributed training
         torchdynamo (`str`, *optional*):
-            The token that is used to set the backend compiler for TorchDynamo. Possible choices are ["eager", "nvfuser].
-            This is an experimental API and subject to change.
+            The token that is used to set the backend compiler for TorchDynamo. Possible choices are ["eager",
+            "nvfuser]. This is an experimental API and subject to change.
     """
 
     output_dir: str = field(
