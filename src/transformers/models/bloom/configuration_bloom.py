@@ -44,11 +44,6 @@ class BloomConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 50257):
             Vocabulary size of the GPT-2 model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`BloomModel`].
-        seq_length (`int`, *optional*, defaults to 1024):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        offset_alibi (`int`, *optional*, defaults to 100):
-            The padding added to the alibi positional embeddings to deal with cached input
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the embeddings and hidden states.
         n_layer (`int`, *optional*, defaults to 12):
@@ -118,7 +113,6 @@ class BloomConfig(PretrainedConfig):
     model_type = "bloom"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
-        "max_position_embeddings": "seq_length",
         "num_hidden_layers": "n_layer",
         "n_head": "num_attention_heads",
         "hidden_size": "n_embed",
@@ -127,8 +121,6 @@ class BloomConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size=250880,
-        seq_length=20,  # This constraints alibi embedding size together with offset_alibi
-        offset_alibi=100,
         hidden_size=64,
         n_layer=2,
         n_head=8,
@@ -151,7 +143,6 @@ class BloomConfig(PretrainedConfig):
         **kwargs,
     ):
         self.vocab_size = vocab_size
-        self.seq_length = seq_length
         self.hidden_size = hidden_size
         self.n_layer = n_layer
         self.n_head = n_head
@@ -168,7 +159,6 @@ class BloomConfig(PretrainedConfig):
         self.skip_bias_add_qkv = skip_bias_add_qkv
         self.attention_dropout = attention_dropout
         self.attention_softmax_in_fp32 = attention_softmax_in_fp32
-        self.offset_alibi = offset_alibi
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id

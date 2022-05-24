@@ -48,38 +48,6 @@ BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Utility functions below:
-def pre_process_alibi_for_pad(alibi, attention_mask, num_heads):
-    """
-    Pre-process the alibi tensor for padding.
-
-    Args:
-        alibi: ([`torch.tensor`], *required*):
-            alibi tensor to pre-process
-        attention_mask: ([`torch.tensor`], *required*):
-            attention mask to pre-process"""
-    # Remove the padding.
-    index_x, index_y = torch.where(attention_mask == 0.0)
-    batches_to_modify = torch.unique(index_x)
-
-    new_alibi = torch.clone(alibi.detach())
-    for i, index in enumerate(batches_to_modify):
-        slice_to_modify = torch.clone(new_alibi[index * num_heads : (index + 1) * num_heads].detach())
-
-        begin, end = torch.where(index_x == index)[0][0], torch.where(index_x == index)[0][-1]
-        if begin != end:
-            shifted_slice = slice_to_modify[:, :, : -(end - begin + 1)]
-
-            begin_position_to_extract, end_position_to_extract = index_y[begin], index_y[end] + 1
-
-            new_alibi[index * num_heads : (index + 1) * num_heads][:, :, begin_position_to_extract:] = 0.0
-            new_alibi[index * num_heads : (index + 1) * num_heads][:, :, end_position_to_extract:] = shifted_slice[
-                :, :, begin_position_to_extract:
-            ]
-
-    return new_alibi
-
-
 def split_tensor_along_last_dim(tensor, num_partitions, contiguous_split_chunks=False):
     """Split a tensor along its last dimension.
 
@@ -121,14 +89,10 @@ def attention_mask_func(attention_scores, attention_mask, causal_mask):
     for i, index in enumerate(index_x):
         padded_causal_mask[index, :, :, index_y[i]] = True
     # Make use of floats
-    if padded_causal_mask.dtype == torch.bool:
-        return (
-            attention_scores.masked_fill_(padded_causal_mask.expand(-1, n_heads, -1, -1), -10000.0),
-            padded_causal_mask,
-        )
-    else:
-        values_to_attend = 1.0 - padded_causal_mask
-        return (values_to_attend * attention_scores) - 10000.0 * padded_causal_mask, padded_causal_mask
+    return (
+        attention_scores.masked_fill_(padded_causal_mask.expand(-1, n_heads, -1, -1), -10000.0),
+        padded_causal_mask,
+    )
 
 
 def bias_dropout_add(x, bias, residual, prob, training):
@@ -184,7 +148,6 @@ class ScaledSoftmax(nn.Module):
         mask_func,
         softmax_in_fp32,
         scale,
-        max_positions,
     ):
         super().__init__()
         self.input_in_fp16 = input_in_fp16
@@ -197,13 +160,10 @@ class ScaledSoftmax(nn.Module):
         self.softmax_in_fp32 = softmax_in_fp32
         self.scale = scale
 
-        self.causal_mask = torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
-            1, 1, max_positions, max_positions
-        )
         if not (self.scale is None or softmax_in_fp32):
             raise ValueError("softmax should be in fp32 when scaled")
 
-    def forward(self, input, mask):
+    def forward(self, input, mask, max_positions):
         if self.input_in_float16 and self.softmax_in_fp32:
             input = input.float()
 
@@ -212,9 +172,10 @@ class ScaledSoftmax(nn.Module):
 
         if mask is not None:
             mask = mask.to(input.device)
-            mask_output, padded_causal_mask = (
-                self.mask_func(input, mask, self.causal_mask) if mask is not None else input
+            causal_mask = torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
+                1, 1, max_positions, max_positions
             )
+            mask_output, padded_causal_mask = self.mask_func(input, mask, causal_mask) if mask is not None else input
             probs = torch.nn.Softmax(dim=-1)(mask_output) * (~padded_causal_mask)
         else:
             probs = torch.nn.Softmax(dim=-1)(input)
@@ -265,8 +226,6 @@ class BloomAttention(nn.Module):
             attention_mask_func,
             self.attention_softmax_in_fp32,
             coeff,
-            # To avoid cache problems, we use a small offset when creating the alibi positional embeddings
-            config.seq_length + config.offset_alibi,
         )
 
         self.query_key_value = nn.Linear(self.hidden_size, 3 * self.hidden_size, dtype=dtype, bias=True)
@@ -341,7 +300,8 @@ class BloomAttention(nn.Module):
 
         # attention scores and attention mask [b, np, sq, sk]
 
-        attention_probs = self.scale_mask_softmax(attention_scores, attention_mask).to(self.dtype)
+        max_positions = max(attention_scores.shape[-1], attention_scores.shape[-2])
+        attention_probs = self.scale_mask_softmax(attention_scores, attention_mask, max_positions).to(self.dtype)
         attention_probs = self.attention_dropout(attention_probs)
 
         if head_mask is not None:
