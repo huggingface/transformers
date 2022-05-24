@@ -1336,7 +1336,7 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
         if attention_mask is not None:
             extended_attention_mask = (
                 1.0 - attention_mask[:, None, :].repeat(self.config.num_encoder_attention_heads, 1, 1)
-            ) * -10000.0
+            ) * torch.finfo(self.dtype).min
             extended_attention_mask = extended_attention_mask.to(inputs_embeds.dtype)
         else:
             extended_attention_mask = None
@@ -1554,7 +1554,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         if encoder_attention_mask is not None:
             extended_encoder_attention_mask = (
                 1.0 - encoder_attention_mask[:, None, :].repeat(self.config.num_decoder_attention_heads, 1, 1)
-            ) * -10000.0
+            ) * torch.finfo(self.dtype).min
             extended_encoder_attention_mask = extended_encoder_attention_mask.to(inputs_embeds.dtype)
         else:
             extended_encoder_attention_mask = None
@@ -1722,7 +1722,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
         # add usual attention mask
         if attention_mask is not None:
-            extended_attention_mask = (1.0 - attention_mask[:, None, :]) * -10000.0
+            extended_attention_mask = (1.0 - attention_mask[:, None, :]) * torch.finfo(self.dtype).min
             extended_attention_mask = extended_causal_mask + extended_attention_mask
         else:
             extended_attention_mask = extended_causal_mask
@@ -1750,7 +1750,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
         # add usual attention mask
         if attention_mask is not None:
-            extended_attention_mask = (1.0 - attention_mask[None, :, None, :]) * -10000.0
+            extended_attention_mask = (1.0 - attention_mask[None, :, None, :]) * torch.finfo(self.dtype).min
             extended_attention_mask = extended_attention_mask.expand((self.ngram, batch_size, seq_length, seq_length))
             # predicted stream attention_mask should always be 0
             extended_attention_mask = torch.cat(

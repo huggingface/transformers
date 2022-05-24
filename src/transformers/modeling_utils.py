@@ -751,15 +751,7 @@ class ModuleUtilsMixin:
         # encoder_extended_attention_mask = (encoder_extended_attention_mask ==
         # encoder_extended_attention_mask.transpose(-1, -2))
         encoder_extended_attention_mask = encoder_extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-
-        if self.dtype == torch.float16:
-            encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e4
-        elif self.dtype in [torch.bfloat16, torch.float32]:
-            encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e9
-        else:
-            raise ValueError(
-                f"{self.dtype} not recognized. `dtype` should be set to either `torch.float32` or `torch.float16`"
-            )
+        encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * torch.finfo(self.dtype).min
 
         return encoder_extended_attention_mask
 
@@ -837,7 +829,7 @@ class ModuleUtilsMixin:
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
         extended_attention_mask = extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-        extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
+        extended_attention_mask = (1.0 - extended_attention_mask) * torch.finfo(self.dtype).min
         return extended_attention_mask
 
     def get_head_mask(
