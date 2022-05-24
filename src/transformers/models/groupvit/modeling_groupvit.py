@@ -128,9 +128,6 @@ def resize_attention_map(attentions, height, width, align_corners=False):
     else:
         feat_height = int(np.round(height / scale))
         feat_width = attentions.shape[2] // feat_height
-    assert (
-        attentions.shape[2] == feat_height * feat_width
-    ), f"{attentions.shape[2]} = {feat_height} x {feat_width}, height={height}, width={width}"
 
     batch_size = attentions.shape[0]
     groups = attentions.shape[1]  # number of group token
@@ -190,36 +187,30 @@ class GroupViTAttention(nn.Module):
         key_length = key.size(1)
 
         # [batch_size, num_heads, query_length, channels//num_heads]
-        q = (
+        query = (
             self.q_proj(query)
             .reshape(batch_size, query_length, self.num_heads, channels // self.num_heads)
             .permute(0, 2, 1, 3)
         )
         # [batch_size, num_heads, key_length, channels//num_heads]
-        k = (
+        key = (
             self.k_proj(key)
             .reshape(batch_size, key_length, self.num_heads, channels // self.num_heads)
             .permute(0, 2, 1, 3)
         )
         # [batch_size, num_heads, key_length, channels//num_heads]
-        v = (
+        value = (
             self.v_proj(key)
             .reshape(batch_size, key_length, self.num_heads, channels // self.num_heads)
             .permute(0, 2, 1, 3)
         )
 
         # [batch_size, num_heads, query_length, key_length]
-        attn = (q @ k.transpose(-2, -1)) * self.scale
+        attn = (query @ key.transpose(-2, -1)) * self.scale
         attn = attn.softmax(dim=-1)
-        assert attn.shape == (
-            batch_size,
-            self.num_heads,
-            query_length,
-            key_length,
-        ), f"{attn.shape} vs {(batch_size, self.num_heads, query_length, key_length)}"
 
         # [batch_size, num_heads, query_length, channels//num_heads] -> [batch_size, query_length, channels]
-        out = (attn @ v).transpose(1, 2).reshape(batch_size, query_length, channels)
+        out = (attn @ value).transpose(1, 2).reshape(batch_size, query_length, channels)
         out = self.proj(out)
         return out
 
@@ -460,23 +451,30 @@ class GroupViTVisionEmbeddings(nn.Module):
         """
 
         npatch = embeddings.shape[1]
-        N = self.position_embeddings.shape[1]
-        if npatch == N and height == width:
+        if npatch == self.position_embeddings.shape[1] and height == width:
             return self.position_embeddings
         patch_pos_embed = self.position_embeddings
         dim = embeddings.shape[-1]
-        h0 = height // self.config.patch_size
-        w0 = width // self.config.patch_size
+        feat_height = height // self.config.patch_size
+        feat_width = width // self.config.patch_size
         # we add a small number to avoid floating point error in the interpolation
         # see discussion at https://github.com/facebookresearch/dino/issues/8
-        h0, w0 = h0 + 0.1, w0 + 0.1
+        feat_height, feat_width = feat_height + 0.1, feat_width + 0.1
         patch_pos_embed = nn.functional.interpolate(
-            patch_pos_embed.reshape(1, int(math.sqrt(N)), int(math.sqrt(N)), dim).permute(0, 3, 1, 2),
-            scale_factor=(h0 / math.sqrt(N), w0 / math.sqrt(N)),
+            patch_pos_embed.reshape(
+                1,
+                int(math.sqrt(self.position_embeddings.shape[1])),
+                int(math.sqrt(self.position_embeddings.shape[1])),
+                dim,
+            ).permute(0, 3, 1, 2),
+            scale_factor=(
+                feat_height / math.sqrt(self.position_embeddings.shape[1]),
+                feat_width / math.sqrt(self.position_embeddings.shape[1]),
+            ),
             mode="bicubic",
             align_corners=False,
         )
-        assert int(h0) == patch_pos_embed.shape[-2] and int(w0) == patch_pos_embed.shape[-1]
+        assert int(feat_height) == patch_pos_embed.shape[-2] and int(feat_width) == patch_pos_embed.shape[-1]
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return patch_pos_embed
 
