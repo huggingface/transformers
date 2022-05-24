@@ -1634,39 +1634,50 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 super().__init__()
 
             def forward(self, x):
-                for _ in range(10):
-                    x = torch.sin(x)
+                for _ in range(20):
+                    x = torch.nn.functional.relu(x)
                 return x
 
         mod = MyModule()
-        a = torch.randn(1024, 1024, device="cuda", requires_grad=True)
 
         # 1. Default - without TorchDynamo
+        a = torch.ones(1024, 1024, device="cuda", requires_grad=True)
         a.grad = None
         trainer = Trainer(model=mod)
-        peak_mem_at_start = torch.cuda.max_memory_allocated()
+        # warmup
+        for _ in range(10):
+            orig_loss = trainer.training_step(mod, {"x": a})
+
+        torch.cuda.reset_peak_memory_stats()
         orig_loss = trainer.training_step(mod, {"x": a})
-        peak_mem_at_end = torch.cuda.max_memory_allocated()
-        orig_peak_mem = peak_mem_at_end - peak_mem_at_start
+        orig_peak_mem = torch.cuda.max_memory_allocated()
         del trainer
+
+        # Reset the peak for another measurement
         gc.collect()
+        torch.cuda.empty_cache()
+        torch.cuda.reset_peak_memory_stats()
 
         # 2. TorchDynamo nvfuser
+        a = torch.ones(1024, 1024, device="cuda", requires_grad=True)
         a.grad = None
         args = TrainingArguments(output_dir="None", torchdynamo="nvfuser")
         trainer = Trainer(model=mod, args=args)
+        # warmup
+        for _ in range(10):
+            loss = trainer.training_step(mod, {"x": a})
 
-        peak_mem_at_start = torch.cuda.max_memory_allocated()
+        torch.cuda.reset_peak_memory_stats()
         loss = trainer.training_step(mod, {"x": a})
-        peak_mem_at_end = torch.cuda.max_memory_allocated()
-        peak_mem = peak_mem_at_end - peak_mem_at_start
+        peak_mem = torch.cuda.max_memory_allocated()
+        del trainer
 
         # Functional check
         self.assertAlmostEqual(loss, orig_loss)
 
         # AOT Autograd recomputaion and nvfuser recomputation optimization
         # aggressively fuses the operations and reduce the memory footprint.
-        self.assertGreater(orig_peak_mem, peak_mem * 5)
+        self.assertGreater(orig_peak_mem, peak_mem * 2)
 
     @require_torch_gpu
     @require_torch_bf16
