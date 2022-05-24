@@ -223,8 +223,8 @@ class MBartModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         else ()
     )
     all_generative_model_classes = (MBartForConditionalGeneration,) if is_torch_available() else ()
-    fx_compatible = True
     is_encoder_decoder = True
+    fx_compatible = True
     test_pruning = False
     test_missing_keys = False
 

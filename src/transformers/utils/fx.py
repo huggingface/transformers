@@ -43,6 +43,8 @@ from .. import (
     MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
     MODEL_MAPPING,
+    CLIPTextModel,
+    CLIPVisionModel,
     GPT2DoubleHeadsModel,
     PretrainedConfig,
     PreTrainedModel,
@@ -110,6 +112,12 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "vit",
     "swin",
     "layoutlm",
+    "pegasus",
+    "blenderbot",
+    "blenderbot-small",
+    "m2m_100",
+    "marian",
+    "clip",
     # TODO: add support for them as it should be quite easy to do so (small blocking issues).
     # "xlnet",
 ]
@@ -123,6 +131,8 @@ for item in _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS:
 
 _SPECIAL_SUPPORTED_MODELS = [
     GPT2DoubleHeadsModel,
+    CLIPTextModel,
+    CLIPVisionModel,
     # TODO: add support for them as it should be quite easy to do so (small blocking issues).
     # XLNetForQuestionAnswering,
 ]
@@ -308,7 +318,7 @@ def torch_index_select(input, dim, index, *, out=None):
 
 
 def torch_tensor_index_select(self, dim, index):
-    return torch_tensor_index_select(self, dim, index)
+    return torch_index_select(self, dim, index)
 
 
 def torch_roll(input, shifts, dims=None):
@@ -390,7 +400,10 @@ def torch_nn_bcewithlogitsloss(self, input, target):
 def operator_getitem(a, b):
     def to_concrete(t):
         if isinstance(t, torch.Tensor):
-            return torch.ones_like(t, device="cpu")
+            concrete = torch.ones_like(t, device="cpu")
+            if concrete.dtype in [torch.float16, torch.float32, torch.float64, torch.int32]:
+                concrete = concrete.to(torch.int64)
+            return concrete
         return t
 
     if isinstance(a, torch.Tensor):
@@ -563,7 +576,7 @@ class HFTracer(Tracer):
     # Feature flag for proxying accesses to buffer values
     proxy_buffer_attributes: bool = True
     allow_insert_stateless_mods: bool = True
-    _TORCH_METHODS_TO_PATCH = ["arange", "zeros", "ones", "full", "full_like", "eye"]
+    _TORCH_METHODS_TO_PATCH = ["arange", "zeros", "ones", "full", "full_like", "eye", "empty"]
 
     def __init__(self, autowrap_modules=(math,), autowrap_functions=()):
 
@@ -639,12 +652,17 @@ class HFTracer(Tracer):
                 raise NotImplementedError(f"{model_class} not supported yet.")
         elif "pixel_values" in input_name:
             batch_size = shape[0]
-            image_size = model.config.image_size
+            image_size = getattr(model.config, "image_size", None)
+            if image_size is None:
+                image_size = model.config.vision_config.image_size
+
+            # If no num_channels is in the config, use some arbitrary value.
+            num_channels = getattr(model.config, "num_channels", 3)
             if not isinstance(image_size, collections.abc.Iterable):
                 image_size = (image_size, image_size)
             height, width = image_size
             inputs_dict[input_name] = torch.zeros(
-                batch_size, model.config.num_channels, height, width, dtype=torch.float32, device=device
+                batch_size, num_channels, height, width, dtype=torch.float32, device=device
             )
         elif "bbox" in input_name:
             inputs_dict[input_name] = torch.zeros(*shape, 4, dtype=torch.float, device=device)
@@ -926,11 +944,11 @@ def symbolic_trace(
     sig = inspect.signature(model.forward)
     concrete_args = {p.name: p.default for p in sig.parameters.values() if p.name not in input_names}
 
-    # if not isinstance(model, _SUPPORTED_MODELS):
-    #     supported_model_names = ", ".join((cls.__name__ for cls in _SUPPORTED_MODELS))
-    #     raise NotImplementedError(
-    #         f"Model {model.__class__.__name__} is not supported yet, supported models: {supported_model_names}"
-    #     )
+    if not isinstance(model, _SUPPORTED_MODELS):
+        supported_model_names = ", ".join((cls.__name__ for cls in _SUPPORTED_MODELS))
+        raise NotImplementedError(
+            f"Model {model.__class__.__name__} is not supported yet, supported models: {supported_model_names}"
+        )
 
     # Tracing.
     tracer = HFTracer()
