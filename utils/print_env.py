@@ -18,10 +18,13 @@
 # this script dumps information about the environment
 
 import transformers
+
+
 print("transformers version:", transformers.__version__)
 
 try:
     import torch
+
     print("Torch version:", torch.__version__)
     print("Cuda available:", torch.cuda.is_available())
     print("Cuda version:", torch.version.cuda)
@@ -33,14 +36,16 @@ except ImportError:
 
 try:
     import deepspeed
+
     print("DeepSpeed version:", deepspeed.__version__)
 except ImportError:
     print("DeepSpeed version:", None)
 
 try:
     import tensorflow as tf
+
     print("TensorFlow version:", tf.__version__)
-    print('TF GPUs available:', bool(tf.config.list_physical_devices('GPU')))
-    print('Number of TF GPUs available:', len(tf.config.list_physical_devices('GPU')))
+    print("TF GPUs available:", bool(tf.config.list_physical_devices("GPU")))
+    print("Number of TF GPUs available:", len(tf.config.list_physical_devices("GPU")))
 except ImportError:
     print("TensorFlow version:", None)
