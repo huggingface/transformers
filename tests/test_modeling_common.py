@@ -19,6 +19,7 @@ import inspect
 import json
 import os
 import os.path
+import pickle
 import random
 import sys
 import tempfile
@@ -93,6 +94,8 @@ if is_torch_available():
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         MODEL_MAPPING,
         AdaptiveEmbedding,
+        AutoModelForCausalLM,
+        AutoTokenizer,
         BertConfig,
         BertModel,
         PreTrainedModel,
@@ -738,8 +741,7 @@ class ModelTesterMixin:
                     traced_model = symbolic_trace(model, input_names)
                     traced_output = traced_model(**filtered_inputs)
                 else:
-                    input_names = ["input_ids", "attention_mask", "token_type_ids"]
-                    input_ids = inputs["input_ids"]
+                    input_names = ["input_ids", "attention_mask", "token_type_ids", "pixel_values"]
 
                     labels = inputs.get("labels", None)
                     start_positions = inputs.get("start_positions", None)
@@ -756,17 +758,11 @@ class ModelTesterMixin:
 
                     model_output = model(**filtered_inputs)
 
-                    rank = len(input_ids.shape)
-                    if rank not in [2, 3]:
-                        raise NotImplementedError(
-                            f"symbolic_trace automatic parameters inference not implemented for input of rank {rank}."
-                        )
-
                     traced_model = symbolic_trace(model, input_names)
                     traced_output = traced_model(**filtered_inputs)
 
-            except RuntimeError:
-                self.fail("Couldn't trace module.")
+            except RuntimeError as e:
+                self.fail(f"Couldn't trace module: {e}")
 
             def flatten_output(output):
                 flatten = []
@@ -788,6 +784,40 @@ class ModelTesterMixin:
                     torch.allclose(model_output[i], traced_output[i]),
                     f"traced {i}th output doesn't match model {i}th output for {model_class}",
                 )
+
+            # Test that the model can be TorchScripted
+            try:
+                scripted = torch.jit.script(traced_model)
+            except Exception as e:
+                self.fail(f"Could not TorchScript the traced model: {e}")
+            scripted_output = scripted(**filtered_inputs)
+            scripted_output = flatten_output(scripted_output)
+
+            for i in range(num_outputs):
+                self.assertTrue(
+                    torch.allclose(model_output[i], scripted_output[i]),
+                    f"scripted {i}th output doesn't match model {i}th output for {model_class}",
+                )
+
+            # Test that the model can be serialized and restored properly
+            with tempfile.TemporaryDirectory() as tmp_dir_name:
+                pkl_file_name = os.path.join(tmp_dir_name, "model.pkl")
+                try:
+                    with open(pkl_file_name, "wb") as f:
+                        pickle.dump(traced_model, f)
+                    with open(pkl_file_name, "rb") as f:
+                        loaded = pickle.load(f)
+                except Exception as e:
+                    self.fail(f"Couldn't serialize / deserialize the traced model: {e}")
+
+                loaded_output = loaded(**filtered_inputs)
+                loaded_output = flatten_output(loaded_output)
+
+                for i in range(num_outputs):
+                    self.assertTrue(
+                        torch.allclose(model_output[i], loaded_output[i]),
+                        f"serialized model {i}th output doesn't match model {i}th output for {model_class}",
+                    )
 
     def test_headmasking(self):
         if not self.test_head_masking:
@@ -1447,7 +1477,12 @@ class ModelTesterMixin:
                             torch.allclose(
                                 set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
                             ),
-                            msg=f"Tuple and dict output are not equal. Difference: {torch.max(torch.abs(tuple_object - dict_object))}. Tuple has `nan`: {torch.isnan(tuple_object).any()} and `inf`: {torch.isinf(tuple_object)}. Dict has `nan`: {torch.isnan(dict_object).any()} and `inf`: {torch.isinf(dict_object)}.",
+                            msg=(
+                                "Tuple and dict output are not equal. Difference:"
+                                f" {torch.max(torch.abs(tuple_object - dict_object))}. Tuple has `nan`:"
+                                f" {torch.isnan(tuple_object).any()} and `inf`: {torch.isinf(tuple_object)}. Dict has"
+                                f" `nan`: {torch.isnan(dict_object).any()} and `inf`: {torch.isinf(dict_object)}."
+                            ),
                         )
 
                 recursive_check(tuple_output, dict_output)
@@ -1636,7 +1671,8 @@ class ModelTesterMixin:
             self.assertLessEqual(max_diff, tol, f"{name}: Difference between torch and tf is {max_diff} (>= {tol}).")
         else:
             raise ValueError(
-                f"`tf_outputs` should be an instance of `tf.Tensor`, a `tuple`, or an instance of `tf.Tensor`. Got {type(tf_outputs)} instead."
+                "`tf_outputs` should be an instance of `tf.Tensor`, a `tuple`, or an instance of `tf.Tensor`. Got"
+                f" {type(tf_outputs)} instead."
             )
 
     def prepare_tf_inputs_from_pt_inputs(self, pt_inputs_dict):
@@ -2066,7 +2102,7 @@ class ModelTesterMixin:
             memory_after_parallelization = get_current_gpu_memory_use()
 
             # Assert that the memory use on all devices is higher than it was when loaded only on CPU
-            for n in range(torch.cuda.device_count()):
+            for n in range(len(model.device_map.keys())):
                 self.assertGreater(memory_after_parallelization[n], memory_at_start[n])
 
             # Assert that the memory use of device 0 is lower than it was when the entire model was loaded on it
@@ -2560,6 +2596,22 @@ class ModelUtilsTest(TestCasePlus):
         # gpu - that way one can measure exactly the total and peak memory used. Perhaps once we add
         # functionality to load models directly on gpu, this test can be rewritten to use torch's
         # cuda memory tracking and then we should be able to do a much more precise test.
+
+    @require_torch_multi_gpu
+    @slow
+    def test_model_parallelism_gpt2(self):
+        device_map = {"transformer.wte": 0, "transformer.wpe": 0, "lm_head": 0, "transformer.ln_f": 1}
+        for i in range(12):
+            device_map[f"transformer.h.{i}"] = 0 if i <= 5 else 1
+
+        model = AutoModelForCausalLM.from_pretrained("gpt2", device_map=device_map)
+
+        tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        inputs = tokenizer("Hello, my name is", return_tensors="pt")
+        output = model.generate(inputs["input_ids"].to(0))
+
+        text_output = tokenizer.decode(output[0].tolist())
+        self.assertEqual(text_output, "Hello, my name is John. I'm a writer, and I'm a writer. I'm")
 
     def test_cached_files_are_used_when_internet_is_down(self):
         # A mock response for an HTTP head request to emulate server down

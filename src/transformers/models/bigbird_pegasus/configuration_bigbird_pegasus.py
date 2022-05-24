@@ -27,9 +27,15 @@ from ...utils import TensorType, is_torch_available, logging
 logger = logging.get_logger(__name__)
 
 BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/bigbird-pegasus-large-arxiv": "https://huggingface.co/google/bigbird-pegasus-large-arxiv/resolve/main/config.json",
-    "google/bigbird-pegasus-large-pubmed": "https://huggingface.co/google/bigbird-pegasus-large-pubmed/resolve/main/config.json",
-    "google/bigbird-pegasus-large-bigpatent": "https://huggingface.co/google/bigbird-pegasus-large-bigpatent/resolve/main/config.json",
+    "google/bigbird-pegasus-large-arxiv": (
+        "https://huggingface.co/google/bigbird-pegasus-large-arxiv/resolve/main/config.json"
+    ),
+    "google/bigbird-pegasus-large-pubmed": (
+        "https://huggingface.co/google/bigbird-pegasus-large-pubmed/resolve/main/config.json"
+    ),
+    "google/bigbird-pegasus-large-bigpatent": (
+        "https://huggingface.co/google/bigbird-pegasus-large-bigpatent/resolve/main/config.json"
+    ),
     # See all BigBirdPegasus models at https://huggingface.co/models?filter=bigbird_pegasus
 }
 
@@ -349,8 +355,9 @@ class BigBirdPegasusOnnxConfig(OnnxSeq2SeqConfigWithPast):
                 self._config.hidden_size // num_encoder_attention_heads,
             )
 
+            mask_dtype = common_inputs["attention_mask"].dtype
             common_inputs["attention_mask"] = torch.cat(
-                [common_inputs["attention_mask"], torch.ones(batch, past_key_values_length)], dim=1
+                [common_inputs["attention_mask"], torch.ones(batch, past_key_values_length, dtype=mask_dtype)], dim=1
             )
             common_inputs["past_key_values"] = [
                 (torch.zeros(past_shape), torch.zeros(past_shape)) for _ in range(num_encoder_layers)

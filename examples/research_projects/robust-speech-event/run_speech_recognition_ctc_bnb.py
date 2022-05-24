@@ -103,9 +103,11 @@ class ModelArguments:
     mask_time_prob: float = field(
         default=0.05,
         metadata={
-            "help": "Probability of each feature vector along the time axis to be chosen as the start of the vector"
-            "span to be masked. Approximately ``mask_time_prob * sequence_length // mask_time_length`` feature"
-            "vectors will be masked along the time axis."
+            "help": (
+                "Probability of each feature vector along the time axis to be chosen as the start of the vector"
+                "span to be masked. Approximately ``mask_time_prob * sequence_length // mask_time_length`` feature"
+                "vectors will be masked along the time axis."
+            )
         },
     )
     mask_time_length: int = field(
@@ -115,8 +117,11 @@ class ModelArguments:
     mask_feature_prob: float = field(
         default=0.0,
         metadata={
-            "help": "Probability of each feature vector along the feature axis to be chosen as the start of the vector"
-            "span to be masked. Approximately ``mask_feature_prob * sequence_length // mask_feature_length`` feature bins will be masked along the time axis."
+            "help": (
+                "Probability of each feature vector along the feature axis to be chosen as the start of the vectorspan"
+                " to be masked. Approximately ``mask_feature_prob * sequence_length // mask_feature_length`` feature"
+                " bins will be masked along the time axis."
+            )
         },
     )
     mask_feature_length: int = field(
@@ -175,15 +180,19 @@ class DataTrainingArguments:
     max_train_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of training examples to this "
+                "value if set."
+            )
         },
     )
     max_eval_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of validation examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of validation examples to this "
+                "value if set."
+            )
         },
     )
     chars_to_ignore: Optional[List[str]] = list_field(
@@ -197,7 +206,10 @@ class DataTrainingArguments:
     max_duration_in_seconds: float = field(
         default=20.0,
         metadata={
-            "help": "Filter audio files that are longer than `max_duration_in_seconds` seconds to 'max_duration_in_seconds`"
+            "help": (
+                "Filter audio files that are longer than `max_duration_in_seconds` seconds to"
+                " 'max_duration_in_seconds`"
+            )
         },
     )
     min_duration_in_seconds: float = field(
@@ -206,17 +218,21 @@ class DataTrainingArguments:
     preprocessing_only: bool = field(
         default=False,
         metadata={
-            "help": "Whether to only do data preprocessing and skip training. "
-            "This is especially useful when data preprocessing errors out in distributed training due to timeout. "
-            "In this case, one should run the preprocessing in a non-distributed setup with `preprocessing_only=True` "
-            "so that the cached datasets can consequently be loaded in distributed training"
+            "help": (
+                "Whether to only do data preprocessing and skip training. This is especially useful when data"
+                " preprocessing errors out in distributed training due to timeout. In this case, one should run the"
+                " preprocessing in a non-distributed setup with `preprocessing_only=True` so that the cached datasets"
+                " can consequently be loaded in distributed training"
+            )
         },
     )
     use_auth_token: bool = field(
         default=False,
         metadata={
-            "help": "If :obj:`True`, will use the token generated when running"
-            ":obj:`transformers-cli login` as HTTP bearer authorization for remote files."
+            "help": (
+                "If :obj:`True`, will use the token generated when running"
+                ":obj:`transformers-cli login` as HTTP bearer authorization for remote files."
+            )
         },
     )
     unk_token: str = field(
@@ -234,10 +250,12 @@ class DataTrainingArguments:
     phoneme_language: Optional[str] = field(
         default=None,
         metadata={
-            "help": "The target language that should be used be"
-            " passed to the tokenizer for tokenization. Note that"
-            " this is only relevant if the model classifies the"
-            " input audio to a sequence of phoneme sequences."
+            "help": (
+                "The target language that should be used be"
+                " passed to the tokenizer for tokenization. Note that"
+                " this is only relevant if the model classifies the"
+                " input audio to a sequence of phoneme sequences."
+            )
         },
     )
 
@@ -406,9 +424,9 @@ def main():
 
         if data_args.audio_column_name not in raw_datasets["train"].column_names:
             raise ValueError(
-                f"--audio_column_name '{data_args.audio_column_name}' not found in dataset '{data_args.dataset_name}'. "
-                "Make sure to set `--audio_column_name` to the correct audio column - one of "
-                f"{', '.join(raw_datasets['train'].column_names)}."
+                f"--audio_column_name '{data_args.audio_column_name}' not found in dataset '{data_args.dataset_name}'."
+                " Make sure to set `--audio_column_name` to the correct audio column - one of"
+                f" {', '.join(raw_datasets['train'].column_names)}."
             )
 
         if data_args.text_column_name not in raw_datasets["train"].column_names:
@@ -743,7 +761,10 @@ def main():
         "finetuned_from": model_args.model_name_or_path,
         "tasks": "speech-recognition",
         "tags": ["automatic-speech-recognition", data_args.dataset_name],
-        "dataset_args": f"Config: {config_name}, Training split: {data_args.train_split_name}, Eval split: {data_args.eval_split_name}",
+        "dataset_args": (
+            f"Config: {config_name}, Training split: {data_args.train_split_name}, Eval split:"
+            f" {data_args.eval_split_name}"
+        ),
         "dataset": f"{data_args.dataset_name.upper()} - {config_name.upper()}",
     }
     if "common_voice" in data_args.dataset_name:

@@ -395,7 +395,8 @@ VAN_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare VAN model outputting raw features without any specific head on top. Note, VAN does not have an embedding layer.",
+    "The bare VAN model outputting raw features without any specific head on top. Note, VAN does not have an embedding"
+    " layer.",
     VAN_START_DOCSTRING,
 )
 class VanModel(VanPreTrainedModel):

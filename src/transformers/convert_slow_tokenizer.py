@@ -1023,6 +1023,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "HerbertTokenizer": HerbertConverter,
     "LayoutLMTokenizer": BertConverter,
     "LayoutLMv2Tokenizer": BertConverter,
+    "LayoutLMv3Tokenizer": RobertaConverter,
     "LayoutXLMTokenizer": XLMRobertaConverter,
     "LongformerTokenizer": RobertaConverter,
     "LEDTokenizer": RobertaConverter,
@@ -1066,8 +1067,9 @@ def convert_slow_tokenizer(transformer_tokenizer) -> Tokenizer:
 
     if tokenizer_class_name not in SLOW_TO_FAST_CONVERTERS:
         raise ValueError(
-            f"An instance of tokenizer class {tokenizer_class_name} cannot be converted in a Fast tokenizer instance. "
-            f"No converter was found. Currently available slow->fast convertors: {list(SLOW_TO_FAST_CONVERTERS.keys())}"
+            f"An instance of tokenizer class {tokenizer_class_name} cannot be converted in a Fast tokenizer instance."
+            " No converter was found. Currently available slow->fast convertors:"
+            f" {list(SLOW_TO_FAST_CONVERTERS.keys())}"
         )
 
     converter_class = SLOW_TO_FAST_CONVERTERS[tokenizer_class_name]

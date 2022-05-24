@@ -167,7 +167,7 @@ class FillMaskPipeline(Pipeline):
                 if len(input_ids) == 0:
                     logger.warning(
                         f"The specified target token `{target}` does not exist in the model vocabulary. "
-                        f"We cannot replace it with anything meaningful, ignoring it"
+                        "We cannot replace it with anything meaningful, ignoring it"
                     )
                     continue
                 id_ = input_ids[0]
