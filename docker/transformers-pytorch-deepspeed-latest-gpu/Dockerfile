@@ -12,7 +12,6 @@ RUN git clone https://github.com/huggingface/transformers && cd transformers && 
 RUN python3 -m pip install --no-cache-dir -e ./transformers[deepspeed-testing]
 
 # Install latest release PyTorch
-RUN python3 -m pip uninstall -y torch torchvision torchaudio
 RUN python3 -m pip install --no-cache-dir -U torch torchvision torchaudio
 
 # When installing in editable mode, `transformers` is not recognized as a package.
