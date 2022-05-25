@@ -337,7 +337,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     @require_torch_gpu
     def test_simple_generation(self):
         path_350m = "bigscience/bloom-350m"
-        model = BloomForCausalLM.from_pretrained(path_350m).cuda()
+        model = BloomForCausalLM.from_pretrained(path_350m, torch_dtype="auto").cuda()
         model = model.eval()
         tokenizer = BloomTokenizerFast.from_pretrained(path_350m)
 
@@ -355,7 +355,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     @slow
     def test_batch_generation(self):
         path_350m = "bigscience/bloom-350m"
-        model = BloomForCausalLM.from_pretrained(path_350m, dtype="float32")
+        model = BloomForCausalLM.from_pretrained(path_350m)  # load in fp32
         model = model.eval()
         tokenizer = BloomTokenizerFast.from_pretrained(path_350m, padding_side="left")
 
@@ -374,7 +374,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     @slow
     def test_batch_generation_padd(self):
         path_350m = "bigscience/bloom-350m"
-        model = BloomForCausalLM.from_pretrained(path_350m, dtype="float32")
+        model = BloomForCausalLM.from_pretrained(path_350m)  # load in fp32
         model = model.eval()
         tokenizer = BloomTokenizerFast.from_pretrained(path_350m, padding_side="left")
 
@@ -428,7 +428,7 @@ class BloomEmbeddingTest(unittest.TestCase):
 
     @require_torch
     def test_embeddings(self):
-        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model)
+        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, torch_dtype="auto")  # load in fp32
         model.eval()
 
         EMBEDDINGS_DS_BEFORE_LN_BF_16_MEAN = {
@@ -664,7 +664,7 @@ class BloomEmbeddingTest(unittest.TestCase):
         # TODO ifelse device
         cuda_available = torch.cuda.is_available()
         device = torch.device("cuda:0" if cuda_available else "cpu")
-        model = BloomModel.from_pretrained(self.path_bigscience_model, use_cache=False).to(device)
+        model = BloomModel.from_pretrained(self.path_bigscience_model, use_cache=False, torch_dtype="auto").to(device)
         model.eval()
 
         # fmt: off
@@ -693,8 +693,10 @@ class BloomEmbeddingTest(unittest.TestCase):
     def test_logits(self):
         cuda_available = torch.cuda.is_available()
         # cuda_available = False
-        device = torch.device("cuda:3" if cuda_available else "cpu")
-        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, use_cache=False).to(device)
+        device = torch.device("cuda:0" if cuda_available else "cpu")
+        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, use_cache=False, torch_dtype="auto").to(
+            device
+        )  # load in bf16
         model.eval()
 
         # fmt: off

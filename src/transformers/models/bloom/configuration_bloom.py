@@ -84,6 +84,9 @@ class BloomConfig(PretrainedConfig):
             Scale attention weights by dividing by sqrt(hidden_size)..
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
+        dtype (`str`, *optional*, defaults to `"bfloat16"`):
+            Precision that has been used for the model's training in Megatron. Please load the model in the correct
+            precision by doing `model = BloomModel.from_pretrained(model_name, torch_dtype="auto")`.`
         scale_attn_by_inverse_layer_idx (`bool`, *optional*, defaults to `False`):
             Whether to additionally scale attention weights by `1 / layer_idx + 1`.
         reorder_and_upcast_attn (`bool`, *optional*, defaults to `False`):
@@ -116,6 +119,7 @@ class BloomConfig(PretrainedConfig):
         "num_hidden_layers": "n_layer",
         "n_head": "num_attention_heads",
         "hidden_size": "n_embed",
+        "dtype": "torch_dtype",
     }
 
     def __init__(

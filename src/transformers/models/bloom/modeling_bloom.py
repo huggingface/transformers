@@ -93,6 +93,11 @@ def attention_mask_func(attention_scores, attention_mask, causal_mask):
     )
 
 
+def shift_alibi_tensor(alibi, n_head, attention_mask):
+    # TODO
+    return
+
+
 def bias_dropout_add(x, bias, residual, prob, training):
     # type: (Tensor, Tensor, Tensor, float, bool) -> Tensor
     out = torch.nn.functional.dropout(x + bias, p=prob, training=training)
@@ -140,19 +145,12 @@ class BloomScaledSoftmax(nn.Module):
 
     def __init__(
         self,
-        input_in_fp16,
-        input_in_bf16,
         scaled_masked_softmax_fusion,
         mask_func,
         softmax_in_fp32,
         scale,
     ):
         super().__init__()
-        self.input_in_fp16 = input_in_fp16
-        self.input_in_bf16 = input_in_bf16
-        if self.input_in_fp16 and self.input_in_bf16:
-            raise ValueError("Only one of input_in_fp16 and input_in_bf16 can be True")
-        self.input_in_float16 = self.input_in_fp16 or self.input_in_bf16
         self.scaled_masked_softmax_fusion = scaled_masked_softmax_fusion
         self.mask_func = mask_func
         self.softmax_in_fp32 = softmax_in_fp32
@@ -162,7 +160,10 @@ class BloomScaledSoftmax(nn.Module):
             raise ValueError("softmax should be in fp32 when scaled")
 
     def forward(self, input, mask, max_positions):
-        if self.input_in_float16 and self.softmax_in_fp32:
+        input_dtype = input.dtype
+        input_in_float16 = (input_dtype == torch.float16) or (input_dtype == torch.bfloat16)
+
+        if input_in_float16 and self.softmax_in_fp32:
             input = input.float()
 
         if self.scale is not None:
@@ -178,8 +179,8 @@ class BloomScaledSoftmax(nn.Module):
         else:
             probs = torch.nn.Softmax(dim=-1)(input)
 
-        if self.input_in_float16 and self.softmax_in_fp32:
-            if self.input_in_fp16:
+        if input_in_float16 and self.softmax_in_fp32:
+            if input_dtype == torch.float16:
                 probs = probs.half()
             else:
                 probs = probs.bfloat16()
@@ -191,7 +192,6 @@ class BloomAttention(nn.Module):
     def __init__(self, config, layer_number=None):
         super().__init__()
 
-        dtype = getattr(torch, config.dtype)
         self.pretraining_tp = config.pretraining_tp
 
         self.hidden_size = config.hidden_size
@@ -200,10 +200,6 @@ class BloomAttention(nn.Module):
         self.split_size = self.hidden_size
         self.attention_softmax_in_fp32 = config.attention_softmax_in_fp32
         self.masked_softmax_fusion = config.masked_softmax_fusion
-
-        self.fp16 = dtype == torch.float16
-        self.bf16 = dtype == torch.bfloat16
-        self.dtype = dtype
 
         if self.head_dim * self.num_heads != self.hidden_size:
             raise ValueError(
@@ -218,16 +214,14 @@ class BloomAttention(nn.Module):
 
         # Scaled Softmax
         self.scale_mask_softmax = BloomScaledSoftmax(
-            self.fp16,
-            self.bf16,
             self.masked_softmax_fusion,
             attention_mask_func,
             self.attention_softmax_in_fp32,
             coeff,
         )
 
-        self.query_key_value = nn.Linear(self.hidden_size, 3 * self.hidden_size, dtype=dtype, bias=True)
-        self.dense = nn.Linear(self.hidden_size, self.hidden_size, dtype=dtype)
+        self.query_key_value = nn.Linear(self.hidden_size, 3 * self.hidden_size, bias=True)
+        self.dense = nn.Linear(self.hidden_size, self.hidden_size)
         self.attention_dropout = torch.nn.Dropout(config.attention_dropout)
 
     def forward(
@@ -297,7 +291,9 @@ class BloomAttention(nn.Module):
         # attention scores and attention mask [b, np, sq, sk]
 
         max_positions = max(attention_scores.shape[-1], attention_scores.shape[-2])
-        attention_probs = self.scale_mask_softmax(attention_scores, attention_mask, max_positions).to(self.dtype)
+        attention_probs = self.scale_mask_softmax(attention_scores, attention_mask, max_positions).to(
+            value_layer.dtype
+        )
         attention_probs = self.attention_dropout(attention_probs)
 
         if head_mask is not None:
@@ -359,12 +355,14 @@ class BloomMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         hidden_size = config.hidden_size
-        dtype = getattr(torch, config.dtype)
+
         self.pretraining_tp = config.pretraining_tp
-        self.dense_h_to_4h = nn.Linear(hidden_size, 4 * hidden_size, dtype=dtype)
+
+        self.dense_h_to_4h = nn.Linear(hidden_size, 4 * hidden_size)
 
         self.activation_func = bias_gelu_impl
-        self.dense_4h_to_h = nn.Linear(4 * hidden_size, hidden_size, dtype=dtype)
+
+        self.dense_4h_to_h = nn.Linear(4 * hidden_size, hidden_size)
 
     def forward(self, hidden_states):
         input_ = hidden_states
@@ -394,12 +392,11 @@ class BloomBlock(nn.Module):
     def __init__(self, config, layer_number=None):
         super().__init__()
         hidden_size = config.hidden_size
-        dtype = getattr(torch, config.dtype)
 
-        self.input_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon).to(dtype)
+        self.input_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         self.n_head = config.n_head
         self.self_attention = BloomAttention(config, layer_number=layer_number)
-        self.post_attention_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon).to(dtype)
+        self.post_attention_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
         self.mlp = BloomMLP(config)
 
@@ -504,7 +501,6 @@ class BloomBlock(nn.Module):
         else:
             residual = layernorm_input
 
-        # output = mlp_output + residual
         with torch.enable_grad():
             output = bias_dropout_add_func(mlp_output, mlp_bias.expand_as(residual), residual, self.hidden_dropout)
 
@@ -641,19 +637,17 @@ class BloomModel(BloomPreTrainedModel):
         super().__init__(config)
 
         self.embed_dim = config.hidden_size
-        dtype = getattr(torch, config.dtype)
-        if dtype not in [torch.bfloat16, torch.float32, torch.float, torch.float16]:
-            raise ValueError(f"Unsupported dtype {dtype}")
 
         # Embedding + LN Embedding
-        self.word_embeddings = nn.Embedding(config.vocab_size, self.embed_dim, dtype=dtype)
-        self.word_embeddings_layernorm = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon).to(dtype)
+        self.word_embeddings = nn.Embedding(config.vocab_size, self.embed_dim)
+
+        self.word_embeddings_layernorm = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
         # Transformer blocks
         self.h = nn.ModuleList([BloomBlock(config, layer_number=i) for i in range(config.num_hidden_layers)])
 
         # Final Layer Norm
-        self.ln_f = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon).to(dtype)
+        self.ln_f = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
         # Model parallel
         self.gradient_checkpointing = False
