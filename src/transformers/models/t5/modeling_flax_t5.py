@@ -154,6 +154,7 @@ class FlaxT5DenseGatedGeluDense(nn.Module):
         hidden_states = self.wo(hidden_states)
         return hidden_states
 
+
 class FlaxT5DenseGatedSiLUDense(nn.Module):
     config: T5Config
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -190,6 +191,7 @@ class FlaxT5DenseGatedSiLUDense(nn.Module):
         hidden_states = self.dropout(hidden_states, deterministic=deterministic)
         hidden_states = self.wo(hidden_states)
         return hidden_states
+
 
 class FlaxT5LayerFF(nn.Module):
     config: T5Config
