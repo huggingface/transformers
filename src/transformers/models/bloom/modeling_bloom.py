@@ -456,7 +456,7 @@ class BloomBlock(nn.Module):
         layernorm_output = self.input_layernorm(hidden_states)
 
         # Compute alibi tensor
-        alibi = self._build_alibi_tensor(hidden_states.shape[1], self.n_head)
+        alibi = self._build_alibi_tensor(hidden_states.shape[1], self.n_head, layernorm_output.dtype)
 
         # Self attention.
         attn_outputs, attention_bias = self.self_attention(
