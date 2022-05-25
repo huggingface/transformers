@@ -240,11 +240,9 @@ class TFOPTModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCa
                             models_equal = False
                     self.assertTrue(models_equal)
 
-
     def test_saved_model_creation(self):
         # This test is too long (>30sec) and makes fail the CI
         pass
-
 
 
 def _long_tensor(tok_lst):
