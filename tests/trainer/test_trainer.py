@@ -1627,6 +1627,14 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     @require_torch_gpu
     @require_torchdynamo
     def test_torchdynamo_memory(self):
+        class CustomTrainer(Trainer):
+            def compute_loss(self, model, inputs, return_outputs=False):
+                x = inputs["x"]
+                output = model(x)
+                if self.args.n_gpu == 1:
+                    return output.mean()
+                return output
+
         class MyModule(torch.nn.Module):
             """Simple module that does aggressive fusion"""
 
@@ -1643,7 +1651,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # 1. Default - without TorchDynamo
         a = torch.ones(1024, 1024, device="cuda", requires_grad=True)
         a.grad = None
-        trainer = Trainer(model=mod)
+        trainer = CustomTrainer(model=mod)
         # warmup
         for _ in range(10):
             orig_loss = trainer.training_step(mod, {"x": a})
@@ -1662,7 +1670,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         a = torch.ones(1024, 1024, device="cuda", requires_grad=True)
         a.grad = None
         args = TrainingArguments(output_dir="None", torchdynamo="nvfuser")
-        trainer = Trainer(model=mod, args=args)
+        trainer = CustomTrainer(model=mod, args=args)
         # warmup
         for _ in range(10):
             loss = trainer.training_step(mod, {"x": a})
