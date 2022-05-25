@@ -122,7 +122,7 @@ class CvtModelTester:
         result = model(pixel_values)
         image_size = (self.image_size, self.image_size)
         height, width = image_size[0], image_size[1]
-        for i in range(len(self.depth)):
+        for i in range(4):
             height = floor(((height + 2 * self.patch_padding[i] - self.patch_sizes[i]) / self.patch_stride[i]) + 1)
             width = floor(((width + 2 * self.patch_padding[i] - self.patch_sizes[i]) / self.patch_stride[i]) + 1)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.embed_dim[-1], height, width))

@@ -45,6 +45,7 @@ class LevitFeatureExtractionTester(unittest.TestCase):
         do_resize=True,
         size=18,
         do_normalize=True,
+        do_center_crop=True,
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
     ):
@@ -56,6 +57,7 @@ class LevitFeatureExtractionTester(unittest.TestCase):
         self.max_resolution = max_resolution
         self.do_resize = do_resize
         self.size = size
+        self.do_center_crop = do_center_crop
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
@@ -66,6 +68,7 @@ class LevitFeatureExtractionTester(unittest.TestCase):
             "image_std": self.image_std,
             "do_normalize": self.do_normalize,
             "do_resize": self.do_resize,
+            "do_center_crop": self.do_center_crop,
             "size": self.size,
         }
 
@@ -89,6 +92,7 @@ class LevitFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Test
         self.assertTrue(hasattr(feature_extractor, "image_std"))
         self.assertTrue(hasattr(feature_extractor, "do_normalize"))
         self.assertTrue(hasattr(feature_extractor, "do_resize"))
+        self.assertTrue(hasattr(feature_extractor, "do_center_crop"))
         self.assertTrue(hasattr(feature_extractor, "size"))
 
     def test_batch_feature(self):

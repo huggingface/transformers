@@ -339,6 +339,7 @@ class LevitEncoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         embeddings = self.patch_embeddings(pixel_values)
         hidden_state = embeddings.flatten(2).transpose(1, 2)
+
         for layers in self.blocks:
             hidden_state = layers(hidden_state)
             if output_hidden_states:
