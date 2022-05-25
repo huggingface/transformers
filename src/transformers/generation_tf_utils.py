@@ -2002,8 +2002,7 @@ class TFGenerationMixin:
         # define condition fn
         def greedy_search_body_fn(generated, finished_sequences, next_tokens, cur_len, model_kwargs):
             """state update fn."""
-            # TODO(pvp, Joao) - `use_xla` can be removed here as soon as `position_ids` are corrected for the non-xla case in gpt2's `prepare_inputs_for_generation`.
-            model_inputs = self.prepare_inputs_for_generation(next_tokens, use_xla=use_xla, **model_kwargs)
+            model_inputs = self.prepare_inputs_for_generation(next_tokens, **model_kwargs)
             # forward pass to get next token logits
             outputs = self(
                 **model_inputs,
@@ -2076,7 +2075,7 @@ class TFGenerationMixin:
         # 2-to-n generation steps can then be run in autoregressive fashion
         # only in case 1st generation step does NOT yield EOS token though
         if greedy_search_cond_fn(generated, finished_sequences, next_tokens, cur_len, model_kwargs):
-            maximum_iterations = max_length - cur_len - 1
+            maximum_iterations = max_length - cur_len
             generated, _, _, cur_len, _ = tf.while_loop(
                 greedy_search_cond_fn,
                 greedy_search_body_fn,
@@ -2271,8 +2270,7 @@ class TFGenerationMixin:
             return ~tf.reduce_all(finished_sequences)
 
         def sample_body_fn(generated, finished_sequences, next_tokens, cur_len, model_kwargs):
-            # TODO(pvp, Joao) - `use_xla` can be removed here as soon as `position_ids` are corrected for the non-xla case in gpt2's `prepare_inputs_for_generation`.
-            model_inputs = self.prepare_inputs_for_generation(next_tokens, use_xla=use_xla, **model_kwargs)
+            model_inputs = self.prepare_inputs_for_generation(next_tokens, **model_kwargs)
             # forward pass to get next token logits
             outputs = self(
                 **model_inputs,
@@ -2353,7 +2351,7 @@ class TFGenerationMixin:
         # 2-to-n generation steps can then be run in autoregressive fashion
         # only in case 1st generation step does NOT yield EOS token though
         if sample_cond_fn(generated, finished_sequences, next_tokens, cur_len, model_kwargs):
-            maximum_iterations = max_length - cur_len - 1
+            maximum_iterations = max_length - cur_len
             generated, _, _, cur_len, _ = tf.while_loop(
                 sample_cond_fn,
                 sample_body_fn,
@@ -2693,9 +2691,7 @@ class TFGenerationMixin:
                 (0, 0, cur_len - input_ids_length),
                 (batch_size, num_beams, input_ids_length),
             )
-            model_inputs = self.prepare_inputs_for_generation(
-                flatten_beam_dim(input_token), use_xla=use_xla, **model_kwargs
-            )
+            model_inputs = self.prepare_inputs_for_generation(flatten_beam_dim(input_token), **model_kwargs)
             model_outputs = self(
                 **model_inputs,
                 return_dict=True,
