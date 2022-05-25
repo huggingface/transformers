@@ -289,9 +289,7 @@ def prepare_img():
 class MobileViTModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return (
-            MobileViTFeatureExtractor.from_pretrained("apple/mobilevit-xx-small") if is_vision_available() else None
-        )
+        return MobileViTFeatureExtractor.from_pretrained("apple/mobilevit-xx-small") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
