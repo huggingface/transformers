@@ -99,8 +99,14 @@ def build_alibi_tensor(max_seq_len, n_head, dtype=torch.bfloat16):
     quick implementation: with l being a tensor, and a fixed value `softmax(l+a) = softmax(l) Based on
     https://github.com/ofirpress/attention_with_linear_biases/blob/a35aaca144e0eb6b789dfcb46784c4b8e31b7983/fairseq/models/transformer.py#L742
 
+    Args:
     Returns tensor shaped (n_head, 1, max_seq_len)
-
+        max_seq_len: (`int`, *required*):
+            max sequence length
+        n_head: (`int`, *required*):
+            number of heads
+        dtype: (`torch.dtype`, *optional*, default=`torch.bfloat16`):
+            dtype of the output tensor
     """
 
     def get_slopes(n):
