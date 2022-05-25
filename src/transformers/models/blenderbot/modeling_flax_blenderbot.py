@@ -24,13 +24,13 @@ import numpy as np
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-from flax.core.frozen_dict import FrozenDict, unfreeze
+from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen import combine_masks, make_causal_mask
 from flax.linen.attention import dot_product_attention_weights
+from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
 from jax.random import PRNGKey
 
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutput,
     FlaxBaseModelOutputWithPastAndCrossAttentions,
@@ -45,7 +45,7 @@ from ...modeling_flax_utils import (
     append_replace_return_docstrings,
     overwrite_call_docstring,
 )
-from ...utils import logging
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_blenderbot import BlenderbotConfig
 
 
@@ -125,7 +125,7 @@ BLENDERBOT_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -156,7 +156,7 @@ BLENDERBOT_ENCODE_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 BLENDERBOT_DECODE_INPUTS_DOCSTRING = r"""
@@ -202,7 +202,7 @@ BLENDERBOT_DECODE_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -528,7 +528,7 @@ class FlaxBlenderbotDecoderLayer(nn.Module):
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
         self.fc1 = nn.Dense(
-            self.config.encoder_ffn_dim,
+            self.config.decoder_ffn_dim,
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(self.config.init_std),
         )
@@ -711,12 +711,19 @@ class FlaxBlenderbotEncoder(nn.Module):
         last_hidden_states = outputs[0]
         last_hidden_states = self.layer_norm(last_hidden_states)
 
+        # update the last element in `hidden_states` after applying `layernorm` above
+        hidden_states = None
+        if output_hidden_states:
+            hidden_states = outputs[1]
+            hidden_states = hidden_states[:-1] + (last_hidden_states,)
+
         if not return_dict:
-            return (last_hidden_states,) + outputs[1:]
+            outputs = (last_hidden_states, hidden_states) + (outputs[2:] if output_hidden_states else outputs[1:])
+            return tuple(v for v in outputs if v is not None)
 
         return FlaxBaseModelOutput(
             last_hidden_state=last_hidden_states,
-            hidden_states=outputs.hidden_states,
+            hidden_states=hidden_states,
             attentions=outputs.attentions,
         )
 
@@ -782,12 +789,19 @@ class FlaxBlenderbotDecoder(nn.Module):
         last_hidden_states = outputs[0]
         last_hidden_states = self.layer_norm(last_hidden_states)
 
+        # update the last element in `hidden_states` after applying `layernorm` above
+        hidden_states = None
+        if output_hidden_states:
+            hidden_states = outputs[1]
+            hidden_states = hidden_states[:-1] + (last_hidden_states,)
+
         if not return_dict:
-            return (last_hidden_states,) + outputs[1:]
+            outputs = (last_hidden_states, hidden_states) + (outputs[2:] if output_hidden_states else outputs[1:])
+            return tuple(v for v in outputs if v is not None)
 
         return FlaxBaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=last_hidden_states,
-            hidden_states=outputs.hidden_states,
+            hidden_states=hidden_states,
             attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,
         )
@@ -874,16 +888,17 @@ class FlaxBlenderbotPreTrainedModel(FlaxPreTrainedModel):
         input_shape: Tuple[int] = (1, 1),
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
+        _do_init: bool = True,
         **kwargs
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
-        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
+        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
         # make sure initialization pass will work for FlaxBlenderbotForSequenceClassificationModule
-        input_ids = jax.ops.index_update(input_ids, (..., -1), self.config.eos_token_id)
+        input_ids = input_ids.at[(..., -1)].set(self.config.eos_token_id)
         attention_mask = jnp.ones_like(input_ids)
         decoder_input_ids = input_ids
         decoder_attention_mask = jnp.ones_like(input_ids)
@@ -895,7 +910,7 @@ class FlaxBlenderbotPreTrainedModel(FlaxPreTrainedModel):
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        return self.module.init(
+        random_params = self.module.init(
             rngs,
             input_ids,
             attention_mask,
@@ -904,6 +919,16 @@ class FlaxBlenderbotPreTrainedModel(FlaxPreTrainedModel):
             position_ids,
             decoder_position_ids,
         )["params"]
+
+        if params is not None:
+            random_params = flatten_dict(unfreeze(random_params))
+            params = flatten_dict(unfreeze(params))
+            for missing_key in self._missing_keys:
+                params[missing_key] = random_params[missing_key]
+            self._missing_keys = set()
+            return freeze(unflatten_dict(params))
+        else:
+            return random_params
 
     def init_cache(self, batch_size, max_length, encoder_outputs):
         r"""
@@ -1257,7 +1282,7 @@ class FlaxBlenderbotForConditionalGenerationModule(nn.Module):
         else:
             lm_logits = self.lm_head(hidden_states)
 
-        lm_logits += self.final_logits_bias.astype(self.dtype)
+        lm_logits += jax.lax.stop_gradient(self.final_logits_bias.astype(self.dtype))
 
         if not return_dict:
             output = (lm_logits,) + outputs[1:]

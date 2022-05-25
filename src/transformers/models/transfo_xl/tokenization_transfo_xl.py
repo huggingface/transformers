@@ -29,9 +29,8 @@ import numpy as np
 
 import sacremoses as sm
 
-from ...file_utils import cached_path, is_torch_available, torch_only_method
 from ...tokenization_utils import PreTrainedTokenizer
-from ...utils import logging
+from ...utils import cached_path, is_torch_available, logging, torch_only_method
 
 
 if is_torch_available():
@@ -681,10 +680,9 @@ class TransfoXLCorpus(object):
             resolved_corpus_file = cached_path(corpus_file, cache_dir=cache_dir)
         except EnvironmentError:
             logger.error(
-                f"Corpus '{pretrained_model_name_or_path}' was not found in corpus list "
-                f"({', '.join(PRETRAINED_CORPUS_ARCHIVE_MAP.keys())}. "
-                f"We assumed '{pretrained_model_name_or_path}' was a path or url but couldn't find files {corpus_file} "
-                "at this path or url."
+                f"Corpus '{pretrained_model_name_or_path}' was not found in corpus list"
+                f" ({', '.join(PRETRAINED_CORPUS_ARCHIVE_MAP.keys())}. We assumed '{pretrained_model_name_or_path}'"
+                f" was a path or url but couldn't find files {corpus_file} at this path or url."
             )
             return None
         if resolved_corpus_file == corpus_file:

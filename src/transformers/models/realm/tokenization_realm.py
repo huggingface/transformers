@@ -19,10 +19,9 @@ import os
 import unicodedata
 from typing import List, Optional, Tuple
 
-from ...file_utils import PaddingStrategy
 from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from ...tokenization_utils_base import BatchEncoding
-from ...utils import logging
+from ...utils import PaddingStrategy, logging
 
 
 logger = logging.get_logger(__name__)
@@ -31,10 +30,18 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "google/realm-cc-news-pretrained-embedder": "https://huggingface.co/google/realm-cc-news-pretrained-embedder/resolve/main/vocab.txt",
-        "google/realm-cc-news-pretrained-encoder": "https://huggingface.co/google/realm-cc-news-pretrained-encoder/resolve/main/vocab.txt",
-        "google/realm-cc-news-pretrained-scorer": "https://huggingface.co/google/realm-cc-news-pretrained-scorer/resolve/main/vocab.txt",
-        "google/realm-cc-news-pretrained-openqa": "https://huggingface.co/google/realm-cc-news-pretrained-openqa/aresolve/main/vocab.txt",
+        "google/realm-cc-news-pretrained-embedder": (
+            "https://huggingface.co/google/realm-cc-news-pretrained-embedder/resolve/main/vocab.txt"
+        ),
+        "google/realm-cc-news-pretrained-encoder": (
+            "https://huggingface.co/google/realm-cc-news-pretrained-encoder/resolve/main/vocab.txt"
+        ),
+        "google/realm-cc-news-pretrained-scorer": (
+            "https://huggingface.co/google/realm-cc-news-pretrained-scorer/resolve/main/vocab.txt"
+        ),
+        "google/realm-cc-news-pretrained-openqa": (
+            "https://huggingface.co/google/realm-cc-news-pretrained-openqa/aresolve/main/vocab.txt"
+        ),
         "google/realm-orqa-nq-openqa": "https://huggingface.co/google/realm-orqa-nq-openqa/resolve/main/vocab.txt",
         "google/realm-orqa-nq-reader": "https://huggingface.co/google/realm-orqa-nq-reader/resolve/main/vocab.txt",
         "google/realm-orqa-wq-openqa": "https://huggingface.co/google/realm-orqa-wq-openqa/resolve/main/vocab.txt",
@@ -166,8 +173,8 @@ class RealmTokenizer(PreTrainedTokenizer):
 
         if not os.path.isfile(vocab_file):
             raise ValueError(
-                f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained "
-                "model use `tokenizer = RealmTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
+                f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
+                " model use `tokenizer = RealmTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         self.vocab = load_vocab(vocab_file)
         self.ids_to_tokens = collections.OrderedDict([(ids, tok) for tok, ids in self.vocab.items()])

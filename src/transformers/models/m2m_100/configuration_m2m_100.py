@@ -18,10 +18,9 @@ from typing import Any, Mapping, Optional
 
 from ... import PreTrainedTokenizer
 from ...configuration_utils import PretrainedConfig
-from ...file_utils import TensorType, is_torch_available
 from ...onnx import OnnxConfig, OnnxSeq2SeqConfigWithPast
 from ...onnx.utils import compute_effective_axis_dimension
-from ...utils import logging
+from ...utils import TensorType, is_torch_available, logging
 
 
 logger = logging.get_logger(__name__)
@@ -37,7 +36,7 @@ class M2M100Config(PretrainedConfig):
     This is the configuration class to store the configuration of a [`M2M100Model`]. It is used to instantiate an
     M2M100 model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the M2M100
-    [m2m100_418M](https://huggingface.co/facebook/m2m100_418M) architecture.
+    [facebook/m2m100_418M](https://huggingface.co/facebook/m2m100_418M) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -198,13 +197,13 @@ class M2M100OnnxConfig(OnnxSeq2SeqConfigWithPast):
         # Did not use super(OnnxConfigWithPast, self).generate_dummy_inputs for code clarity.
         # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
         batch_size = compute_effective_axis_dimension(
-            batch_size, fixed_dimension=OnnxConfig.DEFAULT_FIXED_BATCH, num_token_to_add=0
+            batch_size, fixed_dimension=OnnxConfig.default_fixed_batch, num_token_to_add=0
         )
 
         # If dynamic axis (-1) we forward with a fixed dimension of 8 tokens to avoid optimizations made by ONNX
         token_to_add = tokenizer.num_special_tokens_to_add(is_pair)
         seq_length = compute_effective_axis_dimension(
-            seq_length, fixed_dimension=OnnxConfig.DEFAULT_FIXED_SEQUENCE, num_token_to_add=token_to_add
+            seq_length, fixed_dimension=OnnxConfig.default_fixed_sequence, num_token_to_add=token_to_add
         )
 
         # Generate dummy inputs according to compute batch and sequence

@@ -19,7 +19,7 @@ import os
 import warnings
 from typing import Callable, Dict, Optional, Tuple
 
-from .file_utils import ENV_VARS_TRUE_VALUES
+from .utils import ENV_VARS_TRUE_VALUES
 
 
 # Integrations must be imported before ML frameworks:
@@ -34,7 +34,14 @@ from tensorflow.python.distribute.values import PerReplica
 
 from .modeling_tf_utils import TFPreTrainedModel
 from .optimization_tf import GradientAccumulator, create_optimizer
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, IntervalStrategy, PredictionOutput, set_seed
+from .trainer_utils import (
+    PREFIX_CHECKPOINT_DIR,
+    EvalPrediction,
+    IntervalStrategy,
+    PredictionOutput,
+    enable_full_determinism,
+    set_seed,
+)
 from .training_args_tf import TFTrainingArguments
 from .utils import logging
 
@@ -109,7 +116,7 @@ class TFTrainer:
             "The class `TFTrainer` is deprecated and will be removed in version 5 of Transformers. "
             "We recommend using native Keras instead, by calling methods like `fit()` and `predict()` "
             "directly on the model object. Detailed examples of the Keras style can be found in our "
-            "examples at https://github.com/huggingface/transformers/tree/master/examples/tensorflow",
+            "examples at https://github.com/huggingface/transformers/tree/main/examples/tensorflow",
             FutureWarning,
         )
 
@@ -134,7 +141,7 @@ class TFTrainer:
                 "see https://www.comet.ml/docs/python-sdk/huggingface/"
             )
 
-        set_seed(self.args.seed)
+        enable_full_determinism(self.args.seed) if self.args.full_determinism else set_seed(self.args.seed)
 
     def get_train_tfdataset(self) -> tf.data.Dataset:
         """

@@ -14,8 +14,8 @@
 # limitations under the License.
 """ PyTorch ConvNext model."""
 
-from dataclasses import dataclass
-from typing import Optional, Tuple
+
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -23,14 +23,13 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...file_utils import (
-    ModelOutput,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
+from ...modeling_outputs import (
+    BaseModelOutputWithNoAttention,
+    BaseModelOutputWithPoolingAndNoAttention,
+    ImageClassifierOutputWithNoAttention,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging
+from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_convnext import ConvNextConfig
 
 
@@ -52,66 +51,6 @@ CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/convnext-tiny-224",
     # See all ConvNext models at https://huggingface.co/models?filter=convnext
 ]
-
-
-@dataclass
-class ConvNextEncoderOutput(ModelOutput):
-    """
-    Class for [`ConvNextEncoder`]'s outputs, with potential hidden states (feature maps).
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Last hidden states (final feature map) of the last stage of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the model at
-            the output of each stage.
-    """
-
-    last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-
-
-@dataclass
-class ConvNextModelOutput(ModelOutput):
-    """
-    Class for [`ConvNextModel`]'s outputs, with potential hidden states (feature maps).
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Last hidden states (final feature map) of the last stage of the model.
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, config.dim[-1])`):
-            Global average pooling of the last feature map followed by a layernorm.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the model at
-            the output of each stage.
-    """
-
-    last_hidden_state: torch.FloatTensor = None
-    pooler_output: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-
-
-@dataclass
-class ConvNextClassifierOutput(ModelOutput):
-    """
-    Class for [`ConvNextForImageClassification`]'s outputs, with potential hidden states (feature maps).
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Classification (or regression if config.num_labels==1) loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
-            Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the model at
-            the output of each stage.
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
 # Stochastic depth implementation
@@ -141,7 +80,7 @@ class ConvNextDropPath(nn.Module):
         super().__init__()
         self.drop_prob = drop_prob
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return drop_path(x, self.drop_prob, self.training)
 
 
@@ -161,7 +100,7 @@ class ConvNextLayerNorm(nn.Module):
             raise NotImplementedError(f"Unsupported data format: {self.data_format}")
         self.normalized_shape = (normalized_shape,)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         if self.data_format == "channels_last":
             x = torch.nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
         elif self.data_format == "channels_first":
@@ -184,7 +123,7 @@ class ConvNextEmbeddings(nn.Module):
         )
         self.layernorm = ConvNextLayerNorm(config.hidden_sizes[0], eps=1e-6, data_format="channels_first")
 
-    def forward(self, pixel_values):
+    def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         embeddings = self.patch_embeddings(pixel_values)
         embeddings = self.layernorm(embeddings)
         return embeddings
@@ -218,7 +157,7 @@ class ConvNextLayer(nn.Module):
         )
         self.drop_path = ConvNextDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.FloatTensor) -> torch.Tensor:
         input = hidden_states
         x = self.dwconv(hidden_states)
         x = x.permute(0, 2, 3, 1)  # (N, C, H, W) -> (N, H, W, C)
@@ -260,7 +199,7 @@ class ConvNextStage(nn.Module):
             *[ConvNextLayer(config, dim=out_channels, drop_path=drop_path_rates[j]) for j in range(depth)]
         )
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.FloatTensor) -> torch.Tensor:
         hidden_states = self.downsampling_layer(hidden_states)
         hidden_states = self.layers(hidden_states)
         return hidden_states
@@ -270,8 +209,9 @@ class ConvNextEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.stages = nn.ModuleList()
-        drop_path_rates = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
-        cur = 0
+        drop_path_rates = [
+            x.tolist() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths)).split(config.depths)
+        ]
         prev_chs = config.hidden_sizes[0]
         for i in range(config.num_stages):
             out_chs = config.hidden_sizes[i]
@@ -281,13 +221,17 @@ class ConvNextEncoder(nn.Module):
                 out_channels=out_chs,
                 stride=2 if i > 0 else 1,
                 depth=config.depths[i],
-                drop_path_rates=drop_path_rates[cur],
+                drop_path_rates=drop_path_rates[i],
             )
             self.stages.append(stage)
-            cur += config.depths[i]
             prev_chs = out_chs
 
-    def forward(self, hidden_states, output_hidden_states=False, return_dict=True):
+    def forward(
+        self,
+        hidden_states: torch.FloatTensor,
+        output_hidden_states: Optional[bool] = False,
+        return_dict: Optional[bool] = True,
+    ) -> Union[Tuple, BaseModelOutputWithNoAttention]:
         all_hidden_states = () if output_hidden_states else None
 
         for i, layer_module in enumerate(self.stages):
@@ -302,7 +246,7 @@ class ConvNextEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
 
-        return ConvNextEncoderOutput(
+        return BaseModelOutputWithNoAttention(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
         )
@@ -357,7 +301,7 @@ CONVNEXT_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -383,12 +327,17 @@ class ConvNextModel(ConvNextPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=ConvNextModelOutput,
+        output_type=BaseModelOutputWithPoolingAndNoAttention,
         config_class=_CONFIG_FOR_DOC,
         modality="vision",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
-    def forward(self, pixel_values=None, output_hidden_states=None, return_dict=None):
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutputWithPoolingAndNoAttention]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -413,7 +362,7 @@ class ConvNextModel(ConvNextPreTrainedModel):
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
 
-        return ConvNextModelOutput(
+        return BaseModelOutputWithPoolingAndNoAttention(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
@@ -446,11 +395,17 @@ class ConvNextForImageClassification(ConvNextPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=ConvNextClassifierOutput,
+        output_type=ImageClassifierOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
     )
-    def forward(self, pixel_values=None, labels=None, output_hidden_states=None, return_dict=None):
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor = None,
+        labels: Optional[torch.LongTensor] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, ImageClassifierOutputWithNoAttention]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -491,7 +446,7 @@ class ConvNextForImageClassification(ConvNextPreTrainedModel):
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return ConvNextClassifierOutput(
+        return ImageClassifierOutputWithNoAttention(
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,

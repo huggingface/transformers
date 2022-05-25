@@ -117,9 +117,11 @@ class PegasusTokenizer(PreTrainedTokenizer):
     ) -> None:
         self.offset = offset
         if additional_special_tokens is not None:
-            assert isinstance(
-                additional_special_tokens, list
-            ), f"additional_special_tokens should be of type {type(list)}, but is {type(additional_special_tokens)}"
+            if not isinstance(additional_special_tokens, list):
+                raise TypeError(
+                    f"additional_special_tokens should be of type {type(list)}, but is"
+                    f" {type(additional_special_tokens)}"
+                )
 
             additional_special_tokens_extended = (
                 ([mask_token_sent] + additional_special_tokens)
@@ -133,7 +135,8 @@ class PegasusTokenizer(PreTrainedTokenizer):
 
             if len(set(additional_special_tokens_extended)) != len(additional_special_tokens_extended):
                 raise ValueError(
-                    f"Please make sure that the provided additional_special_tokens do not contain an incorrectly shifted list of <unk_x> tokens. Found {additional_special_tokens_extended}."
+                    "Please make sure that the provided additional_special_tokens do not contain an incorrectly"
+                    f" shifted list of <unk_x> tokens. Found {additional_special_tokens_extended}."
                 )
             additional_special_tokens = additional_special_tokens_extended
         else:

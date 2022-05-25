@@ -25,10 +25,9 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...file_utils import add_start_docstrings, replace_return_docstrings
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging
+from ...utils import add_start_docstrings, logging, replace_return_docstrings
 from .configuration_speech_to_text_2 import Speech2Text2Config
 
 
@@ -239,7 +238,8 @@ class Speech2Text2Attention(nn.Module):
 
         if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
             raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
+                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
+                f" {attn_weights.size()}"
             )
 
         if attention_mask is not None:
@@ -255,7 +255,8 @@ class Speech2Text2Attention(nn.Module):
         if layer_head_mask is not None:
             if layer_head_mask.size() != (self.num_heads,):
                 raise ValueError(
-                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
+                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
+                    f" {layer_head_mask.size()}"
                 )
             attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
@@ -276,7 +277,8 @@ class Speech2Text2Attention(nn.Module):
 
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}"
+                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
+                f" {attn_output.size()}"
             )
 
         attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
@@ -582,7 +584,7 @@ class Speech2Text2Decoder(Speech2Text2PreTrainedModel):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
             return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -634,7 +636,8 @@ class Speech2Text2Decoder(Speech2Text2PreTrainedModel):
             if attn_mask is not None:
                 if attn_mask.size()[0] != (len(self.layers)):
                     raise ValueError(
-                        f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+                        f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for"
+                        f" {head_mask.size()[0]}."
                     )
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -650,7 +653,8 @@ class Speech2Text2Decoder(Speech2Text2PreTrainedModel):
 
                 if use_cache:
                     logger.warning(
-                        "`use_cache = True` is incompatible with gradient checkpointing. Setting `use_cache = False`..."
+                        "`use_cache = True` is incompatible with gradient checkpointing. Setting `use_cache ="
+                        " False`..."
                     )
                     use_cache = False
 
@@ -736,7 +740,8 @@ class Speech2Text2DecoderWrapper(Speech2Text2PreTrainedModel):
 
 
 @add_start_docstrings(
-    "The Speech2Text2 Decoder with a language modeling head. Can be used as the decoder part of [`EncoderDecoderModel`] and [`SpeechEncoderDecoder`].",
+    "The Speech2Text2 Decoder with a language modeling head. Can be used as the decoder part of"
+    " [`EncoderDecoderModel`] and [`SpeechEncoderDecoder`].",
     SPEECH_TO_TEXT_2_START_DOCSTRING,
 )
 class Speech2Text2ForCausalLM(Speech2Text2PreTrainedModel):
@@ -851,7 +856,7 @@ class Speech2Text2ForCausalLM(Speech2Text2PreTrainedModel):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
             return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
         Returns:
 
@@ -870,7 +875,7 @@ class Speech2Text2ForCausalLM(Speech2Text2PreTrainedModel):
         >>> from datasets import load_dataset
 
         >>> feature_extractor = Wav2Vec2FeatureExtractor()
-        >>> tokenizer = Speech2Text2Tokenizer.from_pretrained(_CHECKPOINT_FOR_DOC)
+        >>> tokenizer = Speech2Text2Tokenizer.from_pretrained("facebook/s2t-wav2vec2-large-en-de")
 
         >>> encoder = Wav2Vec2Model(Wav2Vec2Config())
         >>> decoder = Speech2Text2ForCausalLM(Speech2Text2Config())

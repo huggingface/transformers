@@ -22,6 +22,7 @@ import math
 import os
 import sys
 import warnings
+from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from logging import StreamHandler
@@ -29,25 +30,15 @@ from typing import Any, Dict, Iterator, List, Optional, Union
 
 import numpy as np
 import torch
+import torch.distributed as dist
 from packaging import version
 from torch import nn
 from torch.utils.data import Dataset, IterableDataset, RandomSampler, Sampler
 from torch.utils.data.distributed import DistributedSampler
 
-from .file_utils import (
-    is_sagemaker_dp_enabled,
-    is_sagemaker_mp_enabled,
-    is_torch_tpu_available,
-    is_training_run_on_sagemaker,
-)
 from .tokenization_utils_base import BatchEncoding
-from .utils import logging
+from .utils import is_sagemaker_mp_enabled, is_torch_tpu_available, is_training_run_on_sagemaker, logging
 
-
-if is_sagemaker_dp_enabled():
-    import smdistributed.dataparallel.torch.distributed as dist
-else:
-    import torch.distributed as dist
 
 if is_training_run_on_sagemaker():
     logging.add_handler(StreamHandler(sys.stdout))
@@ -64,8 +55,22 @@ except ImportError:
 logger = logging.get_logger(__name__)
 
 
+def atleast_1d(tensor_or_array: Union[torch.Tensor, np.ndarray]):
+    if isinstance(tensor_or_array, torch.Tensor):
+        if hasattr(torch, "atleast_1d"):
+            tensor_or_array = torch.atleast_1d(tensor_or_array)
+        elif tensor_or_array.ndim < 1:
+            tensor_or_array = tensor_or_array[None]
+    else:
+        tensor_or_array = np.atleast_1d(tensor_or_array)
+    return tensor_or_array
+
+
 def torch_pad_and_concatenate(tensor1, tensor2, padding_index=-100):
     """Concatenates `tensor1` and `tensor2` on first axis, applying padding on the second if necessary."""
+    tensor1 = atleast_1d(tensor1)
+    tensor2 = atleast_1d(tensor2)
+
     if len(tensor1.shape) == 1 or tensor1.shape[1] == tensor2.shape[1]:
         return torch.cat((tensor1, tensor2), dim=0)
 
@@ -81,6 +86,9 @@ def torch_pad_and_concatenate(tensor1, tensor2, padding_index=-100):
 
 def numpy_pad_and_concatenate(array1, array2, padding_index=-100):
     """Concatenates `array1` and `array2` on first axis, applying padding on the second if necessary."""
+    array1 = atleast_1d(array1)
+    array2 = atleast_1d(array2)
+
     if len(array1.shape) == 1 or array1.shape[1] == array2.shape[1]:
         return np.concatenate((array1, array2), axis=0)
 
@@ -121,7 +129,7 @@ def find_batch_size(tensors):
             result = find_batch_size(t)
             if result is not None:
                 return result
-    elif isinstance(tensors, (dict, BatchEncoding)):
+    elif isinstance(tensors, Mapping):
         for key, value in tensors.items():
             result = find_batch_size(value)
             if result is not None:
@@ -158,8 +166,7 @@ def nested_xla_mesh_reduce(tensors, name):
 
         if isinstance(tensors, (list, tuple)):
             return type(tensors)(nested_xla_mesh_reduce(t, f"{name}_{i}") for i, t in enumerate(tensors))
-        if tensors.ndim == 0:
-            tensors = tensors[None]
+        tensors = atleast_1d(tensors)
         return xm.mesh_reduce(name, tensors, torch.cat)
     else:
         raise ImportError("Torch xla must be installed to use `nested_xla_mesh_reduce`")
@@ -169,8 +176,8 @@ def distributed_concat(tensor: Any, num_total_examples: Optional[int] = None) ->
     try:
         if isinstance(tensor, (tuple, list)):
             return type(tensor)(distributed_concat(t, num_total_examples) for t in tensor)
+        tensor = atleast_1d(tensor)
         output_tensors = [tensor.clone() for _ in range(dist.get_world_size())]
-        output_tensors = [t if len(t.shape) > 0 else t[None] for t in output_tensors]
         dist.all_gather(output_tensors, tensor)
         concat = torch.cat(output_tensors, dim=0)
 
@@ -1039,7 +1046,7 @@ if is_sagemaker_mp_enabled():
                 f"Can't gather the values of type {type(tensor)}, only of nested list/tuple/dicts of tensors."
             )
         all_tensors = smp.allgather(tensor, smp.CommGroup.DP_GROUP)
-        all_tensors = [t if len(t.shape) > 0 else t[None] for t in all_tensors]
+        all_tensors = [atleast_1d(t) for t in all_tensors]
         return torch.cat([t.cpu() for t in all_tensors], dim=0)
 
     def smp_nested_concat(tensor):

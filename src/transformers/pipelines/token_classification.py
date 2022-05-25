@@ -4,8 +4,8 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 
-from ..file_utils import ExplicitEnum, add_end_docstrings, is_tf_available, is_torch_available
 from ..models.bert.tokenization_bert import BasicTokenizer
+from ..utils import ExplicitEnum, add_end_docstrings, is_tf_available, is_torch_available
 from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Dataset, Pipeline
 
 
@@ -133,11 +133,13 @@ class TokenClassificationPipeline(Pipeline):
 
             if grouped_entities is not None:
                 warnings.warn(
-                    f'`grouped_entities` is deprecated and will be removed in version v5.0.0, defaulted to `aggregation_strategy="{aggregation_strategy}"` instead.'
+                    "`grouped_entities` is deprecated and will be removed in version v5.0.0, defaulted to"
+                    f' `aggregation_strategy="{aggregation_strategy}"` instead.'
                 )
             if ignore_subwords is not None:
                 warnings.warn(
-                    f'`ignore_subwords` is deprecated and will be removed in version v5.0.0, defaulted to `aggregation_strategy="{aggregation_strategy}"` instead.'
+                    "`ignore_subwords` is deprecated and will be removed in version v5.0.0, defaulted to"
+                    f' `aggregation_strategy="{aggregation_strategy}"` instead.'
                 )
 
         if aggregation_strategy is not None:
@@ -192,7 +194,6 @@ class TokenClassificationPipeline(Pipeline):
         truncation = True if self.tokenizer.model_max_length and self.tokenizer.model_max_length > 0 else False
         model_inputs = self.tokenizer(
             sentence,
-            return_attention_mask=False,
             return_tensors=self.framework,
             truncation=truncation,
             return_special_tokens_mask=True,

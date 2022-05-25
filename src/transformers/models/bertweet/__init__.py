@@ -18,12 +18,10 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule
+from ...utils import _LazyModule
 
 
-_import_structure = {
-    "tokenization_bertweet": ["BertweetTokenizer"],
-}
+_import_structure = {"tokenization_bertweet": ["BertweetTokenizer"]}
 
 
 if TYPE_CHECKING:

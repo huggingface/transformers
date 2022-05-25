@@ -21,8 +21,14 @@ from typing import TYPE_CHECKING, Iterable, List, Tuple, Union
 import numpy as np
 from packaging.version import Version, parse
 
-from ..file_utils import TensorType, is_tf_available, is_torch_available, is_torch_onnx_dict_inputs_support_available
-from ..utils import logging
+from ..tokenization_utils_base import PreTrainedTokenizerBase
+from ..utils import (
+    TensorType,
+    is_tf_available,
+    is_torch_available,
+    is_torch_onnx_dict_inputs_support_available,
+    logging,
+)
 from .config import OnnxConfig
 
 
@@ -62,7 +68,7 @@ def check_onnxruntime_requirements(minimum_version: Version):
             raise ImportError(
                 f"We found an older version of onnxruntime ({onnxruntime.__version__}) "
                 f"but we require onnxruntime to be >= {minimum_version} to enable all the conversions options.\n"
-                f"Please update onnxruntime by running `pip install --upgrade onnxruntime`"
+                "Please update onnxruntime by running `pip install --upgrade onnxruntime`"
             )
 
     except ImportError:
@@ -80,6 +86,7 @@ def export_pytorch(
     opset: int,
     output: Path,
     tokenizer: "PreTrainedTokenizer" = None,
+    device: str = "cpu",
 ) -> Tuple[List[str], List[str]]:
     """
     Export a PyTorch model to an ONNX Intermediate Representation (IR)
@@ -95,16 +102,25 @@ def export_pytorch(
             The version of the ONNX operator set to use.
         output (`Path`):
             Directory to store the exported ONNX model.
+        device (`str`, *optional*, defaults to `cpu`):
+            The device on which the ONNX model will be exported. Either `cpu` or `cuda`.
 
     Returns:
         `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
         the ONNX configuration.
     """
+
+    if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
+        raise ValueError("You cannot provide both a tokenizer and a preprocessor to export the model.")
     if tokenizer is not None:
         warnings.warn(
-            "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use `preprocessor` instead.",
+            "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use"
+            " `preprocessor` instead.",
             FutureWarning,
         )
+        logger.info("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
+        preprocessor = tokenizer
+
     if issubclass(type(model), PreTrainedModel):
         import torch
         from torch.onnx import export as onnx_export
@@ -123,9 +139,11 @@ def export_pytorch(
 
             # Ensure inputs match
             # TODO: Check when exporting QA we provide "is_pair=True"
-            model_inputs = config.generate_dummy_inputs(
-                preprocessor, tokenizer=tokenizer, framework=TensorType.PYTORCH
-            )
+            model_inputs = config.generate_dummy_inputs(preprocessor, framework=TensorType.PYTORCH)
+            device = torch.device(device)
+            if device.type == "cuda" and torch.cuda.is_available():
+                model.to(device)
+                model_inputs = dict((k, v.to(device)) for k, v in model_inputs.items())
             inputs_match, matched_inputs = ensure_model_and_config_inputs_match(model, model_inputs.keys())
             onnx_outputs = list(config.outputs.keys())
 
@@ -158,9 +176,13 @@ def export_pytorch(
                     message = str(err)
                     if (
                         message
-                        == "Exporting model exceed maximum protobuf size of 2GB. Please call torch.onnx.export without setting use_external_data_format parameter."
+                        == "Exporting model exceed maximum protobuf size of 2GB. Please call torch.onnx.export without"
+                        " setting use_external_data_format parameter."
                     ):
-                        message = "Exporting model exceed maximum protobuf size of 2GB. Please call torch.onnx.export without setting use_external_data_format parameter or try with torch 1.10+."
+                        message = (
+                            "Exporting model exceed maximum protobuf size of 2GB. Please call torch.onnx.export"
+                            " without setting use_external_data_format parameter or try with torch 1.10+."
+                        )
                         raise RuntimeError(message)
                     else:
                         raise err
@@ -213,11 +235,16 @@ def export_tensorflow(
     import onnx
     import tf2onnx
 
+    if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
+        raise ValueError("You cannot provide both a tokenizer and preprocessor to export the model.")
     if tokenizer is not None:
         warnings.warn(
-            "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use `preprocessor` instead.",
+            "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use"
+            " `preprocessor` instead.",
             FutureWarning,
         )
+        logger.info("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
+        preprocessor = tokenizer
 
     model.config.return_dict = True
 
@@ -229,7 +256,7 @@ def export_tensorflow(
             setattr(model.config, override_config_key, override_config_value)
 
     # Ensure inputs match
-    model_inputs = config.generate_dummy_inputs(preprocessor, tokenizer=tokenizer, framework=TensorType.TENSORFLOW)
+    model_inputs = config.generate_dummy_inputs(preprocessor, framework=TensorType.TENSORFLOW)
     inputs_match, matched_inputs = ensure_model_and_config_inputs_match(model, model_inputs.keys())
     onnx_outputs = list(config.outputs.keys())
 
@@ -248,6 +275,7 @@ def export(
     opset: int,
     output: Path,
     tokenizer: "PreTrainedTokenizer" = None,
+    device: str = "cpu",
 ) -> Tuple[List[str], List[str]]:
     """
     Export a Pytorch or TensorFlow model to an ONNX Intermediate Representation (IR)
@@ -263,6 +291,9 @@ def export(
             The version of the ONNX operator set to use.
         output (`Path`):
             Directory to store the exported ONNX model.
+        device (`str`, *optional*, defaults to `cpu`):
+            The device on which the ONNX model will be exported. Either `cpu` or `cuda`. Only PyTorch is supported for
+            export on CUDA devices.
 
     Returns:
         `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
@@ -273,25 +304,35 @@ def export(
             "Cannot convert because neither PyTorch nor TensorFlow are not installed. "
             "Please install torch or tensorflow first."
         )
+
+    if is_tf_available() and isinstance(model, TFPreTrainedModel) and device == "cuda":
+        raise RuntimeError("`tf2onnx` does not support export on CUDA device.")
+
+    if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
+        raise ValueError("You cannot provide both a tokenizer and a preprocessor to export the model.")
     if tokenizer is not None:
         warnings.warn(
-            "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use `preprocessor` instead.",
+            "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use"
+            " `preprocessor` instead.",
             FutureWarning,
         )
+        logger.info("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
+        preprocessor = tokenizer
 
     if is_torch_available():
-        from ..file_utils import torch_version
+        from ..utils import torch_version
 
         if not is_torch_onnx_dict_inputs_support_available():
             raise AssertionError(f"Unsupported PyTorch version, minimum required is 1.8.0, got: {torch_version}")
 
         if not config.is_torch_support_available:
             logger.warning(
-                f"Unsupported PyTorch version for this model. Minimum required is {config.torch_onnx_minimum_version}, got: {torch_version}"
+                f"Unsupported PyTorch version for this model. Minimum required is {config.torch_onnx_minimum_version},"
+                f" got: {torch_version}"
             )
 
     if is_torch_available() and issubclass(type(model), PreTrainedModel):
-        return export_pytorch(preprocessor, model, config, opset, output, tokenizer=tokenizer)
+        return export_pytorch(preprocessor, model, config, opset, output, tokenizer=tokenizer, device=device)
     elif is_tf_available() and issubclass(type(model), TFPreTrainedModel):
         return export_tensorflow(preprocessor, model, config, opset, output, tokenizer=tokenizer)
 
@@ -309,22 +350,31 @@ def validate_model_outputs(
 
     logger.info("Validating ONNX model...")
 
+    if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
+        raise ValueError("You cannot provide both a tokenizer and a preprocessor to validatethe model outputs.")
+    if tokenizer is not None:
+        warnings.warn(
+            "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use"
+            " `preprocessor` instead.",
+            FutureWarning,
+        )
+        logger.info("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
+        preprocessor = tokenizer
+
     # TODO: generate inputs with a different batch_size and seq_len that was used for conversion to properly test
     # dynamic input shapes.
-    if issubclass(type(reference_model), PreTrainedModel):
-        reference_model_inputs = config.generate_dummy_inputs(
-            preprocessor, tokenizer=tokenizer, framework=TensorType.PYTORCH
-        )
+    if is_torch_available() and issubclass(type(reference_model), PreTrainedModel):
+        reference_model_inputs = config.generate_dummy_inputs(preprocessor, framework=TensorType.PYTORCH)
     else:
-        reference_model_inputs = config.generate_dummy_inputs(
-            preprocessor, tokenizer=tokenizer, framework=TensorType.TENSORFLOW
-        )
+        reference_model_inputs = config.generate_dummy_inputs(preprocessor, framework=TensorType.TENSORFLOW)
 
     # Create ONNX Runtime session
     options = SessionOptions()
     session = InferenceSession(onnx_model.as_posix(), options, providers=["CPUExecutionProvider"])
 
     # Compute outputs from the reference model
+    if is_torch_available() and issubclass(type(reference_model), PreTrainedModel):
+        reference_model.to("cpu")
     ref_outputs = reference_model(**reference_model_inputs)
     ref_outputs_dict = {}
 
@@ -368,7 +418,7 @@ def validate_model_outputs(
 
     # Check the shape and values match
     for name, ort_value in zip(onnx_named_outputs, onnx_outputs):
-        if issubclass(type(reference_model), PreTrainedModel):
+        if is_torch_available() and issubclass(type(reference_model), PreTrainedModel):
             ref_value = ref_outputs_dict[name].detach().numpy()
         else:
             ref_value = ref_outputs_dict[name].numpy()
@@ -402,7 +452,7 @@ def ensure_model_and_config_inputs_match(
 
     :param model_inputs: :param config_inputs: :return:
     """
-    if issubclass(type(model), PreTrainedModel):
+    if is_torch_available() and issubclass(type(model), PreTrainedModel):
         forward_parameters = signature(model.forward).parameters
     else:
         forward_parameters = signature(model.call).parameters

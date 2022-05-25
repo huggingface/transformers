@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -24,20 +24,16 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN, gelu
-from ...file_utils import (
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    logging,
     replace_return_docstrings,
 )
-from ...modeling_utils import (
-    PreTrainedModel,
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
-)
-from ...utils import logging
 from .configuration_longformer import LongformerConfig
 
 
@@ -392,9 +388,10 @@ def _get_question_end_index(input_ids, sep_token_id):
     batch_size = input_ids.shape[0]
 
     assert sep_token_indices.shape[1] == 2, "`input_ids` should have two dimensions"
-    assert (
-        sep_token_indices.shape[0] == 3 * batch_size
-    ), f"There should be exactly three separator tokens: {sep_token_id} in every sample for questions answering. You might also consider to set `global_attention_mask` manually in the forward function to avoid this error."
+    assert sep_token_indices.shape[0] == 3 * batch_size, (
+        f"There should be exactly three separator tokens: {sep_token_id} in every sample for questions answering. You"
+        " might also consider to set `global_attention_mask` manually in the forward function to avoid this error."
+    )
     return sep_token_indices.view(batch_size, 3, 2)[:, 0, 1]
 
 
@@ -604,7 +601,10 @@ class LongformerSelfAttention(nn.Module):
             seq_len,
             self.num_heads,
             self.one_sided_attn_window_size * 2 + 1,
-        ], f"local_attn_probs should be of size ({batch_size}, {seq_len}, {self.num_heads}, {self.one_sided_attn_window_size * 2 + 1}), but is of size {attn_scores.size()}"
+        ], (
+            f"local_attn_probs should be of size ({batch_size}, {seq_len}, {self.num_heads},"
+            f" {self.one_sided_attn_window_size * 2 + 1}), but is of size {attn_scores.size()}"
+        )
 
         # compute local attention probs from global attention keys and contact over window dim
         if is_global_attn:
@@ -1044,7 +1044,11 @@ class LongformerSelfAttention(nn.Module):
             batch_size * self.num_heads,
             max_num_global_attn_indices,
             seq_len,
-        ], f"global_attn_scores have the wrong size. Size should be {(batch_size * self.num_heads, max_num_global_attn_indices, seq_len)}, but is {global_attn_scores.size()}."
+        ], (
+            "global_attn_scores have the wrong size. Size should be"
+            f" {(batch_size * self.num_heads, max_num_global_attn_indices, seq_len)}, but is"
+            f" {global_attn_scores.size()}."
+        )
 
         global_attn_scores = global_attn_scores.view(batch_size, self.num_heads, max_num_global_attn_indices, seq_len)
 
@@ -1087,7 +1091,11 @@ class LongformerSelfAttention(nn.Module):
             batch_size * self.num_heads,
             max_num_global_attn_indices,
             self.head_dim,
-        ], f"global_attn_output tensor has the wrong size. Size should be {(batch_size * self.num_heads, max_num_global_attn_indices, self.head_dim)}, but is {global_attn_output.size()}."
+        ], (
+            "global_attn_output tensor has the wrong size. Size should be"
+            f" {(batch_size * self.num_heads, max_num_global_attn_indices, self.head_dim)}, but is"
+            f" {global_attn_output.size()}."
+        )
 
         global_attn_probs = global_attn_probs.view(batch_size, self.num_heads, max_num_global_attn_indices, seq_len)
         global_attn_output = global_attn_output.view(
@@ -1104,7 +1112,7 @@ class LongformerSelfOutput(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states, input_tensor):
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -1170,7 +1178,7 @@ class LongformerIntermediate(nn.Module):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
@@ -1184,7 +1192,7 @@ class LongformerOutput(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states, input_tensor):
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -1338,7 +1346,7 @@ class LongformerPooler(nn.Module):
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         # We "pool" the model by simply taking the hidden state corresponding
         # to the first token.
         first_token_tensor = hidden_states[:, 0]
@@ -1486,7 +1494,7 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -1609,17 +1617,17 @@ class LongformerModel(LongformerPreTrainedModel):
     @replace_return_docstrings(output_type=LongformerBaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        global_attention_mask=None,
-        head_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        global_attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, LongformerBaseModelOutputWithPooling]:
         r"""
 
         Returns:
@@ -1638,10 +1646,10 @@ class LongformerModel(LongformerPreTrainedModel):
 
         >>> attention_mask = torch.ones(
         ...     input_ids.shape, dtype=torch.long, device=input_ids.device
-        >>> )  # initialize to local attention
+        ... )  # initialize to local attention
         >>> global_attention_mask = torch.zeros(
         ...     input_ids.shape, dtype=torch.long, device=input_ids.device
-        >>> )  # initialize to global attention to be deactivated for all tokens
+        ... )  # initialize to global attention to be deactivated for all tokens
         >>> global_attention_mask[
         ...     :,
         ...     [
@@ -1649,7 +1657,7 @@ class LongformerModel(LongformerPreTrainedModel):
         ...         4,
         ...         21,
         ...     ],
-        >>> ] = 1  # Set global attention to random tokens for the sake of this example
+        ... ] = 1  # Set global attention to random tokens for the sake of this example
         >>> # Usually, set global attention based on the task. For example,
         >>> # classification: the <s> token
         >>> # QA: question tokens
@@ -1696,7 +1704,7 @@ class LongformerModel(LongformerPreTrainedModel):
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)[
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)[
             :, 0, 0, :
         ]
 
@@ -1752,18 +1760,18 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
     @replace_return_docstrings(output_type=LongformerMaskedLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        global_attention_mask=None,
-        head_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        global_attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, LongformerMaskedLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1774,23 +1782,31 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
 
         Returns:
 
-        Examples:
+        Mask filling example:
 
         ```python
-        >>> import torch
-        >>> from transformers import LongformerForMaskedLM, LongformerTokenizer
+        >>> from transformers import LongformerTokenizer, LongformerForMaskedLM
 
-        >>> model = LongformerForMaskedLM.from_pretrained("allenai/longformer-base-4096")
         >>> tokenizer = LongformerTokenizer.from_pretrained("allenai/longformer-base-4096")
+        >>> model = LongformerForMaskedLM.from_pretrained("allenai/longformer-base-4096")
+        ```
 
-        >>> SAMPLE_TEXT = " ".join(["Hello world! "] * 1000)  # long input document
-        >>> input_ids = torch.tensor(tokenizer.encode(SAMPLE_TEXT)).unsqueeze(0)  # batch of size 1
+        Let's try a very long input.
 
-        >>> attention_mask = None  # default is local attention everywhere, which is a good choice for MaskedLM
-        >>> # check `LongformerModel.forward` for more details how to set *attention_mask*
-        >>> outputs = model(input_ids, attention_mask=attention_mask, labels=input_ids)
-        >>> loss = outputs.loss
-        >>> prediction_logits = outputs.logits
+        ```python
+        >>> TXT = (
+        ...     "My friends are <mask> but they eat too many carbs."
+        ...     + " That's why I decide not to eat with them." * 300
+        ... )
+        >>> input_ids = tokenizer([TXT], return_tensors="pt")["input_ids"]
+        >>> logits = model(input_ids).logits
+
+        >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
+        >>> probs = logits[0, masked_index].softmax(dim=0)
+        >>> values, predictions = probs.topk(5)
+
+        >>> tokenizer.decode(predictions).split()
+        ['healthy', 'skinny', 'thin', 'good', 'vegetarian']
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1852,24 +1868,26 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint="jpelhaw/longformer-base-plagiarism-detection",
         output_type=LongformerSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output="'ORIGINAL'",
+        expected_loss=5.44,
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        global_attention_mask=None,
-        head_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        global_attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, LongformerSequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1979,19 +1997,19 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
     @replace_return_docstrings(output_type=LongformerQuestionAnsweringModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        global_attention_mask=None,
-        head_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        inputs_embeds=None,
-        start_positions=None,
-        end_positions=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        global_attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        start_positions: Optional[torch.Tensor] = None,
+        end_positions: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, LongformerQuestionAnsweringModelOutput]:
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
@@ -2029,14 +2047,15 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
         >>> answer_tokens = all_tokens[torch.argmax(start_logits) : torch.argmax(end_logits) + 1]
         >>> answer = tokenizer.decode(
         ...     tokenizer.convert_tokens_to_ids(answer_tokens)
-        >>> )  # remove space prepending space token
+        ... )  # remove space prepending space token
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if global_attention_mask is None:
             if input_ids is None:
                 logger.warning(
-                    "It is not possible to automatically generate the `global_attention_mask` because input_ids is None. Please make sure that it is correctly set."
+                    "It is not possible to automatically generate the `global_attention_mask` because input_ids is"
+                    " None. Please make sure that it is correctly set."
                 )
             else:
                 # set global attention on question tokens automatically
@@ -2118,24 +2137,29 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint="brad1141/Longformer-finetuned-norm",
         output_type=LongformerTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=(
+            "['Evidence', 'Evidence', 'Evidence', 'Evidence', 'Evidence', 'Evidence', 'Evidence', 'Evidence',"
+            " 'Evidence', 'Evidence', 'Evidence', 'Evidence']"
+        ),
+        expected_loss=0.63,
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        global_attention_mask=None,
-        head_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        global_attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, LongformerTokenClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -2207,18 +2231,18 @@ class LongformerForMultipleChoice(LongformerPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        token_type_ids=None,
-        attention_mask=None,
-        global_attention_mask=None,
-        head_mask=None,
-        labels=None,
-        position_ids=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        global_attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, LongformerMultipleChoiceModelOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,

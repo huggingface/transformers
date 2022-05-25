@@ -77,7 +77,8 @@ def require_version(requirement: str, hint: Optional[str] = None) -> None:
         match = re.findall(r"^([^!=<>\s]+)([\s!=<>]{1,2}.+)", requirement)
         if not match:
             raise ValueError(
-                f"requirement needs to be in the pip package format, .e.g., package_a==1.23, or package_b>=1.23, but got {requirement}"
+                "requirement needs to be in the pip package format, .e.g., package_a==1.23, or package_b>=1.23, but"
+                f" got {requirement}"
             )
         pkg, want_full = match[0]
         want_range = want_full.split(",")  # there could be multiple requirements
@@ -86,7 +87,8 @@ def require_version(requirement: str, hint: Optional[str] = None) -> None:
             match = re.findall(r"^([\s!=<>]{1,2})(.+)", w)
             if not match:
                 raise ValueError(
-                    f"requirement needs to be in the pip package format, .e.g., package_a==1.23, or package_b>=1.23, but got {requirement}"
+                    "requirement needs to be in the pip package format, .e.g., package_a==1.23, or package_b>=1.23,"
+                    f" but got {requirement}"
                 )
             op, want_ver = match[0]
             wanted[op] = want_ver
@@ -116,5 +118,5 @@ def require_version(requirement: str, hint: Optional[str] = None) -> None:
 
 def require_version_core(requirement):
     """require_version wrapper which emits a core-specific hint on failure"""
-    hint = "Try: pip install transformers -U or pip install -e '.[dev]' if you're working with git master"
+    hint = "Try: pip install transformers -U or pip install -e '.[dev]' if you're working with git main"
     return require_version(requirement, hint)

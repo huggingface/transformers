@@ -1,0 +1,148 @@
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# Pipelines for inference
+
+The [`pipeline`] makes it simple to use any model from the [Model Hub](https://huggingface.co/models) for inference on a variety of tasks such as text generation, image segmentation and audio classification. Even if you don't have experience with a specific modality or understand the code powering the models, you can still use them with the [`pipeline`]! This tutorial will teach you to:
+
+* Use a [`pipeline`] for inference.
+* Use a specific tokenizer or model.
+* Use a [`pipeline`] for audio and vision tasks.
+
+<Tip>
+
+Take a look at the [`pipeline`] documentation for a complete list of supported tasks.
+
+</Tip>
+
+## Pipeline usage
+
+While each task has an associated [`pipeline`], it is simpler to use the general [`pipeline`] abstraction which contains all the specific task pipelines. The [`pipeline`] automatically loads a default model and tokenizer capable of inference for your task. 
+
+1. Start by creating a [`pipeline`] and specify an inference task:
+
+```py
+>>> from transformers import pipeline
+
+>>> generator = pipeline(task="text-generation")
+```
+
+2. Pass your input text to the [`pipeline`]:
+
+```py
+>>> generator(
+...     "Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone"
+... )  # doctest: +SKIP
+[{'generated_text': 'Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone, Seven for the Iron-priests at the door to the east, and thirteen for the Lord Kings at the end of the mountain'}]
+```
+
+If you have more than one input, pass your input as a list:
+
+```py
+>>> generator(
+...     [
+...         "Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone",
+...         "Nine for Mortal Men, doomed to die, One for the Dark Lord on his dark throne",
+...     ]
+... )  # doctest: +SKIP
+```
+
+Any additional parameters for your task can also be included in the [`pipeline`]. The `text-generation` task has a [`~generation_utils.GenerationMixin.generate`] method with several parameters for controlling the output. For example, if you want to generate more than one output, set the `num_return_sequences` parameter:
+
+```py
+>>> generator(
+...     "Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone",
+...     num_return_sequences=2,
+... )  # doctest: +SKIP
+```
+
+### Choose a model and tokenizer
+
+The [`pipeline`] accepts any model from the [Model Hub](https://huggingface.co/models). There are tags on the Model Hub that allow you to filter for a model you'd like to use for your task. Once you've picked an appropriate model, load it with the corresponding `AutoModelFor` and [`AutoTokenizer'] class. For example, load the [`AutoModelForCausalLM`] class for a causal language modeling task:
+
+```py
+>>> from transformers import AutoTokenizer, AutoModelForCausalLM
+
+>>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
+>>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
+```
+
+Create a [`pipeline`] for your task, and specify the model and tokenizer you've loaded:
+
+```py
+>>> from transformers import pipeline
+
+>>> generator = pipeline(task="text-generation", model=model, tokenizer=tokenizer)
+```
+
+Pass your input text to the [`pipeline`] to generate some text:
+
+```py
+>>> generator(
+...     "Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone"
+... )  # doctest: +SKIP
+[{'generated_text': 'Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone, Seven for the Dragon-lords (for them to rule in a world ruled by their rulers, and all who live within the realm'}]
+```
+
+## Audio pipeline
+
+The flexibility of the [`pipeline`] means it can also be extended to audio tasks.
+
+For example, let's classify the emotion in this audio clip:
+
+```py
+>>> from datasets import load_dataset
+>>> import torch
+
+>>> torch.manual_seed(42)  # doctest: +IGNORE_RESULT
+>>> ds = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+>>> audio_file = ds[0]["audio"]["path"]
+```
+
+Find an [audio classification](https://huggingface.co/models?pipeline_tag=audio-classification) model on the Model Hub for emotion recognition and load it in the [`pipeline`]:
+
+```py
+>>> from transformers import pipeline
+
+>>> audio_classifier = pipeline(
+...     task="audio-classification", model="ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition"
+... )
+```
+
+Pass the audio file to the [`pipeline`]:
+
+```py
+>>> preds = audio_classifier(audio_file)
+>>> preds = [{"score": round(pred["score"], 4), "label": pred["label"]} for pred in preds]
+>>> preds
+[{'score': 0.1315, 'label': 'calm'}, {'score': 0.1307, 'label': 'neutral'}, {'score': 0.1274, 'label': 'sad'}, {'score': 0.1261, 'label': 'fearful'}, {'score': 0.1242, 'label': 'happy'}]
+```
+
+## Vision pipeline
+
+Finally, using a [`pipeline`] for vision tasks is practically identical.
+
+Specify your vision task and pass your image to the classifier. The imaage can be a link or a local path to the image. For example, what species of cat is shown below?
+
+![pipeline-cat-chonk](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg)
+
+```py
+>>> from transformers import pipeline
+
+>>> vision_classifier = pipeline(task="image-classification")
+>>> preds = vision_classifier(
+...     images="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+... )
+>>> preds = [{"score": round(pred["score"], 4), "label": pred["label"]} for pred in preds]
+>>> preds
+[{'score': 0.4335, 'label': 'lynx, catamount'}, {'score': 0.0348, 'label': 'cougar, puma, catamount, mountain lion, painter, panther, Felis concolor'}, {'score': 0.0324, 'label': 'snow leopard, ounce, Panthera uncia'}, {'score': 0.0239, 'label': 'Egyptian cat'}, {'score': 0.0229, 'label': 'tiger cat'}]
+```

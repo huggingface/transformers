@@ -20,9 +20,8 @@ from typing import Optional
 import torch
 from torch import nn
 
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_auto import AutoModel
 from ..clip.modeling_clip import CLIPOutput, CLIPVisionConfig, CLIPVisionModel
@@ -90,7 +89,7 @@ VISION_TEXT_DUAL_ENCODER_TEXT_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 VISION_TEXT_DUAL_ENCODER_VISION_INPUTS_DOCSTRING = r"""
@@ -105,7 +104,7 @@ VISION_TEXT_DUAL_ENCODER_VISION_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 VISION_TEXT_DUAL_ENCODER_INPUTS_DOCSTRING = r"""
@@ -143,7 +142,7 @@ VISION_TEXT_DUAL_ENCODER_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -531,9 +530,9 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         # the projection layers are always newly initialized when loading the model
         # using pre-trained vision and text model.
         logger.warning(
-            "The projection layer and logit scale weights `['visual_projection.weight', 'text_projection.weight', 'logit_scale']` "
-            "are newly initialized. You should probably TRAIN this model on a down-stream task "
-            "to be able to use it for predictions and inference."
+            "The projection layer and logit scale weights `['visual_projection.weight', 'text_projection.weight',"
+            " 'logit_scale']` are newly initialized. You should probably TRAIN this model on a down-stream task to be"
+            " able to use it for predictions and inference."
         )
 
         return model

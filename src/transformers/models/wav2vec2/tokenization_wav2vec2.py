@@ -24,7 +24,9 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ...file_utils import (
+from ...tokenization_utils import PreTrainedTokenizer, _insert_one_token_to_ordered_list
+from ...tokenization_utils_base import AddedToken, BatchEncoding
+from ...utils import (
     ModelOutput,
     PaddingStrategy,
     TensorType,
@@ -32,11 +34,9 @@ from ...file_utils import (
     is_flax_available,
     is_tf_available,
     is_torch_available,
+    logging,
     to_py_obj,
 )
-from ...tokenization_utils import PreTrainedTokenizer, _insert_one_token_to_ordered_list
-from ...tokenization_utils_base import AddedToken, BatchEncoding
-from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -61,7 +61,9 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "facebook/wav2vec2-base-960h": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/vocab.json",
     },
     "tokenizer_config_file": {
-        "facebook/wav2vec2-base-960h": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/tokenizer_config.json",
+        "facebook/wav2vec2-base-960h": (
+            "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/tokenizer_config.json"
+        ),
     },
 }
 
@@ -69,7 +71,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"facebook/wav2vec2-base-960h": sys.maxsize}
 
 WAV2VEC2_KWARGS_DOCSTRING = r"""
-            padding (`bool`, `str` or [`~file_utils.PaddingStrategy`], *optional*, defaults to `False`):
+            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                 Activates and controls padding. Accepts the following values:
 
                 - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
@@ -87,7 +89,7 @@ WAV2VEC2_KWARGS_DOCSTRING = r"""
             pad_to_multiple_of (`int`, *optional*):
                 If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
                 the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
-            return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
@@ -298,6 +300,10 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             word_offsets = None
             if output_word_offsets:
                 word_offsets = self._get_word_offsets(char_offsets, self.replace_word_delimiter_char)
+
+            # don't output chars if not set to True
+            if not output_char_offsets:
+                char_offsets = None
 
         # join to string
         join_char = " " if spaces_between_special_tokens else ""
@@ -713,7 +719,9 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
             "facebook/wav2vec2-base-960h": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/vocab.json"
         },
         "tokenizer_config_file": {
-            "facebook/wav2vec2-base-960h": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/tokenizer.json",
+            "facebook/wav2vec2-base-960h": (
+                "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/tokenizer.json"
+            ),
         },
     }
     model_input_names = ["input_values", "attention_mask"]
@@ -744,7 +752,8 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         )
 
         warnings.warn(
-            "The class `Wav2Vec2Tokenizer` is deprecated and will be removed in version 5 of Transformers. Please use `Wav2Vec2Processor` or `Wav2Vec2CTCTokenizer` instead.",
+            "The class `Wav2Vec2Tokenizer` is deprecated and will be removed in version 5 of Transformers. Please use"
+            " `Wav2Vec2Processor` or `Wav2Vec2CTCTokenizer` instead.",
             FutureWarning,
         )
 

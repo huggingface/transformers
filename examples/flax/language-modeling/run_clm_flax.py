@@ -57,8 +57,8 @@ from transformers import (
     is_tensorboard_available,
     set_seed,
 )
-from transformers.file_utils import get_full_repo_name
 from transformers.testing_utils import CaptureLogger
+from transformers.utils import get_full_repo_name
 
 
 logger = logging.getLogger(__name__)
@@ -138,8 +138,9 @@ class ModelArguments:
     model_name_or_path: Optional[str] = field(
         default=None,
         metadata={
-            "help": "The model checkpoint for weights initialization."
-            "Don't set if you want to train a model from scratch."
+            "help": (
+                "The model checkpoint for weights initialization.Don't set if you want to train a model from scratch."
+            )
         },
     )
     model_type: Optional[str] = field(
@@ -162,7 +163,19 @@ class ModelArguments:
     dtype: Optional[str] = field(
         default="float32",
         metadata={
-            "help": "Floating-point format in which the model weights should be initialized and trained. Choose one of `[float32, float16, bfloat16]`."
+            "help": (
+                "Floating-point format in which the model weights should be initialized and trained. Choose one of"
+                " `[float32, float16, bfloat16]`."
+            )
+        },
+    )
+    use_auth_token: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "with private models)."
+            )
         },
     )
 
@@ -187,15 +200,19 @@ class DataTrainingArguments:
     max_train_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of training examples to this "
+                "value if set."
+            )
         },
     )
     max_eval_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
+                "value if set."
+            )
         },
     )
     overwrite_cache: bool = field(
@@ -210,9 +227,11 @@ class DataTrainingArguments:
     block_size: Optional[int] = field(
         default=None,
         metadata={
-            "help": "Optional input sequence length after tokenization. "
-            "The training dataset will be truncated in block of this size for training. "
-            "Default to the model max input length for single sentence inputs (take into account special tokens)."
+            "help": (
+                "Optional input sequence length after tokenization. "
+                "The training dataset will be truncated in block of this size for training. "
+                "Default to the model max input length for single sentence inputs (take into account special tokens)."
+            )
         },
     )
     overwrite_cache: bool = field(
@@ -363,7 +382,11 @@ def main():
     if data_args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
         dataset = load_dataset(
-            data_args.dataset_name, data_args.dataset_config_name, cache_dir=model_args.cache_dir, keep_in_memory=False
+            data_args.dataset_name,
+            data_args.dataset_config_name,
+            cache_dir=model_args.cache_dir,
+            keep_in_memory=False,
+            use_auth_token=True if model_args.use_auth_token else None,
         )
 
         if "validation" not in dataset.keys():
@@ -372,12 +395,14 @@ def main():
                 data_args.dataset_config_name,
                 split=f"train[:{data_args.validation_split_percentage}%]",
                 cache_dir=model_args.cache_dir,
+                use_auth_token=True if model_args.use_auth_token else None,
             )
             dataset["train"] = load_dataset(
                 data_args.dataset_name,
                 data_args.dataset_config_name,
                 split=f"train[{data_args.validation_split_percentage}%:]",
                 cache_dir=model_args.cache_dir,
+                use_auth_token=True if model_args.use_auth_token else None,
             )
     else:
         data_files = {}
@@ -390,7 +415,13 @@ def main():
         if extension == "txt":
             extension = "text"
             dataset_args["keep_linebreaks"] = data_args.keep_linebreaks
-        dataset = load_dataset(extension, data_files=data_files, cache_dir=model_args.cache_dir, **dataset_args)
+        dataset = load_dataset(
+            extension,
+            data_files=data_files,
+            cache_dir=model_args.cache_dir,
+            **dataset_args,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
 
         if "validation" not in dataset.keys():
             dataset["validation"] = load_dataset(
@@ -399,6 +430,7 @@ def main():
                 split=f"train[:{data_args.validation_split_percentage}%]",
                 cache_dir=model_args.cache_dir,
                 **dataset_args,
+                use_auth_token=True if model_args.use_auth_token else None,
             )
             dataset["train"] = load_dataset(
                 extension,
@@ -406,6 +438,7 @@ def main():
                 split=f"train[{data_args.validation_split_percentage}%:]",
                 cache_dir=model_args.cache_dir,
                 **dataset_args,
+                use_auth_token=True if model_args.use_auth_token else None,
             )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
@@ -416,20 +449,34 @@ def main():
     # The .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
     if model_args.config_name:
-        config = AutoConfig.from_pretrained(model_args.config_name, cache_dir=model_args.cache_dir)
+        config = AutoConfig.from_pretrained(
+            model_args.config_name,
+            cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
     elif model_args.model_name_or_path:
-        config = AutoConfig.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
+        config = AutoConfig.from_pretrained(
+            model_args.model_name_or_path,
+            cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
         logger.warning("You are instantiating a new config instance from scratch.")
 
     if model_args.tokenizer_name:
         tokenizer = AutoTokenizer.from_pretrained(
-            model_args.tokenizer_name, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
+            model_args.tokenizer_name,
+            cache_dir=model_args.cache_dir,
+            use_fast=model_args.use_fast_tokenizer,
+            use_auth_token=True if model_args.use_auth_token else None,
         )
     elif model_args.model_name_or_path:
         tokenizer = AutoTokenizer.from_pretrained(
-            model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
+            model_args.model_name_or_path,
+            cache_dir=model_args.cache_dir,
+            use_fast=model_args.use_fast_tokenizer,
+            use_auth_token=True if model_args.use_auth_token else None,
         )
     else:
         raise ValueError(
@@ -439,11 +486,18 @@ def main():
 
     if model_args.model_name_or_path:
         model = FlaxAutoModelForCausalLM.from_pretrained(
-            model_args.model_name_or_path, config=config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype)
+            model_args.model_name_or_path,
+            config=config,
+            seed=training_args.seed,
+            dtype=getattr(jnp, model_args.dtype),
+            use_auth_token=True if model_args.use_auth_token else None,
         )
     else:
         model = FlaxAutoModelForCausalLM.from_config(
-            config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype)
+            config,
+            seed=training_args.seed,
+            dtype=getattr(jnp, model_args.dtype),
+            use_auth_token=True if model_args.use_auth_token else None,
         )
 
     # Preprocessing the datasets.
@@ -463,7 +517,8 @@ def main():
         # clm input could be much much longer than block_size
         if "Token indices sequence length is longer than the" in cl.out:
             tok_logger.warning(
-                "^^^^^^^^^^^^^^^^ Please ignore the warning above - this long input will be chunked into smaller bits before being passed to the model."
+                "^^^^^^^^^^^^^^^^ Please ignore the warning above - this long input will be chunked into smaller bits"
+                " before being passed to the model."
             )
         return output
 
@@ -527,14 +582,16 @@ def main():
             raise ValueError("--do_train requires a train dataset")
         train_dataset = lm_datasets["train"]
         if data_args.max_train_samples is not None:
-            train_dataset = train_dataset.select(range(data_args.max_train_samples))
+            max_train_samples = min(len(train_dataset), data_args.max_train_samples)
+            train_dataset = train_dataset.select(range(max_train_samples))
 
     if training_args.do_eval:
         if "validation" not in tokenized_datasets:
             raise ValueError("--do_eval requires a validation dataset")
         eval_dataset = lm_datasets["validation"]
         if data_args.max_eval_samples is not None:
-            eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
+            max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
+            eval_dataset = eval_dataset.select(range(max_eval_samples))
 
     # Enable tensorboard only on the master node
     has_tensorboard = is_tensorboard_available()
@@ -691,7 +748,8 @@ def main():
                     write_train_metric(summary_writer, train_metrics, train_time, cur_step)
 
                 epochs.write(
-                    f"Step... ({cur_step} | Loss: {train_metric['loss'].mean()}, Learning Rate: {train_metric['learning_rate'].mean()})"
+                    f"Step... ({cur_step} | Loss: {train_metric['loss'].mean()}, Learning Rate:"
+                    f" {train_metric['learning_rate'].mean()})"
                 )
 
                 train_metrics = []
@@ -718,7 +776,10 @@ def main():
                     eval_metrics["perplexity"] = float("inf")
 
                 # Print metrics and update progress bar
-                desc = f"Step... ({cur_step} | Eval Loss: {eval_metrics['loss']} | Eval Perplexity: {eval_metrics['perplexity']})"
+                desc = (
+                    f"Step... ({cur_step} | Eval Loss: {eval_metrics['loss']} | Eval Perplexity:"
+                    f" {eval_metrics['perplexity']})"
+                )
                 epochs.write(desc)
                 epochs.desc = desc
 
