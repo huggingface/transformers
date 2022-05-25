@@ -97,13 +97,14 @@ if stale_egg_info.exists():
 # 2. once modified, run: `make deps_table_update` to update src/transformers/dependency_versions_table.py
 _deps = [
     "Pillow",
-    "accelerate>=0.7.1",
+    "accelerate>=0.9.0",
     "black~=22.0,>=22.3",
     "codecarbon==1.2.0",
     "cookiecutter==1.7.3",
     "dataclasses",
     "datasets",
     "deepspeed>=0.6.4",
+    "dill<0.3.5",
     "fairscale>0.3",
     "faiss-cpu",
     "fastapi",
@@ -284,6 +285,7 @@ extras["testing"] = (
         "parameterized",
         "psutil",
         "datasets",
+        "dill",
         "pytest-timeout",
         "black",
         "sacrebleu",

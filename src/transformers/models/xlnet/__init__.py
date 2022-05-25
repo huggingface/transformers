@@ -28,9 +28,7 @@ from ...utils import (
 )
 
 
-_import_structure = {
-    "configuration_xlnet": ["XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLNetConfig"],
-}
+_import_structure = {"configuration_xlnet": ["XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLNetConfig"]}
 
 try:
     if not is_sentencepiece_available():
