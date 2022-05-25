@@ -21,9 +21,7 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_flax_available, is_torch_available
 
 
-_import_structure = {
-    "configuration_speech_encoder_decoder": ["SpeechEncoderDecoderConfig"],
-}
+_import_structure = {"configuration_speech_encoder_decoder": ["SpeechEncoderDecoderConfig"]}
 
 try:
     if not is_torch_available():

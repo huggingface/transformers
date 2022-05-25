@@ -20,9 +20,7 @@ from typing import TYPE_CHECKING
 from ...utils import _LazyModule, is_tokenizers_available, is_torch_available
 
 
-_import_structure = {
-    "configuration_opt": ["OPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OPTConfig"],
-}
+_import_structure = {"configuration_opt": ["OPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OPTConfig"]}
 
 
 if is_torch_available():
