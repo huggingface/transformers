@@ -288,7 +288,6 @@ class FlaxOPTEmbeddingsTest(unittest.TestCase):
         self.assertTrue(jnp.allclose(logits, logits_meta, atol=1e-4))
 
 
-
 @slow
 class FlaxOPTGenerationTest(unittest.TestCase):
     @property
@@ -300,7 +299,6 @@ class FlaxOPTGenerationTest(unittest.TestCase):
             "Computers and mobile phones have taken",
         ]
 
-    
     def test_generation_pre_attn_layer_norm(self):
         model_id = "facebook/opt-125m"
 
@@ -324,6 +322,7 @@ class FlaxOPTGenerationTest(unittest.TestCase):
             predicted_outputs += generated_string
 
         self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)
+
     def test_generation_post_attn_layer_norm(self):
         model_id = "facebook/opt-350m"
 

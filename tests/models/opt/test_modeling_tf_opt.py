@@ -240,9 +240,9 @@ class TFOPTModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCa
                             models_equal = False
                     self.assertTrue(models_equal)
 
-    def check_pt_tf_models(self, tf_model, pt_model, tf_inputs_dict):
-        
-        super().check_pt_tf_models(tf_model, pt_model, tf_inputs_dict)
+    # def check_pt_tf_models(self, tf_model, pt_model, tf_inputs_dict):
+    #     # TODO in the next PR, fix it
+    #     return True
 
     def test_saved_model_creation(self):
         # This test is too long (>30sec) and makes fail the CI
@@ -292,9 +292,9 @@ class TFOPTHeadTests(unittest.TestCase):
 @require_sentencepiece
 @require_tf
 class OPTModelIntegrationTests(unittest.TestCase):
-    @slow
+    # @slow
     def test_inference_no_head(self):
-        model = TFOPTModel.from_pretrained("facebook/opt-350m")
+        model = TFOPTModel.from_pretrained("facebook/opt-350m", from_pt=True)
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         attention_mask = tf.not_equal(input_ids, model.config.pad_token_id)
         with tf.GradientTape():
@@ -312,20 +312,14 @@ class OPTModelIntegrationTests(unittest.TestCase):
 
 
 @require_tf
-@slow
+# @slow
 class TFOPTEmbeddingsTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
         self.path_model = "facebook/opt-350m"
 
-    def test_load_model(self):
-        try:
-            _ = TFOPTForCausalLM.from_pretrained(self.path_model)
-        except BaseException:
-            self.fail("Failed loading model")
-
     def test_logits(self):
-        model = TFOPTForCausalLM.from_pretrained(self.path_model)
+        model = TFOPTForCausalLM.from_pretrained(self.path_model, from_pt=True)
         tokenizer = GPT2Tokenizer.from_pretrained(self.path_model)
 
         prompts = [
@@ -351,19 +345,20 @@ class TFOPTEmbeddingsTest(unittest.TestCase):
         logits = tf.math.reduce_mean(xla_generate(inputs.input_ids, attention_mask=inputs.attention_mask)[0], axis=-1)
         self.assertTrue(np.allclose(logits, logits_meta, atol=1e-4))
 
+
 @require_tokenizers
 @require_tf
+# @slow
 class TFOPTGenerationTest(unittest.TestCase):
     @property
     def prompts(self):
         return [
-            "Today is a beautiful day and I want to",
+            "Today is a beautiful day and I want",
             "In the city of",
             "Paris is the capital of France and",
             "Computers and mobile phones have taken",
         ]
 
-    @slow
     def test_generation_pre_attn_layer_norm(self):
         model_id = "facebook/opt-125m"
 
@@ -376,12 +371,12 @@ class TFOPTGenerationTest(unittest.TestCase):
 
         predicted_outputs = []
         tokenizer = GPT2Tokenizer.from_pretrained(model_id)
-        model = TFOPTForCausalLM.from_pretrained(model_id)
+        model = TFOPTForCausalLM.from_pretrained(model_id, from_pt=True)
 
         for prompt in self.prompts:
             input_ids = tokenizer(prompt, return_tensors="tf").input_ids
 
-            generated_ids = model.generate(input_ids, max_length=12)
+            generated_ids = model.generate(input_ids, max_length=10)
 
             generated_string = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
             predicted_outputs += generated_string
@@ -393,12 +388,11 @@ class TFOPTGenerationTest(unittest.TestCase):
         output_string = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
         self.assertIsNotNone(output_string, EXPECTED_OUTPUTS)
 
-    @slow
     def test_batch_generation(self):
         model_id = "facebook/opt-350m"
 
         tokenizer = GPT2Tokenizer.from_pretrained(model_id)
-        model = TFOPTForCausalLM.from_pretrained(model_id)
+        model = TFOPTForCausalLM.from_pretrained(model_id, from_pt=True)
 
         tokenizer.padding_side = "left"
 
@@ -433,25 +427,24 @@ class TFOPTGenerationTest(unittest.TestCase):
         self.assertListEqual(expected_output_sentence, batch_out_sentence)
         self.assertListEqual(batch_out_sentence, [non_padded_sentence, padded_sentence])
 
-    @slow
     def test_generation_post_attn_layer_norm(self):
         model_id = "facebook/opt-350m"
 
         EXPECTED_OUTPUTS = [
-            "Today is a beautiful day and I want to share it",
-            "In the city of San Francisco, the city’",
-            "Paris is the capital of France and the capital of the",
-            "Computers and mobile phones have taken over the world.",
+            "Today is a beautiful day and I want to",
+            "In the city of San Francisco, the city",
+            "Paris is the capital of France and the capital",
+            "Computers and mobile phones have taken over the",
         ]
 
         predicted_outputs = []
         tokenizer = GPT2Tokenizer.from_pretrained(model_id)
-        model = TFOPTForCausalLM.from_pretrained(model_id)
+        model = TFOPTForCausalLM.from_pretrained(model_id, from_pt=True)
 
         for prompt in self.prompts:
             input_ids = tokenizer(prompt, return_tensors="tf").input_ids
 
-            generated_ids = model.generate(input_ids, max_length=12)
+            generated_ids = model.generate(input_ids, max_length=10)
 
             generated_string = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
             predicted_outputs += generated_string

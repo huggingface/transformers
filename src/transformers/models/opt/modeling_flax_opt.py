@@ -594,7 +594,7 @@ class FlaxOPTPreTrainedModel(FlaxPreTrainedModel):
             attention_mask = jnp.ones_like(input_ids)
 
         if position_ids is None:
-            position_ids = (attention_mask.cumsum(axis=1) * attention_mask)- 1
+            position_ids = (attention_mask.cumsum(axis=1) * attention_mask) - 1
 
         # Handle any PRNG if needed
         rngs = {"dropout": dropout_rng} if dropout_rng is not None else {}
