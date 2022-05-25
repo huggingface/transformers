@@ -206,7 +206,8 @@ class FlaxT5LayerFF(nn.Module):
             self.DenseReluDense = FlaxT5DenseGatedSiLUDense(self.config, dtype=self.dtype)
         else:
             raise ValueError(
-                f"{self.config.feed_forward_proj} is not supported. Choose between `relu`, `gated-gelu` and `gated-silu`"
+                f"{self.config.feed_forward_proj} is not supported. "
+                "Choose between `relu`, `gated-gelu` and `gated-silu`"
             )
 
         self.layer_norm = FlaxT5LayerNorm(self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype)
