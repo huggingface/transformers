@@ -16,8 +16,8 @@ import unittest
 import numpy as np
 import timeout_decorator  # noqa
 
-from transformers import GPT2Tokenizer, OPTConfig, is_flax_available
-from transformers.testing_utils import require_flax, slow
+from transformers import OPTConfig, is_flax_available
+from transformers.testing_utils import require_flax, require_sentencepiece, slow
 
 from ...generation.test_generation_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
@@ -33,7 +33,7 @@ if is_flax_available():
 
     import jax
     import jax.numpy as jnp
-    from transformers.models.opt.modeling_flax_opt import FlaxOPTForCausalLM, FlaxOPTModel
+    from transformers import FlaxOPTForCausalLM, FlaxOPTModel, GPT2Tokenizer
 
 
 def prepare_opt_inputs_dict(
@@ -232,6 +232,7 @@ class FlaxOPTModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTe
             self.assertIsNotNone(outputs)
 
 
+@require_sentencepiece
 @require_flax
 class FlaxOPTModelIntegrationTests(unittest.TestCase):
     @slow
@@ -304,8 +305,9 @@ class FlaxOPTGenerationTest(unittest.TestCase):
         ]
 
         predicted_outputs = []
-        tokenizer = GPT2Tokenizer.from_pretrained(model_id)
+
         model = FlaxOPTForCausalLM.from_pretrained(model_id)
+        tokenizer = GPT2Tokenizer.from_pretrained(model_id)
 
         for prompt in self.prompts:
             input_ids = tokenizer(prompt, return_tensors="jax").input_ids
@@ -329,8 +331,8 @@ class FlaxOPTGenerationTest(unittest.TestCase):
         ]
 
         predicted_outputs = []
-        tokenizer = GPT2Tokenizer.from_pretrained(model_id)
         model = FlaxOPTForCausalLM.from_pretrained(model_id)
+        tokenizer = GPT2Tokenizer.from_pretrained(model_id)
 
         for prompt in self.prompts:
             input_ids = tokenizer(prompt, return_tensors="jax").input_ids
@@ -349,7 +351,7 @@ class FlaxOPTGenerationTest(unittest.TestCase):
             "Today is a beautiful day and I want to thank",
             "In the city of Rome Canaver Canaver Canaver Canaver",
         ]
-
+        model = FlaxOPTForCausalLM.from_pretrained(model_id)
         tokenizer = GPT2Tokenizer.from_pretrained(model_id)
         inputs = tokenizer(
             [
@@ -360,7 +362,6 @@ class FlaxOPTGenerationTest(unittest.TestCase):
             padding=True,
         )
 
-        model = FlaxOPTForCausalLM.from_pretrained(model_id)
         jit_generate = jax.jit(model.generate)
 
         output_sequences = jit_generate(inputs["input_ids"], attention_mask=inputs["attention_mask"]).sequences

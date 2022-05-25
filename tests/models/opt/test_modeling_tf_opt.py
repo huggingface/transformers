@@ -17,7 +17,7 @@ import unittest
 
 import numpy as np
 
-from transformers import GPT2Tokenizer, OPTConfig, is_tf_available
+from transformers import OPTConfig, is_tf_available
 from transformers.testing_utils import require_sentencepiece, require_tf, slow
 
 from ...test_configuration_common import ConfigTester
@@ -28,7 +28,7 @@ from ...utils.test_modeling_tf_core import TFCoreModelTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers.models.opt.modeling_tf_opt import TFOPTForCausalLM, TFOPTModel
+    from transformers import GPT2Tokenizer, TFOPTForCausalLM, TFOPTModel
 
 
 def prepare_opt_inputs_dict(
@@ -328,7 +328,6 @@ class TFOPTEmbeddingsTest(unittest.TestCase):
         self.assertTrue(np.allclose(logits, logits_meta, atol=1e-4))
 
 
-@require_tf
 @slow
 class TFOPTGenerationTest(unittest.TestCase):
     @property
