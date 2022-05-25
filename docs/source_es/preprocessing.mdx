@@ -230,7 +230,7 @@ Por ejemplo, carga el dataset [LJ Speech](https://huggingface.co/datasets/lj_spe
  'sampling_rate': 22050}
 ```
 
-1. Usa el método 🤗 Datasets' [`cast_column`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.cast_column) para reducir el sampling rate a 16kHz:
+1. Usa el método 🤗 Datasets' [`cast_column`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.cast_column) para reducir la tasa de muestreo a 16kHz:
 
 ```py
 >>> lj_speech = lj_speech.cast_column("audio", Audio(sampling_rate=16_000))
