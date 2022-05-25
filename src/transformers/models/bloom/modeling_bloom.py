@@ -119,7 +119,7 @@ def bias_dropout_add_fused_inference(x, bias, residual, prob):
     return bias_dropout_add(x, bias, residual, prob, False)
 
 
-class ScaledSoftmax(nn.Module):
+class BloomScaledSoftmax(nn.Module):
     """
     fused operation: scaling + mask + softmax
 
@@ -217,7 +217,7 @@ class BloomAttention(nn.Module):
         self.norm_factor = math.sqrt(self.head_dim) * coeff
 
         # Scaled Softmax
-        self.scale_mask_softmax = ScaledSoftmax(
+        self.scale_mask_softmax = BloomScaledSoftmax(
             self.fp16,
             self.bf16,
             self.masked_softmax_fusion,
