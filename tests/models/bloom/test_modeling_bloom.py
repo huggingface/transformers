@@ -373,7 +373,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
 
     @slow
     def test_batch_generation_padd(self):
-        path_350m = "bigscience/bloom-350m"
+        path_350m = "ybelkada/bigscience-11e-350m"
         model = BloomForCausalLM.from_pretrained(path_350m, dtype="float32")
         model = model.eval()
         tokenizer = BloomTokenizerFast.from_pretrained(path_350m, padding_side="left")
@@ -389,7 +389,14 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         )
         greedy_output_without_pad = model.generate(input_ids_without_pad, max_length=50, do_sample=False)
 
+        # test token values
         self.assertEqual(greedy_output[-1, 3:].tolist(), greedy_output_without_pad[0, :-3].tolist())
+
+        # test reconstructions
+        self.assertEqual(
+            tokenizer.decode(greedy_output[-1, 3:], skip_special_tokens=True),
+            tokenizer.decode(greedy_output_without_pad[0, :-3], skip_special_tokens=True),
+        )
 
 
 @require_torch
@@ -418,14 +425,6 @@ class BloomEmbeddingTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
         self.path_bigscience_model = "bigscience/bigscience-small-testing"
-
-    @require_torch
-    def test_load_transformers_model(self):
-        # TODO load the model (.bin file)
-        try:
-            _ = BloomForCausalLM.from_pretrained(self.path_bigscience_model)
-        except BaseException:
-            self.fail("Failed loading the model")
 
     @require_torch
     def test_embeddings(self):

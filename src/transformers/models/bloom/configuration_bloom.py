@@ -31,7 +31,7 @@ BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class BloomConfig(PretrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`BloomModel`]. It is used to instantiate a GPT-2
+    This is the configuration class to store the configuration of a [`BloomModel`]. It is used to instantiate a Bloom
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to the Bloom architecture
     [bigscience/bloom](https://huggingface.co/bigscience/bloom).
