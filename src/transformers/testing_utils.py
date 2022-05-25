@@ -70,6 +70,7 @@ from .utils import (
     is_torch_tf32_available,
     is_torch_tpu_available,
     is_torchaudio_available,
+    is_torchdynamo_available,
     is_vision_available,
 )
 
@@ -462,6 +463,11 @@ if is_flax_available():
     jax_device = jax.default_backend()
 else:
     jax_device = None
+
+
+def require_torchdynamo(test_case):
+    """Decorator marking a test that requires TorchDynamo"""
+    return unittest.skipUnless(is_torchdynamo_available(), "test requires TorchDynamo")(test_case)
 
 
 def require_torch_gpu(test_case):
