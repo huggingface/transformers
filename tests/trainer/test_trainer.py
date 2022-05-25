@@ -1595,14 +1595,15 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # perfect world: fp32_init/2 == fp16_eval
         self.assertAlmostEqual(fp16_eval, fp32_init / 2, delta=5_000)
 
-    @require_torch_gpu
+    @require_torch_non_multi_gpu
     @require_torchdynamo
     def test_torchdynamo_full_eval(self):
+        # torchdynamo at the moment doesn't support DP/DDP, therefore require a single gpu
         n_gpus = get_gpu_count()
 
         bs = 8
         eval_len = 16 * n_gpus
-        # make the params somewhat big so that there will be enough RAM consumed to be able to
+        # make the params are somewhat big so that there will be enough RAM consumed to be able to
         # measure things. We should get about 64KB for a+b in fp32
         a = torch.ones(1000, bs) + 0.001
         b = torch.ones(1000, bs) - 0.001
@@ -1624,9 +1625,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         metrics = trainer.evaluate()
         self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss)
 
-    @require_torch_gpu
+    @require_torch_non_multi_gpu
     @require_torchdynamo
     def test_torchdynamo_memory(self):
+        # torchdynamo at the moment doesn't support DP/DDP, therefore require a single gpu
         class CustomTrainer(Trainer):
             def compute_loss(self, model, inputs, return_outputs=False):
                 x = inputs["x"]
