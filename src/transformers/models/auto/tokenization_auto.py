@@ -474,6 +474,9 @@ class AutoTokenizer:
 
         >>> # If vocabulary files are in a directory (e.g. tokenizer was saved using *save_pretrained('./test/saved_model/')*)
         >>> tokenizer = AutoTokenizer.from_pretrained("./test/bert_saved_model/")
+
+        >>> # Download vocabulary from huggingface.co and define model-specific arguments
+        >>> tokenizer = AutoTokenizer.from_pretrained("roberta-base", add_prefix_space=True)
         ```"""
         config = kwargs.pop("config", None)
         kwargs["_from_auto"] = True
