@@ -24,8 +24,12 @@
   - local: create_a_model
     title: Crea una arquitectura personalizada
   - sections:
+  - local: sagemaker
+    title: Ejecutar el entrenamiento en Amazon SageMaker
     - local: language_modeling
       title: Modelado de lenguaje
+    - local: tasks/image_classification
+      title: Clasificación de imágenes
     title: Fine-tuning para tareas posteriores
   - local: multilingual
     title: Modelos multilingües para inferencia
