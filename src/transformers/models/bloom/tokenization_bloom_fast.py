@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tokenization classes for OpenAI GPT."""
+"""Tokenization classes for Bloom."""
 
 
 import json
@@ -66,7 +66,7 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
 
     ```
     >>> from transformers import BloomTokenizerFast
-    >>> tokenizer = BloomTokenizerFast.from_pretrained("bloom")
+    >>> tokenizer = BloomTokenizerFast.from_pretrained("bigscience/bloom")
     >>> tokenizer("Hello world")['input_ids']
     [15496, 995]
     >>> tokenizer(" Hello world")['input_ids']
