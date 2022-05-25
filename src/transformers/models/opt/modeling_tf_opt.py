@@ -332,12 +332,12 @@ class TFOPTDecoderLayer(tf.keras.layers.Layer):
         if not self.do_layer_norm_before:
             hidden_states = self.self_attn_layer_norm(hidden_states)
 
-        # 350m applies layer norm AFTER attention
+        # Fully Connected
+        residual = hidden_states
+        # 125m, 1.7B, ..., 175B applies layer norm BEFORE attention
         if self.do_layer_norm_before:
             hidden_states = self.final_layer_norm(hidden_states)
 
-        # Fully Connected
-        residual = hidden_states
         hidden_states = self.fc1(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
 

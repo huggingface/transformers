@@ -17,7 +17,7 @@ import numpy as np
 import timeout_decorator  # noqa
 
 from transformers import GPT2Tokenizer, OPTConfig, is_flax_available
-from transformers.testing_utils import require_flax, require_tokenizers, slow
+from transformers.testing_utils import require_flax, slow
 
 from ...generation.test_generation_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
@@ -411,4 +411,4 @@ class FlaxOPTGenerationTest(unittest.TestCase):
         ]
         self.assertListEqual(expected_output_sentence, batch_out_sentence)
         # TODO outputs will be similar, fix in next PR
-        # self.assertListEqual(batch_out_sentence, [non_padded_sentence, padded_sentence])
+        self.assertListEqual(batch_out_sentence, [non_padded_sentence, padded_sentence])
