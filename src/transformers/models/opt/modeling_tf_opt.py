@@ -487,7 +487,7 @@ class TFOPTDecoder(tf.keras.layers.Layer):
         num_embeddings = config.max_position_embeddings
 
         self.shared = TFSharedEmbeddings(
-            config.vocab_size, config.word_embed_proj_dim, config.pad_token_id, name="decoder.embed_tokens"
+            config.vocab_size, config.word_embed_proj_dim, config.pad_token_id, name="model.decoder.embed_tokens"
         )
 
         self.embed_positions = TFOPTLearnedPositionalEmbedding(
