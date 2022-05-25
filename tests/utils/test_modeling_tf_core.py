@@ -205,7 +205,7 @@ class TFCoreModelTesterMixin:
 
     @slow
     def test_mixed_precision(self):
-        tf.keras.mixed_precision.experimental.set_policy("mixed_float16")
+        tf.keras.mixed_precision.set_global_policy("mixed_float16")
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -216,7 +216,7 @@ class TFCoreModelTesterMixin:
 
             self.assertIsNotNone(outputs)
 
-        tf.keras.mixed_precision.experimental.set_policy("float32")
+        tf.keras.mixed_precision.set_global_policy("float32")
 
     @slow
     def test_train_pipeline_custom_model(self):

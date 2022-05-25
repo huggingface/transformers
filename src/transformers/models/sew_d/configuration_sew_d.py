@@ -66,8 +66,8 @@ class SEWDConfig(PretrainedConfig):
         position_biased_input (`bool`, *optional*, defaults to `False`):
             Whether to add absolute position embedding to content embedding.
         pos_att_type (`Tuple[str]`, *optional*, defaults to `("p2c", "c2p")`):
-            The type of relative position attention, it can be a combination of `("p2c", "c2p", "p2p")`, e.g.
-            `("p2c")`, `("p2c", "c2p")`, `("p2c", "c2p", 'p2p")`.
+            The type of relative position attention, it can be a combination of `("p2c", "c2p")`, e.g. `("p2c")`,
+            `("p2c", "c2p")`, `("p2c", "c2p")`.
         norm_rel_ebd (`str`, *optional*, defaults to `"layer_norm"`):
             Whether to use layer norm in relative embedding (`"layer_norm"` if yes)
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu_python"`):
@@ -94,13 +94,13 @@ class SEWDConfig(PretrainedConfig):
         feat_extract_activation (`str, `optional`, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the 1D convolutional layers of the feature
             extractor. If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        conv_dim (`Tuple[int]`, *optional*, defaults to `(64, 128, 128, 128, 128, 256, 256, 256, 256, 512, 512, 512, 512)`):
+        conv_dim (`Tuple[int]` or `List[int]`, *optional*, defaults to `(64, 128, 128, 128, 128, 256, 256, 256, 256, 512, 512, 512, 512)`):
             A tuple of integers defining the number of input and output channels of each 1D convolutional layer in the
             feature encoder. The length of *conv_dim* defines the number of 1D convolutional layers.
-        conv_stride (`Tuple[int]`, *optional*, defaults to `(5, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1)`):
+        conv_stride (`Tuple[int]` or `List[int]`, *optional*, defaults to `(5, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1)`):
             A tuple of integers defining the stride of each 1D convolutional layer in the feature encoder. The length
             of *conv_stride* defines the number of convolutional layers and has to match the the length of *conv_dim*.
-        conv_kernel (`Tuple[int]`, *optional*, defaults to `(10, 3, 1, 3, 1, 3, 1, 3, 1, 2, 1, 2, 1)`):
+        conv_kernel (`Tuple[int]` or `List[int]`, *optional*, defaults to `(10, 3, 1, 3, 1, 3, 1, 3, 1, 2, 1, 2, 1)`):
             A tuple of integers defining the kernel size of each 1D convolutional layer in the feature encoder. The
             length of *conv_kernel* defines the number of convolutional layers and has to match the the length of
             *conv_dim*.

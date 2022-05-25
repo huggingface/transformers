@@ -39,9 +39,6 @@ Run the docker:
 docker run --gpus all --privileged --rm -it --shm-size=1g --ulimit memlock=-1 --ulimit stack=67108864 bert_quantization:latest
 ```
 
-*Note that the current NGC pytorch container (pytorch:21.07-py3) has TensorRT 8.0 which doesn't meet the requiremnt of TensorRT >= 8.2. One can either update the Dockerfile with the latest [NGC pytorch container](https://catalog.ngc.nvidia.com/orgs/nvidia/containers/pytorch) once it supports TensorRT 8.2, or manually download and install [TensorRT >= 8.2](https://developer.nvidia.com/nvidia-tensorrt-download) in the container.*
-
-
 In the container:
 ```
 cd transformers/examples/research_projects/quantization-qdqbert/
@@ -102,6 +99,12 @@ Recalibrating will affect the accuracy of the model, but the change should be mi
 
 ```
 trtexec --onnx=model.onnx --explicitBatch --workspace=16384 --int8 --shapes=input_ids:64x128,attention_mask:64x128,token_type_ids:64x128 --verbose
+```
+
+### Benchmark the INT8 QAT ONNX model inference with [ONNX Runtime-TRT](https://onnxruntime.ai/docs/execution-providers/TensorRT-ExecutionProvider.html) using dummy input
+
+```
+python3 ort-infer-benchmark.py
 ```
 
 ### Evaluate the INT8 QAT ONNX model inference with TensorRT

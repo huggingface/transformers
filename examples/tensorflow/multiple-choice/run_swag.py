@@ -24,10 +24,9 @@ import sys
 from dataclasses import dataclass, field
 from itertools import chain
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 import datasets
-import numpy as np
 import tensorflow as tf
 from datasets import load_dataset
 
@@ -37,17 +36,19 @@ from transformers import (
     TF2_WEIGHTS_NAME,
     AutoConfig,
     AutoTokenizer,
+    DefaultDataCollator,
     HfArgumentParser,
     TFAutoModelForMultipleChoice,
     TFTrainingArguments,
     create_optimizer,
     set_seed,
 )
-from transformers.utils import check_min_version
+from transformers.tokenization_utils_base import PreTrainedTokenizerBase
+from transformers.utils import PaddingStrategy, check_min_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.17.0.dev0")
+check_min_version("4.20.0.dev0")
 
 logger = logging.getLogger(__name__)
 
@@ -65,51 +66,61 @@ class SavePretrainedCallback(tf.keras.callbacks.Callback):
         self.model.save_pretrained(self.output_dir)
 
 
-def convert_dataset_for_tensorflow(
-    dataset, non_label_column_names, batch_size, dataset_mode="variable_batch", shuffle=True, drop_remainder=True
-):
-    """Converts a Hugging Face dataset to a Tensorflow Dataset. The dataset_mode controls whether we pad all batches
-    to the maximum sequence length, or whether we only pad to the maximum length within that batch. The former
-    is most useful when training on TPU, as a new graph compilation is required for each sequence length.
+@dataclass
+class DataCollatorForMultipleChoice:
+    """
+    Data collator that will dynamically pad the inputs for multiple choice received.
+
+    Args:
+        tokenizer ([`PreTrainedTokenizer`] or [`PreTrainedTokenizerFast`]):
+            The tokenizer used for encoding the data.
+        padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
+            Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
+            among:
+
+            - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single sequence
+              if provided).
+            - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+              acceptable input length for the model if that argument is not provided.
+            - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+              lengths).
+        max_length (`int`, *optional*):
+            Maximum length of the returned list and optionally padding length (see above).
+        pad_to_multiple_of (`int`, *optional*):
+            If set will pad the sequence to a multiple of the provided value.
+
+            This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability >=
+            7.5 (Volta).
     """
 
-    def densify_ragged_batch(features, label=None):
-        features = {
-            feature: ragged_tensor.to_tensor(shape=batch_shape[feature]) for feature, ragged_tensor in features.items()
-        }
-        if label is None:
-            return features
-        else:
-            return features, label
+    tokenizer: PreTrainedTokenizerBase
+    padding: Union[bool, str, PaddingStrategy] = True
+    max_length: Optional[int] = None
+    pad_to_multiple_of: Optional[int] = None
 
-    feature_keys = list(set(dataset.features.keys()) - set(non_label_column_names + ["label"]))
-    if dataset_mode == "variable_batch":
-        batch_shape = {key: None for key in feature_keys}
-        data = {key: tf.ragged.constant(dataset[key]) for key in feature_keys}
-    elif dataset_mode == "constant_batch":
-        data = {key: tf.ragged.constant(dataset[key]) for key in feature_keys}
-        batch_shape = {
-            key: tf.concat(([batch_size], ragged_tensor.bounding_shape()[1:]), axis=0)
-            for key, ragged_tensor in data.items()
-        }
-    else:
-        raise ValueError("Unknown dataset mode!")
+    def __call__(self, features):
+        label_name = "label" if "label" in features[0].keys() else "labels"
+        labels = [feature.pop(label_name) for feature in features]
+        batch_size = len(features)
+        num_choices = len(features[0]["input_ids"])
+        flattened_features = [
+            [{k: v[i] for k, v in feature.items()} for i in range(num_choices)] for feature in features
+        ]
+        flattened_features = list(chain(*flattened_features))
 
-    if "label" in dataset.features:
-        labels = tf.convert_to_tensor(np.array(dataset["label"]))
-        tf_dataset = tf.data.Dataset.from_tensor_slices((data, labels))
-    else:
-        tf_dataset = tf.data.Dataset.from_tensor_slices(data)
-    if shuffle:
-        tf_dataset = tf_dataset.shuffle(buffer_size=len(dataset))
-    options = tf.data.Options()
-    options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
-    tf_dataset = (
-        tf_dataset.with_options(options)
-        .batch(batch_size=batch_size, drop_remainder=drop_remainder)
-        .map(densify_ragged_batch)
-    )
-    return tf_dataset
+        batch = self.tokenizer.pad(
+            flattened_features,
+            padding=self.padding,
+            max_length=self.max_length,
+            pad_to_multiple_of=self.pad_to_multiple_of,
+            return_tensors="tf",
+        )
+
+        # Un-flatten
+        batch = {k: tf.reshape(v, (batch_size, num_choices, -1)) for k, v in batch.items()}
+        # Add back labels
+        batch["labels"] = tf.convert_to_tensor(labels, dtype=tf.int64)
+        return batch
 
 
 # endregion
@@ -145,8 +156,10 @@ class ModelArguments:
     use_auth_token: bool = field(
         default=False,
         metadata={
-            "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
-            "with private models)."
+            "help": (
+                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "with private models)."
+            )
         },
     )
 
@@ -172,30 +185,38 @@ class DataTrainingArguments:
     max_seq_length: Optional[int] = field(
         default=None,
         metadata={
-            "help": "The maximum total input sequence length after tokenization. If passed, sequences longer "
-            "than this will be truncated, sequences shorter will be padded."
+            "help": (
+                "The maximum total input sequence length after tokenization. If passed, sequences longer "
+                "than this will be truncated, sequences shorter will be padded."
+            )
         },
     )
     pad_to_max_length: bool = field(
         default=False,
         metadata={
-            "help": "Whether to pad all samples to the maximum sentence length. "
-            "If False, will pad the samples dynamically when batching to the maximum length in the batch. More "
-            "efficient on GPU but very bad for TPU."
+            "help": (
+                "Whether to pad all samples to the maximum sentence length. "
+                "If False, will pad the samples dynamically when batching to the maximum length in the batch. More "
+                "efficient on GPU but very bad for TPU."
+            )
         },
     )
     max_train_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of training examples to this "
+                "value if set."
+            )
         },
     )
     max_eval_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
+                "value if set."
+            )
         },
     )
 
@@ -279,10 +300,20 @@ def main():
         if data_args.validation_file is not None:
             data_files["validation"] = data_args.validation_file
         extension = data_args.train_file.split(".")[-1]
-        raw_datasets = load_dataset(extension, data_files=data_files, cache_dir=model_args.cache_dir)
+        raw_datasets = load_dataset(
+            extension,
+            data_files=data_files,
+            cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
     else:
         # Downloading and loading the swag dataset from the hub.
-        raw_datasets = load_dataset("swag", "regular", cache_dir=model_args.cache_dir)
+        raw_datasets = load_dataset(
+            "swag",
+            "regular",
+            cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
@@ -358,7 +389,8 @@ def main():
         train_dataset = raw_datasets["train"]
         non_label_columns = [feature for feature in train_dataset.features if feature not in ("label", "labels")]
         if data_args.max_train_samples is not None:
-            train_dataset = train_dataset.select(range(data_args.max_train_samples))
+            max_train_samples = min(len(train_dataset), data_args.max_train_samples)
+            train_dataset = train_dataset.select(range(max_train_samples))
         with training_args.main_process_first(desc="train dataset map pre-processing"):
             train_dataset = train_dataset.map(
                 preprocess_function,
@@ -374,7 +406,8 @@ def main():
         if not training_args.do_train:
             non_label_columns = [feature for feature in eval_dataset.features if feature not in ("label", "labels")]
         if data_args.max_eval_samples is not None:
-            eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
+            max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
+            eval_dataset = eval_dataset.select(range(max_eval_samples))
         with training_args.main_process_first(desc="validation dataset map pre-processing"):
             eval_dataset = eval_dataset.map(
                 preprocess_function,
@@ -382,6 +415,12 @@ def main():
                 num_proc=data_args.preprocessing_num_workers,
                 load_from_cache_file=not data_args.overwrite_cache,
             )
+
+    if data_args.pad_to_max_length:
+        data_collator = DefaultDataCollator(return_tensors="tf")
+    else:
+        # custom class defined above, as HF has no data collator for multiple choice
+        data_collator = DataCollatorForMultipleChoice(tokenizer)
     # endregion
 
     with training_args.strategy.scope():
@@ -417,12 +456,26 @@ def main():
 
         # region Training
         if training_args.do_train:
-            tf_train_dataset = convert_dataset_for_tensorflow(
-                train_dataset, non_label_column_names=non_label_columns, batch_size=total_train_batch_size
+            dataset_exclude_cols = set(non_label_columns + ["label"])
+            tf_train_dataset = train_dataset.to_tf_dataset(
+                columns=[col for col in train_dataset.column_names if col not in dataset_exclude_cols],
+                shuffle=True,
+                batch_size=total_train_batch_size,
+                collate_fn=data_collator,
+                drop_remainder=True,
+                # `label_cols` is needed for user-defined losses, such as in this example
+                label_cols="label" if "label" in train_dataset.column_names else None,
             )
+
             if training_args.do_eval:
-                validation_data = convert_dataset_for_tensorflow(
-                    eval_dataset, non_label_column_names=non_label_columns, batch_size=total_eval_batch_size
+                validation_data = eval_dataset.to_tf_dataset(
+                    columns=[col for col in eval_dataset.column_names if col not in dataset_exclude_cols],
+                    shuffle=False,
+                    batch_size=total_eval_batch_size,
+                    collate_fn=data_collator,
+                    drop_remainder=True,
+                    # `label_cols` is needed for user-defined losses, such as in this example
+                    label_cols="label" if "label" in eval_dataset.column_names else None,
                 )
             else:
                 validation_data = None
@@ -436,9 +489,16 @@ def main():
 
         # region Evaluation
         if training_args.do_eval and not training_args.do_train:
+            dataset_exclude_cols = set(non_label_columns + ["label"])
             # Do a standalone evaluation pass
-            tf_eval_dataset = convert_dataset_for_tensorflow(
-                eval_dataset, non_label_column_names=non_label_columns, batch_size=total_eval_batch_size
+            tf_eval_dataset = eval_dataset.to_tf_dataset(
+                columns=[col for col in eval_dataset.column_names if col not in dataset_exclude_cols],
+                shuffle=False,
+                batch_size=total_eval_batch_size,
+                collate_fn=data_collator,
+                drop_remainder=True,
+                # `label_cols` is needed for user-defined losses, such as in this example
+                label_cols="label" if "label" in eval_dataset.column_names else None,
             )
             model.evaluate(tf_eval_dataset)
         # endregion

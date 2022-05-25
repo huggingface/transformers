@@ -169,12 +169,15 @@ class OriginalMaskFormerConfigToFeatureExtractorConverter:
     def __call__(self, original_config: object) -> MaskFormerFeatureExtractor:
         model = original_config.MODEL
         model_input = original_config.INPUT
+        dataset_catalog = MetadataCatalog.get(original_config.DATASETS.TEST[0])
 
         return MaskFormerFeatureExtractor(
             image_mean=(torch.tensor(model.PIXEL_MEAN) / 255).tolist(),
             image_std=(torch.tensor(model.PIXEL_STD) / 255).tolist(),
             size=model_input.MIN_SIZE_TEST,
             max_size=model_input.MAX_SIZE_TEST,
+            num_labels=model.SEM_SEG_HEAD.NUM_CLASSES,
+            ignore_index=dataset_catalog.ignore_label,
             size_divisibility=32,  # 32 is required by swin
         )
 
@@ -185,7 +188,7 @@ class OriginalMaskFormerCheckpointToOursConverter:
         self.config = config
 
     def pop_all(self, renamed_keys: List[Tuple[str, str]], dst_state_dict: StateDict, src_state_dict: StateDict):
-        for (src_key, dst_key) in renamed_keys:
+        for src_key, dst_key in renamed_keys:
             dst_state_dict[dst_key] = src_state_dict.pop(src_key)
 
     def replace_backbone(self, dst_state_dict: StateDict, src_state_dict: StateDict, config: MaskFormerConfig):
@@ -552,7 +555,7 @@ class OriginalMaskFormerCheckpointToOursConverter:
             yield config, checkpoint
 
 
-def test(original_model, our_model: MaskFormerForInstanceSegmentation):
+def test(original_model, our_model: MaskFormerForInstanceSegmentation, feature_extractor: MaskFormerFeatureExtractor):
     with torch.no_grad():
 
         original_model = original_model.eval()
@@ -600,8 +603,6 @@ def test(original_model, our_model: MaskFormerForInstanceSegmentation):
 
         our_model_out: MaskFormerForInstanceSegmentationOutput = our_model(x)
 
-        feature_extractor = MaskFormerFeatureExtractor()
-
         our_segmentation = feature_extractor.post_process_segmentation(our_model_out, target_size=(384, 384))
 
         assert torch.allclose(
@@ -642,12 +643,18 @@ if __name__ == "__main__":
     parser.add_argument(
         "--checkpoints_dir",
         type=Path,
-        help="A directory containing the model's checkpoints. The directory has to have the following structure: <DIR_NAME>/<DATASET_NAME>/<CONFIG_NAME>.pkl",
+        help=(
+            "A directory containing the model's checkpoints. The directory has to have the following structure:"
+            " <DIR_NAME>/<DATASET_NAME>/<CONFIG_NAME>.pkl"
+        ),
     )
     parser.add_argument(
         "--configs_dir",
         type=Path,
-        help="A directory containing the model's configs, see detectron2 doc. The directory has to have the following structure: <DIR_NAME>/<DATASET_NAME>/<CONFIG_NAME>.yaml",
+        help=(
+            "A directory containing the model's configs, see detectron2 doc. The directory has to have the following"
+            " structure: <DIR_NAME>/<DATASET_NAME>/<CONFIG_NAME>.yaml"
+        ),
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",
@@ -659,7 +666,10 @@ if __name__ == "__main__":
         "--maskformer_dir",
         required=True,
         type=Path,
-        help="A path to MaskFormer's original implementation directory. You can download from here: https://github.com/facebookresearch/MaskFormer",
+        help=(
+            "A path to MaskFormer's original implementation directory. You can download from here:"
+            " https://github.com/facebookresearch/MaskFormer"
+        ),
     )
 
     args = parser.parse_args()
@@ -707,7 +717,7 @@ if __name__ == "__main__":
             mask_former_for_instance_segmentation
         )
 
-        test(original_model, mask_former_for_instance_segmentation)
+        test(original_model, mask_former_for_instance_segmentation, feature_extractor)
 
         model_name = get_name(checkpoint_file)
         logger.info(f"🪄 Saving {model_name}")

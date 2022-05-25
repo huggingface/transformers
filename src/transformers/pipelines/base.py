@@ -30,11 +30,10 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 from packaging import version
 
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
-from ..file_utils import ModelOutput, add_end_docstrings, is_tf_available, is_torch_available
 from ..modelcard import ModelCard
 from ..models.auto.configuration_auto import AutoConfig
 from ..tokenization_utils import PreTrainedTokenizer
-from ..utils import logging
+from ..utils import ModelOutput, add_end_docstrings, is_tf_available, is_torch_available, logging
 
 
 GenericTensor = Union[List["GenericTensor"], "torch.Tensor", "tf.Tensor"]
@@ -76,14 +75,19 @@ def _pad(items, key, padding_value, padding_side):
         # Others include `attention_mask` etc...
         shape = items[0][key].shape
         dim = len(shape)
-        if dim == 4:
+        if key == "pixel_values":
             # This is probable image so padding shouldn't be necessary
             # B, C, H, W
             return torch.cat([item[key] for item in items], dim=0)
         max_length = max(item[key].shape[1] for item in items)
+        min_length = min(item[key].shape[1] for item in items)
         dtype = items[0][key].dtype
 
         if dim == 2:
+            if max_length == min_length:
+                # Bypass for `ImageGPT` which doesn't provide a padding value, yet
+                # we can consistently pad since the size should be matching
+                return torch.cat([item[key] for item in items], dim=0)
             tensor = torch.zeros((batch_size, max_length), dtype=dtype) + padding_value
         elif dim == 3:
             tensor = torch.zeros((batch_size, max_length, shape[-1]), dtype=dtype) + padding_value
@@ -140,16 +144,21 @@ def pad_collate_fn(tokenizer, feature_extractor):
         for item in items:
             if set(item.keys()) != keys:
                 raise ValueError(
-                    f"The elements of the batch contain different keys. Cannot batch them ({set(item.keys())} != {keys})"
+                    f"The elements of the batch contain different keys. Cannot batch them ({set(item.keys())} !="
+                    f" {keys})"
                 )
         # input_values, input_pixels, input_ids, ...
         padded = {}
         for key in keys:
             if key in {"input_ids"}:
-                _padding_value = t_padding_value
+                # ImageGPT uses a feature extractor
+                if feature_extractor is not None:
+                    _padding_value = f_padding_value
+                else:
+                    _padding_value = t_padding_value
             elif key in {"input_values", "pixel_values", "input_features"}:
                 _padding_value = f_padding_value
-            elif key in {"p_mask"}:
+            elif key in {"p_mask", "special_tokens_mask"}:
                 _padding_value = 1
             elif key in {"attention_mask", "token_type_ids"}:
                 _padding_value = 0
@@ -693,7 +702,7 @@ PIPELINE_INIT_ARGS = r"""
             Reference to the object in charge of parsing supplied pipeline parameters.
         device (`int`, *optional*, defaults to -1):
             Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the model on
-            the associated CUDA device id.
+            the associated CUDA device id. You can pass native `torch.device` too.
         binary_output (`bool`, *optional*, defaults to `False`):
             Flag indicating if the output the pipeline should happen in a binary format (i.e., pickle) or as raw text.
 """
@@ -750,7 +759,10 @@ class Pipeline(_ScikitCompat):
         self.feature_extractor = feature_extractor
         self.modelcard = modelcard
         self.framework = framework
-        self.device = device if framework == "tf" else torch.device("cpu" if device < 0 else f"cuda:{device}")
+        if is_torch_available() and isinstance(device, torch.device):
+            self.device = device
+        else:
+            self.device = device if framework == "tf" else torch.device("cpu" if device < 0 else f"cuda:{device}")
         self.binary_output = binary_output
 
         # Special handling
@@ -880,7 +892,8 @@ class Pipeline(_ScikitCompat):
             supported_models = supported_models_names
         if self.model.__class__.__name__ not in supported_models:
             logger.error(
-                f"The model '{self.model.__class__.__name__}' is not supported for {self.task}. Supported models are {supported_models}."
+                f"The model '{self.model.__class__.__name__}' is not supported for {self.task}. Supported models are"
+                f" {supported_models}."
             )
 
     @abstractmethod
@@ -995,7 +1008,8 @@ class Pipeline(_ScikitCompat):
         self.call_count += 1
         if self.call_count > 10 and self.framework == "pt" and self.device.type == "cuda":
             warnings.warn(
-                "You seem to be using the pipelines sequentially on GPU. In order to maximize efficiency please use a dataset",
+                "You seem to be using the pipelines sequentially on GPU. In order to maximize efficiency please use a"
+                " dataset",
                 UserWarning,
             )
 
@@ -1059,7 +1073,8 @@ class ChunkPipeline(Pipeline):
             os.environ["TOKENIZERS_PARALLELISM"] = "false"
         if num_workers > 1:
             logger.warning(
-                "For ChunkPipeline using num_workers>0 is likely to result in errors since everything is iterable, setting `num_workers=1` to guarantee correctness."
+                "For ChunkPipeline using num_workers>0 is likely to result in errors since everything is iterable,"
+                " setting `num_workers=1` to guarantee correctness."
             )
             num_workers = 1
         dataset = PipelineChunkIterator(inputs, self.preprocess, preprocess_params)

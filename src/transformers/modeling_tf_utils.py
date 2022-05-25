@@ -21,6 +21,7 @@ import os
 import pickle
 import re
 import warnings
+from collections.abc import Mapping
 from typing import Dict, List, Optional, Union
 
 import h5py
@@ -37,8 +38,11 @@ from requests import HTTPError
 from .activations_tf import get_tf_activation
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
-from .file_utils import (
+from .generation_tf_utils import TFGenerationMixin
+from .tf_utils import shape_list
+from .utils import (
     DUMMY_INPUTS,
+    HUGGINGFACE_CO_RESOLVE_ENDPOINT,
     TF2_WEIGHTS_NAME,
     WEIGHTS_NAME,
     EntryNotFoundError,
@@ -48,16 +52,13 @@ from .file_utils import (
     RevisionNotFoundError,
     cached_path,
     copy_func,
+    find_labels,
     has_file,
     hf_bucket_url,
     is_offline_mode,
     is_remote_url,
+    logging,
 )
-from .generation_tf_utils import TFGenerationMixin
-from .modeling_tf_outputs import TFSeq2SeqLMOutput
-from .tf_utils import shape_list
-from .tokenization_utils_base import BatchEncoding
-from .utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -311,10 +312,12 @@ def booleans_processing(config, **kwargs):
     final_booleans = {}
 
     if tf.executing_eagerly():
-        # Pure conv models (such as ConvNext) do not have `output_attentions`
-        final_booleans["output_attentions"] = kwargs.get("output_attentions", None)
-        if final_booleans["output_attentions"] is None:
-            final_booleans["output_attentions"] = config.output_attentions
+        # Pure conv models (such as ConvNext) do not have `output_attentions`. If the signature has
+        # `output_attentions`, it will be present here in `kwargs`, even if unset (in that case, as `None`)
+        if "output_attentions" in kwargs:
+            final_booleans["output_attentions"] = (
+                kwargs["output_attentions"] if kwargs["output_attentions"] is not None else config.output_attentions
+            )
         final_booleans["output_hidden_states"] = (
             kwargs["output_hidden_states"]
             if kwargs["output_hidden_states"] is not None
@@ -329,7 +332,10 @@ def booleans_processing(config, **kwargs):
                 kwargs["use_cache"] if kwargs["use_cache"] is not None else getattr(config, "use_cache", None)
             )
     else:
-        final_booleans["output_attentions"] = config.output_attentions
+        # Pure conv models (such as ConvNext) do not have `output_attentions`. If the signature has
+        # `output_attentions`, it will be present here in `kwargs`, even if unset (in that case, as `None`)
+        if "output_attentions" in kwargs:
+            final_booleans["output_attentions"] = config.output_attentions
         final_booleans["output_hidden_states"] = config.output_hidden_states
 
         if kwargs.get("return_dict", None) not in (None, True):
@@ -342,6 +348,46 @@ def booleans_processing(config, **kwargs):
             final_booleans["use_cache"] = getattr(config, "use_cache", None)
 
     return final_booleans
+
+
+def unpack_inputs(func):
+    """
+    Decorator that processes the inputs to a Keras layer, passing them to the layer as keyword arguments. This enables
+    downstream use of the inputs by their variable name, even if they arrive packed as a dictionary in the first input
+    (common case in Keras).
+
+    Args:
+        func (`callable`):
+            The callable function of the TensorFlow model.
+
+    Returns:
+        A callable that wraps the original `func` with the behavior described above.
+    """
+
+    original_signature = inspect.signature(func)
+
+    @functools.wraps(func)
+    def run_call_with_unpacked_inputs(self, *args, **kwargs):
+        # isolates the actual `**kwargs` for the decorated function
+        kwargs_call = {key: val for key, val in kwargs.items() if key not in dict(original_signature.parameters)}
+        fn_args_and_kwargs = {key: val for key, val in kwargs.items() if key not in kwargs_call}
+        fn_args_and_kwargs.update({"kwargs_call": kwargs_call})
+
+        # move any arg into kwargs, if they exist
+        fn_args_and_kwargs.update(dict(zip(func.__code__.co_varnames[1:], args)))
+
+        # process the inputs and call the wrapped function
+        main_input_name = getattr(self, "main_input_name", func.__code__.co_varnames[1])
+        main_input = fn_args_and_kwargs.pop(main_input_name, None)
+        unpacked_inputs = input_processing(func, self.config, main_input, **fn_args_and_kwargs)
+        return func(self, **unpacked_inputs)
+
+    # Keras enforces the first layer argument to be passed, and checks it through `inspect.getfullargspec()`. This
+    # function does not follow wrapper chains (i.e. ignores `functools.wraps()`), meaning that without the line below
+    # Keras would attempt to check the first argument against the literal signature of the wrapper.
+    run_call_with_unpacked_inputs.__signature__ = original_signature
+
+    return run_call_with_unpacked_inputs
 
 
 def input_processing(func, config, input_ids, **kwargs):
@@ -362,7 +408,7 @@ def input_processing(func, config, input_ids, **kwargs):
         Two lists, one for the missing layers, and another one for the unexpected layers.
     """
     signature = dict(inspect.signature(func).parameters)
-    signature.pop("kwargs", None)
+    has_kwargs = bool(signature.pop("kwargs", None))
     signature.pop("self", None)
     parameter_names = list(signature.keys())
     output = {}
@@ -378,26 +424,31 @@ def input_processing(func, config, input_ids, **kwargs):
 
     if "decoder_cached_states" in kwargs["kwargs_call"]:
         warnings.warn(
-            "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
+            "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use"
+            " `past_key_values` instead.",
             FutureWarning,
         )
         output["past_key_values"] = kwargs["kwargs_call"].pop("decoder_cached_states")
 
-    if "past" in kwargs["kwargs_call"] and "past_key_values" in kwargs:
+    if "past" in kwargs["kwargs_call"] and "past_key_values" in parameter_names:
         warnings.warn(
-            "The `past` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
+            "The `past` argument is deprecated and will be removed in a future version, use `past_key_values`"
+            " instead.",
             FutureWarning,
         )
         kwargs["past_key_values"] = kwargs["kwargs_call"].pop("past")
-    elif "past_key_values" in kwargs["kwargs_call"] and "past" in kwargs:
+    elif "past_key_values" in kwargs["kwargs_call"] and "past" in parameter_names:
         kwargs["past"] = kwargs["kwargs_call"].pop("past_key_values")
 
-    if len(kwargs["kwargs_call"]) > 0:
-        raise ValueError(
-            f"The following keyword arguments are not supported by this model: {list(kwargs['kwargs_call'].keys())}."
-        )
-
-    kwargs.pop("kwargs_call")
+    if has_kwargs:
+        output["kwargs"] = kwargs.pop("kwargs_call", {})
+    else:
+        if len(kwargs["kwargs_call"]) > 0:
+            raise ValueError(
+                "The following keyword arguments are not supported by this model:"
+                f" {list(kwargs['kwargs_call'].keys())}."
+            )
+        kwargs.pop("kwargs_call")
 
     for k, v in kwargs.items():
         if isinstance(v, allowed_types) or v is None:
@@ -421,12 +472,14 @@ def input_processing(func, config, input_ids, **kwargs):
                 output[parameter_names[i]] = input
             else:
                 raise ValueError(
-                    f"Data of type {type(input)} is not allowed only {allowed_types} is accepted for {parameter_names[i]}."
+                    f"Data of type {type(input)} is not allowed only {allowed_types} is accepted for"
+                    f" {parameter_names[i]}."
                 )
-    elif isinstance(input_ids, (dict, BatchEncoding)):
+    elif isinstance(input_ids, Mapping):
         if "inputs" in input_ids:
             warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids`"
+                " instead.",
                 FutureWarning,
             )
 
@@ -434,7 +487,8 @@ def input_processing(func, config, input_ids, **kwargs):
 
         if "decoder_cached_states" in input_ids:
             warnings.warn(
-                "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
+                "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use"
+                " `past_key_values` instead.",
                 FutureWarning,
             )
             output["past_key_values"] = input_ids.pop("decoder_cached_states")
@@ -454,9 +508,11 @@ def input_processing(func, config, input_ids, **kwargs):
             output[parameter_names[0]] = input_ids
         else:
             raise ValueError(
-                f"Data of type {type(input_ids)} is not allowed only {allowed_types} is accepted for {parameter_names[0]}."
+                f"Data of type {type(input_ids)} is not allowed only {allowed_types} is accepted for"
+                f" {parameter_names[0]}."
             )
 
+    # Populates any unspecified argument with their default value, according to the signature.
     for name in parameter_names:
         if name not in list(output.keys()) and name != "args":
             output[name] = kwargs.pop(name, signature[name].default)
@@ -666,6 +722,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
     base_model_prefix = ""
     main_input_name = "input_ids"
     _auto_class = None
+    _using_dummy_loss = None
+    _label_to_output_map = None
 
     # a list of re pattern of tensor names to ignore from the model when loading the model weights
     # (and avoid unnecessary warnings).
@@ -853,21 +911,37 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             logger.warning(
                 "No loss specified in compile() - the model's internal loss computation will be used as the "
                 "loss. Don't panic - this is a common way to train TensorFlow models in Transformers! "
-                "Please ensure your labels are passed as keys in the input dict so that they are "
-                "accessible to the model during the forward pass. To disable this behaviour, please pass a "
-                "loss argument, or explicitly pass loss=None if you do not want your model to compute a loss."
+                "To disable this behaviour please pass a loss argument, or explicitly pass "
+                "`loss=None` if you do not want your model to compute a loss."
             )
-            loss = {"loss": dummy_loss}
-        super().compile(
-            optimizer=optimizer,
-            loss=loss,
-            metrics=metrics,
-            loss_weights=loss_weights,
-            weighted_metrics=weighted_metrics,
-            run_eagerly=run_eagerly,
-            steps_per_execution=steps_per_execution,
-            **kwargs,
-        )
+            loss = dummy_loss
+            self._using_dummy_loss = True
+        else:
+            self._using_dummy_loss = False
+        parent_args = list(inspect.signature(tf.keras.Model.compile).parameters.keys())
+        # This argument got renamed, we need to support both versions
+        if "steps_per_execution" in parent_args:
+            super().compile(
+                optimizer=optimizer,
+                loss=loss,
+                metrics=metrics,
+                loss_weights=loss_weights,
+                weighted_metrics=weighted_metrics,
+                run_eagerly=run_eagerly,
+                steps_per_execution=steps_per_execution,
+                **kwargs,
+            )
+        else:
+            super().compile(
+                optimizer=optimizer,
+                loss=loss,
+                metrics=metrics,
+                loss_weights=loss_weights,
+                weighted_metrics=weighted_metrics,
+                run_eagerly=run_eagerly,
+                experimental_steps_per_execution=steps_per_execution,
+                **kwargs,
+            )
 
     def compute_loss(self, *args, **kwargs):
         if hasattr(tf.keras.Model, "compute_loss"):
@@ -883,42 +957,108 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             )
             return self.hf_compute_loss(*args, **kwargs)
 
+    def get_label_to_output_name_mapping(self):
+        arg_names = list(dict(inspect.signature(self.call).parameters).keys())
+        if self._label_to_output_map is not None:
+            return self._label_to_output_map
+        elif "start_positions" in arg_names:
+            return {"start_positions": "start_logits", "end_positions": "end_logits"}
+        elif "sentence_order_label" in arg_names:
+            return {"labels": "prediction_logits", "sentence_order_label": "sop_logits"}
+        elif "next_sentence_label" in arg_names:
+            return {"labels": "prediction_logits", "next_sentence_label": "seq_relationship_logits"}
+        elif "mc_labels" in arg_names:
+            return {"labels": "logits", "mc_labels": "mc_logits"}
+        else:
+            return dict()
+
     def train_step(self, data):
         """
-        A modification of Keras's default `train_step` that cleans up the printed metrics when we use a dummy loss. If
-        a user specifies a loss at model compile time, this function behaves as the original Keras `train_step`. In
-        this case, it expects the same `data` as the original function (i.e. `(inputs, labels)`).
-
-        However, when the model is compiled without specifying the loss AND the expected label columns are passed as
-        part of the input dictionary, the loss is computed internally (inside the model class) and is used in the
-        backwards pass. In this case, `data` is a singleton tuple containing `(inputs,)`.
-
-        This is possible under the aforementioned circumstances because our overriden compile function can set an
-        additional loss function that reduces a `loss` output, and the model will output a `loss` component (notice the
-        name matching) containing the loss that was used to train the pre-trained model.
+        A modification of Keras's default `train_step` that correctly handles matching outputs to labels for our models
+        and supports directly training on the loss output head. In addition, it ensures input keys are copied to the
+        labels where appropriate. It will also copy label keys into the input dict when using the dummy loss, to ensure
+        that they are available to the model during the forward pass.
         """
-        # These are the only transformations `Model.fit` applies to user-input
-        # data when a `tf.data.Dataset` is provided.
-        data = data_adapter.expand_1d(data)
+
+        # We hardcode the most common renamings; models with weirder names can set `self._label_to_output_map`
+        arg_names = list(dict(inspect.signature(self.call).parameters).keys())
+        label_kwargs = find_labels(self.__class__)
+        label_to_output = self.get_label_to_output_name_mapping()
+        output_to_label = {val: key for key, val in label_to_output.items()}
+        if not self._using_dummy_loss:
+            data = data_adapter.expand_1d(data)
         x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
-        # These next two lines differ from the base method - they avoid issues when the labels are in
-        # the input dict (and loss is computed internally)
-        if y is None and "labels" in x:
-            y = x["labels"]  # Stops confusion with metric computations
-        elif y is None and "input_ids" in x:
-            # Just make any kind of dummy array to make loss work
-            y = tf.zeros(tf.shape(x["input_ids"])[0], dtype=tf.int64)
+
+        # When using a dummy loss, we ensure that separate labels are copied to the correct model arguments,
+        # if those keys are not already present in the input dict
+        if self._using_dummy_loss and y is not None:
+
+            # If y is a tensor and the model only has one label-like input, map y to that input
+            if len(label_kwargs) == 1 and isinstance(y, tf.Tensor):
+                if isinstance(x, tf.Tensor):
+                    x = {arg_names[0]: x}
+                label_kwarg = next(iter(label_kwargs))
+                if label_kwarg not in x:
+                    x[label_kwarg] = y
+            # Otherwise, copy keys from y to x as long as they weren't already present in x
+            elif isinstance(y, dict):
+                if isinstance(x, tf.Tensor):
+                    x = {arg_names[0]: x}
+                for key, val in y.items():
+                    if key in arg_names and key not in x:
+                        x[key] = val
+                    elif output_to_label.get(key, None) in arg_names and key not in x:
+                        x[output_to_label[key]] = val
+        if y is None:
+            y = {key: val for key, val in x.items() if key in label_kwargs}
+            if not y and not self._using_dummy_loss:
+                raise ValueError("Could not find label column(s) in input dict and no separate labels were provided!")
+
+        if isinstance(y, dict):
+            # Rename labels at this point to match output heads
+            y = {label_to_output.get(key, key): val for key, val in y.items()}
+
         # Run forward pass.
         with tf.GradientTape() as tape:
             y_pred = self(x, training=True)
-            loss = self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
+            if self._using_dummy_loss:
+                loss = self.compiled_loss(y_pred.loss, y_pred.loss, sample_weight, regularization_losses=self.losses)
+            else:
+                loss = None
+
+            # This next block matches outputs to label keys. Tensorflow's standard method for doing this
+            # can get very confused if any of the keys contain nested values (e.g. lists/tuples of Tensors)
+            if isinstance(y, dict) and len(y) == 1:
+                if list(y.keys())[0] in y_pred.keys():
+                    y_pred = y_pred[list(y.keys())[0]]
+                elif list(y_pred.keys())[0] == "loss":
+                    y_pred = y_pred[1]
+                else:
+                    y_pred = y_pred[0]
+                _, y = y.popitem()
+            elif isinstance(y, dict):
+                # If the labels are a dict, match keys from the output by name
+                y_pred = {key: val for key, val in y_pred.items() if key in y}
+            elif isinstance(y, tuple) or isinstance(y, list):
+                # If the labels are a tuple/list, match keys to the output by order, skipping the loss.
+                if list(y_pred.keys())[0] == "loss":
+                    y_pred = y_pred.to_tuple()[1:]
+                else:
+                    y_pred = y_pred.to_tuple()
+                y_pred = y_pred[: len(y)]  # Remove unused fields in case those cause problems
+            else:
+                # If the labels are a single tensor, match them to the first non-loss tensor in the output
+                if list(y_pred.keys())[0] == "loss":
+                    y_pred = y_pred[1]
+                else:
+                    y_pred = y_pred[0]
+
+            if loss is None:
+                loss = self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
+
         # Run backwards pass.
         self.optimizer.minimize(loss, self.trainable_variables, tape=tape)
-        # When y_pred is a ModelOutput and y is a tf.Tensor the metrics update
-        # should be done only with the relevant ModelOutput param that is
-        # considered by the loss.
-        if isinstance(y_pred, TFSeq2SeqLMOutput) and isinstance(y, tf.Tensor):
-            y_pred = y_pred["logits"]
+
         self.compiled_metrics.update_state(y, y_pred, sample_weight)
         # Collect metrics to return
         return_metrics = {}
@@ -928,30 +1068,90 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 return_metrics.update(result)
             else:
                 return_metrics[metric.name] = result
-        # These next two lines are also not in the base method - they correct the displayed metrics
-        # when we're using a dummy loss, to avoid a bogus "loss_loss" value being shown.
-        if "loss" in return_metrics and "loss_loss" in return_metrics:
-            del return_metrics["loss_loss"]
         return return_metrics
 
     def test_step(self, data):
         """
-        A modification of Keras's default test_step that cleans up the printed metrics when we use a dummy loss.
+        A modification of Keras's default `train_step` that correctly handles matching outputs to labels for our models
+        and supports directly training on the loss output head. In addition, it ensures input keys are copied to the
+        labels where appropriate. It will also copy label keys into the input dict when using the dummy loss, to ensure
+        that they are available to the model during the forward pass.
         """
-        data = data_adapter.expand_1d(data)
+        # We hardcode the most common renamings; models with weirder names can set `self._label_to_output_map`
+        arg_names = list(dict(inspect.signature(self.call).parameters).keys())
+        label_kwargs = find_labels(self.__class__)
+        label_to_output = self.get_label_to_output_name_mapping()
+        output_to_label = {val: key for key, val in label_to_output.items()}
+        if not self._using_dummy_loss:
+            data = data_adapter.expand_1d(data)
         x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
-        # These next two lines differ from the base method - they avoid issues when the labels are in
-        # the input dict (and loss is computed internally)
-        if y is None and "labels" in x:
-            y = x["labels"]  # Stops confusion with metric computations
-        elif y is None and "input_ids" in x:
-            # Just make any kind of dummy array to make loss work
-            y = tf.zeros(tf.shape(x["input_ids"])[0], dtype=tf.int64)
+
+        # When using a dummy loss, we ensure that separate labels are copied to the correct model arguments,
+        # if those keys are not already present in the input dict
+        if self._using_dummy_loss and y is not None:
+            arg_names = list(dict(inspect.signature(self.call).parameters).keys())
+            # If y is a tensor and the model only has one label-like input, map y to that input
+            if len(label_kwargs) == 1 and isinstance(y, tf.Tensor):
+                if isinstance(x, tf.Tensor):
+                    x = {arg_names[0]: x}
+                label_kwarg = next(iter(label_kwargs))
+                if label_kwarg not in x:
+                    x[label_kwarg] = y
+            # Otherwise, copy keys from y to x as long as they weren't already present in x
+            elif isinstance(y, dict):
+                if isinstance(x, tf.Tensor):
+                    x = {arg_names[0]: x}
+                for key, val in y.items():
+                    if key in arg_names and key not in x:
+                        x[key] = val
+                    elif output_to_label.get(key, None) in arg_names and key not in x:
+                        x[output_to_label[key]] = val
+        if y is None:
+            y = {key: val for key, val in x.items() if key in label_kwargs}
+            if not y and not self._using_dummy_loss:
+                raise ValueError("Could not find label column(s) in input dict and no separate labels were provided!")
+
+        if isinstance(y, dict):
+            # Rename labels at this point to match output heads
+            y = {label_to_output.get(key, key): val for key, val in y.items()}
+
+        # Run forward pass.
         y_pred = self(x, training=False)
-        self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
-        # Updates stateful loss metrics.
-        if isinstance(y_pred, TFSeq2SeqLMOutput) and isinstance(y, tf.Tensor):
-            y_pred = y_pred["logits"]
+        if self._using_dummy_loss:
+            loss = self.compiled_loss(y_pred.loss, y_pred.loss, sample_weight, regularization_losses=self.losses)
+        else:
+            loss = None
+
+        # This next block matches outputs to label keys. Tensorflow's standard method for doing this
+        # can get very confused if any of the keys contain nested values (e.g. lists/tuples of Tensors)
+        if isinstance(y, dict) and len(y) == 1:
+            if list(y.keys())[0] in y_pred.keys():
+                y_pred = y_pred[list(y.keys())[0]]
+            elif list(y_pred.keys())[0] == "loss":
+                y_pred = y_pred[1]
+            else:
+                y_pred = y_pred[0]
+            _, y = y.popitem()
+        elif isinstance(y, dict):
+            # If the labels are a dict, match keys from the output by name
+            y_pred = {key: val for key, val in y_pred.items() if key in y}
+        elif isinstance(y, tuple) or isinstance(y, list):
+            # If the labels are a tuple/list, match keys to the output by order, skipping the loss.
+            if list(y_pred.keys())[0] == "loss":
+                y_pred = y_pred.to_tuple()[1:]
+            else:
+                y_pred = y_pred.to_tuple()
+            y_pred = y_pred[: len(y)]  # Remove unused fields in case those cause problems
+        else:
+            # If the labels are a single tensor, match them to the first non-loss tensor in the output
+            if list(y_pred.keys())[0] == "loss":
+                y_pred = y_pred[1]
+            else:
+                y_pred = y_pred[0]
+
+        if loss is None:
+            loss = self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
+
         self.compiled_metrics.update_state(y, y_pred, sample_weight)
         # Collect metrics to return
         return_metrics = {}
@@ -961,10 +1161,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 return_metrics.update(result)
             else:
                 return_metrics[metric.name] = result
-        # These next two lines are also not in the base method - they correct the displayed metrics
-        # when we're using a dummy loss, to avoid a bogus "loss_loss" value being shown.
-        if "loss" in return_metrics and "loss_loss" in return_metrics:
-            del return_metrics["loss_loss"]
         return return_metrics
 
     def create_model_card(
@@ -1360,7 +1556,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 </Tip>
 
             kwargs:
-                Additional key word arguments passed along to the [`~file_utils.PushToHubMixin.push_to_hub`] method.
+                Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
@@ -1466,11 +1662,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             use_auth_token (`str` or *bool*, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
                 when running `transformers-cli login` (stored in `~/.huggingface`).
-            revision(`str`, *optional*, defaults to `"main"`):
+            revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
-            mirror(`str`, *optional*):
+            mirror (`str`, *optional*):
                 Mirror source to accelerate downloads in China. If you are from China and have an accessibility
                 problem, you can set this option to resolve it. Note that we do not guarantee the timeliness or safety.
                 Please refer to the mirror site for more information.
@@ -1637,13 +1833,18 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     raise EnvironmentError(
                         f"{pretrained_model_name_or_path} does not appear to have a file named {filename}."
                     )
-            except HTTPError:
+            except HTTPError as err:
                 raise EnvironmentError(
-                    "We couldn't connect to 'https://huggingface.co/' to load this model and it looks like "
-                    f"{pretrained_model_name_or_path} is not the path to a directory conaining a a file named "
-                    f"{TF2_WEIGHTS_NAME} or {WEIGHTS_NAME}.\n"
-                    "Checkout your internet connection or see how to run the library in offline mode at "
-                    "'https://huggingface.co/docs/transformers/installation#offline-mode'."
+                    f"There was a specific connection error when trying to load {pretrained_model_name_or_path}:\n"
+                    f"{err}"
+                )
+            except ValueError:
+                raise EnvironmentError(
+                    f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this model, couldn't find it"
+                    f" in the cached files and it looks like {pretrained_model_name_or_path} is not the path to a"
+                    f" directory containing a file named {TF2_WEIGHTS_NAME} or {WEIGHTS_NAME}.\nCheckout your internet"
+                    " connection or see how to run the library in offline mode at"
+                    " 'https://huggingface.co/docs/transformers/installation#offline-mode'."
                 )
             except EnvironmentError:
                 raise EnvironmentError(
@@ -1722,27 +1923,29 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         if len(unexpected_keys) > 0:
             logger.warning(
-                f"Some layers from the model checkpoint at {pretrained_model_name_or_path} were not used when "
-                f"initializing {model.__class__.__name__}: {unexpected_keys}\n"
-                f"- This IS expected if you are initializing {model.__class__.__name__} from the checkpoint of a model trained on another task "
-                f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a BertForPreTraining model).\n"
-                f"- This IS NOT expected if you are initializing {model.__class__.__name__} from the checkpoint of a model that you expect "
-                f"to be exactly identical (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
+                f"Some layers from the model checkpoint at {pretrained_model_name_or_path} were not used when"
+                f" initializing {model.__class__.__name__}: {unexpected_keys}\n- This IS expected if you are"
+                f" initializing {model.__class__.__name__} from the checkpoint of a model trained on another task or"
+                " with another architecture (e.g. initializing a BertForSequenceClassification model from a"
+                " BertForPreTraining model).\n- This IS NOT expected if you are initializing"
+                f" {model.__class__.__name__} from the checkpoint of a model that you expect to be exactly identical"
+                " (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
             )
         else:
             logger.warning(f"All model checkpoint layers were used when initializing {model.__class__.__name__}.\n")
 
         if len(missing_keys) > 0:
             logger.warning(
-                f"Some layers of {model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
-                f"and are newly initialized: {missing_keys}\n"
-                f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
+                f"Some layers of {model.__class__.__name__} were not initialized from the model checkpoint at"
+                f" {pretrained_model_name_or_path} and are newly initialized: {missing_keys}\nYou should probably"
+                " TRAIN this model on a down-stream task to be able to use it for predictions and inference."
             )
         elif len(mismatched_keys) == 0:
             logger.warning(
-                f"All the layers of {model.__class__.__name__} were initialized from the model checkpoint at {pretrained_model_name_or_path}.\n"
-                f"If your task is similar to the task the model of the checkpoint was trained on, "
-                f"you can already use {model.__class__.__name__} for predictions without further training."
+                f"All the layers of {model.__class__.__name__} were initialized from the model checkpoint at"
+                f" {pretrained_model_name_or_path}.\nIf your task is similar to the task the model of the checkpoint"
+                f" was trained on, you can already use {model.__class__.__name__} for predictions without further"
+                " training."
             )
         if len(mismatched_keys) > 0:
             mismatched_warning = "\n".join(
@@ -1752,9 +1955,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 ]
             )
             logger.warning(
-                f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
-                f"and are newly initialized because the shapes did not match:\n{mismatched_warning}\n"
-                f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
+                f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at"
+                f" {pretrained_model_name_or_path} and are newly initialized because the shapes did not"
+                f" match:\n{mismatched_warning}\nYou should probably TRAIN this model on a down-stream task to be able"
+                " to use it for predictions and inference."
             )
 
         if output_loading_info:

@@ -20,10 +20,9 @@ from multiprocessing import Pool, cpu_count
 import numpy as np
 from tqdm import tqdm
 
-from ...file_utils import is_tf_available, is_torch_available
 from ...models.bert.tokenization_bert import whitespace_tokenize
 from ...tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase, TruncationStrategy
-from ...utils import logging
+from ...utils import is_tf_available, is_torch_available, logging
 from .utils import DataProcessor
 
 
@@ -58,7 +57,7 @@ def _check_is_max_context(doc_spans, cur_span_index, position):
     """Check if this is the 'max context' doc span for the token."""
     best_score = None
     best_span_index = None
-    for (span_index, doc_span) in enumerate(doc_spans):
+    for span_index, doc_span in enumerate(doc_spans):
         end = doc_span.start + doc_span.length - 1
         if position < doc_span.start:
             continue
@@ -80,7 +79,7 @@ def _new_check_is_max_context(doc_spans, cur_span_index, position):
     # return True
     best_score = None
     best_span_index = None
-    for (span_index, doc_span) in enumerate(doc_spans):
+    for span_index, doc_span in enumerate(doc_spans):
         end = doc_span["start"] + doc_span["length"] - 1
         if position < doc_span["start"]:
             continue
@@ -121,7 +120,7 @@ def squad_convert_example_to_features(
     tok_to_orig_index = []
     orig_to_tok_index = []
     all_doc_tokens = []
-    for (i, token) in enumerate(example.doc_tokens):
+    for i, token in enumerate(example.doc_tokens):
         orig_to_tok_index.append(len(all_doc_tokens))
         if tokenizer.__class__.__name__ in [
             "RobertaTokenizer",

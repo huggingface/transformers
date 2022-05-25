@@ -163,9 +163,11 @@ class Seq2SeqTrainer(Trainer):
 
         if "attention_mask" in inputs:
             gen_kwargs["attention_mask"] = inputs.get("attention_mask", None)
+        if "global_attention_mask" in inputs:
+            gen_kwargs["global_attention_mask"] = inputs.get("global_attention_mask", None)
 
         # prepare generation inputs
-        # some encoder-decoder models can have varying encder's and thus
+        # some encoder-decoder models can have varying encoder's and thus
         # varying model input names
         if hasattr(self.model, "encoder") and self.model.encoder.main_input_name != self.model.main_input_name:
             generation_inputs = inputs[self.model.encoder.main_input_name]
@@ -181,7 +183,7 @@ class Seq2SeqTrainer(Trainer):
             generated_tokens = self._pad_tensors_to_max_len(generated_tokens, gen_kwargs["max_length"])
 
         with torch.no_grad():
-            with self.autocast_smart_context_manager():
+            with self.compute_loss_context_manager():
                 outputs = model(**inputs)
             if has_labels:
                 if self.label_smoother is not None:

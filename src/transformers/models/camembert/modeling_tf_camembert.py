@@ -15,9 +15,9 @@
 # limitations under the License.
 """ TF 2.0 CamemBERT model."""
 
-from ...file_utils import add_start_docstrings
-from ...utils import logging
+from ...utils import add_start_docstrings, logging
 from ..roberta.modeling_tf_roberta import (
+    TFRobertaForCausalLM,
     TFRobertaForMaskedLM,
     TFRobertaForMultipleChoice,
     TFRobertaForQuestionAnswering,
@@ -158,6 +158,18 @@ class TFCamembertForQuestionAnswering(TFRobertaForQuestionAnswering):
     """
     This class overrides [`TFRobertaForQuestionAnswering`]. Please check the superclass for the appropriate
     documentation alongside usage examples.
+    """
+
+    config_class = CamembertConfig
+
+
+@add_start_docstrings(
+    """CamemBERT Model with a `language modeling` head on top for CLM fine-tuning.""", CAMEMBERT_START_DOCSTRING
+)
+class TFCamembertForCausalLM(TFRobertaForCausalLM):
+    """
+    This class overrides [`TFRobertaForCausalLM`]. Please check the superclass for the appropriate documentation
+    alongside usage examples.
     """
 
     config_class = CamembertConfig

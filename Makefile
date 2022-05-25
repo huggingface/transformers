@@ -1,4 +1,4 @@
-.PHONY: deps_table_update modified_only_fixup extra_quality_checks quality style fixup fix-copies test test-examples docs
+.PHONY: deps_table_update modified_only_fixup extra_style_checks quality style fixup fix-copies test test-examples
 
 # make sure to test the local checkout in scripts and not the pre-installed one (don't use quotes!)
 export PYTHONPATH = src
@@ -9,7 +9,7 @@ modified_only_fixup:
 	$(eval modified_py_files := $(shell python utils/get_modified_files.py $(check_dirs)))
 	@if test -n "$(modified_py_files)"; then \
 		echo "Checking/fixing $(modified_py_files)"; \
-		black $(modified_py_files); \
+		black --preview $(modified_py_files); \
 		isort $(modified_py_files); \
 		flake8 $(modified_py_files); \
 	else \
@@ -39,27 +39,30 @@ repo-consistency:
 	python utils/check_dummies.py
 	python utils/check_repo.py
 	python utils/check_inits.py
+	python utils/check_config_docstrings.py
 	python utils/tests_fetcher.py --sanity_check
 
 # this target runs checks on all files
 
 quality:
-	black --check $(check_dirs)
+	black --check --preview $(check_dirs)
 	isort --check-only $(check_dirs)
 	python utils/custom_init_isort.py --check_only
+	python utils/sort_auto_mappings.py --check_only
 	flake8 $(check_dirs)
-	python utils/style_doc.py src/transformers docs/source --max_len 119 --check_only
+	doc-builder style src/transformers docs/source --max_len 119 --check_only --path_to_docs docs/source
 
 # Format source code automatically and check is there are any problems left that need manual fixing
 
 extra_style_checks:
 	python utils/custom_init_isort.py
-	python utils/style_doc.py src/transformers docs/source --max_len 119
+	python utils/sort_auto_mappings.py
+	doc-builder style src/transformers docs/source --max_len 119 --path_to_docs docs/source
 
 # this target runs checks on all files and potentially modifies some of them
 
 style:
-	black $(check_dirs)
+	black --preview $(check_dirs)
 	isort $(check_dirs)
 	${MAKE} autogenerate_code
 	${MAKE} extra_style_checks

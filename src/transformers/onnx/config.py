@@ -13,13 +13,28 @@
 # limitations under the License.
 import copy
 import dataclasses
+import warnings
 from abc import ABC, abstractmethod
 from collections import OrderedDict
-from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple, Union
 
-from transformers import PretrainedConfig, PreTrainedTokenizer, TensorType, is_torch_available
+import numpy as np
+from packaging import version
 
+from ..utils import TensorType, is_torch_available, is_vision_available, logging
 from .utils import ParameterFormat, compute_effective_axis_dimension, compute_serialized_parameters_size
+
+
+if TYPE_CHECKING:
+    from ..configuration_utils import PretrainedConfig
+    from ..feature_extraction_utils import FeatureExtractionMixin
+    from ..tokenization_utils_base import PreTrainedTokenizerBase
+
+
+if is_vision_available():
+    from PIL import Image
+
+logger = logging.get_logger(__name__)
 
 
 DEFAULT_ONNX_OPSET = 11
@@ -54,16 +69,16 @@ class OnnxConfig(ABC):
     Base class for ONNX exportable model describing metadata on how to export the model through the ONNX format.
     """
 
-    DEFAULT_FIXED_BATCH = 2
-    DEFAULT_FIXED_SEQUENCE = 8
-
-    _TASKS_TO_COMMON_OUTPUTS = {
-        "default": OrderedDict({"last_hidden_state": {0: "batch", 1: "sequence"}}),
-        "masked-lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
+    default_fixed_batch = 2
+    default_fixed_sequence = 8
+    default_fixed_num_choices = 4
+    torch_onnx_minimum_version = version.parse("1.8")
+    _tasks_to_common_outputs = {
         "causal-lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
-        "seq2seq-lm": OrderedDict({"logits": {0: "batch", 1: "decoder_sequence"}}),
-        "sequence-classification": OrderedDict({"logits": {0: "batch"}}),
-        "token-classification": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
+        "default": OrderedDict({"last_hidden_state": {0: "batch", 1: "sequence"}}),
+        "image-classification": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
+        "masked-im": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
+        "masked-lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
         "multiple-choice": OrderedDict({"logits": {0: "batch"}}),
         "question-answering": OrderedDict(
             {
@@ -71,14 +86,17 @@ class OnnxConfig(ABC):
                 "end_logits": {0: "batch", 1: "sequence"},
             }
         ),
+        "seq2seq-lm": OrderedDict({"logits": {0: "batch", 1: "decoder_sequence"}}),
+        "sequence-classification": OrderedDict({"logits": {0: "batch"}}),
+        "token-classification": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
     }
 
-    def __init__(self, config: PretrainedConfig, task: str = "default", patching_specs: List[PatchingSpec] = None):
+    def __init__(self, config: "PretrainedConfig", task: str = "default", patching_specs: List[PatchingSpec] = None):
         self._config = config
 
-        if task not in self._TASKS_TO_COMMON_OUTPUTS:
+        if task not in self._tasks_to_common_outputs:
             raise ValueError(
-                f"{task} is not a supported task, supported tasks: {self._TASKS_TO_COMMON_OUTPUTS.keys()}"
+                f"{task} is not a supported task, supported tasks: {self._tasks_to_common_outputs.keys()}"
             )
         self.task = task
 
@@ -90,7 +108,7 @@ class OnnxConfig(ABC):
             self._patching_specs.append(final_spec)
 
     @classmethod
-    def from_model_config(cls, config: PretrainedConfig, task: str = "default") -> "OnnxConfig":
+    def from_model_config(cls, config: "PretrainedConfig", task: str = "default") -> "OnnxConfig":
         """
         Instantiate a OnnxConfig for a specific model
 
@@ -121,7 +139,7 @@ class OnnxConfig(ABC):
         Returns:
             For each output: its name associated to the axes symbolic name and the axis position within the tensor
         """
-        common_outputs = self._TASKS_TO_COMMON_OUTPUTS[self.task]
+        common_outputs = self._tasks_to_common_outputs[self.task]
         return copy.deepcopy(common_outputs)
 
     @property
@@ -146,7 +164,7 @@ class OnnxConfig(ABC):
             Integer > 0
         """
         # Using 2 avoid ONNX making assumption about single sample batch
-        return OnnxConfig.DEFAULT_FIXED_BATCH
+        return OnnxConfig.default_fixed_batch
 
     @property
     def default_sequence_length(self) -> int:
@@ -156,7 +174,17 @@ class OnnxConfig(ABC):
         Returns:
             Integer > 0
         """
-        return OnnxConfig.DEFAULT_FIXED_SEQUENCE
+        return OnnxConfig.default_fixed_sequence
+
+    @property
+    def default_num_choices(self) -> int:
+        """
+        The default number of choices to use if no other indication
+
+        Returns:
+            Integer > 0
+        """
+        return OnnxConfig.default_fixed_num_choices
 
     @property
     def default_onnx_opset(self) -> int:
@@ -178,6 +206,21 @@ class OnnxConfig(ABC):
         """
         return 1e-5
 
+    @property
+    def is_torch_support_available(self) -> bool:
+        """
+        The minimum PyTorch version required to export the model.
+
+        Returns:
+            `bool`: Whether the installed version of PyTorch is compatible with the model.
+        """
+        if is_torch_available():
+            from transformers.utils import torch_version
+
+            return torch_version >= self.torch_onnx_minimum_version
+        else:
+            return False
+
     @staticmethod
     def use_external_data_format(num_parameters: int) -> bool:
         """
@@ -195,42 +238,102 @@ class OnnxConfig(ABC):
             >= EXTERNAL_DATA_FORMAT_SIZE_LIMIT
         )
 
+    def _generate_dummy_images(
+        self, batch_size: int = 2, num_channels: int = 3, image_height: int = 40, image_width: int = 40
+    ):
+        images = []
+        for _ in range(batch_size):
+            data = np.random.rand(image_height, image_width, num_channels) * 255
+            images.append(Image.fromarray(data.astype("uint8")).convert("RGB"))
+        return images
+
     def generate_dummy_inputs(
         self,
-        tokenizer: PreTrainedTokenizer,
+        preprocessor: Union["PreTrainedTokenizerBase", "FeatureExtractionMixin"],
         batch_size: int = -1,
         seq_length: int = -1,
+        num_choices: int = -1,
         is_pair: bool = False,
         framework: Optional[TensorType] = None,
+        num_channels: int = 3,
+        image_width: int = 40,
+        image_height: int = 40,
+        tokenizer: "PreTrainedTokenizerBase" = None,
     ) -> Mapping[str, Any]:
         """
         Generate inputs to provide to the ONNX exporter for the specific framework
 
         Args:
-            tokenizer: The tokenizer associated with this model configuration
-            batch_size: The batch size (int) to export the model for (-1 means dynamic axis)
-            seq_length: The sequence length (int) to export the model for (-1 means dynamic axis)
-            is_pair: Indicate if the input is a pair (sentence 1, sentence 2)
-            framework: The framework (optional) the tokenizer will generate tensor for
+            preprocessor: ([`PreTrainedTokenizerBase`] or [`FeatureExtractionMixin`]):
+                The preprocessor associated with this model configuration.
+            batch_size (`int`, *optional*, defaults to -1):
+                The batch size to export the model for (-1 means dynamic axis).
+            num_choices (`int`, *optional*, defaults to -1):
+                The number of candidate answers provided for multiple choice task (-1 means dynamic axis).
+            seq_length (`int`, *optional*, defaults to -1):
+                The sequence length to export the model for (-1 means dynamic axis).
+            is_pair (`bool`, *optional*, defaults to `False`):
+                Indicate if the input is a pair (sentence 1, sentence 2)
+            framework (`TensorType`, *optional*, defaults to `None`):
+                The framework (PyTorch or TensorFlow) that the tokenizer will generate tensors for.
+            num_channels (`int`, *optional*, defaults to 3):
+                The number of channels of the generated images.
+            image_width (`int`, *optional*, defaults to 40):
+                The width of the generated images.
+            image_height (`int`, *optional*, defaults to 40):
+                The height of the generated images.
 
         Returns:
             Mapping[str, Tensor] holding the kwargs to provide to the model's forward function
         """
+        from ..feature_extraction_utils import FeatureExtractionMixin
+        from ..tokenization_utils_base import PreTrainedTokenizerBase
 
-        # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
-        batch_size = compute_effective_axis_dimension(
-            batch_size, fixed_dimension=OnnxConfig.DEFAULT_FIXED_BATCH, num_token_to_add=0
-        )
-
-        # If dynamic axis (-1) we forward with a fixed dimension of 8 tokens to avoid optimizations made by ONNX
-        token_to_add = tokenizer.num_special_tokens_to_add(is_pair)
-        seq_length = compute_effective_axis_dimension(
-            seq_length, fixed_dimension=OnnxConfig.DEFAULT_FIXED_SEQUENCE, num_token_to_add=token_to_add
-        )
-
-        # Generate dummy inputs according to compute batch and sequence
-        dummy_input = [" ".join([tokenizer.unk_token]) * seq_length] * batch_size
-        return dict(tokenizer(dummy_input, return_tensors=framework))
+        if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
+            raise ValueError("You cannot provide both a tokenizer and a preprocessor to generate dummy inputs.")
+        if tokenizer is not None:
+            warnings.warn(
+                "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use"
+                " `preprocessor` instead.",
+                FutureWarning,
+            )
+            logger.warning("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
+            preprocessor = tokenizer
+        if isinstance(preprocessor, PreTrainedTokenizerBase):
+            # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
+            batch_size = compute_effective_axis_dimension(
+                batch_size, fixed_dimension=OnnxConfig.default_fixed_batch, num_token_to_add=0
+            )
+            # If dynamic axis (-1) we forward with a fixed dimension of 8 tokens to avoid optimizations made by ONNX
+            token_to_add = preprocessor.num_special_tokens_to_add(is_pair)
+            seq_length = compute_effective_axis_dimension(
+                seq_length, fixed_dimension=OnnxConfig.default_fixed_sequence, num_token_to_add=token_to_add
+            )
+            # Generate dummy inputs according to compute batch and sequence
+            dummy_input = [" ".join([preprocessor.unk_token]) * seq_length] * batch_size
+            if self.task == "multiple-choice":
+                # If dynamic axis (-1) we forward with a fixed dimension of 4 candidate answers to avoid optimizations
+                # made by ONNX
+                num_choices = compute_effective_axis_dimension(
+                    num_choices, fixed_dimension=OnnxConfig.default_fixed_num_choices, num_token_to_add=0
+                )
+                dummy_input = dummy_input * num_choices
+                # The shape of the tokenized inputs values is [batch_size * num_choices, seq_length]
+                tokenized_input = preprocessor(dummy_input, text_pair=dummy_input)
+                # Unflatten the tokenized inputs values expanding it to the shape [batch_size, num_choices, seq_length]
+                for k, v in tokenized_input.items():
+                    tokenized_input[k] = [v[i : i + num_choices] for i in range(0, len(v), num_choices)]
+                return dict(tokenized_input.convert_to_tensors(tensor_type=framework))
+            return dict(preprocessor(dummy_input, return_tensors=framework))
+        elif isinstance(preprocessor, FeatureExtractionMixin) and preprocessor.model_input_names[0] == "pixel_values":
+            # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
+            batch_size = compute_effective_axis_dimension(batch_size, fixed_dimension=OnnxConfig.default_fixed_batch)
+            dummy_input = self._generate_dummy_images(batch_size, num_channels, image_height, image_width)
+            return dict(preprocessor(images=dummy_input, return_tensors=framework))
+        else:
+            raise ValueError(
+                "Unable to generate dummy inputs for the model. Please provide a tokenizer or a preprocessor."
+            )
 
     def patch_ops(self):
         for spec in self._patching_specs:
@@ -264,7 +367,7 @@ class OnnxConfig(ABC):
 class OnnxConfigWithPast(OnnxConfig, ABC):
     def __init__(
         self,
-        config: PretrainedConfig,
+        config: "PretrainedConfig",
         task: str = "default",
         patching_specs: List[PatchingSpec] = None,
         use_past: bool = False,
@@ -273,7 +376,7 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
         self.use_past = use_past
 
     @classmethod
-    def with_past(cls, config: PretrainedConfig, task: str = "default") -> "OnnxConfigWithPast":
+    def with_past(cls, config: "PretrainedConfig", task: str = "default") -> "OnnxConfigWithPast":
         """
         Instantiate a OnnxConfig with `use_past` attribute set to True
 
@@ -308,7 +411,8 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
         """
         if not hasattr(self._config, "num_layers"):
             raise AttributeError(
-                "could not find the number of layers attribute in the model configuration, override the num_layers property of the model OnnxConfig to solve this"
+                "could not find the number of layers attribute in the model configuration, override the num_layers"
+                " property of the model OnnxConfig to solve this"
             )
         return self._config.num_layers
 
@@ -320,13 +424,14 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
         """
         if not hasattr(self._config, "num_attention_heads"):
             raise AttributeError(
-                "could not find the number of attention heads attribute in the model configuration, override the num_attention_heads property of the model OnnxConfig to solve this"
+                "could not find the number of attention heads attribute in the model configuration, override the"
+                " num_attention_heads property of the model OnnxConfig to solve this"
             )
         return self._config.num_attention_heads
 
     def generate_dummy_inputs(
         self,
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: "PreTrainedTokenizerBase",
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
@@ -334,7 +439,9 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
     ) -> Mapping[str, Any]:
 
         # TODO: should we set seq_length = 1 when self.use_past = True?
-        common_inputs = super().generate_dummy_inputs(tokenizer, batch_size, seq_length, is_pair, framework)
+        common_inputs = super().generate_dummy_inputs(
+            tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
+        )
 
         if self.use_past:
             if not is_torch_available():
@@ -353,8 +460,10 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
             )
 
             if "attention_mask" in common_inputs:
+                mask_dtype = common_inputs["attention_mask"].dtype
                 common_inputs["attention_mask"] = torch.cat(
-                    [common_inputs["attention_mask"], torch.ones(batch, past_key_values_length)], dim=1
+                    [common_inputs["attention_mask"], torch.ones(batch, past_key_values_length, dtype=mask_dtype)],
+                    dim=1,
                 )
 
             common_inputs["past_key_values"] = []
@@ -424,7 +533,8 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
                 num_layers = (self._config.encoder_layers, self._config.decoder_layers)
             else:
                 raise AttributeError(
-                    "could not find the number of encoder and decoder layers attributes in the model configuration, override the num_layers property of the model OnnxConfig to solve this"
+                    "could not find the number of encoder and decoder layers attributes in the model configuration,"
+                    " override the num_layers property of the model OnnxConfig to solve this"
                 )
 
         return num_layers
@@ -439,13 +549,15 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
                 num_attention_heads = (self._config.encoder_attention_heads, self._config.decoder_attention_heads)
             else:
                 raise AttributeError(
-                    "could not find the number of attention heads for the encoder and the decoder attributes in the model configuration, override the num_attention_heads property of the model OnnxConfig to solve this"
+                    "could not find the number of attention heads for the encoder and the decoder attributes in the"
+                    " model configuration, override the num_attention_heads property of the model OnnxConfig to solve"
+                    " this"
                 )
         return num_attention_heads
 
     def generate_dummy_inputs(
         self,
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: "PreTrainedTokenizerBase",
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
@@ -453,13 +565,13 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
     ) -> Mapping[str, Any]:
 
         encoder_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
-            tokenizer, batch_size, seq_length, is_pair, framework
+            tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
         )
 
         # Generate decoder inputs
         decoder_seq_length = seq_length if not self.use_past else 1
         decoder_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
-            tokenizer, batch_size, decoder_seq_length, is_pair, framework
+            tokenizer, batch_size=batch_size, seq_length=decoder_seq_length, is_pair=is_pair, framework=framework
         )
         decoder_inputs = {f"decoder_{name}": tensor for name, tensor in decoder_inputs.items()}
         common_inputs = dict(**encoder_inputs, **decoder_inputs)

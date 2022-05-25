@@ -21,9 +21,8 @@ from dataclasses import asdict
 from enum import Enum
 from typing import List, Optional, Union
 
-from ...file_utils import is_tf_available
 from ...tokenization_utils import PreTrainedTokenizer
-from ...utils import logging
+from ...utils import is_tf_available, logging
 from .utils import DataProcessor, InputExample, InputFeatures
 
 
@@ -35,7 +34,7 @@ logger = logging.get_logger(__name__)
 DEPRECATION_WARNING = (
     "This {0} will be removed from the library soon, preprocessing should be handled with the 🤗 Datasets "
     "library. You can have a look at this example script for pointers: "
-    "https://github.com/huggingface/transformers/blob/master/examples/pytorch/text-classification/run_glue.py"
+    "https://github.com/huggingface/transformers/blob/main/examples/pytorch/text-classification/run_glue.py"
 )
 
 
@@ -203,7 +202,7 @@ class MrpcProcessor(DataProcessor):
     def _create_examples(self, lines, set_type):
         """Creates examples for the training, dev and test sets."""
         examples = []
-        for (i, line) in enumerate(lines):
+        for i, line in enumerate(lines):
             if i == 0:
                 continue
             guid = f"{set_type}-{i}"
@@ -249,7 +248,7 @@ class MnliProcessor(DataProcessor):
     def _create_examples(self, lines, set_type):
         """Creates examples for the training, dev and test sets."""
         examples = []
-        for (i, line) in enumerate(lines):
+        for i, line in enumerate(lines):
             if i == 0:
                 continue
             guid = f"{set_type}-{line[0]}"
@@ -315,7 +314,7 @@ class ColaProcessor(DataProcessor):
             lines = lines[1:]
         text_index = 1 if test_mode else 3
         examples = []
-        for (i, line) in enumerate(lines):
+        for i, line in enumerate(lines):
             guid = f"{set_type}-{i}"
             text_a = line[text_index]
             label = None if test_mode else line[1]
@@ -359,7 +358,7 @@ class Sst2Processor(DataProcessor):
         """Creates examples for the training, dev and test sets."""
         examples = []
         text_index = 1 if set_type == "test" else 0
-        for (i, line) in enumerate(lines):
+        for i, line in enumerate(lines):
             if i == 0:
                 continue
             guid = f"{set_type}-{i}"
@@ -404,7 +403,7 @@ class StsbProcessor(DataProcessor):
     def _create_examples(self, lines, set_type):
         """Creates examples for the training, dev and test sets."""
         examples = []
-        for (i, line) in enumerate(lines):
+        for i, line in enumerate(lines):
             if i == 0:
                 continue
             guid = f"{set_type}-{line[0]}"
@@ -453,7 +452,7 @@ class QqpProcessor(DataProcessor):
         q1_index = 1 if test_mode else 3
         q2_index = 2 if test_mode else 4
         examples = []
-        for (i, line) in enumerate(lines):
+        for i, line in enumerate(lines):
             if i == 0:
                 continue
             guid = f"{set_type}-{line[0]}"
@@ -502,7 +501,7 @@ class QnliProcessor(DataProcessor):
     def _create_examples(self, lines, set_type):
         """Creates examples for the training, dev and test sets."""
         examples = []
-        for (i, line) in enumerate(lines):
+        for i, line in enumerate(lines):
             if i == 0:
                 continue
             guid = f"{set_type}-{line[0]}"
@@ -548,7 +547,7 @@ class RteProcessor(DataProcessor):
     def _create_examples(self, lines, set_type):
         """Creates examples for the training, dev and test sets."""
         examples = []
-        for (i, line) in enumerate(lines):
+        for i, line in enumerate(lines):
             if i == 0:
                 continue
             guid = f"{set_type}-{line[0]}"
@@ -594,7 +593,7 @@ class WnliProcessor(DataProcessor):
     def _create_examples(self, lines, set_type):
         """Creates examples for the training, dev and test sets."""
         examples = []
-        for (i, line) in enumerate(lines):
+        for i, line in enumerate(lines):
             if i == 0:
                 continue
             guid = f"{set_type}-{line[0]}"

@@ -3,23 +3,24 @@ from tempfile import NamedTemporaryFile
 from unittest import TestCase
 from unittest.mock import patch
 
+import pytest
+
 from parameterized import parameterized
-from transformers import AutoConfig, AutoTokenizer, is_tf_available, is_torch_available
+from transformers import AutoConfig, AutoFeatureExtractor, AutoTokenizer, is_tf_available, is_torch_available
 from transformers.onnx import (
     EXTERNAL_DATA_FORMAT_SIZE_LIMIT,
     OnnxConfig,
+    OnnxConfigWithPast,
     ParameterFormat,
     export,
     validate_model_outputs,
 )
-from transformers.onnx.config import OnnxConfigWithPast
+from transformers.onnx.utils import compute_effective_axis_dimension, compute_serialized_parameters_size
+from transformers.testing_utils import require_onnx, require_rjieba, require_tf, require_torch, require_vision, slow
 
 
 if is_torch_available() or is_tf_available():
     from transformers.onnx.features import FeaturesManager
-
-from transformers.onnx.utils import compute_effective_axis_dimension, compute_serialized_parameters_size
-from transformers.testing_utils import require_onnx, require_tf, require_torch, slow
 
 
 @require_onnx
@@ -171,13 +172,21 @@ class OnnxConfigWithPastTestCaseV2(TestCase):
 PYTORCH_EXPORT_MODELS = {
     ("albert", "hf-internal-testing/tiny-albert"),
     ("bert", "bert-base-cased"),
+    ("big-bird", "google/bigbird-roberta-base"),
     ("ibert", "kssteven/ibert-roberta-base"),
     ("camembert", "camembert-base"),
+    ("convbert", "YituTech/conv-bert-base"),
     ("distilbert", "distilbert-base-cased"),
     ("electra", "google/electra-base-generator"),
     ("roberta", "roberta-base"),
+    ("roformer", "junnyu/roformer_chinese_base"),
+    ("mobilebert", "google/mobilebert-uncased"),
     ("xlm-roberta", "xlm-roberta-base"),
     ("layoutlm", "microsoft/layoutlm-base-uncased"),
+    ("vit", "google/vit-base-patch16-224"),
+    ("deit", "facebook/deit-small-patch16-224"),
+    ("beit", "microsoft/beit-base-patch16-224"),
+    ("data2vec-text", "facebook/data2vec-text-base"),
 }
 
 PYTORCH_EXPORT_WITH_PAST_MODELS = {
@@ -191,36 +200,31 @@ PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {
     ("t5", "t5-small"),
     ("marian", "Helsinki-NLP/opus-mt-en-de"),
     ("m2m-100", "facebook/m2m100_418M"),
+    ("blenderbot-small", "facebook/blenderbot_small-90M"),
+    ("blenderbot", "facebook/blenderbot-400M-distill"),
+    ("bigbird-pegasus", "google/bigbird-pegasus-large-arxiv"),
 }
 
+# TODO(lewtun): Include the same model types in `PYTORCH_EXPORT_MODELS` once TensorFlow has parity with the PyTorch model implementations.
 TENSORFLOW_EXPORT_DEFAULT_MODELS = {
     ("albert", "hf-internal-testing/tiny-albert"),
     ("bert", "bert-base-cased"),
-    ("ibert", "kssteven/ibert-roberta-base"),
     ("camembert", "camembert-base"),
     ("distilbert", "distilbert-base-cased"),
     ("roberta", "roberta-base"),
-    ("xlm-roberta", "xlm-roberta-base"),
-    ("layoutlm", "microsoft/layoutlm-base-uncased"),
 }
 
-TENSORFLOW_EXPORT_WITH_PAST_MODELS = {
-    ("gpt2", "gpt2"),
-    ("gpt-neo", "EleutherAI/gpt-neo-125M"),
-}
+# TODO(lewtun): Include the same model types in `PYTORCH_EXPORT_WITH_PAST_MODELS` once TensorFlow has parity with the PyTorch model implementations.
+TENSORFLOW_EXPORT_WITH_PAST_MODELS = {}
 
-TENSORFLOW_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {
-    ("bart", "facebook/bart-base"),
-    ("mbart", "sshleifer/tiny-mbart"),
-    ("t5", "t5-small"),
-    ("marian", "Helsinki-NLP/opus-mt-en-de"),
-}
+# TODO(lewtun): Include the same model types in `PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS` once TensorFlow has parity with the PyTorch model implementations.
+TENSORFLOW_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {}
 
 
 def _get_models_to_test(export_models_list):
     models_to_test = []
     if is_torch_available() or is_tf_available():
-        for (name, model) in export_models_list:
+        for name, model in export_models_list:
             for feature, onnx_config_class_constructor in FeaturesManager.get_supported_features_for_model_type(
                 name
             ).items():
@@ -238,28 +242,42 @@ class OnnxExportTestCaseV2(TestCase):
     Integration tests ensuring supported models are correctly exported
     """
 
-    def _onnx_export(self, test_name, name, model_name, feature, onnx_config_class_constructor):
+    def _onnx_export(self, test_name, name, model_name, feature, onnx_config_class_constructor, device="cpu"):
         from transformers.onnx import export
 
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-        config = AutoConfig.from_pretrained(model_name)
-
-        # Useful for causal lm models that do not use pad tokens.
-        if not getattr(config, "pad_token_id", None):
-            config.pad_token_id = tokenizer.eos_token_id
-
         model_class = FeaturesManager.get_model_class_for_feature(feature)
+        config = AutoConfig.from_pretrained(model_name)
         model = model_class.from_config(config)
         onnx_config = onnx_config_class_constructor(model.config)
+
+        if is_torch_available():
+            from transformers.utils import torch_version
+
+            if torch_version < onnx_config.torch_onnx_minimum_version:
+                pytest.skip(
+                    "Skipping due to incompatible PyTorch version. Minimum required is"
+                    f" {onnx_config.torch_onnx_minimum_version}, got: {torch_version}"
+                )
+
+        # Check the modality of the inputs and instantiate the appropriate preprocessor
+        if model.main_input_name == "input_ids":
+            preprocessor = AutoTokenizer.from_pretrained(model_name)
+            # Useful for causal lm models that do not use pad tokens.
+            if not getattr(config, "pad_token_id", None):
+                config.pad_token_id = preprocessor.eos_token_id
+        elif model.main_input_name == "pixel_values":
+            preprocessor = AutoFeatureExtractor.from_pretrained(model_name)
+        else:
+            raise ValueError(f"Unsupported model input name: {model.main_input_name}")
 
         with NamedTemporaryFile("w") as output:
             try:
                 onnx_inputs, onnx_outputs = export(
-                    tokenizer, model, onnx_config, onnx_config.default_onnx_opset, Path(output.name)
+                    preprocessor, model, onnx_config, onnx_config.default_onnx_opset, Path(output.name), device=device
                 )
                 validate_model_outputs(
                     onnx_config,
-                    tokenizer,
+                    preprocessor,
                     model,
                     Path(output.name),
                     onnx_outputs,
@@ -271,8 +289,18 @@ class OnnxExportTestCaseV2(TestCase):
     @parameterized.expand(_get_models_to_test(PYTORCH_EXPORT_MODELS))
     @slow
     @require_torch
+    @require_vision
+    @require_rjieba
     def test_pytorch_export(self, test_name, name, model_name, feature, onnx_config_class_constructor):
         self._onnx_export(test_name, name, model_name, feature, onnx_config_class_constructor)
+
+    @parameterized.expand(_get_models_to_test(PYTORCH_EXPORT_MODELS))
+    @slow
+    @require_torch
+    @require_vision
+    @require_rjieba
+    def test_pytorch_export_on_cuda(self, test_name, name, model_name, feature, onnx_config_class_constructor):
+        self._onnx_export(test_name, name, model_name, feature, onnx_config_class_constructor, device="cuda")
 
     @parameterized.expand(_get_models_to_test(PYTORCH_EXPORT_WITH_PAST_MODELS))
     @slow
@@ -291,16 +319,17 @@ class OnnxExportTestCaseV2(TestCase):
     @parameterized.expand(_get_models_to_test(TENSORFLOW_EXPORT_DEFAULT_MODELS))
     @slow
     @require_tf
+    @require_vision
     def test_tensorflow_export(self, test_name, name, model_name, feature, onnx_config_class_constructor):
         self._onnx_export(test_name, name, model_name, feature, onnx_config_class_constructor)
 
-    @parameterized.expand(_get_models_to_test(TENSORFLOW_EXPORT_WITH_PAST_MODELS))
+    @parameterized.expand(_get_models_to_test(TENSORFLOW_EXPORT_WITH_PAST_MODELS), skip_on_empty=True)
     @slow
     @require_tf
     def test_tensorflow_export_with_past(self, test_name, name, model_name, feature, onnx_config_class_constructor):
         self._onnx_export(test_name, name, model_name, feature, onnx_config_class_constructor)
 
-    @parameterized.expand(_get_models_to_test(TENSORFLOW_EXPORT_SEQ2SEQ_WITH_PAST_MODELS))
+    @parameterized.expand(_get_models_to_test(TENSORFLOW_EXPORT_SEQ2SEQ_WITH_PAST_MODELS), skip_on_empty=True)
     @slow
     @require_tf
     def test_tensorflow_export_seq2seq_with_past(

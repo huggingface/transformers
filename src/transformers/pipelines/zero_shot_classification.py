@@ -2,9 +2,8 @@ from typing import List, Union
 
 import numpy as np
 
-from ..file_utils import add_end_docstrings
 from ..tokenization_utils import TruncationStrategy
-from ..utils import logging
+from ..utils import add_end_docstrings, logging
 from .base import PIPELINE_INIT_ARGS, ArgumentHandler, ChunkPipeline
 
 
@@ -87,7 +86,8 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
         if self.tokenizer.pad_token is None:
             # Override for tokenizers not supporting padding
             logger.error(
-                "Tokenizer was not supporting padding necessary for zero-shot, attempting to use  `pad_token=eos_token`"
+                "Tokenizer was not supporting padding necessary for zero-shot, attempting to use "
+                " `pad_token=eos_token`"
             )
             self.tokenizer.pad_token = self.tokenizer.eos_token
         try:

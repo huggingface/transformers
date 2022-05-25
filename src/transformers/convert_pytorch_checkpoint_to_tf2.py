@@ -95,8 +95,7 @@ from . import (
     is_torch_available,
     load_pytorch_checkpoint_in_tf2_model,
 )
-from .file_utils import hf_bucket_url
-from .utils import logging
+from .utils import hf_bucket_url, logging
 
 
 if is_torch_available():
@@ -430,24 +429,30 @@ if __name__ == "__main__":
         "--model_type",
         default=None,
         type=str,
-        help=f"Model type selected in the list of {list(MODEL_CLASSES.keys())}. If not given, will download and "
-        "convert all the models from AWS.",
+        help=(
+            f"Model type selected in the list of {list(MODEL_CLASSES.keys())}. If not given, will download and "
+            "convert all the models from AWS."
+        ),
     )
     parser.add_argument(
         "--pytorch_checkpoint_path",
         default=None,
         type=str,
-        help="Path to the PyTorch checkpoint path or shortcut name to download from AWS. "
-        "If not given, will download and convert all the checkpoints from AWS.",
+        help=(
+            "Path to the PyTorch checkpoint path or shortcut name to download from AWS. "
+            "If not given, will download and convert all the checkpoints from AWS."
+        ),
     )
     parser.add_argument(
         "--config_file",
         default=None,
         type=str,
-        help="The config json file corresponding to the pre-trained model. \n"
-        "This specifies the model architecture. If not given and "
-        "--pytorch_checkpoint_path is not given or is a shortcut name "
-        "use the configuration associated to the shortcut name on the AWS",
+        help=(
+            "The config json file corresponding to the pre-trained model. \n"
+            "This specifies the model architecture. If not given and "
+            "--pytorch_checkpoint_path is not given or is a shortcut name "
+            "use the configuration associated to the shortcut name on the AWS"
+        ),
     )
     parser.add_argument(
         "--compare_with_pt_model", action="store_true", help="Compare Tensorflow and PyTorch model predictions."

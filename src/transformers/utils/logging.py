@@ -339,6 +339,6 @@ def enable_progress_bar():
 
 
 def disable_progress_bar():
-    """Enable tqdm progress bar."""
+    """Disable tqdm progress bar."""
     global _tqdm_active
     _tqdm_active = False

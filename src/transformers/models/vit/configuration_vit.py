@@ -14,7 +14,13 @@
 # limitations under the License.
 """ ViT model configuration"""
 
+from collections import OrderedDict
+from typing import Mapping
+
+from packaging import version
+
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -119,3 +125,20 @@ class ViTConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
         self.encoder_stride = encoder_stride
+
+
+class ViTOnnxConfig(OnnxConfig):
+
+    torch_onnx_minimum_version = version.parse("1.11")
+
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        return OrderedDict(
+            [
+                ("pixel_values", {0: "batch", 1: "sequence"}),
+            ]
+        )
+
+    @property
+    def atol_for_validation(self) -> float:
+        return 1e-4

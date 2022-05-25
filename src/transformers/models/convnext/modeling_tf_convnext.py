@@ -21,17 +21,16 @@ import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPooling, TFSequenceClassifierOutput
 from ...modeling_tf_utils import (
     TFModelInputType,
     TFPreTrainedModel,
     TFSequenceClassificationLoss,
     get_initializer,
-    input_processing,
     keras_serializable,
+    unpack_inputs,
 )
-from ...utils import logging
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_convnext import ConvNextConfig
 
 
@@ -236,8 +235,9 @@ class TFConvNextEncoder(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.stages = []
-        drop_path_rates = [x for x in tf.linspace(0.0, config.drop_path_rate, sum(config.depths))]
-        cur = 0
+        drop_path_rates = tf.linspace(0.0, config.drop_path_rate, sum(config.depths))
+        drop_path_rates = tf.split(drop_path_rates, config.depths)
+        drop_path_rates = [x.numpy().tolist() for x in drop_path_rates]
         prev_chs = config.hidden_sizes[0]
         for i in range(config.num_stages):
             out_chs = config.hidden_sizes[i]
@@ -247,11 +247,10 @@ class TFConvNextEncoder(tf.keras.layers.Layer):
                 out_channels=out_chs,
                 stride=2 if i > 0 else 1,
                 depth=config.depths[i],
-                drop_path_rates=drop_path_rates[cur],
+                drop_path_rates=drop_path_rates[i],
                 name=f"stages.{i}",
             )
             self.stages.append(stage)
-            cur += config.depths[i]
             prev_chs = out_chs
 
     def call(self, hidden_states, output_hidden_states=False, return_dict=True):
@@ -287,42 +286,29 @@ class TFConvNextMainLayer(tf.keras.layers.Layer):
         # NCHW output format
         self.pooler = tf.keras.layers.GlobalAvgPool2D(data_format="channels_first") if add_pooling_layer else None
 
+    @unpack_inputs
     def call(
         self,
         pixel_values: Optional[TFModelInputType] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=pixel_values,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            training=training,
-            kwargs_call=kwargs,
-        )
-
-        if "input_ids" in inputs:
-            inputs["pixel_values"] = inputs.pop("input_ids")
-
-        if inputs["pixel_values"] is None:
+        if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        embedding_output = self.embeddings(inputs["pixel_values"], training=inputs["training"])
+        embedding_output = self.embeddings(pixel_values, training=training)
 
         encoder_outputs = self.encoder(
             embedding_output,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            training=inputs["training"],
+            training=training,
         )
 
         last_hidden_state = encoder_outputs[0]
@@ -429,8 +415,8 @@ CONVNEXT_INPUTS_DOCSTRING = r"""
             more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
             used instead.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This argument can be used
-            in eager mode, in graph mode the value will always be set to True.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple. This argument can be used in
+            eager mode, in graph mode the value will always be set to True.
 """
 
 
@@ -443,6 +429,7 @@ class TFConvNextModel(TFConvNextPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.convnext = TFConvNextMainLayer(config, add_pooling_layer=add_pooling_layer, name="convnext")
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(CONVNEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFBaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
     def call(
@@ -451,7 +438,6 @@ class TFConvNextModel(TFConvNextPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
         r"""
         Returns:
@@ -478,27 +464,14 @@ class TFConvNextModel(TFConvNextPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=pixel_values,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            training=training,
-            kwargs_call=kwargs,
-        )
-
-        if "input_ids" in inputs:
-            inputs["pixel_values"] = inputs.pop("input_ids")
-
-        if inputs["pixel_values"] is None:
+        if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
         outputs = self.convnext(
-            pixel_values=inputs["pixel_values"],
+            pixel_values=pixel_values,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            training=inputs["training"],
+            training=training,
         )
 
         if not return_dict:
@@ -533,6 +506,7 @@ class TFConvNextForImageClassification(TFConvNextPreTrainedModel, TFSequenceClas
             name="classifier",
         )
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(CONVNEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def call(
@@ -542,7 +516,6 @@ class TFConvNextForImageClassification(TFConvNextPreTrainedModel, TFSequenceClas
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
@@ -564,7 +537,7 @@ class TFConvNextForImageClassification(TFConvNextPreTrainedModel, TFSequenceClas
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> feature_extractor = ConvNextFeatureExtractor.from_pretrained("facebook/convnext-tiny-224")
-        >>> model = TFViTForImageClassification.from_pretrained("facebook/convnext-tiny-224")
+        >>> model = TFConvNextForImageClassification.from_pretrained("facebook/convnext-tiny-224")
 
         >>> inputs = feature_extractor(images=image, return_tensors="tf")
         >>> outputs = model(**inputs)
@@ -578,36 +551,22 @@ class TFConvNextForImageClassification(TFConvNextPreTrainedModel, TFSequenceClas
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=pixel_values,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            labels=labels,
-            training=training,
-            kwargs_call=kwargs,
-        )
-
-        if "input_ids" in inputs:
-            inputs["pixel_values"] = inputs.pop("input_ids")
-
-        if inputs["pixel_values"] is None:
+        if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
         outputs = self.convnext(
-            inputs["pixel_values"],
+            pixel_values,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            training=inputs["training"],
+            training=training,
         )
 
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
 
         logits = self.classifier(pooled_output)
-        loss = None if inputs["labels"] is None else self.hf_compute_loss(labels=inputs["labels"], logits=logits)
+        loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=logits)
 
-        if not inputs["return_dict"]:
+        if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 

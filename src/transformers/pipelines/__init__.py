@@ -25,12 +25,11 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 from ..configuration_utils import PretrainedConfig
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
-from ..file_utils import http_get, is_tf_available, is_torch_available
 from ..models.auto.configuration_auto import AutoConfig
 from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
-from ..utils import logging
+from ..utils import http_get, is_tf_available, is_torch_available, logging
 from .audio_classification import AudioClassificationPipeline
 from .automatic_speech_recognition import AutomaticSpeechRecognitionPipeline
 from .base import (
@@ -245,7 +244,7 @@ SUPPORTED_TASKS = {
         "impl": ZeroShotImageClassificationPipeline,
         "tf": (TFAutoModel,) if is_tf_available() else (),
         "pt": (AutoModel,) if is_torch_available() else (),
-        "default": {"pt": "openai/clip-vit-base-patch32", "tf": "openai/clip-vit-base-patch32"},
+        "default": {"model": {"pt": "openai/clip-vit-base-patch32", "tf": "openai/clip-vit-base-patch32"}},
         "type": "multimodal",
     },
     "conversational": {
@@ -346,6 +345,7 @@ def check_task(task: str) -> Tuple[Dict, Any]:
             - `"translation_xx_to_yy"`
             - `"summarization"`
             - `"zero-shot-classification"`
+            - `"zero-shot-image-classification"`
 
     Returns:
         (task_defaults`dict`, task_options: (`tuple`, None)) The actual dictionary required to initialize the pipeline
@@ -493,22 +493,22 @@ def pipeline(
 
     if task is None and model is None:
         raise RuntimeError(
-            "Impossible to instantiate a pipeline without either a task or a model"
-            "being specified."
+            "Impossible to instantiate a pipeline without either a task or a model "
+            "being specified. "
             "Please provide a task class or a model"
         )
 
     if model is None and tokenizer is not None:
         raise RuntimeError(
-            "Impossible to instantiate a pipeline with tokenizer specified but not the model "
-            "as the provided tokenizer may not be compatible with the default model. "
-            "Please provide a PreTrainedModel class or a path/identifier to a pretrained model when providing tokenizer."
+            "Impossible to instantiate a pipeline with tokenizer specified but not the model as the provided tokenizer"
+            " may not be compatible with the default model. Please provide a PreTrainedModel class or a"
+            " path/identifier to a pretrained model when providing tokenizer."
         )
     if model is None and feature_extractor is not None:
         raise RuntimeError(
-            "Impossible to instantiate a pipeline with feature_extractor specified but not the model "
-            "as the provided feature_extractor may not be compatible with the default model. "
-            "Please provide a PreTrainedModel class or a path/identifier to a pretrained model when providing feature_extractor."
+            "Impossible to instantiate a pipeline with feature_extractor specified but not the model as the provided"
+            " feature_extractor may not be compatible with the default model. Please provide a PreTrainedModel class"
+            " or a path/identifier to a pretrained model when providing feature_extractor."
         )
 
     if task is None and model is not None:
@@ -642,7 +642,9 @@ def pipeline(
                     kwargs["decoder"] = decoder
                 except ImportError as e:
                     logger.warning(
-                        f"Could not load the `decoder` for {model_name}. Defaulting to raw CTC. Try to install `pyctcdecode` and `kenlm`: (`pip install pyctcdecode`, `pip install https://github.com/kpu/kenlm/archive/master.zip`): Error: {e}"
+                        f"Could not load the `decoder` for {model_name}. Defaulting to raw CTC. Try to install"
+                        " `pyctcdecode` and `kenlm`: (`pip install pyctcdecode`, `pip install"
+                        f" https://github.com/kpu/kenlm/archive/master.zip`): Error: {e}"
                     )
 
     if task == "translation" and model.config.task_specific_params:

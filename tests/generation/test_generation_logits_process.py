@@ -28,10 +28,12 @@ if is_torch_available():
 
     from transformers.generation_logits_process import (
         EncoderNoRepeatNGramLogitsProcessor,
+        ExponentialDecayLengthPenalty,
         ForcedBOSTokenLogitsProcessor,
         ForcedEOSTokenLogitsProcessor,
         HammingDiversityLogitsProcessor,
         InfNanRemoveLogitsProcessor,
+        LogitNormalization,
         LogitsProcessorList,
         MinLengthLogitsProcessor,
         NoBadWordsLogitsProcessor,
@@ -471,14 +473,14 @@ class LogitsProcessorTest(unittest.TestCase):
 
         logits_processor = ForcedEOSTokenLogitsProcessor(max_length=max_length, eos_token_id=eos_token_id)
 
-        # check that all scores are -inf except the eos_token_id when max_length is reached
+        # check that all scores are -inf except the eos_token_id when max_length-1 is reached
         input_ids = ids_tensor((batch_size, 4), vocab_size=20)
         scores = self._get_uniform_logits(batch_size, vocab_size)
         scores = logits_processor(input_ids, scores)
         self.assertTrue(torch.isneginf(scores[:, eos_token_id + 1 :]).all())
         self.assertListEqual(scores[:, eos_token_id].tolist(), 4 * [0])  # score for eos_token_id should be zero
 
-        # check that eos_token_id is not forced if max_length is not reached
+        # check that eos_token_id is not forced if max_length-1 is not reached
         input_ids = ids_tensor((batch_size, 3), vocab_size=20)
         scores = self._get_uniform_logits(batch_size, vocab_size)
         scores = logits_processor(input_ids, scores)
@@ -504,3 +506,50 @@ class LogitsProcessorTest(unittest.TestCase):
                 atol=1e-6,
             )
         )
+
+    def test_exponential_decay_length_penalty(self):
+        vocab_size = 20
+        batch_size = 4
+        eos_token_id = 0
+
+        penalty_start = 5
+        penalty_factor = 1.1
+
+        input_ids = ids_tensor((batch_size, 2), vocab_size=vocab_size)
+        input_ids_seq_length = input_ids.shape[-1]
+
+        length_decay_processor = ExponentialDecayLengthPenalty(
+            exponential_decay_length_penalty=(penalty_start, penalty_factor),
+            eos_token_id=eos_token_id,
+            input_ids_seq_length=input_ids_seq_length,
+        )
+
+        # check that penalty is not applied before start
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+        scores_before_start = length_decay_processor(input_ids, scores)
+        self.assertListEqual(scores_before_start[:, eos_token_id].tolist(), scores[:, eos_token_id].tolist())
+
+        # check that penalty is applied after start
+        input_ids = ids_tensor((batch_size, 20), vocab_size=vocab_size)
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+        scores_after_start = length_decay_processor(input_ids, scores)
+        self.assertTrue(
+            torch.gt(
+                scores_after_start[penalty_start + 1 :, eos_token_id], scores[penalty_start + 1 :, eos_token_id]
+            ).all()
+        )
+
+    def test_normalization(self):
+        input_ids = None
+
+        scores = torch.tensor(
+            [[-23.18, -29.96, -43.54, 47.77], [-33.58, -26.87, -32.96, 22.51]], device=torch_device, dtype=torch.float
+        )
+
+        logit_normalization = LogitNormalization()
+        normalized_scores = logit_normalization(input_ids, scores).exp()
+
+        ones = torch.ones(scores.shape[0], device=torch_device, dtype=torch.float)
+        self.assertTrue(normalized_scores.sum(dim=-1).allclose(ones))
+
+        self.assertTrue(normalized_scores.allclose(scores.softmax(dim=-1)))

@@ -19,13 +19,13 @@ import os
 import re
 
 import black
-from style_doc import style_docstrings_in_code
+from doc_builder.style_doc import style_docstrings_in_code
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
 # python utils/check_copies.py
 TRANSFORMERS_PATH = "src/transformers"
-PATH_TO_DOCS = "docs/source"
+PATH_TO_DOCS = "docs/source/en"
 REPO_PATH = "."
 
 # Mapping for files that are full copies of others (keys are copies, values the file to keep them up to data with)
@@ -40,22 +40,34 @@ LOCALIZED_READMES = {
     "README.md": {
         "start_prompt": "🤗 Transformers currently provides the following architectures",
         "end_prompt": "1. Want to contribute a new model?",
-        "format_model_list": "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by {paper_authors}.{supplements}",
+        "format_model_list": (
+            "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
+            " {paper_authors}.{supplements}"
+        ),
     },
     "README_zh-hans.md": {
         "start_prompt": "🤗 Transformers 目前支持如下的架构",
         "end_prompt": "1. 想要贡献新的模型？",
-        "format_model_list": "**[{title}]({model_link})** (来自 {paper_affiliations}) 伴随论文 {paper_title_link} 由 {paper_authors} 发布。{supplements}",
+        "format_model_list": (
+            "**[{title}]({model_link})** (来自 {paper_affiliations}) 伴随论文 {paper_title_link} 由 {paper_authors}"
+            " 发布。{supplements}"
+        ),
     },
     "README_zh-hant.md": {
         "start_prompt": "🤗 Transformers 目前支援以下的架構",
         "end_prompt": "1. 想要貢獻新的模型？",
-        "format_model_list": "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by {paper_authors}.{supplements}",
+        "format_model_list": (
+            "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
+            " {paper_authors}.{supplements}"
+        ),
     },
     "README_ko.md": {
         "start_prompt": "🤗 Transformers는 다음 모델들을 제공합니다",
         "end_prompt": "1. 새로운 모델을 올리고 싶나요?",
-        "format_model_list": "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by {paper_authors}.{supplements}",
+        "format_model_list": (
+            "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
+            " {paper_authors}.{supplements}"
+        ),
     },
 }
 
@@ -130,7 +142,7 @@ def blackify(code):
     has_indent = len(get_indent(code)) > 0
     if has_indent:
         code = f"class Bla:\n{code}"
-    mode = black.Mode(target_versions={black.TargetVersion.PY35}, line_length=119)
+    mode = black.Mode(target_versions={black.TargetVersion.PY35}, line_length=119, preview=True)
     result = black.format_str(code, mode=mode)
     result, _ = style_docstrings_in_code(result)
     return result[len("class Bla:\n") :] if has_indent else result
@@ -300,8 +312,6 @@ def convert_to_localized_md(model_list, localized_model_list, format_str):
     # This regex is used to synchronize link.
     _re_capture_title_link = re.compile(r"\*\*\[([^\]]*)\]\(([^\)]*)\)\*\*")
 
-    num_models_equal = True
-
     if len(localized_model_list) == 0:
         localized_model_index = {}
     else:
@@ -313,10 +323,16 @@ def convert_to_localized_md(model_list, localized_model_list, format_str):
         except AttributeError:
             raise AttributeError("A model name in localized READMEs cannot be recognized.")
 
+    model_keys = [re.search(r"\*\*\[([^\]]*)", line).groups()[0] for line in model_list.strip().split("\n")]
+
+    # We exclude keys in localized README not in the main one.
+    readmes_match = not any([k not in model_keys for k in localized_model_index])
+    localized_model_index = {k: v for k, v in localized_model_index.items() if k in model_keys}
+
     for model in model_list.strip().split("\n"):
         title, model_link = _re_capture_title_link.search(model).groups()
         if title not in localized_model_index:
-            num_models_equal = False
+            readmes_match = False
             # Add an anchor white space behind a model description string for regex.
             # If metadata cannot be captured, the English version will be directly copied.
             localized_model_index[title] = _re_capture_meta.sub(_rep, model + " ")
@@ -328,11 +344,11 @@ def convert_to_localized_md(model_list, localized_model_list, format_str):
 
     sorted_index = sorted(localized_model_index.items(), key=lambda x: x[0].lower())
 
-    return num_models_equal, "\n".join(map(lambda x: x[1], sorted_index)) + "\n"
+    return readmes_match, "\n".join(map(lambda x: x[1], sorted_index)) + "\n"
 
 
 def convert_readme_to_index(model_list):
-    model_list = model_list.replace("https://huggingface.co/docs/transformers/master/", "")
+    model_list = model_list.replace("https://huggingface.co/docs/transformers/main/", "")
     return model_list.replace("https://huggingface.co/docs/transformers/", "")
 
 
@@ -364,6 +380,22 @@ def _find_text_in_file(filename, start_prompt, end_prompt):
 
 def check_model_list_copy(overwrite=False, max_per_line=119):
     """Check the model lists in the README and index.rst are consistent and maybe `overwrite`."""
+    # Fix potential doc links in the README
+    with open(os.path.join(REPO_PATH, "README.md"), "r", encoding="utf-8", newline="\n") as f:
+        readme = f.read()
+    new_readme = readme.replace("https://huggingface.co/transformers", "https://huggingface.co/docs/transformers")
+    new_readme = new_readme.replace(
+        "https://huggingface.co/docs/main/transformers", "https://huggingface.co/docs/transformers/main"
+    )
+    if new_readme != readme:
+        if overwrite:
+            with open(os.path.join(REPO_PATH, "README.md"), "w", encoding="utf-8", newline="\n") as f:
+                f.write(new_readme)
+        else:
+            raise ValueError(
+                "The main README contains wrong links to the documentation of Transformers. Run `make fix-copies` to "
+                "automatically fix them."
+            )
 
     # If the introduction or the conclusion of the list change, the prompts may need to be updated.
     index_list, start_index, end_index, lines = _find_text_in_file(
@@ -384,9 +416,9 @@ def check_model_list_copy(overwrite=False, max_per_line=119):
         _format_model_list = value["format_model_list"]
 
         localized_md_list = get_model_list(filename, _start_prompt, _end_prompt)
-        num_models_equal, converted_md_list = convert_to_localized_md(md_list, localized_md_list, _format_model_list)
+        readmes_match, converted_md_list = convert_to_localized_md(md_list, localized_md_list, _format_model_list)
 
-        converted_md_lists.append((filename, num_models_equal, converted_md_list, _start_prompt, _end_prompt))
+        converted_md_lists.append((filename, readmes_match, converted_md_list, _start_prompt, _end_prompt))
 
     converted_md_list = convert_readme_to_index(md_list)
     if converted_md_list != index_list:
@@ -400,7 +432,7 @@ def check_model_list_copy(overwrite=False, max_per_line=119):
             )
 
     for converted_md_list in converted_md_lists:
-        filename, num_models_equal, converted_md, _start_prompt, _end_prompt = converted_md_list
+        filename, readmes_match, converted_md, _start_prompt, _end_prompt = converted_md_list
 
         if filename == "README.md":
             continue
@@ -410,7 +442,7 @@ def check_model_list_copy(overwrite=False, max_per_line=119):
             )
             with open(os.path.join(REPO_PATH, filename), "w", encoding="utf-8", newline="\n") as f:
                 f.writelines(lines[:start_index] + [converted_md] + lines[end_index:])
-        elif not num_models_equal:
+        elif not readmes_match:
             raise ValueError(
                 f"The model list in the README changed and the list in `{filename}` has not been updated. Run "
                 "`make fix-copies` to fix this."

@@ -67,10 +67,12 @@ IGNORE_RESULT = doctest.register_optionflag('IGNORE_RESULT')
 
 OutputChecker = doctest.OutputChecker
 
+
 class CustomOutputChecker(OutputChecker):
     def check_output(self, want, got, optionflags):
-        if IGNORE_RESULT and optionflags:
+        if IGNORE_RESULT & optionflags:
             return True
         return OutputChecker.check_output(self, want, got, optionflags)
+
 
 doctest.OutputChecker = CustomOutputChecker
