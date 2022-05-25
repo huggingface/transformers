@@ -98,6 +98,7 @@ class T5Config(PretrainedConfig):
         use_cache=True,
         pad_token_id=0,
         eos_token_id=1,
+        is_gated_act=False,
         **kwargs
     ):
         self.vocab_size = vocab_size
@@ -116,6 +117,14 @@ class T5Config(PretrainedConfig):
         self.initializer_factor = initializer_factor
         self.feed_forward_proj = feed_forward_proj
         self.use_cache = use_cache
+
+        if feed_forward_proj == "gated-gelu":
+            self.dense_act_fn = "gelu_new"
+            self.is_gated_act = True
+        else:
+            self.dense_act_fn = self.feed_forward_proj
+            self.is_gated_act = is_gated_act
+
         super().__init__(
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,

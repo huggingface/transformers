@@ -276,51 +276,33 @@ except Exception:
     pass
 
 
-class T5DenseReluDense(nn.Module):
+class T5DenseActDense(nn.Module):
     def __init__(self, config: T5Config):
         super().__init__()
         self.wi = nn.Linear(config.d_model, config.d_ff, bias=False)
         self.wo = nn.Linear(config.d_ff, config.d_model, bias=False)
         self.dropout = nn.Dropout(config.dropout_rate)
-        self.relu_act = ACT2FN["relu"]
+        self.act = ACT2FN[config.dense_act_fn]
 
     def forward(self, hidden_states):
         hidden_states = self.wi(hidden_states)
-        hidden_states = self.relu_act(hidden_states)
+        hidden_states = self.act(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.wo(hidden_states)
         return hidden_states
 
 
-class T5DenseGatedGeluDense(nn.Module):
+class T5DenseGatedActDense(nn.Module):
     def __init__(self, config: T5Config):
         super().__init__()
         self.wi_0 = nn.Linear(config.d_model, config.d_ff, bias=False)
         self.wi_1 = nn.Linear(config.d_model, config.d_ff, bias=False)
         self.wo = nn.Linear(config.d_ff, config.d_model, bias=False)
         self.dropout = nn.Dropout(config.dropout_rate)
-        self.gelu_act = ACT2FN["gelu_new"]
+        self.act = ACT2FN[config.dense_act_fn]
 
     def forward(self, hidden_states):
-        hidden_gelu = self.gelu_act(self.wi_0(hidden_states))
-        hidden_linear = self.wi_1(hidden_states)
-        hidden_states = hidden_gelu * hidden_linear
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.wo(hidden_states)
-        return hidden_states
-
-
-class T5DenseGatedSiLUDense(nn.Module):
-    def __init__(self, config: T5Config):
-        super().__init__()
-        self.wi_0 = nn.Linear(config.d_model, config.d_ff, bias=False)
-        self.wi_1 = nn.Linear(config.d_model, config.d_ff, bias=False)
-        self.wo = nn.Linear(config.d_ff, config.d_model, bias=False)
-        self.dropout = nn.Dropout(config.dropout_rate)
-        self.gelu_act = ACT2FN["silu"]
-
-    def forward(self, hidden_states):
-        hidden_gelu = self.gelu_act(self.wi_0(hidden_states))
+        hidden_gelu = self.act(self.wi_0(hidden_states))
         hidden_linear = self.wi_1(hidden_states)
         hidden_states = hidden_gelu * hidden_linear
         hidden_states = self.dropout(hidden_states)
@@ -331,16 +313,10 @@ class T5DenseGatedSiLUDense(nn.Module):
 class T5LayerFF(nn.Module):
     def __init__(self, config: T5Config):
         super().__init__()
-        if config.feed_forward_proj == "relu":
-            self.DenseReluDense = T5DenseReluDense(config)
-        elif config.feed_forward_proj == "gated-gelu":
-            self.DenseReluDense = T5DenseGatedGeluDense(config)
-        elif config.feed_forward_proj == "gated-silu":
-            self.DenseReluDense = T5DenseGatedSiLUDense(config)
+        if config.is_gated_act:
+            self.DenseReluDense = T5DenseGatedActDense(config)
         else:
-            raise ValueError(
-                f"{config.feed_forward_proj} is not supported. Choose between `relu`, `gated-gelu` and `gated-silu`"
-            )
+            self.DenseReluDense = T5DenseActDense(config)
 
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
