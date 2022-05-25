@@ -33,4 +33,6 @@
 - sections:
   - local: philosophy
     title: Filosofía
+  - local: bertology
+    title: BERTología
   title: Guías conceptuales
