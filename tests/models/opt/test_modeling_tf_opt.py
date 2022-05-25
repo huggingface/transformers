@@ -276,7 +276,7 @@ class TFOPTHeadTests(unittest.TestCase):
 class OPTModelIntegrationTests(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
-        model = TFOPTModel.from_pretrained("facebook/opt-350m", from_pt=True)
+        model = TFOPTModel.from_pretrained("facebook/opt-350m")
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         attention_mask = tf.not_equal(input_ids, model.config.pad_token_id)
         with tf.GradientTape():
@@ -301,7 +301,7 @@ class TFOPTEmbeddingsTest(unittest.TestCase):
         self.path_model = "facebook/opt-350m"
 
     def test_logits(self):
-        model = TFOPTForCausalLM.from_pretrained(self.path_model, from_pt=True)
+        model = TFOPTForCausalLM.from_pretrained(self.path_model, from_pt)
         tokenizer = GPT2Tokenizer.from_pretrained(self.path_model)
 
         prompts = [
@@ -352,7 +352,7 @@ class TFOPTGenerationTest(unittest.TestCase):
 
         predicted_outputs = []
         tokenizer = GPT2Tokenizer.from_pretrained(model_id)
-        model = TFOPTForCausalLM.from_pretrained(model_id, from_pt=True)
+        model = TFOPTForCausalLM.from_pretrained(model_id)
 
         for prompt in self.prompts:
             input_ids = tokenizer(prompt, return_tensors="tf").input_ids
@@ -373,7 +373,7 @@ class TFOPTGenerationTest(unittest.TestCase):
         model_id = "facebook/opt-350m"
 
         tokenizer = GPT2Tokenizer.from_pretrained(model_id)
-        model = TFOPTForCausalLM.from_pretrained(model_id, from_pt=True)
+        model = TFOPTForCausalLM.from_pretrained(model_id)
 
         tokenizer.padding_side = "left"
 
@@ -420,7 +420,7 @@ class TFOPTGenerationTest(unittest.TestCase):
 
         predicted_outputs = []
         tokenizer = GPT2Tokenizer.from_pretrained(model_id)
-        model = TFOPTForCausalLM.from_pretrained(model_id, from_pt=True)
+        model = TFOPTForCausalLM.from_pretrained(model_id)
 
         for prompt in self.prompts:
             input_ids = tokenizer(prompt, return_tensors="tf").input_ids
