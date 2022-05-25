@@ -345,7 +345,7 @@ Carga el feature extractor con [`AutoFeatureExtractor.from_pretrained`]:
 
 ### Data augmentation
 
-Para las tareas de computer vision, es común añadir algún tipo de data augmentation a las imágenes como parte del preprocesamiento. Puedes añadir el método data augmentation con cualquier librería que quieras, pero en este tutorial, utilizarás el módulo [`transforms`](https://pytorch.org/vision/stable/transforms.html) de torchvision.
+Para las tareas de visión por computadora es común añadir algún tipo de aumento de datos (o data augmentation) a las imágenes como parte del preprocesamiento. Puedes añadir el método de aumento de datos con cualquier librería que quieras, pero en este tutorial utilizarás el módulo [`transforms`](https://pytorch.org/vision/stable/transforms.html) de torchvision.
 
 1. Normaliza la imagen y utiliza [`Compose`](https://pytorch.org/vision/master/generated/torchvision.transforms.Compose.html) para encadenar algunas transformaciones - [`RandomResizedCrop`](https://pytorch.org/vision/main/generated/torchvision.transforms.RandomResizedCrop.html) y [`ColorJitter`](https://pytorch.org/vision/main/generated/torchvision.transforms.ColorJitter.html) - juntos:
 
