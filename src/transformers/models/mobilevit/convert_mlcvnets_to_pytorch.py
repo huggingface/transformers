@@ -271,8 +271,8 @@ def convert_movilevit_checkpoint(mobilevit_name, checkpoint_path, pytorch_dump_f
 
         print("Pushing to the hub...")
         model_name = model_mapping[mobilevit_name]
-        feature_extractor.push_to_hub(model_name, organization="Matthijs")
-        model.push_to_hub(model_name, organization="Matthijs")
+        feature_extractor.push_to_hub(model_name, organization="apple")
+        model.push_to_hub(model_name, organization="apple")
 
 
 if __name__ == "__main__":

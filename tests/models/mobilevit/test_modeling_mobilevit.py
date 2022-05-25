@@ -290,12 +290,12 @@ class MobileViTModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         return (
-            MobileViTFeatureExtractor.from_pretrained("Matthijs/mobilevit-xx-small") if is_vision_available() else None
+            MobileViTFeatureExtractor.from_pretrained("apple/mobilevit-xx-small") if is_vision_available() else None
         )
 
     @slow
     def test_inference_image_classification_head(self):
-        model = MobileViTForImageClassification.from_pretrained("Matthijs/mobilevit-xx-small").to(torch_device)
+        model = MobileViTForImageClassification.from_pretrained("apple/mobilevit-xx-small").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
@@ -315,10 +315,10 @@ class MobileViTModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_semantic_segmentation(self):
-        model = MobileViTForSemanticSegmentation.from_pretrained("Matthijs/deeplabv3-mobilevit-xx-small")
+        model = MobileViTForSemanticSegmentation.from_pretrained("apple/deeplabv3-mobilevit-xx-small")
         model = model.to(torch_device)
 
-        feature_extractor = MobileViTFeatureExtractor.from_pretrained("Matthijs/deeplabv3-mobilevit-xx-small")
+        feature_extractor = MobileViTFeatureExtractor.from_pretrained("apple/deeplabv3-mobilevit-xx-small")
 
         image = prepare_img()
         inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)

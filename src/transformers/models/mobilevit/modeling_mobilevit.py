@@ -52,21 +52,21 @@ _CONFIG_FOR_DOC = "MobileViTConfig"
 _FEAT_EXTRACTOR_FOR_DOC = "MobileViTFeatureExtractor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "Matthijs/mobilevit-small"
+_CHECKPOINT_FOR_DOC = "apple/mobilevit-small"
 _EXPECTED_OUTPUT_SHAPE = [1, 640, 8, 8]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "Matthijs/mobilevit-small"
+_IMAGE_CLASS_CHECKPOINT = "apple/mobilevit-small"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
 MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Matthijs/mobilevit-small",
-    "Matthijs/mobilevit-x-small",
-    "Matthijs/mobilevit-xx-small",
-    "Matthijs/deeplabv3-mobilevit-small",
-    "Matthijs/deeplabv3-mobilevit-x-small",
-    "Matthijs/deeplabv3-mobilevit-xx-small",
+    "apple/mobilevit-small",
+    "apple/mobilevit-x-small",
+    "apple/mobilevit-xx-small",
+    "apple/deeplabv3-mobilevit-small",
+    "apple/deeplabv3-mobilevit-x-small",
+    "apple/deeplabv3-mobilevit-xx-small",
     # See all MobileViT models at https://huggingface.co/models?filter=mobilevit
 ]
 
@@ -1050,8 +1050,8 @@ class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = MobileViTFeatureExtractor.from_pretrained("Matthijs/deeplabv3-mobilevit-small")
-        >>> model = MobileViTForSemanticSegmentation.from_pretrained("Matthijs/deeplabv3-mobilevit-small")
+        >>> feature_extractor = MobileViTFeatureExtractor.from_pretrained("apple/deeplabv3-mobilevit-small")
+        >>> model = MobileViTForSemanticSegmentation.from_pretrained("apple/deeplabv3-mobilevit-small")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
 
