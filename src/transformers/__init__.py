@@ -323,6 +323,7 @@ _import_structure = {
     "models.visual_bert": ["VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VisualBertConfig"],
     "models.vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
     "models.vit_mae": ["VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMAEConfig"],
+    "models.vitpose": ["VITPOSE_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTPoseConfig"],
     "models.wav2vec2": [
         "WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Wav2Vec2Config",
@@ -1699,6 +1700,13 @@ else:
             "ViTPreTrainedModel",
         ]
     )
+    _import_structure["models.vitpose"].extend(
+        [
+            "VITPOSE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ViTPoseModel",
+            "ViTPosePreTrainedModel",
+        ]
+    )
     _import_structure["models.vit_mae"].extend(
         [
             "VIT_MAE_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2865,6 +2873,7 @@ if TYPE_CHECKING:
     from .models.visual_bert import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VisualBertConfig
     from .models.vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
     from .models.vit_mae import VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMAEConfig
+    from .models.vitpose import VITPOSE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTPoseConfig
     from .models.wav2vec2 import (
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Wav2Vec2Config,
@@ -4023,6 +4032,7 @@ if TYPE_CHECKING:
             ViTMAEModel,
             ViTMAEPreTrainedModel,
         )
+        from .models.vitpose import VITPOSE_PRETRAINED_MODEL_ARCHIVE_LIST, ViTPoseModel, ViTPosePreTrainedModel
         from .models.wav2vec2 import (
             WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
             Wav2Vec2ForAudioFrameClassification,

@@ -121,6 +121,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("visual_bert", "VisualBertModel"),
         ("vit", "ViTModel"),
         ("vit_mae", "ViTMAEModel"),
+        ("vitpose", "ViTPoseModel"),
         ("wav2vec2", "Wav2Vec2Model"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerModel"),
         ("wavlm", "WavLMModel"),
@@ -288,6 +289,7 @@ MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
         ("deit", "DeiTForMaskedImageModeling"),
         ("swin", "SwinForMaskedImageModeling"),
         ("vit", "ViTForMaskedImageModeling"),
+        ("vitpose", "ViTPoseForMaskedImageModeling"),
     ]
 )
 
@@ -323,6 +325,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("swin", "SwinForImageClassification"),
         ("van", "VanForImageClassification"),
         ("vit", "ViTForImageClassification"),
+        ("vitpose", "ViTPoseForImageClassification"),
     ]
 )
 

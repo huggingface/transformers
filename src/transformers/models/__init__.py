@@ -131,6 +131,7 @@ from . import (
     visual_bert,
     vit,
     vit_mae,
+    vitpose,
     wav2vec2,
     wav2vec2_conformer,
     wav2vec2_phoneme,
