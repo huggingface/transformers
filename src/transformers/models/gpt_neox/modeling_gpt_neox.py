@@ -196,7 +196,11 @@ class GPTNeoXAttention(nn.Module):
         attn_scores = torch.einsum("bik,bjk->bij", query, key) / self.norm_factor
         attn_scores = attn_scores.view(batch_size, num_attention_heads, query_length, key_length)
 
-        attn_scores = torch.where(causal_mask, attn_scores, self.masked_bias.to(attn_scores.dtype))
+        mask_value = torch.finfo(attn_scores.dtype).min
+        # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
+        # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
+        mask_value = torch.tensor(mask_value, dtype=attn_scores.dtype).to(attn_scores.device)
+        attn_scores = torch.where(causal_mask, attn_scores, mask_value)
 
         if attention_mask is not None:
             # Apply the attention mask
@@ -214,7 +218,7 @@ class GPTNeoXAttention(nn.Module):
 
 
 def attention_mask_func(attention_scores, ltor_mask):
-    attention_scores.masked_fill_(~ltor_mask, -10000.0)
+    attention_scores.masked_fill_(~ltor_mask, torch.finfo(attention_scores.dtype).min)
     return attention_scores
 
 
@@ -460,7 +464,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
             # Since we are adding it to the raw scores before the softmax, this is
             # effectively the same as removing these entirely.
             attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-            attention_mask = (1.0 - attention_mask) * -10000.0
+            attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
