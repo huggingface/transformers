@@ -13,8 +13,13 @@ RUN python3 -m pip install --no-cache-dir -e ./transformers[dev-torch,testing]
 
 # If set to nothing, will install the latest version
 ARG PYTORCH=''
+ARG TORCH_VISION=''
+ARG TORCH_AUDIO=''
 
 RUN [ ${#PYTORCH} -gt 0 ] && VERSION='torch=='$PYTORCH'.*' ||  VERSION='torch'; python3 -m pip install --no-cache-dir -U $VERSION
+RUN [ ${#TORCH_VISION} -gt 0 ] && VERSION='torchvision=='TORCH_VISION'.*' ||  VERSION='torchvision'; python3 -m pip install --no-cache-dir -U $VERSION
+RUN [ ${#TORCH_AUDIO} -gt 0 ] && VERSION='torchaudio=='TORCH_AUDIO'.*' ||  VERSION='torchaudio'; python3 -m pip install --no-cache-dir -U $VERSION
+
 RUN python3 -m pip uninstall -y tensorflow flax
 
 RUN python3 -m pip install --no-cache-dir torch-scatter -f https://data.pyg.org/whl/torch-$(python3 -c "from torch import version; print(version.__version__.split('+')[0])")+cu102.html
