@@ -2063,7 +2063,9 @@ class TFGenerationMixin:
 
             # update model_kwargs
             if use_xla:
-                model_kwargs = self._update_model_kwargs_for_xla_generation(outputs, model_kwargs, cur_len, max_length)
+                model_kwargs = self._update_model_kwargs_for_xla_generation(
+                    outputs, model_kwargs, cur_len, max_length
+                )
             else:
                 model_kwargs = self._update_model_kwargs_for_generation(
                     outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
