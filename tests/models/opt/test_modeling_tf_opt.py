@@ -301,7 +301,7 @@ class TFOPTEmbeddingsTest(unittest.TestCase):
         self.path_model = "facebook/opt-350m"
 
     def test_logits(self):
-        model = TFOPTForCausalLM.from_pretrained(self.path_model, from_pt)
+        model = TFOPTForCausalLM.from_pretrained(self.path_model)
         tokenizer = GPT2Tokenizer.from_pretrained(self.path_model)
 
         prompts = [
