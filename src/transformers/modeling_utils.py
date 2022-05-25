@@ -597,11 +597,12 @@ def _load_state_dict_into_meta_model(
                 raise ValueError(f"{param_name} doesn't have any device set.")
             param_device = device_map[module_name]
 
-        set_module_tensor_to_device(model, param_name, param_device, value=param)
         if param_device == "disk":
             offload_index = offload_weight(param, param_name, offload_folder, offload_index)
         elif param_device == "cpu" and state_dict_index is not None:
             state_dict_index = offload_weight(param, param_name, state_dict_folder, state_dict_index)
+        else:
+            set_module_tensor_to_device(model, param_name, param_device, value=param)
 
     return error_msgs, offload_index, state_dict_index
 
@@ -2216,6 +2217,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         offload_state_dict=False,
         dtype=None,
     ):
+        if device_map is not None and "disk" in device_map.values() and offload_folder is None:
+            raise ValueError(
+                "The current `device_map` had weights offloaded to the disk. Please provide an `offload_folder` for"
+                " them."
+            )
         # Retrieve missing & unexpected_keys
         model_state_dict = model.state_dict()
         expected_keys = list(model_state_dict.keys())
