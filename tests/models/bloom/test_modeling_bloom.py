@@ -166,7 +166,7 @@ class BloomModelTester:
         output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=4e-2))
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
     def create_and_check_bloom_model_attention_mask_past(self, config, input_ids, input_mask, *args):
         model = BloomModel(config=config)
@@ -209,7 +209,7 @@ class BloomModelTester:
         output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=4e-2))
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-6))
 
     def create_and_check_bloom_model_past_large_inputs(self, config, input_ids, input_mask, *args):
         model = BloomModel(config=config)

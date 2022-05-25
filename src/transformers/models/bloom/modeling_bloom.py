@@ -93,9 +93,75 @@ def attention_mask_func(attention_scores, attention_mask, causal_mask):
     )
 
 
-def shift_alibi_tensor(alibi, n_head, attention_mask):
-    # TODO
-    return
+def build_alibi_tensor(max_seq_len, n_head, dtype=torch.bfloat16):
+    """
+    Alibi tensor is not causal as the original paper mentions, it relies on a translation invariance of softmax for
+    quick implementation: with l being a tensor, and a fixed value `softmax(l+a) = softmax(l) Based on
+    https://github.com/ofirpress/attention_with_linear_biases/blob/a35aaca144e0eb6b789dfcb46784c4b8e31b7983/fairseq/models/transformer.py#L742
+
+    Returns tensor shaped (n_head, 1, max_seq_len)
+
+    """
+
+    def get_slopes(n):
+        def get_slopes_power_of_2(n):
+            start = 2 ** (-(2 ** -(math.log2(n) - 3)))
+            ratio = start
+            return [start * ratio**i for i in range(n)]
+
+        if math.log2(n).is_integer():
+            return get_slopes_power_of_2(n)
+        else:
+            closest_power_of_2 = 2 ** math.floor(math.log2(n))
+            return (
+                get_slopes_power_of_2(closest_power_of_2)
+                + get_slopes(2 * closest_power_of_2)[0::2][: n - closest_power_of_2]
+            )
+
+    slopes = torch.Tensor(get_slopes(n_head)).unsqueeze(1).unsqueeze(1)
+    arange_tensor = torch.arange(max_seq_len).unsqueeze(0).unsqueeze(0)
+    alibi = slopes * arange_tensor.expand(n_head, -1, -1)
+
+    alibi = alibi.to(dtype)
+
+    return alibi
+
+
+def pre_process_alibi_for_pad(alibi, attention_mask, num_heads):
+    """
+    Args:
+    Pre-process the alibi tensor for padding.
+        alibi: ([`torch.tensor`], *required*):
+            alibi tensor to pre-process
+        attention_mask: ([`torch.tensor`], *required*):
+            attention mask to pre-process"""
+
+    # Sanity check if we are not inferring less tokens than the total sequence length
+    # This usually happens when the inference is done with past_key_values
+    # In this case we re-create the alibi tensor with the correct sequence length
+    if attention_mask.shape[-1] != alibi.shape[-1]:
+        alibi = build_alibi_tensor(attention_mask.shape[-1], num_heads, alibi.dtype).repeat(
+            attention_mask.shape[0], 1, 1
+        )
+    # Get the indexes of the padding tokens
+    index_x0, index_y0 = torch.where(attention_mask == 0.0)
+    index_x1, index_y1 = torch.where(attention_mask == 1.0)
+
+    # Clone the embeddings  - we can detach because the embeddings are not learned
+    # Get a refence tensor
+    new_alibi = torch.clone(alibi.detach())
+    slice_reference_alibi = build_alibi_tensor(alibi.shape[-1], num_heads, alibi.dtype)
+
+    # Loop over the batch where the padding is and replace the alibi tensor by the reference tensor
+    # Only where you do not have padding. Replace padding tokens by zeros
+    # This operation can be seen as a shifting operation.
+    for i, index in enumerate(torch.unique(index_x0)):
+        slice_to_modify = torch.zeros_like(slice_reference_alibi)
+        index_shift = index_y1[index_x1 == index]
+        shift_value = len(index_shift)
+        slice_to_modify[:, :, index_shift] = slice_reference_alibi[:, :, :shift_value]
+        new_alibi[index * num_heads : (index + 1) * num_heads] = slice_to_modify
+    return new_alibi
 
 
 def bias_dropout_add(x, bias, residual, prob, training):
@@ -237,6 +303,10 @@ class BloomAttention(nn.Module):
         # hidden_states: [batch_size, seq_length, hidden_size]
         # repeat alibi tensor with the batch size
         alibi = alibi.repeat(hidden_states.shape[0], 1, 1).to(hidden_states.device)
+
+        # apply preprocessing if the input is padded
+        if attention_mask is not None and 0 in attention_mask:
+            alibi = pre_process_alibi_for_pad(alibi, attention_mask, self.num_heads)
 
         bias = self.query_key_value.bias
 
@@ -404,40 +474,6 @@ class BloomBlock(nn.Module):
         self.bias_dropout_fusion = config.bias_dropout_fusion
         self.hidden_dropout = config.hidden_dropout
 
-    @staticmethod
-    def _build_alibi_tensor(max_seq_len, n_head, dtype=torch.bfloat16):
-        """
-        Alibi tensor is not causal as the original paper mentions, it relies on a translation invariance of softmax for
-        quick implementation: with l being a tensor, and a fixed value `softmax(l+a) = softmax(l) Based on
-        https://github.com/ofirpress/attention_with_linear_biases/blob/a35aaca144e0eb6b789dfcb46784c4b8e31b7983/fairseq/models/transformer.py#L742
-
-        Returns tensor shaped (n_head, 1, max_seq_len)
-
-        """
-
-        def get_slopes(n):
-            def get_slopes_power_of_2(n):
-                start = 2 ** (-(2 ** -(math.log2(n) - 3)))
-                ratio = start
-                return [start * ratio**i for i in range(n)]
-
-            if math.log2(n).is_integer():
-                return get_slopes_power_of_2(n)
-            else:
-                closest_power_of_2 = 2 ** math.floor(math.log2(n))
-                return (
-                    get_slopes_power_of_2(closest_power_of_2)
-                    + get_slopes(2 * closest_power_of_2)[0::2][: n - closest_power_of_2]
-                )
-
-        slopes = torch.Tensor(get_slopes(n_head)).unsqueeze(1).unsqueeze(1)
-        arange_tensor = torch.arange(max_seq_len).unsqueeze(0).unsqueeze(0)
-        alibi = slopes * arange_tensor.expand(n_head, -1, -1)
-
-        alibi = alibi.to(dtype)
-
-        return alibi
-
     def forward(
         self,
         hidden_states,
@@ -453,7 +489,10 @@ class BloomBlock(nn.Module):
         layernorm_output = self.input_layernorm(hidden_states)
 
         # Compute alibi tensor
-        alibi = self._build_alibi_tensor(hidden_states.shape[1], self.n_head, layernorm_output.dtype)
+        current_sequence_length = hidden_states.shape[1]
+        if layer_past is not None:
+            current_sequence_length += layer_past[0].shape[1]
+        alibi = build_alibi_tensor(current_sequence_length, self.n_head, layernorm_output.dtype)
 
         # Self attention.
         attn_outputs, attention_bias = self.self_attention(
