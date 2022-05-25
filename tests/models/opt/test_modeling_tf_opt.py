@@ -18,7 +18,7 @@ import unittest
 import numpy as np
 
 from transformers import GPT2Tokenizer, OPTConfig, is_tf_available
-from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
+from transformers.testing_utils import require_sentencepiece, require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -115,8 +115,8 @@ class TFOPTModelTester:
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
             embed_dim=self.embed_dim,
-            is_encoder_decoder=False,
             word_embed_proj_dim=self.word_embed_proj_dim,
+            is_encoder_decoder=False,
             **self.config_updates,
         )
         inputs_dict = prepare_opt_inputs_dict(config, input_ids)
@@ -240,27 +240,11 @@ class TFOPTModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCa
                             models_equal = False
                     self.assertTrue(models_equal)
 
-    # def check_pt_tf_models(self, tf_model, pt_model, tf_inputs_dict):
-    #     # TODO in the next PR, fix it
-    #     return True
 
     def test_saved_model_creation(self):
         # This test is too long (>30sec) and makes fail the CI
         pass
 
-
-def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
-    """If tensors not close, or a and b arent both tensors, raise a nice Assertion error."""
-    if a is None and b is None:
-        return True
-    try:
-        if tf.debugging.assert_near(a, b, atol=atol):
-            return True
-        raise
-    except Exception:
-        if len(prefix) > 0:
-            prefix = f"{prefix}: "
-        raise AssertionError(f"{prefix}{a} != {b}")
 
 
 def _long_tensor(tok_lst):
@@ -292,7 +276,7 @@ class TFOPTHeadTests(unittest.TestCase):
 @require_sentencepiece
 @require_tf
 class OPTModelIntegrationTests(unittest.TestCase):
-    # @slow
+    @slow
     def test_inference_no_head(self):
         model = TFOPTModel.from_pretrained("facebook/opt-350m", from_pt=True)
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
@@ -312,7 +296,7 @@ class OPTModelIntegrationTests(unittest.TestCase):
 
 
 @require_tf
-# @slow
+@slow
 class TFOPTEmbeddingsTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
@@ -346,9 +330,8 @@ class TFOPTEmbeddingsTest(unittest.TestCase):
         self.assertTrue(np.allclose(logits, logits_meta, atol=1e-4))
 
 
-@require_tokenizers
 @require_tf
-# @slow
+@slow
 class TFOPTGenerationTest(unittest.TestCase):
     @property
     def prompts(self):
@@ -364,9 +347,9 @@ class TFOPTGenerationTest(unittest.TestCase):
 
         EXPECTED_OUTPUTS = [
             "Today is a beautiful day and I want everyone",
-            "In the city of Rome Canaver Canaver Canaver Canaver Canaver",
-            "Paris is the capital of France and Parisdylibdylibdylib",
-            "Computers and mobile phones have taken precedence over humansruciating",
+            "In the city of Rome Canaver Canaver Canaver Canaver",
+            "Paris is the capital of France and Parisdylib",
+            "Computers and mobile phones have taken precedence over",
         ]
 
         predicted_outputs = []
