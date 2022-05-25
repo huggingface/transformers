@@ -17,7 +17,7 @@ specific language governing permissions and limitations under the License.
 Antes de que puedas utilizar los datos en un modelo, debes procesarlos en un formato aceptable para el modelo. Un modelo no entiende el texto en bruto, las imágenes o el audio. Estas entradas necesitan ser convertidas en números y ensambladas en tensores. En este tutorial, podrás:
 
 * Preprocesar los datos textuales con un tokenizador.
-* Preprocesar datos de imagen o audio con un feature extractor.
+* Preprocesar datos de imagen o audio con un extractor de características.
 * Preprocesar datos para una tarea multimodal con un procesador.
 
 ## NLP
@@ -93,7 +93,7 @@ Si hay varias frases que quieres preprocesar, pasa las frases como una lista al 
 
 ### Pad
 
-Esto nos lleva a un tema importante. Cuando se procesa un batch de frases, no siempre tienen la misma longitud. Esto es un problema, porque los tensores que se introducen en el modelo deben tener una forma uniforme. El pad es una estrategia para asegurar que los tensores sean rectangulares añadiendo un "padding token" especial a las sentencias con menos tokens.
+Esto nos lleva a un tema importante. Cuando se procesa un batch de frases, no siempre tienen la misma longitud. Esto es un problema porque los tensores que se introducen en el modelo deben tener una forma uniforme. El pad es una estrategia para asegurar que los tensores sean rectangulares añadiendo un "padding token" especial a las oraciones con menos tokens.
 
 Establece el parámetro `padding` en `True` aplicando el pad a las secuencias más cortas del batch para que coincidan con la secuencia más larga:
 
@@ -199,7 +199,7 @@ Carga la tarea de detección de palabras clave del benchmark [SUPERB](https://hu
 >>> dataset = load_dataset("superb", "ks")
 ```
 
-Accede al primer elemento de la columna `audio` para echar un vistazo a la entrada. Al llamar a la columna `audio` se cargará y se hará resample o se remuestreará automáticamente el archivo de audio:
+Accede al primer elemento de la columna `audio` para echar un vistazo a la entrada. Al llamar a la columna `audio` se cargará y volverá a muestrear automáticamente el archivo de audio:
 
 ```py
 >>> dataset["train"][0]["audio"]
@@ -248,11 +248,11 @@ Por ejemplo, carga el dataset [LJ Speech](https://huggingface.co/datasets/lj_spe
 
 Como puedes ver, el `sampling_rate` se ha reducido a 16kHz. Ahora que sabes cómo funciona el resampling, volvamos a nuestro ejemplo anterior con el dataset SUPERB.
 
-### Feature extractor
+### Extractor de características
 
-El siguiente paso es cargar un feature extractor para normalizar y aplicar el pad a la entrada. Cuando se aplica padding a los datos textuales, se añade un "0" para las secuencias más cortas. La misma idea se aplica a los datos de audio, y el feature extractor de audio añadirá un "0" - interpretado como silencio - al "array".
+El siguiente paso es cargar un extractor de características para normalizar y aplicar el pad a la entrada. Cuando se aplica padding a los datos textuales, se añade un "0" para las secuencias más cortas. La misma idea se aplica a los datos de audio y el extractor de características de audio añadirá un "0" - interpretado como silencio - al "array".
 
-Carga el feature extractor con [`AutoFeatureExtractor.from_pretrained`]:
+Carga el extractor de características con [`AutoFeatureExtractor.from_pretrained`]:
 
 ```py
 >>> from transformers import AutoFeatureExtractor
@@ -260,7 +260,7 @@ Carga el feature extractor con [`AutoFeatureExtractor.from_pretrained`]:
 >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base")
 ```
 
-Pasa el `array` de audio al feature extractor. También te recomendamos añadir el argumento `sampling_rate` en el feature extractor para poder depurar mejor los errores silenciosos que puedan producirse.
+Pasa el `array` de audio al extractor de características. También te recomendamos añadir el argumento `sampling_rate` en el extractor de características para poder depurar mejor los errores silenciosos que puedan producirse.
 
 ```py
 >>> audio_input = [dataset["train"][0]["audio"]["array"]]
@@ -280,7 +280,7 @@ Al igual que el tokenizador, puedes aplicar padding o truncamiento para manejar 
 (988891,)
 ```
 
-Como puedes ver, la primera muestra tiene una secuencia más larga que la segunda. Vamos a crear una función que preprocesará el dataset. Específiquemos una longitud máxima de muestra y el extractor de características que aplicará el pad o truncará las secuencias para que coincidan con esta:
+Como puedes ver, el `sampling_rate` se ha reducido a 16kHz. 
 
 ```py
 >>> def preprocess_function(examples):
@@ -313,9 +313,9 @@ Ahora echa un vistazo a las longitudes de las muestras procesadas:
 
 Las longitudes de las dos primeras muestras coinciden ahora con la longitud máxima especificada.
 
-## Vision
+## Visión
 
-También se utiliza un feature extractor para procesar imágenes para tareas de computer vision. Una vez más, el objetivo es convertir la imagen en bruto en un batch de tensores como entrada.
+También se utiliza un extractor de características para procesar imágenes para tareas de visión por computadora. Una vez más, el objetivo es convertir la imagen en bruto en un batch de tensores como entrada.
 
 Vamos a cargar el dataset [food101](https://huggingface.co/datasets/food101) para este tutorial. Usa el parámetro 🤗 Datasets `split` para cargar solo una pequeña muestra de la división de entrenamiento ya que el dataset es bastante grande:
 
@@ -333,9 +333,9 @@ A continuación, observa la imagen con la función 🤗 Datasets [`Image`](https
 
 ![vision-preprocess-tutorial.png](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/vision-preprocess-tutorial.png)
 
-### Feature extractor
+### Extractor de características
 
-Carga el feature extractor con [`AutoFeatureExtractor.from_pretrained`]:
+Carga el extractor de características con [`AutoFeatureExtractor.from_pretrained`]:
 
 ```py
 >>> from transformers import AutoFeatureExtractor
@@ -343,7 +343,7 @@ Carga el feature extractor con [`AutoFeatureExtractor.from_pretrained`]:
 >>> feature_extractor = AutoFeatureExtractor.from_pretrained("google/vit-base-patch16-224")
 ```
 
-### Data augmentation
+### Aumento de Datos
 
 Para las tareas de visión por computadora es común añadir algún tipo de aumento de datos (o data augmentation) a las imágenes como parte del preprocesamiento. Puedes añadir el método de aumento de datos con cualquier librería que quieras, pero en este tutorial utilizarás el módulo [`transforms`](https://pytorch.org/vision/stable/transforms.html) de torchvision.
 
@@ -372,7 +372,7 @@ Para las tareas de visión por computadora es común añadir algún tipo de aume
 >>> dataset.set_transform(transforms)
 ```
 
-4. Ahora, cuando accedes a la imagen, observarás que el feature extractor ha añadido a la entrada del modelo `pixel_values`:
+4. Ahora, cuando accedes a la imagen, observarás que el extractor de características ha añadido a la entrada del modelo `pixel_values`:
 
 ```py
 >>> dataset[0]["image"]
@@ -419,7 +419,7 @@ Este es el aspecto de la imagen después de preprocesarla. Como era de esperar p
 
 Para las tareas multimodales utilizarás una combinación de todo lo que has aprendido hasta ahora y aplicarás tus habilidades a una tarea de reconocimiento automático de voz (ASR). Esto significa que necesitarás un:
 
-* Feature extractor para preprocesar los datos de audio.
+* Extractor de características para preprocesar los datos de audio.
 * Un tokenizador para procesar el texto.
 
 Volvamos al dataset [LJ Speech](https://huggingface.co/datasets/lj_speech):
@@ -430,7 +430,7 @@ Volvamos al dataset [LJ Speech](https://huggingface.co/datasets/lj_speech):
 >>> lj_speech = load_dataset("lj_speech", split="train")
 ```
 
-Suponiendo que te interesan principalmente las columnas `audio` y `texto`, elimine las demás columnas:
+Suponiendo que te interesan principalmente las columnas `audio` y `texto`, elimina las demás columnas:
 
 ```py
 >>> lj_speech = lj_speech.map(remove_columns=["file", "id", "normalized_text"])
@@ -449,7 +449,7 @@ Ahora echa un vistazo a las columnas `audio` y `texto`:
 'Printing, in the only sense with which we are at present concerned, differs from most if not from all the arts and crafts represented in the Exhibition'
 ```
 
-Recuerda la sección anterior sobre el procesamiento de datos de audio, siempre debe hacer [resample](preprocessing#audio) a la tasa de muestreo de sus datos de audio para que coincida con la tasa de muestreo del dataset utilizado para preentrenar un modelo:
+Recuerda la sección anterior sobre el procesamiento de datos de audio, siempre debes [volver a muestrear](preprocessing#audio) la tasa de muestreo de tus datos de audio para que coincida con la tasa de muestreo del dataset utilizado para preentrenar un modelo:
 
 ```py
 >>> lj_speech = lj_speech.cast_column("audio", Audio(sampling_rate=16_000))
@@ -457,7 +457,7 @@ Recuerda la sección anterior sobre el procesamiento de datos de audio, siempre 
 
 ### Processor
 
-Un processor combina un feature extractor y un tokenizador. Cargue un procesador con [`AutoProcessor.from_pretrained]:
+Un processor combina un extractor de características y un tokenizador. Cargue un procesador con [`AutoProcessor.from_pretrained]:
 
 ```py
 >>> from transformers import AutoProcessor
@@ -478,13 +478,13 @@ Un processor combina un feature extractor y un tokenizador. Cargue un procesador
 ...     return example
 ```
 
-2. Aplicar la función `prepare_dataset` a una muestra:
+2. Aplica la función `prepare_dataset` a una muestra:
 
 ```py
 >>> prepare_dataset(lj_speech[0])
 ```
 
-Observa que el método processor ha añadido `input_values` y `labels`. El sampling rate también se ha reducido correctamente a 16kHz.
+Observa que el método processor ha añadido `input_values` y `labels`. La tasa de muestreo también se ha reducido correctamente a 16kHz.
 
 Genial, ahora deberías ser capaz de preprocesar datos para cualquier modalidad e incluso combinar diferentes modalidades. En el siguiente tutorial, aprenderás aplicar fine tuning a un modelo en tus datos recién preprocesados.
 
