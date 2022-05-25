@@ -93,7 +93,6 @@ def convert_bloom_checkpoint_to_pytorch(
 
         index_dict = {"weight_map": {}, "metadata": {}}
         total_size = 0
-        dtype_size = get_dtype_size(config.dtype)
 
         missing_keys = None
 
@@ -143,6 +142,7 @@ def convert_bloom_checkpoint_to_pytorch(
                 temp_tensor = tensors[key]
                 for ele in temp_tensor.size():
                     tensor_size *= ele
+                dtype_size = get_dtype_size(temp_tensor.dtype)
                 total_size += dtype_size * tensor_size
 
                 if key not in index_dict["weight_map"]:
