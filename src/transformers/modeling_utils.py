@@ -1734,6 +1734,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 same device.
 
                 To have Accelerate compute the most optimized `device_map` automatically, set `device_map="auto"`.
+            max_memory (`Dict`, *optional*):
+                A dictionary device identifier to maximum memory. Will default to the maximum memory available for each
+                GPU and the available CPU RAM if unset.
             offload_folder (`str` or `os.PathLike`, *optional*):
                 If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
             offload_state_dict (`bool`, *optional*, defaults to `False`):
@@ -1822,6 +1825,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         torch_dtype = kwargs.pop("torch_dtype", None)
         low_cpu_mem_usage = kwargs.pop("low_cpu_mem_usage", None)
         device_map = kwargs.pop("device_map", None)
+        max_memory = kwargs.pop("max_memory", None)
         offload_folder = kwargs.pop("offload_folder", None)
         offload_state_dict = kwargs.pop("offload_state_dict", False)
 
@@ -2119,7 +2123,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if model._no_split_modules is None:
                 raise ValueError(f"{model.__class__.__name__} does not support `device_map='auto'` yet.")
             no_split_modules = model._no_split_modules
-            device_map = infer_auto_device_map(model, no_split_module_classes=no_split_modules, dtype=torch_dtype)
+            device_map = infer_auto_device_map(
+                model, no_split_module_classes=no_split_modules, dtype=torch_dtype, max_memory=max_memory
+            )
 
         if from_tf:
             if resolved_archive_file.endswith(".index"):
