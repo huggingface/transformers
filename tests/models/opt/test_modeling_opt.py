@@ -346,7 +346,7 @@ class OPTGenerationTest(unittest.TestCase):
         model_id = "facebook/opt-125m"
 
         EXPECTED_OUTPUTS = [
-            "Today is a beautiful day and I want to",
+            "Today is a beautiful day and I want everyone",
             "In the city of Rome Canaver Canaver Canaver Canaver",
             "Paris is the capital of France and Parisdylib",
             "Computers and mobile phones have taken precedence over",
