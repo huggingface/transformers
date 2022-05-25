@@ -358,7 +358,7 @@ Para las tareas de visión por computadora es común añadir algún tipo de aume
 ... )
 ```
 
-2. El modelo acepta [`pixel_values`](model_doc/visionencoderdecoder#transformers.VisionEncoderDecoderModel.forward.pixel_values) como entrada. Este valor es generado por el feature extractor. Crear una función que genere `pixel_values` a partir de las transformaciones:
+2. El modelo acepta [`pixel_values`](model_doc/visionencoderdecoder#transformers.VisionEncoderDecoderModel.forward.pixel_values) como entrada. Este valor es generado por el extractor de características. Crea una función que genere `pixel_values` a partir de las transformaciones:
 
 ```py
 >>> def transforms(examples):
