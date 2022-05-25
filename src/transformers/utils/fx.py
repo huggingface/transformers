@@ -14,23 +14,26 @@
 # limitations under the License.
 
 import builtins
+import collections
 import functools
 import inspect
 import math
+import operator
 import random
 import warnings
-from copy import deepcopy
 from typing import Any, Callable, Dict, Iterable, List, Optional, Type, Union
 
 import torch
 from packaging import version
 from torch import nn
 from torch.fx import Graph, GraphModule, Proxy, Tracer
+from torch.fx.proxy import ParameterProxy
 
 from .. import (
     CONFIG_MAPPING,
     MODEL_FOR_CAUSAL_LM_MAPPING,
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
+    MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
     MODEL_FOR_MASKED_LM_MAPPING,
     MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
     MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
@@ -71,6 +74,7 @@ def _generate_supported_model_classes(
         "question-answering": MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         "sequence-classification": MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         "token-classification": MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+        "masked-image-modeling": MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
         "image-classification": MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
     }
 
@@ -100,6 +104,8 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "gpt_neo",
     "t5",
     "roberta",
+    "vit",
+    "swin",
     # TODO: add support for them as it should be quite easy to do so (small blocking issues).
     # "layoutlm",
     # "xlnet",
@@ -122,45 +128,45 @@ _SUPPORTED_MODELS = tuple(
 )
 
 
-def embedding_override(self, input):
+def torch_nn_embedding(self, input):
     return torch.empty(*input.shape, self.weight.shape[-1], device="meta")
 
 
-def torch_nn_layernorm_override(self, input):
+def torch_nn_layernorm(self, input):
     return input
 
 
-def torch_nn_linear_override(self, input):
+def torch_nn_linear(self, input):
     return torch.empty(input.shape[:-1] + (self.out_features,), device="meta")
 
 
-def torch_relu_override(x):
+def torch_relu(x):
     return x
 
 
-def torch_nn_relu_override(self, x):
+def torch_nn_relu(self, x):
     return x
 
 
-def torch_nn_functional_relu_override(x, inplace=False):
+def torch_nn_functional_relu(x, inplace=False):
     if not inplace:
         raise ValueError("Don't support in-place functional.relu for MetaTensor analysis")
     return x
 
 
-def torch_where_override(condition, x, y):
+def torch_where(condition, x, y):
     # torch.where returns the broadcasted tensor of condition, x, and y,
     # so hack it by using addition
     return condition.to(device="meta") + x.to(device="meta") + y.to(device="meta")
 
 
-def torch_abs_override(input, *, out=None):
-    if out is None:
+def torch_abs(input, *, out=None):
+    if out is not None:
         raise ValueError("Don't support in-place abs for MetaTensor analysis")
     return input
 
 
-def torch_arange_override(*args, **kwargs):
+def torch_arange(*args, **kwargs):
     n = len(args)
     step = 1
     if n == 1:
@@ -175,7 +181,7 @@ def torch_arange_override(*args, **kwargs):
     return torch.empty((end - start) // step, dtype=dtype, device="meta")
 
 
-def torch_cat_override(tensors, dim=None, axis=None, *, out=None):
+def torch_cat(tensors, dim=None, axis=None, *, out=None):
     if dim is None and axis is None:
         dim = 0
     if dim is None and axis is not None:
@@ -189,7 +195,7 @@ def torch_cat_override(tensors, dim=None, axis=None, *, out=None):
     return torch.empty(final_shape, device="meta")
 
 
-def torch_stack_override(tensors, dim=None, axis=None, *, out=None):
+def torch_stack(tensors, dim=None, axis=None, *, out=None):
     if dim is None and axis is None:
         dim = 0
     if dim is None and axis is not None:
@@ -201,7 +207,7 @@ def torch_stack_override(tensors, dim=None, axis=None, *, out=None):
     return torch.empty(shape, device="meta")
 
 
-def torch_add_override(input, other, *, alpha=1, out=None):
+def torch_add(input, other, *, alpha=1, out=None):
     if not isinstance(input, torch.Tensor):
         return torch.empty_like(other, device="meta")
     if not isinstance(other, torch.Tensor):
@@ -215,15 +221,15 @@ def torch_add_override(input, other, *, alpha=1, out=None):
     return torch.empty(shape, device="meta")
 
 
-def torch_mul_override(input, other, *, out=None):
-    return torch_add_override(input, other, out=out)
+def torch_mul(input, other, *, out=None):
+    return torch_add(input, other, out=out)
 
 
-def torch_tensor_mul_override(self, other):
-    return torch_mul_override(self, other)
+def torch_tensor_mul(self, other):
+    return torch_mul(self, other)
 
 
-def torch_matmul_override(input, other, *, out=None):
+def torch_matmul(input, other, *, out=None):
     d1 = input.dim()
     d2 = other.dim()
     shape = None
@@ -259,7 +265,13 @@ def torch_matmul_override(input, other, *, out=None):
     return torch.empty(*shape, device="meta")
 
 
-def torch_tensor_repeat_override(self, *sizes):
+def torch_einsum(equation, *operands):
+    # TODO: infer shape without performing the computation, this might be quite hard.
+    concrete_operands = (torch.empty_like(operand, device="cpu") for operand in operands)
+    return torch.einsum(equation, *concrete_operands).to("meta")
+
+
+def torch_tensor_repeat(self, *sizes):
     shape = list(self.shape)
     for i, x in enumerate(sizes):
         shape[i] *= x
@@ -274,6 +286,43 @@ def torch_index_select(input, dim, index, *, out=None):
 
 def torch_tensor_index_select(self, dim, index):
     return torch_tensor_index_select(self, dim, index)
+
+
+def torch_roll(input, shifts, dims=None):
+    return input
+
+
+def torch_nn_conv2d(self, input):
+    h_in, w_in = input.shape[-2:]
+    shape = None
+    padding = self.padding
+    if padding == "valid":
+        padding = (0, 0)
+    if padding == "same":
+        shape = list(input.shape)
+    if shape is None:
+        shape = list(input.shape)
+        h_out = math.floor(
+            (h_in + 2 * padding[0] - self.dilation[0] * (self.kernel_size[0] - 1) - 1) / self.stride[0] + 1
+        )
+        w_out = math.floor(
+            (w_in + 2 * padding[1] - self.dilation[1] * (self.kernel_size[1] - 1) - 1) / self.stride[1] + 1
+        )
+        shape[-2:] = [h_out, w_out]
+    shape[-3] = self.out_channels
+    return torch.empty(shape, device="meta")
+
+
+def torch_unsqueeze(input, dim):
+    shape = list(input.shape)
+    if dim < 0:
+        dim = input.dim() + 1 + dim
+    shape.insert(dim, 1)
+    return torch.empty(shape, device="meta")
+
+
+def torch_tensor_unsqueeze(self, dim):
+    return torch_unsqueeze(self, dim)
 
 
 def torch_nn_mseloss(self, input, target):
@@ -300,29 +349,42 @@ def torch_nn_bcewithlogitsloss(self, input, target):
     return torch.empty(shape, device="meta")
 
 
+def operator_getitem(a, b):
+    if isinstance(a, torch.Tensor):
+        # TODO: infer shape without performing the computation.
+        return operator.getitem(torch.empty_like(a, device="cpu"), b).to("meta")
+    return operator.getitem(a, b)
+
+
 _MANUAL_META_OVERRIDES: Dict[Callable, Callable] = {
-    torch.nn.Embedding: embedding_override,
-    torch.nn.LayerNorm: torch_nn_layernorm_override,
-    torch.nn.Linear: torch_nn_linear_override,
-    torch.relu: torch_relu_override,
-    torch.nn.functional.relu: torch_nn_functional_relu_override,
-    torch.nn.ReLU: torch_nn_relu_override,
-    torch.where: torch_where_override,
-    torch.abs: torch_abs_override,
-    torch.arange: torch_arange_override,
-    torch.cat: torch_cat_override,
-    torch.stack: torch_stack_override,
-    torch.add: torch_add_override,
-    torch.mul: torch_mul_override,
-    torch.Tensor.mul: torch_tensor_mul_override,
-    torch.matmul: torch_matmul_override,
-    torch.Tensor.repeat: torch_tensor_repeat_override,
+    torch.nn.Embedding: torch_nn_embedding,
+    torch.nn.LayerNorm: torch_nn_layernorm,
+    torch.nn.Linear: torch_nn_linear,
+    torch.relu: torch_relu,
+    torch.nn.functional.relu: torch_nn_functional_relu,
+    torch.nn.ReLU: torch_nn_relu,
+    torch.where: torch_where,
+    torch.abs: torch_abs,
+    torch.arange: torch_arange,
+    torch.cat: torch_cat,
+    torch.stack: torch_stack,
+    torch.add: torch_add,
+    torch.mul: torch_mul,
+    torch.Tensor.mul: torch_tensor_mul,
+    torch.matmul: torch_matmul,
+    torch.einsum: torch_einsum,
+    torch.Tensor.repeat: torch_tensor_repeat,
+    torch.roll: torch_roll,
     # TODO: those might not be needed.
     # torch.index_select: torch_index_select,
     # torch.Tensor.index_select: torch_tensor_index_select,
+    torch.nn.Conv2d: torch_nn_conv2d,
+    torch.unsqueeze: torch_unsqueeze,
+    torch.Tensor.unsqueeze: torch_tensor_unsqueeze,
     torch.nn.MSELoss: torch_nn_mseloss,
     torch.nn.CrossEntropyLoss: torch_nn_crossentropyloss,
     torch.nn.BCEWithLogitsLoss: torch_nn_bcewithlogitsloss,
+    operator.getitem: operator_getitem,
 }
 
 
@@ -340,7 +402,6 @@ class HFProxy(Proxy):
 
     @property
     def dtype(self):
-        return self.tracer.root.dtype
         if hasattr(self, "_metadata") and self._metadata is not None:
             return self._metadata.dtype
         return self.tracer.create_proxy("call_function", builtins.getattr, (self, "dtype"), {})
@@ -367,6 +428,9 @@ class HFProxy(Proxy):
         # note: not added to the graph yet, if this is a method call
         # we peephole optimize to the method invocation
         return HFAttribute(self, k)
+
+    def __setitem__(self, indices, values):
+        return self.tracer.create_proxy("call_function", operator.setitem, (self, indices, values), {})
 
     def __contains__(self, key):
         # To handle cases such as :
@@ -446,14 +510,14 @@ class HFTracer(Tracer):
     regular PyTorch torch.fx.Proxy.
     """
 
+    # Feature flag for proxying accesses to buffer values
+    proxy_buffer_attributes: bool = True
     allow_insert_stateless_mods: bool = True
     _TORCH_METHODS_TO_PATCH = ["arange", "zeros", "ones", "full_like", "eye"]
 
-    def __init__(self, autowrap_modules=(math,), autowrap_functions=(), enable_cpatching=False):
+    def __init__(self, autowrap_modules=(math,), autowrap_functions=()):
 
-        super().__init__(
-            autowrap_modules=autowrap_modules, autowrap_functions=autowrap_functions, enable_cpatching=enable_cpatching
-        )
+        super().__init__(autowrap_modules=autowrap_modules, autowrap_functions=autowrap_functions)
 
         if not is_torch_fx_available():
             torch_version = version.parse(importlib_metadata.version("torch"))
@@ -466,7 +530,9 @@ class HFTracer(Tracer):
         self, model: PreTrainedModel, input_name: str, shape: List[int]
     ) -> Dict[str, torch.Tensor]:
         """Generates dummy input for model inference recording."""
-        model_class = model.__class__
+        # Retrieving the model class, either from the "class_for_deserialization" attribute if the model was restored
+        # from pickle, or from the "__class__" attribute in the general case.
+        model_class = getattr(model, "class_for_deserialization", model.__class__)
         device = model.device
         inputs_dict = {}
 
@@ -521,6 +587,15 @@ class HFTracer(Tracer):
                 inputs_dict["labels"] = torch.zeros(shape, dtype=torch.long, device=device)
             else:
                 raise NotImplementedError(f"{model_class} not supported yet.")
+        elif "pixel_values" in input_name:
+            batch_size = shape[0]
+            image_size = model.config.image_size
+            if not isinstance(image_size, collections.abc.Iterable):
+                image_size = (image_size, image_size)
+            height, width = image_size
+            inputs_dict[input_name] = torch.zeros(
+                batch_size, model.config.num_channels, height, width, dtype=torch.float32, device=device
+            )
 
         elif "mask" in input_name or "ids" in input_name:
             inputs_dict[input_name] = torch.zeros(shape, dtype=torch.long, device=device)
@@ -598,7 +673,38 @@ class HFTracer(Tracer):
         if getattr(self, "_disable_module_getattr", False):
             return attr_val
         else:
-            return super()._module_getattr(attr, attr_val, parameter_proxy_cache)
+            # return super()._module_getattr(attr, attr_val, parameter_proxy_cache)
+            def maybe_get_proxy_for_attr(attr_val, collection_to_search, parameter_proxy_cache):
+                for n, p in collection_to_search:
+                    if attr_val is p:
+                        if n not in parameter_proxy_cache:
+                            kwargs = {}
+                            if "proxy_factory_fn" in inspect.signature(self.create_proxy).parameters:
+                                kwargs["proxy_factory_fn"] = (
+                                    None
+                                    if not self.param_shapes_constant
+                                    else lambda node: ParameterProxy(self, node, n, attr_val)
+                                )
+                            val_proxy = self.create_proxy("get_attr", n, (), {}, **kwargs)  # type: ignore[arg-type]
+                            parameter_proxy_cache[n] = val_proxy
+                        return parameter_proxy_cache[n]
+                return None
+
+            if isinstance(attr_val, torch.nn.Parameter):
+                maybe_parameter_proxy = maybe_get_proxy_for_attr(
+                    attr_val, self.root.named_parameters(), parameter_proxy_cache
+                )
+                if maybe_parameter_proxy is not None:
+                    return maybe_parameter_proxy
+
+            if self.proxy_buffer_attributes and isinstance(attr_val, torch.Tensor):
+                maybe_buffer_proxy = maybe_get_proxy_for_attr(
+                    attr_val, self.root.named_buffers(), parameter_proxy_cache
+                )
+                if maybe_buffer_proxy is not None:
+                    return maybe_buffer_proxy
+
+            return attr_val
 
     def call_module(self, m, forward, args, kwargs):
         self.orig_forward = forward
@@ -650,18 +756,35 @@ class HFTracer(Tracer):
             for name, (_, orig) in self.patched_torch_methods.items():
                 setattr(torch, name, orig)
 
-        # TODO: keep this until necessary.
         # This is necessary because concrete args are added as input to the traced module since
         # https://github.com/pytorch/pytorch/pull/55888.
-        # A PR that solves this was posted: https://github.com/pytorch/pytorch/pull/59569 but it was not merged yet.
         for node in self.graph.nodes:
             if node.op == "placeholder":
                 # Removing default values for inputs as the forward pass will fail with them.
                 if node.target in input_names:
                     node.args = ()
+                    # Without this, torch.jit.script fails because the inputs type is Optional[torch.Tensor].
+                    # It cannot infer on the attributes and methods the input should have, and fails.
+                    node.type = torch.Tensor
                 # It is a concrete arg so it is not used and should be removed.
                 else:
+                    if hasattr(torch.fx._symbolic_trace, "_assert_is_none"):
+                        # Newer versions of torch.fx emit an assert statement
+                        # for concrete arguments; delete those before we delete
+                        # the concrete arg.
+                        to_delete = []
+                        for user in node.users:
+                            if user.target == torch.fx._symbolic_trace._assert_is_none:
+                                to_delete.append(user)
+                        for user in to_delete:
+                            self.graph.erase_node(user)
+
                     self.graph.erase_node(node)
+
+            # TODO: solves GraphModule creation.
+            # Without this, return type annotation "Tuple" is causing code execution failure.
+            if node.op == "output":
+                node.type = None
 
         return self.graph
 
@@ -761,12 +884,10 @@ def symbolic_trace(
     traced_graph = tracer.trace(model, concrete_args=concrete_args)
     traced = torch.fx.GraphModule(model, traced_graph)
 
-    # Copy all the original attributes to the traced GraphModule.
-    regular_module_attributes = dir(nn.Module())
-    for name in dir(model):
-        attr = getattr(model, name)
-        if name.startswith("_") or name in regular_module_attributes:
-            continue
-        setattr(traced, name, deepcopy(attr))
+    traced.config = model.config
+    # The model class must be stored as an attribute to allow model deserialization, which uses trace, and thus
+    # _generate_dummy_input, where the model class is needed.
+    traced.class_for_deserialization = model.__class__
+    traced.device = model.device
 
     return traced

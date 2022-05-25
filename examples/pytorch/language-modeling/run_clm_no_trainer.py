@@ -168,7 +168,11 @@ def parse_args():
         "--block_size",
         type=int,
         default=None,
-        help="Optional input sequence length after tokenization. The training dataset will be truncated in block of this size for training. Default to the model max input length for single sentence inputs (take into account special tokens).",
+        help=(
+            "Optional input sequence length after tokenization. The training dataset will be truncated in block of"
+            " this size for training. Default to the model max input length for single sentence inputs (take into"
+            " account special tokens)."
+        ),
     )
     parser.add_argument(
         "--preprocessing_num_workers",

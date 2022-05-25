@@ -77,11 +77,11 @@ if (
     and "TRANSFORMERS_CACHE" not in os.environ
 ):
     logger.warning(
-        "In Transformers v4.0.0, the default path to cache downloaded models changed from "
-        "'~/.cache/torch/transformers' to '~/.cache/huggingface/transformers'. Since you don't seem to have overridden "
-        "and '~/.cache/torch/transformers' is a directory that exists, we're moving it to "
-        "'~/.cache/huggingface/transformers' to avoid redownloading models you have already in the cache. You should "
-        "only see this message once."
+        "In Transformers v4.0.0, the default path to cache downloaded models changed from"
+        " '~/.cache/torch/transformers' to '~/.cache/huggingface/transformers'. Since you don't seem to have"
+        " overridden and '~/.cache/torch/transformers' is a directory that exists, we're moving it to"
+        " '~/.cache/huggingface/transformers' to avoid redownloading models you have already in the cache. You should"
+        " only see this message once."
     )
     shutil.move(old_default_cache_path, default_cache_path)
 
@@ -408,7 +408,7 @@ def _raise_for_status(request):
         elif error_code == "EntryNotFound":
             raise EntryNotFoundError(f"404 Client Error: Entry Not Found for url: {request.url}")
         elif error_code == "RevisionNotFound":
-            raise RevisionNotFoundError((f"404 Client Error: Revision Not Found for url: {request.url}"))
+            raise RevisionNotFoundError(f"404 Client Error: Revision Not Found for url: {request.url}")
 
     request.raise_for_status()
 

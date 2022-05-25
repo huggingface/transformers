@@ -158,7 +158,8 @@ class VisualBertEmbeddings(nn.Module):
                 if (image_text_alignment_mask == 0).sum() != 0:
                     image_text_alignment_mask[image_text_alignment_mask == 0] = 1  # Avoid divide by zero error
                     logger.warning(
-                        "Found 0 values in `image_text_alignment_mask`. Setting them to 1 to avoid divide-by-zero error."
+                        "Found 0 values in `image_text_alignment_mask`. Setting them to 1 to avoid divide-by-zero"
+                        " error."
                     )
                 visual_position_embeddings = visual_position_embeddings / image_text_alignment_mask.unsqueeze(-1)
 
@@ -978,7 +979,7 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
             total_size = attention_mask.size(-1) + visual_attention_mask.size(-1)
             if labels.size(-1) != total_size:
                 raise ValueError(
-                    f"The labels provided should have same sequence length as total attention mask. "
+                    "The labels provided should have same sequence length as total attention mask. "
                     f"Found labels with sequence length {labels.size(-1)}, expected {total_size}."
                 )
 
@@ -991,7 +992,7 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
             total_size = attention_mask.size(-1) + visual_attention_mask.size(-1)
             if labels.size(-1) != total_size:
                 raise ValueError(
-                    f"The labels provided should have same sequence length as total attention mask. "
+                    "The labels provided should have same sequence length as total attention mask. "
                     f"Found labels with sequence length {labels.size(-1)}, expected {total_size}."
                 )
 

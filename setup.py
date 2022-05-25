@@ -27,12 +27,13 @@ To create the package for pypi.
 
 3. Unpin specific versions from setup.py that use a git install.
 
-4. Commit these changes with the message: "Release: <VERSION>" and push.
+4. Checkout the release branch (v<RELEASE>-release, for example v4.19-release), and commit these changes with the 
+   message: "Release: <VERSION>" and push.
 
 5. Wait for the tests on main to be completed and be green (otherwise revert and fix bugs)
 
 6. Add a tag in git to mark the release: "git tag v<VERSION> -m 'Adds tag v<VERSION> for pypi' "
-   Push the tag to git: git push --tags origin main
+   Push the tag to git: git push --tags origin v<RELEASE>-release
 
 7. Build both the sources and the wheel. Do not change anything in setup.py between
    creating the wheel and the source distribution (obviously).
@@ -96,13 +97,14 @@ if stale_egg_info.exists():
 # 2. once modified, run: `make deps_table_update` to update src/transformers/dependency_versions_table.py
 _deps = [
     "Pillow",
-    "accelerate>=0.7.1",
-    "black~=22.0",
+    "accelerate>=0.9.0",
+    "black~=22.0,>=22.3",
     "codecarbon==1.2.0",
     "cookiecutter==1.7.3",
     "dataclasses",
     "datasets",
     "deepspeed>=0.6.4",
+    "dill<0.3.5",
     "fairscale>0.3",
     "faiss-cpu",
     "fastapi",
@@ -137,7 +139,7 @@ _deps = [
     "pytest",
     "pytest-timeout",
     "pytest-xdist",
-    "python>=3.6.0",
+    "python>=3.7.0",
     "ray[tune]",
     "regex!=2019.12.17",
     "requests",
@@ -283,6 +285,7 @@ extras["testing"] = (
         "parameterized",
         "psutil",
         "datasets",
+        "dill",
         "pytest-timeout",
         "black",
         "sacrebleu",
@@ -391,7 +394,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.19.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.20.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",
