@@ -42,7 +42,7 @@ class BloomConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 50257):
-            Vocabulary size of the GPT-2 model. Defines the number of different tokens that can be represented by the
+            Vocabulary size of the Bloom model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`BloomModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the embeddings and hidden states.
