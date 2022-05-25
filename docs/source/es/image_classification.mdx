@@ -131,7 +131,7 @@ Si no estás familiarizado con el fine-tuning de un modelo con el [`Trainer`], e
 
 Llegados a este punto, sólo quedan tres pasos:
 
-1. Define tus hiperparámetros de entrenamiento en [`TrainingArguments`]. Es importante que no elimines las columnas que no se utilicen, ya que esto hará que desaparezca la columna `image`. Sin la columna `image`, no puedes crear `pixel_values`. Establece `remove_unused_columns=False` para evitar este comportamiento.
+1. Define tus hiperparámetros de entrenamiento en [`TrainingArguments`]. Es importante que no elimines las columnas que no se utilicen, ya que esto hará que desaparezca la columna `image`. Sin la columna `image` no puedes crear `pixel_values`. Establece `remove_unused_columns=False` para evitar este comportamiento.
 2. Pasa los training arguments al [`Trainer`] junto con el modelo, los datasets, tokenizer y data collator.
 3. Llama [`~Trainer.train`] para hacer fine-tune de tu modelo.
 
