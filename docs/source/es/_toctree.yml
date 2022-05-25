@@ -31,8 +31,8 @@
     title: Modelos multilingües para inferencia
   title: Guías prácticas
 - sections:
-  - local: bertology
-    title: BERTología
   - local: philosophy
     title: Filosofía
+  - local: bertology
+    title: BERTología
   title: Guías conceptuales
