@@ -19,6 +19,7 @@ from typing import Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
+from tensorflow.compiler.tf2xla.python.xla import dynamic_update_slice
 
 from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import TFBaseModelOutputWithPast, TFCausalLMOutputWithPast
@@ -79,6 +80,7 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values
 
     return (one_cst - expanded_mask) * LARGE_NEGATIVE
 
+
 class TFOPTLearnedPositionalEmbedding(TFSharedEmbeddings):
     """
     This module learns positional embeddings up to a fixed maximum size.
@@ -101,6 +103,7 @@ class TFOPTLearnedPositionalEmbedding(TFSharedEmbeddings):
         positions = positions[:, past_key_values_length:]
 
         return super().call(positions + self.offset)
+
 
 # Copied from transformers.models.bart.modeling_tf_bart.TFBartAttention with Bart->OPT
 class TFOPTAttention(tf.keras.layers.Layer):
@@ -266,6 +269,7 @@ class TFOPTAttention(tf.keras.layers.Layer):
         attn_weights: tf.Tensor = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len))
 
         return attn_output, attn_weights, past_key_value
+
 
 class TFOPTDecoderLayer(tf.keras.layers.Layer):
     def __init__(self, config: OPTConfig, **kwargs):
@@ -519,8 +523,6 @@ class TFOPTDecoder(tf.keras.layers.Layer):
             self.project_out = None
 
         self.layers = [TFOPTDecoderLayer(config, name=f"layers.{i}") for i in range(config.num_hidden_layers)]
-        self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
-
         self.dropout = tf.keras.layers.Dropout(config.dropout)
 
     def get_embed_tokens(self):
@@ -714,6 +716,7 @@ class TFOPTDecoder(tf.keras.layers.Layer):
                 attentions=all_self_attns,
             )
 
+
 @keras_serializable
 class TFOPTMainLayer(tf.keras.layers.Layer):
     config_class = OPTConfig
@@ -790,6 +793,8 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
 )
 @keras_serializable
 class TFOPTModel(TFOPTPreTrainedModel):
+    config_class = OPTConfig
+
     def __init__(self, config: OPTConfig, **kwargs):
         super().__init__(config, **kwargs)
         self.config = config
@@ -856,25 +861,23 @@ class TFOPTModel(TFOPTPreTrainedModel):
         )
 
 
-# TODO add docstring
 @add_start_docstrings(
     """
     The OPT Model transformer with a language modeling head on top.
     """,
     OPT_START_DOCSTRING,
 )
+@keras_serializable
 class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
-    config: OPTConfig
+    config_class = OPTConfig
 
-    def __init__(self, config: OPTConfig, load_weight_prefix=None, **kwargs):
+    def __init__(self, config: OPTConfig, **kwargs):
         super().__init__(config, **kwargs)
         self.config = config
-
-        # Setting the name to decoder for weight loading compatibility
         self.model = TFOPTMainLayer(config, name="model")
 
     def get_output_embeddings(self):
-        return self.get_input_embeddings()
+        return self.model.get_input_embeddings()
 
     def prepare_inputs_for_generation(self, inputs, past=None, use_cache=None, use_xla=False, **kwargs):
         attention_mask = kwargs.get("attention_mask", None)
@@ -889,6 +892,62 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
             "past_key_values": past,
             "use_cache": use_cache,
         }
+
+    def _update_model_kwargs_for_xla_generation(self, outputs, model_kwargs, current_pos, max_length):
+        # TODO(Pvp, Joao, Matt) - this function can be cleaned a bit and refactored
+        # quite some duplicated code patterns it seems
+        # also the `attention_mask` is currently used in a somewhat hacky to
+        # correctly influence the `past_key_values` - not sure if this is the way to go
+        # Let's keep that for a future PR.
+        past = outputs.past_key_values
+        is_past_initialized = model_kwargs.pop("past", None) is not None
+        attention_mask = model_kwargs.pop("attention_mask")
+        batch_size = attention_mask.shape[0]
+
+        if not is_past_initialized:
+            # past[0].shape[3] is seq_length of prompt
+            num_padding_values = max_length - past[0][0].shape[3] - 1
+
+            padding_values = np.zeros((5, 2), dtype=np.int32)
+            padding_values[3, 1] = num_padding_values
+            padding_values = tf.constant(padding_values)
+
+            new_past = list(past)
+            for i in range(len(past)):
+                new_past[i] = tf.pad(past[i], padding_values)
+
+            # Zeros for the currently-unfilled locations in the past tensor, ones for the actual input_ids
+            attention_mask = tf.concat(
+                [
+                    attention_mask,
+                    tf.zeros((batch_size, num_padding_values), dtype=attention_mask.dtype),
+                    tf.ones((batch_size, 1), dtype=attention_mask.dtype),
+                ],
+                axis=1,
+            )
+        else:
+            new_past = [None for _ in range(len(past))]
+            slice_start_base = tf.constant([0, 0, 0, 1, 0])
+            attention_mask_update_slice = tf.ones((batch_size, 1), dtype=attention_mask.dtype)
+            # correct 5 here
+            new_past_index = current_pos - 1
+
+            for i in range(len(past)):
+                update_slice = past[i][:, :, :, -1:]
+                # Write the last slice to the first open location in the padded past array
+                # and then truncate the last slice off the array
+                new_past[i] = dynamic_update_slice(
+                    past[i][:, :, :, :-1], update_slice, slice_start_base * new_past_index
+                )
+
+            update_start = tf.constant([0, 1], dtype=tf.int32) * new_past_index
+            attention_mask = dynamic_update_slice(attention_mask, attention_mask_update_slice, update_start)
+
+        # set `attention_mask` and `past`
+        model_kwargs["attention_mask"] = attention_mask
+        model_kwargs["past"] = tuple(new_past)
+
+        return model_kwargs
 
     @unpack_inputs
     def call(
@@ -985,7 +1044,7 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.model.decoder(
+        outputs = self.model(
             input_ids=input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
