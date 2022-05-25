@@ -219,7 +219,7 @@ Esto devuelve tres elementos:
 
 Para este tutorial, se utilizará el modelo [Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base). Como puedes ver en la model card, el modelo Wav2Vec2 está preentrenado en audio de habla aplicando sampled a 16kHz. Es importante que el sampling rate de tus datos de audio coincida con el sampling rate del dataset utilizado para preentrenar el modelo. Si el sampling rate de tus datos no es el mismo, deberás volver aplicar resample tus datos de audio. 
 
-Por ejemplo, carga el dataset [LJ Speech](https://huggingface.co/datasets/lj_speech) que tiene un sampling rate de 22050kHz. Para utilizar el modelo Wav2Vec2 con este dataset, reduce el sampling rate a 16kHz:
+Por ejemplo, carga el dataset [LJ Speech](https://huggingface.co/datasets/lj_speech) que tiene una tasa de muestreo de 22050kHz. Para utilizar el modelo Wav2Vec2 con este dataset, reduce la tasa de muestreo a 16kHz:
 
 ```py
 >>> lj_speech = load_dataset("lj_speech", split="train")
