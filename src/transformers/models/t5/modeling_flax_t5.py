@@ -154,6 +154,42 @@ class FlaxT5DenseGatedGeluDense(nn.Module):
         hidden_states = self.wo(hidden_states)
         return hidden_states
 
+class FlaxT5DenseGatedSiLUDense(nn.Module):
+    config: T5Config
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+
+    def setup(self):
+        wi_init_std = self.config.initializer_factor * (self.config.d_model**-0.5)
+        wo_init_std = self.config.initializer_factor * (self.config.d_ff**-0.5)
+
+        self.wi_0 = nn.Dense(
+            self.config.d_ff,
+            use_bias=False,
+            kernel_init=jax.nn.initializers.normal(wi_init_std),
+            dtype=self.dtype,
+        )
+        self.wi_1 = nn.Dense(
+            self.config.d_ff,
+            use_bias=False,
+            kernel_init=jax.nn.initializers.normal(wi_init_std),
+            dtype=self.dtype,
+        )
+        self.wo = nn.Dense(
+            self.config.d_model,
+            use_bias=False,
+            kernel_init=jax.nn.initializers.normal(wo_init_std),
+            dtype=self.dtype,
+        )
+        self.dropout = nn.Dropout(self.config.dropout_rate)
+        self.gelu_act = ACT2FN["silu"]
+
+    def __call__(self, hidden_states, deterministic):
+        hidden_gelu = self.gelu_act(self.wi_0(hidden_states))
+        hidden_linear = self.wi_1(hidden_states)
+        hidden_states = hidden_gelu * hidden_linear
+        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
+        hidden_states = self.wo(hidden_states)
+        return hidden_states
 
 class FlaxT5LayerFF(nn.Module):
     config: T5Config
@@ -164,9 +200,11 @@ class FlaxT5LayerFF(nn.Module):
             self.DenseReluDense = FlaxT5DenseReluDense(self.config, dtype=self.dtype)
         elif self.config.feed_forward_proj == "gated-gelu":
             self.DenseReluDense = FlaxT5DenseGatedGeluDense(self.config, dtype=self.dtype)
+        elif self.config.feed_forward_proj == "silu-gelu":
+            self.DenseReluDense = FlaxT5DenseGatedSiLUDense(self.config, dtype=self.dtype)
         else:
             raise ValueError(
-                f"{self.config.feed_forward_proj} is not supported. Choose between `relu` and `gated-gelu`"
+                f"{self.config.feed_forward_proj} is not supported. Choose between `relu`, `gated-gelu` and `gated-silu`"
             )
 
         self.layer_norm = FlaxT5LayerNorm(self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype)

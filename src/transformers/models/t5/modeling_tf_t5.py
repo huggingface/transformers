@@ -149,6 +149,36 @@ class TFT5GatedGeluDense(tf.keras.layers.Layer):
         return hidden_states
 
 
+class TFT5GatedSiLUDense(tf.keras.layers.Layer):
+    def __init__(self, config, **kwargs):
+        super().__init__(**kwargs)
+        wi_initializer = tf.keras.initializers.RandomNormal(
+            mean=0, stddev=config.initializer_factor * (config.d_model**-0.5)
+        )
+        wo_initializer = tf.keras.initializers.RandomNormal(
+            mean=0, stddev=config.initializer_factor * (config.d_ff**-0.5)
+        )
+        self.wi_0 = tf.keras.layers.Dense(
+            config.d_ff, use_bias=False, name="wi_0", kernel_initializer=wi_initializer
+        )  # Update init weights as in flax
+        self.wi_1 = tf.keras.layers.Dense(
+            config.d_ff, use_bias=False, name="wi_1", kernel_initializer=wi_initializer
+        )  # Update init weights as in flax
+        self.wo = tf.keras.layers.Dense(
+            config.d_model, use_bias=False, name="wo", kernel_initializer=wo_initializer
+        )  # Update init weights as in flax
+        self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
+        self.act = get_tf_activation("silu")
+
+    def call(self, hidden_states, training=False):
+        hidden_gelu = self.act(self.wi_0(hidden_states))
+        hidden_linear = self.wi_1(hidden_states)
+        hidden_states = hidden_gelu * hidden_linear
+        hidden_states = self.dropout(hidden_states, training=training)
+        hidden_states = self.wo(hidden_states)
+        return hidden_states
+
+
 class TFT5LayerFF(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -156,9 +186,11 @@ class TFT5LayerFF(tf.keras.layers.Layer):
             self.DenseReluDense = TFT5DenseReluDense(config, name="DenseReluDense")
         elif config.feed_forward_proj == "gated-gelu":
             self.DenseReluDense = TFT5GatedGeluDense(config, name="DenseReluDense")
+        elif config.feed_forward_proj == "gated-silu":
+            self.DenseReluDense = TFT5GatedSiLUDense(config, name="DenseReluDense")
         else:
             raise ValueError(
-                f"{self.config.feed_forward_proj} is not supported. Choose between `relu` and `gated-gelu`"
+                f"{self.config.feed_forward_proj} is not supported. Choose between `relu`, `gated-gelu` and `gated-silu`"
             )
         self.layer_norm = TFT5LayerNorm(epsilon=config.layer_norm_epsilon, name="layer_norm")
         self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
