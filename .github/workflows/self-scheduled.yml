@@ -88,7 +88,7 @@ jobs:
         run: |
           nvidia-smi
 
-      - name: GPU visibility
+      - name: Environment
         working-directory: /transformers
         run: |
           python3 utils/print_env.py
@@ -141,7 +141,7 @@ jobs:
         run: |
           nvidia-smi
 
-      - name: GPU visibility
+      - name: Environment
         working-directory: /transformers
         run: |
           python3 utils/print_env.py
@@ -178,7 +178,7 @@ jobs:
         run: |
           nvidia-smi
 
-      - name: GPU visibility
+      - name: Environment
         working-directory: /transformers
         run: |
           python3 utils/print_env.py
@@ -221,7 +221,7 @@ jobs:
         run: |
           nvidia-smi
 
-      - name: GPU visibility
+      - name: Environment
         working-directory: /transformers
         run: |
           python3 utils/print_env.py
@@ -266,7 +266,7 @@ jobs:
         run: |
           nvidia-smi
 
-      - name: GPU visibility
+      - name: Environment
         working-directory: /transformers
         run: |
           python3 utils/print_env.py
@@ -318,7 +318,7 @@ jobs:
         run: |
           nvidia-smi
 
-      - name: GPU visibility
+      - name: Environment
         working-directory: /workspace/transformers
         run: |
           python utils/print_env.py
