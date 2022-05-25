@@ -83,9 +83,9 @@ def attention_mask_func(attention_scores, attention_mask, causal_mask):
     query_length, key_length, n_heads = attention_scores.size(2), attention_scores.size(3), attention_scores.size(1)
     padded_causal_mask = (
         attention_mask_bool[:, None, key_length - query_length : key_length, None]
-        + attention_mask_bool[:, None, None, :key_length]
         + ~causal_mask[:, :, key_length - query_length : key_length, :key_length]
     ).bool()
+    padded_causal_mask = padded_causal_mask + attention_mask_bool[:, None, None, :key_length].bool()
     # Make use of floats
     return (
         attention_scores.masked_fill_(padded_causal_mask.expand(-1, n_heads, -1, -1), -10000.0),
