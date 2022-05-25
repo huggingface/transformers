@@ -190,7 +190,7 @@ class TFT5LayerFF(tf.keras.layers.Layer):
             self.DenseReluDense = TFT5GatedSiLUDense(config, name="DenseReluDense")
         else:
             raise ValueError(
-                f"{self.config.feed_forward_proj} is not supported. Choose between `relu`, `gated-gelu` and `gated-silu`"
+                f"{config.feed_forward_proj} is not supported. Choose between `relu`, `gated-gelu` and `gated-silu`"
             )
         self.layer_norm = TFT5LayerNorm(epsilon=config.layer_norm_epsilon, name="layer_norm")
         self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
