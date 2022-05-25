@@ -41,6 +41,7 @@ from .. import (
     MODEL_FOR_QUESTION_ANSWERING_MAPPING,
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+    MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
     MODEL_MAPPING,
     CLIPTextModel,
@@ -52,6 +53,8 @@ from .. import (
     logging,
 )
 from ..models.auto import get_values
+from ..models.speech_to_text_2.modeling_speech_to_text_2 import Speech2Text2Decoder
+from ..models.trocr.modeling_trocr import TrOCRDecoder
 from ..utils import TORCH_FX_REQUIRED_VERSION, is_torch_fx_available
 from ..utils.versions import importlib_metadata
 
@@ -72,6 +75,7 @@ def _generate_supported_model_classes(
         "masked-lm": MODEL_FOR_MASKED_LM_MAPPING,
         "causal-lm": MODEL_FOR_CAUSAL_LM_MAPPING,
         "seq2seq-lm": MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+        "speech-seq2seq": MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
         "multiple-choice": MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
         "question-answering": MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         "sequence-classification": MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
@@ -97,27 +101,33 @@ def _generate_supported_model_classes(
 _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "albert",
     "bart",
-    "mbart",
     "bert",
-    "distilbert",
-    "mobilebert",
-    "electra",
-    "megatron-bert",
-    "gpt2",
-    "gptj",
-    "gpt_neo",
-    "t5",
-    "mt5",
-    "roberta",
-    "vit",
-    "swin",
-    "layoutlm",
-    "pegasus",
     "blenderbot",
     "blenderbot-small",
+    "clip",
+    "distilbert",
+    "electra",
+    "gpt2",
+    "gpt_neo",
+    "gptj",
+    "layoutlm",
     "m2m_100",
     "marian",
-    "clip",
+    "mbart",
+    "megatron-bert",
+    "mobilebert",
+    "mt5",
+    "opt",
+    "pegasus",
+    "plbart",
+    "roberta",
+    "speech_to_text",
+    "speech_to_text_2",
+    "swin",
+    "t5",
+    "trocr",
+    "vit",
+    "xglm",
     # TODO: add support for them as it should be quite easy to do so (small blocking issues).
     # "xlnet",
 ]
@@ -130,9 +140,11 @@ for item in _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS:
         _REGULAR_SUPPORTED_MODELS.extend(_generate_supported_model_classes(item))
 
 _SPECIAL_SUPPORTED_MODELS = [
-    GPT2DoubleHeadsModel,
     CLIPTextModel,
     CLIPVisionModel,
+    GPT2DoubleHeadsModel,
+    Speech2Text2Decoder,
+    TrOCRDecoder,
     # TODO: add support for them as it should be quite easy to do so (small blocking issues).
     # XLNetForQuestionAnswering,
 ]
@@ -325,6 +337,32 @@ def torch_roll(input, shifts, dims=None):
     return input
 
 
+def torch_flip(input, dims):
+    return input
+
+
+def torch_tensor_flip(self, dims):
+    return self
+
+
+def torch_nn_conv1d(self, input):
+    l_in = input.shape[-1]
+    shape = None
+    padding = self.padding
+    if padding == "valid":
+        padding = (0, 0)
+    if padding == "same":
+        shape = list(input.shape)
+    if shape is None:
+        shape = list(input.shape)
+        l_out = math.floor(
+            (l_in + 2 * padding[0] - self.dilation[0] * (self.kernel_size[0] - 1) - 1) / self.stride[0] + 1
+        )
+        shape[-1] = l_out
+    shape[-2] = self.out_channels
+    return torch.empty(shape, device="meta")
+
+
 def torch_nn_conv2d(self, input):
     h_in, w_in = input.shape[-2:]
     shape = None
@@ -437,8 +475,11 @@ _MANUAL_META_OVERRIDES: Dict[Callable, Callable] = {
     torch.einsum: torch_einsum,
     torch.Tensor.repeat: torch_tensor_repeat,
     torch.roll: torch_roll,
+    torch.flip: torch_flip,
+    torch.Tensor.flip: torch_tensor_flip,
     torch.index_select: torch_index_select,
     torch.Tensor.index_select: torch_tensor_index_select,
+    torch.nn.Conv1d: torch_nn_conv1d,
     torch.nn.Conv2d: torch_nn_conv2d,
     torch.unsqueeze: torch_unsqueeze,
     torch.Tensor.unsqueeze: torch_tensor_unsqueeze,
@@ -654,7 +695,12 @@ class HFTracer(Tracer):
             batch_size = shape[0]
             image_size = getattr(model.config, "image_size", None)
             if image_size is None:
-                image_size = model.config.vision_config.image_size
+                if hasattr(model.config, "vision_config"):
+                    image_size = model.config.vision_config.image_size
+                elif hasattr(model.config, "encoder"):
+                    image_size = model.config.encoder.image_size
+                else:
+                    raise AttributeError('Could not find the "image_size" field in the model config')
 
             # If no num_channels is in the config, use some arbitrary value.
             num_channels = getattr(model.config, "num_channels", 3)
@@ -666,6 +712,12 @@ class HFTracer(Tracer):
             )
         elif "bbox" in input_name:
             inputs_dict[input_name] = torch.zeros(*shape, 4, dtype=torch.float, device=device)
+        elif "input_features" in input_name:
+            inputs_dict[input_name] = torch.zeros(
+                *shape, model.config.input_feat_per_channel, dtype=torch.float, device=device
+            )
+        elif "inputs" in input_name:
+            inputs_dict[input_name] = torch.zeros(*shape, dtype=torch.float, device=device)
         elif "mask" in input_name or "ids" in input_name:
             inputs_dict[input_name] = torch.zeros(shape, dtype=torch.long, device=device)
         else:
