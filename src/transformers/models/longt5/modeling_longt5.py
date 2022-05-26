@@ -173,14 +173,16 @@ def _make_global_fixed_block_ids(
         block_ids = torch.where(block_ids < full_blocks, block_ids, full_blocks)
         return block_ids
 
-    attention_mask = torch.where(attention_mask != 0.0, 1.0, -1000.0).type(attention_mask.dtype)
     fixed_block_mask = torch.ones_like(attention_mask, device=attention_mask.device) / global_block_size
     fixed_block_mask = torch.cumsum(fixed_block_mask, axis=1) - fixed_block_mask
-    global_block_ids = torch.floor(attention_mask + fixed_block_mask - 1.0).type(attention_mask.dtype)
+    mask = torch.where(attention_mask != 0.0, 1.0, -1000.0).type(attention_mask.dtype)
+    global_block_ids = torch.floor(mask + fixed_block_mask - 1.0).type(attention_mask.dtype)
     _global_block_ids_lower_bound = torch.tensor(-1.0, dtype=global_block_ids.dtype, device=global_block_ids.device)
     global_block_ids = torch.where(
         global_block_ids > _global_block_ids_lower_bound, global_block_ids, _global_block_ids_lower_bound
     )
+    # set padding tokens to -1
+    global_block_ids = (global_block_ids * attention_mask) + (attention_mask - 1)
     # [batch_size, seq_len]
     global_block_ids = handle_orphan_tokens(global_block_ids)
     num_globals = seq_len // global_block_size
@@ -191,10 +193,7 @@ def _make_global_fixed_block_ids(
         _sequence_block_ids_max = torch.zeros(batch_size, 0, dtype=global_block_ids.dtype)
     global_segment_ids = torch.cumsum(torch.ones(batch_size, num_globals), dim=-1) - 1
     global_segment_ids = global_segment_ids.to(attention_mask.device)
-    global_segment_ids = global_segment_ids.where(
-        global_segment_ids <= _sequence_block_ids_max,
-        -1 * torch.ones_like(global_segment_ids, device=attention_mask.device),
-    )
+    global_segment_ids = torch.where(global_segment_ids <= _sequence_block_ids_max, 1, 0)
     return global_block_ids.type(torch.int), global_segment_ids.type(torch.int)
 
 
@@ -637,14 +636,13 @@ class LongT5LocalAttention(nn.Module):
 
     def compute_bias(self, block_length: int):
         """Compute binned relative position bias"""
-        context_position = torch.arange(
-            block_length, dtype=torch.long, device=self.relative_attention_bias.weight.device
-        )[:, None]
         memory_position = torch.arange(
             3 * block_length, dtype=torch.long, device=self.relative_attention_bias.weight.device
-        )[None, :]
+        )
+        context_position = memory_position[block_length:-block_length]
+
         # (block_length, 3 * block_length)
-        relative_position = memory_position - context_position
+        relative_position = memory_position[None, :] - context_position[:, None]
         relative_position_bucket = self._relative_position_bucket(
             relative_position,  # (block_length, 3 * block_length)
             bidirectional=(not self.is_decoder),
@@ -706,8 +704,8 @@ class LongT5LocalAttention(nn.Module):
                 position_bias = self.compute_bias(self.block_len)
 
             if mask is not None:
-                # Replace masked positions with -10_000 (according to the original implementation)
-                mask = torch.where(mask > 0, 0.0, -1e4)
+                # Replace masked positions with -1e10 (according to the original implementation)
+                mask = torch.where(mask > 0, 0.0, -1e10)
                 # We need to adjust position bias shape to be sum with mask
                 position_bias = position_bias + mask.transpose(1, 2)
 
@@ -833,14 +831,13 @@ class LongT5TransientGlobalAttention(nn.Module):
 
     def compute_bias(self, block_length: int):
         """Compute binned relative position bias"""
-        context_position = torch.arange(
-            block_length, dtype=torch.long, device=self.relative_attention_bias.weight.device
-        )[:, None]
         memory_position = torch.arange(
             3 * block_length, dtype=torch.long, device=self.relative_attention_bias.weight.device
-        )[None, :]
+        )
+        context_position = memory_position[block_length:-block_length]
+
         # (block_length, 3 * block_length)
-        relative_position = memory_position - context_position
+        relative_position = memory_position[None, :] - context_position[:, None]
         relative_position_bucket = self._relative_position_bucket(
             relative_position,  # (block_length, 3 * block_length)
             bidirectional=(not self.is_decoder),
@@ -856,7 +853,7 @@ class LongT5TransientGlobalAttention(nn.Module):
     def compute_side_bias(self, mask: torch.Tensor, global_segment_ids: torch.Tensor) -> torch.Tensor:
         # (batch_size, 1, seq_len, global_seq_len)
         side_attention_mask = torch.eq(mask[..., None], global_segment_ids[:, None, :])[:, None, ...]
-        attention_side_bias = torch.where(side_attention_mask > 0, 0.0, -1e4)
+        attention_side_bias = torch.where(side_attention_mask > 0, 0.0, -1e10)
         # (batch_size, seq_len, global_seq_len)
         side_relative_position = _make_side_relative_position_ids(mask, self.global_block_size)
         side_relative_position_bucket = self._relative_position_bucket(
@@ -941,7 +938,7 @@ class LongT5TransientGlobalAttention(nn.Module):
             # We need to adjust position bias shape to be sum with mask
             local_attention_mask = _get_local_attention_mask(mask, self.block_len, hidden_states.device)
             # Replace masked positions with -10_000 (according to the original implementation)
-            local_attention_mask = torch.where(local_attention_mask > 0, 0.0, -1e4)
+            local_attention_mask = torch.where(local_attention_mask > 0, 0.0, -1e10)
         else:
             local_attention_mask = None
 
