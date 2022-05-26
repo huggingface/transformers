@@ -1660,11 +1660,20 @@ class TFGenerationMixin:
     ) -> tf.Tensor:
         is_input_ids = len(inputs.shape) == 2 and inputs.dtype in (tf.int32, tf.int64)
         is_pad_token_in_inputs = (pad_token_id is not None) and tf.math.reduce_any(inputs == pad_token_id)
+        # some models, like GPT-2, don't set a pad token, and it gets defaulted to eos_token_id (we don't want to pick
+        # up on those)
         is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or (
             (eos_token_id is not None) and (pad_token_id != eos_token_id)
         )
+        # however, they can also have left-padding (we definitely want to pick up on those)
+        has_trailing_pad_tokens = tf.math.reduce_any(inputs[:, 0] == pad_token_id)
+
         # Check if input is input_ids and padded -> only then is attention_mask defined
-        if is_input_ids and is_pad_token_in_inputs and is_pad_token_not_equal_to_eos_token_id:
+        if (
+            is_input_ids
+            and is_pad_token_in_inputs
+            and (has_trailing_pad_tokens or is_pad_token_not_equal_to_eos_token_id)
+        ):
             return tf.cast(tf.math.not_equal(inputs, pad_token_id), dtype=tf.int32)
         else:
             return tf.ones(inputs.shape[:2], dtype=tf.int32)
