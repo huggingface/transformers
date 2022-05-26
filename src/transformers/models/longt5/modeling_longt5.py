@@ -395,26 +395,24 @@ class LongT5Attention(nn.Module):
         is_small = relative_position < max_exact
 
         # The other half of the buckets are for logarithmically bigger bins in positions up to max_distance
-        relative_postion_if_large = max_exact + (
+        relative_position_if_large = max_exact + (
             torch.log(relative_position.float() / max_exact)
             / math.log(max_distance / max_exact)
             * (num_buckets - max_exact)
         ).to(torch.long)
-        relative_postion_if_large = torch.min(
-            relative_postion_if_large, torch.full_like(relative_postion_if_large, num_buckets - 1)
+        relative_position_if_large = torch.min(
+            relative_position_if_large, torch.full_like(relative_position_if_large, num_buckets - 1)
         )
 
-        relative_buckets += torch.where(is_small, relative_position, relative_postion_if_large)
+        relative_buckets += torch.where(is_small, relative_position, relative_position_if_large)
         return relative_buckets
 
-    def compute_bias(self, query_length, key_length):
+    def compute_bias(self, query_length, key_length, device=None):
         """Compute binned relative position bias"""
-        context_position = torch.arange(
-            query_length, dtype=torch.long, device=self.relative_attention_bias.weight.device
-        )[:, None]
-        memory_position = torch.arange(
-            key_length, dtype=torch.long, device=self.relative_attention_bias.weight.device
-        )[None, :]
+        if device is None:
+            device = self.relative_attention_bias.weight.device
+        context_position = torch.arange(query_length, dtype=torch.long, device=device)[:, None]
+        memory_position = torch.arange(key_length, dtype=torch.long, device=device)[None, :]
         relative_position = memory_position - context_position  # shape (query_length, key_length)
         relative_position_bucket = self._relative_position_bucket(
             relative_position,  # shape (query_length, key_length)
@@ -509,7 +507,7 @@ class LongT5Attention(nn.Module):
                 if self.gradient_checkpointing and self.training:
                     position_bias.requires_grad = True
             else:
-                position_bias = self.compute_bias(real_seq_length, key_length)
+                position_bias = self.compute_bias(real_seq_length, key_length, device=scores.device)
 
             # if key and values are already calculated
             # we want only the last query position bias
@@ -622,16 +620,16 @@ class LongT5LocalAttention(nn.Module):
         is_small = relative_position < max_exact
 
         # The other half of the buckets are for logarithmically bigger bins in positions up to max_distance
-        relative_postion_if_large = max_exact + (
+        relative_position_if_large = max_exact + (
             torch.log(relative_position.float() / max_exact)
             / math.log(max_distance / max_exact)
             * (num_buckets - max_exact)
         ).to(torch.long)
-        relative_postion_if_large = torch.min(
-            relative_postion_if_large, torch.full_like(relative_postion_if_large, num_buckets - 1)
+        relative_position_if_large = torch.min(
+            relative_position_if_large, torch.full_like(relative_position_if_large, num_buckets - 1)
         )
 
-        relative_buckets += torch.where(is_small, relative_position, relative_postion_if_large)
+        relative_buckets += torch.where(is_small, relative_position, relative_position_if_large)
         return relative_buckets
 
     def compute_bias(self, block_length: int):
@@ -817,16 +815,16 @@ class LongT5TransientGlobalAttention(nn.Module):
         is_small = relative_position < max_exact
 
         # The other half of the buckets are for logarithmically bigger bins in positions up to max_distance
-        relative_postion_if_large = max_exact + (
+        relative_position_if_large = max_exact + (
             torch.log(relative_position.float() / max_exact)
             / math.log(max_distance / max_exact)
             * (num_buckets - max_exact)
         ).to(torch.long)
-        relative_postion_if_large = torch.min(
-            relative_postion_if_large, torch.full_like(relative_postion_if_large, num_buckets - 1)
+        relative_position_if_large = torch.min(
+            relative_position_if_large, torch.full_like(relative_position_if_large, num_buckets - 1)
         )
 
-        relative_buckets += torch.where(is_small, relative_position, relative_postion_if_large)
+        relative_buckets += torch.where(is_small, relative_position, relative_position_if_large)
         return relative_buckets
 
     def compute_bias(self, block_length: int):

@@ -1636,7 +1636,6 @@ else:
             "LongT5ForConditionalGeneration",
             "LongT5Model",
             "LongT5PreTrainedModel",
-            "load_tf_weights_in_longt5",
         ]
     )
     _import_structure["models.transfo_xl"].extend(
@@ -3683,7 +3682,6 @@ if TYPE_CHECKING:
             LongT5ForConditionalGeneration,
             LongT5Model,
             LongT5PreTrainedModel,
-            load_tf_weights_in_longt5,
         )
         from .models.luke import (
             LUKE_PRETRAINED_MODEL_ARCHIVE_LIST,
