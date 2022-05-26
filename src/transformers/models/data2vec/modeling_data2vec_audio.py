@@ -578,10 +578,8 @@ class Data2VecAudioEncoder(nn.Module):
             hidden_states[~expand_attention_mask] = 0
 
             # extend attention_mask
-            attention_mask = (1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype))
+            attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
             attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
-                hidden_states.dtype
-            ).min
             attention_mask = attention_mask.expand(
                 attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
             )
