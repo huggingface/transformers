@@ -325,7 +325,7 @@ torch_version = None
 _torch_fx_available = _torch_onnx_dict_inputs_support_available = False
 if _torch_available:
     torch_version = version.parse(importlib_metadata.version("torch"))
-    _torch_fx_available = (torch_version.major, torch_version.minor) == (
+    _torch_fx_available = (torch_version.major, torch_version.minor) >= (
         TORCH_FX_REQUIRED_VERSION.major,
         TORCH_FX_REQUIRED_VERSION.minor,
     )
@@ -374,6 +374,10 @@ def is_torch_tpu_available():
     if importlib.util.find_spec("torch_xla.core") is None:
         return False
     return importlib.util.find_spec("torch_xla.core.xla_model") is not None
+
+
+def is_torchdynamo_available():
+    return importlib.util.find_spec("torchdynamo") is not None
 
 
 def is_datasets_available():

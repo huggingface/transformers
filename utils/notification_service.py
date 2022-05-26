@@ -741,14 +741,15 @@ if __name__ == "__main__":
     ci_title = os.environ.get("CI_TITLE")
     ci_url = os.environ.get("CI_COMMIT_URL")
 
-    commit_number = ci_url.split("/")[-1]
-    ci_detail_url = f"https://api.github.com/repos/huggingface/transformers/commits/{commit_number}"
-    ci_details = requests.get(ci_detail_url).json()
-    ci_author = ci_details["author"]["login"]
-
     if ci_title is not None:
         assert ci_url is not None
         ci_title = ci_title.strip().split("\n")[0].strip()
+
+        # Retrieve the PR title and author login to complete the report
+        commit_number = ci_url.split("/")[-1]
+        ci_detail_url = f"https://api.github.com/repos/huggingface/transformers/commits/{commit_number}"
+        ci_details = requests.get(ci_detail_url).json()
+        ci_author = ci_details["author"]["login"]
 
         merged_by = None
         # Find the PR number (if any) and change the url to the actual PR page.
@@ -773,5 +774,7 @@ if __name__ == "__main__":
 
     message = Message(title, ci_title, model_results, additional_results)
 
-    message.post()
-    message.post_reply()
+    # send report only if there is any failure
+    if message.n_failures:
+        message.post()
+        message.post_reply()
