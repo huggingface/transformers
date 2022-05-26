@@ -36,7 +36,13 @@ from ...modeling_tf_utils import (
     unpack_inputs,
 )
 from ...tf_utils import shape_list, stable_softmax
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_opt import OPTConfig
 
 
@@ -961,13 +967,7 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
         return model_kwargs
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(OPT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TFCausalLMOutputWithPast,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=TFCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
@@ -1040,7 +1040,7 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
         Returns:
-        
+
         Example:
 
         ```python
