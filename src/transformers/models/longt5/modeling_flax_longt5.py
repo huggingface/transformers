@@ -162,12 +162,14 @@ def _make_global_fixed_block_ids(attention_mask: np.ndarray, global_block_size: 
         block_ids = jnp.minimum(block_ids, full_blocks - 1)
         return block_ids
 
-    attention_mask = jnp.where(attention_mask != 0.0, 1.0, -1000.0)
     fixed_block_mask = jnp.ones_like(attention_mask) / global_block_size
     fixed_block_mask = jnp.cumsum(fixed_block_mask, axis=1) - fixed_block_mask
+    mask = jnp.where(attention_mask != 0.0, 1.0, -1000.0)
     global_block_ids = jnp.maximum(
-        jnp.floor(attention_mask + fixed_block_mask - 1.0), jnp.array(-1.0, dtype=attention_mask.dtype)
+        jnp.floor(mask + fixed_block_mask - 1.0), jnp.array(-1.0, dtype=attention_mask.dtype)
     )
+    # set padding tokens to -1
+    global_block_ids = (global_block_ids * attention_mask) + (attention_mask - 1)
     # [batch_size, seq_len]
     global_block_ids = handle_orphan_tokens(global_block_ids)
     num_globals = seq_len // global_block_size
@@ -178,9 +180,7 @@ def _make_global_fixed_block_ids(attention_mask: np.ndarray, global_block_size: 
     else:
         _sequence_block_ids_max = jnp.zeros((batch_size, 0), dtype=global_block_ids.dtype)
     global_segment_ids = jnp.cumsum(jnp.ones((batch_size, num_globals)), axis=-1) - 1
-    global_segment_ids = jnp.where(
-        global_segment_ids <= _sequence_block_ids_max, global_segment_ids, -1 * jnp.ones_like(global_segment_ids)
-    )
+    global_segment_ids = jnp.where(global_segment_ids <= _sequence_block_ids_max, 1, 0)
     return global_block_ids, global_segment_ids
 
 
@@ -692,10 +692,10 @@ class FlaxLongT5LocalAttention(nn.Module):
 
     def compute_bias(self, block_length: int):
         """Compute binned relative position bias"""
-        context_position = jnp.arange(block_length, dtype="i4")[:, None]
-        memory_position = jnp.arange(3 * block_length, dtype="i4")[None, :]
+        memory_position = jnp.arange(3 * block_length, dtype="i4")
+        context_position = memory_position[block_length:-block_length]
 
-        relative_position = memory_position - context_position
+        relative_position = memory_position[None, :] - context_position[:, None]
         relative_position_bucket = self._relative_position_bucket(
             relative_position,
             bidirectional=True,
@@ -767,7 +767,7 @@ class FlaxLongT5LocalAttention(nn.Module):
             attention_mask = jax.lax.select(
                 attention_mask > 0,
                 jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
-                jnp.full(attention_mask.shape, -1e4).astype(self.dtype),
+                jnp.full(attention_mask.shape, -1e10).astype(self.dtype),
             )
 
         if position_bias is None:
@@ -915,10 +915,10 @@ class FlaxLongT5TransientGlobalAttention(nn.Module):
 
     def compute_bias(self, block_length: int):
         """Compute binned relative position bias"""
-        context_position = jnp.arange(block_length, dtype="i4")[:, None]
-        memory_position = jnp.arange(3 * block_length, dtype="i4")[None, :]
+        memory_position = jnp.arange(3 * block_length, dtype="i4")
+        context_position = memory_position[block_length:-block_length]
 
-        relative_position = memory_position - context_position
+        relative_position = memory_position[None, :] - context_position[:, None]
         relative_position_bucket = self._relative_position_bucket(
             relative_position,
             bidirectional=True,
@@ -936,7 +936,7 @@ class FlaxLongT5TransientGlobalAttention(nn.Module):
         attention_side_bias = jax.lax.select(
             side_attention_mask > 0,
             jnp.full(side_attention_mask.shape, 0.0).astype(self.dtype),
-            jnp.full(side_attention_mask.shape, -1e4).astype(self.dtype),
+            jnp.full(side_attention_mask.shape, -1e10).astype(self.dtype),
         )
         # (batch_size, seq_len, global_seq_len)
         side_relative_position = _make_side_relative_position_ids(attention_mask, self.global_block_size)
@@ -1046,7 +1046,7 @@ class FlaxLongT5TransientGlobalAttention(nn.Module):
             local_attention_mask = jax.lax.select(
                 local_attention_mask > 0,
                 jnp.full(local_attention_mask.shape, 0.0).astype(self.dtype),
-                jnp.full(local_attention_mask.shape, -1e4).astype(self.dtype),
+                jnp.full(local_attention_mask.shape, -1e10).astype(self.dtype),
             )
         else:
             local_attention_mask = None
