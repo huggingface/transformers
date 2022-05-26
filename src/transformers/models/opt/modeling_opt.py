@@ -87,8 +87,8 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 
 class OPTScaledSoftmax(nn.Module):
     """
-    OPT Scaled Softmax - This is used to scale the softmax into fp32 before applying it
-    Leads to more stable results - See: https://github.com/huggingface/transformers/issues/17433
+    OPT Scaled Softmax - This is used to scale the softmax into fp32 before applying it Leads to more stable results -
+    See: https://github.com/huggingface/transformers/issues/17433
     """
 
     def __init__(self):
@@ -131,7 +131,6 @@ class OPTLearnedPositionalEmbedding(nn.Embedding):
         return super().forward(positions + self.offset)
 
 
-# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->OPT
 class OPTAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
