@@ -14,16 +14,14 @@
 # limitations under the License.
 """ PyTorch LeViT model."""
 
-from sys import modules
-from typing import Optional, Tuple, Union
 import itertools
+from typing import Optional
 
 import torch
 import torch.utils.checkpoint
-from torch import embedding, nn
+from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutputWithNoAttention,
     BaseModelOutputWithPoolingAndNoAttention,
@@ -53,37 +51,53 @@ LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all LeViT models at https://huggingface.co/models?filter=levit
 ]
 
+
 class LevitConvEmbeddings(nn.Module):
     """
     LeViT Conv Embeddings with Batch Norm
     """
-    def __init__(self, in_channels, out_channels, kernel_size, stride, padding, dilation = 1, groups = 1, bn_weight_init = 1):
+
+    def __init__(
+        self, in_channels, out_channels, kernel_size, stride, padding, dilation=1, groups=1, bn_weight_init=1
+    ):
         super().__init__()
-        self.convolution = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, dilation = dilation, groups = groups, bias=False)
+        self.convolution = nn.Conv2d(
+            in_channels, out_channels, kernel_size, stride, padding, dilation=dilation, groups=groups, bias=False
+        )
         self.bn = nn.BatchNorm2d(out_channels)
-        
+
     def forward(self, embeddings):
         embeddings = self.convolution(embeddings)
         embeddings = self.bn(embeddings)
         return embeddings
 
+
 class LevitPatchEmbeddings(nn.Module):
     """
     LeViT patch embeddings
     """
+
     def __init__(self, config):
         super().__init__()
-        self.embedding_layer_1 = LevitConvEmbeddings(config.num_channels, config.embed_dim[0]//8, config.kernel_size, config.stride, config.padding)
+        self.embedding_layer_1 = LevitConvEmbeddings(
+            config.num_channels, config.embed_dim[0] // 8, config.kernel_size, config.stride, config.padding
+        )
         self.activation_layer_1 = nn.Hardswish()
-        
-        self.embedding_layer_2 = LevitConvEmbeddings(config.embed_dim[0]//8, config.embed_dim[0]//4, config.kernel_size, config.stride, config.padding)
+
+        self.embedding_layer_2 = LevitConvEmbeddings(
+            config.embed_dim[0] // 8, config.embed_dim[0] // 4, config.kernel_size, config.stride, config.padding
+        )
         self.activation_layer_2 = nn.Hardswish()
-        
-        self.embedding_layer_3 = LevitConvEmbeddings(config.embed_dim[0]//4, config.embed_dim[0]//2, config.kernel_size, config.stride, config.padding)
+
+        self.embedding_layer_3 = LevitConvEmbeddings(
+            config.embed_dim[0] // 4, config.embed_dim[0] // 2, config.kernel_size, config.stride, config.padding
+        )
         self.activation_layer_3 = nn.Hardswish()
 
-        self.embedding_layer_4 = LevitConvEmbeddings(config.embed_dim[0]//2, config.embed_dim[0], config.kernel_size, config.stride, config.padding)
-        
+        self.embedding_layer_4 = LevitConvEmbeddings(
+            config.embed_dim[0] // 2, config.embed_dim[0], config.kernel_size, config.stride, config.padding
+        )
+
     def forward(self, pixel_values):
         embeddings = self.embedding_layer_1(pixel_values)
         embeddings = self.activation_layer_1(embeddings)
@@ -93,25 +107,29 @@ class LevitPatchEmbeddings(nn.Module):
         embeddings = self.activation_layer_3(embeddings)
         embeddings = self.embedding_layer_4(embeddings)
         return embeddings
-        
+
+
 class MLPLayerWithBN(nn.Module):
     """
     MLP Layer with Batch Norm
     """
+
     def __init__(self, input_dim, output_dim, bn_weight_init=1):
         super().__init__()
         self.linear = nn.Linear(in_features=input_dim, out_features=output_dim, bias=False)
         self.bn = nn.BatchNorm1d(output_dim)
-    
+
     def forward(self, hidden_state):
         hidden_state = self.linear(hidden_state)
         hidden_state = self.bn(hidden_state.flatten(0, 1)).reshape_as(hidden_state)
         return hidden_state
 
+
 class LevitSubsample(nn.Module):
     """
     Subsampling Module
     """
+
     def __init__(self, stride, resolution):
         super().__init__()
         self.stride = stride
@@ -120,17 +138,20 @@ class LevitSubsample(nn.Module):
     def forward(self, hidden_state):
         batch_size, N, channels = hidden_state.shape
         hidden_state = hidden_state.view(batch_size, self.resolution, self.resolution, channels)[
-            :, ::self.stride, ::self.stride].reshape(batch_size, -1, channels)
+            :, :: self.stride, :: self.stride
+        ].reshape(batch_size, -1, channels)
         return hidden_state
+
 
 class LevitAttention(nn.Module):
     """
     LeViT Attention Module
     """
+
     def __init__(self, embed_dim, key_dim, num_heads, attention_ratio, resolution):
         super().__init__()
         self.num_heads = num_heads
-        self.scale = key_dim ** -0.5
+        self.scale = key_dim**-0.5
         self.key_dim = key_dim
         self.attention_ratio = attention_ratio
         self.out_dim_qkv = attention_ratio * key_dim * num_heads + key_dim * num_heads * 2
@@ -149,17 +170,17 @@ class LevitAttention(nn.Module):
                 if offset not in attention_offsets:
                     attention_offsets[offset] = len(attention_offsets)
                 idxs.append(attention_offsets[offset])
-        
+
         self.ab = {}
         self.attention_biases = torch.nn.Parameter(torch.zeros(num_heads, len(attention_offsets)))
-        self.register_buffer('attention_bias_idxs',  torch.LongTensor(idxs).view(N, N))
+        self.register_buffer("attention_bias_idxs", torch.LongTensor(idxs).view(N, N))
 
     @torch.no_grad()
     def train(self, mode=True):
         super().train(mode)
         if mode and self.ab:
             self.ab = {}  # clear ab cache
-    
+
     def get_attention_biases(self, device):
         if self.training:
             return self.attention_biases[:, self.attention_bias_idxs]
@@ -168,15 +189,17 @@ class LevitAttention(nn.Module):
             if device_key not in self.ab:
                 self.ab[device_key] = self.attention_biases[:, self.attention_bias_idxs]
             return self.ab[device_key]
-    
+
     def forward(self, hidden_state):
         batch_size, N, channels = hidden_state.shape
         qkv = self.qkv(hidden_state)
-        query, key, value = qkv.view(batch_size, N, self.num_heads, -1).split([self.key_dim, self.key_dim, self.attention_ratio * self.key_dim], dim=3)
+        query, key, value = qkv.view(batch_size, N, self.num_heads, -1).split(
+            [self.key_dim, self.key_dim, self.attention_ratio * self.key_dim], dim=3
+        )
         query = query.permute(0, 2, 1, 3)
         key = key.permute(0, 2, 1, 3)
         value = value.permute(0, 2, 1, 3)
-        
+
         attention = query @ key.transpose(-2, -1) * self.scale + self.get_attention_biases(hidden_state.device)
         attention = attention.softmax(dim=-1)
         hidden_state = (attention @ value).transpose(1, 2).reshape(batch_size, N, self.out_dim_proj)
@@ -188,41 +211,39 @@ class LevitAttentionSubsample(nn.Module):
     """
     LeViT Attention Subsample Module
     """
+
     def __init__(self, input_dim, output_dim, key_dim, num_heads, attention_ratio, stride, resolution, resolution_):
         super().__init__()
         self.num_heads = num_heads
-        self.scale = key_dim ** -0.5
+        self.scale = key_dim**-0.5
         self.key_dim = key_dim
         self.attention_ratio = attention_ratio
         self.out_dim_kv = attention_ratio * key_dim * num_heads + key_dim * num_heads
         self.out_dim_proj = attention_ratio * key_dim * num_heads
         self.resolution_ = resolution_
-        
+
         self.kv = MLPLayerWithBN(input_dim, self.out_dim_kv)
         self.q_subsample = LevitSubsample(stride, resolution)
         self.q = MLPLayerWithBN(input_dim, key_dim * num_heads)
-        self.activation = nn.Hardswish() 
+        self.activation = nn.Hardswish()
         self.projection = MLPLayerWithBN(self.out_dim_proj, output_dim)
 
         self.ab = {}
 
         points = list(itertools.product(range(resolution), range(resolution)))
-        points_ =  list(itertools.product(range(resolution_), range(resolution_)))
+        points_ = list(itertools.product(range(resolution_), range(resolution_)))
         N, N_ = len(points), len(points_)
         attention_offsets, idxs = {}, []
         for p1 in points_:
             for p2 in points:
                 size = 1
-                offset = (
-                    abs(p1[0] * stride - p2[0] + (size - 1) / 2), 
-                    abs(p1[1] * stride - p2[1] + (size - 1) / 2)
-                )
+                offset = (abs(p1[0] * stride - p2[0] + (size - 1) / 2), abs(p1[1] * stride - p2[1] + (size - 1) / 2))
                 if offset not in attention_offsets:
                     attention_offsets[offset] = len(attention_offsets)
                 idxs.append(attention_offsets[offset])
-        
+
         self.attention_biases = torch.nn.Parameter(torch.zeros(num_heads, len(attention_offsets)))
-        self.register_buffer('attention_bias_idxs',  torch.LongTensor(idxs).view(N_, N))
+        self.register_buffer("attention_bias_idxs", torch.LongTensor(idxs).view(N_, N))
 
     @torch.no_grad()
     def train(self, mode=True):
@@ -238,10 +259,14 @@ class LevitAttentionSubsample(nn.Module):
             if device_key not in self.ab:
                 self.ab[device_key] = self.attention_biases[:, self.attention_bias_idxs]
             return self.ab[device_key]
-    
+
     def forward(self, hidden_state):
         batch_size, N, channels = hidden_state.shape
-        key, value = self.kv(hidden_state).view(batch_size, N, self.num_heads, -1).split([self.key_dim, self.attention_ratio * self.key_dim], dim=3)
+        key, value = (
+            self.kv(hidden_state)
+            .view(batch_size, N, self.num_heads, -1)
+            .split([self.key_dim, self.attention_ratio * self.key_dim], dim=3)
+        )
         key = key.permute(0, 2, 1, 3)
         value = value.permute(0, 2, 1, 3)
 
@@ -254,10 +279,12 @@ class LevitAttentionSubsample(nn.Module):
         hidden_state = self.projection(self.activation(hidden_state))
         return hidden_state
 
+
 class LevitMLPBlock(nn.Module):
     """
     MLP Residual Block a.k.a MLP 2X
     """
+
     def __init__(self, input_dim, hidden_dim):
         super().__init__()
         self.linear_up = MLPLayerWithBN(input_dim, hidden_dim)
@@ -270,10 +297,12 @@ class LevitMLPBlock(nn.Module):
         hidden_state = self.linear_down(hidden_state)
         return hidden_state
 
+
 class LevitResidualBlock(nn.Module):
     """
     Residual Block for LeViT
     """
+
     def __init__(self, module, drop_rate):
         super().__init__()
         self.module = module
@@ -281,16 +310,22 @@ class LevitResidualBlock(nn.Module):
 
     def forward(self, x):
         if self.training and self.drop_rate > 0:
-            x = x + self.module(x) * torch.rand(x.size(0), 1, 1, device=x.device).ge_(self.drop_rate).div(1 - self.drop_rate).detach()
+            x = (
+                x
+                + self.module(x)
+                * torch.rand(x.size(0), 1, 1, device=x.device).ge_(self.drop_rate).div(1 - self.drop_rate).detach()
+            )
             return x
         else:
             x = x + self.module(x)
             return x
 
+
 class LevitEncoder(nn.Module):
     """
     LeViT Encoder Module
     """
+
     def __init__(self, config):
         super().__init__()
         self.num_features = config.embed_dim[-1]
@@ -301,44 +336,47 @@ class LevitEncoder(nn.Module):
         self.patch_embeddings = LevitPatchEmbeddings(config)
 
         self.blocks = []
-        config.down_ops.append([''])
+        config.down_ops.append([""])
 
-        for idx, (ed, kd, dpt, nh, attn_r, mlp_r, do) in enumerate(zip(
-            config.embed_dim, config.key_dim, config.depth, config.num_heads, config.attention_ratio, config.mlp_ratio, config.down_ops
-        )):
+        for idx, (ed, kd, dpt, nh, attn_r, mlp_r, do) in enumerate(
+            zip(
+                config.embed_dim,
+                config.key_dim,
+                config.depth,
+                config.num_heads,
+                config.attention_ratio,
+                config.mlp_ratio,
+                config.down_ops,
+            )
+        ):
             for _ in range(dpt):
-                self.blocks.append(LevitResidualBlock(
-                    LevitAttention(
-                        ed, kd, nh, attn_r, resolution
-                    ), config.drop_path
-                ))
+                self.blocks.append(
+                    LevitResidualBlock(LevitAttention(ed, kd, nh, attn_r, resolution), config.drop_path)
+                )
                 if mlp_r > 0:
                     hidden_dim = ed * mlp_r
-                    self.blocks.append(LevitResidualBlock(
-                        LevitMLPBlock(
-                            ed, hidden_dim
-                        ), config.drop_path
-                    ))
-            
-            if do[0] == 'Subsample':
+                    self.blocks.append(LevitResidualBlock(LevitMLPBlock(ed, hidden_dim), config.drop_path))
+
+            if do[0] == "Subsample":
                 resolution_ = (resolution - 1) // do[5] + 1
                 self.blocks.append(
                     LevitAttentionSubsample(
-                        *config.embed_dim[idx:idx+2], key_dim=do[1], 
-                        num_heads = do[2], attention_ratio=do[3],
-                        stride=do[5], resolution=resolution, 
-                        resolution_ = resolution_
+                        *config.embed_dim[idx : idx + 2],
+                        key_dim=do[1],
+                        num_heads=do[2],
+                        attention_ratio=do[3],
+                        stride=do[5],
+                        resolution=resolution,
+                        resolution_=resolution_,
                     )
                 )
                 resolution = resolution_
                 if do[4] > 0:
-                    hidden_dim = config.embed_dim[idx+1] * do[4]
-                    self.blocks.append(LevitResidualBlock(
-                        LevitMLPBlock(
-                            config.embed_dim[idx+1], hidden_dim
-                        ), config.drop_path
-                    ))
-        
+                    hidden_dim = config.embed_dim[idx + 1] * do[4]
+                    self.blocks.append(
+                        LevitResidualBlock(LevitMLPBlock(config.embed_dim[idx + 1], hidden_dim), config.drop_path)
+                    )
+
         self.blocks = nn.Sequential(*self.blocks)
 
     def forward(self, pixel_values, output_hidden_states=False, return_dict=True):
@@ -467,10 +505,12 @@ class LevitModel(LevitPreTrainedModel):
             hidden_states=encoder_outputs.hidden_states,
         )
 
+
 class LevitClassificationLayer(nn.Module):
     """
     LeViT Classification Layer
     """
+
     def __init__(self, input_dim, output_dim):
         super().__init__()
         self.bn = nn.BatchNorm1d(input_dim)
@@ -497,10 +537,18 @@ class LevitForImageClassification(LevitPreTrainedModel):
         self.levit = LevitModel(config)
 
         # Classifier head
-        self.classifier = LevitClassificationLayer(config.embed_dim[-1], config.num_labels) if config.num_labels > 0 else torch.nn.Identity()
+        self.classifier = (
+            LevitClassificationLayer(config.embed_dim[-1], config.num_labels)
+            if config.num_labels > 0
+            else torch.nn.Identity()
+        )
         if config.distillation:
-            self.classifier_distill = LevitClassificationLayer(config.embed_dim[-1], config.num_labels) if config.num_labels > 0 else torch.nn.Identity()
-        
+            self.classifier_distill = (
+                LevitClassificationLayer(config.embed_dim[-1], config.num_labels)
+                if config.num_labels > 0
+                else torch.nn.Identity()
+            )
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -534,7 +582,7 @@ class LevitForImageClassification(LevitPreTrainedModel):
         logits, logits_distill = self.classifier(sequence_output), self.classifier_distill(sequence_output)
         if self.config.distillation:
             logits = (logits + logits_distill) / 2
-        
+
         else:
             logits = self.classifier(sequence_output)
 

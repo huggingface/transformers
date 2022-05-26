@@ -3229,7 +3229,6 @@ if TYPE_CHECKING:
         from .modeling_utils import PreTrainedModel
 
         # PyTorch model imports
-
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlbertForMaskedLM,

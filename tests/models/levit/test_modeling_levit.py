@@ -17,7 +17,7 @@
 
 import inspect
 import unittest
-from math import floor, ceil
+from math import ceil, floor
 
 from transformers import LevitConfig
 from transformers.file_utils import cached_property, is_torch_available, is_vision_available
@@ -52,20 +52,20 @@ class LevitModelTester:
         self,
         parent,
         batch_size=13,
-        image_size = 64,
-        num_channels = 3,
-        kernel_size = 3,
-        stride = 2,
-        padding = 1,
-        patch_size = 16,
-        embed_dim = [128, 256, 384],
-        num_heads = [4, 6, 8],
-        depth = [2, 3, 4],
-        key_dim = [16, 16, 16],
-        drop_path_rate = 0,
-        mlp_ratio = [2, 2, 2],
-        attention_ratio = [2, 2, 2],
-        distillation = True,
+        image_size=64,
+        num_channels=3,
+        kernel_size=3,
+        stride=2,
+        padding=1,
+        patch_size=16,
+        embed_dim=[128, 256, 384],
+        num_heads=[4, 6, 8],
+        depth=[2, 3, 4],
+        key_dim=[16, 16, 16],
+        drop_path_rate=0,
+        mlp_ratio=[2, 2, 2],
+        attention_ratio=[2, 2, 2],
+        distillation=True,
         initializer_range=0.02,
         is_training=True,
         use_labels=True,
@@ -89,8 +89,8 @@ class LevitModelTester:
         self.distillation = distillation
         self.initializer_range = initializer_range
         self.down_ops = [
-            ['Subsample', key_dim[0], embed_dim[0]// key_dim[0], 4, 2, 2],
-            ['Subsample', key_dim[0], embed_dim[1]// key_dim[0], 4, 2, 2]
+            ["Subsample", key_dim[0], embed_dim[0] // key_dim[0], 4, 2, 2],
+            ["Subsample", key_dim[0], embed_dim[1] // key_dim[0], 4, 2, 2],
         ]
         self.is_training = is_training
         self.use_labels = use_labels
@@ -110,21 +110,21 @@ class LevitModelTester:
     def get_config(self):
         return LevitConfig(
             image_size=self.image_size,
-            num_channels = self.num_channels,
+            num_channels=self.num_channels,
             kernel_size=self.kernel_size,
             stride=self.stride,
-            padding= self.padding,
+            padding=self.padding,
             patch_size=self.patch_size,
             embed_dim=self.embed_dim,
-            num_heads = self.num_heads,
-            depth = self.depth,
+            num_heads=self.num_heads,
+            depth=self.depth,
             key_dim=self.key_dim,
             drop_path_rate=self.drop_path,
             mlp_ratio=self.mlp_ratio,
             attention_ratio=self.attention_ratio,
-            distillation=self.distillation, 
+            distillation=self.distillation,
             initializer_range=self.initializer_range,
-            down_ops=self.down_ops
+            down_ops=self.down_ops,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -137,7 +137,9 @@ class LevitModelTester:
         for _ in range(4):
             height = floor(((height + 2 * self.padding - self.kernel_size) / self.stride) + 1)
             width = floor(((width + 2 * self.padding - self.kernel_size) / self.stride) + 1)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, ceil(height/4) * ceil(width/4), self.embed_dim[-1]))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, ceil(height / 4) * ceil(width / 4), self.embed_dim[-1])
+        )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.num_labels
@@ -228,8 +230,20 @@ class LevitModelTest(ModelTesterMixin, unittest.TestCase):
             image_size = (self.model_tester.image_size, self.model_tester.image_size)
             height, width = image_size[0], image_size[1]
             for _ in range(4):
-                height = floor(((height + 2 * self.model_tester.padding - self.model_tester.kernel_size) / self.model_tester.stride) + 1)
-                width = floor(((width + 2 * self.model_tester.padding - self.model_tester.kernel_size) / self.model_tester.stride) + 1)
+                height = floor(
+                    (
+                        (height + 2 * self.model_tester.padding - self.model_tester.kernel_size)
+                        / self.model_tester.stride
+                    )
+                    + 1
+                )
+                width = floor(
+                    (
+                        (width + 2 * self.model_tester.padding - self.model_tester.kernel_size)
+                        / self.model_tester.stride
+                    )
+                    + 1
+                )
             # verify the first hidden states (first block)
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),

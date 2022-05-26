@@ -304,7 +304,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("layoutlmv3", "LayoutLMv3"),
         ("layoutxlm", "LayoutXLM"),
         ("led", "LED"),
-        ("levit", "Levit"),
+        ("levit", "LeViT"),
         ("longformer", "Longformer"),
         ("luke", "LUKE"),
         ("lxmert", "LXMERT"),

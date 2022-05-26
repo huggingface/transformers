@@ -17,6 +17,7 @@
 
 import argparse
 import json
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
@@ -24,32 +25,34 @@ from typing import List
 
 import torch
 import torch.nn as nn
-from collections import OrderedDict
 
 import timm
 from huggingface_hub import hf_hub_download
-from transformers import LevitFeatureExtractor, LevitConfig, LevitForImageClassification
+from transformers import LevitConfig, LevitFeatureExtractor, LevitForImageClassification
 from transformers.utils import logging
 
 
 logging.set_verbosity_info()
 logger = logging.get_logger()
 
-def convert_weight_and_push(embed_dim: int, name: str, config: LevitConfig, save_directory: Path, push_to_hub: bool = True):
+
+def convert_weight_and_push(
+    embed_dim: int, name: str, config: LevitConfig, save_directory: Path, push_to_hub: bool = True
+):
     print(f"Converting {name}...")
 
     with torch.no_grad():
         if embed_dim == 128:
             if name[-1] == "S":
-                from_model = timm.create_model('levit_128s', pretrained=True)
-            else: 
-                from_model = timm.create_model('levit_128', pretrained=True)
+                from_model = timm.create_model("levit_128s", pretrained=True)
+            else:
+                from_model = timm.create_model("levit_128", pretrained=True)
         if embed_dim == 192:
-            from_model = timm.create_model('levit_192', pretrained=True)
+            from_model = timm.create_model("levit_192", pretrained=True)
         if embed_dim == 256:
-            from_model = timm.create_model('levit_256', pretrained=True)
+            from_model = timm.create_model("levit_256", pretrained=True)
         if embed_dim == 384:
-            from_model = timm.create_model('levit_384', pretrained=True)
+            from_model = timm.create_model("levit_384", pretrained=True)
 
         from_model.eval()
         our_model = LevitForImageClassification(config).eval()
@@ -67,14 +70,12 @@ def convert_weight_and_push(embed_dim: int, name: str, config: LevitConfig, save
         out2 = our_model(x).logits
 
     assert torch.allclose(out1, out2), "The model logits don't match the original one."
-    
+
     checkpoint_name = name
     print(checkpoint_name)
 
     if push_to_hub:
-        #our_model.save_pretrained(save_directory / checkpoint_name)
-
-        # we can use the convnext one
+        our_model.save_pretrained(save_directory / checkpoint_name)
         feature_extractor = LevitFeatureExtractor()
         feature_extractor.save_pretrained(save_directory / checkpoint_name)
 
@@ -106,29 +107,26 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
 
     names_to_config = {
         "levit-128S": ImageNetPreTrainedConfig(
-            embed_dim = [128, 256, 384], num_heads = [4, 6, 8], depth = [2, 3, 4], key_dim = [16, 16, 16],
-            drop_path_rate = 0
+            embed_dim=[128, 256, 384], num_heads=[4, 6, 8], depth=[2, 3, 4], key_dim=[16, 16, 16], drop_path_rate=0
         ),
         "levit-128": ImageNetPreTrainedConfig(
-            embed_dim = [128, 256, 384], num_heads = [4, 8, 12], depth = [4, 4, 4], key_dim = [16, 16, 16],
-            drop_path_rate = 0
+            embed_dim=[128, 256, 384], num_heads=[4, 8, 12], depth=[4, 4, 4], key_dim=[16, 16, 16], drop_path_rate=0
         ),
         "levit-192": ImageNetPreTrainedConfig(
-            embed_dim = [192, 288, 384], num_heads = [3, 5, 6], depth = [4, 4, 4], key_dim = [32, 32, 32],
-            drop_path_rate = 0
+            embed_dim=[192, 288, 384], num_heads=[3, 5, 6], depth=[4, 4, 4], key_dim=[32, 32, 32], drop_path_rate=0
         ),
         "levit-256": ImageNetPreTrainedConfig(
-            embed_dim = [256, 384, 512], num_heads = [4, 6, 8], depth = [4, 4, 4], key_dim = [32, 32, 32],
-            drop_path_rate = 0
+            embed_dim=[256, 384, 512], num_heads=[4, 6, 8], depth=[4, 4, 4], key_dim=[32, 32, 32], drop_path_rate=0
         ),
         "levit-384": ImageNetPreTrainedConfig(
-            embed_dim = [384, 512, 768], num_heads = [6, 9, 12], depth = [4, 4, 4], key_dim = [32, 32, 32],
-            drop_path_rate = 0.1
+            embed_dim=[384, 512, 768], num_heads=[6, 9, 12], depth=[4, 4, 4], key_dim=[32, 32, 32], drop_path_rate=0.1
         ),
     }
 
     if model_name:
-        convert_weight_and_push(names_to_embed_dim[model_name], model_name, names_to_config[model_name], save_directory, push_to_hub)
+        convert_weight_and_push(
+            names_to_embed_dim[model_name], model_name, names_to_config[model_name], save_directory, push_to_hub
+        )
     else:
         for model_name, config in names_to_config.items():
             convert_weight_and_push(names_to_embed_dim[model_name], model_name, config, save_directory, push_to_hub)
@@ -142,9 +140,7 @@ if __name__ == "__main__":
         "--model_name",
         default=None,
         type=str,
-        help=(
-            "The name of the model you wish to convert, it must be one of the supported Levit* architecture,"
-        ),
+        help="The name of the model you wish to convert, it must be one of the supported Levit* architecture,",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",
@@ -160,7 +156,7 @@ if __name__ == "__main__":
         required=False,
         help="If True, push model and feature extractor to the hub.",
     )
-    
+
     args = parser.parse_args()
     pytorch_dump_folder_path: Path = args.pytorch_dump_folder_path
     pytorch_dump_folder_path.mkdir(exist_ok=True, parents=True)

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" LeViT model configuration """
+""" LeViT model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -57,18 +57,18 @@ class LevitConfig(PretrainedConfig):
         depth (`List[int]`, *optional*, defaults to `[4, 4, 4]`):
             The number of layers in each encoder block.
         key_dim (`List[int]`, *optional*, defaults to `[16, 16, 16]`):
-            The size of key in each of the encoder blocks. 
+            The size of key in each of the encoder blocks.
         drop_path_rate (`int`, *optional*, defaults to 0):
             The dropout probability for stochastic depth, used in the blocks of the Transformer encoder.
         mlp_ratios (`List[int]`, *optional*, defaults to `[2, 2, 2]`):
             Ratio of the size of the hidden layer compared to the size of the input layer of the Mix FFNs in the
             encoder blocks.
         attention_drop_rate (`List[int]`, *optional*, defaults to `[2, 2, 2]`):
-            The dropout ratio for the attention probabilities. 
-        distillation (`bool`, *optional*, defaults to True):  
+            The dropout ratio for the attention probabilities.
+        distillation (`bool`, *optional*, defaults to True):
             The value is set to True to use distillation else set to False.
         initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.  
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
     Example:
 
@@ -88,20 +88,20 @@ class LevitConfig(PretrainedConfig):
 
     def __init__(
         self,
-        image_size = 224,
-        num_channels = 3,
-        kernel_size = 3,
-        stride = 2,
-        padding = 1,
-        patch_size = 16,
-        embed_dim = [128, 256, 384],
-        num_heads = [4, 8, 12],
-        depth = [4, 4, 4],
-        key_dim = [16, 16, 16],
-        drop_path_rate = 0,
-        mlp_ratio = [2, 2, 2],
-        attention_ratio = [2, 2, 2],
-        distillation = True,
+        image_size=224,
+        num_channels=3,
+        kernel_size=3,
+        stride=2,
+        padding=1,
+        patch_size=16,
+        embed_dim=[128, 256, 384],
+        num_heads=[4, 8, 12],
+        depth=[4, 4, 4],
+        key_dim=[16, 16, 16],
+        drop_path_rate=0,
+        mlp_ratio=[2, 2, 2],
+        attention_ratio=[2, 2, 2],
+        distillation=True,
         initializer_range=0.02,
         **kwargs
     ):
@@ -122,6 +122,6 @@ class LevitConfig(PretrainedConfig):
         self.distillation = distillation
         self.initializer_range = initializer_range
         self.down_ops = [
-            ['Subsample', key_dim[0], embed_dim[0]// key_dim[0], 4, 2, 2],
-            ['Subsample', key_dim[0], embed_dim[1]// key_dim[0], 4, 2, 2]
+            ["Subsample", key_dim[0], embed_dim[0] // key_dim[0], 4, 2, 2],
+            ["Subsample", key_dim[0], embed_dim[1] // key_dim[0], 4, 2, 2],
         ]
