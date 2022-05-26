@@ -94,7 +94,7 @@ class BloomConfig(PretrainedConfig):
             dot-product/softmax to float() when training with mixed precision.
         pretraining_tp (`int`, *optional*, defaults to `1`):
             Tensor parallelism rank used during pretraining with Megatron. Please refer to [this
-            blogpost](https://huggingface.co/docs/transformers/parallelism) to understand more about it. This value is
+            document](https://huggingface.co/docs/transformers/parallelism) to understand more about it. This value is
             necessary to ensure exact reproducibility of the pretraining results. Please refer to [this
             issue](https://github.com/pytorch/pytorch/issues/76232)
 
