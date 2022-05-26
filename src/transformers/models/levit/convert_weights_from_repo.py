@@ -24,121 +24,58 @@ from typing import List
 
 import torch
 import torch.nn as nn
-from torch import Tensor
+from collections import OrderedDict
 
-from levit import LeViT_192, LeViT_128, LeViT_128S, LeViT_256, LeViT_384
+import timm
 from huggingface_hub import hf_hub_download
-from transformers import LevitFeatureExtractor, LevitConfig, LevitForImageClassification
+from transformers import AutoFeatureExtractor, LevitConfig, LevitForImageClassification
 from transformers.utils import logging
 
 
 logging.set_verbosity_info()
 logger = logging.get_logger()
 
-
-@dataclass
-class Tracker:
-    module: nn.Module
-    traced: List[nn.Module] = field(default_factory=list)
-    handles: list = field(default_factory=list)
-
-    def _forward_hook(self, m, inputs: Tensor, outputs: Tensor):
-        has_not_submodules = len(list(m.modules())) == 1 or isinstance(m, nn.Conv2d) or isinstance(m, nn.BatchNorm2d)
-        if has_not_submodules:
-            self.traced.append(m)
-
-    def __call__(self, x: Tensor):
-        for m in self.module.modules():
-            self.handles.append(m.register_forward_hook(self._forward_hook))
-        self.module(x)
-        list(map(lambda x: x.remove(), self.handles))
-        return self
-
-    @property
-    def parametrized(self):
-        # check the len of the state_dict keys to see if we have learnable params
-        return list(filter(lambda x: len(list(x.state_dict().keys())) > 0, self.traced))
-
-
-@dataclass
-class ModuleTransfer:
-    src: nn.Module
-    dest: nn.Module
-    verbose: int = 0
-    src_skip: List = field(default_factory=list)
-    dest_skip: List = field(default_factory=list)
-
-    def __call__(self, x: Tensor):
-        """
-        Transfer the weights of `self.src` to `self.dest` by performing a forward pass using `x` as input. Under the
-        hood we tracked all the operations in both modules.
-        """
-        dest_traced = Tracker(self.dest)(x).parametrized
-        src_traced = Tracker(self.src)(x).parametrized
-
-        src_traced = list(filter(lambda x: type(x) not in self.src_skip, src_traced))
-        dest_traced = list(filter(lambda x: type(x) not in self.dest_skip, dest_traced))
-
-        if len(dest_traced) != len(src_traced):
-            raise Exception(
-                f"Numbers of operations are different. Source module has {len(src_traced)} operations while"
-                f" destination module has {len(dest_traced)}."
-            )
-
-        for dest_m, src_m in zip(dest_traced, src_traced):
-            dest_m.load_state_dict(src_m.state_dict())
-            if self.verbose == 1:
-                print(f"Transfered from={src_m} to={dest_m}")
-
-
 def convert_weight_and_push(embed_dim: int, name: str, config: LevitConfig, save_directory: Path, push_to_hub: bool = True):
     print(f"Converting {name}...")
+
     with torch.no_grad():
         if embed_dim == 128:
             if name[-1] == "S":
-                from_model = LeViT_128S().eval()
-                weights = "https://dl.fbaipublicfiles.com/LeViT/LeViT-128S-96703c44.pth"
-                checkpoint = torch.hub.load_state_dict_from_url( weights, map_location='cpu')
-                from_model.load_state_dict(checkpoint['model'])
+                from_model = timm.create_model('levit_128s', pretrained=True)
             else: 
-                from_model = LeViT_128().eval()
-                weights = "https://dl.fbaipublicfiles.com/LeViT/LeViT-128-b88c2750.pth"
-                checkpoint = torch.hub.load_state_dict_from_url( weights, map_location='cpu')
-                from_model.load_state_dict(checkpoint['model'])
+                from_model = timm.create_model('levit_128', pretrained=True)
         if embed_dim == 192:
-            from_model = LeViT_192().eval()
-            weights = "https://dl.fbaipublicfiles.com/LeViT/LeViT-192-92712e41.pth"
-            checkpoint = torch.hub.load_state_dict_from_url( weights, map_location='cpu')
-            from_model.load_state_dict(checkpoint['model'])
+            from_model = timm.create_model('levit_192', pretrained=True)
         if embed_dim == 256:
-            from_model = LeViT_256().eval()
-            weights = "https://dl.fbaipublicfiles.com/LeViT/LeViT-256-13b5763e.pth"
-            checkpoint = torch.hub.load_state_dict_from_url( weights, map_location='cpu')
-            from_model.load_state_dict(checkpoint['model'])
+            from_model = timm.create_model('levit_256', pretrained=True)
         if embed_dim == 384:
-            from_model = LeViT_384().eval()
-            weights = "https://dl.fbaipublicfiles.com/LeViT/LeViT-384-9bdaf2e2.pth"
-            checkpoint = torch.hub.load_state_dict_from_url( weights, map_location='cpu')
-            from_model.load_state_dict(checkpoint['model'])
+            from_model = timm.create_model('levit_384', pretrained=True)
 
-
-
+        from_model.eval()
         our_model = LevitForImageClassification(config).eval()
-        module_transfer = ModuleTransfer(src=from_model, dest=our_model)
+        huggingface_weights = OrderedDict()
+
+        weights = from_model.state_dict()
+        og_keys = list(from_model.state_dict().keys())
+        new_keys = list(our_model.state_dict().keys())
+        for i in range(len(og_keys)):
+            huggingface_weights[new_keys[i]] = weights[og_keys[i]]
+        our_model.load_state_dict(huggingface_weights)
+
         x = torch.randn((2, 3, 224, 224))
-        print(x.shape)
-        module_transfer(x)
+        out1 = from_model(x)
+        out2 = our_model(x).logits
 
-    assert torch.allclose(from_model(x), our_model(x).logits), "The model logits don't match the original one."
-
+    assert torch.allclose(out1, out2), "The model logits don't match the original one."
+    
     checkpoint_name = name
     print(checkpoint_name)
 
     if push_to_hub:
-        our_model.save_pretrained(save_directory / checkpoint_name)
+        #our_model.save_pretrained(save_directory / checkpoint_name)
 
         # we can use the convnext one
-        feature_extractor = LevitFeatureExtractor.from_pretrained("anugunj/levit-384")
+        feature_extractor = AutoFeatureExtractor.from_pretrained("anugunj/levit-384")
         feature_extractor.save_pretrained(save_directory / checkpoint_name)
 
         print(f"Pushed {checkpoint_name}")
@@ -211,9 +148,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",
-        default=None,
+        default="dump/",
         type=Path,
-        required=True,
+        required=False,
         help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(

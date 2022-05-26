@@ -150,16 +150,24 @@ class LevitAttention(nn.Module):
                     attention_offsets[offset] = len(attention_offsets)
                 idxs.append(attention_offsets[offset])
         
+        self.ab = {}
         self.attention_biases = torch.nn.Parameter(torch.zeros(num_heads, len(attention_offsets)))
         self.register_buffer('attention_bias_idxs',  torch.LongTensor(idxs).view(N, N))
 
     @torch.no_grad()
     def train(self, mode=True):
         super().train(mode)
-        if mode and hasattr(self, 'ab'):
-            del self.ab
+        if mode and self.ab:
+            self.ab = {}  # clear ab cache
+    
+    def get_attention_biases(self, device):
+        if self.training:
+            return self.attention_biases[:, self.attention_bias_idxs]
         else:
-            self.ab = self.attention_biases[:, self.attention_bias_idxs]
+            device_key = str(device)
+            if device_key not in self.ab:
+                self.ab[device_key] = self.attention_biases[:, self.attention_bias_idxs]
+            return self.ab[device_key]
     
     def forward(self, hidden_state):
         batch_size, N, channels = hidden_state.shape
@@ -169,12 +177,7 @@ class LevitAttention(nn.Module):
         key = key.permute(0, 2, 1, 3)
         value = value.permute(0, 2, 1, 3)
         
-        attention = (
-            (query @ key.transpose(-2, -1)) * self.scale
-            +
-            (self.attention_biases[:, self.attention_bias_idxs]
-            if self.training else self.ab)
-        )
+        attention = query @ key.transpose(-2, -1) * self.scale + self.get_attention_biases(hidden_state.device)
         attention = attention.softmax(dim=-1)
         hidden_state = (attention @ value).transpose(1, 2).reshape(batch_size, N, self.out_dim_proj)
         hidden_state = self.projection(self.activation(hidden_state))
@@ -201,6 +204,7 @@ class LevitAttentionSubsample(nn.Module):
         self.activation = nn.Hardswish() 
         self.projection = MLPLayerWithBN(self.out_dim_proj, output_dim)
 
+        self.ab = {}
 
         points = list(itertools.product(range(resolution), range(resolution)))
         points_ =  list(itertools.product(range(resolution_), range(resolution_)))
@@ -223,10 +227,17 @@ class LevitAttentionSubsample(nn.Module):
     @torch.no_grad()
     def train(self, mode=True):
         super().train(mode)
-        if mode and hasattr(self, 'ab'):
-            del self.ab
+        if mode and self.ab:
+            self.ab = {}  # clear ab cache
+
+    def get_attention_biases(self, device):
+        if self.training:
+            return self.attention_biases[:, self.attention_bias_idxs]
         else:
-            self.ab = self.attention_biases[:, self.attention_bias_idxs]
+            device_key = str(device)
+            if device_key not in self.ab:
+                self.ab[device_key] = self.attention_biases[:, self.attention_bias_idxs]
+            return self.ab[device_key]
     
     def forward(self, hidden_state):
         batch_size, N, channels = hidden_state.shape
@@ -237,12 +248,7 @@ class LevitAttentionSubsample(nn.Module):
         query = self.q(self.q_subsample(hidden_state))
         query = query.view(batch_size, self.resolution_**2, self.num_heads, self.key_dim).permute(0, 2, 1, 3)
 
-        attention = (
-            (query @ key.transpose(-2, -1)) * self.scale
-            +
-            (self.attention_biases[:, self.attention_bias_idxs]
-            if self.training else self.ab)
-        )
+        attention = query @ key.transpose(-2, -1) * self.scale + self.get_attention_biases(hidden_state.device)
         attention = attention.softmax(dim=-1)
         hidden_state = (attention @ value).transpose(1, 2).reshape(batch_size, -1, self.out_dim_proj)
         hidden_state = self.projection(self.activation(hidden_state))
@@ -344,7 +350,6 @@ class LevitEncoder(nn.Module):
             hidden_state = layers(hidden_state)
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_state,)
-        
         if not return_dict:
             return tuple(v for v in [hidden_state, all_hidden_states] if v is not None)
 
@@ -468,8 +473,8 @@ class LevitClassificationLayer(nn.Module):
     """
     def __init__(self, input_dim, output_dim):
         super().__init__()
-        self.linear = nn.Linear(input_dim, output_dim)
         self.bn = nn.BatchNorm1d(input_dim)
+        self.linear = nn.Linear(input_dim, output_dim)
 
     def forward(self, x):
         x = self.bn(x)
@@ -526,9 +531,9 @@ class LevitForImageClassification(LevitPreTrainedModel):
 
         sequence_output = outputs[0]
         sequence_output = sequence_output.mean(1)
+        logits, logits_distill = self.classifier(sequence_output), self.classifier_distill(sequence_output)
         if self.config.distillation:
-            logits = self.classifier(sequence_output), self.classifier_distill(sequence_output)
-            logits = (logits[0] + logits[1]) / 2
+            logits = (logits + logits_distill) / 2
         
         else:
             logits = self.classifier(sequence_output)
