@@ -36,7 +36,7 @@ from ...modeling_tf_utils import (
     unpack_inputs,
 )
 from ...tf_utils import shape_list, stable_softmax
-from ...utils import add_start_docstrings, logging
+from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_opt import OPTConfig
 
 
@@ -307,6 +307,9 @@ class TFOPTDecoderLayer(tf.keras.layers.Layer):
             layer_head_mask (`tf.Tensor`): mask for attention heads in a given layer of size
                 `(decoder_attention_heads,)`
             past_key_value (`Tuple(tf.Tensor)`): cached past key and value projection states
+            training (`bool`, *optional*, defaults to `False`):
+                Whether or not to use the model in training mode (some modules like dropout modules have different
+                behaviors between training and evaluation).
         """
         residual = hidden_states
 
@@ -807,6 +810,14 @@ class TFOPTModel(TFOPTPreTrainedModel):
         self.model.set_input_embeddings(new_embeddings)
 
     @unpack_inputs
+    @add_start_docstrings_to_model_forward(OPT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        processor_class=_TOKENIZER_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=TFBaseModelOutputWithPast,
+        config_class=_CONFIG_FOR_DOC,
+        expected_output=_EXPECTED_OUTPUT_SHAPE,
+    )
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
@@ -950,6 +961,13 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
         return model_kwargs
 
     @unpack_inputs
+    @add_start_docstrings_to_model_forward(OPT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        processor_class=_TOKENIZER_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=TFCausalLMOutputWithPast,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
@@ -1035,7 +1053,7 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
         >>> # Generate
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        'Hey, are you consciours? Can you talk to me?\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n'
+        "Hey, are you consciours? Can you talk to me?\nI'm not consciours, but I can talk to you."
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
