@@ -17,8 +17,9 @@ import random
 from typing import List, Optional, Tuple, Union
 
 import torch
+import torch.nn.functional as F
 import torch.utils.checkpoint
-from torch import nn
+from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
@@ -85,52 +86,55 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
-class OPTScaledSoftmax(nn.Module):
+def make_positions(mask, padding_idx: int):
+    """Replace non-padding symbols with their position numbers.
+
+    Position numbers begin at padding_idx+1. Padding symbols are ignored.
     """
-    OPT Scaled Softmax - This is used to scale the softmax into fp32 before applying it Leads to more stable results -
-    See: https://github.com/huggingface/transformers/issues/17433
-    """
-
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, attn_weights, input_shape, output_shape=None, mask=None):
-        input_dtype = attn_weights.dtype
-        if input_dtype == torch.float16:
-            attn_weights = attn_weights.float()
-        attn_weights = attn_weights.view(input_shape)
-        if mask is not None:
-            attn_weights = attn_weights + mask
-            attn_weights = attn_weights.view(output_shape)
-
-        output = nn.functional.softmax(attn_weights, dim=-1)
-        return output.to(input_dtype)
+    # The series of casts and type-conversions here are carefully
+    # balanced to both work with ONNX export and XLA. In particular XLA
+    # prefers ints, cumsum defaults to output longs, and ONNX doesn't know
+    # how to handle the dtype kwarg in cumsum.
+    positions = (torch.cumsum(mask, dim=1).type_as(mask) * mask).long() + padding_idx
+    return positions
 
 
 class OPTLearnedPositionalEmbedding(nn.Embedding):
     """
-    This module learns positional embeddings up to a fixed maximum size.
+    This module learns positional embeddings up to a fixed maximum size. Padding ids are ignored by either offsetting
+    based on padding_idx or by setting padding_idx to None and ensuring that the appropriate position ids are passed to
+    the forward function.
     """
 
-    def __init__(self, num_embeddings: int, embedding_dim: int):
-        # OPT is set up so that if padding_idx is specified then offset the embedding ids by 2
-        # and adjust num_embeddings appropriately. Other models don't have this hack
-        self.offset = 2
-        super().__init__(num_embeddings + self.offset, embedding_dim)
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int = 1):
+        super().__init__(num_embeddings, embedding_dim, padding_idx)
+        self.onnx_trace = False
+        if self.padding_idx is not None:
+            self.max_positions = self.num_embeddings - self.padding_idx - 1
+        else:
+            self.max_positions = self.num_embeddings
 
-    def forward(self, attention_mask: torch.LongTensor, past_key_values_length: int = 0):
-        """`input_ids_shape` is expected to be [bsz x seqlen]."""
-        attention_mask = attention_mask.long()
+    def forward(self, attention_mask: Tensor, positions: Optional[Tensor] = None):
+        # attention_masks is expected to be of size [batch_size x seq_len].
+        if not ((positions is None) or (self.padding_idx is None)):
+            raise ValueError("If positions is pre-computed then padding_idx should not be set.")
 
-        # create positions depending on attention_mask
-        positions = (torch.cumsum(attention_mask, dim=1).type_as(attention_mask) * attention_mask).long() - 1
+        if positions is None:
+            attention_mask = attention_mask.long()
+            positions = make_positions(attention_mask, self.padding_idx)
 
-        # cut positions if `past_key_values_length` is > 0
-        positions = positions[:, past_key_values_length:]
+        return F.embedding(
+            positions,
+            self.weight,
+            self.padding_idx,
+            self.max_norm,
+            self.norm_type,
+            self.scale_grad_by_freq,
+            self.sparse,
+        )
 
-        return super().forward(positions + self.offset)
 
-
+# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->OPT
 class OPTAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -155,7 +159,6 @@ class OPTAttention(nn.Module):
             )
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
-        self.scaled_softmax = OPTScaledSoftmax()
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -228,16 +231,18 @@ class OPTAttention(nn.Module):
                 f" {attn_weights.size()}"
             )
 
-        input_shape = (bsz, self.num_heads, tgt_len, src_len)
-        output_shape = None
         if attention_mask is not None:
             if attention_mask.size() != (bsz, 1, tgt_len, src_len):
                 raise ValueError(
                     f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
                 )
-            output_shape = (bsz * self.num_heads, tgt_len, src_len)
+            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
+            attn_weights = torch.max(attn_weights, torch.tensor(torch.finfo(attn_weights.dtype).min))
+            attn_weights_before_softmax = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
-        attn_weights = self.scaled_softmax(attn_weights, input_shape, output_shape, attention_mask)
+        attn_weights = nn.functional.softmax(attn_weights_before_softmax, dim=-1, dtype=torch.float32).to(
+            attn_weights_before_softmax.dtype
+        )
 
         if layer_head_mask is not None:
             if layer_head_mask.size() != (self.num_heads,):
@@ -503,7 +508,12 @@ class OPTDecoder(OPTPreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.word_embed_proj_dim, self.padding_idx)
-        self.embed_positions = OPTLearnedPositionalEmbedding(config.max_position_embeddings, config.hidden_size)
+
+        # OPT is set up so that if padding_idx is specified then offset the embedding ids by 2
+        if self.padding_idx is not None:
+            num_embeddings = config.max_position_embeddings + 2
+
+        self.embed_positions = OPTLearnedPositionalEmbedding(num_embeddings, config.hidden_size, self.padding_idx)
 
         if config.word_embed_proj_dim != config.hidden_size:
             self.project_out = nn.Linear(config.hidden_size, config.word_embed_proj_dim, bias=False)
@@ -640,7 +650,8 @@ class OPTDecoder(OPTPreTrainedModel):
         # embed positions
         if attention_mask is None:
             attention_mask = torch.ones(inputs_embeds.shape[:2], dtype=torch.bool, device=inputs_embeds.device)
-        pos_embeds = self.embed_positions(attention_mask, past_key_values_length)
+
+        positions = self.embed_positions(attention_mask)[:, past_key_values_length:, :]
 
         attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
@@ -649,7 +660,8 @@ class OPTDecoder(OPTPreTrainedModel):
         if self.project_in is not None:
             inputs_embeds = self.project_in(inputs_embeds)
 
-        hidden_states = inputs_embeds + pos_embeds
+        hidden_states = inputs_embeds + positions
+
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # decoder layers
@@ -670,7 +682,6 @@ class OPTDecoder(OPTPreTrainedModel):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-
             dropout_probability = random.uniform(0, 1)
             if self.training and (dropout_probability < self.layerdrop):
                 continue
@@ -820,7 +831,7 @@ class OPTForCausalLM(OPTPreTrainedModel):
         self.model = OPTModel(config)
 
         # the lm_head weight is automatically tied to the embed tokens weight
-        self.lm_head = nn.Linear(config.word_embed_proj_dim, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
