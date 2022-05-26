@@ -824,11 +824,11 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
         position_ids = kwargs.get("position_ids", None)
         attention_mask = kwargs.get("attention_mask", None)
 
-        if position_ids is None and attention_mask is not None:
-            if past is not None:
-                position_ids = tf.reduce_sum(attention_mask, axis=1, keepdims=True) - 1
-            else:
-                position_ids = tf.math.cumsum(attention_mask, axis=1, exclusive=True)
+        if attention_mask is not None and position_ids is None:
+            position_ids = tf.math.cumsum(attention_mask, axis=-1, exclusive=True)
+            position_ids = tf.where(attention_mask == 0, 1, position_ids)
+            if past:
+                position_ids = tf.expand_dims(position_ids[:, -1], -1)
 
         return {
             "input_ids": inputs,
@@ -836,6 +836,7 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
             "position_ids": position_ids,
             "past": past,
             "use_cache": use_cache,
+            "token_type_ids": token_type_ids,
         }
 
     def _update_model_kwargs_for_xla_generation(self, outputs, model_kwargs, current_pos, max_length):
