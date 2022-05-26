@@ -85,6 +85,28 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
+class OPTScaledSoftmax(nn.Module):
+    """
+    OPT Scaled Softmax - This is used to scale the softmax into fp32 before applying it
+    Leads to more stable results - See: https://github.com/huggingface/transformers/issues/17433
+    """
+
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, attn_weights, input_shape, output_shape=None, mask=None):
+        input_dtype = attn_weights.dtype
+        if input_dtype == torch.float16:
+            attn_weights = attn_weights.float()
+        attn_weights = attn_weights.view(input_shape)
+        if mask is not None:
+            attn_weights = attn_weights + mask
+            attn_weights = attn_weights.view(output_shape)
+
+        output = nn.functional.softmax(attn_weights, dim=-1)
+        return output.to(input_dtype)
+
+
 class OPTLearnedPositionalEmbedding(nn.Embedding):
     """
     This module learns positional embeddings up to a fixed maximum size.
@@ -134,6 +156,7 @@ class OPTAttention(nn.Module):
             )
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
+        self.scaled_softmax = OPTScaledSoftmax()
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -206,15 +229,16 @@ class OPTAttention(nn.Module):
                 f" {attn_weights.size()}"
             )
 
+        input_shape = (bsz, self.num_heads, tgt_len, src_len)
+        output_shape = None
         if attention_mask is not None:
             if attention_mask.size() != (bsz, 1, tgt_len, src_len):
                 raise ValueError(
                     f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
                 )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
+            output_shape = (bsz * self.num_heads, tgt_len, src_len)
 
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+        attn_weights = self.scaled_softmax(attn_weights, input_shape, output_shape, attention_mask)
 
         if layer_head_mask is not None:
             if layer_head_mask.size() != (self.num_heads,):
