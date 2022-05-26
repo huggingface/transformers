@@ -132,7 +132,7 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
 
         n_frames = frames.size // window_length
         for frame_idx in range(n_frames, 0, -1):
-            start = (frame_idx - 1) * window_length 
+            start = (frame_idx - 1) * window_length
             end = frame_idx * window_length - 1
             frames[start + 1 : end + 1] -= preemphasis_coeff * frames[start:end]
             frames[start] *= 1 - preemphasis_coeff
