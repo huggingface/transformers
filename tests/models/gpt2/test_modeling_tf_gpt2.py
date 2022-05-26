@@ -537,7 +537,7 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_lm_generate_distilgpt2_left_padding(self):
-        """ Tests that the generated text is the same, regarless of left padding"""
+        """Tests that the generated text is the same, regarless of left padding"""
         model = TFGPT2LMHeadModel.from_pretrained("distilgpt2")
         tokenizer = GPT2Tokenizer.from_pretrained("distilgpt2")
 
@@ -550,8 +550,9 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
             "do_sample": False,
             "repetition_penalty": 1.3,
         }
-        expected_output_string = \
+        expected_output_string = (
             "Today is a beautiful day and I am so happy to be able take part in this amazing event."
+        )
 
         sentences = ["Today is a beautiful day and"]
         input_ids = tokenizer(sentences, return_tensors="tf", padding=True).input_ids
@@ -578,7 +579,7 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
         sentences = ["The dog", "The flying machine"]
         expected_output_strings = [
             "The dog was found in a field near the intersection of West and West Streets.\n\nThe",
-            "The flying machine is a small, lightweight, and lightweight aircraft that can be used for any type of"
+            "The flying machine is a small, lightweight, and lightweight aircraft that can be used for any type of",
         ]
         input_ids = tokenizer(sentences, return_tensors="tf", padding=True).input_ids
 
@@ -609,12 +610,12 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
             expected_output_string = [
                 "The dog owner asked why did our vet decide there needed to be extra ventilation inside because most"
                 " puppies",
-                "The flying machine was made by an artist who found it difficult to control it as it did not use"
+                "The flying machine was made by an artist who found it difficult to control it as it did not use",
             ]
             expected_output_string_xla = [
                 "The dog has been named in connection with the murder of a 20-year-old man in",
                 "The flying machine is a new and improved system to operate and operate a new system and system "
-                "system system"
+                "system system",
             ]
             input_ids = tokenizer(sentence, return_tensors="tf", padding=True).input_ids
 

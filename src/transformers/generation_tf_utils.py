@@ -1984,8 +1984,9 @@ class TFGenerationMixin:
             size=max_length,
             clear_after_read=False,
         )
-        for i in range(max_length):
-            generated = generated.write(i, tf.broadcast_to(pad_token_id, (batch_size,)))
+        if pad_token_id:  # ignores the cases when it is 0 or None
+            for i in range(max_length):
+                generated = generated.write(i, tf.broadcast_to(pad_token_id, (batch_size,)))
 
         # write prompt to generated
         for i in range(cur_len):
@@ -2049,9 +2050,7 @@ class TFGenerationMixin:
 
             # update model_kwargs
             if use_xla:
-                model_kwargs = self._update_model_kwargs_for_xla_generation(
-                    outputs, model_kwargs, cur_len, max_length
-                )
+                model_kwargs = self._update_model_kwargs_for_xla_generation(outputs, model_kwargs, cur_len, max_length)
             else:
                 model_kwargs = self._update_model_kwargs_for_generation(
                     outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
@@ -2256,8 +2255,9 @@ class TFGenerationMixin:
             size=max_length,
             clear_after_read=False,
         )
-        for i in range(max_length):
-            generated = generated.write(i, tf.broadcast_to(pad_token_id, (batch_size,)))
+        if pad_token_id:  # ignores the cases when it is 0 or None
+            for i in range(max_length):
+                generated = generated.write(i, tf.broadcast_to(pad_token_id, (batch_size,)))
 
         # write prompt to generated
         for i in range(cur_len):
@@ -2605,12 +2605,13 @@ class TFGenerationMixin:
             size=max_length,
             clear_after_read=False,
         )
-        for i in range(max_length):
-            sequences = sequences.write(i, tf.broadcast_to(pad_token_id, (batch_size, num_beams)))
-            running_sequences = running_sequences.write(i, tf.broadcast_to(pad_token_id, (batch_size, num_beams)))
-            intermediary_running_sequences = intermediary_running_sequences.write(
-                i, tf.broadcast_to(pad_token_id, (batch_size, num_beams * 2))
-            )
+        if pad_token_id:  # ignores the cases when it is 0 or None
+            for i in range(max_length):
+                sequences = sequences.write(i, tf.broadcast_to(pad_token_id, (batch_size, num_beams)))
+                running_sequences = running_sequences.write(i, tf.broadcast_to(pad_token_id, (batch_size, num_beams)))
+                intermediary_running_sequences = intermediary_running_sequences.write(
+                    i, tf.broadcast_to(pad_token_id, (batch_size, num_beams * 2))
+                )
 
         # write prompt to running_sequences
         for i in range(cur_len):
