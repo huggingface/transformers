@@ -110,6 +110,7 @@ class CodeGenConfig(PretrainedConfig):
         self,
         vocab_size=50400,
         n_positions=2048,
+        n_ctx=2048,
         n_embd=4096,
         n_layer=28,
         n_head=16,
@@ -128,10 +129,8 @@ class CodeGenConfig(PretrainedConfig):
         tie_word_embeddings=False,
         **kwargs
     ):
-        super().__init__(
-            bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
-        )
         self.vocab_size = vocab_size
+        self.n_ctx = n_ctx
         self.n_positions = n_positions
         self.n_embd = n_embd
         self.n_layer = n_layer
@@ -149,6 +148,10 @@ class CodeGenConfig(PretrainedConfig):
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+
+        super().__init__(
+            bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
+        )
 
 
 # Copied from transformers.models.gpt2.configuration_gpt2.GPT2OnnxConfig
