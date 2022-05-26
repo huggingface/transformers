@@ -3683,6 +3683,7 @@ if TYPE_CHECKING:
             LongT5ForConditionalGeneration,
             LongT5Model,
             LongT5PreTrainedModel,
+            load_tf_weights_in_longt5,
         )
         from .models.luke import (
             LUKE_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -3982,14 +3983,6 @@ if TYPE_CHECKING:
             TRAJECTORY_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             TrajectoryTransformerModel,
             TrajectoryTransformerPreTrainedModel,
-        )
-        from .models.longt5 import (
-            LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST,
-            LongT5EncoderModel,
-            LongT5ForConditionalGeneration,
-            LongT5Model,
-            LongT5PreTrainedModel,
-            load_tf_weights_in_longt5,
         )
         from .models.transfo_xl import (
             TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,

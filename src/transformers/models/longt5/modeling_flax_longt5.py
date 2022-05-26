@@ -1716,7 +1716,8 @@ class FlaxLongT5PreTrainedModel(FlaxPreTrainedModel):
 
         if decoder_input_ids is None:
             raise ValueError(
-                "Make sure to provide both `input_ids` and `decoder_input_ids`. `decoder_input_ids` is not passed here."
+                "Make sure to provide both `input_ids` and `decoder_input_ids`. `decoder_input_ids` is not passed"
+                " here."
             )
 
         # prepare encoder inputs
@@ -1983,7 +1984,7 @@ LONGT5_START_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare LONGT5 Model transformer outputting raw hidden-states" "without any specific head on top.",
+    "The bare LONGT5 Model transformer outputting raw hidden-stateswithout any specific head on top.",
     LONGT5_START_DOCSTRING,
 )
 # Copied from transformers.models.t5.modeling_flax_t5.FlaxT5Module with T5->LongT5

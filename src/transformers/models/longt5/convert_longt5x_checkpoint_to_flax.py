@@ -38,8 +38,8 @@ def convert_t5x_checkpoint_to_flax(t5x_checkpoint_path, config_name, flax_dump_f
         encoder_attn_name = "TransientGlobalSelfAttention"
     else:
         raise ValueError(
-            "Given config is expected to have `model_type='t5'`, or `model_type='longt5` with `encoder_attention_type` "
-            "attribute with a value from ['local', 'transient-global]."
+            "Given config is expected to have `model_type='t5'`, or `model_type='longt5` with `encoder_attention_type`"
+            " attribute with a value from ['local', 'transient-global]."
         )
 
     # Encoder

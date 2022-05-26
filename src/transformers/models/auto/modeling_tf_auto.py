@@ -42,10 +42,6 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("data2vec-vision", "TFData2VecVisionModel"),
         ("deberta", "TFDebertaModel"),
         ("deberta-v2", "TFDebertaV2Model"),
-        ("led", "TFLEDModel"),
-        ("lxmert", "TFLxmertModel"),
-        ("mt5", "TFMT5Model"),
-        ("t5", "TFT5Model"),
         ("distilbert", "TFDistilBertModel"),
         ("dpr", "TFDPRQuestionEncoder"),
         ("electra", "TFElectraModel"),
@@ -85,9 +81,6 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
 TF_MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
     [
         # Model for pre-training mapping
-        ("lxmert", "TFLxmertForPreTraining"),
-        ("t5", "TFT5ForConditionalGeneration"),
-        ("distilbert", "TFDistilBertForMaskedLM"),
         ("albert", "TFAlbertForPreTraining"),
         ("bart", "TFBartForConditionalGeneration"),
         ("bert", "TFBertForPreTraining"),
@@ -117,13 +110,6 @@ TF_MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
 TF_MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
     [
         # Model with LM heads mapping
-        ("speech_to_text", "TFSpeech2TextForConditionalGeneration"),
-        ("rembert", "TFRemBertForMaskedLM"),
-        ("roformer", "TFRoFormerForMaskedLM"),
-        ("convbert", "TFConvBertForMaskedLM"),
-        ("led", "TFLEDForConditionalGeneration"),
-        ("t5", "TFT5ForConditionalGeneration"),
-        ("distilbert", "TFDistilBertForMaskedLM"),
         ("albert", "TFAlbertForMaskedLM"),
         ("bart", "TFBartForConditionalGeneration"),
         ("bert", "TFBertForMaskedLM"),
@@ -230,8 +216,6 @@ TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("blenderbot-small", "TFBlenderbotSmallForConditionalGeneration"),
         ("encoder-decoder", "TFEncoderDecoderModel"),
         ("led", "TFLEDForConditionalGeneration"),
-        ("mt5", "TFMT5ForConditionalGeneration"),
-        ("t5", "TFT5ForConditionalGeneration"),
         ("marian", "TFMarianMTModel"),
         ("mbart", "TFMBartForConditionalGeneration"),
         ("mt5", "TFMT5ForConditionalGeneration"),
