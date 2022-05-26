@@ -19,6 +19,7 @@ import inspect
 import json
 import os
 import os.path
+import pickle
 import random
 import sys
 import tempfile
@@ -50,7 +51,9 @@ from transformers.testing_utils import (
     is_pt_flax_cross_test,
     is_pt_tf_cross_test,
     is_staging_test,
+    require_accelerate,
     require_torch,
+    require_torch_gpu,
     require_torch_multi_gpu,
     require_usr_bin_time,
     slow,
@@ -59,6 +62,7 @@ from transformers.testing_utils import (
 from transformers.utils import (
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
+    is_accelerate_available,
     is_flax_available,
     is_tf_available,
     is_torch_fx_available,
@@ -69,6 +73,10 @@ from transformers.utils.generic import ModelOutput
 sys.path.append(str(Path(__file__).parent.parent / "utils"))
 
 from test_module.custom_configuration import CustomConfig, NoSuperInitConfig  # noqa E402
+
+
+if is_accelerate_available():
+    from accelerate.utils import compute_module_sizes
 
 
 if is_torch_available():
@@ -93,6 +101,8 @@ if is_torch_available():
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         MODEL_MAPPING,
         AdaptiveEmbedding,
+        AutoModelForCausalLM,
+        AutoTokenizer,
         BertConfig,
         BertModel,
         PreTrainedModel,
@@ -758,8 +768,8 @@ class ModelTesterMixin:
                     traced_model = symbolic_trace(model, input_names)
                     traced_output = traced_model(**filtered_inputs)
 
-            except RuntimeError:
-                self.fail("Couldn't trace module.")
+            except RuntimeError as e:
+                self.fail(f"Couldn't trace module: {e}")
 
             def flatten_output(output):
                 flatten = []
@@ -781,6 +791,40 @@ class ModelTesterMixin:
                     torch.allclose(model_output[i], traced_output[i]),
                     f"traced {i}th output doesn't match model {i}th output for {model_class}",
                 )
+
+            # Test that the model can be TorchScripted
+            try:
+                scripted = torch.jit.script(traced_model)
+            except Exception as e:
+                self.fail(f"Could not TorchScript the traced model: {e}")
+            scripted_output = scripted(**filtered_inputs)
+            scripted_output = flatten_output(scripted_output)
+
+            for i in range(num_outputs):
+                self.assertTrue(
+                    torch.allclose(model_output[i], scripted_output[i]),
+                    f"scripted {i}th output doesn't match model {i}th output for {model_class}",
+                )
+
+            # Test that the model can be serialized and restored properly
+            with tempfile.TemporaryDirectory() as tmp_dir_name:
+                pkl_file_name = os.path.join(tmp_dir_name, "model.pkl")
+                try:
+                    with open(pkl_file_name, "wb") as f:
+                        pickle.dump(traced_model, f)
+                    with open(pkl_file_name, "rb") as f:
+                        loaded = pickle.load(f)
+                except Exception as e:
+                    self.fail(f"Couldn't serialize / deserialize the traced model: {e}")
+
+                loaded_output = loaded(**filtered_inputs)
+                loaded_output = flatten_output(loaded_output)
+
+                for i in range(num_outputs):
+                    self.assertTrue(
+                        torch.allclose(model_output[i], loaded_output[i]),
+                        f"serialized model {i}th output doesn't match model {i}th output for {model_class}",
+                    )
 
     def test_headmasking(self):
         if not self.test_head_masking:
@@ -2141,6 +2185,86 @@ class ModelTesterMixin:
             model.parallelize()
             model.generate(**cast_to_device(inputs_dict, "cuda:0"), num_beams=2)
 
+    def check_device_map_is_respected(self, model, device_map):
+        for param_name, param in model.named_parameters():
+            # Find device in device_map
+            while len(param_name) > 0 and param_name not in device_map:
+                param_name = ".".join(param_name.split(".")[:-1])
+            if param_name not in device_map:
+                raise ValueError("device map is incomplete, it does not contain any device for `param_name`.")
+
+            param_device = device_map[param_name]
+            if param_device in ["cpu", "disk"]:
+                self.assertEqual(param.device, torch.device("meta"))
+            else:
+                self.assertEqual(param.device, torch.device(param_device))
+
+    @require_accelerate
+    @require_torch_gpu
+    def test_cpu_offload(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        if isinstance(getattr(config, "num_hidden_layers", None), int) and config.num_hidden_layers < 5:
+            config.num_hidden_layers = 5
+
+        for model_class in self.all_model_classes:
+            if model_class._no_split_modules is None:
+                continue
+
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config).eval()
+            model = model.to(torch_device)
+            base_output = model(**inputs_dict)
+
+            model_size = compute_module_sizes(model)[""]
+            # We test several splits of sizes to make sure it works.
+            max_gpu_sizes = [int(p * model_size) for p in [0.5, 0.7, 0.9]]
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model.cpu().save_pretrained(tmp_dir)
+
+                for max_size in max_gpu_sizes:
+                    max_memory = {0: max_size, "cpu": model_size * 2}
+                    new_model = model_class.from_pretrained(tmp_dir, device_map="auto", max_memory=max_memory)
+                    # Making sure part of the model will actually end up offloaded
+                    self.assertSetEqual(set(new_model.hf_device_map.values()), {0, "cpu"})
+
+                    self.check_device_map_is_respected(new_model, new_model.hf_device_map)
+                    new_output = new_model(**inputs_dict)
+
+                    self.assertTrue(torch.allclose(base_output[0], new_output[0]))
+
+    @require_accelerate
+    @require_torch_multi_gpu
+    def test_model_parallelism(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        if isinstance(getattr(config, "num_hidden_layers", None), int) and config.num_hidden_layers < 5:
+            config.num_hidden_layers = 5
+
+        for model_class in self.all_model_classes:
+            if model_class._no_split_modules is None:
+                continue
+
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config).eval()
+            model = model.to(torch_device)
+            base_output = model(**inputs_dict)
+
+            model_size = compute_module_sizes(model)[""]
+            # We test several splits of sizes to make sure it works.
+            max_gpu_sizes = [int(p * model_size) for p in [0.5, 0.7, 0.9]]
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model.cpu().save_pretrained(tmp_dir)
+
+                for max_size in max_gpu_sizes:
+                    max_memory = {0: max_size, 1: model_size * 2, "cpu": model_size * 2}
+                    new_model = model_class.from_pretrained(tmp_dir, device_map="auto", max_memory=max_memory)
+                    # Making sure part of the model will actually end up offloaded
+                    self.assertSetEqual(set(new_model.hf_device_map.values()), {0, 1})
+
+                    self.check_device_map_is_respected(new_model, new_model.hf_device_map)
+                    new_output = new_model(**inputs_dict)
+
+                    self.assertTrue(torch.allclose(base_output[0], new_output[0]))
+
     def test_problem_types(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -2510,6 +2634,7 @@ class ModelUtilsTest(TestCasePlus):
         for p1, p2 in zip(model.parameters(), ref_model.parameters()):
             self.assertTrue(torch.allclose(p1, p2))
 
+    @require_accelerate
     def test_from_pretrained_low_cpu_mem_usage_functional(self):
         # test that we can use `from_pretrained(..., low_cpu_mem_usage=True)` with normal and
         # sharded models
@@ -2522,6 +2647,7 @@ class ModelUtilsTest(TestCasePlus):
             _ = BertModel.from_pretrained(mname, low_cpu_mem_usage=True)
 
     @require_usr_bin_time
+    @require_accelerate
     def test_from_pretrained_low_cpu_mem_usage_measured(self):
         # test that `from_pretrained(..., low_cpu_mem_usage=True)` uses less cpu memory than default
 
@@ -2559,6 +2685,23 @@ class ModelUtilsTest(TestCasePlus):
         # gpu - that way one can measure exactly the total and peak memory used. Perhaps once we add
         # functionality to load models directly on gpu, this test can be rewritten to use torch's
         # cuda memory tracking and then we should be able to do a much more precise test.
+
+    @require_accelerate
+    @require_torch_multi_gpu
+    @slow
+    def test_model_parallelism_gpt2(self):
+        device_map = {"transformer.wte": 0, "transformer.wpe": 0, "lm_head": 0, "transformer.ln_f": 1}
+        for i in range(12):
+            device_map[f"transformer.h.{i}"] = 0 if i <= 5 else 1
+
+        model = AutoModelForCausalLM.from_pretrained("gpt2", device_map=device_map)
+
+        tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        inputs = tokenizer("Hello, my name is", return_tensors="pt")
+        output = model.generate(inputs["input_ids"].to(0))
+
+        text_output = tokenizer.decode(output[0].tolist())
+        self.assertEqual(text_output, "Hello, my name is John. I'm a writer, and I'm a writer. I'm")
 
     def test_cached_files_are_used_when_internet_is_down(self):
         # A mock response for an HTTP head request to emulate server down
