@@ -28,7 +28,7 @@ from collections import OrderedDict
 
 import timm
 from huggingface_hub import hf_hub_download
-from transformers import AutoFeatureExtractor, LevitConfig, LevitForImageClassification
+from transformers import LevitFeatureExtractor, LevitConfig, LevitForImageClassification
 from transformers.utils import logging
 
 
@@ -75,7 +75,7 @@ def convert_weight_and_push(embed_dim: int, name: str, config: LevitConfig, save
         #our_model.save_pretrained(save_directory / checkpoint_name)
 
         # we can use the convnext one
-        feature_extractor = AutoFeatureExtractor.from_pretrained("anugunj/levit-384")
+        feature_extractor = LevitFeatureExtractor()
         feature_extractor.save_pretrained(save_directory / checkpoint_name)
 
         print(f"Pushed {checkpoint_name}")
