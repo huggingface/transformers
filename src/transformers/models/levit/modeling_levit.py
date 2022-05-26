@@ -40,7 +40,7 @@ _FEAT_EXTRACTOR_FOR_DOC = "LevitFeatureExtractor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "anugunj/levit-128S"
-_EXPECTED_OUTPUT_SHAPE = [1, 768, 7, 7]
+_EXPECTED_OUTPUT_SHAPE = [1, 16, 384]
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "anugunj/levit-128S"
