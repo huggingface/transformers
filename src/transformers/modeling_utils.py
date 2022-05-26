@@ -1027,9 +1027,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # Both cases look the same for `input_ids`, but one is correct behavior, the other one incorrect.
             # In this case, we should still throw a warning because most models don't have
             # <pad> == EOS or <pad> == BOS or <pad> == SEP.
-            is_pad_token_equal_to_bos_token = self.config.bos_token_id is not None and self.config.bos_token_id == self.config.pad_token_id
-            is_pad_token_equal_to_eos_token = self.config.eos_token_id is not None and self.config.eos_token_id == self.config.pad_token_id
-            is_pad_token_equal_to_sep_token = self.config.sep_token_id is not None and self.config.sep_token_id == self.config.pad_token_id
+            is_pad_token_equal_to_bos_token = (
+                self.config.bos_token_id is not None and self.config.bos_token_id == self.config.pad_token_id
+            )
+            is_pad_token_equal_to_eos_token = (
+                self.config.eos_token_id is not None and self.config.eos_token_id == self.config.pad_token_id
+            )
+            is_pad_token_equal_to_sep_token = (
+                self.config.sep_token_id is not None and self.config.sep_token_id == self.config.pad_token_id
+            )
 
             warn_string = (
                 f"The input IDs {input_ids} contains the `pad_token_id` {self.config.pad_token_id}, "
@@ -1038,21 +1044,24 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             if is_pad_token_equal_to_bos_token:
                 warn_string += (
-                    "\nWe strongly recommend passing an `attention_mask` to avoid possibly incorrectly computing the attention weights. "
-                    f"\nYou can ignore this warning, if your `pad_token_id` {self.config.pad_token_id} is "
-                    f"identical to your `bos_token_id` {self.config.bos_token_id} AND your input is NOT padded."
+                    "\nWe strongly recommend passing an `attention_mask` to avoid possibly incorrectly computing the"
+                    " attention weights. \nYou can ignore this warning, if your `pad_token_id`"
+                    f" {self.config.pad_token_id} is identical to your `bos_token_id` {self.config.bos_token_id} AND"
+                    " your input is NOT padded."
                 )
             if is_pad_token_equal_to_eos_token:
                 warn_string += (
-                    "\nWe strongly recommend passing an `attention_mask` to avoid possibly incorrectly computing the attention weights. "
-                    f"\nYou can ignore this warning, if your `pad_token_id` {self.config.pad_token_id} is "
-                    f"identical to your `eos_token_id` {self.config.eos_token_id} AND your input is NOT padded."
+                    "\nWe strongly recommend passing an `attention_mask` to avoid possibly incorrectly computing the"
+                    " attention weights. \nYou can ignore this warning, if your `pad_token_id`"
+                    f" {self.config.pad_token_id} is identical to your `eos_token_id` {self.config.eos_token_id} AND"
+                    " your input is NOT padded."
                 )
             if is_pad_token_equal_to_sep_token:
                 warn_string += (
-                    "\nWe strongly recommend passing an `attention_mask` to avoid possibly incorrectly computing the attention weights. "
-                    f"\nYou can ignore this warning, if your `pad_token_id` {self.config.pad_token_id} is "
-                    f"identical to your `sep_token_id` {self.config.sep_token_id} AND your input is NOT padded."
+                    "\nWe strongly recommend passing an `attention_mask` to avoid possibly incorrectly computing the"
+                    " attention weights. \nYou can ignore this warning, if your `pad_token_id`"
+                    f" {self.config.pad_token_id} is identical to your `sep_token_id` {self.config.sep_token_id} AND"
+                    " your input is NOT padded."
                 )
             if not (is_pad_token_equal_to_bos_token or is_pad_token_equal_to_eos_token):
                 warn_string += (
