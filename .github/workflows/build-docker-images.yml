@@ -3,10 +3,7 @@ name: Build docker images (scheduled)
 on:
   push:
     branches:
-      - docker-image*
-  repository_dispatch:
-  schedule:
-    - cron: "0 1 * * *"
+      - test_docker_image_build_in_parallel
 
 concurrency:
   group: docker-images-builds
