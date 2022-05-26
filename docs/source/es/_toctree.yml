@@ -11,6 +11,8 @@
     title: Pipelines para inferencia
   - local: autoclass_tutorial
     title: Carga instancias preentrenadas con un AutoClass
+  - local: preprocessing
+    title: Preprocesamiento
   - local: training
     title: Fine-tuning a un modelo pre-entrenado
   - local: accelerate
