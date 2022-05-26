@@ -82,7 +82,7 @@ class MCTCTConv1dSubsampler(nn.Module):
     """
 
     def __init__(self, config):
-        super(MCTCTConv1dSubsampler, self).__init__()
+        super().__init__()
         self.config = config
         self.glu_dim = config.conv_glu_dim
 
@@ -126,13 +126,13 @@ class MCTCTConv1dSubsampler(nn.Module):
         padding = sum([size // 2 for size in self.kernel_size])  # (7, 7) -> (3, 3)
 
         input_features = torch.nn.functional.pad(input_features, (0, 0, padding, padding), "constant", 0)
-        hidden_states = input_features.transpose(1, 2).contiguous()  # -> B x F x T
+        hidden_states = input_features.transpose(1, 2).contiguous()  # -> Batch x Frame x Time
         for conv in self.conv_layers:
             hidden_states = conv(hidden_states)
             hidden_states = nn.functional.glu(hidden_states, dim=self.glu_dim)
             hidden_states = self.dropout(hidden_states)
 
-        hidden_states = hidden_states.transpose(1, 2).contiguous()  # -> B x T x F
+        hidden_states = hidden_states.transpose(1, 2).contiguous()  # -> Batch x Time x Frame
         return hidden_states
 
 
@@ -231,21 +231,21 @@ class MCTCTSelfAttention(nn.Module):
         return x.reshape(*reversed(shape)).permute(*reversed(range(len(shape))))
 
     def relative_position_embedding_rotate(self, scores):
-        # NOTE: must re-evaluate whether this re-implementation was trly necessary
+        # NOTE: should re-evaluate whether this re-implementation was truly necessary
         # or the reason why my complete re-haul worked was due to some other part
         # of the code. Adding this and the reshape fortrain code seems very undesirable.
 
         scores = scores.permute(0, 2, 3, 1)
 
-        b, d0, d1, d2 = scores.shape
+        batch, d0, d1, d2 = scores.shape
 
-        scores = torch.cat((scores, torch.zeros((b, d1, d1, d2), device=scores.device)), dim=1)
+        scores = torch.cat((scores, torch.zeros((batch, d1, d1, d2), device=scores.device)), dim=1)
 
-        scores = self.reshape_fortran(scores, [b, (d0 + d1) * d1, 1, d2])
+        scores = self.reshape_fortran(scores, [batch, (d0 + d1) * d1, 1, d2])
 
         scores = scores[:, : (d1 + d0 - 1) * d1]
 
-        scores = self.reshape_fortran(scores, [b, d0 + d1 - 1, d1, d2])
+        scores = self.reshape_fortran(scores, [batch, d0 + d1 - 1, d1, d2])
 
         n = d0 // 2
         scores = scores[:, n : n + d1].transpose(1, 2)
@@ -462,7 +462,7 @@ class MCTCTPreTrainedModel(PreTrainedModel):
     config_class = MCTCTConfig
     base_model_prefix = "mctct"
     main_input_name = "input_features"
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
+    _keys_to_ignore_on_load_missing = ["position_ids"]
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
@@ -533,7 +533,7 @@ MCTCT_START_DOCSTRING = r"""
     behavior.
 
     Parameters:
-        config ([`~MCTCTConfig`]): Model configuration class with all the parameters of the model.
+        config ([`MCTCTConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -603,8 +603,6 @@ class MCTCTEncoder(MCTCTPreTrainedModel):
         # subsample attention mask if necessary
         if attention_mask is not None:
             attention_mask = self._get_feature_vector_attention_mask(inputs_embeds.shape[1], attention_mask)
-        else:
-            pass
 
         hidden_states = nn.functional.dropout(inputs_embeds, p=self.hidden_dropout_prob, training=self.training)
 
@@ -618,9 +616,11 @@ class MCTCTEncoder(MCTCTPreTrainedModel):
 
         # check if head_mask has a correct number of layers specified if desired
         if head_mask is not None:
-            assert head_mask.size()[0] == (
-                len(self.layers)
-            ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+            if head_mask.size()[0] != len(self.layers):
+                raise ValueError(
+                    f"The head_mask should be specified for {len(self.layers)} layers, "
+                    f"but it is for {head_mask.size()[0]}."
+                )
 
         deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
         for idx, encoder_layer in enumerate(self.layers):

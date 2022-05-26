@@ -312,7 +312,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("maskformer", "MaskFormer"),
         ("mbart", "mBART"),
         ("mbart50", "mBART-50"),
-        ("mctct", "MCTCT"),
+        ("mctct", "M-CTC-T"),
         ("megatron-bert", "MegatronBert"),
         ("megatron_gpt2", "MegatronGPT2"),
         ("mluke", "mLUKE"),

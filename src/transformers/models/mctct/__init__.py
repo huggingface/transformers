@@ -21,10 +21,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_speech_avai
 
 
 _import_structure = {
-    "configuration_mctct": [
-        "MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "MCTCTConfig",
-    ],
+    "configuration_mctct": ["MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MCTCTConfig"],
     "processing_mctct": ["MCTCTProcessor"],
 }
 

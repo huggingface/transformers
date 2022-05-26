@@ -417,14 +417,7 @@ class MCTCTModelTest(ModelTesterMixin, unittest.TestCase):
 
 @require_torch
 class MCTCTRobustModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (
-            MCTCTForCTC,
-            MCTCTModel,
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (MCTCTForCTC, MCTCTModel) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
     test_torchscript = False

@@ -21,14 +21,14 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "mctct-large": "https://huggingface.co/mctct-large/resolve/main/config.json",
+    "mctct-large": "https://huggingface.co/cwkeam/mctct-large/resolve/main/config.json",
     # See all M-CTC-T models at https://huggingface.co/models?filter=mctct
 }
 
 
 class MCTCTConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`~MCTCTModel`]. It is used to instantiate an
+    This is the configuration class to store the configuration of a [`MCTCTModel`]. It is used to instantiate an
     M-CTC-T model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the M-CTC-T
     [mctct-large](https://huggingface.co/mctct-large) architecture.
@@ -40,7 +40,7 @@ class MCTCTConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 8065):
             Vocabulary size of the MCTCT model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`~MCTCTModel`] or [`~TFMCTCTModel`].
+            `inputs_ids` passed when calling [`MCTCTModel`].
         hidden_size (`int`, *optional*, defaults to 1536):
             Dimension of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 36):
@@ -80,10 +80,10 @@ class MCTCTConfig(PretrainedConfig):
             The probability of randomly dropping the `Conv1dSubsampler` layer during training.
         num_conv_layers (`int`, *optional*, defaults to 1):
             Number of convolution layers before applying transformer encoder layers.
-        conv_kernel (`List[int]`, *optional*, defaults to [7]):
+        conv_kernel (`List[int]`, *optional*, defaults to `[7]`):
             The kernel size of the 1D convolution applied before transformer layers. `len(conv_kernel)` must be equal
             to `num_conv_layers`.
-        conv_stride (`List[int]`, *optional*, defaults to [3]):
+        conv_stride (`List[int]`, *optional*, defaults to `[3]`):
             The stride length of the 1D convolution applied before transformer layers. `len(conv_stride)` must be equal
             to `num_conv_layers`.
         input_feat_per_channel (`int`, *optional*, defaults to 80):

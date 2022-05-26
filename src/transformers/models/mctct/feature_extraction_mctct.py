@@ -52,7 +52,7 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
             Number of audio samples between windows. Otherwise referred to as "shift" in many papers.
         win_length (`int`, defaults to 25):
             Number of ms per window
-        win_function (`str`, defaults to `hamming_window`):
+        win_function (`str`, defaults to `"hamming_window"`):
             Name for the window function used for windowing, must be accessible via `torch.{win_function}`
         frame_signal_scale (`float`, defaults to 32768.0):
             Constant multiplied in creating the frames before applying DFT.
@@ -113,12 +113,12 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
     def _frame_signal(one_waveform, n_frames, frame_signal_scale, window_length, sample_stride):
         scale = frame_signal_scale
         frames = np.zeros(n_frames * window_length)
-        for f in range(n_frames):
-            s = f * window_length
-            e = (f + 1) * window_length
-            ws = f * sample_stride
-            we = f * sample_stride + window_length
-            frames[s:e] = scale * one_waveform[ws:we]
+        for frame_idx in range(n_frames):
+            start = frame_idx * window_length
+            end = (frame_idx + 1) * window_length
+            wave_start = frame_idx * sample_stride
+            wave_end = frame_idx * sample_stride + window_length
+            frames[start:end] = scale * one_waveform[wave_start:wave_end]
 
         return frames
 
@@ -131,11 +131,11 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
             )
 
         n_frames = frames.size // window_length
-        for n in range(n_frames, 0, -1):
-            s = (n - 1) * window_length  # start of current frame
-            e = n * window_length - 1  # end of current frame
-            frames[s + 1 : e + 1] -= preemphasis_coeff * frames[s:e]
-            frames[s] *= 1 - preemphasis_coeff
+        for frame_idx in range(n_frames, 0, -1):
+            start = (frame_idx - 1) * window_length 
+            end = frame_idx * window_length - 1
+            frames[start + 1 : end + 1] -= preemphasis_coeff * frames[start:end]
+            frames[start] *= 1 - preemphasis_coeff
 
     @staticmethod
     def _windowing(frames, window_length, window):
@@ -153,21 +153,18 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
     def _dft(frames, K, n_frames, n_samples, n_fft):
         dft = np.zeros([n_frames, K])
 
-        for f in range(n_frames):
-            begin = f * n_samples
+        for frame in range(n_frames):
+            begin = frame * n_samples
 
             inwards_buffer = frames[begin : begin + n_samples]
             inwards_buffer = np.pad(inwards_buffer, (0, n_fft - n_samples), "constant")
             out = np.fft.rfft(inwards_buffer)
 
-            dft[f] = np.abs(out[:K])
+            dft[frame] = np.abs(out[:K])
 
         return dft
 
-    def _extract_mfsc_features(
-        self,
-        one_waveform: np.array,
-    ) -> np.ndarray:
+    def _extract_mfsc_features(self, one_waveform: np.array) -> np.ndarray:
         """
         Extracts MFSC Features for one waveform vector (unbatched). Adapted from Flashlight's C++ MFSC code.
         """
