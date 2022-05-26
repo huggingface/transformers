@@ -168,6 +168,7 @@ _import_structure = {
         "CLIPTokenizer",
         "CLIPVisionConfig",
     ],
+    "models.codegen": ["CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP", "CodeGenConfig"],
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
     "models.convnext": ["CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNextConfig"],
     "models.cpm": [],
@@ -1185,6 +1186,14 @@ else:
             "GPTJForSequenceClassification",
             "GPTJModel",
             "GPTJPreTrainedModel",
+        ]
+    )
+    _import_structure["models.codegen"].extend(
+        [
+            "CODEGEN_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CodeGenForCausalLM",
+            "CodeGenModel",
+            "CodeGenPreTrainedModel",
         ]
     )
     _import_structure["models.hubert"].extend(
@@ -2794,6 +2803,7 @@ if TYPE_CHECKING:
         CLIPTokenizer,
         CLIPVisionConfig,
     )
+    from .models.codegen import CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP, CodeGenConfig
     from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
     from .models.convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
@@ -3451,6 +3461,12 @@ if TYPE_CHECKING:
             CLIPPreTrainedModel,
             CLIPTextModel,
             CLIPVisionModel,
+        )
+        from .models.codegen import (
+            CODEGEN_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CodeGenForCausalLM,
+            CodeGenModel,
+            CodeGenPreTrainedModel,
         )
         from .models.convbert import (
             CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
