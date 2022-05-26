@@ -912,6 +912,7 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
 
     def _update_model_kwargs_for_xla_generation(self, outputs, model_kwargs, current_pos, max_length):
         # TODO(Pvp, Joao, Matt) - this function can be cleaned a bit and refactored
+        # TODO merge latest changes
         # quite some duplicated code patterns it seems
         # also the `attention_mask` is currently used in a somewhat hacky to
         # correctly influence the `past_key_values` - not sure if this is the way to go
