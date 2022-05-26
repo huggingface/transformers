@@ -14,7 +14,7 @@
 # limitations under the License.
 """ Tensorflow ResNet model."""
 
-from typing import Iterable, Union, Callable, Optional, Dict
+from typing import Dict, Iterable, Optional, Union
 
 import tensorflow as tf
 
@@ -51,17 +51,20 @@ TF_RESNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 class TFResNetConvLayer(tf.keras.layers.Layer):
     def __init__(
-        self, in_channels: int, out_channels: int, kernel_size: int = 3, stride: int = 1, activation: str = "relu", **kwargs
-    ):
+        self, out_channels: int, kernel_size: int = 3, stride: int = 1, activation: str = "relu", **kwargs
+    ) -> None:
         super().__init__(**kwargs)
-        padding = 'same' if kernel_size // 2 else 'valid'
+        padding = "same" if kernel_size // 2 else "valid"
         self.convolution = tf.keras.layers.Conv2D(
             out_channels, kernel_size=kernel_size, strides=stride, padding=padding, use_bias=False, name="convolution"
         )
-        self.normalization = tf.keras.layers.BatchNormalization(axis=1, epsilon=1e-5, name="normalization")
+        # Use same default momentum and epsilon as PyTorch equivalent
+        self.normalization = tf.keras.layers.BatchNormalization(
+            axis=1, epsilon=1e-5, momentum=0.1, name="normalization"
+        )
         self.activation = ACT2FN[activation] if activation is not None else IdentityLayer()
 
-    def call(self, x, training: bool = False):
+    def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_state = x
         # B, C, H, W -> B, H, W, C
         hidden_state = tf.transpose(hidden_state, (0, 2, 3, 1))
@@ -78,14 +81,18 @@ class TFResNetEmbeddings(tf.keras.layers.Layer):
     ResNet Embeddings (stem) composed of a single aggressive convolution.
     """
 
-    def __init__(self, config: ResNetConfig, **kwargs):
+    def __init__(self, config: ResNetConfig, **kwargs) -> None:
         super().__init__(**kwargs)
         self.embedder = TFResNetConvLayer(
-            config.num_channels, config.embedding_size, kernel_size=7, stride=2, activation=config.hidden_act, name="embedder"
+            config.embedding_size,
+            kernel_size=7,
+            stride=2,
+            activation=config.hidden_act,
+            name="embedder",
         )
-        self.pooler = tf.keras.layers.MaxPool2D(pool_size=3, strides=2, padding='same', name="pooler")
+        self.pooler = tf.keras.layers.MaxPool2D(pool_size=3, strides=2, padding="same", name="pooler")
 
-    def call(self, x, training: bool = False):
+    def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_state = x
         hidden_state = self.embedder(hidden_state, training=training)
         # B, C, H, W -> B, H, W, C
@@ -102,12 +109,17 @@ class TFResNetShortCut(tf.keras.layers.Layer):
     downsample the input using `stride=2`.
     """
 
-    def __init__(self, in_channels: int, out_channels: int, stride: int = 2, **kwargs):
+    def __init__(self, out_channels: int, stride: int = 2, **kwargs) -> None:
         super().__init__(**kwargs)
-        self.convolution = tf.keras.layers.Conv2D(out_channels, kernel_size=1, strides=stride, use_bias=False, name="convolution")
-        self.normalization = tf.keras.layers.BatchNormalization(axis=1, epsilon=1e-5, name="normalization")
+        self.convolution = tf.keras.layers.Conv2D(
+            out_channels, kernel_size=1, strides=stride, use_bias=False, name="convolution"
+        )
+        # Use same default momentum and epsilon as PyTorch equivalent
+        self.normalization = tf.keras.layers.BatchNormalization(
+            axis=1, epsilon=1e-5, momentum=0.1, name="normalization"
+        )
 
-    def call(self, x, training: bool = False):
+    def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_state = x
         # B, C, H, W -> B, H, W, C
         hidden_state = tf.transpose(hidden_state, (0, 2, 3, 1))
@@ -123,17 +135,21 @@ class TFResNetBasicLayer(tf.keras.layers.Layer):
     A classic ResNet's residual layer composed by a two `3x3` convolutions.
     """
 
-    def __init__(self, in_channels: int, out_channels: int, stride: int = 1, activation: str = "relu", **kwargs):
+    def __init__(
+        self, in_channels: int, out_channels: int, stride: int = 1, activation: str = "relu", **kwargs
+    ) -> None:
         super().__init__(**kwargs)
         should_apply_shortcut = in_channels != out_channels or stride != 1
-        self.conv1 = TFResNetConvLayer(in_channels, out_channels, stride=stride)
-        self.conv2 = TFResNetConvLayer(out_channels, out_channels, activation=None)
+        self.conv1 = TFResNetConvLayer(out_channels, stride=stride)
+        self.conv2 = TFResNetConvLayer(out_channels, activation=None)
         self.shortcut = (
-            TFResNetShortCut(in_channels, out_channels, stride=stride, name="shortcut") if should_apply_shortcut else IdentityLayer(name="shortcut")
+            TFResNetShortCut(out_channels, stride=stride, name="shortcut")
+            if should_apply_shortcut
+            else IdentityLayer(name="shortcut")
         )
         self.activation = ACT2FN[activation]
 
-    def call(self, hidden_state, training: bool = False):
+    def call(self, hidden_state: tf.Tensor, training: bool = False) -> tf.Tensor:
         residual = hidden_state
         hidden_state = self.conv1(hidden_state, training=training)
         hidden_state = self.conv2(hidden_state, training=training)
@@ -144,11 +160,12 @@ class TFResNetBasicLayer(tf.keras.layers.Layer):
 
 
 class IdentityLayer(tf.keras.layers.Layer):
-    """ Helper class to give identity a layer API. """
+    """Helper class to give identity a layer API."""
+
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
 
-    def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
+    def call(self, x: tf.Tensor, *args, **kwargs) -> tf.Tensor:
         return x
 
 
@@ -161,20 +178,28 @@ class TFResNetBottleNeckLayer(tf.keras.layers.Layer):
     """
 
     def __init__(
-        self, in_channels: int, out_channels: int, stride: int = 1, activation: str = "relu", reduction: int = 4, **kwargs
-    ):
+        self,
+        in_channels: int,
+        out_channels: int,
+        stride: int = 1,
+        activation: str = "relu",
+        reduction: int = 4,
+        **kwargs
+    ) -> None:
         super().__init__(**kwargs)
         should_apply_shortcut = in_channels != out_channels or stride != 1
         reduces_channels = out_channels // reduction
-        self.conv0 = TFResNetConvLayer(in_channels, reduces_channels, kernel_size=1, name="layer.0")
-        self.conv1 = TFResNetConvLayer(reduces_channels, reduces_channels, stride=stride, name="layer.1")
-        self.conv2 = TFResNetConvLayer(reduces_channels, out_channels, kernel_size=1, activation=None, name="layer.2")
+        self.conv0 = TFResNetConvLayer(reduces_channels, kernel_size=1, name="layer.0")
+        self.conv1 = TFResNetConvLayer(reduces_channels, stride=stride, name="layer.1")
+        self.conv2 = TFResNetConvLayer(out_channels, kernel_size=1, activation=None, name="layer.2")
         self.shortcut = (
-            TFResNetShortCut(in_channels, out_channels, stride=stride, name="shortcut") if should_apply_shortcut else IdentityLayer(name="shortcut")
+            TFResNetShortCut(out_channels, stride=stride, name="shortcut")
+            if should_apply_shortcut
+            else IdentityLayer(name="shortcut")
         )
         self.activation = ACT2FN[activation]
 
-    def call(self, hidden_state, training: bool = False):
+    def call(self, hidden_state: tf.Tensor, training: bool = False) -> tf.Tensor:
         residual = hidden_state
 
         hidden_state = self.conv0(hidden_state, training=training)
@@ -193,14 +218,8 @@ class TFResNetStage(tf.keras.layers.Layer):
     """
 
     def __init__(
-        self,
-        config: ResNetConfig,
-        in_channels: int,
-        out_channels: int,
-        stride: int = 2,
-        depth: int = 2,
-        **kwargs
-    ):
+        self, config: ResNetConfig, in_channels: int, out_channels: int, stride: int = 2, depth: int = 2, **kwargs
+    ) -> None:
         super().__init__(**kwargs)
 
         layer = TFResNetBottleNeckLayer if config.layer_type == "bottleneck" else TFResNetBasicLayer
@@ -212,15 +231,14 @@ class TFResNetStage(tf.keras.layers.Layer):
         ]
         self.stage_layers = layers
 
-    def call(self, hidden_state, training: bool = False):
+    def call(self, hidden_state: tf.Tensor, training: bool = False) -> tf.Tensor:
         for layer in self.stage_layers:
             hidden_state = layer(hidden_state, training=training)
         return hidden_state
 
 
-
 class TFResNetEncoder(tf.keras.layers.Layer):
-    def __init__(self, config: ResNetConfig, **kwargs):
+    def __init__(self, config: ResNetConfig, **kwargs) -> None:
         super().__init__(**kwargs)
         # based on `downsample_in_first_stage` the first layer of the first stage may or may not downsample the input
         self.stages = [
@@ -230,14 +248,20 @@ class TFResNetEncoder(tf.keras.layers.Layer):
                 config.hidden_sizes[0],
                 stride=2 if config.downsample_in_first_stage else 1,
                 depth=config.depths[0],
-                name=f"stages.0"
+                name="stages.0",
             )
         ]
-        for i, (in_channels, out_channels, depth) in enumerate(zip(config.hidden_sizes, config.hidden_sizes[1:], config.depths[1:])):
+        for i, (in_channels, out_channels, depth) in enumerate(
+            zip(config.hidden_sizes, config.hidden_sizes[1:], config.depths[1:])
+        ):
             self.stages.append(TFResNetStage(config, in_channels, out_channels, depth=depth, name=f"stages.{i + 1}"))
 
     def call(
-        self, hidden_state: tf.Tensor, output_hidden_states: bool = False, return_dict: bool = True, training: bool = False
+        self,
+        hidden_state: tf.Tensor,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+        training: bool = False,
     ) -> TFBaseModelOutputWithNoAttention:
         hidden_states = () if output_hidden_states else None
 
@@ -276,8 +300,7 @@ class TFResNetPreTrainedModel(TFPreTrainedModel):
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
         VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(3, self.config.num_channels, 224, 224), # FIXME - do I need the image size here? #self.config.image_size, self.config.image_size),
-            dtype=tf.float32,
+            shape=(3, self.config.num_channels, self.config.image_size, self.config.image_size), dtype=tf.float32
         )
         return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
 
@@ -293,6 +316,7 @@ RESNET_START_DOCSTRING = r"""
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~TFPreTrainedModel.from_pretrained`] method to load the model weights.
 """
+
 
 RESNET_INPUTS_DOCSTRING = r"""
     Args:
@@ -323,34 +347,35 @@ def normalize_data_format(value: str) -> str:
     return data_format
 
 
-class AdaptivePooling2D(tf.keras.layers.Layer):
-    """Parent class for 2D pooling layers with adaptive kernel size.
-    This class only exists for code reuse. It will never be an exposed API.
+class AdaptiveAveragePooling2D(tf.keras.layers.Layer):
+    """
+    Average Pooling with adaptive kernel size.
+
     Args:
-      reduce_function: The reduction method to apply, e.g. `tf.reduce_max`.
-      output_size: An integer or tuple/list of 2 integers specifying (pooled_rows, pooled_cols).
+      output_size: Tuple of integers specifying (pooled_rows, pooled_cols).
         The new size of output channels.
       data_format: A string,
-        one of `channels_last` (default) or `channels_first`.
-        The ordering of the dimensions in the inputs.
-        `channels_last` corresponds to inputs with shape
-        `(batch, height, width, channels)` while `channels_first`
-        corresponds to inputs with shape
-        `(batch, channels, height, width)`.
+        one of `channels_last` (default) or `channels_first`. The ordering of the dimensions in the inputs.
+        `channels_last` corresponds to inputs with shape `(batch, height, width, channels)` while `channels_first`
+        corresponds to inputs with shape `(batch, channels, height, width)`.
+    Input shape:
+      - If `data_format='channels_last'`: 4D tensor with shape `(batch_size, height, width, channels)`.
+      - If `data_format='channels_first'`: 4D tensor with shape `(batch_size, channels, height, width)`.
+    Output shape:
+      - If `data_format='channels_last'`: 4D tensor with shape `(batch_size, pooled_rows, pooled_cols, channels)`.
+      - If `data_format='channels_first'`: 4D tensor with shape `(batch_size, channels, pooled_rows, pooled_cols)`.
+
+    Adapted from [tensorflow-addon's adaptive_pooling.py][
+        https://github.com/tensorflow/addons/blob/8cec33fcaaf1cf90aec7bdd55a0fcdbb251ce5c2/tensorflow_addons/layers/adaptive_pooling.py#L238-L268
+    ]
     """
-    def __init__(
-        self,
-        reduce_function: Callable,
-        output_size: Union[int, Iterable[int]],
-        data_format=None,
-        **kwargs,
-    ):
+
+    def __init__(self, output_size: Union[int, Iterable[int]], data_format=None, **kwargs) -> None:
         self.data_format = normalize_data_format(data_format)
-        self.reduce_function = reduce_function
-        self.output_size = (output_size, output_size,) if isinstance(output_size, int) else tuple(output_size)
+        self.output_size = (output_size, output_size) if isinstance(output_size, int) else tuple(output_size)
         super().__init__(**kwargs)
 
-    def call(self, inputs, *args):
+    def call(self, inputs: tf.Tensor, *args) -> tf.Tensor:
         h_bins = self.output_size[0]
         w_bins = self.output_size[1]
         if self.data_format == "channels_last":
@@ -358,36 +383,21 @@ class AdaptivePooling2D(tf.keras.layers.Layer):
             split_cols = tf.stack(split_cols, axis=1)
             split_rows = tf.split(split_cols, w_bins, axis=3)
             split_rows = tf.stack(split_rows, axis=3)
-            out_vect = self.reduce_function(split_rows, axis=[2, 4])
+            out_vect = tf.reduce_mean(split_rows, axis=[2, 4])
         else:
             split_cols = tf.split(inputs, h_bins, axis=2)
             split_cols = tf.stack(split_cols, axis=2)
             split_rows = tf.split(split_cols, w_bins, axis=4)
             split_rows = tf.stack(split_rows, axis=4)
-            out_vect = self.reduce_function(split_rows, axis=[3, 5])
+            out_vect = tf.reduce_mean(split_rows, axis=[3, 5])
         return out_vect
 
-    def compute_output_shape(self, input_shape):
+    def compute_output_shape(self, input_shape: Iterable[int]) -> tf.TensorShape:
         input_shape = tf.TensorShape(input_shape).as_list()
         if self.data_format == "channels_last":
-            shape = tf.TensorShape(
-                [
-                    input_shape[0],
-                    self.output_size[0],
-                    self.output_size[1],
-                    input_shape[3],
-                ]
-            )
+            shape = tf.TensorShape([input_shape[0], self.output_size[0], self.output_size[1], input_shape[3]])
         else:
-            shape = tf.TensorShape(
-                [
-                    input_shape[0],
-                    input_shape[1],
-                    self.output_size[0],
-                    self.output_size[1],
-                ]
-            )
-
+            shape = tf.TensorShape([input_shape[0], input_shape[1], self.output_size[0], self.output_size[1]])
         return shape
 
     def get_config(self):
@@ -399,41 +409,12 @@ class AdaptivePooling2D(tf.keras.layers.Layer):
         return {**base_config, **config}
 
 
-
-class AdaptiveAveragePooling2D(AdaptivePooling2D):
-    """Average Pooling with adaptive kernel size.
-    Args:
-      output_size: Tuple of integers specifying (pooled_rows, pooled_cols).
-        The new size of output channels.
-      data_format: A string,
-        one of `channels_last` (default) or `channels_first`.
-        The ordering of the dimensions in the inputs.
-        `channels_last` corresponds to inputs with shape
-        `(batch, height, width, channels)` while `channels_first`
-        corresponds to inputs with shape `(batch, channels, height, width)`.
-    Input shape:
-      - If `data_format='channels_last'`:
-        4D tensor with shape `(batch_size, height, width, channels)`.
-      - If `data_format='channels_first'`:
-        4D tensor with shape `(batch_size, channels, height, width)`.
-    Output shape:
-      - If `data_format='channels_last'`:
-        4D tensor with shape `(batch_size, pooled_rows, pooled_cols, channels)`.
-      - If `data_format='channels_first'`:
-        4D tensor with shape `(batch_size, channels, pooled_rows, pooled_cols)`.
-    """
-    def __init__(
-        self, output_size: Union[int, Iterable[int]], data_format=None, **kwargs
-    ):
-        super().__init__(tf.reduce_mean, output_size, data_format, **kwargs)
-
-
 @add_start_docstrings(
     "The bare ResNet model outputting raw features without any specific head on top.",
     RESNET_START_DOCSTRING,
 )
 class TFResNetModel(TFResNetPreTrainedModel):
-    def __init__(self, config, **kwargs):
+    def __init__(self, config: ResNetConfig, **kwargs) -> None:
         super().__init__(config, **kwargs)
         self.config = config
         self.embedder = TFResNetEmbeddings(config, name="embedder")
@@ -458,7 +439,11 @@ class TFResNetModel(TFResNetPreTrainedModel):
     )
     @unpack_inputs
     def call(
-        self, pixel_values: tf.Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None, training: bool = False
+        self,
+        pixel_values: tf.Tensor,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: bool = False,
     ) -> TFBaseModelOutputWithPoolingAndNoAttention:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -493,12 +478,21 @@ class TFResNetModel(TFResNetPreTrainedModel):
     RESNET_START_DOCSTRING,
 )
 class TFResNetForImageClassification(TFResNetPreTrainedModel, TFSequenceClassificationLoss):
-    def __init__(self, config, **kwargs):
+    def __init__(self, config: ResNetConfig, **kwargs) -> None:
         super().__init__(config, **kwargs)
         self.num_labels = config.num_labels
         self.resnet = TFResNetModel(config, name="resnet")
         # classification head
-        self.classifier = tf.keras.layers.Dense(config.num_labels, name="classifier.1") if config.num_labels > 0 else IdentityLayer(name="classifier.1")
+        self.classifier_layer = (
+            tf.keras.layers.Dense(config.num_labels, name="classifier.1")
+            if config.num_labels > 0
+            else IdentityLayer(name="classifier.1")
+        )
+
+    def classifier(self, x: tf.Tensor) -> tf.Tensor:
+        x = tf.keras.layers.Flatten()(x)
+        logits = self.classifier_layer(x)
+        return logits
 
     @add_start_docstrings_to_model_forward(RESNET_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -515,7 +509,7 @@ class TFResNetForImageClassification(TFResNetPreTrainedModel, TFSequenceClassifi
         labels: tf.Tensor = None,
         output_hidden_states: bool = None,
         return_dict: bool = None,
-        training: bool = False
+        training: bool = False,
     ) -> TFImageClassifierOutputWithNoAttention:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
@@ -524,11 +518,13 @@ class TFResNetForImageClassification(TFResNetPreTrainedModel, TFSequenceClassifi
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.resnet(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict, training=training)
+        outputs = self.resnet(
+            pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict, training=training
+        )
 
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
 
-        logits = self.classifier(tf.keras.layers.Flatten()(pooled_output), training=training) #FIXME - tidyup
+        logits = self.classifier(pooled_output)
 
         loss = None if labels is None else self.hf_compute_loss(labels, logits)
 

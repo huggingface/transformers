@@ -732,7 +732,9 @@ class TFModelTesterMixin:
 
             def check_decoder_attentions_output(outputs):
                 out_len = len(outputs)
-                self.assertEqual(min(out_len % 2, out_len % 5), 0)  # differentiation due to newly added cross_attentions
+                self.assertEqual(
+                    min(out_len % 2, out_len % 5), 0
+                )  # differentiation due to newly added cross_attentions
                 decoder_attentions = outputs.decoder_attentions
                 self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
                 self.assertListEqual(
@@ -742,7 +744,8 @@ class TFModelTesterMixin:
 
             def check_encoder_attentions_output(outputs):
                 attentions = [
-                    t.numpy() for t in (outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions)
+                    t.numpy()
+                    for t in (outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions)
                 ]
                 self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
                 self.assertListEqual(
