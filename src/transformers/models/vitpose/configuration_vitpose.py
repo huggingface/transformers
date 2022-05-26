@@ -31,7 +31,6 @@ VITPOSE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class ViTPoseConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ViTPoseModel`]. It is used to instantiate an

@@ -4501,6 +4501,13 @@ class ViTMAEPreTrainedModel(metaclass=DummyObject):
 VITPOSE_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class ViTPoseForPoseEstimation(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class ViTPoseModel(metaclass=DummyObject):
     _backends = ["torch"]
 

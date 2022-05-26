@@ -27,10 +27,9 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_torch_available():
-    import torch
     from torch import nn
 
-    from transformers import ViTPoseForImageClassification, ViTPoseForMaskedImageModeling, ViTPoseModel
+    from transformers import ViTPoseForPoseEstimation, ViTPoseModel
     from transformers.models.vitpose.modeling_vitpose import VITPOSE_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -120,14 +119,6 @@ class ViTPoseModelTester:
         result = model(pixel_values)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    def create_and_check_for_image_classification(self, config, pixel_values, labels):
-        config.num_labels = self.type_sequence_label_size
-        model = ViTPoseForImageClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values, labels=labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -149,8 +140,7 @@ class ViTPoseModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             ViTPoseModel,
-            ViTPoseForImageClassification,
-            ViTPoseForMaskedImageModeling,
+            ViTPoseForPoseEstimation,
         )
         if is_torch_available()
         else ()
@@ -219,24 +209,10 @@ def prepare_img():
 class ViTPoseModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return ViTFeatureExtractor.from_pretrained("google/vitpose-base-patch16-224") if is_vision_available() else None
+        return (
+            ViTFeatureExtractor.from_pretrained("google/vitpose-base-patch16-224") if is_vision_available() else None
+        )
 
     @slow
-    def test_inference_image_classification_head(self):
-        model = ViTPoseForImageClassification.from_pretrained("google/vitpose-base-patch16-224").to(torch_device)
-
-        feature_extractor = self.default_feature_extractor
-        image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
-
-        # forward pass
-        with torch.no_grad():
-            outputs = model(**inputs)
-
-        # verify the logits
-        expected_shape = torch.Size((1, 1000))
-        self.assertEqual(outputs.logits.shape, expected_shape)
-
-        expected_slice = torch.tensor([-0.2744, 0.8215, -0.0836]).to(torch_device)
-
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+    def test_inference_pose_estimation_head(self):
+        raise NotImplementedError("To do")

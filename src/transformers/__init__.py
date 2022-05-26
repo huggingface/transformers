@@ -1705,6 +1705,7 @@ else:
             "VITPOSE_PRETRAINED_MODEL_ARCHIVE_LIST",
             "ViTPoseModel",
             "ViTPosePreTrainedModel",
+            "ViTPoseForPoseEstimation",
         ]
     )
     _import_structure["models.vit_mae"].extend(
@@ -4032,7 +4033,12 @@ if TYPE_CHECKING:
             ViTMAEModel,
             ViTMAEPreTrainedModel,
         )
-        from .models.vitpose import VITPOSE_PRETRAINED_MODEL_ARCHIVE_LIST, ViTPoseModel, ViTPosePreTrainedModel
+        from .models.vitpose import (
+            VITPOSE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ViTPoseForPoseEstimation,
+            ViTPoseModel,
+            ViTPosePreTrainedModel,
+        )
         from .models.wav2vec2 import (
             WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
             Wav2Vec2ForAudioFrameClassification,

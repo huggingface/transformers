@@ -17,14 +17,12 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import (
-    OptionalDependencyNotAvailable,
-    _LazyModule,
-    is_torch_available,
-)
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
-_import_structure = {"configuration_vitpose": ["VITPOSE_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTPoseConfig", "ViTPoseOnnxConfig"]}
+_import_structure = {
+    "configuration_vitpose": ["VITPOSE_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTPoseConfig", "ViTPoseOnnxConfig"]
+}
 
 try:
     if not is_torch_available():
@@ -36,6 +34,7 @@ else:
         "VITPOSE_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ViTPoseModel",
         "ViTPosePreTrainedModel",
+        "ViTPoseForPoseEstimation",
     ]
 
 if TYPE_CHECKING:
@@ -49,6 +48,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_vitpose import (
             VITPOSE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ViTPoseForPoseEstimation,
             ViTPoseModel,
             ViTPosePreTrainedModel,
         )
