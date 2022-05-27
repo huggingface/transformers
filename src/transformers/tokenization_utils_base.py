@@ -715,15 +715,14 @@ class BatchEncoding(UserDict):
 
                     self[key] = tensor
             except:  # noqa E722
-                if key == "overflowing_tokens":
+                if key == "overflowing_tokens" or key == "input_ids" or key == "attention_mask":
                     raise ValueError(
-                        "Unable to create tensor returning overflowing tokens of different lengths. "
+                        f"Unable to create tensor returning {key} of different lengths. "
                         "Please see if a fast version of this tokenizer is available to have this feature available."
                     )
                 raise ValueError(
                     "Unable to create tensor, you should probably activate truncation and/or padding "
                     "with 'padding=True' 'truncation=True' to have batched tensors with the same length."
-                    "The shape of inputs may be wrong. Ensure there is no excess nesting on inputs (input_ids, attention_mask, ...)."
                 )
 
         return self
