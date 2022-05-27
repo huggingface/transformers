@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "mctct-large": "https://huggingface.co/cwkeam/mctct-large/resolve/main/config.json",
+    "mctct-large": "https://huggingface.co/speechbrain/m-ctc-t-large/resolve/main/config.json",
     # See all M-CTC-T models at https://huggingface.co/models?filter=mctct
 }
 

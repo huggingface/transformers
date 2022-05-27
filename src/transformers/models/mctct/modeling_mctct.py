@@ -46,7 +46,7 @@ _CONFIG_FOR_DOC = "MCTCTConfig"
 _PROCESSOR_FOR_DOC = "MCTCTProcessor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "cwkeam/mctct-large"
+_CHECKPOINT_FOR_DOC = "speechbrain/m-ctc-t-large"
 _EXPECTED_OUTPUT_SHAPE = [1, 195, 1536]
 
 # CTC docstring
@@ -55,7 +55,7 @@ _CTC_EXPECTED_LOSS = 1885.65
 
 
 MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "cwkeam/mctct-large",
+    "speechbrain/m-ctc-t-large",
     # See all M-CTC-T models at https://huggingface.co/models?filter=mctct
 ]
 
