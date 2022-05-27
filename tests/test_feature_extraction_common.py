@@ -107,7 +107,7 @@ class FeatureExtractionSavingTestMixin:
         feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)
 
         with tempfile.TemporaryDirectory() as tmpdirname:
-            saved_file = feat_extract_first.save_pretrained(tmpdirname)
+            saved_file = feat_extract_first.save_pretrained(tmpdirname)[0]
             check_json_file_has_correct_format(saved_file)
             feat_extract_second = self.feature_extraction_class.from_pretrained(tmpdirname)
 
