@@ -144,7 +144,7 @@ class EmformerAttention(torch.nn.Module):
         input_dim (int): input dimension.
         num_heads (int): number of attention heads in each Emformer layer.
         dropout (float, optional): dropout probability. (Default: 0.0)
-        tanh_on_mem (bool, optional): if ``True``, applies tanh to memory elements. (Default: ``False``)
+        tanh_on_mem (bool, optional): if `True`, applies tanh to memory elements. (Default: `False`)
         negative_inf (float, optional): value to use for negative infinity in attention weights. (Default: -1e8)
     """
 
@@ -292,20 +292,20 @@ class EmformerAttention(torch.nn.Module):
         frames; S: number of summary elements; M: number of memory elements.
 
         Args:
-            utterance (torch.Tensor): utterance frames, with shape `(T, B, D)`.
-            lengths (torch.Tensor): with shape `(B,)` and i-th element representing
-                number of valid frames for i-th batch element in ``utterance``.
-            right_context (torch.Tensor): right context frames, with shape `(R, B, D)`.
-            summary (torch.Tensor): summary elements, with shape `(S, B, D)`.
-            mems (torch.Tensor): memory elements, with shape `(M, B, D)`.
+            utterance (torch.Tensor): utterance frames, with shape *(T, B, D)*.
+            lengths (torch.Tensor): with shape *(B,)* and i-th element representing
+                number of valid frames for i-th batch element in `utterance`.
+            right_context (torch.Tensor): right context frames, with shape *(R, B, D)*.
+            summary (torch.Tensor): summary elements, with shape *(S, B, D)*.
+            mems (torch.Tensor): memory elements, with shape *(M, B, D)*.
             attention_mask (torch.Tensor): attention mask for underlying attention module.
 
         Returns:
             (Tensor, Tensor):
                 Tensor
-                    output frames corresponding to utterance and right_context, with shape `(T + R, B, D)`.
+                    output frames corresponding to utterance and right_context, with shape *(T + R, B, D)*.
                 Tensor
-                    updated memory elements, with shape `(M, B, D)`.
+                    updated memory elements, with shape *(M, B, D)*.
         """
         output, output_mems, _, _, attention_probs = self._forward_impl(
             utterance, lengths, right_context, summary, mems, attention_mask, output_attentions
@@ -326,7 +326,7 @@ class EmformerLayer(torch.nn.Module):
             Must be one of ("relu", "gelu", "silu"). (Default: "relu")
         left_context_length (int, optional): length of left context. (Default: 0)
         max_memory_size (int, optional): maximum number of memory elements to use. (Default: 0)
-        tanh_on_mem (bool, optional): if ``True``, applies tanh to memory elements. (Default: ``False``)
+        tanh_on_mem (bool, optional): if `True`, applies tanh to memory elements. (Default: `False`)
         negative_inf (float, optional): value to use for negative infinity in attention weights. (Default: -1e8)
     """
 
@@ -436,21 +436,21 @@ class EmformerLayer(torch.nn.Module):
         frames; M: number of memory elements.
 
         Args:
-            utterance (torch.Tensor): utterance frames, with shape `(T, B, D)`.
-            lengths (torch.Tensor): with shape `(B,)` and i-th element representing
-                number of valid frames for i-th batch element in ``utterance``.
-            right_context (torch.Tensor): right context frames, with shape `(R, B, D)`.
-            mems (torch.Tensor): memory elements, with shape `(M, B, D)`.
+            utterance (torch.Tensor): utterance frames, with shape *(T, B, D)*.
+            lengths (torch.Tensor): with shape *(B,)* and i-th element representing
+                number of valid frames for i-th batch element in `utterance`.
+            right_context (torch.Tensor): right context frames, with shape *(R, B, D)*.
+            mems (torch.Tensor): memory elements, with shape *(M, B, D)*.
             attention_mask (torch.Tensor): attention mask for underlying attention module.
 
         Returns:
             (Tensor, Tensor, Tensor):
                 Tensor
-                    encoded utterance frames, with shape `(T, B, D)`.
+                    encoded utterance frames, with shape *(T, B, D)*.
                 Tensor
-                    updated right context frames, with shape `(R, B, D)`.
+                    updated right context frames, with shape *(R, B, D)*.
                 Tensor
-                    updated memory elements, with shape `(M, B, D)`.
+                    updated memory elements, with shape *(M, B, D)*.
         """
         (
             layer_norm_utterance,
@@ -480,7 +480,7 @@ class Emformer(torch.nn.Module):
         left_context_length (int, optional): length of left context. (Default: 0)
         right_context_length (int, optional): length of right context. (Default: 0)
         max_memory_size (int, optional): maximum number of memory elements to use. (Default: 0)
-        tanh_on_mem (bool, optional): if ``True``, applies tanh to memory elements. (Default: ``False``)
+        tanh_on_mem (bool, optional): if `True`, applies tanh to memory elements. (Default: `False`)
         negative_inf (float, optional): value to use for negative infinity in attention weights. (Default: -1e8)
     """
 
@@ -843,7 +843,7 @@ class RNNTCustomLSTM(torch.nn.Module):
     Args:
         input_dim (int): input dimension.
         hidden_dim (int): hidden dimension.
-        layer_norm (bool, optional): if ``True``, enables layer normalization. (Default: ``False``)
+        layer_norm (bool, optional): if `True`, enables layer normalization. (Default: `False`)
         layer_norm_epsilon (float, optional):  value of epsilon to use in
             layer normalization layers (Default: 1e-5)
     """
@@ -871,16 +871,16 @@ class RNNTCustomLSTM(torch.nn.Module):
         B: batch size; T: maximum sequence length in batch; D: feature dimension of each input sequence element.
 
         Args:
-            input (torch.Tensor): with shape `(T, B, D)`.
+            input (torch.Tensor): with shape *(T, B, D)*.
             state (List[torch.Tensor] or None): list of tensors
-                representing internal state generated in preceding invocation of ``forward``.
+                representing internal state generated in preceding invocation of `forward`.
 
         Returns:
             (torch.Tensor, List[torch.Tensor]):
                 torch.Tensor
-                    output, with shape `(T, B, hidden_dim)`.
+                    output, with shape *(T, B, hidden_dim)*.
                 List[torch.Tensor]
-                    list of tensors representing internal state generated in current invocation of ``forward``.
+                    list of tensors representing internal state generated in current invocation of `forward`.
         """
         if state is None:
             B = input.size(1)
@@ -956,23 +956,23 @@ class RNNTPredictor(torch.nn.Module):
         B: batch size; U: maximum sequence length in batch; D: feature dimension of each input sequence element.
 
         Args:
-            input (torch.Tensor): target sequences, with shape `(B, U)` and each element
-                mapping to a target symbol, i.e. in range `[0, num_symbols)`.
-            lengths (torch.Tensor): with shape `(B,)` and i-th element representing
-                number of valid frames for i-th batch element in ``input``.
+            input (torch.Tensor): target sequences, with shape *(B, U)* and each element
+                mapping to a target symbol, i.e. in range *[0, num_symbols)*.
+            lengths (torch.Tensor): with shape *(B,)* and i-th element representing
+                number of valid frames for i-th batch element in `input`.
             state (List[List[torch.Tensor]] or None, optional): list of lists of tensors
-                representing internal state generated in preceding invocation of ``forward``. (Default: ``None``)
+                representing internal state generated in preceding invocation of `forward`. (Default: `None`)
 
         Returns:
             (torch.Tensor, torch.Tensor, List[List[torch.Tensor]]):
                 torch.Tensor
-                    output encoding sequences, with shape `(B, U, output_dim)`
+                    output encoding sequences, with shape *(B, U, output_dim)*
                 torch.Tensor
-                    output lengths, with shape `(B,)` and i-th element representing number of valid elements for i-th
+                    output lengths, with shape *(B,)* and i-th element representing number of valid elements for i-th
                     batch element in output encoding sequences.
                 List[List[torch.Tensor]]
                     output states; list of lists of tensors representing internal state generated in current invocation
-                    of ``forward``.
+                    of `forward`.
         """
         input_tb = input.permute(1, 0)
         embedding_out = self.embedding(input_tb)
