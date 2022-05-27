@@ -325,3 +325,12 @@ def flatten_dict(d: MutableMapping, parent_key: str = "", delimiter: str = "."):
                 yield key, v
 
     return dict(_flatten_dict(d, parent_key, delimiter))
+
+def remove_excess_nesting(arr: List[Any]) -> List[Any]:
+    """Flattens any leading dimensions of shape 1"""
+
+    arr = np.array(arr)
+    for _ in range(arr.ndim-1):
+        arr = arr[0] if arr.shape[0] == 1 else arr
+
+    return arr.tolist()
