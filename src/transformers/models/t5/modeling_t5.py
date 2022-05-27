@@ -420,14 +420,12 @@ class T5Attention(nn.Module):
         relative_buckets += torch.where(is_small, relative_position, relative_position_if_large)
         return relative_buckets
 
-    def compute_bias(self, query_length, key_length):
+    def compute_bias(self, query_length, key_length, device=None):
         """Compute binned relative position bias"""
-        context_position = torch.arange(
-            query_length, dtype=torch.long, device=self.relative_attention_bias.weight.device
-        )[:, None]
-        memory_position = torch.arange(
-            key_length, dtype=torch.long, device=self.relative_attention_bias.weight.device
-        )[None, :]
+        if device is None:
+            device = self.relative_attention_bias.weight.device
+        context_position = torch.arange(query_length, dtype=torch.long, device=device)[:, None]
+        memory_position = torch.arange(key_length, dtype=torch.long, device=device)[None, :]
         relative_position = memory_position - context_position  # shape (query_length, key_length)
         relative_position_bucket = self._relative_position_bucket(
             relative_position,  # shape (query_length, key_length)
@@ -522,7 +520,7 @@ class T5Attention(nn.Module):
                 if self.gradient_checkpointing and self.training:
                     position_bias.requires_grad = True
             else:
-                position_bias = self.compute_bias(real_seq_length, key_length)
+                position_bias = self.compute_bias(real_seq_length, key_length, device=scores.device)
 
             # if key and values are already calculated
             # we want only the last query position bias
