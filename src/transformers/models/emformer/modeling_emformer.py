@@ -47,7 +47,7 @@ _HIDDEN_STATES_START_POSITION = 1
 
 # General docstring
 _CONFIG_FOR_DOC = "EmformerConfig"
-_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
+_PROCESSOR_FOR_DOC = "EmformerProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "anton-l/emformer-base-librispeech"

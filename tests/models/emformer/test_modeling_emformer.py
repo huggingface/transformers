@@ -19,6 +19,7 @@ import unittest
 from datasets import load_dataset
 
 from transformers import EmformerConfig, is_torch_available
+from transformers.file_utils import is_torchaudio_available
 from transformers.testing_utils import is_pt_flax_cross_test, require_soundfile, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -34,7 +35,10 @@ from ...test_modeling_common import (
 if is_torch_available():
     import torch
 
-    from transformers import EmformerForRNNT, EmformerModel, EmformerProcessor
+    from transformers import EmformerForRNNT, EmformerModel
+
+if is_torchaudio_available():
+    from transformers import EmformerProcessor
 
 
 class EmformerModelTester:
