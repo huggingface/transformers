@@ -417,106 +417,6 @@ class DebertaConverter(Converter):
         return tokenizer
 
 
-class BertweetConverter(Converter):
-    """
-    This is used for vinai/bertweet-base, vinai/bertweet-covid19-base-cased and vinai/bertweet-covid19-base-uncased.
-    """
-
-    def converted(self) -> Tokenizer:
-        token_suffix = "</w>"
-
-        vocab = {}
-        for key, value in self.original_tokenizer.encoder.items():
-            if key in ["<s>", "</s>", "<unk>", "<pad>", "<mask>"]:
-                vocab[key] = value
-            else:
-                if key.endswith("@@"):
-                    vocab[key[:-2]] = len(vocab)
-                else:
-                    vocab[key + "</w>"] = len(vocab)
-
-        merges = list(self.original_tokenizer.bpe_ranks.keys())
-        _merges = []
-        for merge in merges:
-            for t in merge:
-                if t not in vocab.keys():
-                    vocab[t] = len(vocab)
-            if len(merge) == 2:
-                _merges.append(merge)
-        merges = _merges
-
-        tokenizer = Tokenizer(
-            BPE(
-                vocab,
-                merges,
-                dropout=None,
-                unk_token=self.original_tokenizer.unk_token,
-                end_of_word_suffix=token_suffix,
-            )
-        )
-
-        tokenizer.pre_tokenizer = pre_tokenizers.WhitespaceSplit()
-        tokenizer.decoder = decoders.BPEDecoder(suffix=token_suffix)
-        tokenizer.post_processor = processors.TemplateProcessing(
-            single="<s> $A </s>",
-            pair="<s> $A </s> </s> $B </s>",
-            special_tokens=[
-                ("<s>", self.original_tokenizer.convert_tokens_to_ids("<s>")),
-                ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
-            ],
-        )
-
-        return tokenizer
-
-
-class PhobertConverter(Converter):
-    def converted(self) -> Tokenizer:
-        token_suffix = "</w>"
-
-        vocab = {}
-        for key, value in self.original_tokenizer.encoder.items():
-            if key in ["<s>", "</s>", "<unk>", "<pad>", "<mask>"]:
-                vocab[key] = value
-            else:
-                if key.endswith("@@"):
-                    vocab[key[:-2]] = len(vocab)
-                else:
-                    vocab[key + "</w>"] = len(vocab)
-
-        merges = list(self.original_tokenizer.bpe_ranks.keys())
-        _merges = []
-        for merge in merges:
-            for t in merge:
-                if t not in vocab.keys():
-                    vocab[t] = len(vocab)
-            if len(merge) == 2:
-                _merges.append(merge)
-        merges = _merges
-
-        tokenizer = Tokenizer(
-            BPE(
-                vocab,
-                merges,
-                dropout=None,
-                unk_token=self.original_tokenizer.unk_token,
-                end_of_word_suffix=token_suffix,
-            )
-        )
-
-        tokenizer.pre_tokenizer = pre_tokenizers.WhitespaceSplit()
-        tokenizer.decoder = decoders.BPEDecoder(suffix=token_suffix)
-        tokenizer.post_processor = processors.TemplateProcessing(
-            single="<s> $A </s>",
-            pair="<s> $A </s> </s> $B </s>",
-            special_tokens=[
-                ("<s>", self.original_tokenizer.convert_tokens_to_ids("<s>")),
-                ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
-            ],
-        )
-
-        return tokenizer
-
-
 class SpmConverter(Converter):
     def __init__(self, *args):
         requires_backends(self, "protobuf")
@@ -1136,7 +1036,6 @@ SLOW_TO_FAST_CONVERTERS = {
     "BarthezTokenizer": BarthezConverter,
     "BartphoTokenizer": BartphoConverter,
     "BertTokenizer": BertConverter,
-    "BertweetTokenizer": BertweetConverter,
     "BigBirdTokenizer": BigBirdConverter,
     "BlenderbotTokenizer": BlenderbotConverter,
     "CamembertTokenizer": CamembertConverter,
@@ -1165,7 +1064,6 @@ SLOW_TO_FAST_CONVERTERS = {
     "MobileBertTokenizer": BertConverter,
     "OpenAIGPTTokenizer": OpenAIGPTConverter,
     "PegasusTokenizer": PegasusConverter,
-    "PhobertTokenizer": PhobertConverter,
     "RealmTokenizer": BertConverter,
     "ReformerTokenizer": ReformerConverter,
     "RemBertTokenizer": RemBertConverter,
