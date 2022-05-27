@@ -1664,14 +1664,19 @@ class TFLEDEncoder(tf.keras.layers.Layer):
         self.padding_idx = config.pad_token_id
 
         if isinstance(config.attention_window, int):
-            assert config.attention_window % 2 == 0, "`config.attention_window` has to be an even value"
-            assert config.attention_window > 0, "`config.attention_window` has to be positive"
+            if config.attention_window % 2 != 0:
+                raise ValueError("`config.attention_window` has to be an even value")
+            
+            if config.attention_window <= 0: 
+                raise ValueError(f"`config.attention_window` has to be positive, but is {config.attention_window}")
+
             config.attention_window = [config.attention_window] * config.num_hidden_layers  # one value per layer
         else:
-            assert len(config.attention_window) == config.num_hidden_layers, (
-                "`len(config.attention_window)` should equal `config.num_hidden_layers`. "
-                f"Expected {config.num_hidden_layers}, given {len(config.attention_window)}"
-            )
+            if len(config.attention_window) != config.num_hidden_layers: 
+                raise ValueError(
+                    "`len(config.attention_window)` should equal `config.num_hidden_layers`. "
+                    f"Expected {config.num_hidden_layers}, given {len(config.attention_window)}"
+                )
 
         self.attention_window = config.attention_window
         self.embed_tokens = embed_tokens

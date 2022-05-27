@@ -143,7 +143,11 @@ class MultiHeadSelfAttention(nn.Module):
         self.dim = config.dim
         self.dropout = nn.Dropout(p=config.attention_dropout)
 
-        assert self.dim % self.n_heads == 0
+        if self.dim % self.n_heads != 0:
+            raise ValueError(
+                f"Expected `n_heads` to divide `dim`, but is n_heads={self.n_heads} "
+                f"and dim={self.dim}."
+            )
 
         self.q_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
         self.k_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
@@ -255,7 +259,11 @@ class TransformerBlock(nn.Module):
     def __init__(self, config: PretrainedConfig):
         super().__init__()
 
-        assert config.dim % config.n_heads == 0
+        if self.dim % self.n_heads != 0:
+            raise ValueError(
+                f"Expected `n_heads` to divide `dim`, but is n_heads={self.n_heads} "
+                f"and dim={self.dim}."
+            )
 
         self.attention = MultiHeadSelfAttention(config)
         self.sa_layer_norm = nn.LayerNorm(normalized_shape=config.dim, eps=1e-12)
@@ -291,7 +299,8 @@ class TransformerBlock(nn.Module):
         if output_attentions:
             sa_output, sa_weights = sa_output  # (bs, seq_length, dim), (bs, n_heads, seq_length, seq_length)
         else:  # To handle these `output_attentions` or `output_hidden_states` cases returning tuples
-            assert type(sa_output) == tuple
+            if type(sa_output) != tuple:
+                raise TypeError(f'Expected sa_output to be a tuple, but is {type(sa_output)}.')
             sa_output = sa_output[0]
         sa_output = self.sa_layer_norm(sa_output + x)  # (bs, seq_length, dim)
 
@@ -348,6 +357,8 @@ class Transformer(nn.Module):
             hidden_state = layer_outputs[-1]
 
             if output_attentions:
+                if len(layer_outputs) != 2:
+                    raise Value
                 assert len(layer_outputs) == 2
                 attentions = layer_outputs[0]
                 all_attentions = all_attentions + (attentions,)

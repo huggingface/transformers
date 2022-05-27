@@ -361,7 +361,8 @@ class BeamSearchScorer(BeamScorer):
 
         # shorter batches are padded if needed
         if sent_lengths.min().item() != sent_lengths.max().item():
-            assert pad_token_id is not None, "`pad_token_id` has to be defined"
+            if pad_token_id is None:
+                raise ValueError("`pad_token_id` has to be defined but is None.")
             decoded.fill_(pad_token_id)
 
         if indices is not None:
@@ -825,7 +826,8 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         decoded: torch.LongTensor = input_ids.new(batch_size * self.num_beam_hyps_to_keep, sent_max_len)
         # shorter batches are padded if needed
         if sent_lengths.min().item() != sent_lengths.max().item():
-            assert pad_token_id is not None, "`pad_token_id` has to be defined"
+            if pad_token_id is None:
+                raise ValueError("`pad_token_id` has to be defined but is None.")
             decoded.fill_(pad_token_id)
 
         # fill with hypotheses and eos_token_id if the latter fits in
