@@ -1,5 +1,6 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team, All rights reserved.
+# Copyright 2022 The TorchAudio authors and The HuggingFace Inc. team,
+# All rights reserved.
 # Copyright 2017 Facebook Inc. (Soumith Chintala), All rights reserved.
 #
 # Licensed under BSD 2-Clause License (the "License");
