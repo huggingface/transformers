@@ -38,13 +38,6 @@ class BertTokenizerFast(metaclass=DummyObject):
         requires_backends(self, ["tokenizers"])
 
 
-class BertweetTokenizerFast(metaclass=DummyObject):
-    _backends = ["tokenizers"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tokenizers"])
-
-
 class BigBirdTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
@@ -256,13 +249,6 @@ class OpenAIGPTTokenizerFast(metaclass=DummyObject):
 
 
 class PegasusTokenizerFast(metaclass=DummyObject):
-    _backends = ["tokenizers"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tokenizers"])
-
-
-class PhobertTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
     def __init__(self, *args, **kwargs):
