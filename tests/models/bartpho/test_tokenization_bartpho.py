@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import inspect
 
 import os
 import unittest
@@ -20,7 +21,6 @@ from transformers import BartphoTokenizer, BartphoTokenizerFast, convert_slow_to
 from transformers.models.bartpho.tokenization_bartpho import VOCAB_FILES_NAMES
 from transformers.models.bartpho.tokenization_bartpho_fast import VOCAB_FILES_NAMES as VOCAB_FILES_NAMES_F
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers
-from transformers.tokenization_utils import AddedToken
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -31,7 +31,6 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece_bpe.model")
 @require_sentencepiece
 @require_tokenizers
 class BartphoTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
-
     tokenizer_class = BartphoTokenizer
     rust_tokenizer_class = BartphoTokenizerFast
     test_rust_tokenizer = True
@@ -80,31 +79,31 @@ class BartphoTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         input_bpe_tokens = [4, 5, 6, 7, 8, 3]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
-    def test_rust_and_python_full_tokenizers(self):
+    def test_tokenizer_fast_store_full_signature(self):
+        """
+        Override the original test as BartphoTokenizer requires a monolingual_vocab_file rather than a merges_file
+        """
+
         if not self.test_rust_tokenizer:
             return
 
-        tokenizer = self.get_tokenizer()
-        rust_tokenizer = self.get_rust_tokenizer()
+        signature = inspect.signature(self.rust_tokenizer_class.__init__)
+        tokenizer = self.get_rust_tokenizer()
 
-        sequence = "I was born in 2000."
-
-        tokens = tokenizer.tokenize(sequence)
-        rust_tokens = rust_tokenizer.tokenize(sequence)
-        self.assertListEqual(tokens, rust_tokens)
-
-        ids = tokenizer.encode(sequence, add_special_tokens=False)
-        rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
-        self.assertListEqual(ids, rust_ids)
-
-        rust_tokenizer = self.get_rust_tokenizer()
-        ids = tokenizer.encode(sequence)
-        rust_ids = rust_tokenizer.encode(sequence)
-        self.assertListEqual(ids, rust_ids)
+        for parameter_name, parameter in signature.parameters.items():
+            if parameter.default != inspect.Parameter.empty and parameter_name not in [
+                "vocab_file",
+                "monolingual_vocab_file",  # "merges_file",
+                "tokenizer_file",
+            ]:
+                self.assertIn(parameter_name, tokenizer.init_kwargs)
 
     def test_add_tokens_tokenizer(self):
-        tokenizers = self.get_tokenizers(do_lower_case=False)
+        """
+        Override the original test as in the fast tokenizer, the actual vocab_size is in fact mask_token_id + 1
+        """
 
+        tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 vocab_size = tokenizer.vocab_size
@@ -129,10 +128,9 @@ class BartphoTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
                 tokens = tokenizer.encode("aaaaa bbbbbb low cccccccccdddddddd l", add_special_tokens=False)
 
                 self.assertGreaterEqual(len(tokens), 4)
-
                 if tokenizer.__class__.__name__.endswith("Fast"):
-                    self.assertEqual(tokens[0], tokenizer.unk_token_id)
-                    self.assertEqual(tokens[-2], tokenizer.unk_token_id)
+                    self.assertGreater(tokens[0], tokenizer.mask_token_id)
+                    self.assertGreater(tokens[-2], tokenizer.mask_token_id)
                 else:
                     self.assertGreater(tokens[0], tokenizer.vocab_size - 1)
                     self.assertGreater(tokens[-2], tokenizer.vocab_size - 1)
@@ -147,57 +145,42 @@ class BartphoTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(added_toks_2, len(new_toks_2))
                 self.assertEqual(all_size_3, all_size_2 + len(new_toks_2))
 
-    def test_encode_decode_with_spaces(self):
-        tokenizers = self.get_tokenizers(do_lower_case=False)
-        for tokenizer in tokenizers:
-            with self.subTest(f"{tokenizer.__class__.__name__}"):
-
-                input = "This is a test"
-                output = "This is a test"
-                encoded = tokenizer.encode(input, add_special_tokens=False)
-                decoded = tokenizer.decode(encoded, spaces_between_special_tokens=self.space_between_special_tokens)
-                self.assertIn(decoded, [output, output.lower()])
-
-    def test_special_tokens_initialization(self):
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                added_tokens = [AddedToken("<special>", lstrip=True)]
-
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
-                    pretrained_name, additional_special_tokens=added_tokens, **kwargs
+                tokens = tokenizer.encode(
+                    ">>>>|||<||<<|<< aaaaabbbbbb low cccccccccdddddddd <<<<<|||>|>>>>|> l", add_special_tokens=False
                 )
-                r_output = tokenizer_r.encode("Hey this is a <special> token")
 
-                special_token_id = tokenizer_r.encode("<special>", add_special_tokens=False)[0]
+                self.assertGreaterEqual(len(tokens), 6)
+                if tokenizer.__class__.__name__.endswith("Fast"):
+                    self.assertGreater(tokens[0], tokenizer.mask_token_id)
+                else:
+                    self.assertGreater(tokens[0], tokenizer.vocab_size - 1)
+                self.assertGreater(tokens[0], tokens[1])
+                if tokenizer.__class__.__name__.endswith("Fast"):
+                    self.assertGreater(tokens[-2], tokenizer.mask_token_id)
+                else:
+                    self.assertGreater(tokens[-2], tokenizer.vocab_size - 1)
+                self.assertGreater(tokens[-2], tokens[-3])
 
-                self.assertTrue(special_token_id in r_output)
-
-    def test_save_pretrained(self):
-        """
-        BartphoTokenizer involves an external monolingual vocabulary file. Thus, it would not pass the original test.
-        """
-
-        pass
-
-    def test_save_slow_from_fast_and_reload_fast(self):
-        """
-        BartphoTokenizer involves an external monolingual vocabulary file. Thus, it would not pass the original test.
-        """
-
-        pass
+                if tokenizer.__class__.__name__.endswith("Fast"):
+                    _, id_mapping = tokenizer.get_added_vocab_hacking()
+                    self.assertEqual(id_mapping[tokens[0]], tokenizer.eos_token_id)
+                    self.assertEqual(id_mapping[tokens[-2]], tokenizer.pad_token_id)
+                else:
+                    self.assertEqual(tokens[0], tokenizer.eos_token_id)
+                    self.assertEqual(tokens[-2], tokenizer.pad_token_id)
 
     def test_training_new_tokenizer(self):
         """
-        The tokenizer, which involves an external monolingual vocabulary file and assigns unk_token_id to
-        out-of-monolingual-vocabulary tokens, prevents it from training a new one from scratch.
+        The tokenizer involves an external monolingual vocabulary file and assigns unk_token_id to
+        out-of-monolingual-vocabulary tokens, thus is not used for initialization to train a new one.
         """
 
         pass
 
     def test_training_new_tokenizer_with_special_tokens_change(self):
         """
-        The tokenizer, which involves an external monolingual vocabulary file and assigns unk_token_id to
-        out-of-monolingual-vocabulary tokens, prevents it from training a new one from scratch.
+        The tokenizer involves an external monolingual vocabulary file and assigns unk_token_id to
+        out-of-monolingual-vocabulary tokens, thus is not used for initialization to train a new one.
         """
 
         pass

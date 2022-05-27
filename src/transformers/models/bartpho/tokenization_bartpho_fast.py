@@ -17,7 +17,7 @@
 import os
 from collections import defaultdict
 from shutil import copyfile
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from ...tokenization_utils import AddedToken
 from ...tokenization_utils_base import EncodingFast
@@ -115,6 +115,7 @@ class BartphoTokenizerFast(PreTrainedTokenizerFast):
     def __init__(
         self,
         vocab_file=None,
+        monolingual_vocab_file=None,
         tokenizer_file=None,
         bos_token="<s>",
         eos_token="</s>",
@@ -130,6 +131,7 @@ class BartphoTokenizerFast(PreTrainedTokenizerFast):
 
         super().__init__(
             vocab_file,
+            monolingual_vocab_file,
             tokenizer_file=tokenizer_file,
             bos_token=bos_token,
             eos_token=eos_token,
@@ -142,8 +144,57 @@ class BartphoTokenizerFast(PreTrainedTokenizerFast):
         )
 
         self.vocab_file = vocab_file
-        self.tokenizer_file = tokenizer_file
+        self.monolingual_vocab_file = monolingual_vocab_file
         self.can_save_slow_tokenizer = False if not self.vocab_file else True
+
+    def get_added_vocab_hacking(self):
+        """
+        Returns the added tokens in the vocabulary as a dictionary of token to index.
+
+        Returns:
+            `Dict[str, int], Dict[int, int]`: The added tokens, and their original and new ids
+        """
+        base_vocab = self._tokenizer.get_vocab(with_added_tokens=False)
+        full_vocab = self._tokenizer.get_vocab(with_added_tokens=True)
+        base_vocab_size = len(base_vocab)
+        if len(full_vocab) == base_vocab_size:
+            return {}, {}
+
+        # Tokens in added_vocab should have ids that are equal to or larger than the size of base_vocab
+        added_vocab = dict(
+            (tok, index + 1 - base_vocab_size + self.mask_token_id)
+            for tok, index in full_vocab.items()
+            if tok not in base_vocab
+        )
+
+        id_mapping = dict((index, full_vocab[tok]) for tok, index in added_vocab.items())
+
+        return added_vocab, id_mapping
+
+    def _decode(
+        self,
+        token_ids: Union[int, List[int]],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: bool = True,
+        **kwargs
+    ) -> str:
+        self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
+
+        if isinstance(token_ids, int):
+            token_ids = [token_ids]
+
+        # Mapping ids into their original values
+        _, id_mapping = self.get_added_vocab_hacking()
+        if len(id_mapping) > 0:
+            token_ids = [id_mapping[id] if id in id_mapping else id for id in token_ids]
+
+        text = self._tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)
+
+        if clean_up_tokenization_spaces:
+            clean_text = self.clean_up_tokenization(text)
+            return clean_text
+        else:
+            return text
 
     def _convert_encoding(
         self,
@@ -176,9 +227,20 @@ class BartphoTokenizerFast(PreTrainedTokenizerFast):
             encodings = [encoding]
 
         encoding_dict = defaultdict(list)
+        added_vocab, _ = self.get_added_vocab_hacking()
         for e in encodings:
             # encoding_dict["input_ids"].append(e.ids)
-            ids = [id if id <= self.mask_token_id else self.unk_token_id for id in e.ids]
+            # Reassign ids of tokens due to the hacking strategy
+            ids = []
+            for (id, token) in zip(e.ids, e.tokens):
+                if id <= self.mask_token_id:
+                    ids.append(id)
+                else:
+                    if token.strip() in added_vocab:
+                        ids.append(added_vocab[token.strip()])
+                    else:
+                        ids.append(self.unk_token_id)
+
             encoding_dict["input_ids"].append(ids)
 
             if return_token_type_ids:
@@ -262,15 +324,15 @@ class BartphoTokenizerFast(PreTrainedTokenizerFast):
             (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"],
         )
 
-        out_tokenizer_file = os.path.join(
+        out_monolingual_vocab_file = os.path.join(
             save_directory,
-            (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["tokenizer_file"],
+            (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["monolingual_vocab_file"],
         )
 
         if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
             copyfile(self.vocab_file, out_vocab_file)
 
-        if os.path.abspath(self.tokenizer_file) != os.path.abspath(out_tokenizer_file):
-            copyfile(self.tokenizer_file, out_tokenizer_file)
+        if os.path.abspath(self.monolingual_vocab_file) != os.path.abspath(out_monolingual_vocab_file):
+            copyfile(self.monolingual_vocab_file, out_monolingual_vocab_file)
 
-        return (out_vocab_file, out_tokenizer_file)
+        return (out_vocab_file, out_monolingual_vocab_file)

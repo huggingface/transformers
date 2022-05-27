@@ -667,7 +667,7 @@ class BartphoConverter(SpmConverter):
         return vocab
 
     def unk_id(self, proto):
-        unk_id = 3
+        unk_id = self.original_tokenizer.unk_token_id
         return unk_id
 
     def post_processor(self):
