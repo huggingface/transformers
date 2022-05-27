@@ -559,12 +559,12 @@ class WavLMAttention(nn.Module):
         relative_positions_if_large = torch.log(relative_positions.float() / max_exact)
         relative_positions_if_large = relative_positions_if_large / math.log(self.max_distance / max_exact)
         relative_positions_if_large = relative_positions_if_large * (num_buckets - max_exact)
-        relative_postion_if_large = (max_exact + relative_positions_if_large).to(torch.long)
-        relative_postion_if_large = torch.min(
-            relative_postion_if_large, torch.full_like(relative_postion_if_large, num_buckets - 1)
+        relative_position_if_large = (max_exact + relative_positions_if_large).to(torch.long)
+        relative_position_if_large = torch.min(
+            relative_position_if_large, torch.full_like(relative_position_if_large, num_buckets - 1)
         )
 
-        relative_buckets += torch.where(is_small, relative_positions, relative_postion_if_large)
+        relative_buckets += torch.where(is_small, relative_positions, relative_position_if_large)
         return relative_buckets
 
 

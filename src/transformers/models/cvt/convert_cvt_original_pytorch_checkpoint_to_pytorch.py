@@ -275,7 +275,7 @@ def final():
     return head
 
 
-def convert_cvt_checkpoint(cvt_file, pytorch_dump_folder):
+def convert_cvt_checkpoint(cvt_model, image_size, cvt_file_name, pytorch_dump_folder):
     """
     Fucntion to convert the microsoft cvt checkpoint to huggingface checkpoint
     """
@@ -293,11 +293,11 @@ def convert_cvt_checkpoint(cvt_file, pytorch_dump_folder):
     config = config = CvtConfig(num_labels=num_labels, id2label=id2label, label2id=label2id)
 
     # For depth size 13 (13 = 1+2+10)
-    if cvt_file.rsplit("/", 1)[-1][4:6] == "13":
+    if cvt_model.rsplit("/", 1)[-1][4:6] == "13":
         config.depth = [1, 2, 10]
 
     # For depth size 21 (21 = 1+4+16)
-    elif cvt_file.rsplit("/", 1)[-1][4:6] == "21":
+    elif cvt_model.rsplit("/", 1)[-1][4:6] == "21":
         config.depth = [1, 4, 16]
 
     # For wide cvt (similar to wide-resnet) depth size 24 (w24 = 2 + 2 20)
@@ -308,12 +308,13 @@ def convert_cvt_checkpoint(cvt_file, pytorch_dump_folder):
 
     model = CvtForImageClassification(config)
     feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/convnext-base-224-22k-1k")
-    original_weights = torch.load(cvt_file, map_location=torch.device("cpu"))
+    feature_extractor.size = image_size
+    original_weights = torch.load(cvt_file_name, map_location=torch.device("cpu"))
 
     huggingface_weights = OrderedDict()
     list_of_state_dict = []
 
-    for idx in range(config.num_stages):
+    for idx in range(len(config.depth)):
         if config.cls_token[idx]:
             list_of_state_dict = list_of_state_dict + cls_token(idx)
         list_of_state_dict = list_of_state_dict + embeddings(idx)
@@ -336,14 +337,26 @@ def convert_cvt_checkpoint(cvt_file, pytorch_dump_folder):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--cvt_name",
-        default="cvt-13",
+        "--cvt_model",
+        default="cvt-w24",
         type=str,
         help="Name of the cvt model you'd like to convert.",
+    )
+    parser.add_argument(
+        "--image_size",
+        default=384,
+        type=int,
+        help="Input Image Size",
+    )
+    parser.add_argument(
+        "--cvt_file_name",
+        default="cvtmodels\CvT-w24-384x384-IN-22k.pth",
+        type=str,
+        help="Input Image Size",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
 
     args = parser.parse_args()
-    convert_cvt_checkpoint(args.cvt_name, args.pytorch_dump_folder_path)
+    convert_cvt_checkpoint(args.cvt_model, args.image_size, args.cvt_file_name, args.pytorch_dump_folder_path)

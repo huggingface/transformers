@@ -62,6 +62,7 @@ from transformers.testing_utils import (
     require_torch_non_multi_gpu,
     require_torch_tf32,
     require_torch_up_to_2_gpus,
+    require_torchdynamo,
     require_wandb,
     slow,
 )
@@ -1593,6 +1594,100 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # should be about half of fp16_init
         # perfect world: fp32_init/2 == fp16_eval
         self.assertAlmostEqual(fp16_eval, fp32_init / 2, delta=5_000)
+
+    @require_torch_non_multi_gpu
+    @require_torchdynamo
+    def test_torchdynamo_full_eval(self):
+        # torchdynamo at the moment doesn't support DP/DDP, therefore require a single gpu
+        n_gpus = get_gpu_count()
+
+        bs = 8
+        eval_len = 16 * n_gpus
+        # make the params are somewhat big so that there will be enough RAM consumed to be able to
+        # measure things. We should get about 64KB for a+b in fp32
+        a = torch.ones(1000, bs) + 0.001
+        b = torch.ones(1000, bs) - 0.001
+
+        # 1. Default - without TorchDynamo
+        trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len)
+        metrics = trainer.evaluate()
+        original_eval_loss = metrics["eval_loss"]
+        del trainer
+
+        # 2. TorchDynamo eager
+        trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, torchdynamo="eager")
+        metrics = trainer.evaluate()
+        self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss)
+        del trainer
+
+        # 3. TorchDynamo nvfuser
+        trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, torchdynamo="nvfuser")
+        metrics = trainer.evaluate()
+        self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss)
+
+    @require_torch_non_multi_gpu
+    @require_torchdynamo
+    def test_torchdynamo_memory(self):
+        # torchdynamo at the moment doesn't support DP/DDP, therefore require a single gpu
+        class CustomTrainer(Trainer):
+            def compute_loss(self, model, inputs, return_outputs=False):
+                x = inputs["x"]
+                output = model(x)
+                if self.args.n_gpu == 1:
+                    return output.mean()
+                return output
+
+        class MyModule(torch.nn.Module):
+            """Simple module that does aggressive fusion"""
+
+            def __init__(self):
+                super().__init__()
+
+            def forward(self, x):
+                for _ in range(20):
+                    x = torch.nn.functional.relu(x)
+                return x
+
+        mod = MyModule()
+
+        # 1. Default - without TorchDynamo
+        a = torch.ones(1024, 1024, device="cuda", requires_grad=True)
+        a.grad = None
+        trainer = CustomTrainer(model=mod)
+        # warmup
+        for _ in range(10):
+            orig_loss = trainer.training_step(mod, {"x": a})
+
+        torch.cuda.reset_peak_memory_stats()
+        orig_loss = trainer.training_step(mod, {"x": a})
+        orig_peak_mem = torch.cuda.max_memory_allocated()
+        del trainer
+
+        # Reset the peak for another measurement
+        gc.collect()
+        torch.cuda.empty_cache()
+        torch.cuda.reset_peak_memory_stats()
+
+        # 2. TorchDynamo nvfuser
+        a = torch.ones(1024, 1024, device="cuda", requires_grad=True)
+        a.grad = None
+        args = TrainingArguments(output_dir="None", torchdynamo="nvfuser")
+        trainer = CustomTrainer(model=mod, args=args)
+        # warmup
+        for _ in range(10):
+            loss = trainer.training_step(mod, {"x": a})
+
+        torch.cuda.reset_peak_memory_stats()
+        loss = trainer.training_step(mod, {"x": a})
+        peak_mem = torch.cuda.max_memory_allocated()
+        del trainer
+
+        # Functional check
+        self.assertAlmostEqual(loss, orig_loss)
+
+        # AOT Autograd recomputaion and nvfuser recomputation optimization
+        # aggressively fuses the operations and reduce the memory footprint.
+        self.assertGreater(orig_peak_mem, peak_mem * 2)
 
     @require_torch_gpu
     @require_torch_bf16

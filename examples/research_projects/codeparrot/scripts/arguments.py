@@ -24,7 +24,7 @@ class TrainingArguments:
     valid_batch_size: Optional[int] = field(default=2, metadata={"help": "Batch size for evaluation."})
     weight_decay: Optional[float] = field(default=0.1, metadata={"help": "Value of weight decay."})
     shuffle_buffer: Optional[int] = field(
-        default=1000, metadata={"help": "Size of buffer used to shuffle streaming dataset."}
+        default=10000, metadata={"help": "Size of buffer used to shuffle streaming dataset."}
     )
     learning_rate: Optional[float] = field(default=2e-4, metadata={"help": "Learning rate fo training."})
     lr_scheduler_type: Optional[str] = field(default="cosine", metadata={"help": "Learning rate."})
