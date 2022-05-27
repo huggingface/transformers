@@ -1390,9 +1390,7 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
             output_hidden_states=True,  # we need the intermediate hidden states
             return_dict=return_dict,
         )
-        print(f"From TFData2VecVisionForSemanticSegmentation outputs: {outputs}")
         encoder_hidden_states = outputs.hidden_states if return_dict else outputs[1]
-        print(f"From TFData2VecVisionForSemanticSegmentation encoder_hidden_states: {encoder_hidden_states}")
 
         # only keep certain features, and reshape
         # note that we do +1 as the encoder_hidden_states also includes the initial embeddings
