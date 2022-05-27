@@ -51,6 +51,7 @@ from transformers import (
 from transformers.testing_utils import (
     PASS,
     USER,
+    check_json_file_has_correct_format,
     get_tests_dir,
     is_pt_tf_cross_test,
     is_staging_test,
@@ -3328,7 +3329,7 @@ class TokenizerTesterMixin:
                 # make sure that all ".json" files are saved in the correct format
                 for file_path in tokenizer_r_files + tokenizer_p_files:
                     if os.path.exists(file_path) and file_path.endswith(".json"):
-                        self.check_json_file_has_correct_format(file_path)
+                        check_json_file_has_correct_format(file_path)
 
                 # Checks it save with the same files + the tokenizer.json file for the fast one
                 self.assertTrue(any("tokenizer.json" in f for f in tokenizer_r_files))
@@ -3384,22 +3385,6 @@ class TokenizerTesterMixin:
                     self.assertTrue(hasattr(tokenizer_rp, key))
 
                 shutil.rmtree(tmpdirname2)
-
-    def check_json_file_has_correct_format(self, file_path):
-        with open(file_path, "r") as f:
-            lines = f.readlines()
-            if len(lines) == 1:
-                # length can only be 1 if dict is empty
-                self.assertEqual(lines[0], "{}")
-            else:
-                # otherwise make sure json has correct format (at least 3 lines)
-                self.assertGreaterEqual(len(lines), 3)
-                # each key one line, ident should be 2, min length is 3
-                self.assertEqual(lines[0].strip(), "{")
-                for line in lines[1:-1]:
-                    left_indent = len(lines[1]) - len(lines[1].lstrip())
-                    self.assertEqual(left_indent, 2)
-                self.assertEqual(lines[-1].strip(), "}")
 
     def test_embeded_special_tokens(self):
         if not self.test_slow_tokenizer:
