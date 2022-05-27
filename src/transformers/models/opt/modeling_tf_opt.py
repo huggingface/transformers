@@ -19,7 +19,6 @@ from typing import Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
-from tensorflow.compiler.tf2xla.python.xla import dynamic_update_slice
 
 from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import TFBaseModelOutputWithPast, TFCausalLMOutputWithPast
