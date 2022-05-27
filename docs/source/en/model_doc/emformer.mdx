@@ -39,6 +39,30 @@ The original code can be found [here](https://github.com/pytorch/audio/blob/main
 
 [[autodoc]] EmformerConfig
 
+## EmformerTokenizer
+
+[[autodoc]] EmformerTokenizer
+    - __call__
+    - save_vocabulary
+    - decode
+    - batch_decode
+
+## Wav2Vec2FeatureExtractor
+
+[[autodoc]] EmformerFeatureExtractor
+    - __call__
+
+## EmformerProcessor
+
+[[autodoc]] EmformerProcessor
+    - __call__
+    - pad
+    - from_pretrained
+    - save_pretrained
+    - batch_decode
+    - decode
+    - as_target_processor
+
 ## EmformerModel
 
 [[autodoc]] EmformerModel

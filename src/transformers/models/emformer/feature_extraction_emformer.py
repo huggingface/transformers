@@ -43,8 +43,6 @@ class EmformerFeatureExtractor(SequenceFeatureExtractor):
 
     Args:
 
-        global_stats_file (`str`):
-            Path to the global stats file containing the `mean` and `invstddev` statistics of the dataset.
         sampling_rate (`int`, defaults to 16000):
             The sampling rate at which the audio files should be digitalized expressed in samples per second (Hz).
         n_fft (`int`, defaults to 400):
@@ -53,8 +51,12 @@ class EmformerFeatureExtractor(SequenceFeatureExtractor):
             Number of mel filterbanks.
         hop_length (`int`, defaults to 200):
             Length of hop between STFT windows.
-        padding_value (`float`, defaults to 0.0):
-            The value that is used to fill the padding values.
+        global_mean (`List[float]`):
+            The `mean` statistics of the training dataset.
+        global_invstddev (`List[float]`):
+            The `invstddev` (inverse standard deviation) statistics of the training dataset.
+        feature_size (`int`, defaults to 80):
+            Number of mel filterbanks.
         padding_value (`float`, defaults to 0.0):
             The value that is used to fill the padding values.
     """
