@@ -52,19 +52,6 @@ VITPOSE_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Inspired by
-# https://github.com/rwightman/pytorch-image-models/blob/b9bd960a032c75ca6b808ddeed76bee5f3ed4972/timm/models/layers/helpers.py
-# From PyTorch internals
-def to_2tuple(x):
-    if isinstance(x, collections.abc.Iterable):
-        return x
-    return (x, x)
-
-
-# Based on timm implementation, which can be found here:
-# https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
-
-
 class ViTPoseEmbeddings(nn.Module):
     """
     Construct the position and patch embeddings.
@@ -90,7 +77,7 @@ class ViTPoseEmbeddings(nn.Module):
         embeddings = self.patch_embeddings(pixel_values)
 
         # add positional encoding to each token
-        embeddings = embeddings + self.position_embeddings
+        embeddings = embeddings + self.position_embeddings[:, 1:] + self.position_embeddings[:, :1]
 
         embeddings = self.dropout(embeddings)
 
@@ -111,14 +98,14 @@ class PatchEmbeddings(nn.Module):
         embed_dim: int = 768,
     ):
         super().__init__()
-        image_size = to_2tuple(image_size)
-        patch_size = to_2tuple(patch_size)
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_patches = num_patches
 
-        self.projection = nn.Conv2d(num_channels, embed_dim, kernel_size=patch_size, stride=patch_size)
+        self.projection = nn.Conv2d(num_channels, embed_dim, kernel_size=patch_size, stride=patch_size, padding=2)
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
@@ -559,8 +546,12 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
         self.num_labels = config.num_labels
         self.vit = ViTPoseModel(config, add_pooling_layer=False)
 
-        # Classifier head
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
+        # Keypoint head
+        final_conv_kernel = 3
+        padding = 1
+        self.keypoint_head = nn.Conv2d(
+            config.hidden_size, config.num_keypoints, kernel_size=final_conv_kernel, stride=1, padding=padding
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -572,7 +563,6 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, ImageClassifierOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -582,13 +572,20 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=return_dict,
         )
 
         sequence_output = outputs[0]
+        batch_size = sequence_output.shape[0]
+        patch_height = self.config.image_size[0] // self.config.patch_size[0]
+        patch_width = self.config.image_size[1] // self.config.patch_size[1]
+        sequence_output = (
+            sequence_output.permute(0, 2, 1).reshape(batch_size, -1, patch_height, patch_width).contiguous()
+        )
 
-        logits = self.classifier(sequence_output[:, 0, :])
+        print("Shape of sequence output:", sequence_output.shape)
+
+        logits = self.keypoint_head(sequence_output)
 
         loss = None
         if labels is not None:

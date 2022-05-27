@@ -43,6 +43,12 @@ class ViTPoseConfig(PretrainedConfig):
 
 
     Args:
+        image_size (`int`, *optional*, defaults to `[256, 192]`):
+            The size (resolution) of each image.
+        patch_size (`int`, *optional*, defaults to `[16, 16]`):
+            The size (resolution) of each patch.
+        num_channels (`int`, *optional*, defaults to `3`):
+            The number of input channels.
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -62,16 +68,10 @@ class ViTPoseConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        image_size (`int`, *optional*, defaults to `224`):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to `16`):
-            The size (resolution) of each patch.
-        num_channels (`int`, *optional*, defaults to `3`):
-            The number of input channels.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
-        encoder_stride (`int`, `optional`, defaults to 16):
-           Factor to increase the spatial resolution by in the decoder head for masked image modeling.
+        num_keypoints (`int`, *optional*, defaults to `17`):
+            The number of keypoints.
 
     Example:
 
@@ -91,6 +91,9 @@ class ViTPoseConfig(PretrainedConfig):
 
     def __init__(
         self,
+        image_size=[256, 192],
+        patch_size=[16, 16],
+        num_channels=3,
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
@@ -100,12 +103,8 @@ class ViTPoseConfig(PretrainedConfig):
         attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        is_encoder_decoder=False,
-        image_size=224,
-        patch_size=16,
-        num_channels=3,
         qkv_bias=True,
-        encoder_stride=16,
+        num_keypoints=17,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -123,7 +122,7 @@ class ViTPoseConfig(PretrainedConfig):
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
-        self.encoder_stride = encoder_stride
+        self.num_keypoints = num_keypoints
 
 
 class ViTPoseOnnxConfig(OnnxConfig):

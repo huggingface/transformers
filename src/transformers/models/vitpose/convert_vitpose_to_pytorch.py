@@ -35,11 +35,13 @@ logger = logging.get_logger(__name__)
 
 def rename_key(name):
     if "backbone" in name:
-        name = name.replace("backbone", "vitpose")
-    if "patch_embed" in name:
-        name = name.replace("patch_embed", "embeddings.patch_embeddings")
-    if "layers" in name:
-        name = "encoder." + name
+        name = name.replace("backbone", "vit")
+    if "patch_embed.proj" in name:
+        name = name.replace("patch_embed.proj", "embeddings.patch_embeddings.projection")
+    if "pos_embed" in name:
+        name = name.replace("pos_embed", "embeddings.position_embeddings")
+    if "blocks" in name:
+        name = name.replace("blocks", "encoder.layer")
     if "attn.proj" in name:
         name = name.replace("attn.proj", "attention.output.dense")
     if "attn" in name:
@@ -52,47 +54,31 @@ def rename_key(name):
         name = name.replace("mlp.fc1", "intermediate.dense")
     if "mlp.fc2" in name:
         name = name.replace("mlp.fc2", "output.dense")
-
-    if name == "norm.weight":
-        name = "layernorm.weight"
-    if name == "norm.bias":
-        name = "layernorm.bias"
-
-    if "head" in name:
-        name = name.replace("head", "classifier")
-    else:
-        name = "swin." + name
+    if "last_norm" in name:
+        name = name.replace("last_norm", "layernorm")
+    if "final_layer." in name:
+        name = name.replace("final_layer.", "")
 
     return name
 
 
-def convert_state_dict(orig_state_dict):
+def convert_state_dict(orig_state_dict, dim):
     for key in orig_state_dict.copy().keys():
         val = orig_state_dict.pop(key)
 
         if "qkv" in key:
-            # layer_num = int(key_split[1])
-
-            # # read in weights + bias of input projection layer (in timm, this is a single matrix + bias)
-            # in_proj_weight = orig_state_dict.pop(f"blocks.{i}.attn.qkv.weight")
-            # in_proj_bias = orig_state_dict.pop(f"blocks.{i}.attn.qkv.bias")
-            # # next, add query, keys and values (in that order) to the state dict
-            # orig_state_dict[f"encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[
-            #     : config.hidden_size, :
-            # ]
-            # orig_state_dict[f"encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[: config.hidden_size]
-            # orig_state_dict[f"encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
-            #     config.hidden_size : config.hidden_size * 2, :
-            # ]
-            # orig_state_dict[f"encoder.layer.{i}.attention.attention.key.bias"] = in_proj_bias[
-            #     config.hidden_size : config.hidden_size * 2
-            # ]
-            # orig_state_dict[f"encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[
-            #     -config.hidden_size :, :
-            # ]
-            # orig_state_dict[f"encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-config.hidden_size :]
-            pass
-
+            key_split = key.split(".")
+            layer_num = int(key_split[2])
+            if "weight" in key:
+                orig_state_dict[f"vit.encoder.layer.{layer_num}.attention.attention.query.weight"] = val[:dim, :]
+                orig_state_dict[f"vit.encoder.layer.{layer_num}.attention.attention.key.weight"] = val[
+                    dim : dim * 2, :
+                ]
+                orig_state_dict[f"vit.encoder.layer.{layer_num}.attention.attention.value.weight"] = val[-dim:, :]
+            else:
+                orig_state_dict[f"vit.encoder.layer.{layer_num}.attention.attention.query.bias"] = val[:dim]
+                orig_state_dict[f"vit.encoder.layer.{layer_num}.attention.attention.key.bias"] = val[dim : dim * 2]
+                orig_state_dict[f"vit.encoder.layer.{layer_num}.attention.attention.value.bias"] = val[-dim:]
         else:
             orig_state_dict[rename_key(key)] = val
 
@@ -138,23 +124,25 @@ def convert_vitpose_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_
 
     # load state_dict of original model, remove and rename some keys
     state_dict = torch.load(checkpoint_path, map_location="cpu")["state_dict"]
-    new_state_dict = convert_state_dict(state_dict, model)
+    new_state_dict = convert_state_dict(state_dict, dim=config.hidden_size)
     model.load_state_dict(new_state_dict)
 
     # Check outputs on an image, prepared by ViTFeatureExtractor
-    feature_extractor = ViTFeatureExtractor(size=config.image_size)
+    feature_extractor = ViTFeatureExtractor(size=config.image_size[::-1])
     encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
     pixel_values = encoding["pixel_values"]
+
+    print("Shape of pixel values:", pixel_values.shape)
     outputs = model(pixel_values)
 
     # TODO assert logits
     print(outputs.keys())
 
-    Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-    print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
-    model.save_pretrained(pytorch_dump_folder_path)
-    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    # Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
+    # print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
+    # model.save_pretrained(pytorch_dump_folder_path)
+    # print(f"Saving feature extractor to {pytorch_dump_folder_path}")
+    # feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":
