@@ -22,7 +22,6 @@ from transformers.testing_utils import require_sentencepiece, require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor
-from ...utils.test_modeling_tf_core import TFCoreModelTesterMixin
 
 
 if is_tf_available():
@@ -39,11 +38,7 @@ def prepare_opt_inputs_dict(
 ):
     if attention_mask is None:
         attention_mask = tf.cast(tf.math.not_equal(input_ids, config.pad_token_id), tf.int8)
-    return {
-        "input_ids": input_ids,
-        "attention_mask": attention_mask,
-        "head_mask": head_mask,
-    }
+    return {"input_ids": input_ids, "attention_mask": attention_mask}
 
 
 @require_tf
@@ -126,11 +121,10 @@ class TFOPTModelTester:
 
         input_ids = input_ids[:1, :]
         attention_mask = inputs_dict["attention_mask"][:1, :]
-        head_mask = inputs_dict["head_mask"]
         self.batch_size = 1
 
         # first forward pass
-        outputs = model(input_ids, attention_mask=attention_mask, head_mask=head_mask, use_cache=True)
+        outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
 
         output, past_key_values = outputs.to_tuple()
 
@@ -361,11 +355,6 @@ class TFOPTGenerationTest(unittest.TestCase):
 
         self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)
 
-        xla_generate = tf.function(model.generate, jit_compile=True)
-        output_sequences = xla_generate(tokenizer(self.prompts, return_tensors="tf", padding=True).input_ids).sequences
-        output_string = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
-        self.assertIsNotNone(output_string, EXPECTED_OUTPUTS)
-
     def test_batch_generation(self):
         model_id = "facebook/opt-350m"
 
@@ -428,8 +417,3 @@ class TFOPTGenerationTest(unittest.TestCase):
             predicted_outputs += generated_string
 
         self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)
-
-        xla_generate = tf.function(model.generate, jit_compile=True)
-        output_sequences = xla_generate(tokenizer(self.prompts, return_tensors="tf", padding=True).input_ids).sequences
-        output_string = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
-        self.assertIsNotNone(output_string, EXPECTED_OUTPUTS)

@@ -304,6 +304,8 @@ class TFOPTDecoderLayer(tf.keras.layers.Layer):
         layer_head_mask: Optional[tf.Tensor] = None,
         past_key_value: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         training: Optional[bool] = False,
+        output_attentions: Optional[bool] = False,
+        use_cache: Optional[bool] = False,
     ) -> Tuple[tf.Tensor, tf.Tensor, Tuple[Tuple[tf.Tensor]]]:
         """
         Args:
@@ -575,7 +577,6 @@ class TFOPTDecoder(tf.keras.layers.Layer):
         input_ids: Optional[TFModelInputType] = None,
         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         use_cache: Optional[bool] = None,
@@ -763,7 +764,6 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-
         outputs = self.decoder(
             input_ids,
             attention_mask=attention_mask,
@@ -777,8 +777,15 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
             training=training,
         )
 
-        return outputs
+        if not return_dict:
+            return outputs
 
+        return TFBaseModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 @add_start_docstrings(
@@ -831,7 +838,6 @@ class TFOPTModel(TFOPTPreTrainedModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-
         outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
@@ -845,7 +851,15 @@ class TFOPTModel(TFOPTPreTrainedModel):
             training=training,
         )
 
-        return outputs
+        if not return_dict:
+            return outputs
+
+        return TFBaseModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
     def serving_output(self, output):
         pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
@@ -891,63 +905,6 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
             "past_key_values": past,
             "use_cache": use_cache,
         }
-
-    def _update_model_kwargs_for_xla_generation(self, outputs, model_kwargs, current_pos, max_length):
-        # TODO(Pvp, Joao, Matt) - this function can be cleaned a bit and refactored
-        # TODO merge latest changes
-        # quite some duplicated code patterns it seems
-        # also the `attention_mask` is currently used in a somewhat hacky to
-        # correctly influence the `past_key_values` - not sure if this is the way to go
-        # Let's keep that for a future PR.
-        past = outputs.past_key_values
-        is_past_initialized = model_kwargs.pop("past", None) is not None
-        attention_mask = model_kwargs.pop("attention_mask")
-        batch_size = attention_mask.shape[0]
-
-        if not is_past_initialized:
-            # past[0].shape[3] is seq_length of prompt
-            num_padding_values = max_length - past[0][0].shape[3] - 1
-
-            padding_values = np.zeros((5, 2), dtype=np.int32)
-            padding_values[3, 1] = num_padding_values
-            padding_values = tf.constant(padding_values)
-
-            new_past = list(past)
-            for i in range(len(past)):
-                new_past[i] = tf.pad(past[i], padding_values)
-
-            # Zeros for the currently-unfilled locations in the past tensor, ones for the actual input_ids
-            attention_mask = tf.concat(
-                [
-                    attention_mask,
-                    tf.zeros((batch_size, num_padding_values), dtype=attention_mask.dtype),
-                    tf.ones((batch_size, 1), dtype=attention_mask.dtype),
-                ],
-                axis=1,
-            )
-        else:
-            new_past = [None for _ in range(len(past))]
-            slice_start_base = tf.constant([0, 0, 0, 1, 0])
-            attention_mask_update_slice = tf.ones((batch_size, 1), dtype=attention_mask.dtype)
-            # correct 5 here
-            new_past_index = current_pos - 1
-
-            for i in range(len(past)):
-                update_slice = past[i][:, :, :, -1:]
-                # Write the last slice to the first open location in the padded past array
-                # and then truncate the last slice off the array
-                new_past[i] = dynamic_update_slice(
-                    past[i][:, :, :, :-1], update_slice, slice_start_base * new_past_index
-                )
-
-            update_start = tf.constant([0, 1], dtype=tf.int32) * new_past_index
-            attention_mask = dynamic_update_slice(attention_mask, attention_mask_update_slice, update_start)
-
-        # set `attention_mask` and `past`
-        model_kwargs["attention_mask"] = attention_mask
-        model_kwargs["past"] = tuple(new_past)
-
-        return model_kwargs
 
     @unpack_inputs
     @replace_return_docstrings(output_type=TFCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
