@@ -1293,6 +1293,7 @@ class TFGenerationMixin:
         length_penalty=None,
         no_repeat_ngram_size=None,
         num_return_sequences=None,
+        attention_mask=None,
         decoder_start_token_id=None,
         use_cache=None,
         seed=None,
@@ -1497,7 +1498,7 @@ class TFGenerationMixin:
         )
 
         if pad_token_id is None and eos_token_id is not None:
-            if model_kwargs.get("attention_mask", None) is None:
+            if attention_mask is None:
                 logger.warning(
                     "The attention mask and the pad token id were not set. As a consequence, you may observe "
                     "unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results."
@@ -1523,6 +1524,8 @@ class TFGenerationMixin:
             model_kwargs["output_hidden_states"] = output_hidden_states
         if use_cache is not None:
             model_kwargs["use_cache"] = use_cache
+        if attention_mask is not None:
+            model_kwargs["attention_mask"] = attention_mask
 
         accepts_attention_mask = "attention_mask" in set(inspect.signature(self.call).parameters.keys())
         requires_attention_mask = "encoder_outputs" not in model_kwargs
