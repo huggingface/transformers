@@ -199,8 +199,6 @@ _import_structure = {
     "models.emformer": [
         "EMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "EmformerConfig",
-        "EmformerFeatureExtractor",
-        "EmformerProcessor",
         "EmformerTokenizer",
     ],
     "models.encoder_decoder": ["EncoderDecoderConfig"],
@@ -555,6 +553,7 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_speech_objects) if not name.startswith("_")
     ]
 else:
+    _import_structure["models.emformer"].append("EmformerFeatureExtractor")
     _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
 
 try:
@@ -567,6 +566,7 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_sentencepiece_and_speech_objects) if not name.startswith("_")
     ]
 else:
+    _import_structure["models.emformer"].append("EmformerProcessor")
     _import_structure["models.speech_to_text"].append("Speech2TextProcessor")
 
 # Vision-specific objects
@@ -2726,8 +2726,6 @@ if TYPE_CHECKING:
     from .models.emformer import (
         EMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         EmformerConfig,
-        EmformerFeatureExtractor,
-        EmformerProcessor,
         EmformerTokenizer,
     )
     from .models.encoder_decoder import EncoderDecoderConfig
@@ -3039,6 +3037,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_speech_objects import *
     else:
+        from .models.emformer import EmformerFeatureExtractor
         from .models.speech_to_text import Speech2TextFeatureExtractor
 
     try:
@@ -3047,6 +3046,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_sentencepiece_and_speech_objects import *
     else:
+        from .models.emformer import EmformerProcessor
         from .models.speech_to_text import Speech2TextProcessor
 
     try:

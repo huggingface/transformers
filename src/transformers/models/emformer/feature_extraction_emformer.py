@@ -21,7 +21,10 @@ from typing import Dict, List, Optional, Union
 
 import numpy as np
 import torch
-from torchaudio.transforms import MelSpectrogram
+from ...file_utils import is_torchaudio_available
+
+if is_torchaudio_available():
+    from torchaudio.transforms import MelSpectrogram
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
