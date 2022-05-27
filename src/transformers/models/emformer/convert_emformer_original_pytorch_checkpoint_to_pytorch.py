@@ -79,7 +79,7 @@ def convert_config(bundle: RNNTBundle):
     cfg.output_dim = transcriber.output_linear.out_features
 
     cfg.vocab_size = predictor.embedding.num_embeddings
-    cfg.symbol_embedding_dim = predictor.embedding.embedding_dim
+    cfg.token_embedding_dim = predictor.embedding.embedding_dim
     cfg.num_lstm_layers = len(predictor.lstm_layers)
     cfg.lstm_hidden_dim = predictor.lstm_layers[0].p2g.out_features // 4
     cfg.lstm_layer_norm = predictor.lstm_layers[0].c_norm.eps

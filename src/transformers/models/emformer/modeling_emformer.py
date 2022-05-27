@@ -1,17 +1,28 @@
 # coding=utf-8
-# Copyright 2022 The TorchAudio Authors and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team, All rights reserved.
+# Copyright 2017 Facebook Inc. (Soumith Chintala), All rights reserved.
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
+# Licensed under BSD 2-Clause License (the "License");
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# * Redistributions of source code must retain the above copyright notice, this
+#   list of conditions and the following disclaimer.
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# * Redistributions in binary form must reproduce the above copyright notice,
+#   this list of conditions and the following disclaimer in the documentation
+#   and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """ PyTorch Emformer model."""
 
 import math
@@ -454,9 +465,8 @@ class EmformerLayer(torch.nn.Module):
 
 
 class Emformer(torch.nn.Module):
-    r"""Implements the Emformer architecture introduced in
-    *Emformer: Efficient Memory Transformer Based Acoustic Model for Low Latency Streaming Speech Recognition*
-    [:footcite:`shi2021emformer`].
+    r"""Implements the Emformer architecture introduced in [Emformer: Efficient Memory Transformer Based Acoustic
+    Model For Low Latency Streaming Speech Recognition](https://arxiv.org/abs/2010.10759)
 
     Args:
         input_dim (int): input dimension.
@@ -472,12 +482,6 @@ class Emformer(torch.nn.Module):
         max_memory_size (int, optional): maximum number of memory elements to use. (Default: 0)
         tanh_on_mem (bool, optional): if ``True``, applies tanh to memory elements. (Default: ``False``)
         negative_inf (float, optional): value to use for negative infinity in attention weights. (Default: -1e8)
-
-    Examples:
-        >>> emformer = Emformer(512, 8, 2048, 20, 4, right_context_length=1) >>> input = torch.rand(128, 400, 512) #
-        batch, num_frames, feature_dim >>> lengths = torch.randint(1, 200, (128,)) # batch >>> output = emformer(input,
-        lengths) >>> input = torch.rand(128, 5, 512) >>> lengths = torch.ones(128) * 5 >>> output, lengths, states =
-        emformer.infer(input, lengths, None)
     """
 
     def __init__(
@@ -684,9 +688,9 @@ class EmformerPreTrainedModel(PreTrainedModel):
 
 
 EMFORMER_START_DOCSTRING = r"""
-    Emformer was proposed in [wav2vec 2.0: A Framework for Self-Supervised Learning of Speech
-    Representations](https://arxiv.org/abs/2006.11477) by Alexei Baevski, Henry Zhou, Abdelrahman Mohamed, Michael
-    Auli.
+    Emformer was proposed in [Emformer: Efficient Memory Transformer Based Acoustic Model For Low Latency Streaming
+    Speech Recognition](https://arxiv.org/abs/2010.10759) by Yangyang Shi, Yongqiang Wang, Chunyang Wu, Ching-Feng Yeh,
+    Julian Chan, Frank Zhang, Duc Le, Mike Seltzer.
 
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving etc.).
@@ -704,11 +708,11 @@ EMFORMER_START_DOCSTRING = r"""
 
 EMFORMER_INPUTS_DOCSTRING = r"""
     Args:
-        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
-            into an array of type *List[float]* or a *numpy.ndarray*, *e.g.* via the soundfile library (*pip install
-            soundfile*). To prepare the array into *input_values*, the [`Wav2Vec2Processor`] should be used for padding
-            and conversion into a tensor of type *torch.FloatTensor*. See [`Wav2Vec2Processor.__call__`] for details.
+        input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, feature_size)`, *optional*):
+            Float values of fbank features extracted from the raw speech waveform. To convert the waveform array into
+            `input_features`, the [`EmformerFeatureExtractor`] should be used for extracting the Mel spectrogram
+            features, padding and conversion into a tensor of type `torch.FloatTensor`. See
+            [`~EmformerFeatureExtractor.__call__`]
         attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
             1]`:
@@ -923,12 +927,12 @@ class RNNTPredictor(torch.nn.Module):
 
     def __init__(self, config: EmformerConfig) -> None:
         super().__init__()
-        self.embedding = torch.nn.Embedding(config.vocab_size, config.symbol_embedding_dim)
-        self.input_layer_norm = torch.nn.LayerNorm(config.symbol_embedding_dim)
+        self.embedding = torch.nn.Embedding(config.vocab_size, config.token_embedding_dim)
+        self.input_layer_norm = torch.nn.LayerNorm(config.token_embedding_dim)
         self.lstm_layers = torch.nn.ModuleList(
             [
                 RNNTCustomLSTM(
-                    config.symbol_embedding_dim if idx == 0 else config.lstm_hidden_dim,
+                    config.token_embedding_dim if idx == 0 else config.lstm_hidden_dim,
                     config.lstm_hidden_dim,
                     layer_norm=True,
                     layer_norm_epsilon=config.lstm_layer_norm_epsilon,

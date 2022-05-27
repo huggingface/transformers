@@ -14,9 +14,6 @@
 # limitations under the License.
 """ Emformer model configuration"""
 
-import functools
-import operator
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -42,145 +39,45 @@ class EmformerConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 32):
+        vocab_size (`int`, *optional*, defaults to 4096):
             Vocabulary size of the Emformer model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`EmformerModel`] or [`TFEmformerModel`]. Vocabulary size of the
-            model. Defines the different tokens that can be represented by the *inputs_ids* passed to the forward
-            method of [`EmformerModel`].
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
+            the `inputs_ids` passed when calling [`EmformerModel`]. Vocabulary size of the model. Defines the different
+            tokens that can be represented by the *inputs_ids* passed to the forward method of [`EmformerModel`].
+        num_hidden_layers (`int`, *optional*, defaults to 20):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
+        num_attention_heads (`int`, *optional*, defaults to 8):
             Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 3072):
+        intermediate_size (`int`, *optional*, defaults to 2048):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the attention probabilities.
-        final_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for the final projection layer of [`EmformerForCTC`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
-            The epsilon used by the layer normalization layers.
-        feat_extract_norm (`str`, *optional*, defaults to `"group"`):
-            The norm to be applied to 1D convolutional layers in feature encoder. One of `"group"` for group
-            normalization of only the first 1D convolutional layer or `"layer"` for layer normalization of all 1D
-            convolutional layers.
-        feat_proj_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probability for output of the feature encoder.
-        feat_extract_activation (`str, `optional`, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the 1D convolutional layers of the feature
-            extractor. If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        feat_quantizer_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for quantized feature encoder states.
-        conv_dim (`Tuple[int]`, *optional*, defaults to `(512, 512, 512, 512, 512, 512, 512)`):
-            A tuple of integers defining the number of input and output channels of each 1D convolutional layer in the
-            feature encoder. The length of *conv_dim* defines the number of 1D convolutional layers.
-        conv_stride (`Tuple[int]`, *optional*, defaults to `(5, 2, 2, 2, 2, 2, 2)`):
-            A tuple of integers defining the stride of each 1D convolutional layer in the feature encoder. The length
-            of *conv_stride* defines the number of convolutional layers and has to match the length of *conv_dim*.
-        conv_kernel (`Tuple[int]`, *optional*, defaults to `(10, 3, 3, 3, 3, 3, 3)`):
-            A tuple of integers defining the kernel size of each 1D convolutional layer in the feature encoder. The
-            length of *conv_kernel* defines the number of convolutional layers and has to match the length of
-            *conv_dim*.
-        conv_bias (`bool`, *optional*, defaults to `False`):
-            Whether the 1D convolutional layers have a bias.
-        num_conv_pos_embeddings (`int`, *optional*, defaults to 128):
-            Number of convolutional positional embeddings. Defines the kernel size of 1D convolutional positional
-            embeddings layer.
-        num_conv_pos_embedding_groups (`int`, *optional*, defaults to 16):
-            Number of groups of 1D convolutional positional embeddings layer.
-        do_stable_layer_norm (`bool`, *optional*, defaults to `False`):
-            Whether to apply *stable* layer norm architecture of the Transformer encoder. `do_stable_layer_norm is
-            True` corresponds to applying layer norm before the attention layer, whereas `do_stable_layer_norm is
-            False` corresponds to applying layer norm after the attention layer.
-        apply_spec_augment (`bool`, *optional*, defaults to `True`):
-            Whether to apply *SpecAugment* data augmentation to the outputs of the feature encoder. For reference see
-            [SpecAugment: A Simple Data Augmentation Method for Automatic Speech
-            Recognition](https://arxiv.org/abs/1904.08779).
-        mask_time_prob (`float`, *optional*, defaults to 0.05):
-            Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked. The masking
-            procecure generates ''mask_time_prob*len(time_axis)/mask_time_length'' independent masks over the axis. If
-            reasoning from the propability of each feature vector to be chosen as the start of the vector span to be
-            masked, *mask_time_prob* should be `prob_vector_start*mask_time_length`. Note that overlap may decrease the
-            actual percentage of masked vectors. This is only relevant if `apply_spec_augment is True`.
-        mask_time_length (`int`, *optional*, defaults to 10):
-            Length of vector span along the time axis.
-        mask_time_min_masks (`int`, *optional*, defaults to 2),:
-            The minimum number of masks of length `mask_feature_length` generated along the time axis, each time step,
-            irrespectively of `mask_feature_prob`. Only relevant if ''mask_time_prob*len(time_axis)/mask_time_length <
-            mask_time_min_masks''
-        mask_feature_prob (`float`, *optional*, defaults to 0.0):
-            Percentage (between 0 and 1) of all feature vectors along the feature axis which will be masked. The
-            masking procecure generates ''mask_feature_prob*len(feature_axis)/mask_time_length'' independent masks over
-            the axis. If reasoning from the propability of each feature vector to be chosen as the start of the vector
-            span to be masked, *mask_feature_prob* should be `prob_vector_start*mask_feature_length`. Note that overlap
-            may decrease the actual percentage of masked vectors. This is only relevant if `apply_spec_augment is
-            True`.
-        mask_feature_length (`int`, *optional*, defaults to 10):
-            Length of vector span along the feature axis.
-        mask_feature_min_masks (`int`, *optional*, defaults to 0),:
-            The minimum number of masks of length `mask_feature_length` generated along the feature axis, each time
-            step, irrespectively of `mask_feature_prob`. Only relevant if
-            ''mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks''
-        num_codevectors_per_group (`int`, *optional*, defaults to 320):
-            Number of entries in each quantization codebook (group).
-        num_codevector_groups (`int`, *optional*, defaults to 2):
-            Number of codevector groups for product codevector quantization.
-        contrastive_logits_temperature (`float`, *optional*, defaults to 0.1):
-            The temperature *kappa* in the contrastive loss.
-        feat_quantizer_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for the output of the feature encoder that's used by the quantizer.
-        num_negatives (`int`, *optional*, defaults to 100):
-            Number of negative samples for the contrastive loss.
-        codevector_dim (`int`, *optional*, defaults to 256):
-            Dimensionality of the quantized feature vectors.
-        proj_codevector_dim (`int`, *optional*, defaults to 256):
-            Dimensionality of the final projection of both the quantized and the transformer features.
-        diversity_loss_weight (`int`, *optional*, defaults to 0.1):
-            The weight of the codebook diversity loss component.
-        ctc_loss_reduction (`str`, *optional*, defaults to `"sum"`):
-            Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
-            instance of [`EmformerForCTC`].
-        ctc_zero_infinity (`bool`, *optional*, defaults to `False`):
-            Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly
-            occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
-            of [`EmformerForCTC`].
-        use_weighted_layer_sum (`bool`, *optional*, defaults to `False`):
-            Whether to use a weighted average of layer outputs with learned weights. Only relevant when using an
-            instance of [`EmformerForSequenceClassification`].
-        classifier_proj_size (`int`, *optional*, defaults to 256):
-            Dimensionality of the projection before token mean-pooling for classification.
-        tdnn_dim (`Tuple[int]`, *optional*, defaults to `(512, 512, 512, 512, 1500)`):
-            A tuple of integers defining the number of output channels of each 1D convolutional layer in the *TDNN*
-            module of the *XVector* model. The length of *tdnn_dim* defines the number of *TDNN* layers.
-        tdnn_kernel (`Tuple[int]`, *optional*, defaults to `(5, 3, 3, 1, 1)`):
-            A tuple of integers defining the kernel size of each 1D convolutional layer in the *TDNN* module of the
-            *XVector* model. The length of *tdnn_kernel* has to match the length of *tdnn_dim*.
-        tdnn_dilation (`Tuple[int]`, *optional*, defaults to `(1, 2, 3, 1, 1)`):
-            A tuple of integers defining the dilation factor of each 1D convolutional layer in *TDNN* module of the
-            *XVector* model. The length of *tdnn_dilation* has to match the length of *tdnn_dim*.
-        xvector_output_dim (`int`, *optional*, defaults to 512):
-            Dimensionality of the *XVector* embedding vectors.
-        add_adapter (`bool`, *optional*, defaults to `False`):
-            Whether a convolutional network should be stacked on top of the Emformer Encoder. Can be very useful for
-            warm-starting Emformer for SpeechEncoderDecoder models.
-        adapter_kernel_size (`int`, *optional*, defaults to 3):
-            Kernel size of the convolutional layers in the adapter network. Only relevant if `add_adapter is True`.
-        adapter_stride (`int`, *optional*, defaults to 2):
-            Stride of the convolutional layers in the adapter network. Only relevant if `add_adapter is True`.
-        num_adapter_layers (`int`, *optional*, defaults to 3):
-            Number of convolutional layers that should be used in the adapter network. Only relevant if `add_adapter is
-            True`.
-        output_hidden_size (`int`, *optional*):
-            Dimensionality of the encoder output layer. If not defined, this defaults to *hidden-size*. Only relevant
-            if `add_adapter is True`.
+        blank_token_id (`int`, *optional*, defaults to 4096):
+            The ID of a blank token used in RNN-T decoding.
+        pad_token_id (`int`, *optional*, defaults to 1):
+            The ID of a padding token used to pad [`EmformerForRNNT`] outputs.
+        input_dim (`int`, *optional*, defaults to 80):
+            The feature dimension of input features (Mel spectrogram).
+        time_reduction_input_dim (`int`, *optional*, defaults to 128):
+            The dimension that the input features are projected to before time shuffling.
+        time_reduction_stride (`int`, *optional*, defaults to 4):
+            The stride of [`EmformerTimeReduction`] used to compress input features into fewer frames.
+        left_context_length (`int`, *optional*, defaults to 30):
+            The length of Emformer attention context on the left.
+        right_context_length (`int`, *optional*, defaults to 4):
+            The length of Emformer attention context on the right.
+        segment_length (`int`, *optional*, defaults to 16):
+            The length of Emformer attention segments.
+        output_dim (`int`, *optional*, defaults to 1024):
+            The dimension that the Transformer output features are projected to.
+        token_embedding_dim (`int`, *optional*, defaults to 512):
+            The dimensionality of RNN-T token embeddings.
+        num_lstm_layers (`int`, *optional*, defaults to 3):
+            The number of LSTM layers in the RNN-T predictor.
 
     Example:
 
@@ -201,17 +98,13 @@ class EmformerConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size=4096,
-        hidden_size=768,
         num_hidden_layers=20,
         num_attention_heads=8,
         intermediate_size=2048,
         hidden_act="gelu",
         hidden_dropout=0.1,
         activation_dropout=0.1,
-        attention_dropout=0.1,
-        final_dropout=0.1,
         initializer_range=0.02,
-        layer_norm_eps=1e-5,
         blank_token_id=4096,
         pad_token_id=1,
         input_dim=80,
@@ -221,7 +114,7 @@ class EmformerConfig(PretrainedConfig):
         right_context_length=4,
         segment_length=16,
         output_dim=1024,
-        symbol_embedding_dim=512,
+        token_embedding_dim=512,
         num_lstm_layers=3,
         lstm_hidden_dim=512,
         lstm_layer_norm_epsilon=1e-3,
@@ -231,16 +124,12 @@ class EmformerConfig(PretrainedConfig):
         **kwargs
     ):
         super().__init__(**kwargs)
-        self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.num_attention_heads = num_attention_heads
         self.hidden_dropout = hidden_dropout
-        self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
-        self.final_dropout = final_dropout
-        self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
         self.vocab_size = vocab_size
 
@@ -252,7 +141,7 @@ class EmformerConfig(PretrainedConfig):
         self.segment_length = segment_length
         self.output_dim = output_dim
 
-        self.symbol_embedding_dim = symbol_embedding_dim
+        self.token_embedding_dim = token_embedding_dim
         self.num_lstm_layers = num_lstm_layers
         self.lstm_hidden_dim = lstm_hidden_dim
         self.lstm_layer_norm_epsilon = lstm_layer_norm_epsilon
@@ -263,7 +152,3 @@ class EmformerConfig(PretrainedConfig):
         self.blank_token_id = blank_token_id
         self.pad_token_id = pad_token_id
         self.max_output_length = max_output_length
-
-    @property
-    def inputs_to_logits_ratio(self):
-        return functools.reduce(operator.mul, self.conv_stride, 1)
