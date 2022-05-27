@@ -15,7 +15,7 @@
 
 import unittest
 
-from transformers import BertGenerationTokenizer
+from transformers import EmformerTokenizer
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_torch, slow
 from transformers.utils import cached_property
 
@@ -30,7 +30,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_sentencepiece
 class EmformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
-    tokenizer_class = BertGenerationTokenizer
+    tokenizer_class = EmformerTokenizer
     test_rust_tokenizer = False
     test_sentencepiece = True
     test_sentencepiece_ignore_case = True
@@ -38,13 +38,13 @@ class EmformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
 
-        tokenizer = BertGenerationTokenizer(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer = EmformerTokenizer(SAMPLE_VOCAB, keep_accents=True)
         tokenizer.save_pretrained(self.tmpdirname)
 
     def test_convert_token_and_id(self):
         """Test ``_convert_token_to_id`` and ``_convert_id_to_token``."""
-        token = "<s>"
-        token_id = 1
+        token = "<unk>"
+        token_id = 0
 
         self.assertEqual(self.get_tokenizer()._convert_token_to_id(token), token_id)
         self.assertEqual(self.get_tokenizer()._convert_id_to_token(token_id), token)
@@ -55,13 +55,17 @@ class EmformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(vocab_keys[0], "<unk>")
         self.assertEqual(vocab_keys[1], "<s>")
         self.assertEqual(vocab_keys[-1], "<pad>")
-        self.assertEqual(len(vocab_keys), 1_002)
+        self.assertEqual(len(vocab_keys), 1_001)
 
     def test_vocab_size(self):
         self.assertEqual(self.get_tokenizer().vocab_size, 1_000)
 
+    def test_pretrained_model_lists(self):
+        # EmformerModel has no max model length => no testing
+        pass
+
     def test_full_tokenizer(self):
-        tokenizer = BertGenerationTokenizer(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer = EmformerTokenizer(SAMPLE_VOCAB, keep_accents=True)
 
         tokens = tokenizer.tokenize("This is a test")
         self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
@@ -134,7 +138,7 @@ class EmformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @cached_property
     def big_tokenizer(self):
-        return BertGenerationTokenizer.from_pretrained("anton-l/emformer-base-librispeech")
+        return EmformerTokenizer.from_pretrained("anton-l/emformer-base-librispeech")
 
     @slow
     def test_tokenization_base_easy_symbols(self):
@@ -153,30 +157,6 @@ class EmformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
         self.assertListEqual(original_tokenizer_encodings, self.big_tokenizer.encode(symbols))
-
-    @require_torch
-    @slow
-    def test_torch_encode_plus_sent_to_model(self):
-        import torch
-
-        from transformers import BertGenerationConfig, BertGenerationEncoder
-
-        # Build sequence
-        first_ten_tokens = list(self.big_tokenizer.get_vocab().keys())[:10]
-        sequence = " ".join(first_ten_tokens)
-        encoded_sequence = self.big_tokenizer.encode_plus(sequence, return_tensors="pt", return_token_type_ids=False)
-        batch_encoded_sequence = self.big_tokenizer.batch_encode_plus(
-            [sequence + " " + sequence], return_tensors="pt", return_token_type_ids=False
-        )
-
-        config = BertGenerationConfig()
-        model = BertGenerationEncoder(config)
-
-        assert model.get_input_embeddings().weight.shape[0] >= self.big_tokenizer.vocab_size
-
-        with torch.no_grad():
-            model(**encoded_sequence)
-            model(**batch_encoded_sequence)
 
     @slow
     def test_tokenizer_integration(self):
