@@ -21,7 +21,9 @@ from typing import Dict, List, Optional, Union
 
 import numpy as np
 import torch
+
 from ...file_utils import is_torchaudio_available
+
 
 if is_torchaudio_available():
     from torchaudio.transforms import MelSpectrogram

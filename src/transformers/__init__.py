@@ -2723,11 +2723,7 @@ if TYPE_CHECKING:
     )
     from .models.dpt import DPT_PRETRAINED_CONFIG_ARCHIVE_MAP, DPTConfig
     from .models.electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraTokenizer
-    from .models.emformer import (
-        EMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        EmformerConfig,
-        EmformerTokenizer,
-    )
+    from .models.emformer import EMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, EmformerConfig, EmformerTokenizer
     from .models.encoder_decoder import EncoderDecoderConfig
     from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
     from .models.flava import (
