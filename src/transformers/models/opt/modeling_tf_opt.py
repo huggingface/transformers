@@ -308,11 +308,11 @@ class TFOPTDecoderLayer(tf.keras.layers.Layer):
         """
         Args:
             hidden_states (`tf.Tensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
-            attention_mask (`tf.Tensor`): attention mask of size
+            attention_mask (`tf.Tensor`, *optional*): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            layer_head_mask (`tf.Tensor`): mask for attention heads in a given layer of size
+            layer_head_mask (`tf.Tensor`, *optional*): mask for attention heads in a given layer of size
                 `(decoder_attention_heads,)`
-            past_key_value (`Tuple(tf.Tensor)`): cached past key and value projection states
+            past_key_value (`Tuple(tf.Tensor)`, *optional*): cached past key and value projection states
             training (`bool`, *optional*, defaults to `False`):
                 Whether or not to use the model in training mode (some modules like dropout modules have different
                 behaviors between training and evaluation).
@@ -655,7 +655,6 @@ class TFOPTDecoder(tf.keras.layers.Layer):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if attention_mask is None:
-            # attention_mask = tf.ones_like(input_ids, dtype=tf.bool)
             attention_mask = tf.ones(inputs_embeds.shape[:2], dtype=tf.bool)
 
         pos_embeds = self.embed_positions(attention_mask, past_key_values_length)
@@ -764,9 +763,6 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
 
         outputs = self.decoder(
             input_ids,
@@ -783,17 +779,6 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
 
         return outputs
 
-    def serving_output(self, output):
-        pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFBaseModelOutputWithPast(
-            last_hidden_state=output.last_hidden_state,
-            past_key_values=pkv,
-            hidden_states=hs,
-            attentions=attns,
-        )
 
 
 @add_start_docstrings(
@@ -846,9 +831,6 @@ class TFOPTModel(TFOPTPreTrainedModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
 
         outputs = self.model(
             input_ids,
@@ -896,7 +878,7 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
     def get_output_embeddings(self):
         return self.model.get_input_embeddings()
 
-    def prepare_inputs_for_generation(self, inputs, past=None, use_cache=None, use_xla=False, **kwargs):
+    def prepare_inputs_for_generation(self, inputs, past=None, use_cache=None, **kwargs):
         attention_mask = kwargs.get("attention_mask", None)
 
         # only last token for inputs_ids if past is defined in kwargs
