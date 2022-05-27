@@ -1137,7 +1137,11 @@ class GenerationMixin:
             eos_token_id = self.config.decoder.eos_token_id
 
         if pad_token_id is None and eos_token_id is not None:
-            # special case if pad_token_id is not defined
+            if model_kwargs.get("attention_mask", None) is None:
+                logger.warning(
+                    "The attention mask and the pad token id were not set. As a consequence, you may observe "
+                    "unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results."
+                )
             logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
             pad_token_id = eos_token_id
 

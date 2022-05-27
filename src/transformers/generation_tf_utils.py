@@ -1293,7 +1293,6 @@ class TFGenerationMixin:
         length_penalty=None,
         no_repeat_ngram_size=None,
         num_return_sequences=None,
-        attention_mask=None,
         decoder_start_token_id=None,
         use_cache=None,
         seed=None,
@@ -1498,8 +1497,14 @@ class TFGenerationMixin:
         )
 
         if pad_token_id is None and eos_token_id is not None:
+            if model_kwargs.get("attention_mask", None) is None:
+                logger.warning(
+                    "The attention mask and the pad token id were not set. As a consequence, you may observe "
+                    "unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results."
+                )
             logger.warning(f"Setting `pad_token_id` to {eos_token_id} (first `eos_token_id`) to generate sequence")
             pad_token_id = eos_token_id
+
         if min_length is not None and min_length > max_length:
             raise ValueError(
                 f"Unfeasable length constraints: the minimum length ({min_length}) is larger than the maximum "
@@ -1518,8 +1523,6 @@ class TFGenerationMixin:
             model_kwargs["output_hidden_states"] = output_hidden_states
         if use_cache is not None:
             model_kwargs["use_cache"] = use_cache
-        if attention_mask is not None:
-            model_kwargs["attention_mask"] = attention_mask
 
         accepts_attention_mask = "attention_mask" in set(inspect.signature(self.call).parameters.keys())
         requires_attention_mask = "encoder_outputs" not in model_kwargs
@@ -1660,19 +1663,15 @@ class TFGenerationMixin:
     ) -> tf.Tensor:
         is_input_ids = len(inputs.shape) == 2 and inputs.dtype in (tf.int32, tf.int64)
         is_pad_token_in_inputs = (pad_token_id is not None) and tf.math.reduce_any(inputs == pad_token_id)
-        # some models, like GPT-2, don't set a pad token, and it gets defaulted to eos_token_id (we don't want to pick
-        # up on those)
         is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or (
             (eos_token_id is not None) and (pad_token_id != eos_token_id)
         )
-        # however, they can also have left-padding (we definitely want to pick up on those)
-        has_trailing_pad_tokens = tf.math.reduce_any(inputs[:, 0] == pad_token_id)
 
         # Check if input is input_ids and padded -> only then is attention_mask defined
         if (
             is_input_ids
             and is_pad_token_in_inputs
-            and (has_trailing_pad_tokens or is_pad_token_not_equal_to_eos_token_id)
+            and is_pad_token_not_equal_to_eos_token_id
         ):
             return tf.cast(tf.math.not_equal(inputs, pad_token_id), dtype=tf.int32)
         else:

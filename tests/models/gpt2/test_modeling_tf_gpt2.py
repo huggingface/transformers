@@ -456,7 +456,7 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
         tokenizer.padding_side = "left"
 
         sentences = ["Today is a beautiful day and", "Yesterday was"]
-        input_ids = tokenizer(sentences, return_tensors="tf", padding=True).input_ids
+        input_ids = tokenizer(sentences, return_tensors="tf", padding=True)
 
         generation_kwargs = {
             "bad_words_ids": [tokenizer("is").input_ids, tokenizer("angry about").input_ids],
@@ -465,7 +465,7 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
             "repetition_penalty": 1.3,
         }
 
-        output_ids = model.generate(input_ids, **generation_kwargs)
+        output_ids = model.generate(**input_ids, **generation_kwargs)
 
         output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
         expected_output_string = [
@@ -483,7 +483,7 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
         tokenizer.padding_side = "left"
 
         sentences = ["Today is a beautiful day and", "Yesterday was"]
-        input_ids = tokenizer(sentences, return_tensors="tf", padding=True).input_ids
+        input_ids = tokenizer(sentences, return_tensors="tf", padding=True)
 
         generation_kwargs = {
             "do_sample": True,
@@ -498,7 +498,7 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
 
         # forces the generation to happen on CPU, to avoid GPU-related quirks
         with tf.device(":/CPU:0"):
-            output_ids = model.generate(input_ids, **generation_kwargs)
+            output_ids = model.generate(**input_ids, **generation_kwargs)
 
         output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
 
@@ -517,7 +517,7 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
         tokenizer.padding_side = "left"
 
         sentences = ["Today is a beautiful day and", "Yesterday was"]
-        input_ids = tokenizer(sentences, return_tensors="tf", padding=True).input_ids
+        input_ids = tokenizer(sentences, return_tensors="tf", padding=True)
 
         generation_kwargs = {
             "bad_words_ids": [tokenizer("is").input_ids, tokenizer("angry about").input_ids],
@@ -526,7 +526,7 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
             "num_beams": 2,
         }
 
-        output_ids = model.generate(input_ids, **generation_kwargs)
+        output_ids = model.generate(**input_ids, **generation_kwargs)
 
         output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
         expected_output_string = [
@@ -555,16 +555,16 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
         )
 
         sentences = ["Today is a beautiful day and"]
-        input_ids = tokenizer(sentences, return_tensors="tf", padding=True).input_ids
+        input_ids = tokenizer(sentences, return_tensors="tf", padding=True)
         # using default length
-        output_ids = model.generate(input_ids, **generation_kwargs)
+        output_ids = model.generate(**input_ids, **generation_kwargs)
         output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
         self.assertEqual(output_strings[0], expected_output_string)
 
         sentences = ["Today is a beautiful day and", "This is a very long input that we absolutely don't care about"]
-        input_ids = tokenizer(sentences, return_tensors="tf", padding=True).input_ids
+        input_ids = tokenizer(sentences, return_tensors="tf", padding=True)
         # longer max length to capture the full length (remember: it is left padded)
-        output_ids = model.generate(input_ids, **generation_kwargs, max_length=27)
+        output_ids = model.generate(**input_ids, **generation_kwargs, max_length=27)
         output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
         self.assertEqual(output_strings[0], expected_output_string)
 
@@ -581,14 +581,14 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
             "The dog was found in a field near the intersection of West and West Streets.\n\nThe",
             "The flying machine is a small, lightweight, and lightweight aircraft that can be used for any type of",
         ]
-        input_ids = tokenizer(sentences, return_tensors="tf", padding=True).input_ids
+        input_ids = tokenizer(sentences, return_tensors="tf", padding=True)
 
-        output_ids = model.generate(input_ids, do_sample=False)
+        output_ids = model.generate(**input_ids, do_sample=False)
         output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
         self.assertListEqual(output_strings, expected_output_strings)
 
         xla_generate = tf.function(model.generate, jit_compile=True)
-        output_ids = xla_generate(input_ids, do_sample=False)
+        output_ids = xla_generate(**input_ids, do_sample=False)
         output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
         self.assertListEqual(output_strings, expected_output_strings)
 
@@ -617,13 +617,13 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
                 "The flying machine is a new and improved system to operate and operate a new system and system "
                 "system system",
             ]
-            input_ids = tokenizer(sentence, return_tensors="tf", padding=True).input_ids
+            input_ids = tokenizer(sentence, return_tensors="tf", padding=True)
 
-            output_ids = model.generate(input_ids, do_sample=True, seed=[7, 0])
+            output_ids = model.generate(**input_ids, do_sample=True, seed=[7, 0])
             output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
             self.assertListEqual(output_strings, expected_output_string)
 
             xla_generate = tf.function(model.generate, jit_compile=True)
-            output_ids = xla_generate(input_ids, do_sample=True, seed=[7, 0])
+            output_ids = xla_generate(**input_ids, do_sample=True, seed=[7, 0])
             output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
             self.assertListEqual(output_strings, expected_output_string_xla)
