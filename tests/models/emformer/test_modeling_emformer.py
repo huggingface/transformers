@@ -14,24 +14,12 @@
 # limitations under the License.
 """ Testing suite for the PyTorch Emformer model. """
 
-import math
 import unittest
 
-import numpy as np
 from datasets import load_dataset
 
 from transformers import EmformerConfig, is_torch_available
-from transformers.testing_utils import (
-    is_pt_flax_cross_test,
-    is_pyctcdecode_available,
-    is_torchaudio_available,
-    require_pyctcdecode,
-    require_soundfile,
-    require_torch,
-    require_torchaudio,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import is_pt_flax_cross_test, require_soundfile, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -46,11 +34,7 @@ from ...test_modeling_common import (
 if is_torch_available():
     import torch
 
-    from transformers import EmformerFeatureExtractor, EmformerForRNNT, EmformerModel, EmformerProcessor
-
-
-if is_torchaudio_available():
-    import torchaudio
+    from transformers import EmformerForRNNT, EmformerModel, EmformerProcessor
 
 
 class EmformerModelTester:
@@ -61,16 +45,17 @@ class EmformerModelTester:
         seq_length=32,  # Mel spectrogram length
         feature_size=80,
         is_training=False,
+        time_reduction_input_dim=4,
         time_reduction_stride=4,
         right_context_length=4,
         segment_length=16,
-        hidden_size=16,
         num_conv_pos_embeddings=16,
         num_conv_pos_embedding_groups=2,
         num_hidden_layers=4,
         num_attention_heads=2,
         hidden_dropout_prob=0.1,
         intermediate_size=20,
+        output_dim=16,
         layer_norm_eps=1e-5,
         hidden_act="gelu",
         initializer_range=0.02,
@@ -83,16 +68,17 @@ class EmformerModelTester:
         self.seq_length = seq_length
         self.feature_size = feature_size
         self.is_training = is_training
+        self.time_reduction_input_dim = time_reduction_input_dim
         self.time_reduction_stride = time_reduction_stride
         self.right_context_length = right_context_length
         self.segment_length = segment_length
-        self.hidden_size = hidden_size
         self.num_conv_pos_embeddings = num_conv_pos_embeddings
         self.num_conv_pos_embedding_groups = num_conv_pos_embedding_groups
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.hidden_dropout_prob = hidden_dropout_prob
         self.intermediate_size = intermediate_size
+        self.output_dim = output_dim
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
@@ -100,11 +86,10 @@ class EmformerModelTester:
         self.blank_token_id = blank_token_id
         self.scope = scope
 
-        self.output_seq_length = self.seq_length // self.time_reduction_stride
-        right_context_length = self.right_context_length // self.time_reduction_stride
-        segment_length = self.segment_length // self.time_reduction_stride
-        num_segments = math.ceil((self.output_seq_length - right_context_length) / segment_length)
-        self.encoder_seq_length = (self.output_seq_length - right_context_length) + (right_context_length * num_segments)
+        self.hidden_size = time_reduction_input_dim * time_reduction_stride
+        right_context_length = right_context_length // time_reduction_stride
+        self.encoder_seq_length = seq_length // time_reduction_stride - right_context_length
+        self.output_seq_length = self.encoder_seq_length
 
     def prepare_config_and_inputs(self):
         input_features = floats_tensor([self.batch_size, self.seq_length, self.feature_size], self.vocab_size)
@@ -117,6 +102,7 @@ class EmformerModelTester:
     def get_config(self):
         return EmformerConfig(
             hidden_size=self.hidden_size,
+            time_reduction_input_dim=self.time_reduction_input_dim,
             time_reduction_stride=self.time_reduction_stride,
             right_context_length=self.right_context_length,
             segment_length=self.segment_length,
@@ -124,11 +110,12 @@ class EmformerModelTester:
             num_attention_heads=self.num_attention_heads,
             hidden_dropout_prob=self.hidden_dropout_prob,
             intermediate_size=self.intermediate_size,
+            output_dim=self.output_dim,
             layer_norm_eps=self.layer_norm_eps,
             hidden_act=self.hidden_act,
             initializer_range=self.initializer_range,
             vocab_size=self.vocab_size,
-            blank_token_id=self.blank_token_id
+            blank_token_id=self.blank_token_id,
         )
 
     def create_and_check_model(self, config, input_features, attention_mask):
@@ -137,7 +124,7 @@ class EmformerModelTester:
         model.eval()
         result = model(input_features, attention_mask=attention_mask)
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.output_seq_length, self.hidden_size)
+            result.last_hidden_state.shape, (self.batch_size, self.output_seq_length, self.output_dim)
         )
 
     def create_and_check_batch_inference(self, config, input_features, *args):
@@ -177,7 +164,7 @@ class EmformerModelTester:
         attention_mask = torch.ones(input_features.shape, device=torch_device, dtype=torch.long)
 
         input_lengths = [input_features.shape[-1] // i for i in [4, 2, 1]]
-        max_length_labels = model._get_feat_extract_output_lengths(torch.tensor(input_lengths))
+        max_length_labels = model._get_time_reduced_output_lengths(torch.tensor(input_lengths))
         labels = ids_tensor((input_features.shape[0], min(max_length_labels) - 1), model.config.vocab_size)
 
         # pad input
@@ -197,7 +184,7 @@ class EmformerModelTester:
         input_features = input_features[:3]
 
         input_lengths = [input_features.shape[-1] // i for i in [4, 2, 1]]
-        max_length_labels = model._get_feat_extract_output_lengths(torch.tensor(input_lengths))
+        max_length_labels = model._get_time_reduced_output_lengths(torch.tensor(input_lengths))
         labels = ids_tensor((input_features.shape[0], max(max_length_labels) - 2), model.config.vocab_size + 100)
 
         with self.parent.assertRaises(ValueError):
@@ -214,6 +201,7 @@ class EmformerModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (EmformerModel, EmformerForRNNT) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
+    test_torchscript = False
 
     def setUp(self):
         self.model_tester = EmformerModelTester(self)
@@ -250,15 +238,14 @@ class EmformerModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @is_pt_flax_cross_test
-    # non-robust architecture does not exist in Flax
+    # not implemented in Flax
     def test_equivalence_flax_to_pt(self):
         pass
 
     @is_pt_flax_cross_test
-    # non-robust architecture does not exist in Flax
+    # not implemented in Flax
     def test_equivalence_pt_to_flax(self):
         pass
-
 
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -266,21 +253,18 @@ class EmformerModelTest(ModelTesterMixin, unittest.TestCase):
         config.output_attentions = True
 
         # no need to test all models as different heads yield the same functionality
-        model_class = self.all_model_classes[0]
+        model_class = self.all_model_classes[1]
         model = model_class(config)
         model.to(torch_device)
-
-        # set layer drop to 0
-        model.config.layerdrop = 0.0
 
         input_features = inputs_dict["input_features"]
 
         input_lengths = torch.tensor(
             [input_features.shape[1] for _ in range(input_features.shape[0])], dtype=torch.long, device=torch_device
         )
-        output_lengths = model._get_feat_extract_output_lengths(input_lengths)
+        output_lengths = model._get_time_reduced_output_lengths(input_lengths)
 
-        labels = ids_tensor((input_values.shape[0], output_lengths[0] - 2), self.model_tester.vocab_size)
+        labels = ids_tensor((input_features.shape[0], output_lengths[0] - 2), self.model_tester.vocab_size)
         inputs_dict["attention_mask"] = torch.ones_like(inputs_dict["attention_mask"])
         inputs_dict["labels"] = labels
 
@@ -295,7 +279,8 @@ class EmformerModelTest(ModelTesterMixin, unittest.TestCase):
         hidden_states.retain_grad()
         attentions.retain_grad()
 
-        output.flatten()[0].backward(retain_graph=True)
+        with torch.autograd.set_detect_anomaly(True):
+            output.flatten()[0].backward(retain_graph=True)
 
         self.assertIsNotNone(hidden_states.grad)
         self.assertIsNotNone(attentions.grad)
@@ -308,17 +293,7 @@ class EmformerModelTest(ModelTesterMixin, unittest.TestCase):
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 uniform_init_parms = [
-                    "conv.weight",
-                    "masked_spec_embed",
-                    "codevectors",
-                    "quantizer.weight_proj.weight",
-                    "project_hid.weight",
-                    "project_hid.bias",
-                    "project_q.weight",
-                    "project_q.bias",
-                    "feature_projection.projection.weight",
-                    "feature_projection.projection.bias",
-                    "objective.weight",
+                    "predictor.embedding.weight",
                 ]
                 if param.requires_grad:
                     if any([x in name for x in uniform_init_parms]):

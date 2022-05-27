@@ -15,42 +15,23 @@
 """ PyTorch Emformer model."""
 
 import math
-import warnings
-from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
-import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...deepspeed import is_deepspeed_zero3_enabled
-from ...modeling_outputs import (
-    BaseModelOutput,
-    CausalLMOutput,
-    MaskedLMOutput,
-    SequenceClassifierOutput,
-    TokenClassifierOutput,
-)
+from ...modeling_outputs import BaseModelOutput, CausalLMOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import torch_int_div
-from ...utils import (
-    ModelOutput,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_emformer import EmformerConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-_HIDDEN_STATES_START_POSITION = 2
+_HIDDEN_STATES_START_POSITION = 1
 
 # General docstring
 _CONFIG_FOR_DOC = "EmformerConfig"
@@ -111,17 +92,6 @@ def _get_activation_module(activation: str) -> torch.nn.Module:
         raise ValueError(f"Unsupported activation {activation}")
 
 
-def _get_weight_init_gains(weight_init_scale_strategy: Optional[str], num_layers: int) -> List[Optional[float]]:
-    if weight_init_scale_strategy is None:
-        return [None for _ in range(num_layers)]
-    elif weight_init_scale_strategy == "depthwise":
-        return [1.0 / math.sqrt(layer_idx + 1) for layer_idx in range(num_layers)]
-    elif weight_init_scale_strategy == "constant":
-        return [1.0 / math.sqrt(2) for layer_idx in range(num_layers)]
-    else:
-        raise ValueError(f"Unsupported weight_init_scale_strategy value {weight_init_scale_strategy}")
-
-
 def _gen_attention_mask_block(
     col_widths: List[int], col_mask: List[bool], num_rows: int, device: torch.device
 ) -> torch.Tensor:
@@ -163,8 +133,6 @@ class EmformerAttention(torch.nn.Module):
         input_dim (int): input dimension.
         num_heads (int): number of attention heads in each Emformer layer.
         dropout (float, optional): dropout probability. (Default: 0.0)
-        weight_init_gain (float or None, optional): scale factor to apply when initializing
-            attention module parameters. (Default: ``None``)
         tanh_on_mem (bool, optional): if ``True``, applies tanh to memory elements. (Default: ``False``)
         negative_inf (float, optional): value to use for negative infinity in attention weights. (Default: -1e8)
     """
@@ -174,7 +142,6 @@ class EmformerAttention(torch.nn.Module):
         input_dim: int,
         num_heads: int,
         dropout: float = 0.0,
-        weight_init_gain: Optional[float] = None,
         tanh_on_mem: bool = False,
         negative_inf: float = -1e8,
     ):
@@ -194,10 +161,6 @@ class EmformerAttention(torch.nn.Module):
         self.emb_to_key_value = torch.nn.Linear(input_dim, 2 * input_dim, bias=True)
         self.emb_to_query = torch.nn.Linear(input_dim, input_dim, bias=True)
         self.out_proj = torch.nn.Linear(input_dim, input_dim, bias=True)
-
-        if weight_init_gain:
-            torch.nn.init.xavier_uniform_(self.emb_to_key_value.weight, gain=weight_init_gain)
-            torch.nn.init.xavier_uniform_(self.emb_to_query.weight, gain=weight_init_gain)
 
     def _gen_key_value(self, input: torch.Tensor, mems: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         T, _, _ = input.shape
@@ -277,14 +240,12 @@ class EmformerAttention(torch.nn.Module):
         # Compute attention probabilities.
         attention_probs = self._gen_attention_probs(attention_weights, attention_mask, padding_mask)
         if output_attentions:
-            # this operation is a bit awkward, but it's required to
-            # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to be reshaped
-            # twice and have to be reused in the following
-            attention_probs_reshaped = attention_probs.view(batch_size, self.num_heads, time_length, time_length)
-            attention_probs = attention_probs_reshaped.view(batch_size * self.num_heads, time_length, time_length)
+            attention_outputs = attention_probs.reshape(batch_size, self.num_heads, time_length, time_length)
+            utterance_start = right_context.size(0)
+            utterance_end = right_context.size(0) + utterance.size(0)
+            attention_outputs = attention_outputs[:, :, utterance_start:utterance_end, utterance_start:utterance_end]
         else:
-            attention_probs_reshaped = None
+            attention_outputs = None
 
         # Compute attention.
         attention = torch.bmm(attention_probs, reshaped_value)
@@ -302,7 +263,7 @@ class EmformerAttention(torch.nn.Module):
         else:
             output_mems = torch.clamp(output_mems, min=-10, max=10)
 
-        return output_right_context, output_mems, key, value, attention_probs_reshaped
+        return output_right_context, output_mems, key, value, attention_outputs
 
     def forward(
         self,
@@ -354,8 +315,6 @@ class EmformerLayer(torch.nn.Module):
             Must be one of ("relu", "gelu", "silu"). (Default: "relu")
         left_context_length (int, optional): length of left context. (Default: 0)
         max_memory_size (int, optional): maximum number of memory elements to use. (Default: 0)
-        weight_init_gain (float or None, optional): scale factor to apply when initializing
-            attention module parameters. (Default: ``None``)
         tanh_on_mem (bool, optional): if ``True``, applies tanh to memory elements. (Default: ``False``)
         negative_inf (float, optional): value to use for negative infinity in attention weights. (Default: -1e8)
     """
@@ -370,7 +329,6 @@ class EmformerLayer(torch.nn.Module):
         activation: str = "relu",
         left_context_length: int = 0,
         max_memory_size: int = 0,
-        weight_init_gain: Optional[float] = None,
         tanh_on_mem: bool = False,
         negative_inf: float = -1e8,
     ):
@@ -380,12 +338,10 @@ class EmformerLayer(torch.nn.Module):
             input_dim=input_dim,
             num_heads=num_heads,
             dropout=dropout,
-            weight_init_gain=weight_init_gain,
             tanh_on_mem=tanh_on_mem,
             negative_inf=negative_inf,
         )
         self.dropout = torch.nn.Dropout(dropout)
-        self.memory_op = torch.nn.AvgPool1d(kernel_size=segment_length, stride=segment_length, ceil_mode=True)
 
         activation_module = _get_activation_module(activation)
         self.pos_ff = torch.nn.Sequential(
@@ -403,40 +359,6 @@ class EmformerLayer(torch.nn.Module):
         self.segment_length = segment_length
         self.max_memory_size = max_memory_size
         self.input_dim = input_dim
-
-        self.use_mem = max_memory_size > 0
-
-    def _init_state(self, batch_size: int, device: Optional[torch.device]) -> List[torch.Tensor]:
-        empty_memory = torch.zeros(self.max_memory_size, batch_size, self.input_dim, device=device)
-        left_context_key = torch.zeros(self.left_context_length, batch_size, self.input_dim, device=device)
-        left_context_val = torch.zeros(self.left_context_length, batch_size, self.input_dim, device=device)
-        past_length = torch.zeros(1, batch_size, dtype=torch.int32, device=device)
-        return [empty_memory, left_context_key, left_context_val, past_length]
-
-    def _unpack_state(self, state: List[torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        past_length = state[3][0][0].item()
-        past_left_context_length = min(self.left_context_length, past_length)
-        past_mem_length = min(self.max_memory_size, math.ceil(past_length / self.segment_length))
-        pre_mems = state[0][self.max_memory_size - past_mem_length :]
-        lc_key = state[1][self.left_context_length - past_left_context_length :]
-        lc_val = state[2][self.left_context_length - past_left_context_length :]
-        return pre_mems, lc_key, lc_val
-
-    def _pack_state(
-        self,
-        next_k: torch.Tensor,
-        next_v: torch.Tensor,
-        update_length: int,
-        mems: torch.Tensor,
-        state: List[torch.Tensor],
-    ) -> List[torch.Tensor]:
-        new_k = torch.cat([state[1], next_k])
-        new_v = torch.cat([state[2], next_v])
-        state[0] = torch.cat([state[0], mems])[-self.max_memory_size :]
-        state[1] = new_k[new_k.shape[0] - self.left_context_length :]
-        state[2] = new_v[new_v.shape[0] - self.left_context_length :]
-        state[3] = state[3] + update_length
-        return state
 
     def _process_attention_output(
         self,
@@ -476,15 +398,12 @@ class EmformerLayer(torch.nn.Module):
         if attention_mask is None:
             raise ValueError("attention_mask must be not None when for_inference is False")
 
-        if self.use_mem:
-            summary = self.memory_op(utterance.permute(1, 2, 0)).permute(2, 0, 1)
-        else:
-            summary = torch.empty(0).to(dtype=utterance.dtype, device=utterance.device)
+        empty_summary = torch.empty(0).to(dtype=utterance.dtype, device=utterance.device)
         rc_output, next_m, attention_probs = self.attention(
             utterance=utterance,
             lengths=lengths,
             right_context=right_context,
-            summary=summary,
+            summary=empty_summary,
             mems=mems,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
@@ -498,7 +417,7 @@ class EmformerLayer(torch.nn.Module):
         right_context: torch.Tensor,
         mems: torch.Tensor,
         attention_mask: torch.Tensor,
-        output_attentions: bool
+        output_attentions: bool,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         r"""Forward pass for training.
 
@@ -528,12 +447,7 @@ class EmformerLayer(torch.nn.Module):
         ) = self._apply_pre_attention_layer_norm(utterance, right_context)
 
         rc_output, output_mems, attention_probs = self._apply_attention_forward(
-            layer_norm_utterance,
-            lengths,
-            layer_norm_right_context,
-            mems,
-            attention_mask,
-            output_attentions
+            layer_norm_utterance, lengths, layer_norm_right_context, mems, attention_mask, output_attentions
         )
         output_utterance, output_right_context = self._apply_post_attention_ffn(rc_output, utterance, right_context)
         return output_utterance, output_right_context, output_mems, attention_probs
@@ -556,8 +470,6 @@ class Emformer(torch.nn.Module):
         left_context_length (int, optional): length of left context. (Default: 0)
         right_context_length (int, optional): length of right context. (Default: 0)
         max_memory_size (int, optional): maximum number of memory elements to use. (Default: 0)
-        weight_init_scale_strategy (str, optional): per-layer weight initialization scaling
-            strategy. Must be one of ("depthwise", "constant", ``None``). (Default: "depthwise")
         tanh_on_mem (bool, optional): if ``True``, applies tanh to memory elements. (Default: ``False``)
         negative_inf (float, optional): value to use for negative infinity in attention weights. (Default: -1e8)
 
@@ -580,20 +492,11 @@ class Emformer(torch.nn.Module):
         left_context_length: int = 0,
         right_context_length: int = 0,
         max_memory_size: int = 0,
-        weight_init_scale_strategy: str = "depthwise",
         tanh_on_mem: bool = False,
         negative_inf: float = -1e8,
     ):
         super().__init__()
 
-        self.use_mem = max_memory_size > 0
-        self.memory_op = torch.nn.AvgPool1d(
-            kernel_size=segment_length,
-            stride=segment_length,
-            ceil_mode=True,
-        )
-
-        weight_init_gains = _get_weight_init_gains(weight_init_scale_strategy, num_layers)
         self.emformer_layers = torch.nn.ModuleList(
             [
                 EmformerLayer(
@@ -605,7 +508,6 @@ class Emformer(torch.nn.Module):
                     activation=activation,
                     left_context_length=left_context_length,
                     max_memory_size=max_memory_size,
-                    weight_init_gain=weight_init_gains[layer_idx],
                     tanh_on_mem=tanh_on_mem,
                     negative_inf=negative_inf,
                 )
@@ -639,29 +541,14 @@ class Emformer(torch.nn.Module):
         seg_end = min((seg_idx + 1) * self.segment_length, utterance_length)
         rc_length = self.right_context_length * num_segs
 
-        if self.use_mem:
-            m_start = max(seg_idx - self.max_memory_size, 0)
-            mem_length = num_segs - 1
-            col_widths = [
-                m_start,  # before memory
-                seg_idx - m_start,  # memory
-                mem_length - seg_idx,  # after memory
-                rc_start,  # before right context
-                rc,  # right context
-                rc_length - rc_end,  # after right context
-                seg_start,  # before query segment
-                seg_end - seg_start,  # query segment
-                utterance_length - seg_end,  # after query segment
-            ]
-        else:
-            col_widths = [
-                rc_start,  # before right context
-                rc,  # right context
-                rc_length - rc_end,  # after right context
-                seg_start,  # before query segment
-                seg_end - seg_start,  # query segment
-                utterance_length - seg_end,  # after query segment
-            ]
+        col_widths = [
+            rc_start,  # before right context
+            rc,  # right context
+            rc_length - rc_end,  # after right context
+            seg_start,  # before query segment
+            seg_end - seg_start,  # query segment
+            utterance_length - seg_end,  # after query segment
+        ]
 
         return col_widths
 
@@ -673,19 +560,11 @@ class Emformer(torch.nn.Module):
         query_mask = []
         summary_mask = []
 
-        if self.use_mem:
-            num_cols = 9
-            # memory, right context, query segment
-            rc_q_cols_mask = [idx in [1, 4, 7] for idx in range(num_cols)]
-            # right context, query segment
-            s_cols_mask = [idx in [4, 7] for idx in range(num_cols)]
-            masks_to_concat = [rc_mask, query_mask, summary_mask]
-        else:
-            num_cols = 6
-            # right context, query segment
-            rc_q_cols_mask = [idx in [1, 4] for idx in range(num_cols)]
-            s_cols_mask = None
-            masks_to_concat = [rc_mask, query_mask]
+        num_cols = 6
+        # right context, query segment
+        rc_q_cols_mask = [idx in [1, 4] for idx in range(num_cols)]
+        s_cols_mask = None
+        masks_to_concat = [rc_mask, query_mask]
 
         for seg_idx in range(num_segs):
             col_widths = self._gen_attention_mask_col_widths(seg_idx, utterance_length)
@@ -724,24 +603,22 @@ class Emformer(torch.nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
-        # TODO: replace with attention_mask
         lengths = attention_mask.sum(-1)
 
         input = hidden_states.permute(1, 0, 2)
         right_context = self._gen_right_context(input)
         utterance = input[: input.size(0) - self.right_context_length]
         attention_mask = self._gen_attention_mask(utterance)
-        mems = (
-            self.memory_op(utterance.permute(1, 2, 0)).permute(2, 0, 1)[:-1]
-            if self.use_mem
-            else torch.empty(0).to(dtype=input.dtype, device=input.device)
-        )
+
+        mems = torch.empty(0).to(dtype=input.dtype, device=input.device)
         hidden_states = utterance
         for layer in self.emformer_layers:
             if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
+                all_hidden_states = all_hidden_states + (hidden_states.permute(1, 0, 2),)
 
-            hidden_states, right_context, mems, attention_probs = layer(hidden_states, lengths, right_context, mems, attention_mask, output_attentions)
+            hidden_states, right_context, mems, attention_probs = layer(
+                hidden_states, lengths, right_context, mems, attention_mask, output_attentions
+            )
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (attention_probs,)
@@ -769,34 +646,31 @@ class EmformerPreTrainedModel(PreTrainedModel):
 
     config_class = EmformerConfig
     base_model_prefix = "emformer"
-    main_input_name = "input_values"
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-    supports_gradient_checkpointing = True
+    main_input_name = "input_features"
+    _keys_to_ignore_on_load_missing = []
+    supports_gradient_checkpointing = False
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        # gumbel softmax requires special init
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
+        elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(module, nn.Conv1d):
-            nn.init.kaiming_normal_(module.weight)
+        # TODO (Anton): implement weight_init_gain for key-value linear layers
 
-            if module.bias is not None:
-                k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
-                nn.init.uniform_(module.bias, a=-k, b=k)
+    def _get_time_reduced_output_lengths(self, input_lengths):
+        output_lengths = input_lengths.div(self.config.time_reduction_stride, rounding_mode="trunc")
+        return output_lengths
 
     def _get_time_reduced_attention_mask(self, feature_vector_length: int, attention_mask: torch.LongTensor):
         # Effectively attention_mask.sum(-1), but not inplace to be able to run
         # in inference mode.
         non_padded_lengths = attention_mask.cumsum(dim=-1)[:, -1]
 
-        output_lengths = non_padded_lengths.div(self.config.time_reduction_stride, rounding_mode="trunc")
+        output_lengths = self._get_time_reduced_output_lengths(non_padded_lengths)
 
         batch_size = attention_mask.shape[0]
 
@@ -894,7 +768,6 @@ class EmformerModel(EmformerPreTrainedModel):
             left_context_length=config.left_context_length,
             right_context_length=config.right_context_length // config.time_reduction_stride,
             max_memory_size=0,
-            weight_init_scale_strategy="depthwise",
             tanh_on_mem=True,
             negative_inf=-1e8,
         )
@@ -981,12 +854,8 @@ class RNNTCustomLSTM(torch.nn.Module):
         super().__init__()
         self.x2g = torch.nn.Linear(input_dim, 4 * hidden_dim, bias=(not layer_norm))
         self.p2g = torch.nn.Linear(hidden_dim, 4 * hidden_dim, bias=False)
-        if layer_norm:
-            self.c_norm = torch.nn.LayerNorm(hidden_dim, eps=layer_norm_epsilon)
-            self.g_norm = torch.nn.LayerNorm(4 * hidden_dim, eps=layer_norm_epsilon)
-        else:
-            self.c_norm = torch.nn.Identity()
-            self.g_norm = torch.nn.Identity()
+        self.c_norm = torch.nn.LayerNorm(hidden_dim, eps=layer_norm_epsilon)
+        self.g_norm = torch.nn.LayerNorm(4 * hidden_dim, eps=layer_norm_epsilon)
 
         self.hidden_dim = hidden_dim
 
@@ -1144,8 +1013,7 @@ class EmformerForRNNT(EmformerPreTrainedModel):
 
         self.blank_token_id = config.blank_token_id
         self.pad_token_id = config.pad_token_id
-        # TODO: parameterize
-        self.max_output_length = 256
+        self.max_output_length = config.max_output_length
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1155,9 +1023,10 @@ class EmformerForRNNT(EmformerPreTrainedModel):
         joined_out = torch.nn.functional.log_softmax(joined_out, dim=3)
         return joined_out[:, 0, 0]
 
-    def _greedy_decode(self, encoder_out, encoder_lengths, device):
+    def _greedy_decode(self, encoder_out, encoder_lengths):
         past_rnn_state = None
         batch_size = encoder_out.shape[0]
+        device = encoder_out.device
 
         logits = [[] for _ in range(batch_size)]
 
@@ -1211,7 +1080,10 @@ class EmformerForRNNT(EmformerPreTrainedModel):
 
                     n_decoded_tokens += 1
         for batch_idx, seq_logits in enumerate(logits):
-            logits[batch_idx] = torch.stack(seq_logits, dim=-2)
+            if len(seq_logits) > 0:
+                logits[batch_idx] = torch.stack(seq_logits, dim=-2)
+            else:
+                logits[batch_idx] = torch.tensor([], device=device)
 
         return logits
 
@@ -1260,10 +1132,14 @@ class EmformerForRNNT(EmformerPreTrainedModel):
 
         attention_mask = self._get_time_reduced_attention_mask(input_features.shape[1], attention_mask)
 
-        logits = self._greedy_decode(encoded_frames, attention_mask.sum(-1), encoded_frames.device)
+        logits = self._greedy_decode(encoded_frames, attention_mask.sum(-1))
         logits = nn.utils.rnn.pad_sequence(logits, batch_first=True, padding_value=self.pad_token_id)
 
-        # TODO: support RNN-T loss
+        if labels is not None:
+            if labels.max() >= self.config.vocab_size:
+                raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
+
+        # TODO (Anton): support RNN-T loss
         loss = None
         if not return_dict:
             output = (logits,) + encoder_outputs[_HIDDEN_STATES_START_POSITION:]

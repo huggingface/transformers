@@ -16,7 +16,6 @@
 Feature extractor class for Emformer
 """
 
-import json
 import math
 from typing import Dict, List, Optional, Union
 

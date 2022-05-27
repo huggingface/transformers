@@ -227,6 +227,7 @@ class EmformerConfig(PretrainedConfig):
         lstm_layer_norm_epsilon=1e-3,
         lstm_dropout=0.3,
         joiner_activation="relu",
+        max_output_length=128,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -261,6 +262,7 @@ class EmformerConfig(PretrainedConfig):
 
         self.blank_token_id = blank_token_id
         self.pad_token_id = pad_token_id
+        self.max_output_length = max_output_length
 
     @property
     def inputs_to_logits_ratio(self):

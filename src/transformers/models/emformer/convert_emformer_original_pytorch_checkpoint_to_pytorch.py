@@ -16,8 +16,6 @@
 
 
 import argparse
-import json
-import os
 
 import torch
 import torchaudio
@@ -182,13 +180,12 @@ def convert_emformer_checkpoint(model_name: str, model_output_dir: str):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    # TODO: remove defaults
     parser.add_argument(
         "--model_name", default="base_librispeech", type=str, help="Path to the Emformer source model name"
     )
     parser.add_argument(
         "--model_output_dir",
-        default="/home/anton/repos/transformers/src/transformers/models/emformer/emformer-base-librispeech",
+        default=None,
         type=str,
         help="Path to the output PyTorch model.",
     )

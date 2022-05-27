@@ -57,6 +57,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("dpr", "DPRQuestionEncoder"),
         ("dpt", "DPTModel"),
         ("electra", "ElectraModel"),
+        ("emformer", "EmformerModel"),
         ("flaubert", "FlaubertModel"),
         ("flava", "FlavaModel"),
         ("fnet", "FNetModel"),
