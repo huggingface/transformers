@@ -185,7 +185,7 @@ class TFAttention(tf.keras.layers.Layer):
         key = self.split_heads(key)
         value = self.split_heads(value)
         if layer_past is not None:
-            past_key, past_value = tf.unstack(layer_past, axis=0)
+            past_key, past_value = tf.unstack(layer_past, num=2, axis=0)
             key = tf.concat([past_key, key], axis=-2)
             value = tf.concat([past_value, value], axis=-2)
 
@@ -838,24 +838,21 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
             "token_type_ids": token_type_ids,
         }
 
-    def _update_model_kwargs_for_xla_generation(self, outputs, model_kwargs, current_pos, max_length):
+    def _update_model_kwargs_for_xla_generation(self, outputs, model_kwargs, cur_len, max_length):
         # TODO(Pvp, Joao, Matt) - this function can be cleaned a bit and refactored
         # quite some duplicated code patterns it seems
         # also the `attention_mask` is currently used in a somewhat hacky to
         # correctly influence the `past_key_values` - not sure if this is the way to go
         # Let's keep that for a future PR.
         past = outputs.past_key_values
-        is_past_initialized = model_kwargs.pop("past", None) is not None
         attention_mask = model_kwargs.pop("attention_mask")
-        batch_size = attention_mask.shape[0]
+        # is_past_initialized = model_kwargs.pop("past", None) is not None
 
-        if not is_past_initialized:
-            # past[0].shape[3] is seq_length of prompt
-            num_padding_values = max_length - past[0].shape[3] - 1
+        batch_size = tf.shape(attention_mask)[0]
 
-            padding_values = np.zeros((5, 2), dtype=np.int32)
-            padding_values[3, 1] = num_padding_values
-            padding_values = tf.constant(padding_values)
+        def init_variables(past, attention_mask):
+            num_padding_values = max_length - cur_len
+            padding_values = tf.scatter_nd(indices=[[3, 1]], updates=[num_padding_values], shape=(5, 2))
 
             new_past = list(past)
             for i in range(len(past)):
@@ -870,12 +867,14 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
                 ],
                 axis=1,
             )
-        else:
+            return new_past, attention_mask
+
+        def update_variables(past, attention_mask):
             new_past = [None for _ in range(len(past))]
             slice_start_base = tf.constant([0, 0, 0, 1, 0])
             attention_mask_update_slice = tf.ones((batch_size, 1), dtype=attention_mask.dtype)
             # correct 5 here
-            new_past_index = current_pos - 1
+            new_past_index = cur_len - 1
 
             for i in range(len(past)):
                 update_slice = past[i][:, :, :, -1:]
@@ -887,6 +886,14 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
 
             update_start = tf.constant([0, 1], dtype=tf.int32) * new_past_index
             attention_mask = dynamic_update_slice(attention_mask, attention_mask_update_slice, update_start)
+            return new_past, attention_mask
+
+        # if the received past is not padded, then we need to initialize the past variable that is passed in the loops
+        new_past, attention_mask = tf.cond(
+            tf.shape(attention_mask)[1] < max_length,
+            lambda: init_variables(past, attention_mask),
+            lambda: update_variables(past, attention_mask),
+        )
 
         # set `attention_mask` and `past`
         model_kwargs["attention_mask"] = attention_mask

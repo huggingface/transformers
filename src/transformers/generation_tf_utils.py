@@ -2520,11 +2520,13 @@ class TFGenerationMixin:
             # ignore scalars (e.g. cache index)
             if tf.rank(tensor) == 0:
                 return tensor
+            tensor_shape = tf.shape(tensor)
             return tf.reshape(
                 tensor,
-                tensor.shape[:batch_axis]
-                + [tensor.shape[batch_axis] * tensor.shape[batch_axis + 1]]
-                + tensor.shape[batch_axis + 2 :],
+                tf.concat(
+                    (tensor_shape[:batch_axis], [tensor_shape[batch_axis] * tensor_shape[batch_axis + 1]], tensor_shape[batch_axis + 2 :]),
+                    axis=0
+                )
             )
 
         def unflatten_beam_dim(tensor, batch_size, num_beams, batch_axis=0):
@@ -2532,8 +2534,9 @@ class TFGenerationMixin:
             # ignore scalars (e.g. cache index)
             if tf.rank(tensor) == 0:
                 return tensor
+            tensor_shape = tf.shape(tensor)
             return tf.reshape(
-                tensor, tensor.shape[:batch_axis] + [batch_size, num_beams] + tensor.shape[batch_axis + 1 :]
+                tensor, tf.concat((tensor_shape[:batch_axis], [batch_size, num_beams], tensor_shape[batch_axis + 1 :]), axis=0)
             )
 
         def gather_beams(nested, beam_indices, batch_axis=0):
@@ -2546,17 +2549,13 @@ class TFGenerationMixin:
                 else:
                     if batch_axis > 0:
                         # pushes all dimentions before the batch to the end, so we get (batch, beam_id, ...)
-                        perm = [axis for axis in range(tf.rank(tensor)) if axis >= batch_axis] + list(
-                            range(batch_axis)
-                        )
+                        perm = tf.concat((tf.range(tf.rank(tensor))[batch_axis:], tf.range(batch_axis)), axis=0)
                         tensor = tf.transpose(tensor, perm=perm)
 
                     gathered_tensor = tf.gather(params=tensor, indices=beam_indices, axis=1, batch_dims=1)
                     if batch_axis > 0:
                         # transposes back to the original dimensions
-                        perm = [axis for axis in range(tf.rank(tensor)) if axis >= batch_axis] + list(
-                            range(batch_axis)
-                        )
+                        perm = tf.concat((tf.range(tf.rank(tensor))[batch_axis:], tf.range(batch_axis)), axis=0)
                         perm = tf.math.invert_permutation(perm)
                         gathered_tensor = tf.transpose(gathered_tensor, perm=perm)
 
@@ -2640,9 +2639,8 @@ class TFGenerationMixin:
         is_sent_finished = tf.zeros((batch_size, num_beams), dtype=tf.bool)
 
         # per batch, beam-item score, logprobs
-        running_scores = tf.tile(
-            tf.expand_dims(tf.convert_to_tensor([0.0] + [-1.0e9] * (num_beams - 1)), axis=0), [batch_size, 1]
-        )
+        running_scores = tf.concat((tf.zeros((batch_size, 1)), tf.ones((batch_size, num_beams - 1))), axis=1)
+        running_scores = tf.cast(running_scores, dtype=tf.float32) * -1.0e9
         scores = tf.ones((batch_size, num_beams)) * -1.0e9
 
         # flatten beam dim
@@ -2745,8 +2743,8 @@ class TFGenerationMixin:
             )
             log_probs = unflatten_beam_dim(log_probs, batch_size, num_beams)
             log_probs = log_probs + tf.expand_dims(running_scores, axis=2)
-            vocab_size = log_probs.shape[2]
-            log_probs = tf.reshape(log_probs, (batch_size, num_beams * vocab_size))
+            vocab_size = tf.shape(log_probs)[2]
+            log_probs = tf.reshape(log_probs, (-1, num_beams * vocab_size))
 
             # 3. Retrieve top-K
             # Each item in batch has num_beams * vocab_size candidate sequences. For each item, get the top 2*k
@@ -2800,7 +2798,7 @@ class TFGenerationMixin:
             # - add length penalty
             # - make sure no scores can be added anymore if beam is full
             # - make sure still running sequences cannot be chosen as finalized beam
-            topk_log_probs = topk_log_probs / (cur_len**length_penalty)
+            topk_log_probs = topk_log_probs / (tf.cast(cur_len, dtype=tf.float32)**length_penalty)
             beams_in_batch_are_full = (
                 tf.broadcast_to(
                     tf.math.reduce_all(is_sent_finished, axis=-1, keepdims=True), did_topk_just_finished.shape
@@ -2836,6 +2834,7 @@ class TFGenerationMixin:
                     lambda tensor: flatten_beam_dim(tensor, batch_axis=cache_batch_axis), next_cache
                 )
 
+            next_input_ids_length = 1
             if use_xla:
                 next_model_kwargs = self._update_model_kwargs_for_xla_generation(
                     model_outputs, model_kwargs, cur_len, max_length
@@ -2850,8 +2849,6 @@ class TFGenerationMixin:
                     next_input_ids_length = cur_len + 1
                     # let's throw out `past` since we don't want `None` tensors
                     model_kwargs.pop("past", None)
-                else:
-                    next_input_ids_length = 1
 
             # 9. Prepare the `tf.TensorArray` for the next iteration
             next_sequences = sequences.unstack(tf.transpose(next_sequences_seq_last, perm=[2, 0, 1]))
