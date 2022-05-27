@@ -1293,7 +1293,6 @@ class TFGenerationMixin:
         length_penalty=None,
         no_repeat_ngram_size=None,
         num_return_sequences=None,
-        attention_mask=None,
         decoder_start_token_id=None,
         use_cache=None,
         seed=None,
@@ -1524,8 +1523,6 @@ class TFGenerationMixin:
             model_kwargs["output_hidden_states"] = output_hidden_states
         if use_cache is not None:
             model_kwargs["use_cache"] = use_cache
-        if attention_mask is not None:
-            model_kwargs["attention_mask"] = attention_mask
 
         accepts_attention_mask = "attention_mask" in set(inspect.signature(self.call).parameters.keys())
         requires_attention_mask = "encoder_outputs" not in model_kwargs
@@ -1666,11 +1663,10 @@ class TFGenerationMixin:
     ) -> tf.Tensor:
         is_input_ids = len(inputs.shape) == 2 and inputs.dtype in (tf.int32, tf.int64)
         is_pad_token_in_inputs = (pad_token_id is not None) and tf.math.reduce_any(inputs == pad_token_id)
-        # some models, like GPT-2, don't set a pad token, and it gets defaulted to eos_token_id (we don't want to pick
-        # up on those)
         is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or (
             (eos_token_id is not None) and (pad_token_id != eos_token_id)
         )
+
         # Check if input is input_ids and padded -> only then is attention_mask defined
         if (
             is_input_ids
