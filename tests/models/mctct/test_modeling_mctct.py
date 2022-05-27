@@ -606,16 +606,17 @@ class MCTCTModelIntegrationTest(unittest.TestCase):
         inputs = processor(input_speech, return_tensors="pt", padding=True)
 
         input_features = inputs.input_features.to(torch_device)
+        attention_mask = inputs.attention_mask.to(torch_device)
 
         with torch.no_grad():
-            logits = model(input_features).logits
+            logits = model(input_features, attention_mask=attention_mask).logits
 
         predicted_ids = torch.argmax(logits, dim=-1)
         predicted_trans = processor.batch_decode(predicted_ids)
 
         EXPECTED_TRANSCRIPTIONS = [
             "a man said to the universe, sir, i exist.",
-            '"|sweat-covered brion\'s body, trickling into the tight-lowing clossa was the only germent huor."| "|',
+            '"|sweat-covered brion\'s body, trickling into the tight-lowing clossa was the only germent huor."|',
         ]
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
 
