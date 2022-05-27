@@ -216,6 +216,8 @@
       title: DPT
     - local: model_doc/electra
       title: ELECTRA
+    - local: model_doc/emformer
+      title: Emformer
     - local: model_doc/encoder-decoder
       title: Encoder Decoder Models
     - local: model_doc/flaubert
