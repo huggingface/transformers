@@ -501,7 +501,12 @@ def main():
 
         with training_args.main_process_first():
             if training_args.overwrite_output_dir and os.path.isfile(vocab_file):
-                os.remove(vocab_file)
+                try:
+                    os.remove(vocab_file)
+                except OSError:
+                    # in shared file-systems it might be the case that
+                    # two processes try to delete the vocab file at the some time
+                    pass
 
         with training_args.main_process_first(desc="dataset map vocabulary creation"):
             if not os.path.isfile(vocab_file):

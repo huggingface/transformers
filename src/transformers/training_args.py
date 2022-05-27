@@ -450,6 +450,9 @@ class TrainingArguments:
         full_determinism (`bool`, *optional*, defaults to `False`)
             If `True`, [`enable_full_determinism`] is called instead of [`set_seed`] to ensure reproducible results in
             distributed training
+        torchdynamo (`str`, *optional*):
+            The token that is used to set the backend compiler for TorchDynamo. Possible choices are ["eager",
+            "nvfuser]. This is an experimental API and subject to change.
     """
 
     output_dir: str = field(
@@ -879,6 +882,20 @@ class TrainingArguments:
                 "Whether to call enable_full_determinism instead of set_seed for reproducibility in distributed"
                 " training"
             )
+        },
+    )
+    torchdynamo: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Sets up the backend compiler for TorchDynamo. TorchDynamo is a Python level JIT compiler designed to"
+                " make unmodified PyTorch programs faster. TorchDynamo dynamically modifies the Python bytecode right"
+                " before its executed. It rewrites Python bytecode to extract sequences of PyTorch operations"
+                " and lifts them up into Fx graph. We can then pass these Fx graphs to other backend compilers. There"
+                " are two options - eager and nvfuser. Eager defaults to pytorch eager and is useful for debugging."
+                " nvfuser path uses AOT Autograd and nvfuser compiler to optimize the models."
+            ),
+            "choices": ["eager", "nvfuser"],
         },
     )
 
