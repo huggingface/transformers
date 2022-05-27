@@ -495,6 +495,9 @@ def main():
     # Instantiate metric
     metric = load_metric("mean_iou")
 
+    # We need to initialize the trackers we use, and also store our configuration.
+    # We initialize the trackers only on main process because `accelerator.log`
+    # only logs on main process and we don't want empty logs/runs on other processes.
     if args.with_tracking:
         if accelerator.is_main_process:
             experiment_config = vars(args)
