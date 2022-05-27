@@ -277,9 +277,11 @@ class FlaxTransformerBlock(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        assert (
-            self.config.dim % self.config.n_heads == 0
-        ), f"Hidden size {self.config.dim} not dividable by number of heads {self.config.n_heads}"
+        if self.config.dim % self.config.n_heads != 0:
+            raise ValueError(
+                f"Expected `n_heads` to divide `dim`, but is n_heads={self.config.n_heads} "
+                f"and dim={self.config.dim}."
+            )
 
         self.attention = FlaxMultiHeadSelfAttention(self.config, dtype=self.dtype)
         self.sa_layer_norm = nn.LayerNorm(epsilon=1e-12, dtype=self.dtype)
@@ -306,7 +308,9 @@ class FlaxTransformerBlock(nn.Module):
         if output_attentions:
             sa_output, sa_weights = sa_output
         else:
-            assert type(sa_output) == tuple
+            if type(sa_output) != tuple:
+                raise TypeError(f'Expected sa_output to be a tuple, but is {type(sa_output)}.')
+
             sa_output = sa_output[0]
         sa_output = self.sa_layer_norm(sa_output + hidden_states)
 
@@ -353,11 +357,17 @@ class FlaxTransformer(nn.Module):
             hidden_states = layer_outputs[-1]
 
             if output_attentions:
-                assert len(layer_outputs) == 2
+                if len(layer_outputs) != 2:
+                    raise AssertionError(
+                        f'If `output_atttentions` is True, `len(layer_outputs)` should be equal to 2, but is {len(layer_outputs)}.'
+                    )
                 attentions = layer_outputs[0]
                 all_attentions = all_attentions + (attentions,)
             else:
-                assert len(layer_outputs) == 1
+                if len(layer_outputs) != 1:
+                    raise AssertionError(
+                        f'If `output_atttentions` is False, `len(layer_outputs)` should be equal to 1, but is {len(layer_outputs)}.'
+                    )
 
         # Add last layer
         if output_hidden_states:

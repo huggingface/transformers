@@ -358,12 +358,16 @@ class Transformer(nn.Module):
 
             if output_attentions:
                 if len(layer_outputs) != 2:
-                    raise Value
-                assert len(layer_outputs) == 2
+                    raise AssertionError(
+                        f'If `output_atttentions` is True, `len(layer_outputs)` should be equal to 2, but is {len(layer_outputs)}.'
+                    )
                 attentions = layer_outputs[0]
                 all_attentions = all_attentions + (attentions,)
             else:
-                assert len(layer_outputs) == 1
+                if len(layer_outputs) != 1:
+                    raise AssertionError(
+                        f'If `output_atttentions` is False, `len(layer_outputs)` should be equal to 1, but is {len(layer_outputs)}.'
+                    )
 
         # Add last layer
         if output_hidden_states:
@@ -819,7 +823,10 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
 
         self.distilbert = DistilBertModel(config)
         self.qa_outputs = nn.Linear(config.dim, config.num_labels)
-        assert config.num_labels == 2
+
+        if config.num_labels != 2:
+            raise ValueError(f"`config.num_labels` must be 2, but is {config.num_labels}.")
+        
         self.dropout = nn.Dropout(config.qa_dropout)
 
         # Initialize weights and apply final processing
