@@ -205,7 +205,6 @@ class VisualBertModelTester:
             "visual_attention_mask": visual_attention_mask,
             "labels": labels,
         }
-        
 
     def prepare_config_and_inputs_for_vqa(self):
         vqa_labels = None
