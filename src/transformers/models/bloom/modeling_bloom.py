@@ -232,8 +232,7 @@ class BloomScaledSoftmax(nn.Module):
             raise ValueError("softmax should be in fp32 when scaled")
 
     def forward(self, input, mask, max_positions):
-        input_dtype = input.dtype
-        input_in_float16 = (input_dtype == torch.float16) or (input_dtype == torch.bfloat16)
+        input_in_float16 = input.dtype in [torch.float16, torch.bfloat16]
 
         if input_in_float16 and self.softmax_in_fp32:
             input = input.float()
@@ -252,10 +251,7 @@ class BloomScaledSoftmax(nn.Module):
             probs = torch.nn.Softmax(dim=-1)(input)
 
         if input_in_float16 and self.softmax_in_fp32:
-            if input_dtype == torch.float16:
-                probs = probs.half()
-            else:
-                probs = probs.bfloat16()
+            probs = probs.to(dtype=input.dtype)
 
         return probs
 
@@ -433,11 +429,8 @@ class BloomMLP(nn.Module):
         hidden_size = config.hidden_size
 
         self.pretraining_tp = config.pretraining_tp
-
-        self.dense_h_to_4h = nn.Linear(hidden_size, 4 * hidden_size)
-
         self.activation_func = bias_gelu_impl
-
+        self.dense_h_to_4h = nn.Linear(hidden_size, 4 * hidden_size)
         self.dense_4h_to_h = nn.Linear(4 * hidden_size, hidden_size)
 
     def forward(self, hidden_states):
@@ -694,7 +687,6 @@ class BloomModel(BloomPreTrainedModel):
         # Final Layer Norm
         self.ln_f = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
-        # Model parallel
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
