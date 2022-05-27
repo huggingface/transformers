@@ -155,7 +155,6 @@ def pre_process_alibi_for_pad(alibi, attention_mask, num_heads):
 
     # Clone the embeddings  - we can detach because the embeddings are not learned
     # Get a refence tensor
-    new_alibi = torch.clone(alibi.detach())
     slice_reference_alibi = build_alibi_tensor(alibi.shape[-1], num_heads, alibi.dtype)
 
     # Loop over the batch where the padding is and replace the alibi tensor by the reference tensor
@@ -166,8 +165,8 @@ def pre_process_alibi_for_pad(alibi, attention_mask, num_heads):
         index_shift = index_y1[index_x1 == index]
         shift_value = len(index_shift)
         slice_to_modify[:, :, index_shift] = slice_reference_alibi[:, :, :shift_value]
-        new_alibi[index * num_heads : (index + 1) * num_heads] = slice_to_modify
-    return new_alibi
+        alibi[index * num_heads : (index + 1) * num_heads] = slice_to_modify
+    return alibi
 
 
 def bias_dropout_add(x, bias, residual, prob, training):
@@ -232,9 +231,9 @@ class BloomScaledSoftmax(nn.Module):
             raise ValueError("softmax should be in fp32 when scaled")
 
     def forward(self, input, mask, max_positions):
-        input_in_float16 = input.dtype in [torch.float16, torch.bfloat16]
+        input_in_16bit = input.dtype in [torch.float16, torch.bfloat16]
 
-        if input_in_float16 and self.softmax_in_fp32:
+        if input_in_16bit and self.softmax_in_fp32:
             input = input.float()
 
         if self.scale is not None:
@@ -250,7 +249,7 @@ class BloomScaledSoftmax(nn.Module):
         else:
             probs = torch.nn.Softmax(dim=-1)(input)
 
-        if input_in_float16 and self.softmax_in_fp32:
+        if input_in_16bit and self.softmax_in_fp32:
             probs = probs.to(dtype=input.dtype)
 
         return probs
