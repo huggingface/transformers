@@ -1046,7 +1046,7 @@ class EmformerForRNNT(EmformerPreTrainedModel):
 
             blank_mask *= False
             time_mask = time_idx >= encoder_lengths
-            blank_mask.bitwise_or_(time_mask)
+            blank_mask = torch.bitwise_or(blank_mask, time_mask)
 
             while not_blank and (self.max_output_length is None or n_decoded_tokens < self.max_output_length):
                 rnn_out, current_rnn_state = self.predictor(last_label, past_rnn_state)
@@ -1054,7 +1054,7 @@ class EmformerForRNNT(EmformerPreTrainedModel):
                 next_token_id = next_token_logits.argmax(-1)
 
                 token_is_blank = next_token_id == self.blank_token_id
-                blank_mask.bitwise_or_(token_is_blank)
+                blank_mask = torch.bitwise_or(blank_mask, token_is_blank)
 
                 if blank_mask.all():
                     not_blank = False

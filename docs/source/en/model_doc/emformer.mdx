@@ -14,36 +14,30 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The Emformer model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The Emformer model was proposed in [Emformer: Efficient Memory Transformer Based Acoustic Model For Low Latency
+Streaming Speech Recognition](https://arxiv.org/abs/2010.10759) by Yangyang Shi, Yongqiang Wang, Chunyang Wu,
+Ching-Feng Yeh, Julian Chan, Frank Zhang, Duc Le, Mike Seltzer.
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+This paper proposes an efficient memory transformer Emformer for low latency streaming speech recognition. In Emformer,
+the long-range history context is distilled into an augmented memory bank to reduce self-attention's computation
+complexity. A cache mechanism saves the computation for the key and value in self-attention for the left context.
+Emformer applies a parallelized block processing in training to support low latency models. We carry out experiments
+on benchmark LibriSpeech data. Under average latency of 960 ms, Emformer gets WER 2.50% on test-clean and 5.62% on
+test-other. Comparing with a strong baseline augmented memory transformer (AM-TRF), Emformer gets 4.6 folds training
+speedup and 18% relative real-time factor (RTF) reduction in decoding with relative WER reduction 17% on test-clean
+and 9% on test-other. For a low latency scenario with an average latency of 80 ms, Emformer achieves WER 3.01% on
+test-clean and 7.09% on test-other. Comparing with the LSTM baseline with the same latency and model size, Emformer
+gets relative WER reduction 9% and 16% on test-clean and test-other, respectively.
 
-Tips:
-
-<INSERT TIPS ABOUT MODEL HERE>
-
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by [@anton-l](https://huggingface.co/anton-l).
+The original code can be found [here](https://github.com/pytorch/audio/blob/main/torchaudio/models/emformer.py).
 
 
 ## EmformerConfig
 
 [[autodoc]] EmformerConfig
-
-## Emformer specific outputs
-
-[[autodoc]] models.emformer_with_lm.processing_emformer_with_lm.EmformerDecoderWithLMOutput
-
-[[autodoc]] models.emformer.modeling_emformer.EmformerBaseModelOutput
-
-[[autodoc]] models.emformer.modeling_emformer.EmformerForPreTrainingOutput
-
-[[autodoc]] models.emformer.modeling_flax_emformer.FlaxEmformerBaseModelOutput
-
-[[autodoc]] models.emformer.modeling_flax_emformer.FlaxEmformerForPreTrainingOutput
 
 ## EmformerModel
 
@@ -53,24 +47,4 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 ## EmformerForRNNT
 
 [[autodoc]] EmformerForRNNT
-    - forward
-
-## EmformerForSequenceClassification
-
-[[autodoc]] EmformerForSequenceClassification
-    - forward
-
-## EmformerForAudioFrameClassification
-
-[[autodoc]] EmformerForAudioFrameClassification
-    - forward
-
-## EmformerForXVector
-
-[[autodoc]] EmformerForXVector
-    - forward
-
-## EmformerForPreTraining
-
-[[autodoc]] EmformerForPreTraining
     - forward
