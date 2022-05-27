@@ -1668,11 +1668,7 @@ class TFGenerationMixin:
         )
 
         # Check if input is input_ids and padded -> only then is attention_mask defined
-        if (
-            is_input_ids
-            and is_pad_token_in_inputs
-            and is_pad_token_not_equal_to_eos_token_id
-        ):
+        if is_input_ids and is_pad_token_in_inputs and is_pad_token_not_equal_to_eos_token_id:
             return tf.cast(tf.math.not_equal(inputs, pad_token_id), dtype=tf.int32)
         else:
             return tf.ones(inputs.shape[:2], dtype=tf.int32)
