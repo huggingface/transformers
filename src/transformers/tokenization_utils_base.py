@@ -723,6 +723,7 @@ class BatchEncoding(UserDict):
                 raise ValueError(
                     "Unable to create tensor, you should probably activate truncation and/or padding "
                     "with 'padding=True' 'truncation=True' to have batched tensors with the same length."
+                    "The shape of inputs may be wrong. Ensure there is no excess nesting on inputs (input_ids, attention_mask, ...)."
                 )
 
         return self
