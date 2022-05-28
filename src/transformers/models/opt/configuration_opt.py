@@ -112,7 +112,7 @@ class OPTConfig(PretrainedConfig):
         init_std=0.02,
         use_cache=True,
         pad_token_id=1,
-        bos_token_id=0,
+        bos_token_id=2,
         eos_token_id=2,
         **kwargs
     ):

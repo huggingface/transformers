@@ -21,9 +21,7 @@ from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_availab
 from ...utils import OptionalDependencyNotAvailable
 
 
-_import_structure = {
-    "configuration_dpt": ["DPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DPTConfig"],
-}
+_import_structure = {"configuration_dpt": ["DPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DPTConfig"]}
 
 try:
     if not is_vision_available():

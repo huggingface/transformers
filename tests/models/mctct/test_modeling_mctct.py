@@ -411,7 +411,7 @@ class MCTCTModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model = MCTCTModel.from_pretrained("cwkeam/mctct-large")
+        model = MCTCTModel.from_pretrained("speechbrain/m-ctc-t-large")
         self.assertIsNotNone(model)
 
 
@@ -562,7 +562,7 @@ class MCTCTRobustModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model = MCTCTModel.from_pretrained("cwkeam/mctct-large")
+        model = MCTCTModel.from_pretrained("speechbrain/m-ctc-t-large")
         self.assertIsNotNone(model)
 
 
@@ -580,9 +580,9 @@ class MCTCTModelIntegrationTest(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     def test_inference_ctc_normal(self):
-        model = MCTCTForCTC.from_pretrained("cwkeam/mctct-large")
+        model = MCTCTForCTC.from_pretrained("speechbrain/m-ctc-t-large")
         model.to(torch_device)
-        processor = MCTCTProcessor.from_pretrained("cwkeam/mctct-large", do_lower_case=True)
+        processor = MCTCTProcessor.from_pretrained("speechbrain/m-ctc-t-large", do_lower_case=True)
         input_speech = self._load_datasamples(1)
 
         input_features = processor(input_speech, return_tensors="pt").input_features.to(torch_device)
@@ -597,31 +597,32 @@ class MCTCTModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
 
     def test_inference_ctc_normal_batched(self):
-        model = MCTCTForCTC.from_pretrained("cwkeam/mctct-large")
+        model = MCTCTForCTC.from_pretrained("speechbrain/m-ctc-t-large")
         model.to(torch_device)
-        processor = MCTCTProcessor.from_pretrained("cwkeam/mctct-large", do_lower_case=True)
+        processor = MCTCTProcessor.from_pretrained("speechbrain/m-ctc-t-large", do_lower_case=True)
 
         input_speech = self._load_datasamples(2)
 
         inputs = processor(input_speech, return_tensors="pt", padding=True)
 
         input_features = inputs.input_features.to(torch_device)
+        attention_mask = inputs.attention_mask.to(torch_device)
 
         with torch.no_grad():
-            logits = model(input_features).logits
+            logits = model(input_features, attention_mask=attention_mask).logits
 
         predicted_ids = torch.argmax(logits, dim=-1)
         predicted_trans = processor.batch_decode(predicted_ids)
 
         EXPECTED_TRANSCRIPTIONS = [
             "a man said to the universe, sir, i exist.",
-            '"|sweat-covered brion\'s body, trickling into the tight-lowing clossa was the only germent huor."| "|',
+            '"|sweat-covered brion\'s body, trickling into the tight-lowing clossa was the only germent huor."|',
         ]
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
 
     def test_inference_ctc_robust_batched(self):
-        model = MCTCTForCTC.from_pretrained("cwkeam/mctct-large").to(torch_device)
-        processor = MCTCTProcessor.from_pretrained("cwkeam/mctct-large", do_lower_case=True)
+        model = MCTCTForCTC.from_pretrained("speechbrain/m-ctc-t-large").to(torch_device)
+        processor = MCTCTProcessor.from_pretrained("speechbrain/m-ctc-t-large", do_lower_case=True)
 
         input_speech = self._load_datasamples(4)
 

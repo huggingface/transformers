@@ -28,9 +28,7 @@ from ...utils import (
 )
 
 
-_import_structure = {
-    "processing_layoutxlm": ["LayoutXLMProcessor"],
-}
+_import_structure = {"processing_layoutxlm": ["LayoutXLMProcessor"]}
 
 try:
     if not is_sentencepiece_available():
