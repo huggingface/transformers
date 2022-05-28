@@ -75,7 +75,7 @@ class TFBartModelTester:
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
 
-    def prepare_config_and_inputs_for_common(self):
+    def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size)
         eos_tensor = tf.expand_dims(tf.constant([self.eos_token_id] * self.batch_size), 1)
         input_ids = tf.concat([input_ids, eos_tensor], axis=1)
@@ -138,6 +138,23 @@ class TFBartModelTester:
         # test that outputs are equal for slice
         tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
 
+    def create_and_check_bart_xla_generate_fast(self, config, input_ids, *args):
+        config.eos_token_id = None
+        config.max_length = 10
+        config.do_sample = False
+        config.num_beams = 1
+        model = TFBartForConditionalGeneration(config=config)
+
+        # make sure there are no pad tokens in prompt
+        input_ids = tf.where(input_ids != config.pad_token_id, input_ids, config.pad_token_id - 1)
+
+        generated = model.generate(input_ids)
+
+        generate_xla = tf.function(model.generate, jit_compile=True)
+        generated_xla = generate_xla(input_ids)
+
+        self.parent.assertListEqual(generated.numpy().tolist(), generated_xla.numpy().tolist())
+
 
 def prepare_bart_inputs_dict(
     config,
@@ -193,11 +210,11 @@ class TFBartModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
         self.config_tester.run_common_tests()
 
     def test_decoder_model_past_large_inputs(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_decoder_model_past_large_inputs(*config_and_inputs)
 
     def test_model_common_attributes(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
 
         for model_class in self.all_model_classes:
             model = model_class(config)
@@ -217,7 +234,7 @@ class TFBartModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
                 assert name is None
 
     def test_resize_token_embeddings(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
 
         def _get_word_embedding_weight(model, embedding_layer):
             if hasattr(embedding_layer, "weight"):
@@ -279,23 +296,13 @@ class TFBartModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
                                 models_equal = False
                     self.assertTrue(models_equal)
 
+    def test_bart_model_xla_generate_fast(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_bart_xla_generate_fast(config, inputs["input_ids"])
+
     def test_saved_model_creation(self):
         # This test is too long (>30sec) and makes fail the CI
         pass
-
-
-def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
-    """If tensors not close, or a and b arent both tensors, raise a nice Assertion error."""
-    if a is None and b is None:
-        return True
-    try:
-        if tf.debugging.assert_near(a, b, atol=atol):
-            return True
-        raise
-    except Exception:
-        if len(prefix) > 0:
-            prefix = f"{prefix}: "
-        raise AssertionError(f"{prefix}{a} != {b}")
 
 
 def _long_tensor(tok_lst):
