@@ -230,9 +230,10 @@ class BloomScaledSoftmax(nn.Module):
         if not (self.scale is None or softmax_in_fp32):
             raise ValueError("softmax should be in fp32 when scaled")
 
-    def forward(self, input, mask, max_positions):
+   def forward(self, input, mask, max_positions):
         input_dtype = input.dtype
         input_in_16bit = input_dtype in [torch.float16, torch.bfloat16]
+        softmax_dtype = torch.float32 if self.softmax_in_fp32 else input_dtype
 
         if self.scale is not None:
             input = input * self.scale
@@ -243,13 +244,9 @@ class BloomScaledSoftmax(nn.Module):
                 1, 1, max_positions, max_positions
             )
             mask_output, padded_causal_mask = self.mask_func(input, mask, causal_mask) if mask is not None else input
-            probs = torch.nn.functional.softmax(
-                mask_output, dim=-1, dtype=torch.float32 if self.softmax_in_fp32 else input_dtype
-            ) * (~padded_causal_mask)
+            probs = nn.functional.softmax(mask_output, dim=-1, dtype=softmax_dtype) * (~padded_causal_mask)
         else:
-            probs = torch.nn.functional.softmax(
-                input, dim=-1, dtype=torch.float32 if self.softmax_in_fp32 else input_dtype
-            )
+            probs = nn.functional.softmax(input, dim=-1, dtype=softmax_dtype)
 
         if input_in_16bit and self.softmax_in_fp32:
             probs = probs.to(dtype=input_dtype)
