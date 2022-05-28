@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pytest
 
 from parameterized import parameterized
-from transformers import AutoConfig, PreTrainedTokenizer, is_tf_available, is_torch_available
+from transformers import AutoConfig, PreTrainedTokenizerBase, is_tf_available, is_torch_available
 from transformers.onnx import (
     EXTERNAL_DATA_FORMAT_SIZE_LIMIT,
     OnnxConfig,
@@ -281,7 +281,7 @@ class OnnxExportTestCaseV2(TestCase):
             preprocessor = preprocessors[0]
 
         # Useful for causal lm models that do not use pad tokens.
-        if isinstance(preprocessor, PreTrainedTokenizer) and not getattr(config, "pad_token_id", None):
+        if isinstance(preprocessor, PreTrainedTokenizerBase) and not getattr(config, "pad_token_id", None):
             config.pad_token_id = preprocessor.eos_token_id
 
         with NamedTemporaryFile("w") as output:
