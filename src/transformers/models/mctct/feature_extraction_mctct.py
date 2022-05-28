@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Feature extractor class for MCTCT
+Feature extractor class for M-CTC-T
 """
 
 from typing import List, Optional, Union

@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Speech processor class for MCTCT
+Speech processor class for M-CTC-T
 """
 from contextlib import contextmanager
 
