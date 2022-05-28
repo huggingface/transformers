@@ -18,7 +18,6 @@ import math
 from typing import Tuple
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss, LayerNorm
@@ -230,7 +229,7 @@ class BloomScaledSoftmax(nn.Module):
         if not (self.scale is None or softmax_in_fp32):
             raise ValueError("softmax should be in fp32 when scaled")
 
-   def forward(self, input, mask, max_positions):
+    def forward(self, input, mask, max_positions):
         input_dtype = input.dtype
         input_in_16bit = input_dtype in [torch.float16, torch.bfloat16]
         softmax_dtype = torch.float32 if self.softmax_in_fp32 else input_dtype
@@ -240,10 +239,12 @@ class BloomScaledSoftmax(nn.Module):
 
         if mask is not None:
             mask = mask.to(input.device)
-            causal_mask = torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
-                1, 1, max_positions, max_positions
-            ).to(input.device)
-            mask_output, padded_causal_mask = self.mask_func(input, mask, causal_mask) if mask is not None else input
+            causal_mask = (
+                torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool))
+                .view(1, 1, max_positions, max_positions)
+                .to(input.device)
+            )
+            mask_output, padded_causal_mask = self.mask_func(input, mask, causal_mask)
             probs = nn.functional.softmax(mask_output, dim=-1, dtype=softmax_dtype) * (~padded_causal_mask)
         else:
             probs = nn.functional.softmax(input, dim=-1, dtype=softmax_dtype)
@@ -312,7 +313,7 @@ class BloomAttention(nn.Module):
 
         output_bias = None
 
-        mixed_x_layer = F.linear(hidden_states, self.query_key_value.weight, bias)
+        mixed_x_layer = nn.functional.linear(hidden_states, self.query_key_value.weight, bias)
 
         # [batch_size, seq_length, 3 x hidden_size] --> [batch_size, seq_length, num_heads, 3 x head_dim]
         new_tensor_shape = mixed_x_layer.size()[:-1] + (self.num_heads, 3 * self.head_dim)
@@ -403,12 +404,12 @@ class BloomAttention(nn.Module):
             slices = context_layer.shape[-1] / self.pretraining_tp
             output_tensor = torch.zeros_like(context_layer)
             for i in range(self.pretraining_tp):
-                output_tensor = output_tensor + F.linear(
+                output_tensor = output_tensor + nn.functional.linear(
                     context_layer[:, :, int(i * slices) : int((i + 1) * slices)],
                     self.dense.weight[:, int(i * slices) : int((i + 1) * slices)],
                 )
         else:
-            output_tensor = F.linear(context_layer, self.dense.weight)
+            output_tensor = nn.functional.linear(context_layer, self.dense.weight)
 
         output_tensor = output_tensor
         output_bias = self.dense.bias
@@ -435,19 +436,19 @@ class BloomMLP(nn.Module):
         input_ = hidden_states
 
         hidden_states = self.activation_func(
-            F.linear(hidden_states, self.dense_h_to_4h.weight), self.dense_h_to_4h.bias
+            nn.functional.linear(hidden_states, self.dense_h_to_4h.weight), self.dense_h_to_4h.bias
         )
 
         if self.pretraining_tp > 1:
             intermediate_output = torch.zeros_like(input_)
             slices = self.dense_4h_to_h.weight.shape[-1] / self.pretraining_tp
             for i in range(self.pretraining_tp):
-                intermediate_output = intermediate_output + F.linear(
+                intermediate_output = intermediate_output + nn.functional.linear(
                     hidden_states[:, :, int(i * slices) : int((i + 1) * slices)],
                     self.dense_4h_to_h.weight[:, int(i * slices) : int((i + 1) * slices)],
                 )
         else:
-            intermediate_output = F.linear(hidden_states, self.dense_4h_to_h.weight)
+            intermediate_output = nn.functional.linear(hidden_states, self.dense_4h_to_h.weight)
 
         output = intermediate_output
         output_bias = self.dense_4h_to_h.bias
