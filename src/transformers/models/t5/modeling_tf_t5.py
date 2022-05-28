@@ -1516,12 +1516,9 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         batch_size = past[0][0].shape[0]
 
         if not is_past_initialized:
-            # past[0].shape[3] is seq_length of prompt
+            # past[0].shape[2] is seq_length of prompt
             num_padding_values = max_length - past[0][0].shape[2] - 1
-
-            padding_values = np.zeros((4, 2), dtype=np.int32)
-            padding_values[2, 1] = num_padding_values
-            padding_values = tf.constant(padding_values)
+            padding_values = tf.scatter_nd(indices=[[2, 1]], updates=[num_padding_values], shape=(4, 2))
 
             new_past = ()
             for past_layer in past:
@@ -1530,12 +1527,11 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
                     new_past_layer[i] = tf.pad(past_layer[i], padding_values)
                 new_past += (tuple(new_past_layer),)
 
-            # 1 one for decoder_start_token_id, Zeros for the currently-unfilled locations in the past tensor, ones for the actual input_ids
+            # 1 one for decoder_start_token_id, Zeros for the currently-unfilled locations in the past tensor
             decoder_attention_mask = tf.concat(
                 [
                     tf.ones((batch_size, 1), dtype=tf.int32),
-                    tf.zeros((batch_size, num_padding_values), dtype=tf.int32),
-                    tf.ones((batch_size, 1), dtype=tf.int32),
+                    tf.zeros((batch_size, num_padding_values + 1), dtype=tf.int32),
                 ],
                 axis=1,
             )
