@@ -230,7 +230,7 @@ TENSORFLOW_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {}
 def _get_models_to_test(export_models_list):
     models_to_test = []
     if is_torch_available() or is_tf_available():
-        for (name, model, *features) in export_models_list:
+        for name, model, *features in export_models_list:
             if features:
                 feature_config_mapping = {
                     feature: FeaturesManager.get_config(name, feature) for _ in features for feature in _
@@ -275,7 +275,8 @@ class OnnxExportTestCaseV2(TestCase):
             raise ValueError(f"Found no preprocessor for {model_name}.")
         elif len(preprocessors) > 1:
             raise ValueError(
-                f"Found multiple preprocessors for {model_name}, which is currently not supported. Make a special test case."
+                f"Found multiple preprocessors for {model_name}, which is currently not supported. Make a special test"
+                " case."
             )
         else:
             preprocessor = preprocessors[0]

@@ -64,7 +64,8 @@ def main():
             raise ValueError(f"Couldn't find preprocessor for: {args.model}")
         elif len(preprocessors) > 1:
             raise ValueError(
-                f"Found multiple preprocessors for {args.model}: {[type(p) for p in preprocessors]}. Use --preprocessor to specify which one to use."
+                f"Found multiple preprocessors for {args.model}: {[type(p) for p in preprocessors]}. Use"
+                " --preprocessor to specify which one to use."
             )
         else:
             preprocessor = preprocessors[0]
