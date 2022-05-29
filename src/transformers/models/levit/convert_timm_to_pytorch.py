@@ -18,13 +18,10 @@
 import argparse
 import json
 from collections import OrderedDict
-from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import List
 
 import torch
-import torch.nn as nn
 
 import timm
 from huggingface_hub import hf_hub_download

@@ -15,8 +15,8 @@
 """ PyTorch LeViT model."""
 
 import itertools
-from typing import Optional, Tuple
 from dataclasses import dataclass
+from typing import Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
@@ -24,13 +24,13 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...modeling_outputs import (
-    ModelOutput,
     BaseModelOutputWithNoAttention,
     BaseModelOutputWithPoolingAndNoAttention,
     ImageClassifierOutputWithNoAttention,
+    ModelOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_levit import LevitConfig
 
 
@@ -398,6 +398,7 @@ class LevitEncoder(nn.Module):
             hidden_states=all_hidden_states,
         )
 
+
 class LevitClassificationLayer(nn.Module):
     """
     LeViT Classification Layer
@@ -522,6 +523,7 @@ class LevitModel(LevitPreTrainedModel):
             hidden_states=encoder_outputs.hidden_states,
         )
 
+
 @add_start_docstrings(
     """
     Levit Model with an image classification head on top (a linear layer on top of the pooled features), e.g. for
@@ -566,7 +568,7 @@ class LevitForImageClassification(LevitPreTrainedModel):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        
+
         Returns:
 
         Examples:
@@ -635,6 +637,7 @@ class LevitForImageClassification(LevitPreTrainedModel):
             hidden_states=outputs.hidden_states,
         )
 
+
 @dataclass
 class LevitForImageClassificationWithTeacherOutput(ModelOutput):
     """
@@ -663,11 +666,8 @@ class LevitForImageClassificationWithTeacherOutput(ModelOutput):
 
 @add_start_docstrings(
     """
-    LeViT Model transformer with image classification heads on top (a linear layer on top of the final hidden state 
-    and a linear layer on top of the final hidden state of the distillation token) e.g. for ImageNet.
-
-    .. warning::
-
+    LeViT Model transformer with image classification heads on top (a linear layer on top of the final hidden state and
+    a linear layer on top of the final hidden state of the distillation token) e.g. for ImageNet. .. warning::
            This model supports inference-only. Fine-tuning with distillation (i.e. with a teacher) is not yet
            supported.
     """,

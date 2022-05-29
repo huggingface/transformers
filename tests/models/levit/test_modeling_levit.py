@@ -17,13 +17,12 @@
 
 import inspect
 import unittest
-from math import ceil, floor
-from typing import Dict, List, Tuple
-
 import warnings
+from math import ceil, floor
+
 from transformers import LevitConfig
-from transformers.models.auto import get_values
 from transformers.file_utils import cached_property, is_torch_available, is_vision_available
+from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -32,8 +31,15 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
-    import torch.nn as nn
-    from transformers import LevitForImageClassification, LevitModel, LevitForImageClassificationWithTeacher, MODEL_MAPPING, MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING, MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
+
+    from transformers import (
+        MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
+        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+        MODEL_MAPPING,
+        LevitForImageClassification,
+        LevitForImageClassificationWithTeacher,
+        LevitModel,
+    )
     from transformers.models.levit.modeling_levit import LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -157,7 +163,6 @@ class LevitModelTester:
         config, pixel_values, labels = config_and_inputs
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
-
 
 
 @require_torch
@@ -407,7 +412,9 @@ class LevitModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head(self):
-        model = LevitForImageClassificationWithTeacher.from_pretrained(LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST[0]).to(torch_device)
+        model = LevitForImageClassificationWithTeacher.from_pretrained(LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST[0]).to(
+            torch_device
+        )
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
