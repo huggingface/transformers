@@ -154,20 +154,18 @@ class BartphoTokenizerFast(PreTrainedTokenizerFast):
         Returns:
             `Dict[str, int], Dict[int, int]`: The added tokens, and their original and new ids
         """
-        base_vocab = self._tokenizer.get_vocab(with_added_tokens=False)
-        full_vocab = self._tokenizer.get_vocab(with_added_tokens=True)
-        base_vocab_size = len(base_vocab)
-        if len(full_vocab) == base_vocab_size:
+        base_vocab_size = self._tokenizer.get_vocab_size(with_added_tokens=False)
+        full_vocab_size = self._tokenizer.get_vocab_size(with_added_tokens=True)
+        if full_vocab_size == base_vocab_size:
             return {}, {}
 
         # Tokens in added_vocab should have ids that are equal to or larger than the size of base_vocab
         added_vocab = dict(
-            (tok, index + 1 - base_vocab_size + self.mask_token_id)
-            for tok, index in full_vocab.items()
-            if tok not in base_vocab
+            (self._tokenizer.id_to_token(index), index + 1 - base_vocab_size + self.mask_token_id)
+            for index in range(base_vocab_size, full_vocab_size)
         )
 
-        id_mapping = dict((index, full_vocab[tok]) for tok, index in added_vocab.items())
+        id_mapping = dict((index, self._tokenizer.token_to_id(tok)) for tok, index in added_vocab.items())
 
         return added_vocab, id_mapping
 
