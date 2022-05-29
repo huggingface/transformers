@@ -1244,6 +1244,7 @@ else:
         [
             "LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "LevitForImageClassification",
+            "LevitForImageClassificationWithTeacher",
             "LevitModel",
             "LevitPreTrainedModel",
         ]
@@ -3672,6 +3673,7 @@ if TYPE_CHECKING:
         from .models.levit import (
             LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             LevitForImageClassification,
+            LevitForImageClassificationWithTeacher,
             LevitModel,
             LevitPreTrainedModel,
         )

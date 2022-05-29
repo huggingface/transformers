@@ -18,8 +18,11 @@
 import inspect
 import unittest
 from math import ceil, floor
+from typing import Dict, List, Tuple
 
+import warnings
 from transformers import LevitConfig
+from transformers.models.auto import get_values
 from transformers.file_utils import cached_property, is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
@@ -29,15 +32,15 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
-
-    from transformers import LevitForImageClassification, LevitModel
+    import torch.nn as nn
+    from transformers import LevitForImageClassification, LevitModel, LevitForImageClassificationWithTeacher, MODEL_MAPPING, MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING, MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
     from transformers.models.levit.modeling_levit import LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoFeatureExtractor
+    from transformers import LevitFeatureExtractor
 
 
 class LevitConfigTester(ConfigTester):
@@ -156,6 +159,7 @@ class LevitModelTester:
         return config, inputs_dict
 
 
+
 @require_torch
 class LevitModelTest(ModelTesterMixin, unittest.TestCase):
     """
@@ -163,7 +167,15 @@ class LevitModelTest(ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (LevitModel, LevitForImageClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            LevitModel,
+            LevitForImageClassification,
+            LevitForImageClassificationWithTeacher,
+        )
+        if is_torch_available()
+        else ()
+    )
 
     test_pruning = False
     test_torchscript = False
@@ -206,10 +218,6 @@ class LevitModelTest(ModelTesterMixin, unittest.TestCase):
 
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -265,9 +273,117 @@ class LevitModelTest(ModelTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+
+        if return_labels:
+            if model_class.__name__ == "LevitForImageClassificationWithTeacher":
+                del inputs_dict["labels"]
+
+        return inputs_dict
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
+
+    # special case for LevitForImageClassificationWithTeacher model
+    def test_training(self):
+        if not self.model_tester.is_training:
+            return
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        for model_class in self.all_model_classes:
+            # LevitForImageClassificationWithTeacher supports inference-only
+            if (
+                model_class in get_values(MODEL_MAPPING)
+                or model_class.__name__ == "LevitForImageClassificationWithTeacher"
+            ):
+                continue
+            model = model_class(config)
+            model.to(torch_device)
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            loss = model(**inputs).loss
+            loss.backward()
+
+    def test_training_gradient_checkpointing(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        if not self.model_tester.is_training:
+            return
+
+        config.use_cache = False
+        config.return_dict = True
+
+        for model_class in self.all_model_classes:
+            if model_class in get_values(MODEL_MAPPING) or not model_class.supports_gradient_checkpointing:
+                continue
+            # LevitForImageClassificationWithTeacher supports inference-only
+            if model_class.__name__ == "LevitForImageClassificationWithTeacher":
+                continue
+            model = model_class(config)
+            model.gradient_checkpointing_enable()
+            model.to(torch_device)
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            loss = model(**inputs).loss
+            loss.backward()
+
+    def test_problem_types(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        problem_types = [
+            {"title": "multi_label_classification", "num_labels": 2, "dtype": torch.float},
+            {"title": "single_label_classification", "num_labels": 1, "dtype": torch.long},
+            {"title": "regression", "num_labels": 1, "dtype": torch.float},
+        ]
+
+        for model_class in self.all_model_classes:
+            if (
+                model_class
+                not in [
+                    *get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING),
+                    *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
+                ]
+                or model_class.__name__ == "LevitForImageClassificationWithTeacher"
+            ):
+                continue
+
+            for problem_type in problem_types:
+                with self.subTest(msg=f"Testing {model_class} with {problem_type['title']}"):
+
+                    config.problem_type = problem_type["title"]
+                    config.num_labels = problem_type["num_labels"]
+
+                    model = model_class(config)
+                    model.to(torch_device)
+                    model.train()
+
+                    inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+
+                    if problem_type["num_labels"] > 1:
+                        inputs["labels"] = inputs["labels"].unsqueeze(1).repeat(1, problem_type["num_labels"])
+
+                    inputs["labels"] = inputs["labels"].to(problem_type["dtype"])
+
+                    # This tests that we do not trigger the warning form PyTorch "Using a target size that is different
+                    # to the input size. This will likely lead to incorrect results due to broadcasting. Please ensure
+                    # they have the same size." which is a symptom something in wrong for the regression problem.
+                    # See https://github.com/huggingface/transformers/issues/11780
+                    with warnings.catch_warnings(record=True) as warning_list:
+                        loss = model(**inputs).loss
+                    for w in warning_list:
+                        if "Using a target size that is different to the input size" in str(w.message):
+                            raise ValueError(
+                                f"Something is going wrong in the regression problem: intercepted {w.message}"
+                            )
+
+                    loss.backward()
 
     @slow
     def test_model_from_pretrained(self):
@@ -287,11 +403,11 @@ def prepare_img():
 class LevitModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return AutoFeatureExtractor.from_pretrained(LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST[0])
+        return LevitFeatureExtractor.from_pretrained(LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST[0])
 
     @slow
     def test_inference_image_classification_head(self):
-        model = LevitForImageClassification.from_pretrained(LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST[0]).to(torch_device)
+        model = LevitForImageClassificationWithTeacher.from_pretrained(LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST[0]).to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
@@ -305,6 +421,6 @@ class LevitModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-0.4981, 1.0718, 0.5807]).to(torch_device)
+        expected_slice = torch.tensor([0.0096, -1.0084, -1.4318]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))

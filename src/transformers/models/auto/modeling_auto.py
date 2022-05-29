@@ -309,7 +309,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("data2vec-vision", "Data2VecVisionForImageClassification"),
         ("deit", ("DeiTForImageClassification", "DeiTForImageClassificationWithTeacher")),
         ("imagegpt", "ImageGPTForImageClassification"),
-        ("levit", "LevitForImageClassification"),
+        ("levit", ("LevitForImageClassification", "LevitForImageClassificationWithTeacher")),
         (
             "perceiver",
             (

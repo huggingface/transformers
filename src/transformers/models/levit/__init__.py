@@ -39,6 +39,7 @@ else:
     _import_structure["modeling_levit"] = [
         "LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "LevitForImageClassification",
+        "LevitForImageClassificationWithTeacher",
         "LevitModel",
         "LevitPreTrainedModel",
     ]
@@ -64,6 +65,7 @@ if TYPE_CHECKING:
         from .modeling_levit import (
             LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             LevitForImageClassification,
+            LevitForImageClassificationWithTeacher,
             LevitModel,
             LevitPreTrainedModel,
         )

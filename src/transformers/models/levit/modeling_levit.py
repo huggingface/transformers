@@ -15,7 +15,8 @@
 """ PyTorch LeViT model."""
 
 import itertools
-from typing import Optional
+from typing import Optional, Tuple
+from dataclasses import dataclass
 
 import torch
 import torch.utils.checkpoint
@@ -23,12 +24,13 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...modeling_outputs import (
+    ModelOutput,
     BaseModelOutputWithNoAttention,
     BaseModelOutputWithPoolingAndNoAttention,
     ImageClassifierOutputWithNoAttention,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_levit import LevitConfig
 
 
@@ -396,6 +398,21 @@ class LevitEncoder(nn.Module):
             hidden_states=all_hidden_states,
         )
 
+class LevitClassificationLayer(nn.Module):
+    """
+    LeViT Classification Layer
+    """
+
+    def __init__(self, input_dim, output_dim):
+        super().__init__()
+        self.bn = nn.BatchNorm1d(input_dim)
+        self.linear = nn.Linear(input_dim, output_dim)
+
+    def forward(self, x):
+        x = self.bn(x)
+        x = self.linear(x)
+        return x
+
 
 class LevitPreTrainedModel(PreTrainedModel):
     """
@@ -425,7 +442,7 @@ class LevitPreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
 
-CONVNEXT_START_DOCSTRING = r"""
+LEVIT_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
     as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
@@ -436,7 +453,7 @@ CONVNEXT_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-CONVNEXT_INPUTS_DOCSTRING = r"""
+LEVIT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
@@ -452,7 +469,7 @@ CONVNEXT_INPUTS_DOCSTRING = r"""
 
 @add_start_docstrings(
     "The bare Levit model outputting raw features without any specific head on top.",
-    CONVNEXT_START_DOCSTRING,
+    LEVIT_START_DOCSTRING,
 )
 class LevitModel(LevitPreTrainedModel):
     def __init__(self, config):
@@ -462,7 +479,7 @@ class LevitModel(LevitPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(CONVNEXT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(LEVIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -505,29 +522,12 @@ class LevitModel(LevitPreTrainedModel):
             hidden_states=encoder_outputs.hidden_states,
         )
 
-
-class LevitClassificationLayer(nn.Module):
-    """
-    LeViT Classification Layer
-    """
-
-    def __init__(self, input_dim, output_dim):
-        super().__init__()
-        self.bn = nn.BatchNorm1d(input_dim)
-        self.linear = nn.Linear(input_dim, output_dim)
-
-    def forward(self, x):
-        x = self.bn(x)
-        x = self.linear(x)
-        return x
-
-
 @add_start_docstrings(
     """
     Levit Model with an image classification head on top (a linear layer on top of the pooled features), e.g. for
     ImageNet.
     """,
-    CONVNEXT_START_DOCSTRING,
+    LEVIT_START_DOCSTRING,
 )
 class LevitForImageClassification(LevitPreTrainedModel):
     def __init__(self, config):
@@ -542,17 +542,11 @@ class LevitForImageClassification(LevitPreTrainedModel):
             if config.num_labels > 0
             else torch.nn.Identity()
         )
-        if config.distillation:
-            self.classifier_distill = (
-                LevitClassificationLayer(config.embed_dim[-1], config.num_labels)
-                if config.num_labels > 0
-                else torch.nn.Identity()
-            )
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(CONVNEXT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(LEVIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
@@ -579,12 +573,7 @@ class LevitForImageClassification(LevitPreTrainedModel):
 
         sequence_output = outputs[0]
         sequence_output = sequence_output.mean(1)
-        logits, logits_distill = self.classifier(sequence_output), self.classifier_distill(sequence_output)
-        if self.config.distillation:
-            logits = (logits + logits_distill) / 2
-
-        else:
-            logits = self.classifier(sequence_output)
+        logits = self.classifier(sequence_output)
 
         loss = None
         if labels is not None:
@@ -615,5 +604,100 @@ class LevitForImageClassification(LevitPreTrainedModel):
         return ImageClassifierOutputWithNoAttention(
             loss=loss,
             logits=logits,
+            hidden_states=outputs.hidden_states,
+        )
+
+@dataclass
+class LevitForImageClassificationWithTeacherOutput(ModelOutput):
+    """
+    Output type of [`LevitForImageClassificationWithTeacher`].
+
+    Args:
+        logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+            Prediction scores as the average of the cls_logits and distillation logits.
+        cls_logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+            Prediction scores of the classification head (i.e. the linear layer on top of the final hidden state of the
+            class token).
+        distillation_logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+            Prediction scores of the distillation head (i.e. the linear layer on top of the final hidden state of the
+            distillation token).
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
+            plus the initial embedding outputs.
+    """
+
+    logits: torch.FloatTensor = None
+    cls_logits: torch.FloatTensor = None
+    distillation_logits: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@add_start_docstrings(
+    """
+    LeViT Model transformer with image classification heads on top (a linear layer on top of the final hidden state 
+    and a linear layer on top of the final hidden state of the distillation token) e.g. for ImageNet.
+
+    .. warning::
+
+           This model supports inference-only. Fine-tuning with distillation (i.e. with a teacher) is not yet
+           supported.
+    """,
+    LEVIT_START_DOCSTRING,
+)
+class LevitForImageClassificationWithTeacher(LevitPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.config = config
+        self.num_labels = config.num_labels
+        self.levit = LevitModel(config)
+
+        # Classifier head
+        self.classifier = (
+            LevitClassificationLayer(config.embed_dim[-1], config.num_labels)
+            if config.num_labels > 0
+            else torch.nn.Identity()
+        )
+        if config.distillation:
+            self.classifier_distill = (
+                LevitClassificationLayer(config.embed_dim[-1], config.num_labels)
+                if config.num_labels > 0
+                else torch.nn.Identity()
+            )
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(LEVIT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
+        checkpoint=_IMAGE_CLASS_CHECKPOINT,
+        output_type=LevitForImageClassificationWithTeacherOutput,
+        config_class=_CONFIG_FOR_DOC,
+        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
+    )
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ):
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.levit(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
+
+        sequence_output = outputs[0]
+        sequence_output = sequence_output.mean(1)
+        cls_logits, distill_logits = self.classifier(sequence_output), self.classifier_distill(sequence_output)
+        logits = (cls_logits + distill_logits) / 2
+
+        if not return_dict:
+            output = (logits, cls_logits, distill_logits) + outputs[2:]
+            return output
+
+        return LevitForImageClassificationWithTeacherOutput(
+            logits=logits,
+            cls_logits=cls_logits,
+            distillation_logits=distill_logits,
             hidden_states=outputs.hidden_states,
         )
