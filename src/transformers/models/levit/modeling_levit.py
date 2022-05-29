@@ -581,7 +581,8 @@ class LevitForImageClassification(LevitPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> # note: we are loading a LevitForImageClassificationWithTeacher from the hub here,
+        >>> # note: we are loading a LevitForImageClassificationWithTeacher from the hub here
+        >>> # there maybe cases where prediction might be wrong
         >>> feature_extractor = LevitFeatureExtractor.from_pretrained("anugunj/levit-128S")
         >>> model = LevitForImageClassification.from_pretrained("anugunj/levit-128S")
 
