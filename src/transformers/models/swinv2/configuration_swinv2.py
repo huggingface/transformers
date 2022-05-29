@@ -21,9 +21,10 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 SWINV2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/swinv2_tiny_patch4_windows8_256": "https://huggingface.co/microsoft/swinv2_tiny_patch4_windows8_256/resolve/main/config.json",
+    "microsoft/swinv2_tiny_patch4_windows8_256": (
+        "https://huggingface.co/microsoft/swinv2_tiny_patch4_windows8_256/resolve/main/config.json"
+    ),
 }
-
 
 
 class Swinv2Config(PretrainedConfig):

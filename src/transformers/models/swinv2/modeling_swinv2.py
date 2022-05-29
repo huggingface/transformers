@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
 import torch
+import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
@@ -406,9 +407,8 @@ class Swinv2DropPath(nn.Module):
         return drop_path(input, self.drop_prob, self.training, self.scale_by_keep)
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinSelfAttention with Swin->Swinv2
 class Swinv2SelfAttention(nn.Module):
-    def __init__(self, config, dim, num_heads):
+    def __init__(self, config, dim, num_heads, pretrained_window_size=[0, 0]):
         super().__init__()
         if dim % num_heads != 0:
             raise ValueError(
@@ -419,10 +419,33 @@ class Swinv2SelfAttention(nn.Module):
         self.attention_head_size = int(dim / num_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.window_size = to_2tuple(config.window_size)
-
-        self.relative_position_bias_table = nn.Parameter(
-            torch.zeros((2 * self.window_size[0] - 1) * (2 * self.window_size[1] - 1), num_heads)
+        self.pretrained_window_size = pretrained_window_size
+        self.logit_scale = nn.Parameter(torch.log(10 * torch.ones((num_heads, 1, 1))))
+        # mlp to generate continuous relative position bias
+        self.cpb_mlp = nn.Sequential(
+            nn.Linear(2, 512, bias=True), nn.ReLU(inplace=True), nn.Linear(512, num_heads, bias=False)
         )
+
+        # get relative_coords_table
+        relative_coords_h = torch.arange(-(self.window_size[0] - 1), self.window_size[0], dtype=torch.float32)
+        relative_coords_w = torch.arange(-(self.window_size[1] - 1), self.window_size[1], dtype=torch.float32)
+        relative_coords_table = (
+            torch.stack(torch.meshgrid([relative_coords_h, relative_coords_w]))
+            .permute(1, 2, 0)
+            .contiguous()
+            .unsqueeze(0)
+        )  # 1, 2*Wh-1, 2*Ww-1, 2
+        if pretrained_window_size[0] > 0:
+            relative_coords_table[:, :, :, 0] /= pretrained_window_size[0] - 1
+            relative_coords_table[:, :, :, 1] /= pretrained_window_size[1] - 1
+        else:
+            relative_coords_table[:, :, :, 0] /= self.window_size[0] - 1
+            relative_coords_table[:, :, :, 1] /= self.window_size[1] - 1
+        relative_coords_table *= 8  # normalize to -8, 8
+        relative_coords_table = (
+            torch.sign(relative_coords_table) * torch.log2(torch.abs(relative_coords_table) + 1.0) / math.log2(8)
+        )
+        self.register_buffer("relative_coords_table", relative_coords_table, persistent=False)
 
         # get pair-wise relative position index for each token inside the window
         coords_h = torch.arange(self.window_size[0])
@@ -435,12 +458,19 @@ class Swinv2SelfAttention(nn.Module):
         relative_coords[:, :, 1] += self.window_size[1] - 1
         relative_coords[:, :, 0] *= 2 * self.window_size[1] - 1
         relative_position_index = relative_coords.sum(-1)
-        self.register_buffer("relative_position_index", relative_position_index)
+        self.register_buffer("relative_position_index", relative_position_index, persistent=False)
 
         self.query = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
         self.key = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
         self.value = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
-
+        if config.qkv_bias:
+            self.q_bias = nn.Parameter(torch.zeros(dim))
+            self.register_buffer("k_bias", torch.zeros(dim), persistent=False)
+            self.v_bias = nn.Parameter(torch.zeros(dim))
+        else:
+            self.q_bias = None
+            self.k_bias = None
+            self.v_bias = None
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
     def transpose_for_scores(self, x):
@@ -463,16 +493,25 @@ class Swinv2SelfAttention(nn.Module):
         query_layer = self.transpose_for_scores(mixed_query_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+        # attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+        # attention_scores = attention_scores / math.sqrt(self.attention_head_size)
 
-        relative_position_bias = self.relative_position_bias_table[self.relative_position_index.view(-1)]
-        relative_position_bias = relative_position_bias.view(
+        # relative_position_bias = self.relative_position_bias_table[self.relative_position_index.view(-1)]
+        # relative_position_bias = relative_position_bias.view(
+        #     self.window_size[0] * self.window_size[1], self.window_size[0] * self.window_size[1], -1
+        # )
+
+        # relative_position_bias = relative_position_bias.permute(2, 0, 1).contiguous()
+        attention_scores = F.normalize(query_layer, dim=-1) @ F.normalize(key_layer, dim=-1).transpose(-2, -1)
+        logit_scale = torch.clamp(self.logit_scale, max=math.log(1.0 / 0.01)).exp()
+        attention_scores = attention_scores * logit_scale
+        relative_position_bias_table = self.cpb_mlp(self.relative_coords_table).view(-1, self.num_attention_heads)
+        relative_position_bias = relative_position_bias_table[self.relative_position_index.view(-1)].view(
             self.window_size[0] * self.window_size[1], self.window_size[0] * self.window_size[1], -1
-        )
-
-        relative_position_bias = relative_position_bias.permute(2, 0, 1).contiguous()
+        )  # Wh*Ww,Wh*Ww,nH
+        relative_position_bias = relative_position_bias.permute(2, 0, 1).contiguous()  # nH, Wh*Ww, Wh*Ww
+        relative_position_bias = 16 * torch.sigmoid(relative_position_bias)
         attention_scores = attention_scores + relative_position_bias.unsqueeze(0)
 
         if attention_mask is not None:
@@ -587,7 +626,6 @@ class Swinv2Output(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinLayer with Swin->Swinv2
 class Swinv2Layer(nn.Module):
     def __init__(self, config, dim, input_resolution, num_heads, shift_size=0):
         super().__init__()
@@ -656,8 +694,8 @@ class Swinv2Layer(nn.Module):
         batch_size, _, channels = hidden_states.size()
         shortcut = hidden_states
 
-        hidden_states = self.layernorm_before(hidden_states)
-        hidden_states = hidden_states.view(batch_size, height, width, channels)
+        # hidden_states = self.layernorm_before(hidden_states)
+        # hidden_states = hidden_states.view(batch_size, height, width, channels)
         # pad hidden_states to multiples of window size
         hidden_states, pad_values = self.maybe_pad(hidden_states, height, width)
 
@@ -695,12 +733,13 @@ class Swinv2Layer(nn.Module):
             attention_windows = attention_windows[:, :height, :width, :].contiguous()
 
         attention_windows = attention_windows.view(batch_size, height * width, channels)
+        hidden_states = self.layernorm_before(attention_windows)
+        hidden_states = hidden_states.view(batch_size, height, width, channels)
+        hidden_states = shortcut + self.drop_path(hidden_states)
 
-        hidden_states = shortcut + self.drop_path(attention_windows)
-
-        layer_output = self.layernorm_after(hidden_states)
-        layer_output = self.intermediate(layer_output)
-        layer_output = hidden_states + self.output(layer_output)
+        layer_output = self.intermediate(hidden_states)
+        layer_output = self.output(layer_output)
+        layer_output = hidden_states + self.drop_path(self.layernorm_after(layer_output))
 
         layer_outputs = (layer_output, attention_outputs[1]) if output_attentions else (layer_output,)
         return layer_outputs
@@ -1020,7 +1059,6 @@ class Swinv2Model(Swinv2PreTrainedModel):
     " <https://arxiv.org/abs/2111.09886>`__.",
     SWINV2_START_DOCSTRING,
 )
-# Copied from transformers.models.swin.modeling_swin.SwinForMaskedImageModeling with SWIN->SWINV2,Swin->Swinv2,swin->swinv2,microsoft/swin-tiny-patch4-window7-224->microsoft/swinv2_tiny_patch4_windows8_256
 class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1125,8 +1163,8 @@ class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
 
 @add_start_docstrings(
     """
-    Swinv2 Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
-    the [CLS] token) e.g. for ImageNet.
+    Swinv2 Model transformer with an image classification head on top (a linear layer on top of the final hidden state
+    of the [CLS] token) e.g. for ImageNet.
     """,
     SWINV2_START_DOCSTRING,
 )

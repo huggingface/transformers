@@ -1248,7 +1248,6 @@ class TFSwinv2Decoder(tf.keras.layers.Layer):
     " <https://arxiv.org/abs/2111.09886>`__.",
     SWINV2_START_DOCSTRING,
 )
-# Copied from transformers.models.swin.modeling_tf_swin.TFSwinForMaskedImageModeling with SWIN->SWINV2,Swin->Swinv2,swin->swinv2,microsoft/swin-tiny-patch4-window7-224->microsoft/swinv2_tiny_patch4_windows8_256
 class TFSwinv2ForMaskedImageModeling(TFSwinv2PreTrainedModel):
     def __init__(self, config: Swinv2Config):
         super().__init__(config)
@@ -1355,8 +1354,8 @@ class TFSwinv2ForMaskedImageModeling(TFSwinv2PreTrainedModel):
 
 @add_start_docstrings(
     """
-    Swinv2 Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
-    the [CLS] token) e.g. for ImageNet.
+    Swinv2 Model transformer with an image classification head on top (a linear layer on top of the final hidden state
+    of the [CLS] token) e.g. for ImageNet.
     """,
     SWINV2_START_DOCSTRING,
 )

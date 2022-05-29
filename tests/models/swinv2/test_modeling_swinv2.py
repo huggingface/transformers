@@ -395,7 +395,9 @@ class Swinv2ModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head(self):
-        model = Swinv2ForImageClassification.from_pretrained("microsoft/swinv2_tiny_patch4_windows8_256").to(torch_device)
+        model = Swinv2ForImageClassification.from_pretrained("microsoft/swinv2_tiny_patch4_windows8_256").to(
+            torch_device
+        )
         feature_extractor = self.default_feature_extractor
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
