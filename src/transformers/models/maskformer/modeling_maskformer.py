@@ -19,7 +19,7 @@ import math
 import random
 from dataclasses import dataclass
 from numbers import Number
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -1958,7 +1958,7 @@ class MaskFormerSwinTransformerBackbone(nn.Module):
         return [layer.dim for layer in self.model.encoder.layers]
 
 
-class MaskFormerFPNConvLayer(nn.Sequential):
+class MaskFormerFPNConvLayer(nn.Module):
     def __init__(self, in_features: int, out_features: int, kernel_size: int = 3, padding: int = 1):
         """
         A basic module that executes conv - norm - in sequence used in MaskFormer.
@@ -1969,11 +1969,26 @@ class MaskFormerFPNConvLayer(nn.Sequential):
             out_features (`int`):
                 The number of outputs features (channels).
         """
-        super().__init__(
+        super().__init__()
+        self.layers = [
             nn.Conv2d(in_features, out_features, kernel_size=kernel_size, padding=padding, bias=False),
             nn.GroupNorm(32, out_features),
             nn.ReLU(inplace=True),
-        )
+        ]
+        for i, layer in enumerate(self.layers):
+            # Provide backwards compatibility from when the class inherited from nn.Sequential
+            # In nn.Sequential subclasses, the name given to the layer is its index in the sequence.
+            # In nn.Module subclasses they derived from the instance attribute they are assigned to e.g.
+            # self.my_layer_name = Layer()
+            # We can't give instance attributes integer names i.e. self.0 is not permitted and so need to register
+            # explicitly
+            self.add_module(str(i), layer)
+
+    def forward(self, input: Tensor) -> Tensor:
+        hidden_state - input
+        for layer in self.layers:
+            hidden_state = layer(hidden_state)
+        return hidden_state
 
 
 class MaskFormerFPNLayer(nn.Module):
@@ -2101,7 +2116,47 @@ class MaskFormerSinePositionEmbedding(nn.Module):
         return pos
 
 
-class MaskformerMLPPredictionHead(nn.Sequential):
+class IdentityModule(nn.Module):
+    def __init__(self, i: Optional[int] = None):
+        super().__init__()
+        i = i or 0
+        self.layers = [nn.Identity()]
+        # Provide backwards compatibility from when the class inherited from nn.Sequential
+        # In nn.Sequential subclasses, the name given to the layer is its index in the sequence.
+        # In nn.Module subclasses they derived from the instance attribute they are assigned to e.g.
+        # self.my_layer_name = Layer()
+        # We can't give instance attributes integer names i.e. self.0 is not permitted and so need to register
+        # explicitly
+        self.add_module(str(i), self.layers[0])
+
+    def forward(self, input: Tensor) -> Tensor:
+        hidden_state = input
+        for layer in self:
+            hidden_state = layer(hidden_state)
+        return hidden_state
+
+
+class MLPModule(nn.Module):
+    def __init__(self, in_dim: int, out_dim: int) -> None:
+        super().__init__()
+        layers = [nn.Linear(in_dim, out_dim), nn.ReLU(inplace=True)]
+        for i, layer in enumerate(layers):
+            # Provide backwards compatibility from when the class inherited from nn.Sequential
+            # In nn.Sequential subclasses, the name given to the layer is its index in the sequence.
+            # In nn.Module subclasses they derived from the instance attribute they are assigned to e.g.
+            # self.my_layer_name = Layer()
+            # We can't give instance attributes integer names i.e. self.0 is not permitted and so need to register
+            # explicitly
+            self.add_module(str(i), layer)
+
+    def forward(self, input: Tensor) -> Tensor:
+        hidden_state = input
+        for layer in self:
+            hidden_state = layer(hidden_state)
+        return hidden_state
+
+
+class MaskformerMLPPredictionHead(nn.Module):
     def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int = 3):
         """
         A classic Multi Layer Perceptron (MLP).
@@ -2116,18 +2171,27 @@ class MaskformerMLPPredictionHead(nn.Sequential):
             num_layers (int, *optional*, defaults to 3):
                 The number of layers.
         """
+        super().__init__()
         in_dims = [input_dim] + [hidden_dim] * (num_layers - 1)
         out_dims = [hidden_dim] * (num_layers - 1) + [output_dim]
 
-        layers = []
+        self.layers = []
         for i, (in_dim, out_dim) in enumerate(zip(in_dims, out_dims)):
+            layer = MLPModule(in_dim, out_dim) if i < num_layers - 1 else IdentityModule()
+            self.layers.append(layer)
+            # Provide backwards compatibility from when the class inherited from nn.Sequential
+            # In nn.Sequential subclasses, the name given to the layer is its index in the sequence.
+            # In nn.Module subclasses they derived from the instance attribute they are assigned to e.g.
+            # self.my_layer_name = Layer()
+            # We can't give instance attributes integer names i.e. self.0 is not permitted and so need to register
+            # explicitly
+            self.add_module(str(i), layer)
 
-            layer = nn.Sequential(
-                nn.Linear(in_dim, out_dim), nn.ReLU(inplace=True) if i < num_layers - 1 else nn.Identity()
-            )
-            layers.append(layer)
-
-        super().__init__(*layers)
+    def forward(self, input: Tensor) -> Tensor:
+        hidden_state = input
+        for layer in self:
+            hidden_state = layer(hidden_state)
+        return hidden_state
 
 
 class MaskFormerPixelLevelModule(nn.Module):
