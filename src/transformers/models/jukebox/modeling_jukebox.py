@@ -2691,8 +2691,6 @@ class JukeboxPrior(nn.Module):
         else:
             # Separate encoder-decoder transformer
             if self.n_tokens != 0 and self.use_tokens:
-                from jukebox.transformer.ops import Conv1D
-
                 prime_input_shape = (self.n_tokens,)
                 self.prime_loss_dims = np.prod(prime_input_shape)
                 self.prime_acts_width, self.prime_state_width = prime_kwargs["width"], prior_kwargs["width"]
