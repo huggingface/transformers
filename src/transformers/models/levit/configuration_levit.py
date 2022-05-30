@@ -28,7 +28,7 @@ LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class LevitConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LevitModel`]. It is used to instantiate an LeViT
+    This is the configuration class to store the configuration of a [`LevitModel`]. It is used to instantiate a LeViT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the LeViT
     [facebook/levit-base-192](https://huggingface.co/facebook/levit-base-192) architecture.
