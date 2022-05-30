@@ -43,7 +43,7 @@ WEIGHTS_TO_AVERAGE_ENDSWITH = [
 ]
 
 WEIGHTS_WITH_ROW_PARALLELISM_CONTAIN = [
-    "dense_4h_to_h",
+    "mlp.dense_4h_to_h.weight",
     "self_attention.dense.weight",
 ]
 
@@ -51,16 +51,16 @@ WEIGHTS_WITH_ROW_PARALLELISM_CONTAIN = [
 def layer_name_mapping(key, file):
     """Convert Megatron-DeepSpeed TP/PP weights mapping in transformers PP only"""
     # Handle first and last layers
-    if key == "word_embeddings.weight":
-        return key
-    if key == "word_embeddings.norm.weight":
-        return "word_embeddings_layernorm.weight"
-    if key == "word_embeddings.norm.bias":
-        return "word_embeddings_layernorm.bias"
-    if key == "weight":
-        return "ln_f.weight"
-    if key == "bias":
-        return "ln_f.bias"
+    layer_rename_map = {
+        "word_embeddings.weight": "word_embeddings.weight",
+        "word_embeddings.norm.weight": "word_embeddings_layernorm.weight",
+        "word_embeddings.norm.bias": "word_embeddings_layernorm.bias",
+        "weight": "ln_f.weight",
+        "bias": "ln_f.bias",
+    }
+
+    if key in layer_rename_map:
+        return layer_rename_map[key]
 
     # Handle transformer blocks
     layer_number = int(re.match(r".*layer_(\d*).*", file)[1])
