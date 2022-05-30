@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Meta Inc. and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 Meta Platforms, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -64,8 +64,6 @@ class LevitConfig(PretrainedConfig):
             encoder blocks.
         attention_drop_rate (`List[int]`, *optional*, defaults to `[2, 2, 2]`):
             The dropout ratio for the attention probabilities.
-        distillation (`bool`, *optional*, defaults to True):
-            The value is set to True to use distillation else set to False.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
@@ -118,7 +116,6 @@ class LevitConfig(PretrainedConfig):
         self.patch_size = patch_size
         self.attention_ratio = attention_ratio
         self.mlp_ratio = mlp_ratio
-        self.distillation = distillation
         self.initializer_range = initializer_range
         self.down_ops = [
             ["Subsample", key_dim[0], embed_dim[0] // key_dim[0], 4, 2, 2],

@@ -234,10 +234,8 @@ class LevitModelTest(ModelTesterMixin, unittest.TestCase):
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
             hidden_states = outputs.hidden_states
-            for i in hidden_states:
-                print(i.shape)
 
-            expected_num_layers = sum(self.model_tester.depth) * 2 + len(self.model_tester.down_ops) * 2
+            expected_num_layers = len(self.model_tester.depth) + 1
             self.assertEqual(len(hidden_states), expected_num_layers)
 
             image_size = (self.model_tester.image_size, self.model_tester.image_size)
@@ -352,13 +350,12 @@ class LevitModelTest(ModelTesterMixin, unittest.TestCase):
             if (
                 model_class
                 not in [
-                    *get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING),
                     *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
                 ]
                 or model_class.__name__ == "LevitForImageClassificationWithTeacher"
             ):
                 continue
-
+            
             for problem_type in problem_types:
                 with self.subTest(msg=f"Testing {model_class} with {problem_type['title']}"):
 

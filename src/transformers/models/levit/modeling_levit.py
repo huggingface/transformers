@@ -54,9 +54,34 @@ LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+@dataclass
+class LevitForImageClassificationWithTeacherOutput(ModelOutput):
+    """
+    Output type of [`LevitForImageClassificationWithTeacher`].
+
+    Args:
+        logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+            Prediction scores as the average of the cls_logits and distillation logits.
+        cls_logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+            Prediction scores of the classification head (i.e. the linear layer on top of the final hidden state of the
+            class token).
+        distillation_logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+            Prediction scores of the distillation head (i.e. the linear layer on top of the final hidden state of the
+            distillation token).
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
+            plus the initial embedding outputs.
+    """
+
+    logits: torch.FloatTensor = None
+    cls_logits: torch.FloatTensor = None
+    distillation_logits: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+
 class LevitConvEmbeddings(nn.Module):
     """
-    LeViT Conv Embeddings with Batch Norm
+    LeViT Conv Embeddings with Batch Norm, used in the initial patch embedding layer.
     """
 
     def __init__(
@@ -66,17 +91,18 @@ class LevitConvEmbeddings(nn.Module):
         self.convolution = nn.Conv2d(
             in_channels, out_channels, kernel_size, stride, padding, dilation=dilation, groups=groups, bias=False
         )
-        self.bn = nn.BatchNorm2d(out_channels)
+        self.batch_norm = nn.BatchNorm2d(out_channels)
 
     def forward(self, embeddings):
         embeddings = self.convolution(embeddings)
-        embeddings = self.bn(embeddings)
+        embeddings = self.batch_norm(embeddings)
         return embeddings
 
 
 class LevitPatchEmbeddings(nn.Module):
     """
-    LeViT patch embeddings
+    LeViT patch embeddings, for final embeddings to be passed to transformer blocks.
+    It consists of multiple `LevitConvEmbeddings`.
     """
 
     def __init__(self, config):
@@ -108,37 +134,29 @@ class LevitPatchEmbeddings(nn.Module):
         embeddings = self.embedding_layer_3(embeddings)
         embeddings = self.activation_layer_3(embeddings)
         embeddings = self.embedding_layer_4(embeddings)
-        return embeddings
+        return embeddings.flatten(2).transpose(1, 2)
 
 
 class MLPLayerWithBN(nn.Module):
-    """
-    MLP Layer with Batch Norm
-    """
-
     def __init__(self, input_dim, output_dim, bn_weight_init=1):
         super().__init__()
         self.linear = nn.Linear(in_features=input_dim, out_features=output_dim, bias=False)
-        self.bn = nn.BatchNorm1d(output_dim)
+        self.batch_norm = nn.BatchNorm1d(output_dim)
 
     def forward(self, hidden_state):
         hidden_state = self.linear(hidden_state)
-        hidden_state = self.bn(hidden_state.flatten(0, 1)).reshape_as(hidden_state)
+        hidden_state = self.batch_norm(hidden_state.flatten(0, 1)).reshape_as(hidden_state)
         return hidden_state
 
 
 class LevitSubsample(nn.Module):
-    """
-    Subsampling Module
-    """
-
     def __init__(self, stride, resolution):
         super().__init__()
         self.stride = stride
         self.resolution = resolution
 
     def forward(self, hidden_state):
-        batch_size, N, channels = hidden_state.shape
+        batch_size, _, channels = hidden_state.shape
         hidden_state = hidden_state.view(batch_size, self.resolution, self.resolution, channels)[
             :, :: self.stride, :: self.stride
         ].reshape(batch_size, -1, channels)
@@ -146,10 +164,6 @@ class LevitSubsample(nn.Module):
 
 
 class LevitAttention(nn.Module):
-    """
-    LeViT Attention Module
-    """
-
     def __init__(self, embed_dim, key_dim, num_heads, attention_ratio, resolution):
         super().__init__()
         self.num_heads = num_heads
@@ -173,29 +187,29 @@ class LevitAttention(nn.Module):
                     attention_offsets[offset] = len(attention_offsets)
                 idxs.append(attention_offsets[offset])
 
-        self.ab = {}
+        self.attention_bias_cache = {}
         self.attention_biases = torch.nn.Parameter(torch.zeros(num_heads, len(attention_offsets)))
         self.register_buffer("attention_bias_idxs", torch.LongTensor(idxs).view(N, N))
 
     @torch.no_grad()
     def train(self, mode=True):
         super().train(mode)
-        if mode and self.ab:
-            self.ab = {}  # clear ab cache
+        if mode and self.attention_bias_cache:
+            self.attention_bias_cache = {}  # clear ab cache
 
     def get_attention_biases(self, device):
         if self.training:
             return self.attention_biases[:, self.attention_bias_idxs]
         else:
             device_key = str(device)
-            if device_key not in self.ab:
-                self.ab[device_key] = self.attention_biases[:, self.attention_bias_idxs]
-            return self.ab[device_key]
+            if device_key not in self.attention_bias_cache:
+                self.attention_bias_cache[device_key] = self.attention_biases[:, self.attention_bias_idxs]
+            return self.attention_bias_cache[device_key]
 
     def forward(self, hidden_state):
-        batch_size, N, channels = hidden_state.shape
+        batch_size, seq_length, _ = hidden_state.shape
         qkv = self.qkv(hidden_state)
-        query, key, value = qkv.view(batch_size, N, self.num_heads, -1).split(
+        query, key, value = qkv.view(batch_size, seq_length, self.num_heads, -1).split(
             [self.key_dim, self.key_dim, self.attention_ratio * self.key_dim], dim=3
         )
         query = query.permute(0, 2, 1, 3)
@@ -204,16 +218,12 @@ class LevitAttention(nn.Module):
 
         attention = query @ key.transpose(-2, -1) * self.scale + self.get_attention_biases(hidden_state.device)
         attention = attention.softmax(dim=-1)
-        hidden_state = (attention @ value).transpose(1, 2).reshape(batch_size, N, self.out_dim_proj)
+        hidden_state = (attention @ value).transpose(1, 2).reshape(batch_size, seq_length, self.out_dim_proj)
         hidden_state = self.projection(self.activation(hidden_state))
         return hidden_state
 
 
 class LevitAttentionSubsample(nn.Module):
-    """
-    LeViT Attention Subsample Module
-    """
-
     def __init__(self, input_dim, output_dim, key_dim, num_heads, attention_ratio, stride, resolution, resolution_):
         super().__init__()
         self.num_heads = num_heads
@@ -230,7 +240,7 @@ class LevitAttentionSubsample(nn.Module):
         self.activation = nn.Hardswish()
         self.projection = MLPLayerWithBN(self.out_dim_proj, output_dim)
 
-        self.ab = {}
+        self.attention_bias_cache = {}
 
         points = list(itertools.product(range(resolution), range(resolution)))
         points_ = list(itertools.product(range(resolution_), range(resolution_)))
@@ -250,23 +260,23 @@ class LevitAttentionSubsample(nn.Module):
     @torch.no_grad()
     def train(self, mode=True):
         super().train(mode)
-        if mode and self.ab:
-            self.ab = {}  # clear ab cache
+        if mode and self.attention_bias_cache:
+            self.attention_bias_cache = {}  # clear ab cache
 
     def get_attention_biases(self, device):
         if self.training:
             return self.attention_biases[:, self.attention_bias_idxs]
         else:
             device_key = str(device)
-            if device_key not in self.ab:
-                self.ab[device_key] = self.attention_biases[:, self.attention_bias_idxs]
-            return self.ab[device_key]
+            if device_key not in self.attention_bias_cache:
+                self.attention_bias_cache[device_key] = self.attention_biases[:, self.attention_bias_idxs]
+            return self.attention_bias_cache[device_key]
 
     def forward(self, hidden_state):
-        batch_size, N, channels = hidden_state.shape
+        batch_size, seq_length, _ = hidden_state.shape
         key, value = (
             self.kv(hidden_state)
-            .view(batch_size, N, self.num_heads, -1)
+            .view(batch_size, seq_length, self.num_heads, -1)
             .split([self.key_dim, self.attention_ratio * self.key_dim], dim=3)
         )
         key = key.permute(0, 2, 1, 3)
@@ -282,9 +292,9 @@ class LevitAttentionSubsample(nn.Module):
         return hidden_state
 
 
-class LevitMLPBlock(nn.Module):
+class LevitMLPLayer(nn.Module):
     """
-    MLP Residual Block a.k.a MLP 2X
+    MLP Layer with `2X` expansion in constrast to ViT with `4X`.
     """
 
     def __init__(self, input_dim, hidden_dim):
@@ -300,7 +310,7 @@ class LevitMLPBlock(nn.Module):
         return hidden_state
 
 
-class LevitResidualBlock(nn.Module):
+class LevitResidualLayer(nn.Module):
     """
     Residual Block for LeViT
     """
@@ -323,72 +333,92 @@ class LevitResidualBlock(nn.Module):
             return x
 
 
+class LevitStage(nn.Module):
+    """
+    LeViT Stage Layer for each stage consisting of `LevitMLPLayer` and `LevitAttention` layers.
+    """
+    def __init__(self, config, idx, embed_dim, key_dim, depth, num_heads, attention_ratio, mlp_ratio, down_ops, resolution):
+        super().__init__()
+        self.layers = []
+        self.config = config
+        self.resolution = resolution
+        for _ in range(depth):
+            self.layers.append(
+                LevitResidualLayer(LevitAttention(embed_dim, key_dim, num_heads, attention_ratio, resolution), self.config.drop_path)
+            )
+            if mlp_ratio > 0:
+                hidden_dim = embed_dim * mlp_ratio
+                self.layers.append(LevitResidualLayer(LevitMLPLayer(embed_dim, hidden_dim), self.config.drop_path))
+
+        if down_ops[0] == "Subsample":
+            self.resolution_ = (self.resolution - 1) // down_ops[5] + 1
+            self.layers.append(
+                LevitAttentionSubsample(
+                    *self.config.embed_dim[idx : idx + 2],
+                    key_dim=down_ops[1],
+                    num_heads=down_ops[2],
+                    attention_ratio=down_ops[3],
+                    stride=down_ops[5],
+                    resolution=resolution,
+                    resolution_=self.resolution_,
+                )
+            )
+            self.resolution = self.resolution_
+            if down_ops[4] > 0:
+                hidden_dim = self.config.embed_dim[idx + 1] * down_ops[4]
+                self.layers.append(
+                    LevitResidualLayer(LevitMLPLayer(self.config.embed_dim[idx + 1], hidden_dim), self.config.drop_path)
+                )
+
+        self.layers = nn.Sequential(*self.layers)
+
+    def get_resolution(self):
+        return self.resolution
+
+    def forward(self, hidden_state):
+        hidden_state = self.layers(hidden_state)
+        return hidden_state
+
+
 class LevitEncoder(nn.Module):
     """
-    LeViT Encoder Module
+    LeViT Encoder Layer consisting of `LevitStage` layers.
     """
 
     def __init__(self, config):
         super().__init__()
-        self.num_features = config.embed_dim[-1]
-        self.embed_dim = config.embed_dim
+        self.config = config
+        resolution = self.config.image_size // self.config.patch_size
+        self.stages = []
+        self.config.down_ops.append([""])
 
-        resolution = config.image_size // config.patch_size
-
-        self.patch_embeddings = LevitPatchEmbeddings(config)
-
-        self.blocks = []
-        config.down_ops.append([""])
-
-        for idx, (ed, kd, dpt, nh, attn_r, mlp_r, do) in enumerate(
+        for idx, (embed_dim, key_dim, depth, num_heads, attention_ratio, mlp_ratio, down_ops) in enumerate(
             zip(
-                config.embed_dim,
-                config.key_dim,
-                config.depth,
-                config.num_heads,
-                config.attention_ratio,
-                config.mlp_ratio,
-                config.down_ops,
+                self.config.embed_dim,
+                self.config.key_dim,
+                self.config.depth,
+                self.config.num_heads,
+                self.config.attention_ratio,
+                self.config.mlp_ratio,
+                self.config.down_ops,
             )
         ):
-            for _ in range(dpt):
-                self.blocks.append(
-                    LevitResidualBlock(LevitAttention(ed, kd, nh, attn_r, resolution), config.drop_path)
-                )
-                if mlp_r > 0:
-                    hidden_dim = ed * mlp_r
-                    self.blocks.append(LevitResidualBlock(LevitMLPBlock(ed, hidden_dim), config.drop_path))
+            stage = LevitStage(self.config, idx, embed_dim, key_dim, depth, num_heads, attention_ratio, mlp_ratio, down_ops, resolution)
+            resolution = stage.get_resolution()
+            self.stages.append(stage)
 
-            if do[0] == "Subsample":
-                resolution_ = (resolution - 1) // do[5] + 1
-                self.blocks.append(
-                    LevitAttentionSubsample(
-                        *config.embed_dim[idx : idx + 2],
-                        key_dim=do[1],
-                        num_heads=do[2],
-                        attention_ratio=do[3],
-                        stride=do[5],
-                        resolution=resolution,
-                        resolution_=resolution_,
-                    )
-                )
-                resolution = resolution_
-                if do[4] > 0:
-                    hidden_dim = config.embed_dim[idx + 1] * do[4]
-                    self.blocks.append(
-                        LevitResidualBlock(LevitMLPBlock(config.embed_dim[idx + 1], hidden_dim), config.drop_path)
-                    )
+        self.stages = nn.Sequential(*self.stages)
 
-        self.blocks = nn.Sequential(*self.blocks)
-
-    def forward(self, pixel_values, output_hidden_states=False, return_dict=True):
+    def forward(self, embeddings, output_hidden_states=False, return_dict=True):
         all_hidden_states = () if output_hidden_states else None
-        embeddings = self.patch_embeddings(pixel_values)
-        hidden_state = embeddings.flatten(2).transpose(1, 2)
+        hidden_state = embeddings
 
-        for layers in self.blocks:
-            hidden_state = layers(hidden_state)
+        for each_stage in self.stages:
             if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_state,)
+            hidden_state = each_stage(hidden_state)
+        
+        if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_state,)
         if not return_dict:
             return tuple(v for v in [hidden_state, all_hidden_states] if v is not None)
@@ -406,13 +436,13 @@ class LevitClassificationLayer(nn.Module):
 
     def __init__(self, input_dim, output_dim):
         super().__init__()
-        self.bn = nn.BatchNorm1d(input_dim)
+        self.batch_norm = nn.BatchNorm1d(input_dim)
         self.linear = nn.Linear(input_dim, output_dim)
 
-    def forward(self, x):
-        x = self.bn(x)
-        x = self.linear(x)
-        return x
+    def forward(self, hidden_state):
+        hidden_state = self.batch_norm(hidden_state)
+        logits = self.linear(hidden_state)
+        return logits
 
 
 class LevitPreTrainedModel(PreTrainedModel):
@@ -476,6 +506,7 @@ class LevitModel(LevitPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
+        self.patch_embeddings = LevitPatchEmbeddings(config)
         self.encoder = LevitEncoder(config)
         # Initialize weights and apply final processing
         self.post_init()
@@ -503,16 +534,17 @@ class LevitModel(LevitPreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
+        embeddings = self.patch_embeddings(pixel_values)
         encoder_outputs = self.encoder(
-            pixel_values,
+            embeddings,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
         last_hidden_state = encoder_outputs[0]
 
-        # global average pooling, (N, C, H, W) -> (N, C)
-        pooled_output = last_hidden_state.mean([-2, -1])
+        # global average pooling, (batch_size, seq_length, embed_dim) -> (batch_size, embed_dim)
+        pooled_output = last_hidden_state.mean(dim=1)
 
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
@@ -568,32 +600,6 @@ class LevitForImageClassification(LevitPreTrainedModel):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
-        Examples:
-
-        ```python
-        >>> from transformers import LevitFeatureExtractor, LevitForImageClassification
-        >>> import torch
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> torch.manual_seed(3)  # doctest: +IGNORE_RESULT
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> # note: we are loading a LevitForImageClassificationWithTeacher from the hub here
-        >>> # there maybe cases where prediction might be wrong
-        >>> feature_extractor = LevitFeatureExtractor.from_pretrained("anugunj/levit-128S")
-        >>> model = LevitForImageClassification.from_pretrained("anugunj/levit-128S")
-
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
-        >>> outputs = model(**inputs)
-        >>> logits = outputs.logits
-        >>> # model predicts one of the 1000 ImageNet classes
-        >>> predicted_class_idx = logits.argmax(-1).item()
-        >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
-        Predicted class: tabby, tabby cat
-        ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -635,37 +641,11 @@ class LevitForImageClassification(LevitPreTrainedModel):
             hidden_states=outputs.hidden_states,
         )
 
-
-@dataclass
-class LevitForImageClassificationWithTeacherOutput(ModelOutput):
-    """
-    Output type of [`LevitForImageClassificationWithTeacher`].
-
-    Args:
-        logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
-            Prediction scores as the average of the cls_logits and distillation logits.
-        cls_logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
-            Prediction scores of the classification head (i.e. the linear layer on top of the final hidden state of the
-            class token).
-        distillation_logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
-            Prediction scores of the distillation head (i.e. the linear layer on top of the final hidden state of the
-            distillation token).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
-            plus the initial embedding outputs.
-    """
-
-    logits: torch.FloatTensor = None
-    cls_logits: torch.FloatTensor = None
-    distillation_logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-
-
 @add_start_docstrings(
     """
     LeViT Model transformer with image classification heads on top (a linear layer on top of the final hidden state and
-    a linear layer on top of the final hidden state of the distillation token) e.g. for ImageNet. .. warning::
+    a linear layer on top of the final hidden state of the distillation token) e.g. for ImageNet. 
+    .. warning::
            This model supports inference-only. Fine-tuning with distillation (i.e. with a teacher) is not yet
            supported.
     """,
@@ -684,8 +664,7 @@ class LevitForImageClassificationWithTeacher(LevitPreTrainedModel):
             if config.num_labels > 0
             else torch.nn.Identity()
         )
-        if config.distillation:
-            self.classifier_distill = (
+        self.classifier_distill = (
                 LevitClassificationLayer(config.embed_dim[-1], config.num_labels)
                 if config.num_labels > 0
                 else torch.nn.Identity()

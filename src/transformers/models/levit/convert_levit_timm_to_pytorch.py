@@ -25,7 +25,7 @@ import torch
 
 import timm
 from huggingface_hub import hf_hub_download
-from transformers import LevitConfig, LevitFeatureExtractor, LevitForImageClassification
+from transformers import LevitConfig, LevitFeatureExtractor, LevitForImageClassificationWithTeacher
 from transformers.utils import logging
 
 
@@ -52,12 +52,13 @@ def convert_weight_and_push(
             from_model = timm.create_model("levit_384", pretrained=True)
 
         from_model.eval()
-        our_model = LevitForImageClassification(config).eval()
+        our_model = LevitForImageClassificationWithTeacher(config).eval()
         huggingface_weights = OrderedDict()
 
         weights = from_model.state_dict()
         og_keys = list(from_model.state_dict().keys())
         new_keys = list(our_model.state_dict().keys())
+        print(len(og_keys), len(new_keys))
         for i in range(len(og_keys)):
             huggingface_weights[new_keys[i]] = weights[og_keys[i]]
         our_model.load_state_dict(huggingface_weights)
@@ -141,7 +142,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",
-        default="dump/",
+        default="levit-dump-folder/",
         type=Path,
         required=False,
         help="Path to the output PyTorch model directory.",
