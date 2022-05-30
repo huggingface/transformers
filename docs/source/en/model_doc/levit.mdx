@@ -31,10 +31,7 @@ to the speed/accuracy tradeoff. For example, at 80% ImageNet top-1 accuracy, LeV
 
 Tips:
 
-- Compared to ViT, LeViT models uses additional distillation head to effectively learn from a teacher (which, in the
-  LeViT paper, is a ResNet like-model). The distillation head is learned through backpropagation under supervision of
-  from ResNet like-model. They also use inspiration from convolution neural networks to use activation maps with decreasing
-  resolutions to increase the efficiency.
+- Compared to ViT, LeViT models use an additional distillation head to effectively learn from a teacher (which, in the LeViT paper, is a ResNet like-model). The distillation head is learned through backpropagation under supervision of a ResNet like-model. They also draw inspiration from convolution neural networks to use activation maps with decreasing resolutions to increase the efficiency.
 - There are 2 ways to fine-tune distilled models, either (1) in a classic way, by only placing a prediction head on top
   of the final hidden state and not using the distillation head, or (2) by placing both a prediction head and distillation 
   head on top of the final hidden state. In that case, the prediction head is trained using regular cross-entropy between 
