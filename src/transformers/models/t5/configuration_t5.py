@@ -98,7 +98,6 @@ class T5Config(PretrainedConfig):
         use_cache=True,
         pad_token_id=0,
         eos_token_id=1,
-        is_gated_act=False,
         **kwargs
     ):
         self.vocab_size = vocab_size
@@ -118,12 +117,16 @@ class T5Config(PretrainedConfig):
         self.feed_forward_proj = feed_forward_proj
         self.use_cache = use_cache
 
+        act_info = self.feed_forward_proj.split("-")
+        self.dense_act_fn = act_info[-1]
+        self.is_gated_act = act_info[0] == "gated"
+
+        if len(act_info) > 1 and act_info[0] != "gated" or len(act_info) > 2:
+            raise ValueError(f"{feed_forward_proj} is not a valid activation function.")
+
+        # for backwards compatibility
         if feed_forward_proj == "gated-gelu":
             self.dense_act_fn = "gelu_new"
-            self.is_gated_act = True
-        else:
-            self.dense_act_fn = self.feed_forward_proj
-            self.is_gated_act = is_gated_act
 
         super().__init__(
             pad_token_id=pad_token_id,
