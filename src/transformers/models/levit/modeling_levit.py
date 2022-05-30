@@ -79,6 +79,7 @@ class LevitForImageClassificationWithTeacherOutput(ModelOutput):
     distillation_logits: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
+
 class LevitConvEmbeddings(nn.Module):
     """
     LeViT Conv Embeddings with Batch Norm, used in the initial patch embedding layer.
@@ -101,8 +102,8 @@ class LevitConvEmbeddings(nn.Module):
 
 class LevitPatchEmbeddings(nn.Module):
     """
-    LeViT patch embeddings, for final embeddings to be passed to transformer blocks.
-    It consists of multiple `LevitConvEmbeddings`.
+    LeViT patch embeddings, for final embeddings to be passed to transformer blocks. It consists of multiple
+    `LevitConvEmbeddings`.
     """
 
     def __init__(self, config):
@@ -178,7 +179,7 @@ class LevitAttention(nn.Module):
         self.projection = MLPLayerWithBN(self.out_dim_proj, embed_dim, bn_weight_init=0)
 
         points = list(itertools.product(range(resolution), range(resolution)))
-        N = len(points)
+        len_points = len(points)
         attention_offsets, idxs = {}, []
         for p1 in points:
             for p2 in points:
@@ -189,7 +190,7 @@ class LevitAttention(nn.Module):
 
         self.attention_bias_cache = {}
         self.attention_biases = torch.nn.Parameter(torch.zeros(num_heads, len(attention_offsets)))
-        self.register_buffer("attention_bias_idxs", torch.LongTensor(idxs).view(N, N))
+        self.register_buffer("attention_bias_idxs", torch.LongTensor(idxs).view(len_points, len_points))
 
     @torch.no_grad()
     def train(self, mode=True):
@@ -244,7 +245,7 @@ class LevitAttentionSubsample(nn.Module):
 
         points = list(itertools.product(range(resolution), range(resolution)))
         points_ = list(itertools.product(range(resolution_), range(resolution_)))
-        N, N_ = len(points), len(points_)
+        len_points, len_points_ = len(points), len(points_)
         attention_offsets, idxs = {}, []
         for p1 in points_:
             for p2 in points:
@@ -255,7 +256,7 @@ class LevitAttentionSubsample(nn.Module):
                 idxs.append(attention_offsets[offset])
 
         self.attention_biases = torch.nn.Parameter(torch.zeros(num_heads, len(attention_offsets)))
-        self.register_buffer("attention_bias_idxs", torch.LongTensor(idxs).view(N_, N))
+        self.register_buffer("attention_bias_idxs", torch.LongTensor(idxs).view(len_points, len_points_))
 
     @torch.no_grad()
     def train(self, mode=True):
@@ -337,14 +338,19 @@ class LevitStage(nn.Module):
     """
     LeViT Stage Layer for each stage consisting of `LevitMLPLayer` and `LevitAttention` layers.
     """
-    def __init__(self, config, idx, embed_dim, key_dim, depth, num_heads, attention_ratio, mlp_ratio, down_ops, resolution):
+
+    def __init__(
+        self, config, idx, embed_dim, key_dim, depth, num_heads, attention_ratio, mlp_ratio, down_ops, resolution
+    ):
         super().__init__()
         self.layers = []
         self.config = config
         self.resolution = resolution
         for _ in range(depth):
             self.layers.append(
-                LevitResidualLayer(LevitAttention(embed_dim, key_dim, num_heads, attention_ratio, resolution), self.config.drop_path)
+                LevitResidualLayer(
+                    LevitAttention(embed_dim, key_dim, num_heads, attention_ratio, resolution), self.config.drop_path
+                )
             )
             if mlp_ratio > 0:
                 hidden_dim = embed_dim * mlp_ratio
@@ -367,7 +373,9 @@ class LevitStage(nn.Module):
             if down_ops[4] > 0:
                 hidden_dim = self.config.embed_dim[idx + 1] * down_ops[4]
                 self.layers.append(
-                    LevitResidualLayer(LevitMLPLayer(self.config.embed_dim[idx + 1], hidden_dim), self.config.drop_path)
+                    LevitResidualLayer(
+                        LevitMLPLayer(self.config.embed_dim[idx + 1], hidden_dim), self.config.drop_path
+                    )
                 )
 
         self.layers = nn.Sequential(*self.layers)
@@ -403,7 +411,18 @@ class LevitEncoder(nn.Module):
                 self.config.down_ops,
             )
         ):
-            stage = LevitStage(self.config, idx, embed_dim, key_dim, depth, num_heads, attention_ratio, mlp_ratio, down_ops, resolution)
+            stage = LevitStage(
+                self.config,
+                idx,
+                embed_dim,
+                key_dim,
+                depth,
+                num_heads,
+                attention_ratio,
+                mlp_ratio,
+                down_ops,
+                resolution,
+            )
             resolution = stage.get_resolution()
             self.stages.append(stage)
 
@@ -417,9 +436,9 @@ class LevitEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_state,)
             hidden_state = each_stage(hidden_state)
-        
+
         if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_state,)
+            all_hidden_states = all_hidden_states + (hidden_state,)
         if not return_dict:
             return tuple(v for v in [hidden_state, all_hidden_states] if v is not None)
 
@@ -641,11 +660,11 @@ class LevitForImageClassification(LevitPreTrainedModel):
             hidden_states=outputs.hidden_states,
         )
 
+
 @add_start_docstrings(
     """
     LeViT Model transformer with image classification heads on top (a linear layer on top of the final hidden state and
-    a linear layer on top of the final hidden state of the distillation token) e.g. for ImageNet. 
-    .. warning::
+    a linear layer on top of the final hidden state of the distillation token) e.g. for ImageNet. .. warning::
            This model supports inference-only. Fine-tuning with distillation (i.e. with a teacher) is not yet
            supported.
     """,
@@ -665,10 +684,10 @@ class LevitForImageClassificationWithTeacher(LevitPreTrainedModel):
             else torch.nn.Identity()
         )
         self.classifier_distill = (
-                LevitClassificationLayer(config.embed_dim[-1], config.num_labels)
-                if config.num_labels > 0
-                else torch.nn.Identity()
-            )
+            LevitClassificationLayer(config.embed_dim[-1], config.num_labels)
+            if config.num_labels > 0
+            else torch.nn.Identity()
+        )
 
         # Initialize weights and apply final processing
         self.post_init()

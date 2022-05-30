@@ -34,7 +34,6 @@ if is_torch_available():
 
     from transformers import (
         MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
-        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         MODEL_MAPPING,
         LevitForImageClassification,
         LevitForImageClassificationWithTeacher,
@@ -355,7 +354,7 @@ class LevitModelTest(ModelTesterMixin, unittest.TestCase):
                 or model_class.__name__ == "LevitForImageClassificationWithTeacher"
             ):
                 continue
-            
+
             for problem_type in problem_types:
                 with self.subTest(msg=f"Testing {model_class} with {problem_type['title']}"):
 
