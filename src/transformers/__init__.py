@@ -512,6 +512,7 @@ else:
     _import_structure["models.gpt2"].append("GPT2TokenizerFast")
     _import_structure["models.gpt_neox"].append("GPTNeoXTokenizerFast")
     _import_structure["models.herbert"].append("HerbertTokenizerFast")
+    _import_structure["models.jukebox"].append("JukeboxTokenizerFast")
     _import_structure["models.layoutlm"].append("LayoutLMTokenizerFast")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2TokenizerFast")
     _import_structure["models.layoutlmv3"].append("LayoutLMv3TokenizerFast")
@@ -3052,6 +3053,7 @@ if TYPE_CHECKING:
         from .models.gpt2 import GPT2TokenizerFast
         from .models.gpt_neox import GPTNeoXTokenizerFast
         from .models.herbert import HerbertTokenizerFast
+        from .models.jukebox import JukeboxTokenizerFast
         from .models.layoutlm import LayoutLMTokenizerFast
         from .models.layoutlmv2 import LayoutLMv2TokenizerFast
         from .models.layoutlmv3 import LayoutLMv3TokenizerFast
