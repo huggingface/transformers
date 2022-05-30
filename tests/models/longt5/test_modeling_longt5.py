@@ -1561,7 +1561,7 @@ class LongT5TGlobalModelIntegrationTests(LongT5ModelIntegrationTests):
             dtype=torch.long,
             device=torch_device,
         )
-        attention_mask = torch.ones(
+        attention_mask = torch.tensor(
             [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
             dtype=torch.long,
             device=torch_device,
