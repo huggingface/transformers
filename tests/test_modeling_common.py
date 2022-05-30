@@ -747,7 +747,9 @@ class ModelTesterMixin:
                     ]
                     if labels is not None:
                         input_names.append("labels")
+
                     filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
+                    input_names = list(filtered_inputs.keys())
 
                     model_output = model(**filtered_inputs)
 
@@ -774,7 +776,7 @@ class ModelTesterMixin:
                         input_names.append("end_positions")
 
                     filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
-                    input_names = filtered_inputs.keys()
+                    input_names = list(filtered_inputs.keys())
 
                     model_output = model(**filtered_inputs)
 

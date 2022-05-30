@@ -997,7 +997,7 @@ def symbolic_trace(
 
     sig = inspect.signature(model.forward)
 
-    if not (set(input_names) & set(sig.parameters.keys())):
+    if not (set(input_names) <= set(sig.parameters.keys())):
         formatted_input_names = input_names[0] if len(input_names) == 1 else ", ".join(input_names)
         formatted_allowed_input_names = ", ".join(sig.parameters.keys())
         raise ValueError(

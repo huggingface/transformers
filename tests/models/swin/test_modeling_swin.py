@@ -398,7 +398,9 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
                     input_names = ["input_ids", "attention_mask", "decoder_input_ids", "decoder_attention_mask"]
                     if labels is not None:
                         input_names.append("labels")
+
                     filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
+                    input_names = list(filtered_inputs.keys())
 
                     model_output = model(**filtered_inputs)
 
@@ -418,7 +420,7 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
                         input_names.append("end_positions")
 
                     filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
-                    input_names = filtered_inputs.keys()
+                    input_names = list(filtered_inputs.keys())
 
                     model_output = model(**filtered_inputs)
 
