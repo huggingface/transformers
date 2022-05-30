@@ -117,6 +117,7 @@ class PhobertTokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
         self,
@@ -152,6 +153,7 @@ class PhobertTokenizer(PreTrainedTokenizer):
         self.encoder[self.unk_token] = 3
 
         self.add_from_file(vocab_file)
+        self.encoder[self.mask_token] = len(self.encoder)
 
         self.decoder = {v: k for k, v in self.encoder.items()}
 
@@ -315,22 +317,41 @@ class PhobertTokenizer(PreTrainedTokenizer):
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
-            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
+            logger.error(f"Vocabulary path ({save_directory}) should be a directory.")
             return
+
         out_vocab_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
         )
-        out_merge_file = os.path.join(
+
+        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file) and os.path.isfile(self.vocab_file):
+            copyfile(self.vocab_file, out_vocab_file)
+        elif not os.path.isfile(self.vocab_file):
+            with open(out_vocab_file, "w", encoding="utf-8") as fp:
+                for token, value in self.encoder.items():
+                    if token not in self.all_special_tokens:
+                        fp.write(f"{str(token)} 1\n")
+
+        out_merges_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["merges_file"]
         )
 
-        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
-            copyfile(self.vocab_file, out_vocab_file)
+        if os.path.abspath(self.merges_file) != os.path.abspath(out_merges_file) and os.path.isfile(self.merges_file):
+            copyfile(self.merges_file, out_merges_file)
+        elif not os.path.isfile(self.merges_file):
+            index = 0
+            with open(out_merges_file, "w", encoding="utf-8") as writer:
+                for bpe_tokens, token_index in sorted(self.bpe_ranks.items(), key=lambda kv: kv[1]):
+                    if index != token_index:
+                        logger.warning(
+                            f"Saving vocabulary to {out_merges_file}: BPE merge indices are not consecutive."
+                            " Please check that the tokenizer is not corrupted!"
+                        )
+                        index = token_index
+                    writer.write(" ".join(bpe_tokens) + " 1\n")
+                    index += 1
 
-        if os.path.abspath(self.merges_file) != os.path.abspath(out_merge_file):
-            copyfile(self.merges_file, out_merge_file)
-
-        return out_vocab_file, out_merge_file
+        return (out_vocab_file, out_merges_file)
 
     # def decode(self, token_ids, skip_special_tokens=False, clean_up_tokenization_spaces=True):
     #     filtered_tokens = ' '.join(self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens))
