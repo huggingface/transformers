@@ -993,7 +993,18 @@ def symbolic_trace(
     if input_names is None:
         input_names = model.dummy_inputs.keys()
 
+    input_names = list(input_names)
+
     sig = inspect.signature(model.forward)
+
+    if not (set(input_names) & set(sig.parameters.keys())):
+        formatted_input_names = input_names[0] if len(input_names) == 1 else ", ".join(input_names)
+        formatted_allowed_input_names = ", ".join(sig.parameters.keys())
+        raise ValueError(
+            f"The model does not have input(s) named: {formatted_input_names}, expected a subset of the following:"
+            f" {formatted_allowed_input_names}"
+        )
+
     concrete_args = {p.name: p.default for p in sig.parameters.values() if p.name not in input_names}
 
     if not isinstance(model, _SUPPORTED_MODELS):
