@@ -701,6 +701,7 @@ else:
         "TemperatureLogitsWarper",
         "TopKLogitsWarper",
         "TopPLogitsWarper",
+        "TypicalLogitsWarper",
     ]
     _import_structure["generation_stopping_criteria"] = [
         "MaxLengthCriteria",
