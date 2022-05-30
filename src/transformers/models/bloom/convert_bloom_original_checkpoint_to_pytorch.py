@@ -137,14 +137,9 @@ def convert_bloom_checkpoint_to_pytorch(
                 ),
             )
 
-            tensor_size = 1
             for key in tensors.keys():
-                temp_tensor = tensors[key]
-                for ele in temp_tensor.size():
-                    tensor_size *= ele
-                dtype_size = get_dtype_size(temp_tensor.dtype)
-                total_size += dtype_size * tensor_size
-
+                value = tensors[key]
+                total_size += value.numel() * get_dtype_size(value.dtype)
                 if key not in index_dict["weight_map"]:
                     index_dict["weight_map"][key] = "pytorch_model_{}-of-{}.bin".format(
                         str(j + 1).zfill(5), str(len(file_names)).zfill(5)
