@@ -90,7 +90,8 @@ def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: i
     """
     Make causal mask used for bi-directional self-attention.
     """
-    bsz, tgt_len = input_ids_shape
+    bsz = input_ids_shape[0]
+    tgt_len = input_ids_shape[1]
     mask = tf.ones((tgt_len, tgt_len)) * LARGE_NEGATIVE
     mask_cond = tf.range(shape_list(mask)[-1])
 
