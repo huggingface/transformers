@@ -890,7 +890,7 @@ jobs:
             - run: make deps_table_check_updated
             - run: python utils/tests_fetcher.py --sanity_check
 
-    run_tests_layoutlmv2:
+    run_tests_layoutlmv2_and_v3:
         working_directory: ~/transformers
         docker:
             - image: circleci/python:3.7
@@ -921,7 +921,7 @@ jobs:
                   path: ~/transformers/test_preparation.txt
             - run: |
                   if [ -f test_list.txt ]; then
-                    python -m pytest -n 1 tests/models/*layoutlmv2* --dist=loadfile -s --make-reports=tests_layoutlmv2 --durations=100
+                    python -m pytest -n 1 tests/models/*layoutlmv* --dist=loadfile -s --make-reports=tests_layoutlmv2_and_v3 --durations=100
                   fi
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
@@ -982,7 +982,7 @@ workflows:
             - run_tests_pipelines_tf
             - run_tests_onnxruntime
             - run_tests_hub
-            - run_tests_layoutlmv2
+            - run_tests_layoutlmv2_and_v3
     nightly:
         triggers:
             - schedule:
