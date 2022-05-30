@@ -256,7 +256,7 @@ class LevitAttentionSubsample(nn.Module):
                 idxs.append(attention_offsets[offset])
 
         self.attention_biases = torch.nn.Parameter(torch.zeros(num_heads, len(attention_offsets)))
-        self.register_buffer("attention_bias_idxs", torch.LongTensor(idxs).view(len_points, len_points_))
+        self.register_buffer("attention_bias_idxs", torch.LongTensor(idxs).view(len_points_, len_points))
 
     @torch.no_grad()
     def train(self, mode=True):
