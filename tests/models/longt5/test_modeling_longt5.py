@@ -1546,3 +1546,39 @@ class LongT5TGlobalModelIntegrationTests(LongT5ModelIntegrationTests):
     @cached_property
     def tokenizer(self):
         return T5Tokenizer.from_pretrained("longt5-base")
+
+    @slow
+    def test_inference_hidden_states(self):
+        model = self.model
+
+        input_ids = torch.tensor(
+            [[100, 19, 3, 9, 7142, 1200, 145, 8, 1252, 14145, 2034, 812, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
+            dtype=torch.long,
+            device=torch_device,
+        )
+        decoder_input_ids = torch.tensor(
+            [[100, 19, 3, 9, 7142, 1200, 145, 8, 1252, 14145, 2034, 812, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
+            dtype=torch.long,
+            device=torch_device,
+        )
+        attention_mask = torch.ones(
+            [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
+            dtype=torch.long,
+            device=torch_device,
+        )
+
+        output = model(
+            input_ids, attention_mask=attention_mask, decoder_input_ids=decoder_input_ids, output_hidden_states=True
+        )
+
+        # check if encoder_outputs match
+        expected_output_slice = torch.tensor(
+            [0.00276407, 0.09927233, 0.00156037, -0.17903061, -0.15985875], device=torch_device
+        )
+        self.assertTrue(torch.allclose(output.encoder_hidden_states[-1][0, 0, :5], expected_output_slice, atol=1e-4))
+
+        # check if logits match
+        expected_output_slice = torch.tensor(
+            [-72.025055, -13.3219185, -12.156551, -7.4609437, -17.41865], device=torch_device
+        )
+        self.assertTrue(torch.allclose(output.logits[0, 0, :5], expected_output_slice, atol=1e-4))
