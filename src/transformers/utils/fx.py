@@ -29,32 +29,23 @@ from torch import nn
 from torch.fx import Graph, GraphModule, Proxy, Tracer
 from torch.fx.proxy import ParameterProxy
 
-from .. import (
-    CONFIG_MAPPING,
-    MODEL_FOR_CAUSAL_LM_MAPPING,
-    MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
-    MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
-    MODEL_FOR_MASKED_LM_MAPPING,
-    MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
-    MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
-    MODEL_FOR_PRETRAINING_MAPPING,
-    MODEL_FOR_QUESTION_ANSWERING_MAPPING,
-    MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-    MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
-    MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
-    MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
-    MODEL_MAPPING,
-    CLIPTextModel,
-    CLIPVisionModel,
-    GPT2DoubleHeadsModel,
-    PretrainedConfig,
-    PreTrainedModel,
-    XLNetForQuestionAnswering,
-    logging,
-)
+from .. import PretrainedConfig, PreTrainedModel, logging
 from ..models.auto import get_values
-from ..models.speech_to_text_2.modeling_speech_to_text_2 import Speech2Text2Decoder
-from ..models.trocr.modeling_trocr import TrOCRDecoder
+from ..models.auto.modeling_auto import (
+    MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
+    MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES,
+    MODEL_FOR_MASKED_LM_MAPPING_NAMES,
+    MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES,
+    MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES,
+    MODEL_FOR_PRETRAINING_MAPPING_NAMES,
+    MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES,
+    MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES,
+    MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES,
+    MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_MAPPING_NAMES,
+)
 from ..utils import TORCH_FX_REQUIRED_VERSION, is_torch_fx_available
 from ..utils.versions import importlib_metadata
 
@@ -62,26 +53,25 @@ from ..utils.versions import importlib_metadata
 logger = logging.get_logger(__name__)
 
 
-def _generate_supported_model_classes(
+def _generate_supported_model_class_names(
     model_name: Type[PretrainedConfig],
     supported_tasks: Optional[Union[str, List[str]]] = None,
-) -> List[Type[PreTrainedModel]]:
+) -> List[str]:
 
-    model_config_class = CONFIG_MAPPING[model_name]
     task_mapping = {
-        "default": MODEL_MAPPING,
-        "pretraining": MODEL_FOR_PRETRAINING_MAPPING,
-        "next-sentence-prediction": MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
-        "masked-lm": MODEL_FOR_MASKED_LM_MAPPING,
-        "causal-lm": MODEL_FOR_CAUSAL_LM_MAPPING,
-        "seq2seq-lm": MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-        "speech-seq2seq": MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
-        "multiple-choice": MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
-        "question-answering": MODEL_FOR_QUESTION_ANSWERING_MAPPING,
-        "sequence-classification": MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
-        "token-classification": MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
-        "masked-image-modeling": MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
-        "image-classification": MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
+        "default": MODEL_MAPPING_NAMES,
+        "pretraining": MODEL_FOR_PRETRAINING_MAPPING_NAMES,
+        "next-sentence-prediction": MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES,
+        "masked-lm": MODEL_FOR_MASKED_LM_MAPPING_NAMES,
+        "causal-lm": MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
+        "seq2seq-lm": MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES,
+        "speech-seq2seq": MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES,
+        "multiple-choice": MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES,
+        "question-answering": MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES,
+        "sequence-classification": MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
+        "token-classification": MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
+        "masked-image-modeling": MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES,
+        "image-classification": MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
     }
 
     if supported_tasks is None:
@@ -89,13 +79,13 @@ def _generate_supported_model_classes(
     if isinstance(supported_tasks, str):
         supported_tasks = [supported_tasks]
 
-    model_classes = []
+    model_class_names = []
     for task in supported_tasks:
-        model_class = task_mapping[task].get(model_config_class, None)
-        if model_class:
-            model_classes.append(model_class)
+        class_name = task_mapping[task].get(model_name, None)
+        if class_name:
+            model_class_names.append(class_name)
 
-    return model_classes
+    return model_class_names
 
 
 _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
@@ -135,22 +125,20 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
 _REGULAR_SUPPORTED_MODELS = []
 for item in _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS:
     if isinstance(item, dict):
-        _REGULAR_SUPPORTED_MODELS.extend(_generate_supported_model_classes(**item))
+        _REGULAR_SUPPORTED_MODELS.extend(_generate_supported_model_class_names(**item))
     else:
-        _REGULAR_SUPPORTED_MODELS.extend(_generate_supported_model_classes(item))
+        _REGULAR_SUPPORTED_MODELS.extend(_generate_supported_model_class_names(item))
 
 _SPECIAL_SUPPORTED_MODELS = [
-    CLIPTextModel,
-    CLIPVisionModel,
-    GPT2DoubleHeadsModel,
-    Speech2Text2Decoder,
-    TrOCRDecoder,
+    "CLIPTextModel",
+    "CLIPVisionModel",
+    "GPT2DoubleHeadsModel",
+    "Speech2Text2Decoder",
+    "TrOCRDecoder",
     # TODO: add support for them as it should be quite easy to do so (small blocking issues).
     # XLNetForQuestionAnswering,
 ]
-_SUPPORTED_MODELS = tuple(
-    sorted(list(set(_REGULAR_SUPPORTED_MODELS + _SPECIAL_SUPPORTED_MODELS)), key=lambda c: c.__name__)
-)
+_SUPPORTED_MODELS = tuple(sorted(set(_REGULAR_SUPPORTED_MODELS + _SPECIAL_SUPPORTED_MODELS)))
 
 
 def torch_nn_embedding(self, input):
@@ -636,22 +624,22 @@ class HFTracer(Tracer):
         """Generates dummy input for model inference recording."""
         # Retrieving the model class, either from the "class_for_deserialization" attribute if the model was restored
         # from pickle, or from the "__class__" attribute in the general case.
-        model_class = getattr(model, "class_for_deserialization", model.__class__)
+        model_class_name = getattr(model, "class_for_deserialization", model.__class__).__name__
         device = model.device
         inputs_dict = {}
 
         if input_name in ["labels", "start_positions", "end_positions"]:
 
             batch_size = shape[0]
-            if model_class in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
+            if model_class_name in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES):
                 inputs_dict["labels"] = torch.zeros(batch_size, dtype=torch.long, device=device)
-            elif model_class in [
-                *get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING),
-                XLNetForQuestionAnswering,
+            elif model_class_name in [
+                *get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES),
+                "XLNetForQuestionAnswering",
             ]:
                 inputs_dict["start_positions"] = torch.zeros(batch_size, dtype=torch.long, device=device)
                 inputs_dict["end_positions"] = torch.zeros(batch_size, dtype=torch.long, device=device)
-            elif model_class in get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING):
+            elif model_class_name in get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES):
                 if not hasattr(model.config, "problem_type") or model.config.problem_type is None:
                     raise ValueError(
                         "Could not retrieve the problem type for the sequence classification task, please set "
@@ -675,22 +663,22 @@ class HFTracer(Tracer):
                     )
                 inputs_dict["labels"] = torch.zeros(*labels_shape, dtype=labels_dtype, device=device)
 
-            elif model_class in [
-                *get_values(MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING),
-                *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
+            elif model_class_name in [
+                *get_values(MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES),
+                *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES),
             ]:
                 inputs_dict["labels"] = torch.zeros(batch_size, dtype=torch.long, device=device)
-            elif model_class in [
-                *get_values(MODEL_FOR_PRETRAINING_MAPPING),
-                *get_values(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING),
-                *get_values(MODEL_FOR_CAUSAL_LM_MAPPING),
-                *get_values(MODEL_FOR_MASKED_LM_MAPPING),
-                *get_values(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING),
-                GPT2DoubleHeadsModel,
+            elif model_class_name in [
+                *get_values(MODEL_FOR_PRETRAINING_MAPPING_NAMES),
+                *get_values(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES),
+                *get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES),
+                *get_values(MODEL_FOR_MASKED_LM_MAPPING_NAMES),
+                *get_values(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES),
+                "GPT2DoubleHeadsModel",
             ]:
                 inputs_dict["labels"] = torch.zeros(shape, dtype=torch.long, device=device)
             else:
-                raise NotImplementedError(f"{model_class} not supported yet.")
+                raise NotImplementedError(f"{model_class_name} not supported yet.")
         elif "pixel_values" in input_name:
             batch_size = shape[0]
             image_size = getattr(model.config, "image_size", None)
@@ -854,7 +842,7 @@ class HFTracer(Tracer):
         sequence_length = _generate_random_int()
         shape = [batch_size, sequence_length]
 
-        if root.__class__ in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
+        if root.__class__.__name__ in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES):
             num_choices = _generate_random_int(low=2, high=5)
             shape.insert(1, num_choices)
 
@@ -1007,8 +995,8 @@ def symbolic_trace(
 
     concrete_args = {p.name: p.default for p in sig.parameters.values() if p.name not in input_names}
 
-    if not isinstance(model, _SUPPORTED_MODELS):
-        supported_model_names = ", ".join((cls.__name__ for cls in _SUPPORTED_MODELS))
+    if model.__class__.__name__ not in _SUPPORTED_MODELS:
+        supported_model_names = ", ".join(_SUPPORTED_MODELS)
         raise NotImplementedError(
             f"Model {model.__class__.__name__} is not supported yet, supported models: {supported_model_names}"
         )
