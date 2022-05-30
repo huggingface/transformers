@@ -1504,9 +1504,6 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
     def _update_model_kwargs_for_xla_generation(self, outputs, model_kwargs, current_pos, max_length):
         # TODO(Pvp, Joao, Matt) - this function can be cleaned a bit and refactored
         # quite some duplicated code patterns it seems
-        # also the `attention_mask` is currently used in a somewhat hacky to
-        # correctly influence the `past_key_values` - not sure if this is the way to go
-        # Let's keep that for a future PR.
         past = outputs.past_key_values
         is_past_initialized = model_kwargs.pop("past", None) is not None
         decoder_attention_mask = model_kwargs.pop("decoder_attention_mask", None)
@@ -1528,7 +1525,8 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
             decoder_attention_mask = tf.concat(
                 [
                     tf.ones((batch_size, 1), dtype=tf.int32),
-                    tf.zeros((batch_size, num_padding_values + 1), dtype=tf.int32),
+                    tf.zeros((batch_size, num_padding_values), dtype=tf.int32),
+                    tf.ones((batch_size, 1), dtype=tf.int32),
                 ],
                 axis=1,
             )
@@ -1555,7 +1553,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
                 decoder_attention_mask, decoder_attention_mask_update_slice, update_start
             )
 
-        # set `attention_mask` and `past`
+        # set `decoder_attention_mask` and `past`
         model_kwargs["decoder_attention_mask"] = decoder_attention_mask
         model_kwargs["past"] = new_past
 
