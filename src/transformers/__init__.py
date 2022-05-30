@@ -1878,6 +1878,7 @@ else:
         "TFTemperatureLogitsWarper",
         "TFTopKLogitsWarper",
         "TFTopPLogitsWarper",
+        "TypicalLogitsWarper",
     ]
     _import_structure["generation_tf_utils"] = ["tf_top_k_top_p_filtering"]
     _import_structure["keras_callbacks"] = ["KerasMetricCallback", "PushToHubCallback"]
