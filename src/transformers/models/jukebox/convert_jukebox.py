@@ -21,6 +21,7 @@ import requests
 import torch
 
 from transformers import JukeboxConfig, JukeboxModel
+from transformers.models import jukebox
 from transformers.utils import logging
 
 
@@ -35,40 +36,61 @@ def rename_key(dct, old, new):
 PREFIX = "https://openaipublic.azureedge.net/jukebox/models/"
 MODEL_MAPPING = {
     "jukebox-1b-lyrics": [
-        "1b_lyrics/prior_level_2.pth.tar",
-        "5b/prior_level_1.pth.tar",
+        "5b/vqvae.pth.tar",
         "5b/prior_level_0.pth.tar",
-        "5b/vqvae.pth.tar"
+        "5b/prior_level_1.pth.tar",
+        "1b_lyrics/prior_level_2.pth.tar",
     ],
     "jukebox-5b":[
-        "5b/prior_level_2.pth.tar",
-        "5b/prior_level_1.pth.tar",
-        "5b/prior_level_0.pth.tar",
         "5b/vqvae.pth.tar"
+        "5b/prior_level_0.pth.tar",
+        "5b/prior_level_1.pth.tar",
+        "5b/prior_level_2.pth.tar",
     ],
     "jukebox-5b-lyrics":[
-        "5b_lyrics/prior_level_2.pth.tar",
-        "5b/prior_level_1.pth.tar",
-        "5b/prior_level_0.pth.tar",
         "5b/vqvae.pth.tar"
+        "5b/prior_level_0.pth.tar",
+        "5b/prior_level_1.pth.tar",
+        "5b_lyrics/prior_level_2.pth.tar",
     ]
 } 
 
+
+jukebox_1b_lyrics = JukeboxConfig(
+    vq_vae_emmbedding_width=64,
+    vq_vae_codebook_dimension=2048,
+    vq_vae_width=32, # appears to be useless 
+    vq_vae_conv_block_width=32,
+    t_bins=128,
+    l_bins=2048,
+    width=[2048, 2048, 1920],
+    labels = True,
+    attn_order=[10, 2, 2],
+    priors_width=[1920, 2048, 1024],
+    cond_width=[1920,1024,1024]
+)
+
+# conditioner_blocks.0.cond.model.1.0.model.0.model.1.weight
+# conditioner_blocks.0.cond.model.1.0.blocks.0.model.1.weight
+
+
+# "prior.transformer._attn_mods.46.mlp.c_proj.bias"
+# "prior.transformer._attn_mods.46.mlp.c_proj.b"
 @torch.no_grad()
 def convert_openai_checkpoint(model_name=None, pytorch_dump_folder_path=None):
     """
     Copy/paste/tweak model's weights to our Jukebox structure.
     """
     for file in MODEL_MAPPING[model_name]:
-        r = requests.get(file, allow_redirects=True)
+        r = requests.get(f"{PREFIX}{file}", allow_redirects=True)
         open(f"{pytorch_dump_folder_path}/{file.split('/')[-1]}", 'wb').write(r.content)
         
-    *priors, vqvae =  MODEL_MAPPING[model_name]
-    vqvae_dic = torch.load(f"{pytorch_dump_folder_path}/{vqvae}")
-    weight_dict = [vqvae_dic]
+    vqvae, *priors =  MODEL_MAPPING[model_name]
+    vqvae_dic = torch.load(f"{pytorch_dump_folder_path}/{vqvae.split('/')[-1]}")
     
+    weight_dict = []
     for dict_name in priors:
-        old_dic = torch.load(f"{pytorch_dump_folder_path}/{dict_name}")
+        old_dic = torch.load(f"{pytorch_dump_folder_path}/{dict_name.split('/')[-1]}")['model']
         new_dic = {}
         for k in old_dic.keys():
             if k.endswith(".b"):
@@ -80,13 +102,13 @@ def convert_openai_checkpoint(model_name=None, pytorch_dump_folder_path=None):
             else:
                 new_dic[k] = old_dic[k]
         weight_dict.append(new_dic)
+        
     config = JukeboxConfig.from_pretrained(model_name)
     model = JukeboxModel(config)
-
-    vq, *weights = weight_dict
-    model.vqvae.load_state_dict(vq)
-    for i in range(len(weights)):
-        model.priors[i].load_state_dict(weights[i])
+    
+    model.vqvae.load_state_dict(vqvae_dic)
+    for i in range(len(weight_dict)):
+        model.priors[i].load_state_dict(weight_dict[i])
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model {model_name} to {pytorch_dump_folder_path}")

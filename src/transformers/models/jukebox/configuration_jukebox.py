@@ -27,7 +27,8 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "huggingface/jukebox-dummy": "https://huggingface.co/huggingface/jukebox-dummy/resolve/main/config.json",
+    "ArthurZ/jukebox-dummy": "https://huggingface.co/ArthurZ/jukebox-dummy/resolve/main/config.json",
+    "ArthurZ/jukebox-1h-lyrics": "https://huggingface.co/ArthurZ/jukebox-1b-lyrics/resolve/main/config.json"
 }
 
 
@@ -138,7 +139,8 @@ class JukeboxConfig(PretrainedConfig):
         "num_attention_heads": "n_head",
         "num_hidden_layers": "n_layer",
     }
-
+    # params are given for the `n` priors at the same time which means that you have
+    # level2,level1,level0
     def __init__(
         self,
         vocab_size=50257,
