@@ -46,7 +46,7 @@ Tips:
   pre-training.
 - The authors of LeViT released 5 trained LeViT models, which you can directly plug into [`LevitModel`] or [`LevitModelForImageClassification`]. 
   Techniques like data augmentation, optimization, and regularization were used in order to simulate training on a much larger dataset
-  (while only using ImageNet-1k for pre-training). The 5 variants available  are (all in 224x224 image size):
+  (while only using ImageNet-1k for pre-training). The 5 variants available are (all trained on images of size 224x224):
   *facebook/levit-128S*, *facebook/levit-128*, *facebook/levit-192*, *facebook/levit-256* and
   *facebook/levit-384*. Note that one should use [`LevitFeatureExtractor`] in order to
   prepare images for the model.
