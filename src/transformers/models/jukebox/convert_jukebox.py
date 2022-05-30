@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team.
+# Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 
 import argparse
 from pathlib import Path
-
+import requests
 import torch
 
 from transformers import JukeboxConfig, JukeboxModel
@@ -32,31 +32,54 @@ def rename_key(dct, old, new):
     val = dct.pop(old)
     dct[new] = val
 
+PREFIX = "https://openaipublic.azureedge.net/jukebox/models/"
+MODEL_MAPPING = {
+    "jukebox-1b-lyrics": [
+        "1b_lyrics/prior_level_2.pth.tar",
+        "5b/prior_level_1.pth.tar",
+        "5b/prior_level_0.pth.tar",
+        "5b/vqvae.pth.tar"
+    ],
+    "jukebox-5b":[
+        "5b/prior_level_2.pth.tar",
+        "5b/prior_level_1.pth.tar",
+        "5b/prior_level_0.pth.tar",
+        "5b/vqvae.pth.tar"
+    ],
+    "jukebox-5b-lyrics":[
+        "5b_lyrics/prior_level_2.pth.tar",
+        "5b/prior_level_1.pth.tar",
+        "5b/prior_level_0.pth.tar",
+        "5b/vqvae.pth.tar"
+    ]
+} 
 
 @torch.no_grad()
-def convert_openai_checkpoint(model_name=None, pytorch_dump_folder_path=None, base_model=True):
+def convert_openai_checkpoint(model_name=None, pytorch_dump_folder_path=None):
     """
-    Copy/paste/tweak model's weights to our ViT structure.
+    Copy/paste/tweak model's weights to our Jukebox structure.
     """
-    weight_dict = []
-    vqvae_dic = torch.load("/Users/arthur/Work/HuggingFace/jukebox/porting/vqvae.pth")
-    weight_dict.append(vqvae_dic)
-
-    for dict_name in ["up0", "up1", "up2"]:
-        old_dic = torch.load(f"/Users/arthur/Work/HuggingFace/jukebox/porting/{dict_name}.pth")
+    for file in MODEL_MAPPING[model_name]:
+        r = requests.get(file, allow_redirects=True)
+        open(f"{pytorch_dump_folder_path}/{file.split('/')[-1]}", 'wb').write(r.content)
+        
+    *priors, vqvae =  MODEL_MAPPING[model_name]
+    vqvae_dic = torch.load(f"{pytorch_dump_folder_path}/{vqvae}")
+    weight_dict = [vqvae_dic]
+    
+    for dict_name in priors:
+        old_dic = torch.load(f"{pytorch_dump_folder_path}/{dict_name}")
         new_dic = {}
         for k in old_dic.keys():
             if k.endswith(".b"):
                 new_dic[k.replace("b", "bias")] = old_dic[k]
             elif k.endswith(".w"):
                 new_dic[k.replace("w", "weight")] = old_dic[k]
-            elif dict_name != "up2" and "cond.model." in k:
+            elif "level_2" not in dict_name and "cond.model." in k:
                 new_dic[k.replace(".blocks.", ".model.")] = old_dic[k]
             else:
                 new_dic[k] = old_dic[k]
         weight_dict.append(new_dic)
-
-    return weight_dict
     config = JukeboxConfig.from_pretrained(model_name)
     model = JukeboxModel(config)
 
@@ -77,19 +100,35 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="dino_vitb16",
+        default="jukebox-1b-lyrics",
         type=str,
-        help="Name of the model trained with DINO you'd like to convert.",
+        help="Name of the model you'd like to convert.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
-    parser.add_argument(
-        "--base_model",
-        action="store_true",
-        help="Whether to only convert the base model (no projection head weights).",
-    )
-
-    parser.set_defaults(base_model=True)
     args = parser.parse_args()
-    convert_openai_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.base_model)
+    convert_openai_checkpoint(args.model_name, args.pytorch_dump_folder_path)
+
+
+
+# previous code to convert dummy : 
+# weight_dict = []
+# vqvae_dic = torch.load("/Users/arthur/Work/HuggingFace/jukebox/porting/vqvae.pth")
+# weight_dict.append(vqvae_dic)
+
+# for dict_name in ["up0", "up1", "up2"]:
+#     old_dic = torch.load(f"/Users/arthur/Work/HuggingFace/jukebox/porting/{dict_name}.pth")
+#     new_dic = {}
+#     for k in old_dic.keys():
+#         if k.endswith(".b"):
+#             new_dic[k.replace("b", "bias")] = old_dic[k]
+#         elif k.endswith(".w"):
+#             new_dic[k.replace("w", "weight")] = old_dic[k]
+#         elif dict_name != "up2" and "cond.model." in k:
+#             new_dic[k.replace(".blocks.", ".model.")] = old_dic[k]
+#         else:
+#             new_dic[k] = old_dic[k]
+#     weight_dict.append(new_dic)
+
+# return weight_dict

@@ -18,18 +18,20 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import _LazyModule, is_tokenizers_available, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
-    "configuration_jukebox": ["JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP", "JukeboxConfig", "JukeboxOnnxConfig"],
+    "configuration_jukebox": ["JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP", "JukeboxConfig"],
     "tokenization_jukebox": ["JukeboxTokenizer"],
 }
 
-if is_tokenizers_available():
-    _import_structure["tokenization_jukebox_fast"] = ["JukeboxTokenizerFast"]
-
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_jukebox"] = [
         "JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST",
         "JukeboxModel",
@@ -38,13 +40,15 @@ if is_torch_available():
     ]
 
 if TYPE_CHECKING:
-    from .configuration_jukebox import JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP, JukeboxConfig, JukeboxOnnxConfig
+    from .configuration_jukebox import JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP, JukeboxConfig
     from .tokenization_jukebox import JukeboxTokenizer
 
-    if is_tokenizers_available():
-        from .tokenization_jukebox_fast import JukeboxTokenizerFast
-
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_jukebox import (
             JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST,
             JukeboxModel,
