@@ -93,7 +93,9 @@ La pipeline scarica e salva il [modello pre-allenato](https://huggingface.co/Mil
 Per più di una frase, passa una lista di frasi alla [`pipeline`] la quale restituirà una lista di dizionari:
 
 ```py
->>> risultati = classificatore(["Siamo molto felici di mostrarti la libreria 🤗 Transformers.", "Speriamo te non la odierai."])
+>>> risultati = classificatore(
+...     ["Siamo molto felici di mostrarti la libreria 🤗 Transformers.", "Speriamo te non la odierai."]
+... )
 >>> for risultato in risultati:
 ...     print(f"etichetta: {risultato['label']}, con punteggio: {round(risultato['score'], 4)}")
 etichetta: positive, con punteggio: 0.9998
@@ -112,7 +114,9 @@ Crea una [`pipeline`] con il compito che vuoi risolvere e con il modello che vuo
 >>> import torch
 >>> from transformers import pipeline
 
->>> riconoscitore_vocale = pipeline("automatic-speech-recognition", model="radiogroup-crits/wav2vec2-xls-r-1b-italian-doc4lm-5gram")
+>>> riconoscitore_vocale = pipeline(
+...     "automatic-speech-recognition", model="radiogroup-crits/wav2vec2-xls-r-1b-italian-doc4lm-5gram"
+... )
 ```
 
 Poi, carica un dataset (vedi 🤗 Datasets [Quick Start](https://huggingface.co/docs/datasets/quickstart.html) per maggiori dettagli) sul quale vuoi iterare. Per esempio, carichiamo il dataset [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14):
@@ -120,7 +124,7 @@ Poi, carica un dataset (vedi 🤗 Datasets [Quick Start](https://huggingface.co/
 ```py
 >>> from datasets import load_dataset, Audio
 
->>> dataset = load_dataset("PolyAI/minds14", name="it-IT", split="train") # doctest: +IGNORE_RESULT
+>>> dataset = load_dataset("PolyAI/minds14", name="it-IT", split="train")  # doctest: +IGNORE_RESULT
 ```
 
 Dobbiamo assicurarci che la frequenza di campionamento del set di dati corrisponda alla frequenza di campionamento con cui è stato addestrato `radiogroup-crits/wav2vec2-xls-r-1b-italian-doc4lm-5gram`.
