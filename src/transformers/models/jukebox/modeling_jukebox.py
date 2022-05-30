@@ -17,8 +17,6 @@
 
 import math
 import os
-from dataclasses import dataclass
-from typing import Optional, Tuple
 
 import numpy as np
 import torch
@@ -37,7 +35,6 @@ else:
 import gc
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...utils import (  # replace_return_docstrings,
     ModelOutput,
@@ -78,15 +75,7 @@ except ImportError:
     from torch.nn import LayerNorm as FusedLayerNorm
 
 
-####################################################################
-####################################################################
-####################################################################
-#                               VQ-VAE functions and class
-####################################################################
-####################################################################
-####################################################################
-
-
+# VQ-VAE building blocks
 class Conv1D(nn.Module):
     def __init__(self, n_in, n_out, zero_out=False, init_scale=1.0):
         super(Conv1D, self).__init__()
@@ -928,9 +917,7 @@ class VQVAE(nn.Module):
         return x_out, loss, metrics
 
 
-########### TRANSFORMER
-
-
+# Scalable transformer
 class JukeboxMLP(nn.Module):
     def __init__(self, width, n_state, resid_dropout=0.0, afn="gelu", zero_out=False, init_scale=1.0):
         # a single channel is always used in original code
