@@ -36,14 +36,7 @@ import gc
 
 from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
-from ...utils import (  # replace_return_docstrings,
-    ModelOutput,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-)
-from ...utils.model_parallel_utils import assert_device_map, get_device_map
+from ...utils import add_start_docstrings, logging
 from .configuration_jukebox import JukeboxConfig
 
 
@@ -2337,7 +2330,7 @@ def split_chunks(length, chunk_size):
     return chunk_sizes
 
 
-################################ Conditioners
+# Conditioners
 
 
 class MusicTokenConditioner(nn.Module):
