@@ -28,7 +28,7 @@ logger = logging.get_logger(__name__)
 
 JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "ArthurZ/jukebox-dummy": "https://huggingface.co/ArthurZ/jukebox-dummy/resolve/main/config.json",
-    "ArthurZ/jukebox-1h-lyrics": "https://huggingface.co/ArthurZ/jukebox-1b-lyrics/resolve/main/config.json"
+    "ArthurZ/jukebox-1h-lyrics": "https://huggingface.co/ArthurZ/jukebox-1b-lyrics/resolve/main/config.json",
 }
 
 
@@ -167,7 +167,7 @@ class JukeboxConfig(PretrainedConfig):
         sr=16000,
         sample_length=None,
         sample_length_in_seconds=1,
-        y_bins=[(120, 4111),(120, 4111),(120, 4111)],
+        y_bins=[(120, 4111), (120, 4111), (120, 4111)],
         use_nonrelative_specloss=True,
         copy_input=False,
         resid_dropout=0.0,
@@ -211,7 +211,7 @@ class JukeboxConfig(PretrainedConfig):
         pos_init=False,
         cond_zero_out=False,
         # args for the priors, 3 priors
-        n_ctx=(8192,8192,8192),
+        n_ctx=(8192, 8192, 8192),
         t_bins=128,
         downs_t=(3, 2, 2),
         strides_t=(2, 2, 2),

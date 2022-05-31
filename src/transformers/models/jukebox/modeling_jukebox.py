@@ -406,11 +406,11 @@ class BottleneckBlock(nn.Module):
         self.k_sum = None
         self.k_elem = None
         # self.register_buffer('k',  torch.zeros(self.k_bins, self.emb_width).cuda())
-        
+
         if torch.cuda.is_available():
-            self.register_buffer("k",torch.zeros(self.k_bins, self.emb_width).to("cuda"))
-        else : 
-            self.register_buffer("k",torch.zeros(self.k_bins, self.emb_width))
+            self.register_buffer("k", torch.zeros(self.k_bins, self.emb_width).to("cuda"))
+        else:
+            self.register_buffer("k", torch.zeros(self.k_bins, self.emb_width))
 
     def _tile(self, x):
         d, ew = x.shape
@@ -2074,7 +2074,9 @@ class JukeboxConditionalAutoregressive(nn.Module):
             ), f"Got {x_cond.shape}, expected ({N}, {D}/{1}, {self.width})"
         else:
             assert x_cond is None
-            x_cond = torch.zeros((N, 1, self.width), dtype=torch.float).to("cuda" if torch.cuda.is_available() else "cpu")  # .cuda()
+            x_cond = torch.zeros((N, 1, self.width), dtype=torch.float).to(
+                "cuda" if torch.cuda.is_available() else "cpu"
+            )  # .cuda()
 
         with torch.no_grad():
             xs, x = [], None
@@ -2452,7 +2454,9 @@ class RangeEmbedding(nn.Module):
         n_time = self.n_time
         if n_time != 1:
             assert pos_end is not None
-            interpolation = torch.arange(0, n_time, dtype=torch.float, device=pos_start.device).view(1, n_time) / n_time
+            interpolation = (
+                torch.arange(0, n_time, dtype=torch.float, device=pos_start.device).view(1, n_time) / n_time
+            )
             position = pos_start + (pos_end - pos_start) * interpolation
         else:
             position = pos_start
@@ -2551,7 +2555,7 @@ class JukeboxPrior(nn.Module):
         vqvae_z_shapes = config.vqvae_z_shapes
 
         def rescale(z_shape):
-            return (z_shape[0] * config.n_ctx[-level-1] // vqvae_z_shapes[level][0],)
+            return (z_shape[0] * config.n_ctx[-level - 1] // vqvae_z_shapes[level][0],)
 
         z_shapes = [rescale(z_shape) for z_shape in vqvae_z_shapes]
         self.use_tokens = config.use_tokens[-level - 1]
@@ -2789,7 +2793,7 @@ class JukeboxPrior(nn.Module):
                 # assert_shape(cond, (N, dims, self.prior_width))
                 pass
             else:
-                conds[i] = torch.zeros((N, dims, self.prior_width), dtype=torch.float, device=xs.device)
+                conds[i] = torch.zeros((N, dims, self.prior_width), dtype=torch.float, device=xs[0].device)
 
         return torch.cat(xs, dim=1), torch.cat(conds, dim=1)
 
@@ -3138,7 +3142,7 @@ def get_alignment(x, zs, labels, prior, level, fp16, hps):
     attn_layers = set([alignment_layer])
     alignment_hops = {}
     indices_hops = {}
-    prior=prior.to(zs.device)
+    prior = prior.to(zs.device)
     # prior.cuda()
     empty_cache()
     for start in get_starts(total_length, n_ctx, hop_length):
@@ -3301,7 +3305,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         alignments = None
         for level in reversed(sample_levels):
             prior = self.priors[level]
-            prior = prior.to(zs.device)
+            prior = prior.to(zzs[0].device)
             # prior.cuda()
             empty_cache()
 
@@ -3319,7 +3323,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
             else:
                 zs = self.sample_level(zs, labels[level], sampling_kwargs[level], level, total_length, hop_length, hps)
 
-            prior.cpu()
+            prior.to(zs[0].device)
             empty_cache()
 
             # Decode sample

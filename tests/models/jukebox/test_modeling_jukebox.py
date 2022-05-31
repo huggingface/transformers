@@ -41,7 +41,7 @@ class JukeboxModelTest(unittest.TestCase):
         set_seed(0)
 
         config = JukeboxConfig(
-            n_ctx=(256,256,256),
+            n_ctx=(256, 256, 256),
             width=[128, 64, 32],
             depth=[2, 2, 2],
             priors_width=[128, 64, 32],
@@ -483,8 +483,6 @@ class JukeboxModelTest(unittest.TestCase):
         ys = torch.stack([torch.from_numpy(y) for y in ys], dim=0).to("cpu").long()
 
         start = timeit.default_timer()
-        # import cProfile as profile
-        # profile.runctx('model.ancestral_sample(ys, sampling_kwargs, config)', globals(), locals())
         zs = model.ancestral_sample(ys, sampling_kwargs, config)
         print(f"time to sample : {timeit.default_timer() - start}")
         print(zs)
@@ -545,18 +543,13 @@ class JukeboxModelTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(zs[0][0][0:50], top_50_expected_zs.long(), atol=1e-4))
 
-
     def test_gpu_sampling(self):
         model = JukeboxModel.from_pretrained("ArthurZ/jukebox-1b-lyrics").eval().to("cuda")
-        
-        
+
         model.priors[2].sample(1, y=torch.Tensor([[44100.0, 0, 44100.0] + 386 * [0]]).long().to("cuda"), chunk_size=32)
-        
-        
-        
+
         tokenizer = JukeboxTokenizer.from_pretrained("ArthurZ/jukebox")
-        
-        
+
         sampling_temperature = 0.98
         lower_batch_size = 16
         max_batch_size = 16
@@ -591,6 +584,7 @@ class JukeboxModelTest(unittest.TestCase):
         print(f"time to sample : {timeit.default_timer() - start}")
 
         # sample = model.priors[2].sample(1, y=torch.Tensor([[44100.0, 0, 44100.0] + 386 * [0]]).long(), chunk_size=32)
+
 
 # class JukeboxModelTester:
 #     def __init__(
