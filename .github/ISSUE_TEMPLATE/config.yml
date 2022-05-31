@@ -3,7 +3,7 @@ version: 2.1
 contact_links:
   - name: Model checkpoints on the Hugging Face Hub
     url: https://huggingface.co/models
-    about: Pull requests / Issue reports related to specific model checkpoints on the Hugging Face Hub
+    about: Open a Pull request / Discussion related to a specific model checkpoint directly on the Hugging Face Hub
   - name: Website Related
     url: https://github.com/huggingface/hub-docs/issues
     about: Feature requests and bug reports related to the website
