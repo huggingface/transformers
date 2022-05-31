@@ -546,6 +546,52 @@ class JukeboxModelTest(unittest.TestCase):
         self.assertTrue(torch.allclose(zs[0][0][0:50], top_50_expected_zs.long(), atol=1e-4))
 
 
+    def test_gpu_sampling(self):
+        model = JukeboxModel.from_pretrained("ArthurZ/jukebox-1b-lyrics").eval().to("cuda")
+        
+        
+        model.priors[2].sample(1, y=torch.Tensor([[44100.0, 0, 44100.0] + 386 * [0]]).long(), chunk_size=32)
+        
+        
+        
+        tokenizer = JukeboxTokenizer.from_pretrained("ArthurZ/jukebox")
+        
+        
+        sampling_temperature = 0.98
+        lower_batch_size = 16
+        max_batch_size = 16
+        lower_level_chunk_size = 32
+        chunk_size = 32
+        sampling_kwargs = [
+            dict(temp=0.99, fp16=False, max_batch_size=lower_batch_size, chunk_size=lower_level_chunk_size),
+            dict(temp=0.99, fp16=False, max_batch_size=lower_batch_size, chunk_size=lower_level_chunk_size),
+            dict(temp=sampling_temperature, fp16=False, max_batch_size=max_batch_size, chunk_size=chunk_size),
+        ]
+        model.config.hop_fraction = [0.125, 0.5, 0.5]
+        model.config.n_samples = 1
+
+        tokens = tokenizer(
+            "Alan Jackson",
+            "rock",
+            "old town road",
+            total_length=model.config.sample_length_in_seconds * model.config.sr,
+            sample_length=32768,
+            offset=0,
+            duration=1,
+        )
+
+        inputs, _ = tokens["input_ids"], tokens["attention_masks"]
+        ys = np.array([[inputs]] * 3, dtype=np.int64)
+        ys = torch.stack([torch.from_numpy(y) for y in ys], dim=0).to("cuda").long()
+
+        start = timeit.default_timer()
+        # import cProfile as profile
+        # profile.runctx('model.ancestral_sample(ys, sampling_kwargs, config)', globals(), locals())
+        zs = model.ancestral_sample(ys, sampling_kwargs, model.config)
+        print(f"time to sample : {timeit.default_timer() - start}")
+
+        # sample = model.priors[2].sample(1, y=torch.Tensor([[44100.0, 0, 44100.0] + 386 * [0]]).long(), chunk_size=32)
+
 # class JukeboxModelTester:
 #     def __init__(
 #         self,

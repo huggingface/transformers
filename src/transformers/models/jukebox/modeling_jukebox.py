@@ -2018,7 +2018,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
         if sample_t == 0:
             # Fill in start token
             # x = torch.empty(n_samples, 1, self.width).cuda()
-            x = torch.empty(n_samples, 1, self.width).cpu()
+            x = torch.empty(n_samples, 1, self.width).to(x.device)
 
             if self.y_cond:
                 x[:, 0] = y_cond.view(N, self.width)
@@ -2070,7 +2070,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
             ), f"Got {x_cond.shape}, expected ({N}, {D}/{1}, {self.width})"
         else:
             assert x_cond is None
-            x_cond = torch.zeros((N, 1, self.width), dtype=torch.float)  # .cuda()
+            x_cond = torch.zeros((N, 1, self.width), dtype=torch.float).to(self.device)  # .cuda()
 
         with torch.no_grad():
             xs, x = [], None
@@ -2151,7 +2151,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
             ), f"Got {x_cond.shape}, expected ({N}, {D}/{1}, {self.width})"
         else:
             assert x_cond is None
-            x_cond = torch.zeros((N, 1, self.width), dtype=torch.float)  # .cuda()
+            x_cond = torch.zeros((N, 1, self.width), dtype=torch.float).to(x.device)  # .cuda()
 
         with torch.no_grad():
             if get_preds:
@@ -2945,6 +2945,7 @@ class JukeboxPrior(nn.Module):
     def get_encoder_kv(self, prime, fp16=False, sample=False):
         if self.n_tokens != 0 and self.use_tokens:
             if sample:
+                self.prime_prior = self.prime_prior.to(prime.device)
                 # self.prime_prior.cuda()
                 pass
             # N = prime.shape[0]
@@ -3133,7 +3134,7 @@ def get_alignment(x, zs, labels, prior, level, fp16, hps):
     attn_layers = set([alignment_layer])
     alignment_hops = {}
     indices_hops = {}
-
+    prior=prior.to(zs.device)
     # prior.cuda()
     empty_cache()
     for start in get_starts(total_length, n_ctx, hop_length):

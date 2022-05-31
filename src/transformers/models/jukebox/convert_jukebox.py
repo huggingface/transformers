@@ -56,26 +56,7 @@ MODEL_MAPPING = {
 } 
 
 
-jukebox_1b_lyrics = JukeboxConfig(
-    vq_vae_emmbedding_width=64,
-    vq_vae_codebook_dimension=2048,
-    vq_vae_width=32, # appears to be useless 
-    vq_vae_conv_block_width=32,
-    t_bins=128,
-    l_bins=2048,
-    width=[2048, 2048, 1920],
-    labels = True,
-    attn_order=[10, 2, 2],
-    priors_width=[1920, 2048, 1024],
-    cond_width=[1920,1024,1024]
-)
 
-# conditioner_blocks.0.cond.model.1.0.model.0.model.1.weight
-# conditioner_blocks.0.cond.model.1.0.blocks.0.model.1.weight
-
-
-# "prior.transformer._attn_mods.46.mlp.c_proj.bias"
-# "prior.transformer._attn_mods.46.mlp.c_proj.b"
 @torch.no_grad()
 def convert_openai_checkpoint(model_name=None, pytorch_dump_folder_path=None):
     """
@@ -84,9 +65,9 @@ def convert_openai_checkpoint(model_name=None, pytorch_dump_folder_path=None):
     for file in MODEL_MAPPING[model_name]:
         r = requests.get(f"{PREFIX}{file}", allow_redirects=True)
         open(f"{pytorch_dump_folder_path}/{file.split('/')[-1]}", 'wb').write(r.content)
-        
-    vqvae, *priors =  MODEL_MAPPING[model_name]
-    vqvae_dic = torch.load(f"{pytorch_dump_folder_path}/{vqvae.split('/')[-1]}")
+    
+    vqvae, *priors =  MODEL_MAPPING[model_name.split('/')[-1]]
+    vqvae_dic = torch.load(f"{pytorch_dump_folder_path}/{vqvae.split('/')[-1]}",map_location=torch.device('cpu'))['model']
     
     weight_dict = []
     for dict_name in priors:
@@ -112,7 +93,7 @@ def convert_openai_checkpoint(model_name=None, pytorch_dump_folder_path=None):
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
-    model.save_pretrained(pytorch_dump_folder_path)
+    model.save_pretrained(pytorch_dump_folder_path,save_config = False)
 
     return weight_dict
 
