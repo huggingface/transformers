@@ -870,33 +870,33 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
 
     def patchify(self, imgs):
         """
-        imgs: (N, 3, H, W) x: (N, L, patch_size**2 *3)
+        imgs: (N, num_channels, H, W) x: (N, L, patch_size**2 * num_channels)
         """
         p = self.vit.embeddings.patch_embeddings.patch_size[0]
         assert imgs.shape[2] == imgs.shape[3] and imgs.shape[2] % p == 0
 
         h = w = imgs.shape[2] // p
-        x = imgs.reshape(shape=(imgs.shape[0], 3, h, p, w, p))
+        x = imgs.reshape(shape=(imgs.shape[0], self.config.num_channels, h, p, w, p))
         x = torch.einsum("nchpwq->nhwpqc", x)
-        x = x.reshape(shape=(imgs.shape[0], h * w, p**2 * 3))
+        x = x.reshape(shape=(imgs.shape[0], h * w, p**2 * self.config.num_channels))
         return x
 
     def unpatchify(self, x):
         """
-        x: (N, L, patch_size**2 *3) imgs: (N, 3, H, W)
+        x: (N, L, patch_size**2 * num_channels) imgs: (N, num_channels, H, W)
         """
         p = self.vit.embeddings.patch_embeddings.patch_size[0]
         h = w = int(x.shape[1] ** 0.5)
         assert h * w == x.shape[1]
 
-        x = x.reshape(shape=(x.shape[0], h, w, p, p, 3))
+        x = x.reshape(shape=(x.shape[0], h, w, p, p, self.config.num_channels))
         x = torch.einsum("nhwpqc->nchpwq", x)
-        imgs = x.reshape(shape=(x.shape[0], 3, h * p, h * p))
+        imgs = x.reshape(shape=(x.shape[0], self.config.num_channels, h * p, h * p))
         return imgs
 
     def forward_loss(self, imgs, pred, mask):
         """
-        imgs: [N, 3, H, W] pred: [N, L, p*p*3] mask: [N, L], 0 is keep, 1 is remove,
+        imgs: [N, num_channels, H, W] pred: [N, L, p*p* num_channels] mask: [N, L], 0 is keep, 1 is remove,
         """
         target = self.patchify(imgs)
         if self.config.norm_pix_loss:

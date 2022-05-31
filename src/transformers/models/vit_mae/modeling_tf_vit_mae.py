@@ -971,10 +971,12 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
 
     def patchify(self, imgs):
         """
-        imgs: (batch_size, height, width, 3) x: (batch_size, num_patches, patch_size**2 *3)
+        imgs: (batch_size, height, width, num_channels) x: (batch_size, num_patches, patch_size**2 * num_channels)
         """
         imgs = tf.cond(
-            tf.math.equal(shape_list(imgs)[1], 3), lambda: tf.transpose(imgs, perm=(0, 2, 3, 1)), lambda: imgs
+            tf.math.equal(shape_list(imgs)[1], self.config.num_channels),
+            lambda: tf.transpose(imgs, perm=(0, 2, 3, 1)),
+            lambda: imgs,
         )
 
         p = self.vit.embeddings.patch_embeddings.patch_size[0]
@@ -982,28 +984,28 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
         tf.debugging.assert_equal(shape_list(imgs)[1] % p, 0)
 
         h = w = shape_list(imgs)[2] // p
-        x = tf.reshape(imgs, (shape_list(imgs)[0], h, p, w, p, 3))
+        x = tf.reshape(imgs, (shape_list(imgs)[0], h, p, w, p, self.config.num_channels))
         x = tf.einsum("nhpwqc->nhwpqc", x)
-        x = tf.reshape(x, (shape_list(imgs)[0], h * w, p**2 * 3))
+        x = tf.reshape(x, (shape_list(imgs)[0], h * w, p**2 * self.config.num_channels))
         return x
 
     def unpatchify(self, x):
         """
-        x: (batch_size, num_patches, patch_size**2 *3) imgs: (batch_size, height, width, 3)
+        x: (batch_size, num_patches, patch_size**2 * num_channels) imgs: (batch_size, height, width, num_channels)
         """
         p = self.vit.embeddings.patch_embeddings.patch_size[0]
         h = w = int(shape_list(x)[1] ** 0.5)
         tf.debugging.assert_equal(h * w, shape_list(x)[1])
 
-        x = tf.reshape(x, (shape_list(x)[0], h, w, p, p, 3))
+        x = tf.reshape(x, (shape_list(x)[0], h, w, p, p, self.config.num_channels))
         x = tf.einsum("nhwpqc->nhpwqc", x)
-        imgs = tf.reshape(x, (shape_list(x)[0], h * p, h * p, 3))
+        imgs = tf.reshape(x, (shape_list(x)[0], h * p, h * p, self.config.num_channels))
         return imgs
 
     def forward_loss(self, imgs, pred, mask):
         """
-        imgs: [batch_size, height, width, 3] pred: [batch_size, num_patches, patch_size**2*3] mask: [N, L], 0 is keep,
-        1 is remove,
+        imgs: [batch_size, height, width, num_channels] pred: [batch_size, num_patches, patch_size**2 * num_channels]
+        mask: [N, L], 0 is keep, 1 is remove,
         """
         target = self.patchify(imgs)
         if self.config.norm_pix_loss:
