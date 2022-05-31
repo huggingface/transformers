@@ -196,7 +196,7 @@ class PhobertTokenizerFast(PreTrainedTokenizerFast):
             # encoding_dict["input_ids"].append(e.ids)
             # Reassign ids of tokens due to the hacking strategy
             ids = []
-            for (id, token) in zip(e.ids, e.tokens):
+            for id, token in zip(e.ids, e.tokens):
                 if id <= self.mask_token_id:
                     ids.append(id)
                 else:
