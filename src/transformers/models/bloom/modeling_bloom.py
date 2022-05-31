@@ -260,6 +260,7 @@ class BloomAttention(nn.Module):
         super().__init__()
 
         self.pretraining_tp = config.pretraining_tp
+        self.slow_but_exact = config.slow_but_exact
 
         self.hidden_size = config.hidden_size
         self.num_heads = config.n_head
@@ -400,7 +401,7 @@ class BloomAttention(nn.Module):
         # =================
 
         # aggregate results across tp ranks. See here: https://github.com/pytorch/pytorch/issues/76232
-        if self.pretraining_tp > 1:
+        if self.pretraining_tp > 1 and self.slow_but_exact:
             slices = context_layer.shape[-1] / self.pretraining_tp
             output_tensor = torch.zeros_like(context_layer)
             for i in range(self.pretraining_tp):
@@ -428,6 +429,7 @@ class BloomMLP(nn.Module):
         hidden_size = config.hidden_size
 
         self.pretraining_tp = config.pretraining_tp
+        self.slow_but_exact = config.slow_but_exact
         self.activation_func = bias_gelu_impl
         self.dense_h_to_4h = nn.Linear(hidden_size, 4 * hidden_size)
         self.dense_4h_to_h = nn.Linear(4 * hidden_size, hidden_size)
@@ -439,7 +441,7 @@ class BloomMLP(nn.Module):
             nn.functional.linear(hidden_states, self.dense_h_to_4h.weight), self.dense_h_to_4h.bias
         )
 
-        if self.pretraining_tp > 1:
+        if self.pretraining_tp > 1 and self.slow_but_exact:
             intermediate_output = torch.zeros_like(input_)
             slices = self.dense_4h_to_h.weight.shape[-1] / self.pretraining_tp
             for i in range(self.pretraining_tp):

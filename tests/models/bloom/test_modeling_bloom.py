@@ -100,7 +100,7 @@ class BloomModelTester:
 
         return (config, input_ids, input_mask)
 
-    def get_config(self, gradient_checkpointing=False):
+    def get_config(self, gradient_checkpointing=False, slow_but_exact=True):
         return BloomConfig(
             vocab_size=self.vocab_size,
             seq_length=self.seq_length,
@@ -117,6 +117,7 @@ class BloomModelTester:
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
             gradient_checkpointing=gradient_checkpointing,
+            slow_but_exact=slow_but_exact,
             dtype="float32",
         )
 

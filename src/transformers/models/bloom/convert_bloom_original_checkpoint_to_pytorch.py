@@ -79,7 +79,7 @@ def get_dtype_size(dtype):
 
 
 def convert_bloom_checkpoint_to_pytorch(
-    bloom_checkpoint_path, bloom_config_file, pytorch_dump_folder_path, shard_model
+    bloom_checkpoint_path, bloom_config_file, pytorch_dump_folder_path, shard_model, pretraining_tp
 ):
     # Construct model
     if bloom_config_file == "":
@@ -102,7 +102,7 @@ def convert_bloom_checkpoint_to_pytorch(
             print("Processing file: {}".format(file))
             tensors = None
 
-            for i in range(config.pretraining_tp):
+            for i in range(pretraining_tp):
                 # load all TP files
                 f_name = file.replace("model_00", f"model_0{i}")
                 temp = torch.load(os.path.join(bloom_checkpoint_path, f_name), map_location="cpu")
@@ -128,7 +128,7 @@ def convert_bloom_checkpoint_to_pytorch(
             # Divide by the number of TP the weights we want to average
             for key in tensors.keys():
                 if any(key.endswith(end) for end in WEIGHTS_TO_AVERAGE_ENDSWITH):
-                    tensors[key] = tensors[key] / config.pretraining_tp
+                    tensors[key] = tensors[key] / pretraining_tp
             torch.save(
                 tensors,
                 os.path.join(
@@ -162,7 +162,7 @@ def convert_bloom_checkpoint_to_pytorch(
         missing_keys = None
         for i, file in enumerate(file_names):
             tensors = None
-            for i in range(config.pretraining_tp):
+            for i in range(pretraining_tp):
                 # load all TP files
                 f_name = file.replace("model_00", f"model_0{i}")
                 temp = torch.load(os.path.join(bloom_checkpoint_path, f_name), map_location="cpu")
@@ -188,7 +188,7 @@ def convert_bloom_checkpoint_to_pytorch(
             # Divide by the number of TP the weights we want to average
             for key in tensors.keys():
                 if any(key.endswith(end) for end in WEIGHTS_TO_AVERAGE_ENDSWITH):
-                    tensors[key] = tensors[key] / config.pretraining_tp
+                    tensors[key] = tensors[key] / pretraining_tp
 
             other_keys = model.load_state_dict(tensors, strict=False)
             assert not other_keys.unexpected_keys
@@ -237,10 +237,17 @@ if __name__ == "__main__":
         action="store_true",
         help="An optional setting to shard the output model \nThis enables sharding the converted checkpoint",
     )
+    parser.add_argument(
+        "--pretraining_tp",
+        default=4,
+        type=int,
+        help="Pretraining TP rank that has been used when training the model in Megatron-LM \n",
+    )
     args = parser.parse_args()
     convert_bloom_checkpoint_to_pytorch(
         args.bloom_checkpoint_path,
         args.bloom_config_file,
         args.pytorch_dump_folder_path,
         args.shard_model,
+        args.pretraining_tp,
     )

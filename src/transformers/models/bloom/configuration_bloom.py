@@ -97,6 +97,15 @@ class BloomConfig(PretrainedConfig):
             document](https://huggingface.co/docs/transformers/parallelism) to understand more about it. This value is
             necessary to ensure exact reproducibility of the pretraining results. Please refer to [this
             issue](https://github.com/pytorch/pytorch/issues/76232)
+        gradient_checkpointing (`bool`, *optional*, defaults to `True`):
+            Whether to use gradient checkpointing.
+        slow_but_exact (`bool`, *optional*, defaults to `False`):
+            Experimental feature. Whether to use slow but exact implementation of the attention mechanism. While
+            merging the TP rank tensors, due to slicing operations the results may be slightly different between the
+            model trained on Megatron and our model. Please refer to [this
+            issue](https://github.com/pytorch/pytorch/issues/76232). A solution to obtain more accurate results is to
+            enable this feature. Enabling this will hurt the computational time of the inference. Will be probably
+            resolved in the future once the main model has been fine-tuned with TP_rank=1.
 
     Example:
 
@@ -143,6 +152,7 @@ class BloomConfig(PretrainedConfig):
         pretraining_tp=1,  # TP rank used when training with megatron
         dtype="bfloat16",
         gradient_checkpointing=True,
+        slow_but_exact=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -165,5 +175,6 @@ class BloomConfig(PretrainedConfig):
         self.eos_token_id = eos_token_id
         self.dtype = dtype
         self.gradient_checkpointing = gradient_checkpointing
+        self.slow_but_exact = slow_but_exact
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
