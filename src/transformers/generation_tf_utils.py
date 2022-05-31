@@ -1498,8 +1498,14 @@ class TFGenerationMixin:
         )
 
         if pad_token_id is None and eos_token_id is not None:
+            if attention_mask is None:
+                logger.warning(
+                    "The attention mask and the pad token id were not set. As a consequence, you may observe "
+                    "unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results."
+                )
             logger.warning(f"Setting `pad_token_id` to {eos_token_id} (first `eos_token_id`) to generate sequence")
             pad_token_id = eos_token_id
+
         if min_length is not None and min_length > max_length:
             raise ValueError(
                 f"Unfeasable length constraints: the minimum length ({min_length}) is larger than the maximum "
@@ -1525,7 +1531,9 @@ class TFGenerationMixin:
         requires_attention_mask = "encoder_outputs" not in model_kwargs
 
         if model_kwargs.get("attention_mask", None) is None and requires_attention_mask and accepts_attention_mask:
-            model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(input_ids, pad_token_id)
+            model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(
+                input_ids, pad_token_id, eos_token_id
+            )
 
         # 4. Prepare model inputs which will be used for auto-regressive generation
         if self.config.is_encoder_decoder:
@@ -1653,12 +1661,17 @@ class TFGenerationMixin:
     def _prepare_attention_mask_for_generation(
         self,
         inputs: tf.Tensor,
-        pad_token_id: int,
+        pad_token_id: Optional[int],
+        eos_token_id: Optional[int],
     ) -> tf.Tensor:
         is_input_ids = len(inputs.shape) == 2 and inputs.dtype in (tf.int32, tf.int64)
         is_pad_token_in_inputs = (pad_token_id is not None) and tf.math.reduce_any(inputs == pad_token_id)
+        is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or (
+            (eos_token_id is not None) and (pad_token_id != eos_token_id)
+        )
+
         # Check if input is input_ids and padded -> only then is attention_mask defined
-        if is_input_ids and is_pad_token_in_inputs:
+        if is_input_ids and is_pad_token_in_inputs and is_pad_token_not_equal_to_eos_token_id:
             return tf.cast(tf.math.not_equal(inputs, pad_token_id), dtype=tf.int32)
         else:
             return tf.ones(inputs.shape[:2], dtype=tf.int32)
@@ -1954,6 +1967,7 @@ class TFGenerationMixin:
         # 1. init greedy_search values
         logits_processor = logits_processor if logits_processor is not None else TFLogitsProcessorList()
 
+        max_length = max_length if max_length is not None else self.config.max_length
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
         output_scores = output_scores if output_scores is not None else self.config.output_scores
@@ -1973,10 +1987,9 @@ class TFGenerationMixin:
         decoder_hidden_states = [] if (return_dict_in_generate and output_hidden_states) else None
 
         # 3. init tensors to use for "xla-compileable" generate function
-        # define bsz, seq_length
-        batch_size, seq_length = input_ids.shape
+        batch_size, cur_len = input_ids.shape
 
-        # initialize `generated`, `finished_sequences`, and `current_pos`
+        # initialize `generated` (pre-populated with `pad_token_id`), `finished_sequences`
         generated = tf.TensorArray(
             element_shape=(batch_size,),
             dtype=tf.int32,
@@ -1984,25 +1997,26 @@ class TFGenerationMixin:
             size=max_length,
             clear_after_read=False,
         )
+        if pad_token_id:  # ignores the cases when it is 0 or None
+            for i in range(max_length):
+                generated = generated.write(i, tf.broadcast_to(pad_token_id, (batch_size,)))
 
         # write prompt to generated
-        for i in range(seq_length):
+        for i in range(cur_len):
             generated = generated.write(i, input_ids[:, i])
 
         finished_sequences = tf.zeros((batch_size,), dtype=tf.bool)
-        current_pos = tf.ones(shape=(1,), dtype=tf.int32) * seq_length
 
         # 4. define "xla-compile-able" stop-condition and auto-regressive function
         # define condition fn
-        def greedy_search_cond_fn(generated, finished_sequences, next_tokens, current_pos, model_kwargs):
+        def greedy_search_cond_fn(generated, finished_sequences, next_tokens, cur_len, model_kwargs):
             """state termination condition fn."""
             return ~tf.reduce_all(finished_sequences)
 
         # define condition fn
-        def greedy_search_body_fn(generated, finished_sequences, next_tokens, current_pos, model_kwargs):
+        def greedy_search_body_fn(generated, finished_sequences, next_tokens, cur_len, model_kwargs):
             """state update fn."""
-            # TODO(pvp, Joao) - `use_xla` can be removed here as soon as `position_ids` are corrected for the non-xla case in gpt2's `prepare_inputs_for_generation`.
-            model_inputs = self.prepare_inputs_for_generation(next_tokens, use_xla=use_xla, **model_kwargs)
+            model_inputs = self.prepare_inputs_for_generation(next_tokens, **model_kwargs)
             # forward pass to get next token logits
             outputs = self(
                 **model_inputs,
@@ -2029,13 +2043,8 @@ class TFGenerationMixin:
                     decoder_hidden_states.append(outputs.hidden_states)
 
             # pre-process distribution
-            # TODO(pvp, joao, matt) - all the logits processors need to be adapted
-            # to be XLA compatible
-            input_ids = None
-            if not use_xla:
-                input_ids = tf.reshape(generated.concat(), (-1, batch_size))
-                input_ids = tf.transpose(input_ids[: current_pos[0]])
-            next_tokens_scores = logits_processor(input_ids, next_token_logits, current_pos[0])
+            input_ids = tf.transpose(tf.reshape(generated.concat(), (-1, batch_size)))
+            next_tokens_scores = logits_processor(input_ids, next_token_logits, cur_len)
 
             # argmax
             next_tokens = tf.argmax(next_tokens_scores, axis=-1, output_type=tf.int32)
@@ -2047,16 +2056,14 @@ class TFGenerationMixin:
                 next_tokens = next_tokens * unfinished_seq + pad_token_id * (1 - unfinished_seq)
             finished_sequences = finished_sequences | (next_tokens == eos_token_id)
 
-            # update `generated` and `current_pos`
-            generated = generated.write(current_pos[0], next_tokens)
+            # update `generated` and `cur_len`
+            generated = generated.write(cur_len, next_tokens)
             next_tokens = next_tokens[:, None]
-            current_pos += 1
+            cur_len += 1
 
             # update model_kwargs
             if use_xla:
-                model_kwargs = self._update_model_kwargs_for_xla_generation(
-                    outputs, model_kwargs, current_pos, max_length
-                )
+                model_kwargs = self._update_model_kwargs_for_xla_generation(outputs, model_kwargs, cur_len, max_length)
             else:
                 model_kwargs = self._update_model_kwargs_for_generation(
                     outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
@@ -2067,24 +2074,24 @@ class TFGenerationMixin:
                     model_kwargs.pop("past", None)
 
                     next_tokens = tf.reshape(generated.concat(), (-1, batch_size))
-                    next_tokens = tf.transpose(next_tokens[: current_pos[0]])
+                    next_tokens = tf.transpose(next_tokens[:cur_len])
 
-            return generated, finished_sequences, next_tokens, current_pos, model_kwargs
+            return generated, finished_sequences, next_tokens, cur_len, model_kwargs
 
         # 5. run generation
         # 1st generation step has to be run before to initialize `past`
-        generated, finished_sequences, next_tokens, current_pos, model_kwargs = greedy_search_body_fn(
-            generated, finished_sequences, input_ids, current_pos, model_kwargs
+        generated, finished_sequences, next_tokens, cur_len, model_kwargs = greedy_search_body_fn(
+            generated, finished_sequences, input_ids, cur_len, model_kwargs
         )
 
         # 2-to-n generation steps can then be run in autoregressive fashion
         # only in case 1st generation step does NOT yield EOS token though
-        if greedy_search_cond_fn(generated, finished_sequences, next_tokens, current_pos, model_kwargs):
-            maximum_iterations = max_length - seq_length - 1
-            generated, _, _, current_pos, _ = tf.while_loop(
+        if greedy_search_cond_fn(generated, finished_sequences, next_tokens, cur_len, model_kwargs):
+            maximum_iterations = max_length - cur_len
+            generated, _, _, cur_len, _ = tf.while_loop(
                 greedy_search_cond_fn,
                 greedy_search_body_fn,
-                (generated, finished_sequences, next_tokens, current_pos, model_kwargs),
+                (generated, finished_sequences, next_tokens, cur_len, model_kwargs),
                 maximum_iterations=maximum_iterations,
             )
 
@@ -2093,7 +2100,7 @@ class TFGenerationMixin:
 
         if not use_xla:
             # cut for backward compatibility
-            output_ids = output_ids[:, : current_pos[0]]
+            output_ids = output_ids[:, :cur_len]
 
         if return_dict_in_generate:
             if self.config.is_encoder_decoder:
@@ -2231,6 +2238,7 @@ class TFGenerationMixin:
         logits_processor = logits_processor if logits_processor is not None else TFLogitsProcessorList()
         logits_warper = logits_warper if logits_warper is not None else TFLogitsProcessorList()
 
+        max_length = max_length if max_length is not None else self.config.max_length
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
         output_scores = output_scores if output_scores is not None else self.config.output_scores
@@ -2250,10 +2258,9 @@ class TFGenerationMixin:
         decoder_hidden_states = [] if (return_dict_in_generate and output_hidden_states) else None
 
         # 3. init tensors to use for "xla-compileable" generate function
-        # define bsz, seq_length
         batch_size, cur_len = input_ids.shape
 
-        # initialize `generated`, `finished_sequences`
+        # initialize `generated` (pre-populated with `pad_token_id`), `finished_sequences`
         generated = tf.TensorArray(
             element_shape=(batch_size,),
             dtype=tf.int32,
@@ -2261,19 +2268,22 @@ class TFGenerationMixin:
             size=max_length,
             clear_after_read=False,
         )
-        finished_sequences = tf.zeros((batch_size,), dtype=tf.bool)
+        if pad_token_id:  # ignores the cases when it is 0 or None
+            for i in range(max_length):
+                generated = generated.write(i, tf.broadcast_to(pad_token_id, (batch_size,)))
 
         # write prompt to generated
         for i in range(cur_len):
             generated = generated.write(i, input_ids[:, i])
+
+        finished_sequences = tf.zeros((batch_size,), dtype=tf.bool)
 
         # 4. define "xla-compile-able" stop-condition and auto-regressive function
         def sample_cond_fn(generated, finished_sequences, next_tokens, cur_len, model_kwargs):
             return ~tf.reduce_all(finished_sequences)
 
         def sample_body_fn(generated, finished_sequences, next_tokens, cur_len, model_kwargs):
-            # TODO(pvp, Joao) - `use_xla` can be removed here as soon as `position_ids` are corrected for the non-xla case in gpt2's `prepare_inputs_for_generation`.
-            model_inputs = self.prepare_inputs_for_generation(next_tokens, use_xla=use_xla, **model_kwargs)
+            model_inputs = self.prepare_inputs_for_generation(next_tokens, **model_kwargs)
             # forward pass to get next token logits
             outputs = self(
                 **model_inputs,
@@ -2300,12 +2310,7 @@ class TFGenerationMixin:
                     decoder_hidden_states.append(outputs.hidden_states)
 
             # pre-process distribution
-            # TODO(pvp, joao, matt) - all the logits processors/wrappers need to be adapted
-            # to be XLA compatible
-            input_ids = None
-            if not use_xla:
-                input_ids = tf.reshape(generated.concat(), (-1, batch_size))
-                input_ids = tf.transpose(input_ids[:cur_len])
+            input_ids = tf.transpose(tf.reshape(generated.concat(), (-1, batch_size)))
             next_tokens_scores = logits_processor(input_ids, next_token_logits, cur_len)
             next_tokens_scores = logits_warper(input_ids, next_tokens_scores, cur_len)
 
@@ -2359,7 +2364,7 @@ class TFGenerationMixin:
         # 2-to-n generation steps can then be run in autoregressive fashion
         # only in case 1st generation step does NOT yield EOS token though
         if sample_cond_fn(generated, finished_sequences, next_tokens, cur_len, model_kwargs):
-            maximum_iterations = max_length - cur_len - 1
+            maximum_iterations = max_length - cur_len
             generated, _, _, cur_len, _ = tf.while_loop(
                 sample_cond_fn,
                 sample_body_fn,
@@ -2613,12 +2618,13 @@ class TFGenerationMixin:
             size=max_length,
             clear_after_read=False,
         )
-        for i in range(max_length):
-            sequences = sequences.write(i, tf.broadcast_to(pad_token_id, (batch_size, num_beams)))
-            running_sequences = running_sequences.write(i, tf.broadcast_to(pad_token_id, (batch_size, num_beams)))
-            intermediary_running_sequences = intermediary_running_sequences.write(
-                i, tf.broadcast_to(pad_token_id, (batch_size, num_beams * 2))
-            )
+        if pad_token_id:  # ignores the cases when it is 0 or None
+            for i in range(max_length):
+                sequences = sequences.write(i, tf.broadcast_to(pad_token_id, (batch_size, num_beams)))
+                running_sequences = running_sequences.write(i, tf.broadcast_to(pad_token_id, (batch_size, num_beams)))
+                intermediary_running_sequences = intermediary_running_sequences.write(
+                    i, tf.broadcast_to(pad_token_id, (batch_size, num_beams * 2))
+                )
 
         # write prompt to running_sequences
         for i in range(cur_len):
@@ -2699,9 +2705,7 @@ class TFGenerationMixin:
                 (0, 0, cur_len - input_ids_length),
                 (batch_size, num_beams, input_ids_length),
             )
-            model_inputs = self.prepare_inputs_for_generation(
-                flatten_beam_dim(input_token), use_xla=use_xla, **model_kwargs
-            )
+            model_inputs = self.prepare_inputs_for_generation(flatten_beam_dim(input_token), **model_kwargs)
             model_outputs = self(
                 **model_inputs,
                 return_dict=True,

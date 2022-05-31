@@ -490,8 +490,8 @@ class GenerationMixin:
     def _prepare_attention_mask_for_generation(
         self,
         inputs: torch.Tensor,
-        pad_token_id: int,
-        eos_token_id: int,
+        pad_token_id: Optional[int],
+        eos_token_id: Optional[int],
     ) -> torch.LongTensor:
         is_input_ids = len(inputs.shape) == 2 and inputs.dtype in [torch.int, torch.long]
         is_pad_token_in_inputs = (pad_token_id is not None) and (pad_token_id in inputs)
@@ -1137,7 +1137,11 @@ class GenerationMixin:
             eos_token_id = self.config.decoder.eos_token_id
 
         if pad_token_id is None and eos_token_id is not None:
-            # special case if pad_token_id is not defined
+            if model_kwargs.get("attention_mask", None) is None:
+                logger.warning(
+                    "The attention mask and the pad token id were not set. As a consequence, you may observe "
+                    "unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results."
+                )
             logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
             pad_token_id = eos_token_id
 
