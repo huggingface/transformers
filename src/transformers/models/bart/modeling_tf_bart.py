@@ -1456,7 +1456,7 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
                     new_past_layer[i] = tf.pad(past_layer[i], padding_values)
                 new_past += (tuple(new_past_layer),)
 
-            # 1 one for decoder_start_token_id, Zeros for the currently-unfilled locations in the past tensor
+            # 1 one for decoder_start_token_id, Zeros for the currently-unfilled locations in the past tensor, ones for the actual input_ids
             decoder_attention_mask = tf.concat(
                 [
                     tf.ones((batch_size, 1), dtype=tf.int32),
