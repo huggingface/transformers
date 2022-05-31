@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The EleutherAI and HuggingFace Teams. All rights reserved.
+# Copyright 2022 Salesforce authors, The EleutherAI, and HuggingFace Teams. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -46,9 +46,9 @@ class CodeGenConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`CodeGenModel`]. It is used to instantiate a
     CodeGen model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the CodeGen
-    [EleutherAI/gpt-j-6B](https://huggingface.co/EleutherAI/gpt-j-6B) architecture. Configuration objects inherit from
-    [`PretrainedConfig`] and can be used to control the model outputs. Read the documentation from [`PretrainedConfig`]
-    for more information.
+    [Salesforce/codegen-2B-mono](https://huggingface.co/Salesforce/codegen-2B-mono) architecture. Configuration objects
+    inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the documentation from
+    [`PretrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 50400):

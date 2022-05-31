@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The EleutherAI and HuggingFace Teams. All rights reserved.
+# Copyright 2022 Salesforce authors, The EleutherAI, and HuggingFace Teams. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,7 +25,6 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
-from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_codegen import CodeGenConfig
 
 
@@ -53,6 +52,7 @@ CODEGEN_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+# Copied from transformers.models.gptj.modeling_gptj.fixed_pos_embedding
 def fixed_pos_embedding(x, seq_dim=1, seq_len=None):
     dim = x.shape[-1]
     if seq_len is None:
@@ -64,6 +64,7 @@ def fixed_pos_embedding(x, seq_dim=1, seq_len=None):
     return torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)
 
 
+# Copied from transformers.models.gptj.modeling_gptj.rotate_every_two
 def rotate_every_two(x):
     x1 = x[:, :, :, ::2]
     x2 = x[:, :, :, 1::2]
@@ -71,6 +72,7 @@ def rotate_every_two(x):
     return x.flatten(-2)  # in einsum notation: rearrange(x, '... d j -> ... (d j)')
 
 
+# Copied from transformers.models.gptj.modeling_gptj.duplicate_interleave
 def duplicate_interleave(m):
     """
     A simple version of `torch.repeat_interleave` for duplicating a matrix while interleaving the copy.
@@ -82,6 +84,7 @@ def duplicate_interleave(m):
     return m
 
 
+# Copied from transformers.models.gptj.modeling_gptj.apply_rotary_pos_emb
 def apply_rotary_pos_emb(x, sincos, offset=0):
     sin, cos = map(lambda t: duplicate_interleave(t)[None, offset : x.shape[1] + offset, None, :], sincos)
     # einsum notation for lambda t: repeat(t[offset:x.shape[1]+offset,:], "n d -> () n () (d j)", j=2)
@@ -255,6 +258,7 @@ class CodeGenAttention(nn.Module):
         return outputs  # a, present, (attentions)
 
 
+# Copied from transformers.models.gptj.modeling_gptj.GPTJMLP with GPTJ->CodeGen
 class CodeGenMLP(nn.Module):
     def __init__(self, intermediate_size, config):  # in MLP: intermediate_size= 4 * embed_dim
         super().__init__()
@@ -274,6 +278,7 @@ class CodeGenMLP(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.gptj.modeling_gptj.GPTJBlock with GPTJ->CodeGen
 class CodeGenBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -315,6 +320,7 @@ class CodeGenBlock(nn.Module):
         return outputs  # hidden_states, present, (attentions)
 
 
+# Copied from transformers.models.gptj.modeling_gptj.GPTJPreTrainedModel with GPTJ->CodeGen
 class CodeGenPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -367,7 +373,7 @@ CODEGEN_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`CodeGenTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`GPT2Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -411,54 +417,6 @@ CODEGEN_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-PARALLELIZE_DOCSTRING = r"""
-    This is an experimental feature and is a subject to change at a moment's notice. Uses a device map to distribute
-    attention modules of the model across several devices. If no device map is given, it will evenly distribute blocks
-    across all devices.
-
-    Args:
-        device_map (`Dict[int, list]`, optional, defaults to None):
-            A dictionary that maps attention modules to devices. Note that the embedding module and LMHead are always
-            automatically mapped to the first device (for esoteric reasons). That means that the first device should
-            have fewer attention modules mapped to it than other devices. For reference, the CodeGen models have the
-            following number of attention modules:
-
-                - gpt-j-6B: 28
-
-    Example:
-
-    ```python
-    # Here is an example of a device map on a machine with 4 GPUs using gpt-j-6B, which has a total of 28 attention modules:
-    model = CodeGenForCausalLM.from_pretrained("EleutherAI/gpt-j-6B")
-    device_map = {
-        0: [0, 1, 2, 3, 4, 5, 6],
-        1: [7, 8, 9, 10, 11, 12, 13],
-        2: [14, 15, 16, 17, 18, 19, 20],
-        3: [21, 22, 23, 24, 25, 26, 27],
-    }
-    model.parallelize(device_map)
-    ```
-"""
-
-DEPARALLELIZE_DOCSTRING = r"""
-    Moves the model to CPU from a model parallel state.
-
-    Example:
-
-    ```python
-    # On a 4 GPU machine with gpt-j-6B:
-    model = CodeGenForCausalLM.from_pretrained("EleutherAI/gpt-j-6B")
-    device_map = {
-        0: [0, 1, 2, 3, 4, 5, 6],
-        1: [7, 8, 9, 10, 11, 12, 13],
-        2: [14, 15, 16, 17, 18, 19, 20],
-        3: [21, 22, 23, 24, 25, 26, 27],
-    }
-    model.parallelize(device_map)  # Splits the model across several devices
-    model.deparallelize()  # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
-    ```
-"""
-
 
 @add_start_docstrings(
     "The bare CodeGen Model transformer outputting raw hidden-states without any specific head on top.",
@@ -476,44 +434,10 @@ class CodeGenModel(CodeGenPreTrainedModel):
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
         self.rotary_dim = min(config.rotary_dim, config.n_ctx // config.num_attention_heads)
 
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    def parallelize(self, device_map=None):
-        # Check validity of device_map
-        self.device_map = (
-            get_device_map(len(self.h), range(torch.cuda.device_count())) if device_map is None else device_map
-        )
-        assert_device_map(self.device_map, len(self.h))
-        self.model_parallel = True
-        self.first_device = "cpu" if "cpu" in self.device_map.keys() else "cuda:" + str(min(self.device_map.keys()))
-        self.last_device = "cuda:" + str(max(self.device_map.keys()))
-        self.wte = self.wte.to(self.first_device)
-        # Load onto devices
-        for k, v in self.device_map.items():
-            for block in v:
-                cuda_device = "cuda:" + str(k)
-                self.h[block] = self.h[block].to(cuda_device)
-        # ln_f to last
-        self.ln_f = self.ln_f.to(self.last_device)
-
-    @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
-    def deparallelize(self):
-        self.model_parallel = False
-        self.device_map = None
-        self.first_device = "cpu"
-        self.last_device = "cpu"
-        self.wte = self.wte.to("cpu")
-        for index in range(len(self.h)):
-            self.h[index] = self.h[index].to("cpu")
-        self.ln_f = self.ln_f.to("cpu")
-        torch.cuda.empty_cache()
 
     def get_input_embeddings(self):
         return self.wte
@@ -623,17 +547,6 @@ class CodeGenModel(CodeGenPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
 
-            # Model parallel
-            if self.model_parallel:
-                torch.cuda.set_device(hidden_states.device)
-                # Ensure layer_past is on same device as hidden_states (might not be correct)
-                if layer_past is not None:
-                    layer_past = tuple(past_state.to(hidden_states.device) for past_state in layer_past)
-                # Ensure that attention_mask is always on the same device as hidden_states
-                if attention_mask is not None:
-                    attention_mask = attention_mask.to(hidden_states.device)
-                if isinstance(head_mask, torch.Tensor):
-                    head_mask = head_mask.to(hidden_states.device)
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -677,12 +590,6 @@ class CodeGenModel(CodeGenPreTrainedModel):
             if output_attentions:
                 all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
 
-            # Model Parallel: If it's the last layer for that device, put things on the next device
-            if self.model_parallel:
-                for k, v in self.device_map.items():
-                    if i == v[-1] and "cuda:" + str(k) != self.last_device:
-                        hidden_states = hidden_states.to("cuda:" + str(k + 1))
-
         hidden_states = self.ln_f(hidden_states)
 
         hidden_states = hidden_states.view(output_shape)
@@ -715,32 +622,8 @@ class CodeGenForCausalLM(CodeGenPreTrainedModel):
         self.transformer = CodeGenModel(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size)
 
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
-
         # Initialize weights and apply final processing
         self.post_init()
-
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    def parallelize(self, device_map=None):
-        self.device_map = (
-            get_device_map(len(self.transformer.h), range(torch.cuda.device_count()))
-            if device_map is None
-            else device_map
-        )
-        assert_device_map(self.device_map, len(self.transformer.h))
-        self.transformer.parallelize(self.device_map)
-        self.lm_head = self.lm_head.to(self.transformer.first_device)
-        self.model_parallel = True
-
-    @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
-    def deparallelize(self):
-        self.transformer.deparallelize()
-        self.transformer = self.transformer.to("cpu")
-        self.lm_head = self.lm_head.to("cpu")
-        self.model_parallel = False
-        torch.cuda.empty_cache()
 
     def get_output_embeddings(self):
         return self.lm_head
