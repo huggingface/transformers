@@ -14,7 +14,7 @@
 
 from ctypes import c_float, sizeof
 from enum import Enum
-from typing import List, Union
+from typing import Optional, Union
 
 from .. import AutoFeatureExtractor, AutoProcessor, AutoTokenizer
 
@@ -66,30 +66,39 @@ def compute_serialized_parameters_size(num_parameters: int, dtype: ParameterForm
     return num_parameters * dtype.size
 
 
-def get_preprocessors(model_name: str) -> List[Union[AutoTokenizer, AutoFeatureExtractor, AutoProcessor]]:
+def get_preprocessor(model_name: str) -> Optional[Union[AutoTokenizer, AutoFeatureExtractor, AutoProcessor]]:
     """
-    Gets all preprocessors (tokenizer, feature extractor or processor) that are available for `model_name`.
+    Gets a preprocessor (tokenizer, feature extractor or processor) that is available for `model_name`.
 
     Args:
-        model_name (`str`): Name of the model for which preprocessors are loaded.
+        model_name (`str`): Name of the model for which a preprocessor are loaded.
 
     Returns:
-        `List[Union[AutoTokenizer, AutoFeatureExtractor, AutoProcessor]]`: A list of preprocessors.
+        `Optional[Union[AutoTokenizer, AutoFeatureExtractor, AutoProcessor]]`:
+            If a processor is found, it is returned. Otherwise, if a tokenizer or a feature extractor extractor exists, it is returned.
+            If both a tokenizer and a feature extractor exist, an error is raised.
+            The function returns `None`, if no preprocesor is found.
     """
-    procs = []
     try:
-        procs.append(AutoTokenizer.from_pretrained(model_name))
-    except (OSError, KeyError):
-        pass
-
-    try:
-        procs.append(AutoFeatureExtractor.from_pretrained(model_name))
-    except (OSError, KeyError):
-        pass
-
-    try:
-        procs.append(AutoProcessor.from_pretrained(model_name))
+        return AutoProcessor.from_pretrained(model_name)
     except (ValueError, OSError, KeyError):
-        pass
+        tokenizer, feature_extractor = None, None
+        try:
+            tokenizer = AutoTokenizer.from_pretrained(model_name)
+        except (OSError, KeyError):
+            pass
+        try:
+            feature_extractor = AutoFeatureExtractor.from_pretrained(model_name)
+        except (OSError, KeyError):
+            pass
 
-    return procs
+        if tokenizer and feature_extractor:
+            raise ValueError(
+                f"Couldn't auto-detect preprocessor for {model_name}. Found both a tokenizer and a feature extractor."
+            )
+        elif (not tokenizer) and (not feature_extractor):
+            return None
+        elif tokenizer:
+            return tokenizer
+        else:
+            return feature_extractor

@@ -16,7 +16,7 @@ from argparse import ArgumentParser
 from pathlib import Path
 
 from ..models.auto import AutoFeatureExtractor, AutoProcessor, AutoTokenizer
-from ..onnx.utils import get_preprocessors
+from ..onnx.utils import get_preprocessor
 from ..utils import logging
 from .convert import export, validate_model_outputs
 from .features import FeaturesManager
@@ -59,16 +59,7 @@ def main():
 
     # Instantiate the appropriate preprocessor
     if args.preprocessor == "auto":
-        preprocessors = get_preprocessors(args.model)
-        if len(preprocessors) == 0:
-            raise ValueError(f"Couldn't find preprocessor for: {args.model}")
-        elif len(preprocessors) > 1:
-            raise ValueError(
-                f"Found multiple preprocessors for {args.model}: {[type(p) for p in preprocessors]}. Use"
-                " --preprocessor to specify which one to use."
-            )
-        else:
-            preprocessor = preprocessors[0]
+        preprocessor = get_preprocessor(args.model)
     elif args.preprocessor == "tokenizer":
         preprocessor = AutoTokenizer.from_pretrained(args.model)
     elif args.preprocessor == "feature_extractor":

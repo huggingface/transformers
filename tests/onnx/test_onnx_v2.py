@@ -18,7 +18,7 @@ from transformers.onnx import (
 from transformers.onnx.utils import (
     compute_effective_axis_dimension,
     compute_serialized_parameters_size,
-    get_preprocessors,
+    get_preprocessor,
 )
 from transformers.testing_utils import require_onnx, require_rjieba, require_tf, require_torch, require_vision, slow
 
@@ -270,16 +270,7 @@ class OnnxExportTestCaseV2(TestCase):
                     f" {onnx_config.torch_onnx_minimum_version}, got: {torch_version}"
                 )
 
-        preprocessors = get_preprocessors(model_name)
-        if len(preprocessors) == 0:
-            raise ValueError(f"Found no preprocessor for {model_name}.")
-        elif len(preprocessors) > 1:
-            raise ValueError(
-                f"Found multiple preprocessors for {model_name}, which is currently not supported. Make a special test"
-                " case."
-            )
-        else:
-            preprocessor = preprocessors[0]
+        preprocessor = get_preprocessor(model_name)
 
         # Useful for causal lm models that do not use pad tokens.
         if isinstance(preprocessor, PreTrainedTokenizerBase) and not getattr(config, "pad_token_id", None):
