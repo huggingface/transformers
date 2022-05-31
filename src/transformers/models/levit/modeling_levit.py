@@ -327,7 +327,7 @@ class LevitResidualLayer(nn.Module):
         if self.training and self.drop_rate > 0:
             rnd = torch.rand(hidden_state.size(0), 1, 1, device=hidden_state.device)
             rnd = rnd.ge_(self.drop_rate).div(1 - self.drop_rate).detach()
-            hidden_state = (hidden_state + self.module(hidden_state) * rnd)
+            hidden_state = hidden_state + self.module(hidden_state) * rnd
             return hidden_state
         else:
             hidden_state = hidden_state + self.module(hidden_state)
