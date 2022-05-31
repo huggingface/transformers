@@ -323,17 +323,15 @@ class LevitResidualLayer(nn.Module):
         self.module = module
         self.drop_rate = drop_rate
 
-    def forward(self, x):
+    def forward(self, hidden_state):
         if self.training and self.drop_rate > 0:
-            x = (
-                x
-                + self.module(x)
-                * torch.rand(x.size(0), 1, 1, device=x.device).ge_(self.drop_rate).div(1 - self.drop_rate).detach()
-            )
-            return x
+            rnd = torch.rand(hidden_state.size(0), 1, 1, device=hidden_state.device)
+            rnd = rnd.ge_(self.drop_rate).div(1 - self.drop_rate).detach()
+            hidden_state = (hidden_state + self.module(hidden_state) * rnd)
+            return hidden_state
         else:
-            x = x + self.module(x)
-            return x
+            hidden_state = hidden_state + self.module(hidden_state)
+            return hidden_state
 
 
 class LevitStage(nn.Module):
