@@ -54,7 +54,7 @@ class MobileViTConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        num_channels (`int`, *optional*, defaults to `3`):
+        num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         image_size (`int`, *optional*, defaults to `256`):
             The size (resolution) of each image.
