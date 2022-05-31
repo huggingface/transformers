@@ -2518,9 +2518,13 @@ class TFGenerationMixin:
             return tf.reshape(
                 tensor,
                 tf.concat(
-                    (tensor_shape[:batch_axis], [tensor_shape[batch_axis] * tensor_shape[batch_axis + 1]], tensor_shape[batch_axis + 2 :]),
-                    axis=0
-                )
+                    (
+                        tensor_shape[:batch_axis],
+                        [tensor_shape[batch_axis] * tensor_shape[batch_axis + 1]],
+                        tensor_shape[batch_axis + 2 :],
+                    ),
+                    axis=0,
+                ),
             )
 
         def unflatten_beam_dim(tensor, batch_size, num_beams, batch_axis=0):
@@ -2530,7 +2534,10 @@ class TFGenerationMixin:
                 return tensor
             tensor_shape = tf.shape(tensor)
             return tf.reshape(
-                tensor, tf.concat((tensor_shape[:batch_axis], [batch_size, num_beams], tensor_shape[batch_axis + 1 :]), axis=0)
+                tensor,
+                tf.concat(
+                    (tensor_shape[:batch_axis], [batch_size, num_beams], tensor_shape[batch_axis + 1 :]), axis=0
+                ),
             )
 
         def gather_beams(nested, beam_indices, batch_axis=0):
@@ -2792,7 +2799,7 @@ class TFGenerationMixin:
             # - add length penalty
             # - make sure no scores can be added anymore if beam is full
             # - make sure still running sequences cannot be chosen as finalized beam
-            topk_log_probs = topk_log_probs / (tf.cast(cur_len, dtype=tf.float32)**length_penalty)
+            topk_log_probs = topk_log_probs / (tf.cast(cur_len, dtype=tf.float32) ** length_penalty)
             beams_in_batch_are_full = (
                 tf.broadcast_to(
                     tf.math.reduce_all(is_sent_finished, axis=-1, keepdims=True), did_topk_just_finished.shape
