@@ -98,7 +98,7 @@ def get_preprocessor(model_name: str) -> Optional[Union[AutoTokenizer, AutoFeatu
             )
         elif tokenizer is None and feature_extractor is None:
             return None
-        elif tokenizer:
+        elif tokenizer is not None:
             return tokenizer
         else:
             return feature_extractor
