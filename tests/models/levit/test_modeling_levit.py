@@ -172,11 +172,7 @@ class LevitModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (
-        (
-            LevitModel,
-            LevitForImageClassification,
-            LevitForImageClassificationWithTeacher,
-        )
+        (LevitModel, LevitForImageClassification, LevitForImageClassificationWithTeacher)
         if is_torch_available()
         else ()
     )
