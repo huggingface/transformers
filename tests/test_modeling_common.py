@@ -2216,6 +2216,42 @@ class ModelTesterMixin:
 
     @require_accelerate
     @require_torch_gpu
+    def test_disk_offload(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        if isinstance(getattr(config, "num_hidden_layers", None), int) and config.num_hidden_layers < 5:
+            config.num_hidden_layers = 5
+
+        for model_class in self.all_model_classes:
+            if model_class._no_split_modules is None:
+                continue
+
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config).eval()
+            model = model.to(torch_device)
+            base_output = model(**inputs_dict)
+
+            model_size = compute_module_sizes(model)[""]
+            # We test several splits of sizes to make sure it works.
+            max_size = int(0.4 * model_size)
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model.cpu().save_pretrained(tmp_dir)
+
+                max_memory = {0: max_size, "cpu": max_size}
+                with self.assertRaises(ValueError):
+                    # This errors out cause it's missing an offload folder
+                    new_model = model_class.from_pretrained(tmp_dir, device_map="auto", max_memory=max_memory)
+
+                new_model = model_class.from_pretrained(
+                    tmp_dir, device_map="auto", max_memory=max_memory, offload_folder=tmp_dir
+                )
+
+                self.check_device_map_is_respected(new_model, new_model.hf_device_map)
+                new_output = new_model(**inputs_dict)
+
+                self.assertTrue(torch.allclose(base_output[0], new_output[0]))
+
+    @require_accelerate
+    @require_torch_gpu
     def test_cpu_offload(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if isinstance(getattr(config, "num_hidden_layers", None), int) and config.num_hidden_layers < 5:
