@@ -225,7 +225,9 @@ class LevitAttention(nn.Module):
 
 
 class LevitAttentionSubsample(nn.Module):
-    def __init__(self, input_dim, output_dim, key_dim, num_heads, attention_ratio, stride, resolution_in, resolution_out):
+    def __init__(
+        self, input_dim, output_dim, key_dim, num_heads, attention_ratio, stride, resolution_in, resolution_out
+    ):
         super().__init__()
         self.num_heads = num_heads
         self.scale = key_dim**-0.5
@@ -350,7 +352,8 @@ class LevitStage(nn.Module):
         for _ in range(depth):
             self.layers.append(
                 LevitResidualLayer(
-                    LevitAttention(embed_dim, key_dim, num_heads, attention_ratio, resolution_in), self.config.drop_path
+                    LevitAttention(embed_dim, key_dim, num_heads, attention_ratio, resolution_in),
+                    self.config.drop_path,
                 )
             )
             if mlp_ratio > 0:

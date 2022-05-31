@@ -143,7 +143,10 @@ class LevitFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
         # transformations (resizing + center cropping + normalization)
         if self.do_resize and self.size is not None:
             size_ = int((256 / 224) * self.size)
-            images = [self.resize(image=image, size=size_, resample=self.resample, default_to_square=False) for image in images]
+            images = [
+                self.resize(image=image, size=size_, resample=self.resample, default_to_square=False)
+                for image in images
+            ]
         if self.do_center_crop:
             images = [self.center_crop(image=image, size=self.size) for image in images]
         if self.do_normalize:
