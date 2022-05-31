@@ -142,6 +142,7 @@ class BloomConfig(PretrainedConfig):
         attention_softmax_in_fp32=True,
         pretraining_tp=1,  # TP rank used when training with megatron
         dtype="bfloat16",
+        gradient_checkpointing=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -163,5 +164,6 @@ class BloomConfig(PretrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.dtype = dtype
+        self.gradient_checkpointing = gradient_checkpointing
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
