@@ -1689,10 +1689,13 @@ class GenerationMixin:
 
             next_token_logits = outputs.logits[:, -1, :]
 
+            # pre-process distribution
+            next_tokens_scores = logits_processor(input_ids, next_token_logits)
+
             # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
                 if output_scores:
-                    scores += (next_token_logits,)
+                    scores += (next_tokens_scores,)
                 if output_attentions:
                     decoder_attentions += (
                         (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
@@ -1706,9 +1709,6 @@ class GenerationMixin:
                         if self.config.is_encoder_decoder
                         else (outputs.hidden_states,)
                     )
-
-            # pre-process distribution
-            next_tokens_scores = logits_processor(input_ids, next_token_logits)
 
             # argmax
             next_tokens = torch.argmax(next_tokens_scores, dim=-1)
