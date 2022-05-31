@@ -70,8 +70,8 @@ class LevitFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
         resample=Image.BICUBIC,
         do_normalize=True,
         do_center_crop=True,
-        image_mean=None,
-        image_std=None,
+        image_mean=IMAGENET_DEFAULT_MEAN,
+        image_std=IMAGENET_DEFAULT_STD,
         **kwargs
     ):
         super().__init__(**kwargs)
