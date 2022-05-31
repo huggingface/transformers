@@ -406,7 +406,11 @@ class BottleneckBlock(nn.Module):
         self.k_sum = None
         self.k_elem = None
         # self.register_buffer('k',  torch.zeros(self.k_bins, self.emb_width).cuda())
-        self.register_buffer("k", torch.zeros(self.k_bins, self.emb_width))
+        
+        if torch.cuda.is_available():
+            self.register_buffer("k",torch.zeros(self.k_bins, self.emb_width).to(self.device))
+        else : 
+            self.register_buffer("k",torch.zeros(self.k_bins, self.emb_width))
 
     def _tile(self, x):
         d, ew = x.shape
@@ -3297,6 +3301,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         alignments = None
         for level in reversed(sample_levels):
             prior = self.priors[level]
+            prior = prior.to(zs.device)
             # prior.cuda()
             empty_cache()
 
