@@ -488,6 +488,11 @@ class LukeModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
 
+    def test_for_masked_lm_with_word_only(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config_and_inputs = (*config_and_inputs[:4], *((None,) * len(config_and_inputs[4:])))
+        self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
+
     def test_for_entity_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_entity_classification(*config_and_inputs)
