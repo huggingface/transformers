@@ -80,8 +80,8 @@ class LevitFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
         self.resample = resample
         self.do_normalize = do_normalize
         self.do_center_crop = do_center_crop
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
-        self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
+        self.image_mean = image_mean
+        self.image_std = image_std
 
     def __call__(
         self, images: ImageInput, return_tensors: Optional[Union[str, TensorType]] = None, **kwargs
