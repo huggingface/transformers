@@ -16,7 +16,7 @@
 import unittest
 
 from transformers import EmformerTokenizer
-from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_torch, slow
+from transformers.testing_utils import get_tests_dir, require_sentencepiece, slow
 from transformers.utils import cached_property
 
 from ...test_tokenization_common import TokenizerTesterMixin
