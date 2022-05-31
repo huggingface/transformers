@@ -665,7 +665,9 @@ class BloomEmbeddingTest(unittest.TestCase):
     @require_torch
     def test_hidden_states_transformers(self):
         cuda_available = torch.cuda.is_available()
-        model = BloomModel.from_pretrained(self.path_bigscience_model, use_cache=False, torch_dtype="auto").to(torch_device)
+        model = BloomModel.from_pretrained(self.path_bigscience_model, use_cache=False, torch_dtype="auto").to(
+            torch_device
+        )
         model.eval()
 
         # fmt: off
