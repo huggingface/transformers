@@ -2547,7 +2547,7 @@ class JukeboxPrior(nn.Module):
         vqvae_z_shapes = config.vqvae_z_shapes
 
         def rescale(z_shape):
-            return (z_shape[0] * config.n_ctx // vqvae_z_shapes[level][0],)
+            return (z_shape[0] * config.n_ctx[-level-1] // vqvae_z_shapes[level][0],)
 
         z_shapes = [rescale(z_shape) for z_shape in vqvae_z_shapes]
         self.use_tokens = config.use_tokens[-level - 1]
@@ -2569,7 +2569,7 @@ class JukeboxPrior(nn.Module):
         self.l_bins = config.l_bins
 
         prior_kwargs = dict(
-            input_shape=(config.n_ctx,),
+            input_shape=(config.n_ctx[-level - 1],),
             bins=config.l_bins,
             width=config.width[-level - 1],
             depth=config.depth[-level - 1],
@@ -2625,7 +2625,7 @@ class JukeboxPrior(nn.Module):
         y_cond_kwargs = dict(
             out_width=config.width[-level - 1],
             init_scale=config.init_scale[-level - 1],
-            y_bins=config.y_bins,
+            y_bins=config.y_bins[-level - 1],
             t_bins=config.t_bins,
             sr=config.sr,
             min_duration=config.min_duration,
