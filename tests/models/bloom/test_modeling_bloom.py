@@ -635,7 +635,6 @@ class BloomEmbeddingTest(unittest.TestCase):
         }
 
         tensor_ids = torch.LongTensor([EXAMPLE_IDS])
-        # position_ids = torch.LongTensor([[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]])
         with torch.no_grad():
             embeddings = model.transformer.word_embeddings(tensor_ids)
             embeddings_ln = model.transformer.word_embeddings_layernorm(embeddings)  #
@@ -654,13 +653,11 @@ class BloomEmbeddingTest(unittest.TestCase):
             output_dict_norm["min"][idx] = embeddings_ln.min(dim=-1).values[0][i].item()
             output_dict_norm["max"][idx] = embeddings_ln.max(dim=-1).values[0][i].item()
             output_dict_norm["mean"][idx] = embeddings_ln.mean(dim=-1)[0][i].item()
-        # word_embeddings
 
         # This test does not pass when places = 2
         for i, key in enumerate(output_dict_norm.keys()):
             for j, idx in enumerate(output_dict[key].keys()):
                 self.assertAlmostEqual(EMBEDDINGS_DS_AFTER_LN[key][idx], output_dict_norm[key][idx], places=1)
-        # self.assertDictEqual(EMBEDDINGS_DS_AFTER_LN, output_dict_norm)
 
     @require_torch
     def test_hidden_states_transformers(self):
