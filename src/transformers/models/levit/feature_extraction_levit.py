@@ -42,11 +42,11 @@ class LevitFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the input to a certain `size`.
+            Whether to resize the shortest edge of the input to int(256/224 *`size`).
         size (`int` or `Tuple(int)`, *optional*, defaults to 224):
             Resize the input to the given size. If a tuple is provided, it should be (width, height). If only an
-            integer is provided, then the input will be resized to (size, size). Only has an effect if `do_resize` is
-            set to `True`.
+            integer is provided, then shorter side of input will be resized to 'size'. Only works when
+            `default_to_square` is set to `False`.
         resample (`int`, *optional*, defaults to `PIL.Image.BICUBIC`):
             An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
             `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`. Only has an effect
@@ -140,10 +140,10 @@ class LevitFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
         if not is_batched:
             images = [images]
 
-        # transformations (resizing + normalization)
+        # transformations (resizing + center cropping + normalization)
         if self.do_resize and self.size is not None:
             size_ = int((256 / 224) * self.size)
-            images = [self.resize(image=image, size=size_, resample=self.resample) for image in images]
+            images = [self.resize(image=image, size=size_, resample=self.resample, default_to_square=False) for image in images]
         if self.do_center_crop:
             images = [self.center_crop(image=image, size=self.size) for image in images]
         if self.do_normalize:
