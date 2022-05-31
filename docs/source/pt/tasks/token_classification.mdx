@@ -10,23 +10,29 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# Token classification
+!# Token classification
+# Classificação de tokens
 
 <Youtube id="wVHdVlPScxA"/>
 
-Token classification assigns a label to individual tokens in a sentence. One of the most common token classification tasks is Named Entity Recognition (NER). NER attempts to find a label for each entity in a sentence, such as a person, location, or organization. 
+!Token classification assigns a label to individual tokens in a sentence. One of the most common token classification tasks is Named Entity Recognition (NER). NER attempts to find a label for each entity in a sentence, such as a person, location, or organization. 
+A classificação de tokens atribui um rótulo a tokens individuais em uma frase. Uma das tarefas de classificação de tokens mais comuns é o Reconhecimento de Entidade Nomeada, também chamada de NER (sigla em inglês para Named Entity Recognition). O NER tenta encontrar um rótulo para cada entidade em uma frase, como uma pessoa, local ou organização.
 
-This guide will show you how to fine-tune [DistilBERT](https://huggingface.co/distilbert-base-uncased) on the [WNUT 17](https://huggingface.co/datasets/wnut_17) dataset to detect new entities.
+!This guide will show you how to fine-tune [DistilBERT](https://huggingface.co/distilbert-base-uncased) on the [WNUT 17](https://huggingface.co/datasets/wnut_17) dataset to detect new entities.
+Este guia mostrará como realizar o fine-tuning do [DistilBERT](https://huggingface.co/distilbert-base-uncased) no conjunto de dados [WNUT 17](https://huggingface.co/datasets/wnut_17) para detectar novas entidades.
 
 <Tip>
 
-See the token classification [task page](https://huggingface.co/tasks/token-classification) for more information about other forms of token classification and their associated models, datasets, and metrics.
+!See the token classification [task page](https://huggingface.co/tasks/token-classification) for more information about other forms of token classification and their associated models, datasets, and metrics.
+Consulte a [página de tarefas de classificação de tokens](https://huggingface.co/tasks/token-classification) para obter mais informações sobre outras formas de classificação de tokens e seus modelos, conjuntos de dados e métricas associadas.
 
 </Tip>
 
-## Load WNUT 17 dataset
+!## Load WNUT 17 dataset
+## Carregando o conjunto de dados WNUT 17
 
-Load the WNUT 17 dataset from the 🤗 Datasets library:
+!Load the WNUT 17 dataset from the 🤗 Datasets library:
+Carregue o conjunto de dados WNUT 17 da biblioteca 🤗 Datasets:
 
 ```py
 >>> from datasets import load_dataset
@@ -44,7 +50,8 @@ Then take a look at an example:
 }
 ```
 
-Each number in `ner_tags` represents an entity. Convert the number to a label name for more information:
+!Each number in `ner_tags` represents an entity. Convert the number to a label name for more information:
+Cada número em `ner_tags` representa uma entidade. Converta o número em um rótulo para obter mais informações:
 
 ```py
 >>> label_list = wnut["train"].features[f"ner_tags"].feature.names
@@ -66,18 +73,25 @@ Each number in `ner_tags` represents an entity. Convert the number to a label na
 ]
 ```
 
-The `ner_tag` describes an entity, such as a corporation, location, or person. The letter that prefixes each `ner_tag` indicates the token position of the entity:
+!The `ner_tag` describes an entity, such as a corporation, location, or person. The letter that prefixes each `ner_tag` indicates the token position of the entity:
+O `ner_tag` descreve uma entidade, como uma corporação, local ou pessoa. A letra que prefixa cada `ner_tag` indica a posição do token da entidade:
 
-- `B-` indicates the beginning of an entity.
-- `I-` indicates a token is contained inside the same entity (e.g., the `State` token is a part of an entity like
-  `Empire State Building`).
-- `0` indicates the token doesn't correspond to any entity.
+!- `B-` indicates the beginning of an entity.
+!- `I-` indicates a token is contained inside the same entity (e.g., the `State` token is a part of an entity like
+!  `Empire State Building`).
+!- `0` indicates the token doesn't correspond to any entity.
 
-## Preprocess
+- `B-` indica o início de uma entidade.
+- `I-` indica que um token está contido dentro da mesma entidade (por exemplo, o token `State` pode fazer parte de uma entidade como `Empire State Building`).
+- `0` indica que o token não corresponde a nenhuma entidade.
+
+!## Preprocess
+## Pré-processamento
 
 <Youtube id="iY2AZYdZAr0"/>
 
-Load the DistilBERT tokenizer to process the `tokens`:
+!Load the DistilBERT tokenizer to process the `tokens`:
+Carregue o tokenizer do DistilBERT para processar os `tokens`:
 
 ```py
 >>> from transformers import AutoTokenizer
@@ -85,7 +99,8 @@ Load the DistilBERT tokenizer to process the `tokens`:
 >>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
 ```
 
-Since the input has already been split into words, set `is_split_into_words=True` to tokenize the words into subwords:
+!Since the input has already been split into words, set `is_split_into_words=True` to tokenize the words into subwords:
+Como a entrada já foi dividida em palavras, defina `is_split_into_words=True` para tokenizar as palavras em subpalavras:
 
 ```py
 >>> tokenized_input = tokenizer(example["tokens"], is_split_into_words=True)
@@ -94,14 +109,20 @@ Since the input has already been split into words, set `is_split_into_words=True
 ['[CLS]', '@', 'paul', '##walk', 'it', "'", 's', 'the', 'view', 'from', 'where', 'i', "'", 'm', 'living', 'for', 'two', 'weeks', '.', 'empire', 'state', 'building', '=', 'es', '##b', '.', 'pretty', 'bad', 'storm', 'here', 'last', 'evening', '.', '[SEP]']
 ```
 
-Adding the special tokens `[CLS]` and `[SEP]` and subword tokenization creates a mismatch between the input and labels. A single word corresponding to a single label may be split into two subwords. You will need to realign the tokens and labels by:
+!Adding the special tokens `[CLS]` and `[SEP]` and subword tokenization creates a mismatch between the input and labels. A single word corresponding to a single label may be split into two subwords. You will need to realign the tokens and labels by:
+Ao adicionar os tokens especiais `[CLS]` e `[SEP]` e a tokenização de subpalavras uma incompatibilidade é gerada entre a entrada e os rótulos. Uma única palavra correspondente a um único rótulo pode ser dividida em duas subpalavras. Você precisará realinhar os tokens e os rótulos da seguinte forma:
 
-1. Mapping all tokens to their corresponding word with the [`word_ids`](https://huggingface.co/docs/tokenizers/python/latest/api/reference.html#tokenizers.Encoding.word_ids) method.
-2. Assigning the label `-100` to the special tokens `[CLS]` and `[SEP]` so the PyTorch loss function ignores
-   them.
-3. Only labeling the first token of a given word. Assign `-100` to other subtokens from the same word.
+!1. Mapping all tokens to their corresponding word with the [`word_ids`](https://huggingface.co/docs/tokenizers/python/latest/api/reference.html#tokenizers.Encoding.word_ids) method.
+!2. Assigning the label `-100` to the special tokens `[CLS]` and `[SEP]` so the PyTorch loss function ignores
+!   them.
+!3. Only labeling the first token of a given word. Assign `-100` to other subtokens from the same word.
 
-Here is how you can create a function to realign the tokens and labels, and truncate sequences to be no longer than DistilBERT's maximum input length::
+1. Mapeie todos os tokens para a palavra correspondente com o método [`word_ids`](https://huggingface.co/docs/tokenizers/python/latest/api/reference.html#tokenizers.Encoding.word_ids).
+2. Atribuindo o rótulo `-100` aos tokens especiais `[CLS]` e `[SEP]` para que a função de loss do PyTorch ignore eles.
+3. Rotular apenas o primeiro token de uma determinada palavra. Atribuindo `-100` a outros subtokens da mesma palavra.
+
+!Here is how you can create a function to realign the tokens and labels, and truncate sequences to be no longer than DistilBERT's maximum input length::
+Aqui está como você pode criar uma função para realinhar os tokens e rótulos e truncar sequências para não serem maiores que o comprimento máximo de entrada do DistilBERT:
 
 ```py
 >>> def tokenize_and_align_labels(examples):
@@ -126,13 +147,15 @@ Here is how you can create a function to realign the tokens and labels, and trun
 ...     return tokenized_inputs
 ```
 
-Use 🤗 Datasets [`map`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map) function to tokenize and align the labels over the entire dataset. You can speed up the `map` function by setting `batched=True` to process multiple elements of the dataset at once:
+!Use 🤗 Datasets [`map`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map) function to tokenize and align the labels over the entire dataset. You can speed up the `map` function by setting `batched=True` to process multiple elements of the dataset at once:
+Use a função [`map`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map) do 🤗 Datasets para tokenizar e alinhar os rótulos em todo o conjunto de dados. Você pode acelerar a função `map` configurando `batched=True` para processar vários elementos do conjunto de dados de uma só vez:
 
 ```py
 >>> tokenized_wnut = wnut.map(tokenize_and_align_labels, batched=True)
 ```
 
-Use [`DataCollatorForTokenClassification`] to create a batch of examples. It will also *dynamically pad* your text and labels to the length of the longest element in its batch, so they are a uniform length. While it is possible to pad your text in the `tokenizer` function by setting `padding=True`, dynamic padding is more efficient.
+!Use [`DataCollatorForTokenClassification`] to create a batch of examples. It will also *dynamically pad* your text and labels to the length of the longest element in its batch, so they are a uniform length. While it is possible to pad your text in the `tokenizer` function by setting `padding=True`, dynamic padding is more efficient.
+Use o [`DataCollatorForTokenClassification`] para criar um batch de exemplos. Ele também *preencherá dinamicamente* seu texto e rótulos para o comprimento do elemento mais longo em seu batch, para que tenham um comprimento uniforme. Embora seja possível preencher seu texto na função `tokenizer` configurando `padding=True`, o preenchimento dinâmico é mais eficiente.
 
 <frameworkcontent>
 <pt>
@@ -151,11 +174,13 @@ Use [`DataCollatorForTokenClassification`] to create a batch of examples. It wil
 </tf>
 </frameworkcontent>
 
-## Train
+!## Train
+## Treinamento
 
 <frameworkcontent>
 <pt>
-Load DistilBERT with [`AutoModelForTokenClassification`] along with the number of expected labels:
+!Load DistilBERT with [`AutoModelForTokenClassification`] along with the number of expected labels:
+Carregue o DistilBERT com o [`AutoModelForTokenClassification`] junto com o número de rótulos esperados:
 
 ```py
 >>> from transformers import AutoModelForTokenClassification, TrainingArguments, Trainer
@@ -165,15 +190,22 @@ Load DistilBERT with [`AutoModelForTokenClassification`] along with the number o
 
 <Tip>
 
-If you aren't familiar with fine-tuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#finetune-with-trainer)!
+!If you aren't familiar with fine-tuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#finetune-with-trainer)!
+Se você não estiver familiarizado com o fine-tuning de um modelo com o [`Trainer`], dê uma olhada em um tutorial básico [aqui](../training#finetune-with-trainer)!
 
 </Tip>
 
-At this point, only three steps remain:
+!At this point, only three steps remain:
 
-1. Define your training hyperparameters in [`TrainingArguments`].
-2. Pass the training arguments to [`Trainer`] along with the model, dataset, tokenizer, and data collator.
-3. Call [`~Trainer.train`] to fine-tune your model.
+!1. Define your training hyperparameters in [`TrainingArguments`].
+!2. Pass the training arguments to [`Trainer`] along with the model, dataset, tokenizer, and data collator.
+!3. Call [`~Trainer.train`] to fine-tune your model.
+
+Nesse ponto, restam apenas três passos:
+
+1. Definir seus hiperparâmetros de treinamento em [`TrainingArguments`].
+2. Passar os argumentos de treinamento para o [`Trainer`] junto com o modelo, conjunto de dados, tokenizador e o data collator.
+3. Chamar a função [`~Trainer.train`] para executar o fine-tuning do seu modelo.
 
 ```py
 >>> training_args = TrainingArguments(
@@ -199,7 +231,8 @@ At this point, only three steps remain:
 ```
 </pt>
 <tf>
-To fine-tune a model in TensorFlow, start by converting your datasets to the `tf.data.Dataset` format with [`to_tf_dataset`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.to_tf_dataset). Specify inputs and labels in `columns`, whether to shuffle the dataset order, batch size, and the data collator:
+!To fine-tune a model in TensorFlow, start by converting your datasets to the `tf.data.Dataset` format with [`to_tf_dataset`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.to_tf_dataset). Specify inputs and labels in `columns`, whether to shuffle the dataset order, batch size, and the data collator:
+Para executar o fine-tuning de um modelo no TensorFlow, comece convertendo seu conjunto de dados para o formato `tf.data.Dataset` com [`to_tf_dataset`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.to_tf_dataset). Nessa execução você deverá especificar as entradas e rótulos (no parâmetro `columns`), se deseja embaralhar o conjunto de dados, o tamanho do batch e o data collator:
 
 ```py
 >>> tf_train_set = tokenized_wnut["train"].to_tf_dataset(
@@ -219,11 +252,13 @@ To fine-tune a model in TensorFlow, start by converting your datasets to the `tf
 
 <Tip>
 
-If you aren't familiar with fine-tuning a model with Keras, take a look at the basic tutorial [here](training#finetune-with-keras)!
+!If you aren't familiar with fine-tuning a model with Keras, take a look at the basic tutorial [here](training#finetune-with-keras)!
+Se você não estiver familiarizado com o fine-tuning de um modelo com o Keras, dê uma olhada no tutorial básico [aqui](training#finetune-with-keras)!
 
 </Tip>
 
-Set up an optimizer function, learning rate schedule, and some training hyperparameters:
+!Set up an optimizer function, learning rate schedule, and some training hyperparameters:
+Configure o otimizador e alguns hiperparâmetros de treinamento:
 
 ```py
 >>> from transformers import create_optimizer
@@ -239,7 +274,8 @@ Set up an optimizer function, learning rate schedule, and some training hyperpar
 ... )
 ```
 
-Load DistilBERT with [`TFAutoModelForTokenClassification`] along with the number of expected labels:
+!Load DistilBERT with [`TFAutoModelForTokenClassification`] along with the number of expected labels:
+Carregue o DistilBERT com [`TFAutoModelForTokenClassification`] junto com o número de rótulos esperados:
 
 ```py
 >>> from transformers import TFAutoModelForTokenClassification
@@ -247,7 +283,8 @@ Load DistilBERT with [`TFAutoModelForTokenClassification`] along with the number
 >>> model = TFAutoModelForTokenClassification.from_pretrained("distilbert-base-uncased", num_labels=2)
 ```
 
-Configure the model for training with [`compile`](https://keras.io/api/models/model_training_apis/#compile-method):
+!Configure the model for training with [`compile`](https://keras.io/api/models/model_training_apis/#compile-method):
+Configure o modelo para treinamento com o método [`compile`](https://keras.io/api/models/model_training_apis/#compile-method):
 
 ```py
 >>> import tensorflow as tf
@@ -255,7 +292,8 @@ Configure the model for training with [`compile`](https://keras.io/api/models/mo
 >>> model.compile(optimizer=optimizer)
 ```
 
-Call [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) to fine-tune the model:
+!Call [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) to fine-tune the model:
+Chame o método [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) para executar o fine-tuning do modelo:
 
 ```py
 >>> model.fit(x=tf_train_set, validation_data=tf_validation_set, epochs=3)
@@ -265,8 +303,11 @@ Call [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) to fin
 
 <Tip>
 
-For a more in-depth example of how to fine-tune a model for token classification, take a look at the corresponding
-[PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb)
-or [TensorFlow notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb).
+!For a more in-depth example of how to fine-tune a model for token classification, take a look at the corresponding
+![PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb)
+!or [TensorFlow notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb).
+
+Para obter um exemplo mais aprofundado de como executar o fine-tuning de um modelo para classificação de tokens, dê uma olhada nesse [notebook utilizando PyTorch](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb) ou nesse [notebook utilizando TensorFlow](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb).
+
 
 </Tip>
