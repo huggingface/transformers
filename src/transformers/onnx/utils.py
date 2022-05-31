@@ -77,7 +77,7 @@ def get_preprocessor(model_name: str) -> Optional[Union[AutoTokenizer, AutoFeatu
         `Optional[Union[AutoTokenizer, AutoFeatureExtractor, AutoProcessor]]`:
             If a processor is found, it is returned. Otherwise, if a tokenizer or a feature extractor extractor exists,
             it is returned. If both a tokenizer and a feature extractor exist, an error is raised. The function returns
-            `None`, if no preprocessor is found.
+            `None` if no preprocessor is found.
     """
     try:
         return AutoProcessor.from_pretrained(model_name)
