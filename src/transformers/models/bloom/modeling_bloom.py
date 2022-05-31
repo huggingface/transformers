@@ -357,11 +357,9 @@ class BloomAttention(nn.Module):
         )
 
         # change view to [batch_size, num_heads, q_length, k_length]
-
         attention_scores = matmul_result.view(*output_size)
 
         # attention scores and attention mask [b, np, sq, sk]
-
         max_positions = max(attention_scores.shape[-1], attention_scores.shape[-2])
         attention_probs = self.scale_mask_softmax(attention_scores, attention_mask, max_positions).to(
             value_layer.dtype
@@ -376,14 +374,12 @@ class BloomAttention(nn.Module):
 
         # change view [k_length, batch_size x num_heads, head_dim]
         value_layer = value_layer.transpose(1, 0).reshape(value_layer.size(1), output_size[0] * output_size[1], -1)
-        # value_layer = value_layer.contiguous().view(value_layer.size(1), output_size[0] * output_size[1], -1)
 
         # change view [batch_size x num_heads, q_length, k_length]
         attention_probs_reshaped = attention_probs.view(output_size[0] * output_size[1], output_size[2], -1)
 
         # matmul: [batch_size * num_heads, q_length, head_dim]
         context_layer = torch.bmm(attention_probs_reshaped, value_layer.transpose(0, 1))
-        # context_layer = torch.bmm(attention_probs, value_layer)
 
         # change view [batch_size, num_heads, q_length, head_dim]
         context_layer = context_layer.view(*output_size)
