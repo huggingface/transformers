@@ -550,7 +550,7 @@ class JukeboxModelTest(unittest.TestCase):
         model = JukeboxModel.from_pretrained("ArthurZ/jukebox-1b-lyrics").eval().to("cuda")
         
         
-        model.priors[2].sample(1, y=torch.Tensor([[44100.0, 0, 44100.0] + 386 * [0]]).long(), chunk_size=32)
+        model.priors[2].sample(1, y=torch.Tensor([[44100.0, 0, 44100.0] + 386 * [0]]).long().to("cuda"), chunk_size=32)
         
         
         

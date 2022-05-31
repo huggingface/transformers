@@ -408,7 +408,7 @@ class BottleneckBlock(nn.Module):
         # self.register_buffer('k',  torch.zeros(self.k_bins, self.emb_width).cuda())
         
         if torch.cuda.is_available():
-            self.register_buffer("k",torch.zeros(self.k_bins, self.emb_width).to(self.device))
+            self.register_buffer("k",torch.zeros(self.k_bins, self.emb_width).to("cuda"))
         else : 
             self.register_buffer("k",torch.zeros(self.k_bins, self.emb_width))
 
@@ -2022,7 +2022,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
         if sample_t == 0:
             # Fill in start token
             # x = torch.empty(n_samples, 1, self.width).cuda()
-            x = torch.empty(n_samples, 1, self.width).to(x.device)
+            x = torch.empty(n_samples, 1, self.width).to(x_cond.device)
 
             if self.y_cond:
                 x[:, 0] = y_cond.view(N, self.width)
@@ -2074,7 +2074,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
             ), f"Got {x_cond.shape}, expected ({N}, {D}/{1}, {self.width})"
         else:
             assert x_cond is None
-            x_cond = torch.zeros((N, 1, self.width), dtype=torch.float).to(self.device)  # .cuda()
+            x_cond = torch.zeros((N, 1, self.width), dtype=torch.float).to("cuda" if torch.cuda.is_available() else "cpu")  # .cuda()
 
         with torch.no_grad():
             xs, x = [], None
@@ -2452,7 +2452,7 @@ class RangeEmbedding(nn.Module):
         n_time = self.n_time
         if n_time != 1:
             assert pos_end is not None
-            interpolation = torch.arange(0, n_time, dtype=torch.float, device="cpu").view(1, n_time) / n_time
+            interpolation = torch.arange(0, n_time, dtype=torch.float, device=pos_start.device).view(1, n_time) / n_time
             position = pos_start + (pos_end - pos_start) * interpolation
         else:
             position = pos_start
@@ -2789,7 +2789,7 @@ class JukeboxPrior(nn.Module):
                 # assert_shape(cond, (N, dims, self.prior_width))
                 pass
             else:
-                conds[i] = torch.zeros((N, dims, self.prior_width), dtype=torch.float, device="cpu")
+                conds[i] = torch.zeros((N, dims, self.prior_width), dtype=torch.float, device=xs.device)
 
         return torch.cat(xs, dim=1), torch.cat(conds, dim=1)
 
@@ -3347,7 +3347,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
     def ancestral_sample(self, labels, sampling_kwargs, hps):
         priors = self.priors
         sample_levels = list(range(len(priors)))
-        zs = [torch.zeros(hps.n_samples, 0, dtype=torch.long, device="cpu") for _ in range(len(priors))]
+        zs = [torch.zeros(hps.n_samples, 0, dtype=torch.long, device=self.device) for _ in range(len(priors))]
         zs = self._sample(zs, labels, sampling_kwargs, sample_levels, hps)
         return zs
 
