@@ -270,9 +270,12 @@ class LukeModelTester:
             entity_labels=entity_labels,
         )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-        self.parent.assertEqual(
-            result.entity_logits.shape, (self.batch_size, self.entity_length, self.entity_vocab_size)
-        )
+        if entity_ids is not None:
+            self.parent.assertEqual(
+                result.entity_logits.shape, (self.batch_size, self.entity_length, self.entity_vocab_size)
+            )
+        else:
+            self.parent.assertIsNone(result.entity_logits)
 
     def create_and_check_for_entity_classification(
         self,
