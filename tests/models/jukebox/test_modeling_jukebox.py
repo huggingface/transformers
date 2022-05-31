@@ -41,7 +41,7 @@ class JukeboxModelTest(unittest.TestCase):
         set_seed(0)
 
         config = JukeboxConfig(
-            n_ctx=256,
+            n_ctx=(256,256,256),
             width=[128, 64, 32],
             depth=[2, 2, 2],
             priors_width=[128, 64, 32],
@@ -52,7 +52,6 @@ class JukeboxModelTest(unittest.TestCase):
             sr=44100,
             attn_order=[12, 2, 2],
             n_heads=[2, 1, 1],
-            y_bins=(120, 4111),
             t_bins=64,
             single_enc_dec=[True, False, False],
             labels=True,
