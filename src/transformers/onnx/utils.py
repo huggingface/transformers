@@ -92,7 +92,7 @@ def get_preprocessor(model_name: str) -> Optional[Union[AutoTokenizer, AutoFeatu
         except (OSError, KeyError):
             pass
 
-        if tokenizer and feature_extractor:
+        if tokenizer is not None and feature_extractor is not None:
             raise ValueError(
                 f"Couldn't auto-detect preprocessor for {model_name}. Found both a tokenizer and a feature extractor."
             )
