@@ -437,10 +437,7 @@ class LevitEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_state, all_hidden_states] if v is not None)
 
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=hidden_state,
-            hidden_states=all_hidden_states,
-        )
+        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_state, hidden_states=all_hidden_states)
 
 
 class LevitClassificationLayer(nn.Module):
