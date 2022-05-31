@@ -1497,15 +1497,6 @@ class TFGenerationMixin:
             num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
         )
 
-        if pad_token_id is None and eos_token_id is not None:
-            if attention_mask is None:
-                logger.warning(
-                    "The attention mask and the pad token id were not set. As a consequence, you may observe "
-                    "unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results."
-                )
-            logger.warning(f"Setting `pad_token_id` to {eos_token_id} (first `eos_token_id`) to generate sequence")
-            pad_token_id = eos_token_id
-
         if min_length is not None and min_length > max_length:
             raise ValueError(
                 f"Unfeasable length constraints: the minimum length ({min_length}) is larger than the maximum "
@@ -1534,6 +1525,15 @@ class TFGenerationMixin:
             model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(
                 input_ids, pad_token_id, eos_token_id
             )
+
+        if pad_token_id is None and eos_token_id is not None:
+            if attention_mask is None:
+                logger.warning(
+                    "The attention mask and the pad token id were not set. As a consequence, you may observe "
+                    "unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results."
+                )
+            logger.warning(f"Setting `pad_token_id` to {eos_token_id} (first `eos_token_id`) to generate sequence")
+            pad_token_id = eos_token_id
 
         # 4. Prepare model inputs which will be used for auto-regressive generation
         if self.config.is_encoder_decoder:
