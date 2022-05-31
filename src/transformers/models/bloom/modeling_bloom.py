@@ -213,13 +213,7 @@ class BloomScaledSoftmax(nn.Module):
             scaling factor used in input tensor scaling.
     """
 
-    def __init__(
-        self,
-        scaled_masked_softmax_fusion,
-        mask_func,
-        softmax_in_fp32,
-        scale,
-    ):
+    def __init__(self, scaled_masked_softmax_fusion, mask_func, softmax_in_fp32, scale):
         super().__init__()
         self.scaled_masked_softmax_fusion = scaled_masked_softmax_fusion
         self.mask_func = mask_func
