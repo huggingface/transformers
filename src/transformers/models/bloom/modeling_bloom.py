@@ -471,7 +471,7 @@ class BloomBlock(nn.Module):
         use_cache=False,
         output_attentions=False,
     ):
-        # hidden_states: [b, s, h]
+        # hidden_states: [batch_size, seq_length, hidden_size]
 
         # Layer norm at the beginning of the transformer layer.
         layernorm_output = self.input_layernorm(hidden_states)
@@ -548,7 +548,6 @@ class BloomPreTrainedModel(PreTrainedModel):
 
     config_class = BloomConfig
     base_model_prefix = "transformer"
-    is_parallelizable = True
     supports_gradient_checkpointing = True
     _no_split_modules = ["BloomBlock"]
 

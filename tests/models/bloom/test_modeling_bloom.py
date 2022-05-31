@@ -134,7 +134,6 @@ class BloomModelTester:
     def create_and_check_bloom_model_past(self, config, input_ids, input_mask, *args):
         model = BloomModel(config=config)
 
-        # model = BloomForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -146,7 +145,6 @@ class BloomModelTester:
         self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
         self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
 
-        # output, past = outputs.to_tuple()
         past = outputs["past_key_values"]
 
         # create hypothetical next token and extent to next_input_ids
@@ -154,9 +152,6 @@ class BloomModelTester:
 
         # append to next input_ids and token_type_ids
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-
-        # output_from_no_past = model(next_input_ids, output_hidden_states=True)["hidden_states"][-1]
-        # output_from_past = model(next_tokens, past_key_values=past, output_hidden_states=True)["hidden_states"][-1]
 
         output_from_no_past = model(next_input_ids)["last_hidden_state"]
         output_from_past = model(next_tokens, past_key_values=past)["last_hidden_state"]
@@ -198,9 +193,6 @@ class BloomModelTester:
         )
 
         # get two different outputs
-        # output_from_no_past = model(next_input_ids, attention_mask=attn_mask, output_hidden_states=True)["hidden_states"][-1]
-        # output_from_past = model(next_tokens, past_key_values=past, attention_mask=attn_mask, output_hidden_states=True)["hidden_states"][-1]
-
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
         output_from_past = model(next_tokens, past_key_values=past, attention_mask=attn_mask)["last_hidden_state"]
 
@@ -289,10 +281,8 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
 
     all_model_classes = (BloomModel, BloomForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (BloomForCausalLM,) if is_torch_available() else ()
-    all_parallelizable_model_classes = (BloomForCausalLM,) if is_torch_available() else ()
     fx_compatible = False
     test_missing_keys = False
-    test_model_parallel = False
     test_pruning = False
 
     def setUp(self):
