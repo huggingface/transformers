@@ -359,11 +359,7 @@ class TFOPTDecoderLayer(tf.keras.layers.Layer):
         if not self.do_layer_norm_before:
             hidden_states = self.final_layer_norm(hidden_states)
 
-        return (
-            hidden_states,
-            self_attn_weights,
-            present_key_value,
-        )
+        return (hidden_states, self_attn_weights, present_key_value)
 
 
 OPT_START_DOCSTRING = r"""

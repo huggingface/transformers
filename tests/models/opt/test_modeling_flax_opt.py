@@ -36,12 +36,7 @@ if is_flax_available():
     from transformers import FlaxOPTForCausalLM, FlaxOPTModel, GPT2Tokenizer
 
 
-def prepare_opt_inputs_dict(
-    config,
-    input_ids,
-    attention_mask=None,
-    head_mask=None,
-):
+def prepare_opt_inputs_dict(config, input_ids, attention_mask=None, head_mask=None):
     if attention_mask is None:
         attention_mask = np.where(input_ids != config.pad_token_id, 1, 0)
     return {
@@ -130,10 +125,8 @@ class FlaxOPTModelTester:
         max_length = 20
         model = model_class_name(config)
 
-        input_ids, attention_mask = (
-            inputs_dict["input_ids"],
-            inputs_dict["attention_mask"],
-        )
+        input_ids = inputs_dict["input_ids"]
+        attention_mask = inputs_dict["attention_mask"]
 
         past_key_values = model.init_cache(input_ids.shape[0], max_length)
         attention_mask = jnp.ones((input_ids.shape[0], max_length), dtype="i4")

@@ -30,12 +30,7 @@ if is_tf_available():
     from transformers import GPT2Tokenizer, TFOPTForCausalLM, TFOPTModel
 
 
-def prepare_opt_inputs_dict(
-    config,
-    input_ids,
-    attention_mask=None,
-    head_mask=None,
-):
+def prepare_opt_inputs_dict(config, input_ids, attention_mask=None, head_mask=None):
     if attention_mask is None:
         attention_mask = tf.cast(tf.math.not_equal(input_ids, config.pad_token_id), tf.int8)
     return {"input_ids": input_ids, "attention_mask": attention_mask}
