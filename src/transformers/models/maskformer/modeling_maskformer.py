@@ -1985,7 +1985,7 @@ class MaskFormerFPNConvLayer(nn.Module):
             self.add_module(str(i), layer)
 
     def forward(self, input: Tensor) -> Tensor:
-        hidden_state - input
+        hidden_state = input
         for layer in self.layers:
             hidden_state = layer(hidden_state)
         return hidden_state
@@ -2116,42 +2116,33 @@ class MaskFormerSinePositionEmbedding(nn.Module):
         return pos
 
 
-class IdentityModule(nn.Module):
-    def __init__(self, i: Optional[int] = None):
+class IdentityBlock(nn.Module):
+    def __init__(self,):
         super().__init__()
-        i = i or 0
+        # Create as an iterable here so that the identity layer isn't registered
+        # with the name of the instance variable its assigned to
         self.layers = [nn.Identity()]
-        # Provide backwards compatibility from when the class inherited from nn.Sequential
-        # In nn.Sequential subclasses, the name given to the layer is its index in the sequence.
-        # In nn.Module subclasses they derived from the instance attribute they are assigned to e.g.
-        # self.my_layer_name = Layer()
-        # We can't give instance attributes integer names i.e. self.0 is not permitted and so need to register
-        # explicitly
-        self.add_module(str(i), self.layers[0])
+        # Maintain submodule indexing as if part of a Sequential block
+        self.add_module('0', self.layers[0])
 
     def forward(self, input: Tensor) -> Tensor:
         hidden_state = input
-        for layer in self:
+        for layer in self.layers:
             hidden_state = layer(hidden_state)
         return hidden_state
 
 
-class MLPModule(nn.Module):
+class NonLinearBlock(nn.Module):
     def __init__(self, in_dim: int, out_dim: int) -> None:
         super().__init__()
-        layers = [nn.Linear(in_dim, out_dim), nn.ReLU(inplace=True)]
-        for i, layer in enumerate(layers):
-            # Provide backwards compatibility from when the class inherited from nn.Sequential
-            # In nn.Sequential subclasses, the name given to the layer is its index in the sequence.
-            # In nn.Module subclasses they derived from the instance attribute they are assigned to e.g.
-            # self.my_layer_name = Layer()
-            # We can't give instance attributes integer names i.e. self.0 is not permitted and so need to register
-            # explicitly
+        self.layers = [nn.Linear(in_dim, out_dim), nn.ReLU(inplace=True)]
+        # Maintain submodule indexing as if part of a Sequential block
+        for i, layer in enumerate(self.layers):
             self.add_module(str(i), layer)
 
     def forward(self, input: Tensor) -> Tensor:
         hidden_state = input
-        for layer in self:
+        for layer in self.layers:
             hidden_state = layer(hidden_state)
         return hidden_state
 
@@ -2177,7 +2168,7 @@ class MaskformerMLPPredictionHead(nn.Module):
 
         self.layers = []
         for i, (in_dim, out_dim) in enumerate(zip(in_dims, out_dims)):
-            layer = MLPModule(in_dim, out_dim) if i < num_layers - 1 else IdentityModule()
+            layer = NonLinearBlock(in_dim, out_dim) if i < num_layers - 1 else IdentityBlock()
             self.layers.append(layer)
             # Provide backwards compatibility from when the class inherited from nn.Sequential
             # In nn.Sequential subclasses, the name given to the layer is its index in the sequence.
@@ -2189,7 +2180,7 @@ class MaskformerMLPPredictionHead(nn.Module):
 
     def forward(self, input: Tensor) -> Tensor:
         hidden_state = input
-        for layer in self:
+        for layer in self.layers:
             hidden_state = layer(hidden_state)
         return hidden_state
 
@@ -2317,20 +2308,21 @@ class MaskFormerPreTrainedModel(PreTrainedModel):
                 nn.init.constant_(module.input_projection.bias, 0)
         # FPN
         elif isinstance(module, MaskFormerFPNModel):
-            nn.init.xavier_uniform_(module.stem[0].weight, gain=xavier_std)
+            nn.init.xavier_uniform_(module.stem.get_submodule('0').weight, gain=xavier_std)
 
         elif isinstance(module, MaskFormerFPNLayer):
             nn.init.xavier_uniform_(module.proj[0].weight, gain=xavier_std)
 
         elif isinstance(module, MaskFormerFPNConvLayer):
-            nn.init.xavier_uniform_(module[0].weight, gain=xavier_std)
+            nn.init.xavier_uniform_(module.get_submodule('0').weight, gain=xavier_std)
         # The MLP head
         elif isinstance(module, MaskformerMLPPredictionHead):
             # I was not able to find the correct initializer in the original implementation
             # we'll use xavier
-            for layer in module:
-                nn.init.xavier_uniform_(layer[0].weight, gain=xavier_std)
-                nn.init.constant_(layer[0].bias, 0)
+            for submodule in module.modules():
+                if isinstance(submodule, nn.Linear):
+                    nn.init.xavier_uniform_(submodule.weight, gain=xavier_std)
+                    nn.init.constant_(submodule.bias, 0)
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
