@@ -16,18 +16,22 @@ import os
 from argparse import ArgumentParser, Namespace
 
 import numpy as np
-import tensorflow as tf
-import torch
 from datasets import load_dataset
 
 from huggingface_hub import Repository, upload_file
 
-from .. import AutoFeatureExtractor, AutoModel, AutoTokenizer, TFAutoModel
+from .. import AutoFeatureExtractor, AutoModel, AutoTokenizer, TFAutoModel, is_tf_available, is_torch_available
 from ..utils import logging
 from . import BaseTransformersCLICommand
 
 
-tf.config.experimental.enable_tensor_float_32_execution(False)
+if is_tf_available():
+    import tensorflow as tf
+
+    tf.config.experimental.enable_tensor_float_32_execution(False)
+
+if is_torch_available():
+    import torch
 
 
 MAX_ERROR = 5e-5  # larger error tolerance than in our internal tests, to avoid flaky user-facing errors
@@ -83,7 +87,9 @@ class PTtoTFCommand(BaseTransformersCLICommand):
 
     def get_text_inputs(self):
         tokenizer = AutoTokenizer.from_pretrained(self._local_dir)
-        sample_text = ["Hi there!", "I am a batch with more than one row and different length inputs."]
+        sample_text = ["Hi there!", "I am a batch with more than one row and different input lengths."]
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
         pt_input = tokenizer(sample_text, return_tensors="pt", padding=True, truncation=True)
         tf_input = tokenizer(sample_text, return_tensors="tf", padding=True, truncation=True)
         return pt_input, tf_input
