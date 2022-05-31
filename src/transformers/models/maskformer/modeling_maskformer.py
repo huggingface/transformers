@@ -19,7 +19,7 @@ import math
 import random
 from dataclasses import dataclass
 from numbers import Number
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -2117,13 +2117,13 @@ class MaskFormerSinePositionEmbedding(nn.Module):
 
 
 class IdentityBlock(nn.Module):
-    def __init__(self,):
+    def __init__(self):
         super().__init__()
         # Create as an iterable here so that the identity layer isn't registered
         # with the name of the instance variable its assigned to
         self.layers = [nn.Identity()]
         # Maintain submodule indexing as if part of a Sequential block
-        self.add_module('0', self.layers[0])
+        self.add_module("0", self.layers[0])
 
     def forward(self, input: Tensor) -> Tensor:
         hidden_state = input
@@ -2308,13 +2308,13 @@ class MaskFormerPreTrainedModel(PreTrainedModel):
                 nn.init.constant_(module.input_projection.bias, 0)
         # FPN
         elif isinstance(module, MaskFormerFPNModel):
-            nn.init.xavier_uniform_(module.stem.get_submodule('0').weight, gain=xavier_std)
+            nn.init.xavier_uniform_(module.stem.get_submodule("0").weight, gain=xavier_std)
 
         elif isinstance(module, MaskFormerFPNLayer):
             nn.init.xavier_uniform_(module.proj[0].weight, gain=xavier_std)
 
         elif isinstance(module, MaskFormerFPNConvLayer):
-            nn.init.xavier_uniform_(module.get_submodule('0').weight, gain=xavier_std)
+            nn.init.xavier_uniform_(module.get_submodule("0").weight, gain=xavier_std)
         # The MLP head
         elif isinstance(module, MaskformerMLPPredictionHead):
             # I was not able to find the correct initializer in the original implementation
