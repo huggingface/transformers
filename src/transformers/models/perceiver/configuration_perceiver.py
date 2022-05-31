@@ -210,7 +210,6 @@ class PerceiverOnnxConfig(OnnxConfig):
         num_channels: int = 3,
         image_width: int = 40,
         image_height: int = 40,
-        tokenizer: "PreTrainedTokenizerBase" = None,
     ) -> Mapping[str, Any]:
         # copied from `transformers.onnx.config.OnnxConfig` and slightly altered/simplified
 

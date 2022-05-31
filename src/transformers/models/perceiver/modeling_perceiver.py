@@ -2842,9 +2842,8 @@ class PerceiverEmbeddingDecoder(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor, embedding_layer: torch.Tensor) -> torch.Tensor:
         batch_size, seq_len, d_model = hidden_states.shape
-        output = torch.matmul(
-            hidden_states.reshape([-1, d_model]), embedding_layer.weight.transpose(0, 1)
-        )  # Flatten batch dim
+        # Flatten batch dim
+        output = torch.matmul(hidden_states.reshape([-1, d_model]), embedding_layer.weight.transpose(0, 1))
         output = output + self.bias
 
         return output.reshape([batch_size, seq_len, self.vocab_size])
@@ -3170,12 +3169,8 @@ class PerceiverImagePreprocessor(AbstractPreprocessor):
         if self.prep_type != "patches":
             # move channels to last dimension, as the _build_network_inputs method below expects this
             if inputs.ndim == 4:
-                # equivalent to `torch.moveaxis(inputs, 1, -1)` but `torch.moveaxis`
-                # cannot be converted to ONNX
                 inputs = torch.permute(inputs, (0, 2, 3, 1))
             elif inputs.ndim == 5:
-                # equivalent to `torch.moveaxis(inputs, 2, -1)` but `torch.moveaxis`
-                # cannot be converted to ONNX
                 inputs = torch.permute(inputs, (0, 1, 3, 4, 2))
             else:
                 raise ValueError("Unsupported data format for conv1x1.")
