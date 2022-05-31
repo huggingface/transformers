@@ -90,7 +90,7 @@ class MobileViTConfig(PretrainedConfig):
             Whether to add a bias to the queries, keys and values.
         aspp_out_channels (`int`, `optional`, defaults to 256):
             Number of output channels used in the ASPP layer for semantic segmentation.
-        atrous_rates (`List[int]`, *optional*, defaults to [6, 12, 18]):
+        atrous_rates (`List[int]`, *optional*, defaults to `[6, 12, 18]`):
             Dilation factors used in the ASPP layer for semantic segmentation.
         aspp_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the ASPP layer for semantic segmentation.
