@@ -24,7 +24,7 @@ from torch.nn import CrossEntropyLoss, LayerNorm
 
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
-from ...modeling_utils import Conv1D, PreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_bloom import BloomConfig
 from .fused_bias_gelu import bias_gelu_impl
@@ -392,9 +392,7 @@ class BloomAttention(nn.Module):
 
         context_layer = context_layer.view(*new_context_layer_shape)
 
-        # =================
         # Output. [q_length, batch_size, hidden_size]
-        # =================
 
         # aggregate results across tp ranks. See here: https://github.com/pytorch/pytorch/issues/76232
         if self.pretraining_tp > 1 and self.slow_but_exact:
@@ -565,7 +563,7 @@ class BloomPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights."""
-        if isinstance(module, (nn.Linear, Conv1D)):
+        if isinstance(module, (nn.Linear)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
