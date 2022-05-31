@@ -3305,7 +3305,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         alignments = None
         for level in reversed(sample_levels):
             prior = self.priors[level]
-            prior = prior.to(zzs[0].device)
+            prior = prior.to(zs[0].device)
             # prior.cuda()
             empty_cache()
 

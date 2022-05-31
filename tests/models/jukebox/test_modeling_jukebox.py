@@ -546,10 +546,10 @@ class JukeboxModelTest(unittest.TestCase):
     def test_gpu_sampling(self):
         model = JukeboxModel.from_pretrained("ArthurZ/jukebox-1b-lyrics").eval().to("cuda")
 
-        model.priors[2].sample(1, y=torch.Tensor([[44100.0, 0, 44100.0] + 386 * [0]]).long().to("cuda"), chunk_size=32)
+        # model.priors[2].sample(1, y=torch.Tensor([[44100.0, 0, 44100.0] + 386 * [0]]).long().to("cuda"), chunk_size=32)
 
-        tokenizer = JukeboxTokenizer.from_pretrained("ArthurZ/jukebox")
-
+        tokenizer = JukeboxTokenizer.from_pretrained("ArthurZ/jukebox", max_n_lyric_tokens = 384)
+        
         sampling_temperature = 0.98
         lower_batch_size = 16
         max_batch_size = 16
@@ -584,8 +584,10 @@ class JukeboxModelTest(unittest.TestCase):
         print(f"time to sample : {timeit.default_timer() - start}")
 
         # sample = model.priors[2].sample(1, y=torch.Tensor([[44100.0, 0, 44100.0] + 386 * [0]]).long(), chunk_size=32)
-
-
+if __name__ == "__main__":
+    tester = JukeboxModelTest()
+    tester.test_gpu_sampling()
+    
 # class JukeboxModelTester:
 #     def __init__(
 #         self,
