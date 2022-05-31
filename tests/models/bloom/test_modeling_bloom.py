@@ -665,8 +665,7 @@ class BloomEmbeddingTest(unittest.TestCase):
     @require_torch
     def test_hidden_states_transformers(self):
         cuda_available = torch.cuda.is_available()
-        device = torch_device
-        model = BloomModel.from_pretrained(self.path_bigscience_model, use_cache=False, torch_dtype="auto").to(device)
+        model = BloomModel.from_pretrained(self.path_bigscience_model, use_cache=False, torch_dtype="auto").to(torch_device)
         model.eval()
 
         # fmt: off
@@ -678,7 +677,7 @@ class BloomEmbeddingTest(unittest.TestCase):
         tensor_ids = torch.LongTensor([EXAMPLE_IDS])
 
         with torch.no_grad():
-            logits = model(tensor_ids.to(device))
+            logits = model(tensor_ids.to(torch_device))
         output_dict = {
             "min": logits.last_hidden_state.min(dim=-1).values[0][0].item(),
             "max": logits.last_hidden_state.max(dim=-1).values[0][0].item(),
@@ -694,10 +693,8 @@ class BloomEmbeddingTest(unittest.TestCase):
     @require_torch
     def test_logits(self):
         cuda_available = torch.cuda.is_available()
-        # cuda_available = False
-        device = torch.device("cuda:0" if cuda_available else "cpu")
         model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, use_cache=False, torch_dtype="auto").to(
-            device
+            torch_device
         )  # load in bf16
         model.eval()
 
@@ -708,7 +705,7 @@ class BloomEmbeddingTest(unittest.TestCase):
         MEAN_LOGITS_GPU_1 = -1.823902130126953e-05
         MEAN_LOGITS_GPU_2 = 1.9431114196777344e-05
 
-        tensor_ids = torch.LongTensor([EXAMPLE_IDS]).to(device)
+        tensor_ids = torch.LongTensor([EXAMPLE_IDS]).to(torch_device)
         with torch.no_grad():
             output = model(tensor_ids).logits
 
