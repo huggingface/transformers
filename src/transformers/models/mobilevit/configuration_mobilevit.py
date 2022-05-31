@@ -60,9 +60,9 @@ class MobileViTConfig(PretrainedConfig):
             The size (resolution) of each image.
         patch_size (`int`, *optional*, defaults to `2`):
             The size (resolution) of each patch.
-        hidden_sizes (`List[int]`, *optional*, defaults to [144, 192, 240]):
+        hidden_sizes (`List[int]`, *optional*, defaults to `[144, 192, 240]`):
             Dimensionality (hidden size) of the Transformer encoders at each stage.
-        neck_hidden_sizes (`List[int]`, *optional*, defaults to [16, 32, 64, 96, 128, 160, 640]):
+        neck_hidden_sizes (`List[int]`, *optional*, defaults to `[16, 32, 64, 96, 128, 160, 640]`):
             The number of channels for the feature maps of the backbone.
         num_attention_heads (`int`, *optional*, defaults to 4):
             Number of attention heads for each attention layer in the Transformer encoder.
