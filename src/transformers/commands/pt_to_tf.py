@@ -101,12 +101,10 @@ class PTtoTFCommand(BaseTransformersCLICommand):
 
     def get_image_inputs(self):
         feature_extractor = AutoFeatureExtractor.from_pretrained(self._local_dir)
-        images = [  # images from COCO
-            Image.open("http://images.cocodataset.org/train2017/000000391895.jpg"),
-            Image.open("http://images.cocodataset.org/train2017/000000522418.jpg"),
-        ]
-        pt_input = feature_extractor(images=images, return_tensors="pt")
-        tf_input = feature_extractor(images=images, return_tensors="tf")
+        num_samples = 2
+        ds = load_dataset("cifar10", "plain_text", split="test")[:num_samples]["img"]
+        pt_input = feature_extractor(images=ds, return_tensors="pt")
+        tf_input = feature_extractor(images=ds, return_tensors="tf")
         return pt_input, tf_input
 
     def run(self):
@@ -123,7 +121,7 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         main_input_name = pt_model.main_input_name
         if main_input_name == "input_ids":
             pt_input, tf_input = self.get_text_inputs()
-        elif main_input_name == "input_pixels":
+        elif main_input_name == "pixel_values":
             pt_input, tf_input = self.get_image_inputs()
         elif main_input_name == "input_features":
             pt_input, tf_input = self.get_audio_inputs()
