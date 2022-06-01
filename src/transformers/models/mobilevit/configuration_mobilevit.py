@@ -118,8 +118,8 @@ class MobileViTConfig(PretrainedConfig):
         num_channels=3,
         image_size=256,
         patch_size=2,
-        hidden_sizes=None,
-        neck_hidden_sizes=None,
+        hidden_sizes=[144, 192, 240],
+        neck_hidden_sizes=[16, 32, 64, 96, 128, 160, 640],
         num_attention_heads=4,
         mlp_ratio=2.0,
         expand_ratio=4.0,
@@ -134,7 +134,7 @@ class MobileViTConfig(PretrainedConfig):
         qkv_bias=True,
         is_encoder_decoder=False,
         aspp_out_channels=256,
-        atrous_rates=None,
+        atrous_rates=[6, 12, 18],
         aspp_dropout_prob=0.1,
         semantic_loss_ignore_index=255,
         **kwargs
@@ -144,8 +144,8 @@ class MobileViTConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.image_size = image_size
         self.patch_size = patch_size
-        self.hidden_sizes = [144, 192, 240] if hidden_sizes is None else hidden_sizes
-        self.neck_hidden_sizes = [16, 32, 64, 96, 128, 160, 640] if neck_hidden_sizes is None else neck_hidden_sizes
+        self.hidden_sizes = hidden_sizes
+        self.neck_hidden_sizes = neck_hidden_sizes
         self.num_attention_heads = num_attention_heads
         self.mlp_ratio = mlp_ratio
         self.expand_ratio = expand_ratio
@@ -161,7 +161,7 @@ class MobileViTConfig(PretrainedConfig):
 
         # decode head attributes for semantic segmentation
         self.aspp_out_channels = aspp_out_channels
-        self.atrous_rates = [6, 12, 18] if atrous_rates is None else atrous_rates
+        self.atrous_rates = atrous_rates
         self.aspp_dropout_prob = aspp_dropout_prob
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
 

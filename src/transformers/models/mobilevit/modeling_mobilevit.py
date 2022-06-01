@@ -72,7 +72,7 @@ MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 def make_divisible(
-    v: Union[float, int], divisor: Optional[int] = 8, min_value: Optional[Union[float, int]] = None
+    value: Union[float, int], divisor: Optional[int] = 8, min_value: Optional[Union[float, int]] = None
 ) -> Union[float, int]:
     """
     Ensure that all layers have a channel number that is divisible by 8. This function is taken from the original
@@ -81,11 +81,11 @@ def make_divisible(
     """
     if min_value is None:
         min_value = divisor
-    new_v = max(min_value, int(v + divisor / 2) // divisor * divisor)
+    new_value = max(min_value, int(value + divisor / 2) // divisor * divisor)
     # Make sure that round down does not go down by more than 10%.
-    if new_v < 0.9 * v:
-        new_v += divisor
-    return new_v
+    if new_value < 0.9 * value:
+        new_value += divisor
+    return new_value
 
 
 class MobileViTConvLayer(nn.Module):
@@ -354,8 +354,8 @@ class MobileViTLayer(nn.Module):
         num_stages: int,
     ) -> None:
         super().__init__()
-        self.patch_w = config.patch_size
-        self.patch_h = config.patch_size
+        self.patch_width = config.patch_size
+        self.patch_height = config.patch_size
 
         self.conv_kxk = MobileViTConvLayer(
             config,
@@ -391,72 +391,61 @@ class MobileViTLayer(nn.Module):
         )
 
     def unfolding(self, features: torch.Tensor) -> Tuple[torch.Tensor, Dict]:
-        patch_w, patch_h = self.patch_w, self.patch_h
-        patch_area = int(patch_w * patch_h)  # P
+        patch_width, patch_height = self.patch_width, self.patch_height
+        patch_area = int(patch_width * patch_height)
 
-        batch_size, channels, orig_h, orig_w = features.shape  # B, C, H, W
+        batch_size, channels, orig_height, orig_width = features.shape
 
-        new_h = int(math.ceil(orig_h / patch_h) * patch_h)
-        new_w = int(math.ceil(orig_w / patch_w) * patch_w)
+        new_height = int(math.ceil(orig_height / patch_height) * patch_height)
+        new_width = int(math.ceil(orig_width / patch_width) * patch_width)
 
         interpolate = False
-        if new_w != orig_w or new_h != orig_h:
+        if new_width != orig_width or new_height != orig_height:
             # Note: Padding can be done, but then it needs to be handled in attention function.
-            features = nn.functional.interpolate(features, size=(new_h, new_w), mode="bilinear", align_corners=False)
+            features = nn.functional.interpolate(features, size=(new_height, new_width), mode="bilinear", align_corners=False)
             interpolate = True
 
         # number of patches along width and height
-        num_patch_w = new_w // patch_w  # num_w
-        num_patch_h = new_h // patch_h  # num_h
-        num_patches = num_patch_h * num_patch_w  # N
+        num_patch_width = new_width // patch_width
+        num_patch_height = new_height // patch_height
+        num_patches = num_patch_height * num_patch_width
 
-        # [B, C, H, W] --> [B * C * num_h, patch_h, num_w, patch_w]
-        patches = features.reshape(batch_size * channels * num_patch_h, patch_h, num_patch_w, patch_w)
-
-        # --> [B * C * num_h, num_w, patch_h, patch_w]
+        # convert from shape (batch_size, channels, orig_height, orig_width) 
+        # to the shape (batch_size * patch_area, num_patches, channels)
+        patches = features.reshape(batch_size * channels * num_patch_height, patch_height, num_patch_width, patch_width)
         patches = patches.transpose(1, 2)
-
-        # --> [B, C, N, P] where P = patch_h * patch_w and N = num_h * num_w
         patches = patches.reshape(batch_size, channels, num_patches, patch_area)
-
-        # --> [B, P, N, C]
         patches = patches.transpose(1, 3)
-
-        # --> [B * P, N, C]
         patches = patches.reshape(batch_size * patch_area, num_patches, -1)
 
         info_dict = {
-            "orig_size": (orig_h, orig_w),
+            "orig_size": (orig_height, orig_width),
             "batch_size": batch_size,
+            "channels": channels,
             "interpolate": interpolate,
-            "total_patches": num_patches,
-            "num_patches_w": num_patch_w,
-            "num_patches_h": num_patch_h,
+            "num_patches": num_patches,
+            "num_patches_width": num_patch_width,
+            "num_patches_height": num_patch_height,
         }
         return patches, info_dict
 
     def folding(self, patches: torch.Tensor, info_dict: Dict) -> torch.Tensor:
-        patch_w, patch_h = self.patch_w, self.patch_h
-        patch_area = int(patch_w * patch_h)  # P
+        patch_width, patch_height = self.patch_width, self.patch_height
+        patch_area = int(patch_width * patch_height)
 
-        # [B * P, N, C] --> [B, P, N, C]
-        patches = patches.contiguous().view(info_dict["batch_size"], patch_area, info_dict["total_patches"], -1)
+        batch_size = info_dict["batch_size"]
+        channels = info_dict["channels"]
+        num_patches = info_dict["num_patches"]
+        num_patch_height = info_dict["num_patches_height"]
+        num_patch_width = info_dict["num_patches_width"]
 
-        batch_size, pixels, num_patches, channels = patches.size()  # B, P, N, C
-        num_patch_h = info_dict["num_patches_h"]  # num_h
-        num_patch_w = info_dict["num_patches_w"]  # num_w
-
-        # [B, P, N, C] --> [B, C, N, P]
-        features = patches.transpose(1, 3)
-
-        # --> [B * C * num_h, num_w, patch_h, patch_w]
-        features = features.reshape(batch_size * channels * num_patch_h, num_patch_w, patch_h, patch_w)
-
-        # --> [B * C * num_h, patch_h, num_w, patch_w]
+        # convert from shape (batch_size * patch_area, num_patches, channels)
+        # back to shape (batch_size, channels, orig_height, orig_width)
+        features = patches.contiguous().view(batch_size, patch_area, num_patches, -1)
+        features = features.transpose(1, 3)
+        features = features.reshape(batch_size * channels * num_patch_height, num_patch_width, patch_height, patch_width)
         features = features.transpose(1, 2)
-
-        # --> [B, C, H, W]
-        features = features.reshape(batch_size, channels, num_patch_h * patch_h, num_patch_w * patch_w)
+        features = features.reshape(batch_size, channels, num_patch_height * patch_height, num_patch_width * patch_width)
 
         if info_dict["interpolate"]:
             features = nn.functional.interpolate(
@@ -768,7 +757,7 @@ class MobileViTModel(MobileViTPreTrainedModel):
         if self.expand_output:
             last_hidden_state = self.conv_1x1_exp(encoder_outputs[0])
 
-            # global average pooling: (N, C, H, W) -> (N, C)
+            # global average pooling: (batch_size, channels, height, width) -> (batch_size, channels)
             pooled_output = torch.mean(last_hidden_state, dim=[-2, -1], keepdim=False)
         else:
             last_hidden_state = encoder_outputs[0]
@@ -907,7 +896,9 @@ class MobileViTASPP(nn.Module):
 
         in_channels = config.neck_hidden_sizes[-2]
         out_channels = config.aspp_out_channels
-        assert len(config.atrous_rates) == 3
+
+        if len(config.atrous_rates) != 3:
+            raise ValueError("Expected 3 values for atrous_rates")
 
         self.convs = nn.ModuleList()
 
