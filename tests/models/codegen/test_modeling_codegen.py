@@ -444,7 +444,7 @@ class CodeGenModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
 
         expected_output_sentence = [
             'def hellow_world():\n    print("Hello World")\n\nhellow_world()',
-            '<|endoftext|>def greet(name):\n    print(f"Hello {name}")\n\ng',
+            'def greet(name):\n    print(f"Hello {name}")\n\ng',
         ]
         self.assertListEqual(expected_output_sentence, batch_out_sentence)
         self.assertTrue(batch_out_sentence_tt != batch_out_sentence)  # token_type_ids should change output
