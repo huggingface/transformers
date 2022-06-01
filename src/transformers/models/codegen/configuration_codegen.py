@@ -126,7 +126,6 @@ class CodeGenConfig(PretrainedConfig):
         use_cache=True,
         bos_token_id=50256,
         eos_token_id=50256,
-        tie_word_embeddings=False,
         **kwargs
     ):
         self.vocab_size = vocab_size
@@ -150,7 +149,7 @@ class CodeGenConfig(PretrainedConfig):
         self.eos_token_id = eos_token_id
 
         super().__init__(
-            bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
+            bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs
         )
 
 
