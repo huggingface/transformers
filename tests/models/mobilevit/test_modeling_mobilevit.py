@@ -180,11 +180,7 @@ class MobileViTModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (
-        (
-            MobileViTModel,
-            MobileViTForImageClassification,
-            MobileViTForSemanticSegmentation,
-        )
+        (MobileViTModel, MobileViTForImageClassification, MobileViTForSemanticSegmentation)
         if is_torch_available()
         else ()
     )
