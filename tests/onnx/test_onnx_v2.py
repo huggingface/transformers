@@ -180,6 +180,7 @@ PYTORCH_EXPORT_MODELS = {
     ("electra", "google/electra-base-generator"),
     ("roberta", "roberta-base"),
     ("roformer", "junnyu/roformer_chinese_base"),
+    ("squeezebert", "squeezebert/squeezebert-uncased"),
     ("mobilebert", "google/mobilebert-uncased"),
     ("xlm", "xlm-clm-ende-1024"),
     ("xlm-roberta", "xlm-roberta-base"),
