@@ -320,7 +320,6 @@ class CodeGenBlock(nn.Module):
         return outputs  # hidden_states, present, (attentions)
 
 
-# Copied from transformers.models.gptj.modeling_gptj.GPTJPreTrainedModel with GPTJ->CodeGen
 class CodeGenPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -329,9 +328,7 @@ class CodeGenPreTrainedModel(PreTrainedModel):
 
     config_class = CodeGenConfig
     base_model_prefix = "transformer"
-    is_parallelizable = True
     supports_gradient_checkpointing = True
-    _no_split_modules = ["CodeGenBlock"]
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
@@ -703,11 +700,6 @@ class CodeGenForCausalLM(CodeGenPreTrainedModel):
             return_dict=return_dict,
         )
         hidden_states = transformer_outputs[0]
-
-        # Set device for model parallelism
-        if self.model_parallel:
-            torch.cuda.set_device(self.transformer.first_device)
-            hidden_states = hidden_states.to(self.lm_head.weight.device)
 
         # make sure sampling in fp16 works correctly and
         # compute loss in fp32 to match with mesh-tf version
