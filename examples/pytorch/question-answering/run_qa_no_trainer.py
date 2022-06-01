@@ -822,7 +822,6 @@ def main():
             resume_step -= starting_epoch * len(train_dataloader)
 
     for epoch in range(starting_epoch, args.num_train_epochs):
-        logger.info("Trained")
         model.train()
         if args.with_tracking:
             total_loss = 0
