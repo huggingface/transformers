@@ -22,7 +22,6 @@ from typing import List
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
 from transformers.models.layoutxlm import LayoutXLMTokenizer, LayoutXLMTokenizerFast
 from transformers.testing_utils import (
-    get_tests_dir,
     require_pytesseract,
     require_sentencepiece,
     require_tokenizers,
