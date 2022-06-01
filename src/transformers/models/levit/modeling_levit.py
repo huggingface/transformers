@@ -297,7 +297,7 @@ class LevitAttentionSubsample(nn.Module):
 
 class LevitMLPLayer(nn.Module):
     """
-    MLP Layer with `2X` expansion in constrast to ViT with `4X`.
+    MLP Layer with `2X` expansion in contrast to ViT with `4X`.
     """
 
     def __init__(self, input_dim, hidden_dim):
