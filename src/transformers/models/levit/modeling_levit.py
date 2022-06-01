@@ -336,7 +336,7 @@ class LevitResidualLayer(nn.Module):
 
 class LevitStage(nn.Module):
     """
-    LeViT Stage Layer for each stage consisting of `LevitMLPLayer` and `LevitAttention` layers.
+    LeViT Stage consisting of `LevitMLPLayer` and `LevitAttention` layers.
     """
 
     def __init__(
