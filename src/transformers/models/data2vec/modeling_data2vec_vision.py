@@ -922,7 +922,7 @@ class Data2VecVisionPyramidPoolingModule(nn.Module):
             block = Data2VecVisionPyramidPoolingBlock(
                 pool_scale=pool_scale, in_channels=in_channels, channels=channels
             )
-            self.block.append(block)
+            self.blocks.append(block)
             self.add_module(str(i), block)
 
     def forward(self, x: torch.Tensor) -> List[torch.Tensor]:

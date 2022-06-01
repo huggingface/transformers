@@ -999,7 +999,7 @@ class BeitPyramidPoolingModule(nn.Module):
         self.blocks = []
         for i, pool_scale in enumerate(pool_scales):
             block = BeitPyramidPoolingBlock(pool_scale=pool_scale, in_channels=in_channels, channels=channels)
-            self.block.append(block)
+            self.blocks.append(block)
             self.add_module(str(i), block)
 
     def forward(self, x: torch.Tensor) -> List[torch.Tensor]:
