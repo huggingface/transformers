@@ -44,7 +44,7 @@ def convert_command_factory(args: Namespace):
 
     Returns: ServeCommand
     """
-    return PTtoTFCommand(args.model_name, args.local_dir, args.open_pr)
+    return PTtoTFCommand(args.model_name, args.local_dir, args.no_pr)
 
 
 class PTtoTFCommand(BaseTransformersCLICommand):
@@ -60,7 +60,7 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             "pt-to-tf",
             help=(
                 "CLI tool to run convert a transformers model from a PyTorch checkpoint to a TensorFlow checkpoint."
-                " Can also be used to validate existing weights."
+                " Can also be used to validate existing weights without opening PRs, with --no-pr."
             ),
         )
         train_parser.add_argument(
@@ -70,20 +70,21 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             help="The model name, including owner/organization, as seen on the hub.",
         )
         train_parser.add_argument(
-            "--local-dir", type=str, required=True, help="Local directory of the model repository."
+            "--local-dir",
+            type=str,
+            default="",
+            help="Optional local directory of the model repository. Defaults to /tmp/{model_name}",
         )
         train_parser.add_argument(
-            "--open-pr", action="store_true", help="Optional flag to open a PR with converted weights."
+            "--no-pr", action="store_true", help="Optional flag to NOT open a PR with converted weights."
         )
         train_parser.set_defaults(func=convert_command_factory)
 
-    def __init__(self, model_name: str, local_dir: str, open_pr: bool, *args):
+    def __init__(self, model_name: str, local_dir: str, no_pr: bool, *args):
         self._logger = logging.get_logger("transformers-cli/pt_to_tf")
-
-        self._logger.info(f"Loading model {model_name}")
         self._model_name = model_name
-        self._local_dir = local_dir
-        self._open_pr = open_pr
+        self._local_dir = local_dir if local_dir else os.path.join("/tmp", model_name)
+        self._no_pr = no_pr
 
     def get_text_inputs(self):
         tokenizer = AutoTokenizer.from_pretrained(self._local_dir)
@@ -114,11 +115,8 @@ class PTtoTFCommand(BaseTransformersCLICommand):
 
     def run(self):
         # Fetch remote data
-        repo = Repository(
-            local_dir=self._local_dir,
-            clone_from=self._model_name,
-            # TODO: implement a solution to pull a specific PR/commit, so we can use this CLI to validate pushes.
-        )
+        # TODO: implement a solution to pull a specific PR/commit, so we can use this CLI to validate pushes.
+        repo = Repository(local_dir=self._local_dir, clone_from=self._model_name)
         repo.git_pull()  # in case the repo already exists locally, but with an older commit
 
         # Load models and acquire a basic input for its modality.
@@ -164,7 +162,7 @@ class PTtoTFCommand(BaseTransformersCLICommand):
                 f" {converted_diff})"
             )
 
-        if self._open_pr:
+        if not self._no_pr:
             # TODO: remove try/except when the upload to PR feature is released
             # (https://github.com/huggingface/huggingface_hub/pull/884)
             try:
@@ -176,8 +174,8 @@ class PTtoTFCommand(BaseTransformersCLICommand):
                     create_pr=True,
                     pr_commit_summary="Add TF weights",
                     pr_commit_description=(
-                        f"Adds TF weights. Validated by the `pt_to_tf` CLI: crossload_diff={crossload_diff},"
-                        f" converted_diff={converted_diff}"
+                        f"Validated by the `pt_to_tf` CLI. Max crossload hidden state difference={crossload_diff:.3e};"
+                        f" Max converted hidden state difference={converted_diff:.3e}."
                     ),
                 )
                 self._logger.warn(f"PR open in {hub_pr_url}")

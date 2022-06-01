@@ -35,19 +35,13 @@ class CLITest(unittest.TestCase):
 
     @is_pt_tf_cross_test
     @patch(
-        "sys.argv",
-        [
-            "fakeprogrampath",
-            "pt-to-tf",
-            "--model-name",
-            "hf-internal-testing/tiny-random-gptj",
-            "--local-dir",
-            "/tmp/model_conversion",
-        ],
+        "sys.argv", ["fakeprogrampath", "pt-to-tf", "--model-name", "hf-internal-testing/tiny-random-gptj", "--no-pr"]
     )
     def test_cli_pt_to_tf(self):
         import transformers.commands.transformers_cli
 
-        shutil.rmtree("/tmp/model_conversion")  # cleans potential past runs
+        shutil.rmtree("/tmp/hf-internal-testing/tiny-random-gptj", ignore_errors=True)  # cleans potential past runs
         transformers.commands.transformers_cli.main()
-        self.assertTrue(os.path.exists("/tmp/model_conversion/tf_model.h5"))  # the original repo has no TF weights
+
+        # The original repo has no TF weights -- if they exist, they were created by the CLI
+        self.assertTrue(os.path.exists("/tmp/hf-internal-testing/tiny-random-gptj/tf_model.h5"))
