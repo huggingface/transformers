@@ -109,22 +109,22 @@ class LevitPatchEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.embedding_layer_1 = LevitConvEmbeddings(
-            config.num_channels, config.embed_dim[0] // 8, config.kernel_size, config.stride, config.padding
+            config.num_channels, config.hidden_sizes[0] // 8, config.kernel_size, config.stride, config.padding
         )
         self.activation_layer_1 = nn.Hardswish()
 
         self.embedding_layer_2 = LevitConvEmbeddings(
-            config.embed_dim[0] // 8, config.embed_dim[0] // 4, config.kernel_size, config.stride, config.padding
+            config.hidden_sizes[0] // 8, config.hidden_sizes[0] // 4, config.kernel_size, config.stride, config.padding
         )
         self.activation_layer_2 = nn.Hardswish()
 
         self.embedding_layer_3 = LevitConvEmbeddings(
-            config.embed_dim[0] // 4, config.embed_dim[0] // 2, config.kernel_size, config.stride, config.padding
+            config.hidden_sizes[0] // 4, config.hidden_sizes[0] // 2, config.kernel_size, config.stride, config.padding
         )
         self.activation_layer_3 = nn.Hardswish()
 
         self.embedding_layer_4 = LevitConvEmbeddings(
-            config.embed_dim[0] // 2, config.embed_dim[0], config.kernel_size, config.stride, config.padding
+            config.hidden_sizes[0] // 2, config.hidden_sizes[0], config.kernel_size, config.stride, config.padding
         )
 
     def forward(self, pixel_values):
@@ -165,18 +165,18 @@ class LevitSubsample(nn.Module):
 
 
 class LevitAttention(nn.Module):
-    def __init__(self, embed_dim, key_dim, num_heads, attention_ratio, resolution):
+    def __init__(self, hidden_sizes, key_dim, num_attention_heads, attention_ratio, resolution):
         super().__init__()
-        self.num_heads = num_heads
+        self.num_attention_heads = num_attention_heads
         self.scale = key_dim**-0.5
         self.key_dim = key_dim
         self.attention_ratio = attention_ratio
-        self.out_dim_keys_values = attention_ratio * key_dim * num_heads + key_dim * num_heads * 2
-        self.out_dim_projection = attention_ratio * key_dim * num_heads
+        self.out_dim_keys_values = attention_ratio * key_dim * num_attention_heads + key_dim * num_attention_heads * 2
+        self.out_dim_projection = attention_ratio * key_dim * num_attention_heads
 
-        self.queries_keys_values = MLPLayerWithBN(embed_dim, self.out_dim_keys_values)
+        self.queries_keys_values = MLPLayerWithBN(hidden_sizes, self.out_dim_keys_values)
         self.activation = nn.Hardswish()
-        self.projection = MLPLayerWithBN(self.out_dim_projection, embed_dim, bn_weight_init=0)
+        self.projection = MLPLayerWithBN(self.out_dim_projection, hidden_sizes, bn_weight_init=0)
 
         points = list(itertools.product(range(resolution), range(resolution)))
         len_points = len(points)
@@ -189,7 +189,7 @@ class LevitAttention(nn.Module):
                 indices.append(attention_offsets[offset])
 
         self.attention_bias_cache = {}
-        self.attention_biases = torch.nn.Parameter(torch.zeros(num_heads, len(attention_offsets)))
+        self.attention_biases = torch.nn.Parameter(torch.zeros(num_attention_heads, len(attention_offsets)))
         self.register_buffer("attention_bias_idxs", torch.LongTensor(indices).view(len_points, len_points))
 
     @torch.no_grad()
@@ -210,7 +210,7 @@ class LevitAttention(nn.Module):
     def forward(self, hidden_state):
         batch_size, seq_length, _ = hidden_state.shape
         queries_keys_values = self.queries_keys_values(hidden_state)
-        query, key, value = queries_keys_values.view(batch_size, seq_length, self.num_heads, -1).split(
+        query, key, value = queries_keys_values.view(batch_size, seq_length, self.num_attention_heads, -1).split(
             [self.key_dim, self.key_dim, self.attention_ratio * self.key_dim], dim=3
         )
         query = query.permute(0, 2, 1, 3)
@@ -226,20 +226,28 @@ class LevitAttention(nn.Module):
 
 class LevitAttentionSubsample(nn.Module):
     def __init__(
-        self, input_dim, output_dim, key_dim, num_heads, attention_ratio, stride, resolution_in, resolution_out
+        self,
+        input_dim,
+        output_dim,
+        key_dim,
+        num_attention_heads,
+        attention_ratio,
+        stride,
+        resolution_in,
+        resolution_out,
     ):
         super().__init__()
-        self.num_heads = num_heads
+        self.num_attention_heads = num_attention_heads
         self.scale = key_dim**-0.5
         self.key_dim = key_dim
         self.attention_ratio = attention_ratio
-        self.out_dim_keys_values = attention_ratio * key_dim * num_heads + key_dim * num_heads
-        self.out_dim_projection = attention_ratio * key_dim * num_heads
+        self.out_dim_keys_values = attention_ratio * key_dim * num_attention_heads + key_dim * num_attention_heads
+        self.out_dim_projection = attention_ratio * key_dim * num_attention_heads
         self.resolution_out = resolution_out
         # resolution_in is the intial resolution, resoloution_out is final resolution after downsampling
         self.keys_values = MLPLayerWithBN(input_dim, self.out_dim_keys_values)
         self.queries_subsample = LevitSubsample(stride, resolution_in)
-        self.queries = MLPLayerWithBN(input_dim, key_dim * num_heads)
+        self.queries = MLPLayerWithBN(input_dim, key_dim * num_attention_heads)
         self.activation = nn.Hardswish()
         self.projection = MLPLayerWithBN(self.out_dim_projection, output_dim)
 
@@ -257,7 +265,7 @@ class LevitAttentionSubsample(nn.Module):
                     attention_offsets[offset] = len(attention_offsets)
                 indices.append(attention_offsets[offset])
 
-        self.attention_biases = torch.nn.Parameter(torch.zeros(num_heads, len(attention_offsets)))
+        self.attention_biases = torch.nn.Parameter(torch.zeros(num_attention_heads, len(attention_offsets)))
         self.register_buffer("attention_bias_idxs", torch.LongTensor(indices).view(len_points_, len_points))
 
     @torch.no_grad()
@@ -279,14 +287,16 @@ class LevitAttentionSubsample(nn.Module):
         batch_size, seq_length, _ = hidden_state.shape
         key, value = (
             self.keys_values(hidden_state)
-            .view(batch_size, seq_length, self.num_heads, -1)
+            .view(batch_size, seq_length, self.num_attention_heads, -1)
             .split([self.key_dim, self.attention_ratio * self.key_dim], dim=3)
         )
         key = key.permute(0, 2, 1, 3)
         value = value.permute(0, 2, 1, 3)
 
         query = self.queries(self.queries_subsample(hidden_state))
-        query = query.view(batch_size, self.resolution_out**2, self.num_heads, self.key_dim).permute(0, 2, 1, 3)
+        query = query.view(batch_size, self.resolution_out**2, self.num_attention_heads, self.key_dim).permute(
+            0, 2, 1, 3
+        )
 
         attention = query @ key.transpose(-2, -1) * self.scale + self.get_attention_biases(hidden_state.device)
         attention = attention.softmax(dim=-1)
@@ -340,31 +350,43 @@ class LevitStage(nn.Module):
     """
 
     def __init__(
-        self, config, idx, embed_dim, key_dim, depth, num_heads, attention_ratio, mlp_ratio, down_ops, resolution_in
+        self,
+        config,
+        idx,
+        hidden_sizes,
+        key_dim,
+        depths,
+        num_attention_heads,
+        attention_ratio,
+        mlp_ratio,
+        down_ops,
+        resolution_in,
     ):
         super().__init__()
         self.layers = []
         self.config = config
         self.resolution_in = resolution_in
         # resolution_in is the intial resolution, resoloution_out is final resolution after downsampling
-        for _ in range(depth):
+        for _ in range(depths):
             self.layers.append(
                 LevitResidualLayer(
-                    LevitAttention(embed_dim, key_dim, num_heads, attention_ratio, resolution_in),
-                    self.config.drop_path,
+                    LevitAttention(hidden_sizes, key_dim, num_attention_heads, attention_ratio, resolution_in),
+                    self.config.drop_path_rate,
                 )
             )
             if mlp_ratio > 0:
-                hidden_dim = embed_dim * mlp_ratio
-                self.layers.append(LevitResidualLayer(LevitMLPLayer(embed_dim, hidden_dim), self.config.drop_path))
+                hidden_dim = hidden_sizes * mlp_ratio
+                self.layers.append(
+                    LevitResidualLayer(LevitMLPLayer(hidden_sizes, hidden_dim), self.config.drop_path_rate)
+                )
 
         if down_ops[0] == "Subsample":
             self.resolution_out = (self.resolution_in - 1) // down_ops[5] + 1
             self.layers.append(
                 LevitAttentionSubsample(
-                    *self.config.embed_dim[idx : idx + 2],
+                    *self.config.hidden_sizes[idx : idx + 2],
                     key_dim=down_ops[1],
-                    num_heads=down_ops[2],
+                    num_attention_heads=down_ops[2],
                     attention_ratio=down_ops[3],
                     stride=down_ops[5],
                     resolution_in=resolution_in,
@@ -373,10 +395,10 @@ class LevitStage(nn.Module):
             )
             self.resolution_in = self.resolution_out
             if down_ops[4] > 0:
-                hidden_dim = self.config.embed_dim[idx + 1] * down_ops[4]
+                hidden_dim = self.config.hidden_sizes[idx + 1] * down_ops[4]
                 self.layers.append(
                     LevitResidualLayer(
-                        LevitMLPLayer(self.config.embed_dim[idx + 1], hidden_dim), self.config.drop_path
+                        LevitMLPLayer(self.config.hidden_sizes[idx + 1], hidden_dim), self.config.drop_path_rate
                     )
                 )
 
@@ -403,14 +425,14 @@ class LevitEncoder(nn.Module):
         self.stages = []
         self.config.down_ops.append([""])
 
-        for stage_idx in range(len(config.depth)):
+        for stage_idx in range(len(config.depths)):
             stage = LevitStage(
                 config,
                 stage_idx,
-                config.embed_dim[stage_idx],
+                config.hidden_sizes[stage_idx],
                 config.key_dim[stage_idx],
-                config.depth[stage_idx],
-                config.num_heads[stage_idx],
+                config.depths[stage_idx],
+                config.num_attention_heads[stage_idx],
                 config.attention_ratio[stage_idx],
                 config.mlp_ratio[stage_idx],
                 config.down_ops[stage_idx],
@@ -552,7 +574,7 @@ class LevitModel(LevitPreTrainedModel):
 
         last_hidden_state = encoder_outputs[0]
 
-        # global average pooling, (batch_size, seq_length, embed_dim) -> (batch_size, embed_dim)
+        # global average pooling, (batch_size, seq_length, hidden_sizes) -> (batch_size, hidden_sizes)
         pooled_output = last_hidden_state.mean(dim=1)
 
         if not return_dict:
@@ -581,7 +603,7 @@ class LevitForImageClassification(LevitPreTrainedModel):
 
         # Classifier head
         self.classifier = (
-            LevitClassificationLayer(config.embed_dim[-1], config.num_labels)
+            LevitClassificationLayer(config.hidden_sizes[-1], config.num_labels)
             if config.num_labels > 0
             else torch.nn.Identity()
         )
@@ -669,12 +691,12 @@ class LevitForImageClassificationWithTeacher(LevitPreTrainedModel):
 
         # Classifier head
         self.classifier = (
-            LevitClassificationLayer(config.embed_dim[-1], config.num_labels)
+            LevitClassificationLayer(config.hidden_sizes[-1], config.num_labels)
             if config.num_labels > 0
             else torch.nn.Identity()
         )
         self.classifier_distill = (
-            LevitClassificationLayer(config.embed_dim[-1], config.num_labels)
+            LevitClassificationLayer(config.hidden_sizes[-1], config.num_labels)
             if config.num_labels > 0
             else torch.nn.Identity()
         )

@@ -34,21 +34,21 @@ logger = logging.get_logger()
 
 
 def convert_weight_and_push(
-    embed_dim: int, name: str, config: LevitConfig, save_directory: Path, push_to_hub: bool = True
+    hidden_sizes: int, name: str, config: LevitConfig, save_directory: Path, push_to_hub: bool = True
 ):
     print(f"Converting {name}...")
 
     with torch.no_grad():
-        if embed_dim == 128:
+        if hidden_sizes == 128:
             if name[-1] == "S":
                 from_model = timm.create_model("levit_128s", pretrained=True)
             else:
                 from_model = timm.create_model("levit_128", pretrained=True)
-        if embed_dim == 192:
+        if hidden_sizes == 192:
             from_model = timm.create_model("levit_192", pretrained=True)
-        if embed_dim == 256:
+        if hidden_sizes == 256:
             from_model = timm.create_model("levit_256", pretrained=True)
-        if embed_dim == 384:
+        if hidden_sizes == 384:
             from_model = timm.create_model("levit_384", pretrained=True)
 
         from_model.eval()
@@ -95,7 +95,7 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
 
     ImageNetPreTrainedConfig = partial(LevitConfig, num_labels=num_labels, id2label=id2label, label2id=label2id)
 
-    names_to_embed_dim = {
+    names_to_hidden_sizes = {
         "levit-128S": 128,
         "levit-128": 128,
         "levit-192": 192,
@@ -105,29 +105,49 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
 
     names_to_config = {
         "levit-128S": ImageNetPreTrainedConfig(
-            embed_dim=[128, 256, 384], num_heads=[4, 6, 8], depth=[2, 3, 4], key_dim=[16, 16, 16], drop_path_rate=0
+            hidden_sizes=[128, 256, 384],
+            num_attention_heads=[4, 6, 8],
+            depths=[2, 3, 4],
+            key_dim=[16, 16, 16],
+            drop_path_rate=0,
         ),
         "levit-128": ImageNetPreTrainedConfig(
-            embed_dim=[128, 256, 384], num_heads=[4, 8, 12], depth=[4, 4, 4], key_dim=[16, 16, 16], drop_path_rate=0
+            hidden_sizes=[128, 256, 384],
+            num_attention_heads=[4, 8, 12],
+            depths=[4, 4, 4],
+            key_dim=[16, 16, 16],
+            drop_path_rate=0,
         ),
         "levit-192": ImageNetPreTrainedConfig(
-            embed_dim=[192, 288, 384], num_heads=[3, 5, 6], depth=[4, 4, 4], key_dim=[32, 32, 32], drop_path_rate=0
+            hidden_sizes=[192, 288, 384],
+            num_attention_heads=[3, 5, 6],
+            depths=[4, 4, 4],
+            key_dim=[32, 32, 32],
+            drop_path_rate=0,
         ),
         "levit-256": ImageNetPreTrainedConfig(
-            embed_dim=[256, 384, 512], num_heads=[4, 6, 8], depth=[4, 4, 4], key_dim=[32, 32, 32], drop_path_rate=0
+            hidden_sizes=[256, 384, 512],
+            num_attention_heads=[4, 6, 8],
+            depths=[4, 4, 4],
+            key_dim=[32, 32, 32],
+            drop_path_rate=0,
         ),
         "levit-384": ImageNetPreTrainedConfig(
-            embed_dim=[384, 512, 768], num_heads=[6, 9, 12], depth=[4, 4, 4], key_dim=[32, 32, 32], drop_path_rate=0.1
+            hidden_sizes=[384, 512, 768],
+            num_attention_heads=[6, 9, 12],
+            depths=[4, 4, 4],
+            key_dim=[32, 32, 32],
+            drop_path_rate=0.1,
         ),
     }
 
     if model_name:
         convert_weight_and_push(
-            names_to_embed_dim[model_name], model_name, names_to_config[model_name], save_directory, push_to_hub
+            names_to_hidden_sizes[model_name], model_name, names_to_config[model_name], save_directory, push_to_hub
         )
     else:
         for model_name, config in names_to_config.items():
-            convert_weight_and_push(names_to_embed_dim[model_name], model_name, config, save_directory, push_to_hub)
+            convert_weight_and_push(names_to_hidden_sizes[model_name], model_name, config, save_directory, push_to_hub)
     return config, expected_shape
 
 

@@ -51,8 +51,8 @@ if is_vision_available():
 class LevitConfigTester(ConfigTester):
     def create_and_test_config_common_properties(self):
         config = self.config_class(**self.inputs_dict)
-        self.parent.assertTrue(hasattr(config, "embed_dim"))
-        self.parent.assertTrue(hasattr(config, "num_heads"))
+        self.parent.assertTrue(hasattr(config, "hidden_sizes"))
+        self.parent.assertTrue(hasattr(config, "num_attention_heads"))
 
 
 class LevitModelTester:
@@ -66,14 +66,13 @@ class LevitModelTester:
         stride=2,
         padding=1,
         patch_size=16,
-        embed_dim=[128, 256, 384],
-        num_heads=[4, 6, 8],
-        depth=[2, 3, 4],
+        hidden_sizes=[128, 256, 384],
+        num_attention_heads=[4, 6, 8],
+        depths=[2, 3, 4],
         key_dim=[16, 16, 16],
         drop_path_rate=0,
         mlp_ratio=[2, 2, 2],
         attention_ratio=[2, 2, 2],
-        distillation=True,
         initializer_range=0.02,
         is_training=True,
         use_labels=True,
@@ -86,19 +85,18 @@ class LevitModelTester:
         self.kernel_size = kernel_size
         self.stride = stride
         self.padding = padding
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.depth = depth
+        self.hidden_sizes = hidden_sizes
+        self.num_attention_heads = num_attention_heads
+        self.depths = depths
         self.key_dim = key_dim
-        self.drop_path = drop_path_rate
+        self.drop_path_rate = drop_path_rate
         self.patch_size = patch_size
         self.attention_ratio = attention_ratio
         self.mlp_ratio = mlp_ratio
-        self.distillation = distillation
         self.initializer_range = initializer_range
         self.down_ops = [
-            ["Subsample", key_dim[0], embed_dim[0] // key_dim[0], 4, 2, 2],
-            ["Subsample", key_dim[0], embed_dim[1] // key_dim[0], 4, 2, 2],
+            ["Subsample", key_dim[0], hidden_sizes[0] // key_dim[0], 4, 2, 2],
+            ["Subsample", key_dim[0], hidden_sizes[1] // key_dim[0], 4, 2, 2],
         ]
         self.is_training = is_training
         self.use_labels = use_labels
@@ -123,14 +121,13 @@ class LevitModelTester:
             stride=self.stride,
             padding=self.padding,
             patch_size=self.patch_size,
-            embed_dim=self.embed_dim,
-            num_heads=self.num_heads,
-            depth=self.depth,
+            hidden_sizes=self.hidden_sizes,
+            num_attention_heads=self.num_attention_heads,
+            depths=self.depths,
             key_dim=self.key_dim,
-            drop_path_rate=self.drop_path,
+            drop_path_rate=self.drop_path_rate,
             mlp_ratio=self.mlp_ratio,
             attention_ratio=self.attention_ratio,
-            distillation=self.distillation,
             initializer_range=self.initializer_range,
             down_ops=self.down_ops,
         )
@@ -146,7 +143,8 @@ class LevitModelTester:
             height = floor(((height + 2 * self.padding - self.kernel_size) / self.stride) + 1)
             width = floor(((width + 2 * self.padding - self.kernel_size) / self.stride) + 1)
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, ceil(height / 4) * ceil(width / 4), self.embed_dim[-1])
+            result.last_hidden_state.shape,
+            (self.batch_size, ceil(height / 4) * ceil(width / 4), self.hidden_sizes[-1]),
         )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
@@ -230,7 +228,7 @@ class LevitModelTest(ModelTesterMixin, unittest.TestCase):
 
             hidden_states = outputs.hidden_states
 
-            expected_num_layers = len(self.model_tester.depth) + 1
+            expected_num_layers = len(self.model_tester.depths) + 1
             self.assertEqual(len(hidden_states), expected_num_layers)
 
             image_size = (self.model_tester.image_size, self.model_tester.image_size)
@@ -255,7 +253,7 @@ class LevitModelTest(ModelTesterMixin, unittest.TestCase):
                 list(hidden_states[0].shape[-2:]),
                 [
                     height * width,
-                    self.model_tester.embed_dim[0],
+                    self.model_tester.hidden_sizes[0],
                 ],
             )
 

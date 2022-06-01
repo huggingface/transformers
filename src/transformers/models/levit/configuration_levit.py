@@ -49,21 +49,21 @@ class LevitConfig(PretrainedConfig):
             The padding size for the initial convolution layers of patch embedding.
         patch_size (`int`, *optional*, defaults to 16):
             The patch size for embeddings.
-        embed_dim (`List[int]`, *optional*, defaults to `[128, 256, 384]`):
+        hidden_sizes (`List[int]`, *optional*, defaults to `[128, 256, 384]`):
             Dimension of each of the encoder blocks.
-        num_heads (`List[int]`, *optional*, defaults to `[4, 8, 12]`):
+        num_attention_heads (`List[int]`, *optional*, defaults to `[4, 8, 12]`):
             Number of attention heads for each attention layer in each block of the Transformer encoder.
-        depth (`List[int]`, *optional*, defaults to `[4, 4, 4]`):
+        depths (`List[int]`, *optional*, defaults to `[4, 4, 4]`):
             The number of layers in each encoder block.
         key_dim (`List[int]`, *optional*, defaults to `[16, 16, 16]`):
             The size of key in each of the encoder blocks.
         drop_path_rate (`int`, *optional*, defaults to 0):
-            The dropout probability for stochastic depth, used in the blocks of the Transformer encoder.
+            The dropout probability for stochastic depths, used in the blocks of the Transformer encoder.
         mlp_ratios (`List[int]`, *optional*, defaults to `[2, 2, 2]`):
             Ratio of the size of the hidden layer compared to the size of the input layer of the Mix FFNs in the
             encoder blocks.
-        attention_drop_rate (`List[int]`, *optional*, defaults to `[2, 2, 2]`):
-            The dropout ratio for the attention probabilities.
+        attention_ratios (`List[int]`, *optional*, defaults to `[2, 2, 2]`):
+            Ratio of the size of the output dimension compared to input dimension of attention layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
@@ -91,14 +91,13 @@ class LevitConfig(PretrainedConfig):
         stride=2,
         padding=1,
         patch_size=16,
-        embed_dim=[128, 256, 384],
-        num_heads=[4, 8, 12],
-        depth=[4, 4, 4],
+        hidden_sizes=[128, 256, 384],
+        num_attention_heads=[4, 8, 12],
+        depths=[4, 4, 4],
         key_dim=[16, 16, 16],
         drop_path_rate=0,
         mlp_ratio=[2, 2, 2],
         attention_ratio=[2, 2, 2],
-        distillation=True,
         initializer_range=0.02,
         **kwargs
     ):
@@ -108,16 +107,16 @@ class LevitConfig(PretrainedConfig):
         self.kernel_size = kernel_size
         self.stride = stride
         self.padding = padding
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.depth = depth
+        self.hidden_sizes = hidden_sizes
+        self.num_attention_heads = num_attention_heads
+        self.depths = depths
         self.key_dim = key_dim
-        self.drop_path = drop_path_rate
+        self.drop_path_rate = drop_path_rate
         self.patch_size = patch_size
         self.attention_ratio = attention_ratio
         self.mlp_ratio = mlp_ratio
         self.initializer_range = initializer_range
         self.down_ops = [
-            ["Subsample", key_dim[0], embed_dim[0] // key_dim[0], 4, 2, 2],
-            ["Subsample", key_dim[0], embed_dim[1] // key_dim[0], 4, 2, 2],
+            ["Subsample", key_dim[0], hidden_sizes[0] // key_dim[0], 4, 2, 2],
+            ["Subsample", key_dim[0], hidden_sizes[1] // key_dim[0], 4, 2, 2],
         ]
