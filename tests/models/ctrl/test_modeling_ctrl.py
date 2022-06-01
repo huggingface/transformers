@@ -208,7 +208,6 @@ class CTRLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
 @require_torch
 class CTRLModelLanguageGenerationTest(unittest.TestCase):
-
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
