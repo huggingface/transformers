@@ -505,11 +505,11 @@ class FSMTTokenizer(PreTrainedTokenizer):
         )
 
         with open(src_vocab_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(self.encoder, ensure_ascii=False))
+            f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
         with open(tgt_vocab_file, "w", encoding="utf-8") as f:
             tgt_vocab = {v: k for k, v in self.decoder.items()}
-            f.write(json.dumps(tgt_vocab, ensure_ascii=False))
+            f.write(json.dumps(tgt_vocab, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
         index = 0
         with open(merges_file, "w", encoding="utf-8") as writer:

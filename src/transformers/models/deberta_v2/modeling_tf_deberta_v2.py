@@ -604,14 +604,14 @@ class TFDebertaV2DisentangledSelfAttention(tf.keras.layers.Layer):
 
             if not self.share_att_key:
                 if "c2p" in self.pos_att_type:
-                    self.pos_proj = tf.keras.layers.Dense(
+                    self.pos_key_proj = tf.keras.layers.Dense(
                         self.all_head_size,
                         kernel_initializer=get_initializer(config.initializer_range),
                         name="pos_proj",
                         use_bias=True,
                     )
                 if "p2c" in self.pos_att_type:
-                    self.pos_q_proj = tf.keras.layers.Dense(
+                    self.pos_query_proj = tf.keras.layers.Dense(
                         self.all_head_size,
                         kernel_initializer=get_initializer(config.initializer_range),
                         name="pos_q_proj",

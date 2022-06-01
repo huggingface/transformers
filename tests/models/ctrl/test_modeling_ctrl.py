@@ -13,6 +13,7 @@
 # limitations under the License.
 
 
+import gc
 import unittest
 
 from transformers import CTRLConfig, is_torch_available
@@ -181,6 +182,12 @@ class CTRLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         self.model_tester = CTRLModelTester(self)
         self.config_tester = ConfigTester(self, config_class=CTRLConfig, n_embd=37)
 
+    def tearDown(self):
+        super().tearDown()
+        # clean-up as much as possible GPU memory occupied by PyTorch
+        gc.collect()
+        torch.cuda.empty_cache()
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
@@ -201,6 +208,12 @@ class CTRLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
 @require_torch
 class CTRLModelLanguageGenerationTest(unittest.TestCase):
+    def tearDown(self):
+        super().tearDown()
+        # clean-up as much as possible GPU memory occupied by PyTorch
+        gc.collect()
+        torch.cuda.empty_cache()
+
     @slow
     def test_lm_generate_ctrl(self):
         model = CTRLLMHeadModel.from_pretrained("ctrl")

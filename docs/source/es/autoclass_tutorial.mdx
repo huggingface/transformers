@@ -20,16 +20,16 @@ Recuerda, la arquitectura se refiere al esqueleto del modelo y los checkpoints s
 
 </Tip>
 
-En este tutorial, aprende a:
+En este tutorial, aprenderás a:
 
-* Cargar un tokenizador preentrenado.
-* Cargar un extractor de características (feature extractor) preentrenado.
-* Cargar un procesador preentrenado.
-* Cargar un modelo preentrenado.
+* Cargar un tokenizador pre-entrenado.
+* Cargar un extractor de características (feature extractor en inglés) pre-entrenado.
+* Cargar un procesador pre-entrenado.
+* Cargar un modelo pre-entrenado.
 
 ## AutoTokenizer
 
-Casi cualquier tarea de Natural Language Processing comienza con un tokenizador. Un tokenizador convierte tu input a un formato que puede ser procesado por el modelo.
+Casi cualquier tarea de Procesamiento de Lenguaje Natural comienza con un tokenizador. Un tokenizador convierte tu input a un formato que puede ser procesado por el modelo.
 
 Carga un tokenizador con [`AutoTokenizer.from_pretrained`]:
 
@@ -87,7 +87,7 @@ Finalmente, las clases `AutoModelFor` te permiten cargar un modelo preentrenado 
 >>> model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
 ```
 
-Reutilice fácilmente el mismo checkpoint para cargar una aquitectura para alguna tarea diferente:
+Reutiliza fácilmente el mismo checkpoint para cargar una aquitectura para alguna tarea diferente:
 
 ```py
 >>> from transformers import AutoModelForTokenClassification
@@ -95,10 +95,10 @@ Reutilice fácilmente el mismo checkpoint para cargar una aquitectura para algun
 >>> model = AutoModelForTokenClassification.from_pretrained("distilbert-base-uncased")
 ```
 
-Generalmente recomendamos utilizar las clases `AutoTokenizer` y `AutoModelFor` para cargar instancias preentrenadas de modelos. Ésto asegurará que cargues la arquitectura correcta en cada ocasión. En el siguiente [tutorial](preprocessing), aprende a usar tu tokenizador recién cargado, el extractor de características y el procesador para preprocesar un dataset para fine-tuning.
+Generalmente recomendamos utilizar las clases `AutoTokenizer` y `AutoModelFor` para cargar instancias pre-entrenadas de modelos. Ésto asegurará que cargues la arquitectura correcta en cada ocasión. En el siguiente [tutorial](preprocessing), aprende a usar tu tokenizador recién cargado, el extractor de características y el procesador para preprocesar un dataset para fine-tuning.
 </pt>
 <tf>
-Finalmente, la clase `TFAutoModelFor` te permite cargar tu modelo preentrenado para una tarea dada (revisa [aquí](model_doc/auto) para conocer la lista completa de tareas disponibles). Por ejemplo, carga un modelo para clasificación de secuencias con [`TFAutoModelForSequenceClassification.from_pretrained`]:
+Finalmente, la clase `TFAutoModelFor` te permite cargar tu modelo pre-entrenado para una tarea dada (revisa [aquí](model_doc/auto) para conocer la lista completa de tareas disponibles). Por ejemplo, carga un modelo para clasificación de secuencias con [`TFAutoModelForSequenceClassification.from_pretrained`]:
 
 ```py
 >>> from transformers import TFAutoModelForSequenceClassification
@@ -106,7 +106,7 @@ Finalmente, la clase `TFAutoModelFor` te permite cargar tu modelo preentrenado p
 >>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
 ```
 
-Reutilice fácilmente el mismo checkpoint para cargar una aquitectura para alguna tarea diferente:
+Reutiliza fácilmente el mismo checkpoint para cargar una aquitectura para alguna tarea diferente:
 
 ```py
 >>> from transformers import TFAutoModelForTokenClassification
@@ -114,6 +114,6 @@ Reutilice fácilmente el mismo checkpoint para cargar una aquitectura para algun
 >>> model = TFAutoModelForTokenClassification.from_pretrained("distilbert-base-uncased")
 ```
 
-Generalmente recomendamos utilizar las clases `AutoTokenizer` y `TFAutoModelFor` para cargar instancias de modelos preentrenados. Ésto asegurará que cargues la arquitectura correcta cada vez. En el siguiente [tutorial](preprocessing), aprende a usar tu tokenizador recién cargado, el extractor de características y el procesador para preprocesar un dataset para fine-tuning.
+Generalmente recomendamos utilizar las clases `AutoTokenizer` y `TFAutoModelFor` para cargar instancias de modelos pre-entrenados. Ésto asegurará que cargues la arquitectura correcta cada vez. En el siguiente [tutorial](preprocessing), aprende a usar tu tokenizador recién cargado, el extractor de características y el procesador para preprocesar un dataset para fine-tuning.
 </tf>
 </frameworkcontent>
