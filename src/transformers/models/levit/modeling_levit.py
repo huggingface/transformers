@@ -443,9 +443,8 @@ class LevitEncoder(nn.Module):
 
         self.stages = nn.ModuleList(self.stages)
 
-    def forward(self, embeddings, output_hidden_states=False, return_dict=True):
+    def forward(self, hidden_state, output_hidden_states=False, return_dict=True):
         all_hidden_states = () if output_hidden_states else None
-        hidden_state = embeddings
 
         for stage in self.stages:
             if output_hidden_states:
