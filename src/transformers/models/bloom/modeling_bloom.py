@@ -765,7 +765,6 @@ class BloomModel(BloomPreTrainedModel):
             current_sequence_length += past_key_values[0][0].shape[1]
         alibi = build_alibi_tensor(current_sequence_length, self.n_head, hidden_states.dtype)
 
-
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
 
             if output_hidden_states:
