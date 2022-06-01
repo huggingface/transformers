@@ -366,7 +366,7 @@ class LevitStage(nn.Module):
         self.layers = []
         self.config = config
         self.resolution_in = resolution_in
-        # resolution_in is the intial resolution, resoloution_out is final resolution after downsampling
+        # resolution_in is the intial resolution, resolution_out is final resolution after downsampling
         for _ in range(depths):
             self.layers.append(
                 LevitResidualLayer(
