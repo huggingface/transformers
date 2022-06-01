@@ -275,6 +275,7 @@ class FlaxOPTEmbeddingsTest(unittest.TestCase):
         logits = model(inputs.input_ids, attention_mask=inputs.attention_mask)[0].mean(axis=-1)
         self.assertTrue(jnp.allclose(logits, logits_meta, atol=1e-4))
 
+
 @require_flax
 @slow
 class FlaxOPTGenerationTest(unittest.TestCase):
