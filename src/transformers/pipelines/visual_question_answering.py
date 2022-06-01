@@ -22,7 +22,7 @@ class VisualQuestionAnsweringPipeline(Pipeline):
     available in PyTorch.
 
     This visual question answering pipeline can currently be loaded from [`pipeline`] using the following task
-    identifier: `"visual-question-answering"`.
+    identifiers: `"visual-question-answering", "vqa"`.
 
     The models that this pipeline can use are models that have been fine-tuned on a visual question answering task.
     TODO: point to [huggingface.co/models](https://huggingface.co/models?filter=table-question-answering) after the
