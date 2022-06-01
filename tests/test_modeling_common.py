@@ -738,17 +738,32 @@ class ModelTesterMixin:
                 if model.config.is_encoder_decoder:
                     model.config.use_cache = False  # FSTM still requires this hack -> FSTM should probably be refactored similar to BART afterward
                     labels = inputs.get("labels", None)
-                    input_names = ["input_ids", "attention_mask", "decoder_input_ids", "decoder_attention_mask"]
+                    input_names = [
+                        "input_ids",
+                        "attention_mask",
+                        "decoder_input_ids",
+                        "decoder_attention_mask",
+                        "input_features",
+                    ]
                     if labels is not None:
                         input_names.append("labels")
+
                     filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
+                    input_names = list(filtered_inputs.keys())
 
                     model_output = model(**filtered_inputs)
 
                     traced_model = symbolic_trace(model, input_names)
                     traced_output = traced_model(**filtered_inputs)
                 else:
-                    input_names = ["input_ids", "attention_mask", "token_type_ids", "pixel_values"]
+                    input_names = [
+                        "input_ids",
+                        "attention_mask",
+                        "token_type_ids",
+                        "pixel_values",
+                        "bbox",
+                        "input_features",
+                    ]
 
                     labels = inputs.get("labels", None)
                     start_positions = inputs.get("start_positions", None)
@@ -761,7 +776,7 @@ class ModelTesterMixin:
                         input_names.append("end_positions")
 
                     filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
-                    input_names = filtered_inputs.keys()
+                    input_names = list(filtered_inputs.keys())
 
                     model_output = model(**filtered_inputs)
 
@@ -2198,6 +2213,42 @@ class ModelTesterMixin:
                 self.assertEqual(param.device, torch.device("meta"))
             else:
                 self.assertEqual(param.device, torch.device(param_device))
+
+    @require_accelerate
+    @require_torch_gpu
+    def test_disk_offload(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        if isinstance(getattr(config, "num_hidden_layers", None), int) and config.num_hidden_layers < 5:
+            config.num_hidden_layers = 5
+
+        for model_class in self.all_model_classes:
+            if model_class._no_split_modules is None:
+                continue
+
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config).eval()
+            model = model.to(torch_device)
+            base_output = model(**inputs_dict)
+
+            model_size = compute_module_sizes(model)[""]
+            # We test several splits of sizes to make sure it works.
+            max_size = int(0.4 * model_size)
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model.cpu().save_pretrained(tmp_dir)
+
+                max_memory = {0: max_size, "cpu": max_size}
+                with self.assertRaises(ValueError):
+                    # This errors out cause it's missing an offload folder
+                    new_model = model_class.from_pretrained(tmp_dir, device_map="auto", max_memory=max_memory)
+
+                new_model = model_class.from_pretrained(
+                    tmp_dir, device_map="auto", max_memory=max_memory, offload_folder=tmp_dir
+                )
+
+                self.check_device_map_is_respected(new_model, new_model.hf_device_map)
+                new_output = new_model(**inputs_dict)
+
+                self.assertTrue(torch.allclose(base_output[0], new_output[0]))
 
     @require_accelerate
     @require_torch_gpu
