@@ -132,7 +132,6 @@ class MobileViTConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         qkv_bias=True,
-        is_encoder_decoder=False,
         aspp_out_channels=256,
         atrous_rates=[6, 12, 18],
         aspp_dropout_prob=0.1,
