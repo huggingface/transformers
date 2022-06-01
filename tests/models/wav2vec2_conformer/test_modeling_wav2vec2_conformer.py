@@ -581,6 +581,10 @@ class Wav2Vec2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
             module.weight_v.data.fill_(3)
         if hasattr(module, "bias") and module.bias is not None:
             module.bias.data.fill_(3)
+        if hasattr(module, "pos_bias_u") and module.pos_bias_u is not None:
+            module.pos_bias_u.data.fill_(3)
+        if hasattr(module, "pos_bias_v") and module.pos_bias_v is not None:
+            module.pos_bias_v.data.fill_(3)
         if hasattr(module, "codevectors") and module.codevectors is not None:
             module.codevectors.data.fill_(3)
         if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
