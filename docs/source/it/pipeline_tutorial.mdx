@@ -24,11 +24,11 @@ Dai un'occhiata alla documentazione di [`pipeline`] per una lista completa dei c
 
 </Tip>
 
-## Pipeline usage
+## Utilizzo della Pipeline
 
-While each task has an associated [`pipeline`], it is simpler to use the general [`pipeline`] abstraction which contains all the specific task pipelines. The [`pipeline`] automatically loads a default model and tokenizer capable of inference for your task. 
+Nonostante ogni compito abbia una [`pipeline`] associata, è più semplice utilizzare l'astrazione generica della [`pipeline`] che contiene tutte quelle specifiche per ogni mansione. La [`pipeline`] carica automaticamente un modello predefinito e un tokenizer in grado di fare inferenza per il tuo compito. 
 
-1. Start by creating a [`pipeline`] and specify an inference task:
+1. Inizia creando una [`pipeline`] e specificando il compito su cui fare inferenza:
 
 ```py
 >>> from transformers import pipeline
@@ -36,7 +36,7 @@ While each task has an associated [`pipeline`], it is simpler to use the general
 >>> generator = pipeline(task="text-generation")
 ```
 
-2. Pass your input text to the [`pipeline`]:
+2. Inserisci il testo in input nella [`pipeline`]:
 
 ```py
 >>> generator(
@@ -45,7 +45,7 @@ While each task has an associated [`pipeline`], it is simpler to use the general
 [{'generated_text': 'Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone, Seven for the Iron-priests at the door to the east, and thirteen for the Lord Kings at the end of the mountain'}]
 ```
 
-If you have more than one input, pass your input as a list:
+Se hai più di un input, inseriscilo in una lista:
 
 ```py
 >>> generator(
@@ -56,7 +56,7 @@ If you have more than one input, pass your input as a list:
 ... )  # doctest: +SKIP
 ```
 
-Any additional parameters for your task can also be included in the [`pipeline`]. The `text-generation` task has a [`~generation_utils.GenerationMixin.generate`] method with several parameters for controlling the output. For example, if you want to generate more than one output, set the `num_return_sequences` parameter:
+Qualsiasi parametro addizionale per il tuo compito può essere incluso nella [`pipeline`]. La mansione `text-generation` ha un [`~generation_utils.GenerationMixin.generate`] metodo con diversi parametri per controllare l'output. Ad esempio, se desideri generare più di un output, utilizza il parametro `num_return_sequences`:
 
 ```py
 >>> generator(
@@ -65,9 +65,9 @@ Any additional parameters for your task can also be included in the [`pipeline`]
 ... )  # doctest: +SKIP
 ```
 
-### Choose a model and tokenizer
+### Scegliere modello e tokenizer
 
-The [`pipeline`] accepts any model from the [Model Hub](https://huggingface.co/models). There are tags on the Model Hub that allow you to filter for a model you'd like to use for your task. Once you've picked an appropriate model, load it with the corresponding `AutoModelFor` and [`AutoTokenizer'] class. For example, load the [`AutoModelForCausalLM`] class for a causal language modeling task:
+La [`pipeline`] accetta qualsiasi modello dal [Model Hub](https://huggingface.co/models). Ci sono tag nel Model Hub che consentono di filtrare i modelli per attività. Una volta che avrai scelto il modello appropriato, caricalo usando la corrispondente classe `AutoModelFor` e [`AutoTokenizer']. Ad esempio, carica la classe [`AutoModelForCausalLM`] per un compito di causal language modeling:
 
 ```py
 >>> from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -76,7 +76,7 @@ The [`pipeline`] accepts any model from the [Model Hub](https://huggingface.co/m
 >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
 ```
 
-Create a [`pipeline`] for your task, and specify the model and tokenizer you've loaded:
+Crea una [`pipeline`] per il tuo compito, specificando il modello e il tokenizer che hai caricato:
 
 ```py
 >>> from transformers import pipeline
@@ -84,7 +84,7 @@ Create a [`pipeline`] for your task, and specify the model and tokenizer you've 
 >>> generator = pipeline(task="text-generation", model=model, tokenizer=tokenizer)
 ```
 
-Pass your input text to the [`pipeline`] to generate some text:
+Inserisci il testo di input nella [`pipeline`] per generare del testo:
 
 ```py
 >>> generator(
@@ -95,9 +95,9 @@ Pass your input text to the [`pipeline`] to generate some text:
 
 ## Audio pipeline
 
-The flexibility of the [`pipeline`] means it can also be extended to audio tasks.
+La flessibilità della [`pipeline`] fa si che possa essere estesa ad attività sugli audio.
 
-For example, let's classify the emotion in this audio clip:
+Per esempio, classifichiamo le emozioni in questo clip audio:
 
 ```py
 >>> from datasets import load_dataset
@@ -108,7 +108,7 @@ For example, let's classify the emotion in this audio clip:
 >>> audio_file = ds[0]["audio"]["path"]
 ```
 
-Find an [audio classification](https://huggingface.co/models?pipeline_tag=audio-classification) model on the Model Hub for emotion recognition and load it in the [`pipeline`]:
+Trova un [audio classification](https://huggingface.co/models?pipeline_tag=audio-classification) modello per eseguire emotion recognition sul Model Hub e caricalo nella [`pipeline`]:
 
 ```py
 >>> from transformers import pipeline
@@ -118,7 +118,7 @@ Find an [audio classification](https://huggingface.co/models?pipeline_tag=audio-
 ... )
 ```
 
-Pass the audio file to the [`pipeline`]:
+Inserisci il file audio nella [`pipeline`]:
 
 ```py
 >>> preds = audio_classifier(audio_file)
@@ -129,9 +129,9 @@ Pass the audio file to the [`pipeline`]:
 
 ## Vision pipeline
 
-Finally, using a [`pipeline`] for vision tasks is practically identical.
+Infine, usare la [`pipeline`] per le attività sulle immagini è praticamente la stessa cosa.
 
-Specify your vision task and pass your image to the classifier. The imaage can be a link or a local path to the image. For example, what species of cat is shown below?
+Specifica la tua attività e inserisci l'immagine nel classificatore. L'immagine può essere sia un link che un percorso sul tuo pc in locale. Per esempio, quale specie di gatto è raffigurata qui sotto?
 
 ![pipeline-cat-chonk](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg)
 
