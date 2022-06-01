@@ -870,7 +870,7 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
 
     def patchify(self, imgs):
         """
-        imgs: (N, num_channels, H, W) x: (N, L, patch_size**2 * num_channels)
+        imgs: (batch_size, num_channels, height, width)
         """
         p = self.vit.embeddings.patch_embeddings.patch_size[0]
         assert imgs.shape[2] == imgs.shape[3] and imgs.shape[2] % p == 0
