@@ -31,7 +31,6 @@ from .test_pipelines_common import ANY, PipelineTestCaseMeta
 if is_vision_available():
     from PIL import Image
 else:
-    print("here")
 
     class Image:
         @staticmethod
@@ -46,7 +45,7 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeline
     model_mapping = MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING
 
     def get_test_pipeline(self, model, tokenizer, feature_extractor):
-        vqa_pipeline = pipeline("visual-question-answering", model="sijunhe/tiny-vilt-random-vqa")
+        vqa_pipeline = pipeline("visual-question-answering", model="hf-internal-testing/tiny-vilt-random-vqa")
         examples = [
             {
                 "image": Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
@@ -71,7 +70,7 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeline
 
     @require_torch
     def test_small_model_pt(self):
-        vqa_pipeline = pipeline("visual-question-answering", model="sijunhe/tiny-vilt-random-vqa")
+        vqa_pipeline = pipeline("visual-question-answering", model="hf-internal-testing/tiny-vilt-random-vqa")
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
         question = "How many cats are there?"
 

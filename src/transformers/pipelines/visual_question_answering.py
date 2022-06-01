@@ -75,7 +75,7 @@ class VisualQuestionAnsweringPipeline(Pipeline):
             - **score** (`int`) -- The score attributed by the model for that label.
         """
         if isinstance(image, (Image.Image, str)) and isinstance(question, str):
-            inputs_ = {"image": image, "question": question}
+            inputs = {"image": image, "question": question}
         else:
             """
             Supports the following format
@@ -83,8 +83,8 @@ class VisualQuestionAnsweringPipeline(Pipeline):
             - [{"image": image, "question": question}]
             - Generator and datasets
             """
-            inputs_ = image
-        results = super().__call__(inputs_, **kwargs)
+            inputs = image
+        results = super().__call__(inputs, **kwargs)
         return results
 
     def preprocess(self, inputs, padding=False, truncation=False):
