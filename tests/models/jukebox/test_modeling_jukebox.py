@@ -544,7 +544,7 @@ class JukeboxModelTest(unittest.TestCase):
         self.assertTrue(torch.allclose(zs[0][0][0:50], top_50_expected_zs.long(), atol=1e-4))
 
     def test_gpu_sampling(self):
-        model = JukeboxModel.from_pretrained("ArthurZ/jukebox-1b-lyrics").eval().to("cuda")
+        model = JukeboxModel.from_pretrained("ArthurZ/jukebox-1b-lyrics-local").eval() #.to("cuda")
 
         # model.priors[2].sample(1, y=torch.Tensor([[44100.0, 0, 44100.0] + 386 * [0]]).long().to("cuda"), chunk_size=32)
 
@@ -562,20 +562,24 @@ class JukeboxModelTest(unittest.TestCase):
         ]
         model.config.hop_fraction = [0.125, 0.5, 0.5]
         model.config.n_samples = 1
-
+        model.config.sample_length = 2*model.config.sr #32768
+        
+        model.config.sample_length_in_seconds = 2
+        model.config.total_sample_length_in_seconds = 180
+        
         tokens = tokenizer(
             "Alan Jackson",
             "rock",
             "old town road",
-            total_length=model.config.sample_length_in_seconds * model.config.sr,
-            sample_length=32768,
+            total_length=model.config.total_sample_length_in_seconds * model.config.sr,
+            sample_length=20*model.config.sr,#32768, # 256 tokens from level 0, as row_to_tokens is 128
             offset=0,
             duration=1,
         )
 
         inputs, _ = tokens["input_ids"], tokens["attention_masks"]
         ys = np.array([[inputs]] * 3, dtype=np.int64)
-        ys = torch.stack([torch.from_numpy(y) for y in ys], dim=0).to("cuda").long()
+        ys = torch.stack([torch.from_numpy(y) for y in ys], dim=0).long() # .to("cuda")
 
         start = timeit.default_timer()
         # import cProfile as profile
@@ -583,7 +587,6 @@ class JukeboxModelTest(unittest.TestCase):
         zs = model.ancestral_sample(ys, sampling_kwargs, model.config)
         print(f"time to sample : {timeit.default_timer() - start}")
 
-        # sample = model.priors[2].sample(1, y=torch.Tensor([[44100.0, 0, 44100.0] + 386 * [0]]).long(), chunk_size=32)
 if __name__ == "__main__":
     tester = JukeboxModelTest()
     tester.test_gpu_sampling()

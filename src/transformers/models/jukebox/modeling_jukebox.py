@@ -2076,7 +2076,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
             assert x_cond is None
             x_cond = torch.zeros((N, 1, self.width), dtype=torch.float).to(
                 "cuda" if torch.cuda.is_available() else "cpu"
-            )  # .cuda()
+            )
 
         with torch.no_grad():
             xs, x = [], None
@@ -2359,7 +2359,7 @@ class MusicTokenConditioner(nn.Module):
         self.x_emb = nn.Embedding(bins, out_width)
         nn.init.normal_(self.x_emb.weight, std=0.02 * init_scale)
 
-        # MusicTokenConditioner
+        # MusicTokenConditioner, takes as input either uper level tokens or raw audio? #TODO check that
         self.cond = DecoderConvBock(
             self.width, self.width, down_t, stride_t, **block_kwargs, zero_out=zero_out, res_scale=res_scale
         )
@@ -2539,8 +2539,9 @@ class LabelConditioner(nn.Module):
 class JukeboxPrior(nn.Module):
     """
     Model the prior on vq codes conditioned on timing, artist, genre, lyrics and codes from levels above. To condition
-    on the timing, genre and artist, we use the LabelConditioner class To condition on the codes from the level above,
-    we use the MusicTokenConditioner class To condition on lyrics, we allow two types of priors:
+    on the timing, genre and artist, we use the LabelConditioner class 
+    To condition on the codes from the level above, we use the MusicTokenConditioner class 
+    To condition on lyrics, we allow two types of priors:
     - Separate Encoder Decoder: This is the usual encoder-decoder style transformer. The encoder transformer
       autoregressively
     models the lyrics, and we use its last layer to produce keys/values that are attened to by the decoder transformer
@@ -3306,7 +3307,6 @@ class JukeboxModel(JukeboxPreTrainedModel):
         for level in reversed(sample_levels):
             prior = self.priors[level]
             prior = prior.to(zs[0].device)
-            # prior.cuda()
             empty_cache()
 
             # Set correct total_length, hop_length, labels and sampling_kwargs for level
