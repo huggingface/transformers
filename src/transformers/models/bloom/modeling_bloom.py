@@ -470,17 +470,12 @@ class BloomBlock(nn.Module):
         head_mask=None,
         use_cache=False,
         output_attentions=False,
+        alibi=None,
     ):
         # hidden_states: [batch_size, seq_length, hidden_size]
 
         # Layer norm at the beginning of the transformer layer.
         layernorm_output = self.input_layernorm(hidden_states)
-
-        # Compute alibi tensor
-        current_sequence_length = hidden_states.shape[1]
-        if layer_past is not None:
-            current_sequence_length += layer_past[0].shape[1]
-        alibi = build_alibi_tensor(current_sequence_length, self.n_head, layernorm_output.dtype)
 
         # Self attention.
         attn_outputs, attention_bias = self.self_attention(
@@ -664,6 +659,7 @@ class BloomModel(BloomPreTrainedModel):
         super().__init__(config)
 
         self.embed_dim = config.hidden_size
+        self.n_head = config.n_head
 
         # Embedding + LN Embedding
         self.word_embeddings = nn.Embedding(config.vocab_size, self.embed_dim)
@@ -762,6 +758,14 @@ class BloomModel(BloomPreTrainedModel):
         presents = () if use_cache else None
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
+
+        # Compute alibi tensor
+        current_sequence_length = hidden_states.shape[1]
+        if past_key_values[0] is not None:
+            current_sequence_length += past_key_values[0][0].shape[1]
+        alibi = build_alibi_tensor(current_sequence_length, self.n_head, hidden_states.dtype)
+
+
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
 
             if output_hidden_states:
@@ -778,7 +782,7 @@ class BloomModel(BloomPreTrainedModel):
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
                         # None for past_key_value
-                        return module(*inputs, use_cache, output_attentions)
+                        return module(*inputs, use_cache, output_attentions, alibi)
 
                     return custom_forward
 
@@ -797,6 +801,7 @@ class BloomModel(BloomPreTrainedModel):
                     head_mask=head_mask[i],
                     use_cache=use_cache,
                     output_attentions=output_attentions,
+                    alibi=alibi,
                 )
 
             hidden_states = outputs[0]
