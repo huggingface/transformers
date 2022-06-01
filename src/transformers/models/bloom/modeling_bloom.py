@@ -754,7 +754,7 @@ class BloomModel(BloomPreTrainedModel):
 
         if token_type_ids is not None:
             token_type_embeds = self.word_embeddings(token_type_ids)
-            token_type_embeds = token_type_embeds.transpose(0, 1).contiguous()
+            token_type_embeds = token_type_embeds.contiguous()
             hidden_states = hidden_states + token_type_embeds
 
         output_shape = input_shape + (hidden_states.size(-1),)
