@@ -41,15 +41,15 @@ _CONFIG_FOR_DOC = "LevitConfig"
 _FEAT_EXTRACTOR_FOR_DOC = "LevitFeatureExtractor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "anugunj/levit-128S"
+_CHECKPOINT_FOR_DOC = "facebook/levit-128S"
 _EXPECTED_OUTPUT_SHAPE = [1, 16, 384]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "anugunj/levit-128S"
+_IMAGE_CLASS_CHECKPOINT = "facebook/levit-128S"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "anugunj/levit-128S",
+    "facebook/levit-128S",
     # See all LeViT models at https://huggingface.co/models?filter=levit
 ]
 

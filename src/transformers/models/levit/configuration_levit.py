@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "anugunj/levit-128S": "https://huggingface.co/anugunj/levit-128S/resolve/main/config.json",
+    "facebook/levit-128S": "https://huggingface.co/facebook/levit-128S/resolve/main/config.json",
     # See all LeViT models at https://huggingface.co/models?filter=levit
 }
 

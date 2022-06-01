@@ -78,7 +78,7 @@ class LevitFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
         self.size = size
         self.resample = resample
         self.do_center_crop = do_center_crop
-        self.do_normalize = do_normalize 
+        self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
 
