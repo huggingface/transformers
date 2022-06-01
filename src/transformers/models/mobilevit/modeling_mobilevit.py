@@ -384,12 +384,7 @@ class MobileViTLayer(nn.Module):
 
         self.layernorm = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
 
-        self.conv_proj = MobileViTConvLayer(
-            config,
-            in_channels=hidden_size,
-            out_channels=in_channels,
-            kernel_size=1,
-        )
+        self.conv_proj = MobileViTConvLayer(config, in_channels=hidden_size, out_channels=in_channels, kernel_size=1)
 
         self.fusion = MobileViTConvLayer(
             config,
