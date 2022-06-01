@@ -18,7 +18,7 @@ import datetime
 import unittest
 
 from transformers import CodeGenConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, tooslow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_generation_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -394,14 +394,11 @@ class CodeGenModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_forward_and_backwards(*config_and_inputs, gradient_checkpointing=True)
 
-    @tooslow
+    @slow
     def test_batch_generation(self):
-        # Marked as @tooslow due to GPU OOM
-        model = CodeGenForCausalLM.from_pretrained(
-            "Salesforce/codegen-2B-mono", revision="float16", torch_dtype=torch.float16
-        )
+        tokenizer = AutoTokenizer.from_pretrained("Salesforce/codegen-350M-mono")
+        model = CodeGenForCausalLM.from_pretrained("Salesforce/codegen-350M-mono")
         model.to(torch_device)
-        tokenizer = AutoTokenizer.from_pretrained("Salesforce/codegen-2B-mono", revision="float16")
 
         tokenizer.padding_side = "left"
 
@@ -410,10 +407,7 @@ class CodeGenModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         model.config.pad_token_id = model.config.eos_token_id
 
         # use different length sentences to test batching
-        sentences = [
-            "Hello, my dog is a little",
-            "Today, I",
-        ]
+        sentences = ["def hellow_world():", "def greet(name):"]
 
         inputs = tokenizer(sentences, return_tensors="pt", padding=True)
         input_ids = inputs["input_ids"].to(torch_device)
@@ -449,8 +443,8 @@ class CodeGenModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
 
         expected_output_sentence = [
-            "Hello, my dog is a little over a year old and has been diagnosed with a heart murmur",
-            "Today, I’m going to talk about the most important thing in the",
+            'def hellow_world():\n    print("Hello World")\n\nhellow_world()',
+            '<|endoftext|>def greet(name):\n    print(f"Hello {name}")\n\ng',
         ]
         self.assertListEqual(expected_output_sentence, batch_out_sentence)
         self.assertTrue(batch_out_sentence_tt != batch_out_sentence)  # token_type_ids should change output
@@ -459,7 +453,7 @@ class CodeGenModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
     @slow
     def test_model_from_pretrained(self):
         for model_name in CODEGEN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = CodeGenModel.from_pretrained(model_name, revision="float16", torch_dtype=torch.float16)
+            model = CodeGenModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
