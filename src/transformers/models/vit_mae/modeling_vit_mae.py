@@ -896,7 +896,8 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
 
     def forward_loss(self, imgs, pred, mask):
         """
-        imgs: [N, num_channels, H, W] pred: [N, L, p*p* num_channels] mask: [N, L], 0 is keep, 1 is remove,
+        imgs: [batch_size, num_channels, height, width] pred: [batch_size, seq_length, patch_size**2 * num_channels]
+        mask: [batch_size, seq_length], 0 is keep, 1 is remove,
         """
         target = self.patchify(imgs)
         if self.config.norm_pix_loss:

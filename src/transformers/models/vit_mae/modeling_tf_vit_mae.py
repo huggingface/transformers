@@ -1005,7 +1005,7 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
     def forward_loss(self, imgs, pred, mask):
         """
         imgs: [batch_size, height, width, num_channels] pred: [batch_size, num_patches, patch_size**2 * num_channels]
-        mask: [N, L], 0 is keep, 1 is remove,
+        mask: [batch_size, seq_length], 0 is keep, 1 is remove,
         """
         target = self.patchify(imgs)
         if self.config.norm_pix_loss:
