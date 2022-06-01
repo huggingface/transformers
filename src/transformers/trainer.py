@@ -491,9 +491,7 @@ class Trainer:
         if is_sagemaker_mp_enabled():
             # BF16 + model parallelism in SageMaker: currently not supported, raise an error
             if args.bf16:
-                raise ValueError(
-                    "SageMaker Model Parallelism does not support BF16 yet. Please use FP16 instead "
-                )
+                raise ValueError("SageMaker Model Parallelism does not support BF16 yet. Please use FP16 instead ")
             # When there's mismatch between SMP config and trainer argument, use SMP config as truth
             if args.fp16 != smp.state.cfg.fp16:
                 logger.warning(
@@ -520,7 +518,9 @@ class Trainer:
             logger.info(f"Using {args.half_precision_backend} half precision backend")
 
         self.do_grad_scaling = False
-        if (args.fp16 or args.bf16) and not (args.deepspeed or is_sagemaker_mp_enabled()):  # deepspeed and SageMaker Model Parallel manage their own half precision
+        if (args.fp16 or args.bf16) and not (
+            args.deepspeed or is_sagemaker_mp_enabled()
+        ):  # deepspeed and SageMaker Model Parallel manage their own half precision
             if args.half_precision_backend == "amp":
                 self.use_amp = True
                 self.amp_dtype = torch.float16 if args.fp16 else torch.bfloat16
@@ -922,7 +922,10 @@ class Trainer:
         `create_scheduler`) in a subclass.
         """
         self.create_optimizer()
-        self.create_scheduler(num_training_steps=num_training_steps, optimizer=self.optimizer.optimizer if is_sagemaker_mp_enabled() and smp.state.cfg.fp16 else self.optimizer)
+        self.create_scheduler(
+            num_training_steps=num_training_steps,
+            optimizer=self.optimizer.optimizer if is_sagemaker_mp_enabled() and smp.state.cfg.fp16 else self.optimizer,
+        )
 
     def create_optimizer(self):
         """
@@ -2024,7 +2027,9 @@ class Trainer:
                 if is_sagemaker_mp_enabled():
 
                     def opt_load_hook(mod, opt):
-                        opt.load_state_dict(smp.load(os.path.join(checkpoint, OPTIMIZER_NAME), partial=True), gather_if_shard=False)
+                        opt.load_state_dict(
+                            smp.load(os.path.join(checkpoint, OPTIMIZER_NAME), partial=True), gather_if_shard=False
+                        )
 
                     self.model_wrapped.register_post_step_hook(opt_load_hook)
                 else:
