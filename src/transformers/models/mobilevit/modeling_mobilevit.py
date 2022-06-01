@@ -387,10 +387,7 @@ class MobileViTLayer(nn.Module):
         self.conv_proj = MobileViTConvLayer(config, in_channels=hidden_size, out_channels=in_channels, kernel_size=1)
 
         self.fusion = MobileViTConvLayer(
-            config,
-            in_channels=2 * in_channels,
-            out_channels=in_channels,
-            kernel_size=config.conv_kernel_size,
+            config, in_channels=2 * in_channels, out_channels=in_channels, kernel_size=config.conv_kernel_size
         )
 
     def unfolding(self, features: torch.Tensor) -> Tuple[torch.Tensor, Dict]:
