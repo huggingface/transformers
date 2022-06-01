@@ -261,8 +261,8 @@ class ExamplesTests(TestCasePlus):
         with patch.object(sys, "argv", testargs):
             run_squad.main()
             result = get_results(tmp_dir)
-            self.assertGreaterEqual(result["eval_f1"], 28)
-            self.assertGreaterEqual(result["eval_exact"], 28)
+            self.assertGreaterEqual(result["eval_f1"], 30)
+            self.assertGreaterEqual(result["eval_exact"], 30)
 
     def test_run_squad_seq2seq(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
