@@ -402,7 +402,9 @@ class MobileViTLayer(nn.Module):
         interpolate = False
         if new_width != orig_width or new_height != orig_height:
             # Note: Padding can be done, but then it needs to be handled in attention function.
-            features = nn.functional.interpolate(features, size=(new_height, new_width), mode="bilinear", align_corners=False)
+            features = nn.functional.interpolate(
+                features, size=(new_height, new_width), mode="bilinear", align_corners=False
+            )
             interpolate = True
 
         # number of patches along width and height
@@ -410,9 +412,11 @@ class MobileViTLayer(nn.Module):
         num_patch_height = new_height // patch_height
         num_patches = num_patch_height * num_patch_width
 
-        # convert from shape (batch_size, channels, orig_height, orig_width) 
+        # convert from shape (batch_size, channels, orig_height, orig_width)
         # to the shape (batch_size * patch_area, num_patches, channels)
-        patches = features.reshape(batch_size * channels * num_patch_height, patch_height, num_patch_width, patch_width)
+        patches = features.reshape(
+            batch_size * channels * num_patch_height, patch_height, num_patch_width, patch_width
+        )
         patches = patches.transpose(1, 2)
         patches = patches.reshape(batch_size, channels, num_patches, patch_area)
         patches = patches.transpose(1, 3)
@@ -443,9 +447,13 @@ class MobileViTLayer(nn.Module):
         # back to shape (batch_size, channels, orig_height, orig_width)
         features = patches.contiguous().view(batch_size, patch_area, num_patches, -1)
         features = features.transpose(1, 3)
-        features = features.reshape(batch_size * channels * num_patch_height, num_patch_width, patch_height, patch_width)
+        features = features.reshape(
+            batch_size * channels * num_patch_height, num_patch_width, patch_height, patch_width
+        )
         features = features.transpose(1, 2)
-        features = features.reshape(batch_size, channels, num_patch_height * patch_height, num_patch_width * patch_width)
+        features = features.reshape(
+            batch_size, channels, num_patch_height * patch_height, num_patch_width * patch_width
+        )
 
         if info_dict["interpolate"]:
             features = nn.functional.interpolate(
