@@ -44,8 +44,8 @@ class LevitFeatureExtractionTester(unittest.TestCase):
         max_resolution=400,
         do_resize=True,
         size=18,
-        do_normalize=True,
         do_center_crop=True,
+        do_normalize=True,
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
     ):
