@@ -460,6 +460,8 @@ def is_in_notebook():
             raise ImportError("console")
         if "VSCODE_PID" in os.environ:
             raise ImportError("vscode")
+        if "DATABRICKS_RUNTIME_VERSION" in os.environ:
+            raise ImportError("databricks")
 
         return importlib.util.find_spec("IPython") is not None
     except (AttributeError, ImportError, KeyError):

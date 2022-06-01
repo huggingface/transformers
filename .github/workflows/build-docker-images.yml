@@ -41,7 +41,6 @@ jobs:
 
   latest-torch-deepspeed-docker:
     name: "Latest PyTorch + DeepSpeed"
-    needs: latest-docker
     runs-on: ubuntu-latest
     steps:
       -
@@ -93,7 +92,6 @@ jobs:
   latest-pytorch:
     name: "Latest PyTorch [dev]"
     runs-on: ubuntu-latest
-    needs: latest-torch-deepspeed-docker
     steps:
       -
         name: Set up Docker Buildx
@@ -118,7 +116,6 @@ jobs:
           tags: huggingface/transformers-pytorch-gpu
 
   latest-tensorflow:
-    needs: latest-pytorch
     name: "Latest TensorFlow [dev]"
     runs-on: ubuntu-latest
     steps:

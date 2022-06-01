@@ -28,8 +28,10 @@ from ..models.mbart import MBartOnnxConfig
 from ..models.mobilebert import MobileBertOnnxConfig
 from ..models.roberta import RobertaOnnxConfig
 from ..models.roformer import RoFormerOnnxConfig
+from ..models.squeezebert import SqueezeBertOnnxConfig
 from ..models.t5 import T5OnnxConfig
 from ..models.vit import ViTOnnxConfig
+from ..models.xlm import XLMOnnxConfig
 from ..models.xlm_roberta import XLMRobertaOnnxConfig
 from ..utils import logging
 from .config import OnnxConfig
@@ -351,11 +353,30 @@ class FeaturesManager:
             "token-classification",
             onnx_config_cls=RoFormerOnnxConfig,
         ),
+        "squeezebert": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "sequence-classification",
+            "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=SqueezeBertOnnxConfig,
+        ),
         "t5": supported_features_mapping(
             "default", "default-with-past", "seq2seq-lm", "seq2seq-lm-with-past", onnx_config_cls=T5OnnxConfig
         ),
         "vit": supported_features_mapping(
             "default", "image-classification", "masked-im", onnx_config_cls=ViTOnnxConfig
+        ),
+        "xlm": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "causal-lm",
+            "sequence-classification",
+            "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=XLMOnnxConfig,
         ),
         "xlm-roberta": supported_features_mapping(
             "default",

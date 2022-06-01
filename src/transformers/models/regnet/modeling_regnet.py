@@ -100,7 +100,7 @@ class RegNetEmbeddings(nn.Module):
 
 
 # Copied from transformers.models.resnet.modeling_resnet.ResNetShortCut with ResNet->RegNet
-class RegNetShortCut(nn.Sequential):
+class RegNetShortCut(nn.Module):
     """
     RegNet shortcut, used to project the residual features to the correct size. If needed, it is also used to
     downsample the input using `stride=2`.
@@ -110,6 +110,11 @@ class RegNetShortCut(nn.Sequential):
         super().__init__()
         self.convolution = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride, bias=False)
         self.normalization = nn.BatchNorm2d(out_channels)
+
+    def forward(self, input: Tensor) -> Tensor:
+        hidden_state = self.convolution(input)
+        hidden_state = self.normalization(hidden_state)
+        return hidden_state
 
 
 class RegNetSELayer(nn.Module):
