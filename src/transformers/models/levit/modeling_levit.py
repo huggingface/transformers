@@ -393,7 +393,7 @@ class LevitStage(nn.Module):
 
 class LevitEncoder(nn.Module):
     """
-    LeViT Encoder Layer consisting of `LevitStage` layers.
+    LeViT Encoder consisting of multiple `LevitStage` stages.
     """
 
     def __init__(self, config):
