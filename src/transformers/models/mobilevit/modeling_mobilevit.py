@@ -169,10 +169,7 @@ class MobileViTInvertedResidual(nn.Module):
         self.use_residual = (stride == 1) and (in_channels == out_channels)
 
         self.expand_1x1 = MobileViTConvLayer(
-            config,
-            in_channels=in_channels,
-            out_channels=expanded_channels,
-            kernel_size=1,
+            config, in_channels=in_channels, out_channels=expanded_channels, kernel_size=1
         )
 
         self.conv_3x3 = MobileViTConvLayer(
