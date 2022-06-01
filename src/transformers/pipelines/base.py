@@ -75,14 +75,19 @@ def _pad(items, key, padding_value, padding_side):
         # Others include `attention_mask` etc...
         shape = items[0][key].shape
         dim = len(shape)
-        if dim == 4:
+        if key == "pixel_values":
             # This is probable image so padding shouldn't be necessary
             # B, C, H, W
             return torch.cat([item[key] for item in items], dim=0)
         max_length = max(item[key].shape[1] for item in items)
+        min_length = min(item[key].shape[1] for item in items)
         dtype = items[0][key].dtype
 
         if dim == 2:
+            if max_length == min_length:
+                # Bypass for `ImageGPT` which doesn't provide a padding value, yet
+                # we can consistently pad since the size should be matching
+                return torch.cat([item[key] for item in items], dim=0)
             tensor = torch.zeros((batch_size, max_length), dtype=dtype) + padding_value
         elif dim == 3:
             tensor = torch.zeros((batch_size, max_length, shape[-1]), dtype=dtype) + padding_value
@@ -146,7 +151,11 @@ def pad_collate_fn(tokenizer, feature_extractor):
         padded = {}
         for key in keys:
             if key in {"input_ids"}:
-                _padding_value = t_padding_value
+                # ImageGPT uses a feature extractor
+                if feature_extractor is not None:
+                    _padding_value = f_padding_value
+                else:
+                    _padding_value = t_padding_value
             elif key in {"input_values", "pixel_values", "input_features"}:
                 _padding_value = f_padding_value
             elif key in {"p_mask", "special_tokens_mask"}:

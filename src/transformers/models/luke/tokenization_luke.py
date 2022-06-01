@@ -1386,6 +1386,6 @@ class LukeTokenizer(RobertaTokenizer):
         )
 
         with open(entity_vocab_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(self.entity_vocab, ensure_ascii=False))
+            f.write(json.dumps(self.entity_vocab, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
         return vocab_file, merge_file, entity_vocab_file

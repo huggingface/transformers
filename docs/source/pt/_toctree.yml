@@ -13,6 +13,10 @@
 - sections:
   - local: fast_tokenizers
     title: Usando os Tokenizers do 🤗 Tokenizers
+  - sections:
+    - local: tasks/sequence_classification
+      title: Classificação de texto
+    title: Fine-tuning para tarefas específicas
   - local: multilingual
     title: Modelos multilinguísticos para inferência
   title: Guias práticos
