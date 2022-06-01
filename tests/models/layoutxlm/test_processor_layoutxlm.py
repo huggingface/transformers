@@ -57,6 +57,7 @@ class LayoutXLMProcessorTest(unittest.TestCase):
         with open(self.feature_extraction_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(feature_extractor_map) + "\n")
 
+        # taken from `test_tokenization_layoutxlm.LayoutXLMTokenizationTest.test_save_pretrained`
         self.tokenizer_pretrained_name = "hf-internal-testing/tiny-random-layoutxlm"
 
     def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
