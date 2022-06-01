@@ -1640,15 +1640,6 @@ else:
             "TrajectoryTransformerPreTrainedModel",
         ]
     )
-    _import_structure["models.longt5"].extend(
-        [
-            "LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "LongT5EncoderModel",
-            "LongT5ForConditionalGeneration",
-            "LongT5Model",
-            "LongT5PreTrainedModel",
-        ]
-    )
     _import_structure["models.transfo_xl"].extend(
         [
             "TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST",

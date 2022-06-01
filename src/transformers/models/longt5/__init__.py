@@ -18,14 +18,19 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import _LazyModule, is_flax_available, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_flax_available, is_torch_available
 
 
 _import_structure = {
     "configuration_longt5": ["LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongT5Config", "LongT5OnnxConfig"],
 }
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_longt5"] = [
         "LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST",
         "LongT5EncoderModel",
@@ -34,7 +39,12 @@ if is_torch_available():
         "LongT5PreTrainedModel",
     ]
 
-if is_flax_available():
+try:
+    if not is_flax_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_flax_longt5"] = [
         "FlaxLongT5ForConditionalGeneration",
         "FlaxLongT5Model",
@@ -45,7 +55,12 @@ if is_flax_available():
 if TYPE_CHECKING:
     from .configuration_longt5 import LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP, LongT5Config, LongT5OnnxConfig
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_longt5 import (
             LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST,
             LongT5EncoderModel,
@@ -54,7 +69,12 @@ if TYPE_CHECKING:
             LongT5PreTrainedModel,
         )
 
-    if is_flax_available():
+    try:
+        if not is_flax_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_flax_longt5 import (
             FlaxLongT5ForConditionalGeneration,
             FlaxLongT5Model,
