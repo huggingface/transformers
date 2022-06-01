@@ -465,37 +465,37 @@ class CodeGenModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
 
 @require_torch
 class CodeGenModelLanguageGenerationTest(unittest.TestCase):
-    @tooslow
+    @slow
     def test_lm_generate_codegen(self):
-        # Marked as @tooslow due to GPU OOM
+        tokenizer = AutoTokenizer.from_pretrained("Salesforce/codegen-350M-mono")
         for checkpointing in [True, False]:
-            model = CodeGenForCausalLM.from_pretrained(
-                "Salesforce/codegen-2B-mono", revision="float16", torch_dtype=torch.float16
-            )
+            model = CodeGenForCausalLM.from_pretrained("Salesforce/codegen-350M-mono")
+
             if checkpointing:
                 model.gradient_checkpointing_enable()
             else:
                 model.gradient_checkpointing_disable()
             model.to(torch_device)
-            input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)  # The dog
-            # fmt: off
-            # The dog is a man's best friend. It is a loyal companion, and it is a friend
-            expected_output_ids = [464, 3290, 318, 257, 582, 338, 1266, 1545, 13, 632, 318, 257, 9112, 15185, 11, 290, 340, 318, 257, 1545]
-            # fmt: on
-            output_ids = model.generate(input_ids, do_sample=False)
-            self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
 
-    @tooslow
+            inputs = tokenizer("def hello_world():", return_tensors="pt").to(torch_device)
+            expected_output = 'def hello_world():\n    print("Hello World")\n\nhello_world()\n\n'
+
+            output_ids = model.generate(**inputs, do_sample=False)
+            output_str = tokenizer.batch_decode(output_ids)[0]
+
+            self.assertEqual(output_str, expected_output)
+
+    @slow
     def test_codegen_sample(self):
-        # Marked as @tooslow due to GPU OOM (issue #13676)
-        tokenizer = AutoTokenizer.from_pretrained("Salesforce/codegen-2B-mono", revision="float16")
-        model = CodeGenForCausalLM.from_pretrained(
-            "Salesforce/codegen-2B-mono", revision="float16", torch_dtype=torch.float16
-        )
+        tokenizer = AutoTokenizer.from_pretrained("Salesforce/codegen-350M-mono")
+        model = CodeGenForCausalLM.from_pretrained("Salesforce/codegen-350M-mono")
         model.to(torch_device)
 
         torch.manual_seed(0)
-        tokenized = tokenizer("Today is a nice day and", return_tensors="pt", return_token_type_ids=True)
+        if torch_device == "cuda":
+            torch.cuda.manual_seed(0)
+
+        tokenized = tokenizer("def hello_world():", return_tensors="pt", return_token_type_ids=True)
         input_ids = tokenized.input_ids.to(torch_device)
         output_ids = model.generate(input_ids, do_sample=True)
         output_str = tokenizer.decode(output_ids[0], skip_special_tokens=True)
@@ -509,11 +509,9 @@ class CodeGenModelLanguageGenerationTest(unittest.TestCase):
         output_seq_tt_strs = tokenizer.batch_decode(output_seq_tt, skip_special_tokens=True)
 
         if torch_device == "cuda":
-            EXPECTED_OUTPUT_STR = (
-                "Today is a nice day and I've already been enjoying it. I walked to work with my wife"
-            )
+            EXPECTED_OUTPUT_STR = 'def hello_world():\n    print("Hello World")\n\n#'
         else:
-            EXPECTED_OUTPUT_STR = "Today is a nice day and one of those days that feels a bit more alive. I am ready"
+            EXPECTED_OUTPUT_STR = "def hello_world():\r\n    print('Hello, World.')\r\n\r\n\r"
 
         self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
         self.assertTrue(
