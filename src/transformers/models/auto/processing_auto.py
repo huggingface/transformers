@@ -40,6 +40,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("clip", "CLIPProcessor"),
         ("flava", "FLAVAProcessor"),
         ("layoutlmv2", "LayoutLMv2Processor"),
+        ("layoutlmv3", "LayoutLMv3Processor"),
         ("layoutxlm", "LayoutXLMProcessor"),
         ("sew", "Wav2Vec2Processor"),
         ("sew-d", "Wav2Vec2Processor"),
@@ -51,6 +52,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("vilt", "ViltProcessor"),
         ("vision-text-dual-encoder", "VisionTextDualEncoderProcessor"),
         ("wav2vec2", "Wav2Vec2Processor"),
+        ("wav2vec2-conformer", "Wav2Vec2Processor"),
         ("wav2vec2_with_lm", "Wav2Vec2ProcessorWithLM"),
         ("wavlm", "Wav2Vec2Processor"),
     ]

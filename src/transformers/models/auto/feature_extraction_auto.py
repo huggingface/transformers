@@ -40,6 +40,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("beit", "BeitFeatureExtractor"),
         ("clip", "CLIPFeatureExtractor"),
         ("convnext", "ConvNextFeatureExtractor"),
+        ("cvt", "ConvNextFeatureExtractor"),
         ("data2vec-audio", "Wav2Vec2FeatureExtractor"),
         ("data2vec-vision", "BeitFeatureExtractor"),
         ("deit", "DeiTFeatureExtractor"),
@@ -49,7 +50,10 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("flava", "FlavaFeatureExtractor"),
         ("glpn", "GLPNFeatureExtractor"),
         ("hubert", "Wav2Vec2FeatureExtractor"),
+        ("imagegpt", "ImageGPTFeatureExtractor"),
         ("layoutlmv2", "LayoutLMv2FeatureExtractor"),
+        ("layoutlmv3", "LayoutLMv3FeatureExtractor"),
+        ("levit", "LevitFeatureExtractor"),
         ("maskformer", "MaskFormerFeatureExtractor"),
         ("perceiver", "PerceiverFeatureExtractor"),
         ("poolformer", "PoolFormerFeatureExtractor"),
@@ -62,6 +66,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("vit", "ViTFeatureExtractor"),
         ("vit_mae", "ViTFeatureExtractor"),
         ("wav2vec2", "Wav2Vec2FeatureExtractor"),
+        ("wav2vec2-conformer", "Wav2Vec2FeatureExtractor"),
         ("yolos", "YolosFeatureExtractor"),
     ]
 )

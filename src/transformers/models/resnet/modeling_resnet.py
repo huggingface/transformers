@@ -52,7 +52,7 @@ RESNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-class ResNetConvLayer(nn.Sequential):
+class ResNetConvLayer(nn.Module):
     def __init__(
         self, in_channels: int, out_channels: int, kernel_size: int = 3, stride: int = 1, activation: str = "relu"
     ):
@@ -63,8 +63,14 @@ class ResNetConvLayer(nn.Sequential):
         self.normalization = nn.BatchNorm2d(out_channels)
         self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
 
+    def forward(self, input: Tensor) -> Tensor:
+        hidden_state = self.convolution(input)
+        hidden_state = self.normalization(hidden_state)
+        hidden_state = self.activation(hidden_state)
+        return hidden_state
 
-class ResNetEmbeddings(nn.Sequential):
+
+class ResNetEmbeddings(nn.Module):
     """
     ResNet Embeddings (stem) composed of a single aggressive convolution.
     """
@@ -76,8 +82,13 @@ class ResNetEmbeddings(nn.Sequential):
         )
         self.pooler = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
+    def forward(self, input: Tensor) -> Tensor:
+        embedding = self.embedder(input)
+        embedding = self.pooler(embedding)
+        return embedding
 
-class ResNetShortCut(nn.Sequential):
+
+class ResNetShortCut(nn.Module):
     """
     ResNet shortcut, used to project the residual features to the correct size. If needed, it is also used to
     downsample the input using `stride=2`.
@@ -87,6 +98,11 @@ class ResNetShortCut(nn.Sequential):
         super().__init__()
         self.convolution = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride, bias=False)
         self.normalization = nn.BatchNorm2d(out_channels)
+
+    def forward(self, input: Tensor) -> Tensor:
+        hidden_state = self.convolution(input)
+        hidden_state = self.normalization(hidden_state)
+        return hidden_state
 
 
 class ResNetBasicLayer(nn.Module):
@@ -148,7 +164,7 @@ class ResNetBottleNeckLayer(nn.Module):
         return hidden_state
 
 
-class ResNetStage(nn.Sequential):
+class ResNetStage(nn.Module):
     """
     A ResNet stage composed by stacked layers.
     """
@@ -165,11 +181,25 @@ class ResNetStage(nn.Sequential):
 
         layer = ResNetBottleNeckLayer if config.layer_type == "bottleneck" else ResNetBasicLayer
 
-        self.layers = nn.Sequential(
+        self.layers = [
             # downsampling is done in the first layer with stride of 2
             layer(in_channels, out_channels, stride=stride, activation=config.hidden_act),
             *[layer(out_channels, out_channels, activation=config.hidden_act) for _ in range(depth - 1)],
-        )
+        ]
+        # Provide backwards compatibility from when the class inherited from nn.Sequential
+        # In nn.Sequential subclasses, the name given to the layer is its index in the sequence.
+        # In nn.Module subclasses they derived from the instance attribute they are assigned to e.g.
+        # self.my_layer_name = Layer()
+        # We can't give instance attributes integer names i.e. self.0 is not permitted and so need to register
+        # the module explicitly
+        for i, layer in enumerate(self.layers):
+            self.add_module(str(i), layer)
+
+    def forward(self, input: Tensor) -> Tensor:
+        hidden_state = input
+        for layer in self.layers:
+            hidden_state = layer(hidden_state)
+        return hidden_state
 
 
 class ResNetEncoder(nn.Module):

@@ -87,6 +87,10 @@ class ModelArguments:
             )
         },
     )
+    ignore_mismatched_sizes: bool = field(
+        default=False,
+        metadata={"help": "Will enable to load a pretrained model whose head dimensions are different."},
+    )
 
 
 @dataclass
@@ -364,6 +368,7 @@ def main():
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
+        ignore_mismatched_sizes=model_args.ignore_mismatched_sizes,
     )
 
     # Tokenizer check: this script requires a fast tokenizer.
