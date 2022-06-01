@@ -50,10 +50,10 @@ class LevitFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
             An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
             `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`. Only has an effect
             if `do_resize` is set to `True`.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether or not to normalize the input with mean and standard deviation.
         do_center_crop (`bool`, *optional*, defaults to `True`):
             Whether or not to center crop the input to `size`.
+        do_normalize (`bool`, *optional*, defaults to `True`):
+            Whether or not to normalize the input with mean and standard deviation.
         image_mean (`List[int]`, defaults to `[0.229, 0.224, 0.225]`):
             The sequence of means for each channel, to be used when normalizing images.
         image_std (`List[int]`, defaults to `[0.485, 0.456, 0.406]`):
