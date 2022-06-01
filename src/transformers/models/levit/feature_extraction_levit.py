@@ -45,8 +45,7 @@ class LevitFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
             Whether to resize the shortest edge of the input to int(256/224 *`size`).
         size (`int` or `Tuple(int)`, *optional*, defaults to 224):
             Resize the input to the given size. If a tuple is provided, it should be (width, height). If only an
-            integer is provided, then shorter side of input will be resized to 'size'. Only works when
-            `default_to_square` is set to `False`.
+            integer is provided, then shorter side of input will be resized to 'size'.
         resample (`int`, *optional*, defaults to `PIL.Image.BICUBIC`):
             An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
             `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`. Only has an effect
