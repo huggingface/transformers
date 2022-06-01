@@ -269,7 +269,7 @@ class FlaxOPTEmbeddingsTest(unittest.TestCase):
                 [6.4783, -1.9913, -10.7926, -2.3336, 1.5092, -0.9974, -6.8213, 1.3477, 1.3477],
             ]
         )
-        self.assertTrue(jnp.allclose(logits, logits_meta, atol=1e-4))
+        self.assertTrue(jnp.allclose(logits, logits_meta, atol=1e-2))
 
         model = jax.jit(model)
         logits = model(inputs.input_ids, attention_mask=inputs.attention_mask)[0].mean(axis=-1)
