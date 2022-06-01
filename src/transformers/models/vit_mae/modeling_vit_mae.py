@@ -883,7 +883,7 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
 
     def unpatchify(self, x):
         """
-        x: (N, L, patch_size**2 * num_channels) imgs: (N, num_channels, H, W)
+        x: (batch_size, seq_length, patch_size**2 * num_channels)
         """
         p = self.vit.embeddings.patch_embeddings.patch_size[0]
         h = w = int(x.shape[1] ** 0.5)
