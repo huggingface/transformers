@@ -67,8 +67,8 @@ class LevitFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
         do_resize=True,
         size=224,
         resample=Image.BICUBIC,
-        do_normalize=True,
         do_center_crop=True,
+        do_normalize=True,
         image_mean=IMAGENET_DEFAULT_MEAN,
         image_std=IMAGENET_DEFAULT_STD,
         **kwargs
