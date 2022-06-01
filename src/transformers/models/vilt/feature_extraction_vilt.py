@@ -29,6 +29,7 @@ from ...image_utils import (
 )
 from ...utils import TensorType, is_torch_available, logging
 
+
 if is_torch_available():
     import torch
 
