@@ -1465,9 +1465,14 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             ones.
         """
         new_lm_head_decoder = old_lm_head_decoder
-        is_input_output_equals = tf.reduce_any(
-            self._get_word_embedding_weight(self.get_input_embeddings()) == old_lm_head_decoder
-        )
+
+        input_embeddings = self.get_input_embeddings()
+        word_embedding = self._get_word_embedding_weight(input_embeddings)
+        is_input_output_equals = False
+        is_shape_equal = word_embedding.shape == old_lm_head_decoder.shape
+        if is_shape_equal:
+            is_input_output_equals = word_embedding == old_lm_head_decoder
+            is_input_output_equals = tf.reduce_any(is_input_output_equals)
 
         if old_lm_head_decoder is not None and not is_input_output_equals:
             old_embedding_dim = shape_list(old_lm_head_decoder)[1]
