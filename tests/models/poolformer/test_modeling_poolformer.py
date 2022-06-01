@@ -142,7 +142,7 @@ class PoolFormerModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="ResNet does not output attentions")
+    @unittest.skip(reason="PoolFormer does not output attentions")
     def test_attention_outputs(self):
         pass
 
