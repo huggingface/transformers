@@ -569,16 +569,42 @@ class JukeboxModelTest(unittest.TestCase):
         model.config.sample_length_in_seconds = 2
         model.config.total_sample_length_in_seconds = 180
         
-        tokens = tokenizer(
-            "Alan Jackson",
-            "rock",
-            "old town road",
+        metas = dict(artist = "Zac Brown Band",
+            genres = "Country",
             total_length=model.config.total_sample_length_in_seconds * model.config.sr,
-            sample_length=2*model.config.sr,#32768, # 256 tokens from level 0, as row_to_tokens is 128
-            offset=0,
+            offset = 0,
+            lyrics = """I met a traveller from an antique land,
+            Who said—“Two vast and trunkless legs of stone
+            Stand in the desert. . . . Near them, on the sand,
+            Half sunk a shattered visage lies, whose frown,
+            And wrinkled lip, and sneer of cold command,
+            Tell that its sculptor well those passions read
+            Which yet survive, stamped on these lifeless things,
+            The hand that mocked them, and the heart that fed;
+            And on the pedestal, these words appear:
+            My name is Ozymandias, King of Kings;
+            Look on my Works, ye Mighty, and despair!
+            Nothing beside remains. Round the decay
+            Of that colossal Wreck, boundless and bare
+            The lone and level sands stretch far away
+            """,
             duration=2,
-        )
+            sample_length=2*model.config.sr,
+            
+            )
+        
+        # tokens = tokenizer(
+        #     "Alan Jackson",
+        #     "rock",
+        #     "old town road",
+        #     total_length=model.config.total_sample_length_in_seconds * model.config.sr,
+        #     sample_length=2*model.config.sr,#32768, # 256 tokens from level 0, as row_to_tokens is 128
+        #     offset=0,
+        #     duration=2,
+        # )
 
+        tokens = tokenizer(**metas)
+        
         inputs, _ = tokens["input_ids"], tokens["attention_masks"]
         ys = np.array([[inputs]] * 3, dtype=np.int64)
         ys = torch.stack([torch.from_numpy(y) for y in ys], dim=0).long() # .to("cuda")
