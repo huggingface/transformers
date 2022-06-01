@@ -22,7 +22,7 @@ import unittest
 import timeout_decorator  # noqa
 
 from transformers import OPTConfig, is_torch_available
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_generation_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -178,6 +178,7 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (OPTModel, OPTForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (OPTForCausalLM,) if is_torch_available() else ()
     is_encoder_decoder = False
+    fx_compatible = True
     test_pruning = False
     test_missing_keys = False
 
@@ -266,25 +267,29 @@ def _long_tensor(tok_lst):
 
 
 @require_torch
-@require_sentencepiece
-@require_tokenizers
 class OPTModelIntegrationTests(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
         model = OPTModel.from_pretrained("facebook/opt-350m").to(torch_device)
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        attention_mask = input_ids.ne(model.config.pad_token_id)
+
         with torch.no_grad():
-            output = model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
+            output = model(input_ids=input_ids).last_hidden_state
+
         expected_shape = torch.Size((1, 11, 512))
         self.assertEqual(output.shape, expected_shape)
+        # expected value works for CPU, as well as GPU (with TF32 disabled)
         expected_slice = torch.tensor(
-            [[-0.2873, -1.9218, -0.3033], [-1.2710, -0.1338, -0.1902], [0.4095, 0.1214, -1.3121]], device=torch_device
+            [
+                [-0.28726277, -1.9241608, -0.3058734],
+                [-1.2737825, -0.13332152, -0.18766522],
+                [0.41159445, 0.1191957, -1.3107123],
+            ],
+            device=torch_device,
         )
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-3))
+        assert_tensors_close(output[0, :3, :3], expected_slice, atol=5e-5)
 
 
-@require_tokenizers
 @require_torch
 @slow
 class OPTEmbeddingsTest(unittest.TestCase):
@@ -329,7 +334,7 @@ class OPTGenerationTest(unittest.TestCase):
     @property
     def prompts(self):
         return [
-            "Today is a beautiful day and I want to",
+            "Today is a beautiful day and I want",
             "In the city of",
             "Paris is the capital of France and",
             "Computers and mobile phones have taken",
@@ -339,7 +344,7 @@ class OPTGenerationTest(unittest.TestCase):
         model_id = "facebook/opt-125m"
 
         EXPECTED_OUTPUTS = [
-            "Today is a beautiful day and I want to thank",
+            "Today is a beautiful day and I want everyone",
             "In the city of Rome Canaver Canaver Canaver Canaver",
             "Paris is the capital of France and Parisdylib",
             "Computers and mobile phones have taken precedence over",
@@ -359,11 +364,52 @@ class OPTGenerationTest(unittest.TestCase):
 
         self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)
 
+    def test_batch_generation(self):
+        model_id = "facebook/opt-350m"
+
+        tokenizer = GPT2Tokenizer.from_pretrained(model_id)
+        model = OPTForCausalLM.from_pretrained(model_id)
+        model.to(torch_device)
+
+        tokenizer.padding_side = "left"
+
+        # use different length sentences to test batching
+        sentences = [
+            "Hello, my dog is a little",
+            "Today, I",
+        ]
+
+        inputs = tokenizer(sentences, return_tensors="pt", padding=True)
+        input_ids = inputs["input_ids"].to(torch_device)
+
+        outputs = model.generate(
+            input_ids=input_ids,
+            attention_mask=inputs["attention_mask"].to(torch_device),
+        )
+
+        inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
+        output_non_padded = model.generate(input_ids=inputs_non_padded)
+
+        num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().cpu().item()
+        inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
+        output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
+
+        batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        non_padded_sentence = tokenizer.decode(output_non_padded[0], skip_special_tokens=True)
+        padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
+
+        expected_output_sentence = [
+            "Hello, my dog is a little bit of a dork.\nI'm a little bit",
+            "Today, I was in the middle of a conversation with a friend about the",
+        ]
+        self.assertListEqual(expected_output_sentence, batch_out_sentence)
+        self.assertListEqual(batch_out_sentence, [non_padded_sentence, padded_sentence])
+
     def test_generation_post_attn_layer_norm(self):
         model_id = "facebook/opt-350m"
 
         EXPECTED_OUTPUTS = [
-            "Today is a beautiful day and I want to share",
+            "Today is a beautiful day and I want to",
             "In the city of San Francisco, the city",
             "Paris is the capital of France and the capital",
             "Computers and mobile phones have taken over the",

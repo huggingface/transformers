@@ -43,7 +43,6 @@ from huggingface_hub import Repository
 from transformers import (
     CONFIG_MAPPING,
     MODEL_MAPPING,
-    AdamW,
     AutoConfig,
     AutoModelForSeq2SeqLM,
     AutoTokenizer,
@@ -185,7 +184,7 @@ def parse_args():
         "--model_name_or_path",
         type=str,
         help="Path to pretrained model or model identifier from huggingface.co/models.",
-        required=True,
+        required=False,
     )
     parser.add_argument(
         "--config_name",
@@ -287,7 +286,17 @@ def parse_args():
     parser.add_argument(
         "--with_tracking",
         action="store_true",
-        help="Whether to load in all available experiment trackers from the environment and use them for logging.",
+        help="Whether to enable experiment trackers for logging.",
+    )
+    parser.add_argument(
+        "--report_to",
+        type=str,
+        default="all",
+        help=(
+            'The integration to report the results and logs to. Supported platforms are `"tensorboard"`,'
+            ' `"wandb"` and `"comet_ml"`. Use `"all"` (default) to report to all integrations.'
+            "Only applicable when `--with_tracking` is passed."
+        ),
     )
     args = parser.parse_args()
 
@@ -310,7 +319,12 @@ def parse_args():
 
 def main():
     args = parse_args()
-
+    # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
+    # If we're using tracking, we also need to initialize it here and it will by default pick up all supported trackers
+    # in the environment
+    accelerator = (
+        Accelerator(log_with=args.report_to, logging_dir=args.output_dir) if args.with_tracking else Accelerator()
+    )
     if args.source_prefix is None and args.model_name_or_path in [
         "t5-small",
         "t5-base",
@@ -322,9 +336,6 @@ def main():
             "You're running a t5 model but didn't provide a source prefix, which is the expected, e.g. with "
             "`--source_prefix 'summarize: ' `"
         )
-    # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
-    # If we're using tracking, we also need to initialize it here and it will pick up all supported trackers in the environment
-    accelerator = Accelerator(log_with="all", logging_dir=args.output_dir) if args.with_tracking else Accelerator()
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
@@ -522,7 +533,7 @@ def main():
             "weight_decay": 0.0,
         },
     ]
-    optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
+    optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
 
     # Scheduler and math around the number of training steps.
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
@@ -555,12 +566,15 @@ def main():
     else:
         checkpointing_steps = None
 
-    # We need to initialize the trackers we use, and also store our configuration
+    # We need to initialize the trackers we use, and also store our configuration.
+    # We initialize the trackers only on main process because `accelerator.log`
+    # only logs on main process and we don't want empty logs/runs on other processes.
     if args.with_tracking:
-        experiment_config = vars(args)
-        # TensorBoard cannot log Enums, need the raw value
-        experiment_config["lr_scheduler_type"] = experiment_config["lr_scheduler_type"].value
-        accelerator.init_trackers("summarization_no_trainer", experiment_config)
+        if accelerator.is_main_process:
+            experiment_config = vars(args)
+            # TensorBoard cannot log Enums, need the raw value
+            experiment_config["lr_scheduler_type"] = experiment_config["lr_scheduler_type"].value
+            accelerator.init_trackers("summarization_no_trainer", experiment_config)
 
     # Metric
     metric = load_metric("rouge")
@@ -675,11 +689,11 @@ def main():
                 decoded_preds, decoded_labels = postprocess_text(decoded_preds, decoded_labels)
                 # If we are in a multiprocess environment, the last batch has duplicates
                 if accelerator.num_processes > 1:
-                    if step == len(eval_dataloader):
+                    if step == len(eval_dataloader) - 1:
                         decoded_preds = decoded_preds[: len(eval_dataloader.dataset) - samples_seen]
                         decoded_labels = decoded_labels[: len(eval_dataloader.dataset) - samples_seen]
                     else:
-                        samples_seen += decoded_labels.shape[0]
+                        samples_seen += len(decoded_labels)
 
                 metric.add_batch(
                     predictions=decoded_preds,
@@ -694,10 +708,10 @@ def main():
         logger.info(result)
 
         if args.with_tracking:
-            result["train_loss"] = total_loss
+            result["train_loss"] = total_loss.item() / len(train_dataloader)
             result["epoch"] = epoch
             result["step"] = completed_steps
-            accelerator.log(result)
+            accelerator.log(result, step=completed_steps)
 
         if args.push_to_hub and epoch < args.num_train_epochs - 1:
             accelerator.wait_for_everyone()

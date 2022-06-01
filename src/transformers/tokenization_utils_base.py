@@ -1964,24 +1964,38 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             # Sort added tokens by index
             added_tok_encoder_sorted = list(sorted(added_tok_encoder.items(), key=lambda x: x[1]))
 
+            # Accumulate added tokens into batches of special/non-special tokens, because calling add_tokens() for
+            # individual tokens would repeatedly rebuild a trie, which can be slow.
+            is_last_special = None
+            tokens = []
+
             for token, index in added_tok_encoder_sorted:
-                if has_tokenizer_file and index != len(tokenizer) and tokenizer.convert_tokens_to_ids(token) != index:
+                current_index = len(tokenizer) + len(tokens)
+                if has_tokenizer_file and index != current_index and tokenizer.convert_tokens_to_ids(token) != index:
                     # Tokenizer fast: added token needs to either be in the vocabulary with the proper index or the
                     # index is the current length of the tokenizer (not in vocabulary)
                     raise ValueError(
                         f"Wrong index found for {token}: should be {tokenizer.convert_tokens_to_ids(token)} but found "
                         f"{index}."
                     )
-                elif not has_tokenizer_file and index != len(tokenizer):
+                elif not has_tokenizer_file and index != current_index:
                     # Tokenizer slow: added token cannot already be in the vocabulary so its index needs to be the
                     # current length of the tokenizer.
                     raise ValueError(
                         f"Non-consecutive added token '{token}' found. "
-                        f"Should have index {len(tokenizer)} but has index {index} in saved vocabulary."
+                        f"Should have index {current_index} but has index {index} in saved vocabulary."
                     )
 
-                # Safe to call on a tokenizer fast even if token already there.
-                tokenizer.add_tokens(token, special_tokens=bool(token in special_tokens))
+                is_special = bool(token in special_tokens)
+                if is_last_special is None or is_last_special == is_special:
+                    tokens.append(token)
+                else:
+                    tokenizer.add_tokens(tokens, special_tokens=is_last_special)
+                    tokens = [token]
+                is_last_special = is_special
+
+            if tokens:
+                tokenizer.add_tokens(tokens, special_tokens=is_last_special)
 
         # Check all our special tokens are registered as "no split" token (we don't cut them) and are in the vocab
         added_tokens = tokenizer.sanitize_special_tokens()
@@ -2104,13 +2118,15 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             custom_object_save(self, save_directory, config=tokenizer_config)
 
         with open(tokenizer_config_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(tokenizer_config, ensure_ascii=False))
+            out_str = json.dumps(tokenizer_config, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+            f.write(out_str)
         logger.info(f"tokenizer config file saved in {tokenizer_config_file}")
 
         # Sanitize AddedTokens in special_tokens_map
         write_dict = convert_added_tokens(self.special_tokens_map_extended, add_type_field=False)
         with open(special_tokens_map_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(write_dict, ensure_ascii=False))
+            out_str = json.dumps(write_dict, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+            f.write(out_str)
         logger.info(f"Special tokens file saved in {special_tokens_map_file}")
 
         file_names = (tokenizer_config_file, special_tokens_map_file)
@@ -2154,7 +2170,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         added_vocab = self.get_added_vocab()
         if added_vocab:
             with open(added_tokens_file, "w", encoding="utf-8") as f:
-                out_str = json.dumps(added_vocab, ensure_ascii=False)
+                out_str = json.dumps(added_vocab, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
                 f.write(out_str)
                 logger.info(f"added tokens file saved in {added_tokens_file}")
 
