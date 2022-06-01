@@ -560,6 +560,8 @@ class JukeboxModelTest(unittest.TestCase):
             dict(temp=0.99, fp16=False, max_batch_size=lower_batch_size, chunk_size=lower_level_chunk_size),
             dict(temp=sampling_temperature, fp16=False, max_batch_size=max_batch_size, chunk_size=chunk_size),
         ]
+        
+        model.config.sr = 44100
         model.config.hop_fraction = [0.125, 0.5, 0.5]
         model.config.n_samples = 1
         model.config.sample_length = 2*model.config.sr #32768
@@ -572,9 +574,9 @@ class JukeboxModelTest(unittest.TestCase):
             "rock",
             "old town road",
             total_length=model.config.total_sample_length_in_seconds * model.config.sr,
-            sample_length=20*model.config.sr,#32768, # 256 tokens from level 0, as row_to_tokens is 128
+            sample_length=2*model.config.sr,#32768, # 256 tokens from level 0, as row_to_tokens is 128
             offset=0,
-            duration=1,
+            duration=2,
         )
 
         inputs, _ = tokens["input_ids"], tokens["attention_masks"]
