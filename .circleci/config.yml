@@ -95,7 +95,7 @@ jobs:
                   path: ~/transformers/test_preparation.txt
             - run: |
                   if [ -f test_list.txt ]; then
-                    python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_torch_and_tf $(cat test_list.txt) -m is_pt_tf_cross_test --durations=0 | tee tests_output.txt
+                    python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_torch_and_tf $(cat test_list.txt) -m is_pt_tf_cross_test --durations=0 | tee tests_output.txt
                   fi
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
@@ -131,7 +131,7 @@ jobs:
                 paths:
                     - '~/.cache/pip'
             - run: |
-                  python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_torch_and_tf tests -m is_pt_tf_cross_test --durations=0 | tee tests_output.txt
+                  python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_torch_and_tf tests -m is_pt_tf_cross_test --durations=0 | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -168,7 +168,7 @@ jobs:
                   path: ~/transformers/test_preparation.txt
             - run: |
                   if [ -f test_list.txt ]; then
-                    python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_torch_and_flax $(cat test_list.txt) -m is_pt_flax_cross_test --durations=0 | tee tests_output.txt
+                    python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_torch_and_flax $(cat test_list.txt) -m is_pt_flax_cross_test --durations=0 | tee tests_output.txt
                   fi
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
@@ -202,7 +202,7 @@ jobs:
                 paths:
                     - '~/.cache/pip'
             - run: |
-                  python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_torch_and_flax tests -m is_pt_flax_cross_test --durations=0 | tee tests_output.txt
+                  python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_torch_and_flax tests -m is_pt_flax_cross_test --durations=0 | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -238,7 +238,7 @@ jobs:
                   path: ~/transformers/test_preparation.txt
             - run: |
                   if [ -f test_list.txt ]; then
-                    python -m pytest -n 3 --dist=loadfile -s --make-reports=tests_torch $(cat test_list.txt) | tee tests_output.txt
+                    python -m pytest -n 3 --max-worker-restart=0 --dist=loadfile -s --make-reports=tests_torch $(cat test_list.txt) | tee tests_output.txt
                   fi
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
@@ -271,7 +271,7 @@ jobs:
                   paths:
                       - '~/.cache/pip'
             - run: |
-                  python -m pytest -n 3 --dist=loadfile -s --make-reports=tests_torch tests | tee tests_output.txt
+                  python -m pytest -n 3 --max-worker-restart=0 --dist=loadfile -s --make-reports=tests_torch tests | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -306,7 +306,7 @@ jobs:
                   path: ~/transformers/test_preparation.txt
             - run: |
                   if [ -f test_list.txt ]; then
-                    python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_tf $(cat test_list.txt) | tee tests_output.txt
+                    python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_tf $(cat test_list.txt) | tee tests_output.txt
                   fi
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
@@ -338,7 +338,7 @@ jobs:
                   paths:
                       - '~/.cache/pip'
             - run: |
-                  python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_tf tests | tee tests_output.txt
+                  python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_tf tests | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -372,7 +372,7 @@ jobs:
                   path: ~/transformers/test_preparation.txt
             - run: |
                   if [ -f test_list.txt ]; then
-                    python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_flax $(cat test_list.txt) | tee tests_output.txt
+                    python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_flax $(cat test_list.txt) | tee tests_output.txt
                   fi
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
@@ -403,7 +403,7 @@ jobs:
                   paths:
                       - '~/.cache/pip'
             - run: |
-                  python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_flax tests | tee tests_output.txt
+                  python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_flax tests | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -439,7 +439,7 @@ jobs:
                   path: ~/transformers/test_preparation.txt
             - run: |
                   if [ -f test_list.txt ]; then
-                    python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_pipelines_torch -m is_pipeline_test $(cat test_list.txt) | tee tests_output.txt
+                    python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_pipelines_torch -m is_pipeline_test $(cat test_list.txt) | tee tests_output.txt
                   fi
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
@@ -472,7 +472,7 @@ jobs:
                   paths:
                       - '~/.cache/pip'
             - run: |
-                  python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_pipelines_torch -m is_pipeline_test tests | tee tests_output.txt
+                  python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_pipelines_torch -m is_pipeline_test tests | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -506,7 +506,7 @@ jobs:
                   path: ~/transformers/test_preparation.txt
             - run: |
                   if [ -f test_list.txt ]; then
-                    python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_pipelines_tf $(cat test_list.txt) -m is_pipeline_test | tee tests_output.txt
+                    python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_pipelines_tf $(cat test_list.txt) -m is_pipeline_test | tee tests_output.txt
                   fi
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
@@ -537,7 +537,7 @@ jobs:
                   paths:
                       - '~/.cache/pip'
             - run: |
-                  python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_pipelines_tf tests -m is_pipeline_test | tee tests_output.txt
+                  python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_pipelines_tf tests -m is_pipeline_test | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -565,11 +565,11 @@ jobs:
                       - '~/.cache/pip'
             - run: |
                   if [ -f test_list.txt ]; then
-                    python -m pytest -s --make-reports=tests_custom_tokenizers ./tests/test_tokenization_bert_japanese.py ./tests/test_tokenization_openai.py | tee tests_output.txt
+                    python -m pytest --max-worker-restart=0 -s --make-reports=tests_custom_tokenizers ./tests/test_tokenization_bert_japanese.py ./tests/test_tokenization_openai.py | tee tests_output.txt
                   fi
             - run: |
                   if [ -f test_list.txt ]; then
-                    python -m pytest -n 1 tests/test_tokenization_clip.py --dist=loadfile -s --make-reports=tests_tokenization_clip --durations=100 | tee tests_output.txt
+                    python -m pytest -n 1 --max-worker-restart=0 tests/test_tokenization_clip.py --dist=loadfile -s --make-reports=tests_tokenization_clip --durations=100 | tee tests_output.txt
                   fi
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
@@ -604,7 +604,7 @@ jobs:
                   path: ~/transformers/test_preparation.txt
             - run: |
                   if [ -f test_list.txt ]; then
-                    python -m pytest -n 8 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/ | tee tests_output.txt
+                    python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/ | tee tests_output.txt
                   fi
             - store_artifacts:
                   path: ~/transformers/examples_output.txt
@@ -635,7 +635,7 @@ jobs:
                   paths:
                       - '~/.cache/pip'
             - run: |
-                  TRANSFORMERS_IS_CI=1 python -m pytest -n 8 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/ | tee examples_output.txt
+                  TRANSFORMERS_IS_CI=1 python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/ | tee examples_output.txt
             - store_artifacts:
                   path: ~/transformers/examples_output.txt
             - store_artifacts:
@@ -668,7 +668,7 @@ jobs:
                   path: ~/transformers/test_preparation.txt
             - run: |
                   if [ -f test_list.txt ]; then
-                    python -m pytest -n 8 --dist=loadfile -s --make-reports=examples_flax ./examples/flax/ | tee tests_output.txt
+                    python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_flax ./examples/flax/ | tee tests_output.txt
                   fi
             - store_artifacts:
                   path: ~/transformers/flax_examples_output.txt
@@ -698,7 +698,7 @@ jobs:
                   paths:
                       - '~/.cache/pip'
             - run: |
-                  TRANSFORMERS_IS_CI=1 python -m pytest -n 8 --dist=loadfile -s --make-reports=examples_flax ./examples/flax/ | tee examples_output.txt
+                  TRANSFORMERS_IS_CI=1 python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_flax ./examples/flax/ | tee examples_output.txt
             - store_artifacts:
                   path: ~/transformers/flax_examples_output.txt
             - store_artifacts:
@@ -735,7 +735,7 @@ jobs:
                   path: ~/transformers/test_preparation.txt
             - run: |
                   if [ -f test_list.txt ]; then
-                    python -m pytest -sv --make-reports=tests_hub $(cat test_list.txt) -m is_staging_test | tee tests_output.txt
+                    python -m pytest --max-worker-restart=0 -sv --make-reports=tests_hub $(cat test_list.txt) -m is_staging_test | tee tests_output.txt
                   fi
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
@@ -769,7 +769,7 @@ jobs:
                   paths:
                       - '~/.cache/pip'
             - run: |
-                  python -m pytest -sv --make-reports=tests_hub tests -m is_staging_test | tee tests_output.txt
+                  python -m pytest --max-worker-restart=0 -sv --make-reports=tests_hub tests -m is_staging_test | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -801,7 +801,7 @@ jobs:
                   path: ~/transformers/test_preparation.txt
             - run: |
                   if [ -f test_list.txt ]; then
-                    python -m pytest -n 1 --dist=loadfile -s --make-reports=tests_onnx $(cat test_list.txt) -k onnx | tee tests_output.txt
+                    python -m pytest -n 1 --max-worker-restart=0 --dist=loadfile -s --make-reports=tests_onnx $(cat test_list.txt) -k onnx | tee tests_output.txt
                   fi
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
@@ -830,7 +830,7 @@ jobs:
                   paths:
                       - '~/.cache/pip'
             - run: |
-                  python -m pytest -n 1 --dist=loadfile -s --make-reports=tests_onnx tests -k onnx | tee tests_output.txt
+                  python -m pytest -n 1 --max-worker-restart=0 --dist=loadfile -s --make-reports=tests_onnx tests -k onnx | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -923,7 +923,7 @@ jobs:
                   path: ~/transformers/test_preparation.txt
             - run: |
                   if [ -f test_list.txt ]; then
-                    python -m pytest -n 1 tests/models/*layoutlmv* --dist=loadfile -s --make-reports=tests_layoutlmv2_and_v3 --durations=100
+                    python -m pytest -n 1 --max-worker-restart=0 tests/models/*layoutlmv* --dist=loadfile -s --make-reports=tests_layoutlmv2_and_v3 --durations=100
                   fi
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
