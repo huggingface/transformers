@@ -116,8 +116,12 @@ def rename_key(name, base_model=False):
 
     if ".aspp_layer." in name:
         name = name.replace(".aspp_layer.", ".")
+    if ".aspp_pool." in name:
+        name = name.replace(".aspp_pool.", ".")
     if "seg_head." in name:
         name = name.replace("seg_head.", "segmentation_head.")
+    if "segmentation_head.classifier.classifier." in name:
+        name = name.replace("segmentation_head.classifier.classifier.", "segmentation_head.classifier.")
 
     if "classifier.fc." in name:
         name = name.replace("classifier.fc.", "classifier.")

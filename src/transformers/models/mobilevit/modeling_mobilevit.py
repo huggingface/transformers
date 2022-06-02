@@ -872,24 +872,22 @@ class MobileViTASPPPooling(nn.Module):
     def __init__(self, config: MobileViTConfig, in_channels: int, out_channels: int) -> None:
         super().__init__()
 
-        self.aspp_pool = nn.Sequential()
-        self.aspp_pool.add_module(name="global_pool", module=nn.AdaptiveAvgPool2d(output_size=1))
-        self.aspp_pool.add_module(
-            name="conv_1x1",
-            module=MobileViTConvLayer(
-                config,
-                in_channels=in_channels,
-                out_channels=out_channels,
-                kernel_size=1,
-                stride=1,
-                use_normalization=True,
-                use_activation="relu",
-            ),
+        self.global_pool = nn.AdaptiveAvgPool2d(output_size=1)
+
+        self.conv_1x1 = MobileViTConvLayer(
+            config,
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=1,
+            stride=1,
+            use_normalization=True,
+            use_activation="relu",
         )
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
         spatial_size = features.shape[-2:]
-        features = self.aspp_pool(features)
+        features = self.global_pool(features)
+        features = self.conv_1x1(features)
         features = nn.functional.interpolate(features, size=spatial_size, mode="bilinear", align_corners=False)
         return features
 
@@ -962,23 +960,21 @@ class MobileViTDeeplabV3(nn.Module):
         super().__init__()
         self.aspp = MobileViTASPP(config)
 
-        self.classifier = nn.Sequential()
-        self.classifier.add_module(name="classifier_dropout", module=nn.Dropout2d(config.classifier_dropout_prob))
-        self.classifier.add_module(
-            name="classifier",
-            module=MobileViTConvLayer(
-                config,
-                in_channels=config.aspp_out_channels,
-                out_channels=config.num_labels,
-                kernel_size=1,
-                use_normalization=False,
-                use_activation=False,
-                bias=True,
-            ),
+        self.dropout = nn.Dropout2d(config.classifier_dropout_prob)
+
+        self.classifier = MobileViTConvLayer(
+            config,
+            in_channels=config.aspp_out_channels,
+            out_channels=config.num_labels,
+            kernel_size=1,
+            use_normalization=False,
+            use_activation=False,
+            bias=True,
         )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         features = self.aspp(hidden_states[-1])
+        features = self.dropout(features)
         features = self.classifier(features)
         return features
 
