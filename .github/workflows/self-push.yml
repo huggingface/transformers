@@ -3,7 +3,7 @@ name: Self-hosted runner (push)
 on:
   push:
     branches:
-      - main
+      - push-ci
       - ci_*
       - ci-*
     paths:

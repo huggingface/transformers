@@ -41,6 +41,12 @@ from .configuration_vilt import ViltConfig
 
 logger = logging.get_logger(__name__)
 
+if torch.__version__ < (1, 10, 0):
+    logger.warning(
+        f"You are using torch=={torch.__version__}, but torch>=1.10.0 is required to use "
+        "ViltModel. Please upgrade torch."
+    )
+
 _CONFIG_FOR_DOC = "ViltConfig"
 _CHECKPOINT_FOR_DOC = "dandelin/vilt-b32-mlm"
 
