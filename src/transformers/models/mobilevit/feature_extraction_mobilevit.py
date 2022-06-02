@@ -39,7 +39,7 @@ class MobileViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
             Whether to resize the input to a certain `size`.
         size (`int` or `Tuple(int)`, *optional*, defaults to 288):
             Resize the input to the given size. If a tuple is provided, it should be (width, height). If only an
-            integer is provided, then the input will be resized to match the shorter side. Only has an effect if 
+            integer is provided, then the input will be resized to match the shorter side. Only has an effect if
             `do_resize` is set to `True`.
         resample (`int`, *optional*, defaults to `PIL.Image.BILINEAR`):
             An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
@@ -133,7 +133,10 @@ class MobileViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
 
         # transformations (resizing + normalization)
         if self.do_resize and self.size is not None:
-            images = [self.resize(image=image, size=self.size, resample=self.resample) for image in images]
+            images = [
+                self.resize(image=image, size=self.size, resample=self.resample, default_to_square=False)
+                for image in images
+            ]
         if self.do_center_crop and self.crop_size is not None:
             images = [self.center_crop(image, self.crop_size) for image in images]
 
@@ -175,31 +178,3 @@ class MobileViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
         crop_left = int((image_width - crop_width + 1) * 0.5)
 
         return image.crop((crop_left, crop_top, crop_left + crop_width, crop_top + crop_height))
-
-    # Copied from transformers.models.clip.feature_extraction_clip.CLIPFeatureExtractor.resize
-    def resize(self, image, size, resample=Image.BICUBIC):
-        """
-        Resizes `image`. Note that this will trigger a conversion of `image` to a PIL Image.
-
-        Args:
-            image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
-                The image to resize.
-            size (`int` or `Tuple[int, int]`):
-                The size to use for resizing the image. If `int` it will be resized to match the shorter side
-            resample (`int`, *optional*, defaults to `PIL.Image.BILINEAR`):
-                The filter to user for resampling.
-        """
-        self._ensure_format_supported(image)
-
-        if not isinstance(image, Image.Image):
-            image = self.to_pil_image(image)
-        if isinstance(size, tuple):
-            new_w, new_h = size
-        else:
-            width, height = image.size
-            short, long = (width, height) if width <= height else (height, width)
-            if short == size:
-                return image
-            new_short, new_long = size, int(size * long / short)
-            new_w, new_h = (new_short, new_long) if width <= height else (new_long, new_short)
-        return image.resize((new_w, new_h), resample)
