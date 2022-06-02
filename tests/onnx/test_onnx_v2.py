@@ -346,8 +346,10 @@ class LayerTestCase(TestCase):
     def test_StableDropout(self):
         """Tests export of StableDropout in training mode."""
         import os
-        import torch
         import warnings
+
+        import torch
+
         from transformers.models.deberta import modeling_deberta
 
         devnull = open(os.devnull, "wb")
