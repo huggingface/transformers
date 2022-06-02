@@ -56,41 +56,17 @@ def get_mobilevit_config(mobilevit_name):
     if mobilevit_name.startswith("deeplabv3_"):
         config.image_size = 512
         config.output_stride = 16
-
         config.num_labels = 21
-        id2label = {
-            0: "background",
-            1: "aeroplane",
-            2: "bicycle",
-            3: "bird",
-            4: "boat",
-            5: "bottle",
-            6: "bus",
-            7: "car",
-            8: "cat",
-            9: "chair",
-            10: "cow",
-            11: "diningtable",
-            12: "dog",
-            13: "horse",
-            14: "motorbike",
-            15: "person",
-            16: "pottedplant",
-            17: "sheep",
-            18: "sofa",
-            19: "train",
-            20: "tvmonitor",
-        }
-        config.id2label = id2label
-        config.label2id = {v: k for k, v in id2label.items()}
+        filename = "pascal-voc-id2label.json"
     else:
         config.num_labels = 1000
-        repo_id = "datasets/huggingface/label-files"
         filename = "imagenet-1k-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
-        id2label = {int(k): v for k, v in id2label.items()}
-        config.id2label = id2label
-        config.label2id = {v: k for k, v in id2label.items()}
+
+    repo_id = "datasets/huggingface/label-files"
+    id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
+    id2label = {int(k): v for k, v in id2label.items()}
+    config.id2label = id2label
+    config.label2id = {v: k for k, v in id2label.items()}
 
     return config
 
