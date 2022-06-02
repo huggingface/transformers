@@ -689,7 +689,7 @@ class AutoConfig:
         >>> config.output_attentions
         True
 
-        >>> config.unused_kwargs
+        >>> unused_kwargs
         {'foo': False}
         ```"""
         kwargs["_from_auto"] = True
