@@ -337,3 +337,48 @@ class OnnxExportTestCaseV2(TestCase):
         self, test_name, name, model_name, feature, onnx_config_class_constructor
     ):
         self._onnx_export(test_name, name, model_name, feature, onnx_config_class_constructor)
+
+
+class LayerTestCase(TestCase):
+    """Tests export of specific Layers / Modules."""
+
+    @require_torch
+    def test_StableDropout(self):
+        """Tests export of StableDropout in training mode."""
+        import os
+        import torch
+        import warnings
+        from transformers.models.deberta import modeling_deberta
+
+        devnull = open(os.devnull, "wb")
+        # drop_prob must be > 0 for the test to be meaningful
+        sd = modeling_deberta.StableDropout(0.1)
+        # Avoid warnings in training mode
+        do_constant_folding = False
+        # Dropout is a no-op in inference mode
+        training = torch.onnx.TrainingMode.PRESERVE
+
+        input = (torch.randn(2, 2),)
+
+        with warnings.catch_warnings():
+            # torch.onnx is spammy.
+            warnings.filterwarnings("ignore", module=r"torch.onnx.*")
+            torch.onnx.export(
+                sd,
+                input,
+                devnull,
+                opset_version=12,  # Minimum supported
+                do_constant_folding=do_constant_folding,
+                training=training,
+            )
+
+            # Expected to fail with opset_version < 12
+            with self.assertRaises(Exception):
+                torch.onnx.export(
+                    sd,
+                    input,
+                    devnull,
+                    opset_version=11,
+                    do_constant_folding=do_constant_folding,
+                    training=training,
+                )
