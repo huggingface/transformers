@@ -15,7 +15,7 @@ specific language governing permissions and limitations under the License.
 La [`pipeline`] rende semplice usare qualsiasi modello dal [Model Hub](https://huggingface.co/models) per fare inferenza su diversi compiti come generazione del testo, segmentazione di immagini e classificazione di audio. Anche se non hai esperienza con una modalità specifica o non comprendi bene il codice che alimenta i modelli, è comunque possibile utilizzarli con l'opzione [`pipeline`]! Questa esercitazione ti insegnerà a:
 
 * Usare una [`pipeline`] per fare inferenza.
-* Usare uno specifico tokenizer or modello.
+* Usare uno specifico tokenizer o modello.
 * Usare una [`pipeline`] per compiti che riguardano audio e video.
 
 <Tip>
@@ -56,7 +56,7 @@ Se hai più di un input, inseriscilo in una lista:
 ... )  # doctest: +SKIP
 ```
 
-Qualsiasi parametro addizionale per il tuo compito può essere incluso nella [`pipeline`]. La mansione `text-generation` ha un [`~generation_utils.GenerationMixin.generate`] metodo con diversi parametri per controllare l'output. Ad esempio, se desideri generare più di un output, utilizza il parametro `num_return_sequences`:
+Qualsiasi parametro addizionale per il tuo compito può essere incluso nella [`pipeline`]. La mansione `text-generation` ha un metodo [`~generation_utils.GenerationMixin.generate`] con diversi parametri per controllare l'output. Ad esempio, se desideri generare più di un output, utilizza il parametro `num_return_sequences`:
 
 ```py
 >>> generator(
@@ -67,7 +67,7 @@ Qualsiasi parametro addizionale per il tuo compito può essere incluso nella [`p
 
 ### Scegliere modello e tokenizer
 
-La [`pipeline`] accetta qualsiasi modello dal [Model Hub](https://huggingface.co/models). Ci sono tag nel Model Hub che consentono di filtrare i modelli per attività. Una volta che avrai scelto il modello appropriato, caricalo usando la corrispondente classe `AutoModelFor` e [`AutoTokenizer']. Ad esempio, carica la classe [`AutoModelForCausalLM`] per un compito di causal language modeling:
+La [`pipeline`] accetta qualsiasi modello dal [Model Hub](https://huggingface.co/models). Ci sono tag nel Model Hub che consentono di filtrare i modelli per attività. Una volta che avrai scelto il modello appropriato, caricalo usando la corrispondente classe `AutoModelFor` e [`AutoTokenizer`]. Ad esempio, carica la classe [`AutoModelForCausalLM`] per un compito di causal language modeling:
 
 ```py
 >>> from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -108,7 +108,7 @@ Per esempio, classifichiamo le emozioni in questo clip audio:
 >>> audio_file = ds[0]["audio"]["path"]
 ```
 
-Trova un [audio classification](https://huggingface.co/models?pipeline_tag=audio-classification) modello per eseguire emotion recognition sul Model Hub e caricalo nella [`pipeline`]:
+Trova un modello per la [classificazione audio](https://huggingface.co/models?pipeline_tag=audio-classification) sul Model Hub per eseguire un compito di riconoscimento automatico delle emozioni e caricalo nella [`pipeline`]:
 
 ```py
 >>> from transformers import pipeline
