@@ -1,5 +1,7 @@
 from typing import Dict
 
+from transformers import CLIPModel
+
 from .base import GenericTensor, Pipeline
 
 
@@ -54,16 +56,27 @@ class FeatureExtractionPipeline(Pipeline):
             kwargs = {"truncation": truncation}
 
         if hasattr(self, "tokenizer") and hasattr(self, "feature_extractor"):
-            model_inputs = self.tokenizer(inputs["text"], return_tensors=return_tensors, **kwargs)
-            # TODO add support for text + audio.
-            image_model_inputs = self.feature_extractor(inputs["image"], return_tensors=return_tensors, **kwargs)
-            model_inputs.update(image_model_inputs)
+            # TODO This is multimodal code an currently hyper specific for CLIP
+            if not isinstance(self.model, CLIPModel):
+                raise ValueError("This pipeline does not support multimodal that are not CLIPModel yet")
+            if isinstance(inputs, str):
+                model_inputs = self.tokenizer(inputs, return_tensors=return_tensors, **kwargs)
+            else:
+                model_inputs = self.feature_extractor(inputs, return_tensors=return_tensors, **kwargs)
         else:
             model_inputs = self.tokenizer(inputs, return_tensors=return_tensors, **kwargs)
         return model_inputs
 
     def _forward(self, model_inputs):
-        model_outputs = self.model(**model_inputs)
+        if hasattr(self, "tokenizer") and hasattr(self, "feature_extractor"):
+            # TODO This is multimodal code an currently hyper specific for CLIP
+            if "pixel_values" in model_inputs:
+                model_outputs = self.model.vision_model(**model_inputs)
+            else:
+                model_outputs = self.model.text_model(**model_inputs)
+
+        else:
+            model_outputs = self.model(**model_inputs)
         return model_outputs
 
     def postprocess(self, model_outputs):

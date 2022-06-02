@@ -65,10 +65,16 @@ class FeatureExtractionPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             model="hf-internal-testing/tiny-random-clip-zero-shot-image-classification",
             framework="pt",
         )
-        outputs = feature_extractor(
-            {"text": "This is a test", "image": Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")}
-        )
-        self.assertEqual(nested_simplify(outputs), [[-0.002]])
+        outputs = feature_extractor("This is a test")
+        outputs = nested_simplify(outputs)
+
+        self.assertEqual((len(outputs), len(outputs[0]), len(outputs[0][0])), (1, 13, 32))
+        self.assertEqual([outputs[0][0][:2], outputs[0][1][:2]], [[-1.104, 1.064], [-0.279, 0.864]])
+
+        outputs = feature_extractor(Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"))
+        outputs = nested_simplify(outputs)
+        self.assertEqual((len(outputs), len(outputs[0]), len(outputs[0][0])), (1, 226, 32))
+        self.assertEqual([outputs[0][0][:2], outputs[0][1][:2]], [[-1.242, -2.559], [0.651, -0.647]])
 
     @require_tf
     def test_small_model_tf(self):
