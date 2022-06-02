@@ -52,7 +52,14 @@ class FeatureExtractionPipeline(Pipeline):
             kwargs = {}
         else:
             kwargs = {"truncation": truncation}
-        model_inputs = self.tokenizer(inputs, return_tensors=return_tensors, **kwargs)
+
+        if hasattr(self, "tokenizer") and hasattr(self, "feature_extractor"):
+            model_inputs = self.tokenizer(inputs["text"], return_tensors=return_tensors, **kwargs)
+            # TODO add support for text + audio.
+            image_model_inputs = self.feature_extractor(inputs["image"], return_tensors=return_tensors, **kwargs)
+            model_inputs.update(image_model_inputs)
+        else:
+            model_inputs = self.tokenizer(inputs, return_tensors=return_tensors, **kwargs)
         return model_inputs
 
     def _forward(self, model_inputs):
