@@ -53,14 +53,16 @@ def parse_args():
         "--max_length",
         type=int,
         default=5,
-        help=("The maximum total input sequence length after tokenization."),
+        help="The maximum total input sequence length after tokenization.",
     )
     parser.add_argument(
         "--num_beams",
         type=int,
         default=None,
-        help="Number of beams to use for evaluation. This argument will be "
-        "passed to ``model.generate``, which is used during ``evaluate`` and ``predict``.",
+        help=(
+            "Number of beams to use for evaluation. This argument will be "
+            "passed to ``model.generate``, which is used during ``evaluate`` and ``predict``."
+        ),
     )
     parser.add_argument(
         "--model_name_or_path",

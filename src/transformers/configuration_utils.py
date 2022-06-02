@@ -632,10 +632,10 @@ class PretrainedConfig(PushToHubMixin):
             )
         except ValueError:
             raise EnvironmentError(
-                f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this model, couldn't find it in the cached "
-                f"files and it looks like {pretrained_model_name_or_path} is not the path to a directory containing a "
-                f"{configuration_file} file.\nCheckout your internet connection or see how to run the library in "
-                "offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'."
+                f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this model, couldn't find it in"
+                f" the cached files and it looks like {pretrained_model_name_or_path} is not the path to a directory"
+                f" containing a {configuration_file} file.\nCheckout your internet connection or see how to run the"
+                " library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'."
             )
         except EnvironmentError:
             raise EnvironmentError(

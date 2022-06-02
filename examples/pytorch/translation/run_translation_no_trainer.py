@@ -41,7 +41,6 @@ from huggingface_hub import Repository
 from transformers import (
     CONFIG_MAPPING,
     MODEL_MAPPING,
-    AdamW,
     AutoConfig,
     AutoModelForSeq2SeqLM,
     AutoTokenizer,
@@ -95,41 +94,51 @@ def parse_args():
         "--num_beams",
         type=int,
         default=None,
-        help="Number of beams to use for evaluation. This argument will be "
-        "passed to ``model.generate``, which is used during ``evaluate`` and ``predict``.",
+        help=(
+            "Number of beams to use for evaluation. This argument will be "
+            "passed to ``model.generate``, which is used during ``evaluate`` and ``predict``."
+        ),
     )
 
     parser.add_argument(
         "--max_source_length",
         type=int,
         default=1024,
-        help="The maximum total input sequence length after "
-        "tokenization.Sequences longer than this will be truncated, sequences shorter will be padded.",
+        help=(
+            "The maximum total input sequence length after "
+            "tokenization.Sequences longer than this will be truncated, sequences shorter will be padded."
+        ),
     )
     parser.add_argument(
         "--max_target_length",
         type=int,
         default=128,
-        help="The maximum total sequence length for target text after "
-        "tokenization. Sequences longer than this will be truncated, sequences shorter will be padded."
-        "during ``evaluate`` and ``predict``.",
+        help=(
+            "The maximum total sequence length for target text after "
+            "tokenization. Sequences longer than this will be truncated, sequences shorter will be padded."
+            "during ``evaluate`` and ``predict``."
+        ),
     )
     parser.add_argument(
         "--val_max_target_length",
         type=int,
         default=None,
-        help="The maximum total sequence length for validation "
-        "target text after tokenization.Sequences longer than this will be truncated, sequences shorter will be "
-        "padded. Will default to `max_target_length`.This argument is also used to override the ``max_length`` "
-        "param of ``model.generate``, which is used during ``evaluate`` and ``predict``.",
+        help=(
+            "The maximum total sequence length for validation "
+            "target text after tokenization.Sequences longer than this will be truncated, sequences shorter will be "
+            "padded. Will default to `max_target_length`.This argument is also used to override the ``max_length`` "
+            "param of ``model.generate``, which is used during ``evaluate`` and ``predict``."
+        ),
     )
     parser.add_argument(
         "--pad_to_max_length",
         type=bool,
         default=False,
-        help="Whether to pad all samples to model maximum sentence "
-        "length. If False, will pad the samples dynamically when batching to the maximum length in the batch. More"
-        "efficient on GPU but very bad for TPU.",
+        help=(
+            "Whether to pad all samples to model maximum sentence "
+            "length. If False, will pad the samples dynamically when batching to the maximum length in the batch. More"
+            "efficient on GPU but very bad for TPU."
+        ),
     )
     parser.add_argument(
         "--validation_file", type=str, default=None, help="A csv or a json file containing the validation data."
@@ -138,7 +147,7 @@ def parse_args():
         "--ignore_pad_token_for_loss",
         type=bool,
         default=True,
-        help="Whether to ignore the tokens corresponding to " "padded labels in the loss computation or not.",
+        help="Whether to ignore the tokens corresponding to padded labels in the loss computation or not.",
     )
     parser.add_argument("--source_lang", type=str, default=None, help="Source language id for translation.")
     parser.add_argument("--target_lang", type=str, default=None, help="Target language id for translation.")
@@ -146,7 +155,7 @@ def parse_args():
         "--source_prefix",
         type=str,
         default=None,
-        help="A prefix to add before every source text " "(useful for T5 models).",
+        help="A prefix to add before every source text (useful for T5 models).",
     )
     parser.add_argument(
         "--preprocessing_num_workers",
@@ -170,7 +179,7 @@ def parse_args():
         "--model_name_or_path",
         type=str,
         help="Path to pretrained model or model identifier from huggingface.co/models.",
-        required=True,
+        required=False,
     )
     parser.add_argument(
         "--config_name",
@@ -260,7 +269,17 @@ def parse_args():
     parser.add_argument(
         "--with_tracking",
         action="store_true",
-        help="Whether to load in all available experiment trackers from the environment and use them for logging.",
+        help="Whether to enable experiment trackers for logging.",
+    )
+    parser.add_argument(
+        "--report_to",
+        type=str,
+        default="all",
+        help=(
+            'The integration to report the results and logs to. Supported platforms are `"tensorboard"`,'
+            ' `"wandb"` and `"comet_ml"`. Use `"all"` (default) to report to all integrations.'
+            "Only applicable when `--with_tracking` is passed."
+        ),
     )
     args = parser.parse_args()
 
@@ -287,8 +306,11 @@ def main():
     args = parse_args()
 
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
-    # If we're using tracking, we also need to initialize it here and it will pick up all supported trackers in the environment
-    accelerator = Accelerator(log_with="all", logging_dir=args.output_dir) if args.with_tracking else Accelerator()
+    # If we're using tracking, we also need to initialize it here and it will by default pick up all supported trackers
+    # in the environment
+    accelerator = (
+        Accelerator(log_with=args.report_to, logging_dir=args.output_dir) if args.with_tracking else Accelerator()
+    )
 
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
@@ -492,7 +514,7 @@ def main():
             "weight_decay": 0.0,
         },
     ]
-    optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
+    optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
 
     # Scheduler and math around the number of training steps.
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
@@ -525,12 +547,15 @@ def main():
     else:
         checkpointing_steps = None
 
-    # We need to initialize the trackers we use, and also store our configuration
+    # We need to initialize the trackers we use, and also store our configuration.
+    # We initialize the trackers only on main process because `accelerator.log`
+    # only logs on main process and we don't want empty logs/runs on other processes.
     if args.with_tracking:
-        experiment_config = vars(args)
-        # TensorBoard cannot log Enums, need the raw value
-        experiment_config["lr_scheduler_type"] = experiment_config["lr_scheduler_type"].value
-        accelerator.init_trackers("translation_no_trainer", experiment_config)
+        if accelerator.is_main_process:
+            experiment_config = vars(args)
+            # TensorBoard cannot log Enums, need the raw value
+            experiment_config["lr_scheduler_type"] = experiment_config["lr_scheduler_type"].value
+            accelerator.init_trackers("translation_no_trainer", experiment_config)
 
     metric = load_metric("sacrebleu")
 
@@ -651,11 +676,11 @@ def main():
 
                 # If we are in a multiprocess environment, the last batch has duplicates
                 if accelerator.num_processes > 1:
-                    if step == len(eval_dataloader):
+                    if step == len(eval_dataloader) - 1:
                         decoded_preds = decoded_preds[: len(eval_dataloader.dataset) - samples_seen]
                         decoded_labels = decoded_labels[: len(eval_dataloader.dataset) - samples_seen]
                     else:
-                        samples_seen += decoded_labels.shape[0]
+                        samples_seen += len(decoded_labels)
 
                 metric.add_batch(predictions=decoded_preds, references=decoded_labels)
         eval_metric = metric.compute()
@@ -663,7 +688,13 @@ def main():
 
         if args.with_tracking:
             accelerator.log(
-                {"blue": eval_metric["score"], "train_loss": total_loss, "epoch": epoch, "step": completed_steps},
+                {
+                    "blue": eval_metric["score"],
+                    "train_loss": total_loss.item() / len(train_dataloader),
+                    "epoch": epoch,
+                    "step": completed_steps,
+                },
+                step=completed_steps,
             )
 
         if args.push_to_hub and epoch < args.num_train_epochs - 1:

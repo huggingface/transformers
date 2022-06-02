@@ -325,7 +325,7 @@ torch_version = None
 _torch_fx_available = _torch_onnx_dict_inputs_support_available = False
 if _torch_available:
     torch_version = version.parse(importlib_metadata.version("torch"))
-    _torch_fx_available = (torch_version.major, torch_version.minor) == (
+    _torch_fx_available = (torch_version.major, torch_version.minor) >= (
         TORCH_FX_REQUIRED_VERSION.major,
         TORCH_FX_REQUIRED_VERSION.minor,
     )
@@ -374,6 +374,10 @@ def is_torch_tpu_available():
     if importlib.util.find_spec("torch_xla.core") is None:
         return False
     return importlib.util.find_spec("torch_xla.core.xla_model") is not None
+
+
+def is_torchdynamo_available():
+    return importlib.util.find_spec("torchdynamo") is not None
 
 
 def is_datasets_available():
@@ -456,6 +460,8 @@ def is_in_notebook():
             raise ImportError("console")
         if "VSCODE_PID" in os.environ:
             raise ImportError("vscode")
+        if "DATABRICKS_RUNTIME_VERSION" in os.environ:
+            raise ImportError("databricks")
 
         return importlib.util.find_spec("IPython") is not None
     except (AttributeError, ImportError, KeyError):
@@ -872,7 +878,8 @@ class _LazyModule(ModuleType):
             return importlib.import_module("." + module_name, self.__name__)
         except Exception as e:
             raise RuntimeError(
-                f"Failed to import {self.__name__}.{module_name} because of the following error (look up to see its traceback):\n{e}"
+                f"Failed to import {self.__name__}.{module_name} because of the following error (look up to see its"
+                f" traceback):\n{e}"
             ) from e
 
     def __reduce__(self):

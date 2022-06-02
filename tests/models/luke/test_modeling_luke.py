@@ -270,9 +270,12 @@ class LukeModelTester:
             entity_labels=entity_labels,
         )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-        self.parent.assertEqual(
-            result.entity_logits.shape, (self.batch_size, self.entity_length, self.entity_vocab_size)
-        )
+        if entity_ids is not None:
+            self.parent.assertEqual(
+                result.entity_logits.shape, (self.batch_size, self.entity_length, self.entity_vocab_size)
+            )
+        else:
+            self.parent.assertIsNone(result.entity_logits)
 
     def create_and_check_for_entity_classification(
         self,
@@ -488,6 +491,11 @@ class LukeModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
 
+    def test_for_masked_lm_with_word_only(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config_and_inputs = (*config_and_inputs[:4], *((None,) * len(config_and_inputs[4:])))
+        self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
+
     def test_for_entity_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_entity_classification(*config_and_inputs)
@@ -624,7 +632,10 @@ class LukeModelIntegrationTests(unittest.TestCase):
         model.to(torch_device)
 
         tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base", task="entity_classification")
-        text = "Top seed Ana Ivanovic said on Thursday she could hardly believe her luck as a fortuitous netcord helped the new world number one avoid a humiliating second- round exit at Wimbledon ."
+        text = (
+            "Top seed Ana Ivanovic said on Thursday she could hardly believe her luck as a fortuitous netcord helped"
+            " the new world number one avoid a humiliating second- round exit at Wimbledon ."
+        )
         span = (39, 42)
         encoding = tokenizer(text, entity_spans=[span], add_prefix_space=True, return_tensors="pt")
 
@@ -656,7 +667,10 @@ class LukeModelIntegrationTests(unittest.TestCase):
         model.to(torch_device)
 
         tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-large", task="entity_classification")
-        text = "Top seed Ana Ivanovic said on Thursday she could hardly believe her luck as a fortuitous netcord helped the new world number one avoid a humiliating second- round exit at Wimbledon ."
+        text = (
+            "Top seed Ana Ivanovic said on Thursday she could hardly believe her luck as a fortuitous netcord helped"
+            " the new world number one avoid a humiliating second- round exit at Wimbledon ."
+        )
         span = (39, 42)
         encoding = tokenizer(text, entity_spans=[span], add_prefix_space=True, return_tensors="pt")
 

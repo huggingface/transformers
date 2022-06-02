@@ -28,8 +28,10 @@ from ..models.mbart import MBartOnnxConfig
 from ..models.mobilebert import MobileBertOnnxConfig
 from ..models.roberta import RobertaOnnxConfig
 from ..models.roformer import RoFormerOnnxConfig
+from ..models.squeezebert import SqueezeBertOnnxConfig
 from ..models.t5 import T5OnnxConfig
 from ..models.vit import ViTOnnxConfig
+from ..models.xlm import XLMOnnxConfig
 from ..models.xlm_roberta import XLMRobertaOnnxConfig
 from ..utils import logging
 from .config import OnnxConfig
@@ -45,7 +47,6 @@ if is_torch_available():
         AutoModelForMaskedImageModeling,
         AutoModelForMaskedLM,
         AutoModelForMultipleChoice,
-        AutoModelForNextSentencePrediction,
         AutoModelForQuestionAnswering,
         AutoModelForSeq2SeqLM,
         AutoModelForSequenceClassification,
@@ -57,7 +58,6 @@ if is_tf_available():
         TFAutoModelForCausalLM,
         TFAutoModelForMaskedLM,
         TFAutoModelForMultipleChoice,
-        TFAutoModelForNextSentencePrediction,
         TFAutoModelForQuestionAnswering,
         TFAutoModelForSeq2SeqLM,
         TFAutoModelForSequenceClassification,
@@ -65,7 +65,8 @@ if is_tf_available():
     )
 if not is_torch_available() and not is_tf_available():
     logger.warning(
-        "The ONNX export features are only supported for PyTorch or TensorFlow. You will not be able to export models without one of these libraries installed."
+        "The ONNX export features are only supported for PyTorch or TensorFlow. You will not be able to export models"
+        " without one of these libraries installed."
     )
 
 
@@ -111,7 +112,6 @@ class FeaturesManager:
             "question-answering": AutoModelForQuestionAnswering,
             "image-classification": AutoModelForImageClassification,
             "masked-im": AutoModelForMaskedImageModeling,
-            "next-sentence-prediction": AutoModelForNextSentencePrediction,
         }
     if is_tf_available():
         _TASKS_TO_TF_AUTOMODELS = {
@@ -123,7 +123,6 @@ class FeaturesManager:
             "token-classification": TFAutoModelForTokenClassification,
             "multiple-choice": TFAutoModelForMultipleChoice,
             "question-answering": TFAutoModelForQuestionAnswering,
-            "next-sentence-prediction": TFAutoModelForNextSentencePrediction,
         }
 
     # Set of model topologies we support associated to the features supported by each topology and the factory
@@ -158,7 +157,6 @@ class FeaturesManager:
             "multiple-choice",
             "token-classification",
             "question-answering",
-            "next-sentence-prediction",
             onnx_config_cls=BertOnnxConfig,
         ),
         "big-bird": supported_features_mapping(
@@ -325,7 +323,6 @@ class FeaturesManager:
         "mobilebert": supported_features_mapping(
             "default",
             "masked-lm",
-            "next-sentence-prediction",
             "sequence-classification",
             "multiple-choice",
             "token-classification",
@@ -356,11 +353,30 @@ class FeaturesManager:
             "token-classification",
             onnx_config_cls=RoFormerOnnxConfig,
         ),
+        "squeezebert": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "sequence-classification",
+            "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=SqueezeBertOnnxConfig,
+        ),
         "t5": supported_features_mapping(
             "default", "default-with-past", "seq2seq-lm", "seq2seq-lm-with-past", onnx_config_cls=T5OnnxConfig
         ),
         "vit": supported_features_mapping(
             "default", "image-classification", "masked-im", onnx_config_cls=ViTOnnxConfig
+        ),
+        "xlm": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "causal-lm",
+            "sequence-classification",
+            "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=XLMOnnxConfig,
         ),
         "xlm-roberta": supported_features_mapping(
             "default",
@@ -443,8 +459,7 @@ class FeaturesManager:
             task_to_automodel = FeaturesManager._TASKS_TO_TF_AUTOMODELS
         if task not in task_to_automodel:
             raise KeyError(
-                f"Unknown task: {feature}. "
-                f"Possible values are {list(FeaturesManager._TASKS_TO_AUTOMODELS.values())}"
+                f"Unknown task: {feature}. Possible values are {list(FeaturesManager._TASKS_TO_AUTOMODELS.values())}"
             )
         return task_to_automodel[task]
 
@@ -497,8 +512,7 @@ class FeaturesManager:
         model_features = FeaturesManager.get_supported_features_for_model_type(model_type, model_name=model_name)
         if feature not in model_features:
             raise ValueError(
-                f"{model.config.model_type} doesn't support feature {feature}. "
-                f"Supported values are: {model_features}"
+                f"{model.config.model_type} doesn't support feature {feature}. Supported values are: {model_features}"
             )
 
         return model.config.model_type, FeaturesManager._SUPPORTED_MODEL_TYPE[model_type][feature]

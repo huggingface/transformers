@@ -245,7 +245,7 @@ def default_hp_space_optuna(trial) -> Dict[str, float]:
 def default_hp_space_ray(trial) -> Dict[str, float]:
     from .integrations import is_ray_tune_available
 
-    assert is_ray_tune_available(), "This function needs ray installed: `pip " "install ray[tune]`"
+    assert is_ray_tune_available(), "This function needs ray installed: `pip install ray[tune]`"
     from ray import tune
 
     return {
@@ -676,6 +676,8 @@ class RemoveColumnsCollator:
         self.message_logged = False
 
     def _remove_columns(self, feature: dict) -> dict:
+        if not isinstance(feature, dict):
+            return feature
         if not self.message_logged and self.logger and self.model_name:
             ignored_columns = list(set(feature.keys()) - set(self.signature_columns))
             if len(ignored_columns) > 0:
