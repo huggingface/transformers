@@ -736,10 +736,10 @@ class MobileViTModel(MobileViTPreTrainedModel):
         heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base class PreTrainedModel
         """
         for layer_index, heads in heads_to_prune.items():
-            layer = self.encoder.layer[layer_index]
-            if len(layer) == 2 and isinstance(layer[1], MobileViTLayer):
-                for transformer in layer[1].transformer:
-                    transformer.attention.prune_heads(heads)
+            mobilevit_layer = self.encoder.layer[layer_index]
+            if isinstance(mobilevit_layer, MobileViTLayer):
+                for transformer_layer in mobilevit_layer.transformer.layer:
+                    transformer_layer.attention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(MOBILEVIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
