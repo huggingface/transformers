@@ -99,8 +99,8 @@ class MobileViTConvLayer(nn.Module):
         groups: Optional[int] = 1,
         bias: bool = False,
         dilation: Optional[int or tuple] = 1,
-        use_norm: Optional[bool] = True,
-        use_act: Optional[bool or str] = True,
+        use_normalization: Optional[bool] = True,
+        use_activation: Optional[bool or str] = True,
     ) -> None:
         super().__init__()
         padding = int((kernel_size - 1) / 2) * dilation
@@ -110,7 +110,7 @@ class MobileViTConvLayer(nn.Module):
         if out_channels % groups != 0:
             raise ValueError(f"Output channels ({out_channels}) are not divisible by {groups} groups.")
 
-        self.conv = nn.Conv2d(
+        self.convolution = nn.Conv2d(
             in_channels=in_channels,
             out_channels=out_channels,
             kernel_size=kernel_size,
@@ -122,8 +122,8 @@ class MobileViTConvLayer(nn.Module):
             padding_mode="zeros",
         )
 
-        if use_norm:
-            self.norm = nn.BatchNorm2d(
+        if use_normalization:
+            self.normalization = nn.BatchNorm2d(
                 num_features=out_channels,
                 eps=1e-5,
                 momentum=0.1,
@@ -131,24 +131,24 @@ class MobileViTConvLayer(nn.Module):
                 track_running_stats=True,
             )
         else:
-            self.norm = None
+            self.normalization = None
 
-        if use_act:
-            if isinstance(use_act, str):
-                self.act = ACT2FN[use_act]
+        if use_activation:
+            if isinstance(use_activation, str):
+                self.activation = ACT2FN[use_activation]
             elif isinstance(config.hidden_act, str):
-                self.act = ACT2FN[config.hidden_act]
+                self.activation = ACT2FN[config.hidden_act]
             else:
-                self.act = config.hidden_act
+                self.activation = config.hidden_act
         else:
-            self.act = None
+            self.activation = None
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
-        features = self.conv(features)
-        if self.norm is not None:
-            features = self.norm(features)
-        if self.act is not None:
-            features = self.act(features)
+        features = self.convolution(features)
+        if self.normalization is not None:
+            features = self.normalization(features)
+        if self.activation is not None:
+            features = self.activation(features)
         return features
 
 
@@ -187,7 +187,7 @@ class MobileViTInvertedResidual(nn.Module):
             in_channels=expanded_channels,
             out_channels=out_channels,
             kernel_size=1,
-            use_act=False,
+            use_activation=False,
         )
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
@@ -369,8 +369,8 @@ class MobileViTLayer(nn.Module):
             in_channels=in_channels,
             out_channels=hidden_size,
             kernel_size=1,
-            use_norm=False,
-            use_act=False,
+            use_normalization=False,
+            use_activation=False,
         )
 
         self.transformer = nn.Sequential()
@@ -882,8 +882,8 @@ class MobileViTASPPPooling(nn.Module):
                 out_channels=out_channels,
                 kernel_size=1,
                 stride=1,
-                use_norm=True,
-                use_act="relu",
+                use_normalization=True,
+                use_activation="relu",
             ),
         )
 
@@ -915,7 +915,7 @@ class MobileViTASPP(nn.Module):
             in_channels=in_channels,
             out_channels=out_channels,
             kernel_size=1,
-            use_act="relu",
+            use_activation="relu",
         )
         self.convs.append(in_proj)
 
@@ -927,7 +927,7 @@ class MobileViTASPP(nn.Module):
                     out_channels=out_channels,
                     kernel_size=3,
                     dilation=rate,
-                    use_act="relu",
+                    use_activation="relu",
                 )
                 for rate in config.atrous_rates
             ]
@@ -937,7 +937,7 @@ class MobileViTASPP(nn.Module):
         self.convs.append(pool_layer)
 
         self.project = MobileViTConvLayer(
-            config, in_channels=5 * out_channels, out_channels=out_channels, kernel_size=1, use_act="relu"
+            config, in_channels=5 * out_channels, out_channels=out_channels, kernel_size=1, use_activation="relu"
         )
 
         self.dropout = nn.Dropout(p=config.aspp_dropout_prob)
@@ -971,8 +971,8 @@ class MobileViTDeeplabV3(nn.Module):
                 in_channels=config.aspp_out_channels,
                 out_channels=config.num_labels,
                 kernel_size=1,
-                use_norm=False,
-                use_act=False,
+                use_normalization=False,
+                use_activation=False,
                 bias=True,
             ),
         )

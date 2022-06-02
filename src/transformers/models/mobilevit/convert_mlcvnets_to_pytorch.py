@@ -88,6 +88,10 @@ def rename_key(name, base_model=False):
         name = name.replace(".local_rep.conv_3x3.", ".conv_kxk.")
     if ".local_rep.conv_1x1." in name:
         name = name.replace(".local_rep.conv_1x1.", ".conv_1x1.")
+    if ".norm." in name:
+        name = name.replace(".norm.", ".normalization.")
+    if ".conv." in name:
+        name = name.replace(".conv.", ".convolution.")
 
     for i in range(2, 5):
         if f".global_rep.{i}.weight" in name:
