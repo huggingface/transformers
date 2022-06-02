@@ -1177,7 +1177,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         dataset_args: Optional[Union[str, List[str]]] = None,
     ):
         # Avoids a circular import by doing this when necessary.
-        from .modelcard import TrainingSummary
+        from .modelcard import TrainingSummary  # tests_ignore
 
         training_summary = TrainingSummary.from_keras(
             self,
