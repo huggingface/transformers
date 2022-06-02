@@ -534,7 +534,7 @@ class XSoftmax(torch.autograd.Function):
         self.dim = dim
         rmask = ~(mask.to(torch.bool))
 
-        output = input.masked_fill(rmask, torch.tensor(torch.finfo(input.dtype).min))
+        output = input.masked_fill(rmask, torch.finfo(input.dtype).min)
         output = torch.softmax(output, self.dim)
         output.masked_fill_(rmask, 0)
         self.save_for_backward(output)

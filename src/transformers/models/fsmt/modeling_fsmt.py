@@ -908,7 +908,7 @@ class Attention(nn.Module):
         if key_padding_mask is not None:  # don't attend to padding symbols
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
             reshaped = key_padding_mask.unsqueeze(1).unsqueeze(2)
-            attn_weights = attn_weights.masked_fill(reshaped, torch.tensor(torch.finfo(attn_weights.dtype).min))
+            attn_weights = attn_weights.masked_fill(reshaped, torch.finfo(attn_weights.dtype).min)
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)

@@ -178,7 +178,7 @@ class LayoutLMv2SelfAttention(nn.Module):
             attention_scores += rel_pos
         if self.has_spatial_attention_bias:
             attention_scores += rel_2d_pos
-        attention_scores = attention_scores.float().masked_fill_(attention_mask.to(torch.bool), torch.tensor(torch.finfo(attention_scores.dtype).min))
+        attention_scores = attention_scores.float().masked_fill_(attention_mask.to(torch.bool), torch.finfo(attention_scores.dtype).min)
         attention_probs = nn.functional.softmax(attention_scores, dim=-1, dtype=torch.float32).type_as(value_layer)
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
