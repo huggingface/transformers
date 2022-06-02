@@ -170,7 +170,7 @@ def pre_process_alibi_for_pad(alibi, attention_mask, num_heads):
 
 def bias_dropout_add(x, bias, residual, prob, training):
     # type: (Tensor, Tensor, Tensor, float, bool) -> Tensor
-    out = torch.nn.functional.dropout(x + bias, p=prob, training=training)
+    out = nn.functional.dropout(x + bias, p=prob, training=training)
     out = residual + out
     return out
 
@@ -284,7 +284,7 @@ class BloomAttention(nn.Module):
 
         self.query_key_value = nn.Linear(self.hidden_size, 3 * self.hidden_size, bias=True)
         self.dense = nn.Linear(self.hidden_size, self.hidden_size)
-        self.attention_dropout = torch.nn.Dropout(config.attention_dropout)
+        self.attention_dropout = nn.Dropout(config.attention_dropout)
 
     def forward(
         self,
