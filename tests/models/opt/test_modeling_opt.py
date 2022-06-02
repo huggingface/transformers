@@ -178,6 +178,7 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (OPTModel, OPTForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (OPTForCausalLM,) if is_torch_available() else ()
     is_encoder_decoder = False
+    fx_compatible = True
     test_pruning = False
     test_missing_keys = False
 
@@ -277,19 +278,16 @@ class OPTModelIntegrationTests(unittest.TestCase):
 
         expected_shape = torch.Size((1, 11, 512))
         self.assertEqual(output.shape, expected_shape)
+        # expected value works for CPU, as well as GPU (with TF32 disabled)
         expected_slice = torch.tensor(
-            [[-0.2873, -1.9242, -0.3059], [-1.2738, -0.1333, -0.1877], [0.4116, 0.1192, -1.3107]],
+            [
+                [-0.28726277, -1.9241608, -0.3058734],
+                [-1.2737825, -0.13332152, -0.18766522],
+                [0.41159445, 0.1191957, -1.3107123],
+            ],
             device=torch_device,
         )
-        # Getting different logits results on GPU depending on PyTorch version (1.10+cu11.0 vs. 1.11+cu11.4)
-        # and results also differ between CPU and GPU. Only on CPU it seems to be deterministic.
-
-        # It's not because the weights are saved & loaded in FP16
-        # checked that the same happens when weights are stored in fp32 and loaded in fp32.
-        # The differences start to creep in in the first linear projection matrix project_in_dim
-        # It however also happens for BART (maybe related to training model in fp16?)
-        atol = 1e-2 if torch_device != "cpu" else 1e-3
-        assert_tensors_close(output[0, :3, :3], expected_slice, atol=atol)
+        assert_tensors_close(output[0, :3, :3], expected_slice, atol=5e-5)
 
 
 @require_torch
@@ -336,7 +334,7 @@ class OPTGenerationTest(unittest.TestCase):
     @property
     def prompts(self):
         return [
-            "Today is a beautiful day and I want to",
+            "Today is a beautiful day and I want",
             "In the city of",
             "Paris is the capital of France and",
             "Computers and mobile phones have taken",
@@ -346,7 +344,7 @@ class OPTGenerationTest(unittest.TestCase):
         model_id = "facebook/opt-125m"
 
         EXPECTED_OUTPUTS = [
-            "Today is a beautiful day and I want to thank",
+            "Today is a beautiful day and I want everyone",
             "In the city of Rome Canaver Canaver Canaver Canaver",
             "Paris is the capital of France and Parisdylib",
             "Computers and mobile phones have taken precedence over",
@@ -411,7 +409,7 @@ class OPTGenerationTest(unittest.TestCase):
         model_id = "facebook/opt-350m"
 
         EXPECTED_OUTPUTS = [
-            "Today is a beautiful day and I want to share",
+            "Today is a beautiful day and I want to",
             "In the city of San Francisco, the city",
             "Paris is the capital of France and the capital",
             "Computers and mobile phones have taken over the",

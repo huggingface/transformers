@@ -44,6 +44,7 @@ FLAX_MODEL_MAPPING_NAMES = OrderedDict(
         ("marian", "FlaxMarianModel"),
         ("mbart", "FlaxMBartModel"),
         ("mt5", "FlaxMT5Model"),
+        ("opt", "FlaxOPTModel"),
         ("pegasus", "FlaxPegasusModel"),
         ("roberta", "FlaxRobertaModel"),
         ("roformer", "FlaxRoFormerModel"),
@@ -129,6 +130,7 @@ FLAX_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("gpt2", "FlaxGPT2LMHeadModel"),
         ("gpt_neo", "FlaxGPTNeoForCausalLM"),
         ("gptj", "FlaxGPTJForCausalLM"),
+        ("opt", "FlaxOPTForCausalLM"),
         ("roberta", "FlaxRobertaForCausalLM"),
         ("xglm", "FlaxXGLMForCausalLM"),
     ]

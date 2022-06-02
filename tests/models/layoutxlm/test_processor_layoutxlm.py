@@ -22,7 +22,6 @@ from typing import List
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
 from transformers.models.layoutxlm import LayoutXLMTokenizer, LayoutXLMTokenizerFast
 from transformers.testing_utils import (
-    get_tests_dir,
     require_pytesseract,
     require_sentencepiece,
     require_tokenizers,
@@ -36,9 +35,6 @@ if is_pytesseract_available():
     from PIL import Image
 
     from transformers import LayoutLMv2FeatureExtractor, LayoutXLMProcessor
-
-
-SAMPLE_SP = get_tests_dir("fixtures/test_sentencepiece.model")
 
 
 @require_pytesseract
@@ -60,11 +56,14 @@ class LayoutXLMProcessorTest(unittest.TestCase):
         with open(self.feature_extraction_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(feature_extractor_map) + "\n")
 
+        # taken from `test_tokenization_layoutxlm.LayoutXLMTokenizationTest.test_save_pretrained`
+        self.tokenizer_pretrained_name = "hf-internal-testing/tiny-random-layoutxlm"
+
     def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
-        return self.tokenizer_class.from_pretrained(SAMPLE_SP, **kwargs)
+        return self.tokenizer_class.from_pretrained(self.tokenizer_pretrained_name, **kwargs)
 
     def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
-        return self.rust_tokenizer_class.from_pretrained(SAMPLE_SP, **kwargs)
+        return self.rust_tokenizer_class.from_pretrained(self.tokenizer_pretrained_name, **kwargs)
 
     def get_tokenizers(self, **kwargs) -> List[PreTrainedTokenizerBase]:
         return [self.get_tokenizer(**kwargs), self.get_rust_tokenizer(**kwargs)]

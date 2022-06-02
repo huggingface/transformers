@@ -193,8 +193,8 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
         result = get_results(tmp_dir)
         # Because we use --version_2_with_negative the testing script uses SQuAD v2 metrics.
-        self.assertGreaterEqual(result["eval_f1"], 30)
-        self.assertGreaterEqual(result["eval_exact"], 30)
+        self.assertGreaterEqual(result["eval_f1"], 28)
+        self.assertGreaterEqual(result["eval_exact"], 28)
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "qa_no_trainer")))
 

@@ -86,7 +86,7 @@ class VanDropPath(nn.Module):
         return drop_path(x, self.drop_prob, self.training)
 
 
-class VanOverlappingPatchEmbedder(nn.Sequential):
+class VanOverlappingPatchEmbedder(nn.Module):
     """
     Downsamples the input using a patchify operation with a `stride` of 4 by default making adjacent windows overlap by
     half of the area. From [PVTv2: Improved Baselines with Pyramid Vision
@@ -100,8 +100,13 @@ class VanOverlappingPatchEmbedder(nn.Sequential):
         )
         self.normalization = nn.BatchNorm2d(hidden_size)
 
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        hidden_state = self.convolution(input)
+        hidden_state = self.normalization(hidden_state)
+        return hidden_state
 
-class VanMlpLayer(nn.Sequential):
+
+class VanMlpLayer(nn.Module):
     """
     MLP with depth-wise convolution, from [PVTv2: Improved Baselines with Pyramid Vision
     Transformer](https://arxiv.org/abs/2106.13797).
@@ -123,8 +128,17 @@ class VanMlpLayer(nn.Sequential):
         self.out_dense = nn.Conv2d(hidden_size, out_channels, kernel_size=1)
         self.dropout2 = nn.Dropout(dropout_rate)
 
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        hidden_state = self.in_dense(hidden_state)
+        hidden_state = self.depth_wise(hidden_state)
+        hidden_state = self.activation(hidden_state)
+        hidden_state = self.dropout1(hidden_state)
+        hidden_state = self.out_dense(hidden_state)
+        hidden_state = self.dropout2(hidden_state)
+        return hidden_state
 
-class VanLargeKernelAttention(nn.Sequential):
+
+class VanLargeKernelAttention(nn.Module):
     """
     Basic Large Kernel Attention (LKA).
     """
@@ -136,6 +150,12 @@ class VanLargeKernelAttention(nn.Sequential):
             hidden_size, hidden_size, kernel_size=7, dilation=3, padding=9, groups=hidden_size
         )
         self.point_wise = nn.Conv2d(hidden_size, hidden_size, kernel_size=1)
+
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        hidden_state = self.depth_wise(hidden_state)
+        hidden_state = self.depth_wise_dilated(hidden_state)
+        hidden_state = self.point_wise(hidden_state)
+        return hidden_state
 
 
 class VanLargeKernelAttentionLayer(nn.Module):

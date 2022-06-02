@@ -597,11 +597,12 @@ def _load_state_dict_into_meta_model(
                 raise ValueError(f"{param_name} doesn't have any device set.")
             param_device = device_map[module_name]
 
-        set_module_tensor_to_device(model, param_name, param_device, value=param)
         if param_device == "disk":
             offload_index = offload_weight(param, param_name, offload_folder, offload_index)
         elif param_device == "cpu" and state_dict_index is not None:
             state_dict_index = offload_weight(param, param_name, state_dict_folder, state_dict_index)
+        else:
+            set_module_tensor_to_device(model, param_name, param_device, value=param)
 
     return error_msgs, offload_index, state_dict_index
 
@@ -1734,6 +1735,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 same device.
 
                 To have Accelerate compute the most optimized `device_map` automatically, set `device_map="auto"`.
+            max_memory (`Dict`, *optional*):
+                A dictionary device identifier to maximum memory. Will default to the maximum memory available for each
+                GPU and the available CPU RAM if unset.
             offload_folder (`str` or `os.PathLike`, *optional*):
                 If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
             offload_state_dict (`bool`, *optional*, defaults to `False`):
@@ -1822,6 +1826,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         torch_dtype = kwargs.pop("torch_dtype", None)
         low_cpu_mem_usage = kwargs.pop("low_cpu_mem_usage", None)
         device_map = kwargs.pop("device_map", None)
+        max_memory = kwargs.pop("max_memory", None)
         offload_folder = kwargs.pop("offload_folder", None)
         offload_state_dict = kwargs.pop("offload_state_dict", False)
 
@@ -2119,7 +2124,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if model._no_split_modules is None:
                 raise ValueError(f"{model.__class__.__name__} does not support `device_map='auto'` yet.")
             no_split_modules = model._no_split_modules
-            device_map = infer_auto_device_map(model, no_split_module_classes=no_split_modules, dtype=torch_dtype)
+            device_map = infer_auto_device_map(
+                model, no_split_module_classes=no_split_modules, dtype=torch_dtype, max_memory=max_memory
+            )
 
         if from_tf:
             if resolved_archive_file.endswith(".index"):
@@ -2210,6 +2217,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         offload_state_dict=False,
         dtype=None,
     ):
+        if device_map is not None and "disk" in device_map.values() and offload_folder is None:
+            raise ValueError(
+                "The current `device_map` had weights offloaded to the disk. Please provide an `offload_folder` for"
+                " them."
+            )
         # Retrieve missing & unexpected_keys
         model_state_dict = model.state_dict()
         expected_keys = list(model_state_dict.keys())
@@ -2382,7 +2394,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 del state_dict
                 gc.collect()
 
-            save_offload_index(offload_index, offload_folder)
+            if offload_index is not None and len(offload_index) > 0:
+                save_offload_index(offload_index, offload_folder)
 
             if offload_state_dict:
                 # Load back temporarily offloaded state dict
