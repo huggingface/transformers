@@ -343,10 +343,10 @@ class LayerTestCase(TestCase):
     """Tests export of specific Layers / Modules."""
 
     @require_torch
+    @pytest.mark.filterwarnings("ignore:.*Dropout.*:UserWarning:torch.onnx.*")  # torch.onnx is spammy.
     def test_StableDropout(self):
         """Tests export of StableDropout in training mode."""
         import os
-        import warnings
 
         import torch
 
@@ -359,28 +359,24 @@ class LayerTestCase(TestCase):
         do_constant_folding = False
         # Dropout is a no-op in inference mode
         training = torch.onnx.TrainingMode.PRESERVE
-
         input = (torch.randn(2, 2),)
 
-        with warnings.catch_warnings():
-            # torch.onnx is spammy.
-            warnings.filterwarnings("ignore", module=r"torch.onnx.*")
+        torch.onnx.export(
+            sd,
+            input,
+            devnull,
+            opset_version=12,  # Minimum supported
+            do_constant_folding=do_constant_folding,
+            training=training,
+        )
+
+        # Expected to fail with opset_version < 12
+        with self.assertRaises(Exception):
             torch.onnx.export(
                 sd,
                 input,
                 devnull,
-                opset_version=12,  # Minimum supported
+                opset_version=11,
                 do_constant_folding=do_constant_folding,
                 training=training,
             )
-
-            # Expected to fail with opset_version < 12
-            with self.assertRaises(Exception):
-                torch.onnx.export(
-                    sd,
-                    input,
-                    devnull,
-                    opset_version=11,
-                    do_constant_folding=do_constant_folding,
-                    training=training,
-                )
