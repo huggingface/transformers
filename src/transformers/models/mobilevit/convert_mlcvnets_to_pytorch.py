@@ -113,6 +113,8 @@ def rename_key(name, base_model=False):
         name = name.replace(".pre_norm_ffn.1.", ".intermediate.dense.")
     if ".pre_norm_ffn.4." in name:
         name = name.replace(".pre_norm_ffn.4.", ".output.dense.")
+    if ".transformer." in name:
+        name = name.replace(".transformer.", ".transformer.layers.")
 
     if ".aspp_layer." in name:
         name = name.replace(".aspp_layer.", ".")
@@ -148,8 +150,8 @@ def convert_state_dict(orig_state_dict, model, base_model=False):
             layer_num = int(key_split[0][6:]) - 1
             transformer_num = int(key_split[3])
             layer = model.get_submodule(f"{model_prefix}encoder.layer.{layer_num}.1")
-            dim = layer.transformer[transformer_num].attention.attention.all_head_size
-            prefix = f"{model_prefix}encoder.layer.{layer_num}.1.transformer.{transformer_num}.attention.attention."
+            dim = layer.transformer.layers[transformer_num].attention.attention.all_head_size
+            prefix = f"{model_prefix}encoder.layer.{layer_num}.1.transformer.layers.{transformer_num}.attention.attention."
             if "weight" in key:
                 orig_state_dict[prefix + "query.weight"] = val[:dim, :]
                 orig_state_dict[prefix + "key.weight"] = val[dim : dim * 2, :]

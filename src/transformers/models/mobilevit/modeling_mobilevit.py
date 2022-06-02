@@ -341,6 +341,25 @@ class MobileViTTransformerLayer(nn.Module):
         return layer_output
 
 
+class MobileViTTransformer(nn.Module):
+    def __init__(self, config: MobileViTConfig, hidden_size: int, num_stages: int) -> None:
+        super().__init__()
+
+        self.layers = nn.ModuleList()
+        for _ in range(num_stages):
+            transformer_layer = MobileViTTransformerLayer(
+                config,
+                hidden_size=hidden_size,
+                intermediate_size=int(hidden_size * config.mlp_ratio),
+            )
+            self.layers.append(transformer_layer)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        for layer in self.layers:
+            hidden_states = layer(hidden_states)
+        return hidden_states
+
+
 class MobileViTLayer(nn.Module):
     """
     MobileViT block: https://arxiv.org/abs/2110.02178
@@ -373,14 +392,9 @@ class MobileViTLayer(nn.Module):
             use_activation=False,
         )
 
-        self.transformer = nn.Sequential()
-        for block_idx in range(num_stages):
-            transformer = MobileViTTransformerLayer(
-                config,
-                hidden_size=hidden_size,
-                intermediate_size=int(hidden_size * config.mlp_ratio),
-            )
-            self.transformer.append(transformer)
+        self.transformer = MobileViTTransformer(
+            config, hidden_size=hidden_size, num_stages=num_stages,
+        )
 
         self.layernorm = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
 
