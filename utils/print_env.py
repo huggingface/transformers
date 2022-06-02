@@ -18,12 +18,14 @@
 # this script dumps information about the environment
 
 import os
+import sys
 
 import transformers
 
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
+print("Python version:", sys.version)
 print("transformers version:", transformers.__version__)
 
 try:
