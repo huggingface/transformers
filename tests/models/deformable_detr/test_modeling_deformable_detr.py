@@ -22,7 +22,7 @@ from typing import Dict, List, Tuple
 
 from transformers import DeformableDetrConfig, is_timm_available, is_vision_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_timm, require_vision, slow, torch_device
+from transformers.testing_utils import require_timm, require_torch_gpu, require_vision, slow, torch_device
 
 from ...generation.test_generation_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -166,6 +166,7 @@ class DeformableDetrModelTester:
 
 
 @require_timm
+@require_torch_gpu
 class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (DeformableDetrModel, DeformableDetrForObjectDetection) if is_timm_available() else ()
     is_encoder_decoder = True
