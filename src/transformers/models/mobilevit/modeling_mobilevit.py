@@ -384,7 +384,7 @@ class MobileViTLayer(nn.Module):
 
         self.layernorm = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
 
-        self.conv_proj = MobileViTConvLayer(config, in_channels=hidden_size, out_channels=in_channels, kernel_size=1)
+        self.conv_projection = MobileViTConvLayer(config, in_channels=hidden_size, out_channels=in_channels, kernel_size=1)
 
         self.fusion = MobileViTConvLayer(
             config, in_channels=2 * in_channels, out_channels=in_channels, kernel_size=config.conv_kernel_size
@@ -479,7 +479,7 @@ class MobileViTLayer(nn.Module):
         # convert patches back to feature maps
         features = self.folding(patches, info_dict)
 
-        features = self.conv_proj(features)
+        features = self.conv_projection(features)
         features = self.fusion(torch.cat((residual, features), dim=1))
         return features
 
@@ -910,14 +910,14 @@ class MobileViTASPP(nn.Module):
 
         self.convs = nn.ModuleList()
 
-        in_proj = MobileViTConvLayer(
+        in_projection = MobileViTConvLayer(
             config,
             in_channels=in_channels,
             out_channels=out_channels,
             kernel_size=1,
             use_activation="relu",
         )
-        self.convs.append(in_proj)
+        self.convs.append(in_projection)
 
         self.convs.extend(
             [
@@ -995,7 +995,7 @@ class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
 
         self.num_labels = config.num_labels
         self.mobilevit = MobileViTModel(config, expand_output=False)
-        self.seg_head = MobileViTDeeplabV3(config)
+        self.segmentation_head = MobileViTDeeplabV3(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1059,7 +1059,7 @@ class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
 
         encoder_hidden_states = outputs.hidden_states if return_dict else outputs[1]
 
-        logits = self.seg_head(encoder_hidden_states)
+        logits = self.segmentation_head(encoder_hidden_states)
 
         loss = None
         if labels is not None:

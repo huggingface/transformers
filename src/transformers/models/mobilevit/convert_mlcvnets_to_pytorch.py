@@ -92,6 +92,8 @@ def rename_key(name, base_model=False):
         name = name.replace(".norm.", ".normalization.")
     if ".conv." in name:
         name = name.replace(".conv.", ".convolution.")
+    if ".conv_proj." in name:
+        name = name.replace(".conv_proj.", ".conv_projection.")
 
     for i in range(2, 5):
         if f".global_rep.{i}.weight" in name:
@@ -114,10 +116,12 @@ def rename_key(name, base_model=False):
 
     if ".aspp_layer." in name:
         name = name.replace(".aspp_layer.", ".")
+    if "seg_head." in name:
+        name = name.replace("seg_head.", "segmentation_head.")
 
     if "classifier.fc." in name:
         name = name.replace("classifier.fc.", "classifier.")
-    elif (not base_model) and ("seg_head." not in name):
+    elif (not base_model) and ("segmentation_head." not in name):
         name = "mobilevit." + name
 
     return name
