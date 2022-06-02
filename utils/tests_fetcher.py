@@ -260,7 +260,7 @@ def create_reverse_dependency_tree():
 
 def get_tree_starting_at(module, edges):
     """
-    Retruns the tree starting at a given module following all edges in the following format: [module, [list of edges
+    Returns the tree starting at a given module following all edges in the following format: [module, [list of edges
     starting at module], [list of edges starting at the preceding level], ...]
     """
     vertices_seen = [module]
