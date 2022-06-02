@@ -575,6 +575,7 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
             return_dict=return_dict,
         )
 
+        # Turn output hidden states in tensor of shape (batch_size, num_channels, height, width)
         sequence_output = outputs[0]
         batch_size = sequence_output.shape[0]
         patch_height = self.config.image_size[0] // self.config.patch_size[0]
@@ -583,8 +584,13 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
             sequence_output.permute(0, 2, 1).reshape(batch_size, -1, patch_height, patch_width).contiguous()
         )
 
-        print("Shape of sequence output:", sequence_output.shape)
+        # ReLu + upsample
+        sequence_output = nn.functional.relu(sequence_output)
+        sequence_output = nn.functional.interpolate(
+            sequence_output, scale_factor=4, mode="bilinear", align_corners=False
+        )
 
+        # Conv2d
         logits = self.keypoint_head(sequence_output)
 
         loss = None

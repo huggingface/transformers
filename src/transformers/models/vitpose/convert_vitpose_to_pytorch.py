@@ -19,7 +19,6 @@ URL: https://github.com/vitae-transformer/vitpose
 
 
 import argparse
-from pathlib import Path
 
 import torch
 from PIL import Image
@@ -28,6 +27,8 @@ import requests
 from transformers import ViTFeatureExtractor, ViTPoseConfig, ViTPoseForPoseEstimation
 from transformers.utils import logging
 
+
+# from pathlib import Path
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -136,7 +137,7 @@ def convert_vitpose_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_
     outputs = model(pixel_values)
 
     # TODO assert logits
-    print(outputs.keys())
+    print("Shape of logits:", outputs.logits.shape)
 
     # Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     # print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
