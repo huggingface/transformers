@@ -515,8 +515,10 @@ def check_readme(overwrite=False):
     if len(absents) > 0 and not overwrite:
         print(absents)
         raise ValueError(
-            "The main README doesn't contain all models, run `make fix-copies` to fill it with the missing model(s) "
-            "then complete the generated entries."
+            "The main README doesn't contain all models, run `make fix-copies` to fill it with the missing model(s)"
+            " then complete the generated entries.\nIf the model is not supposed to be in the main README, add it to"
+            " the list `MODELS_NOT_IN_README` in utils/check_copies.py.\nIf it has a different name in the repo than"
+            " in the README, map the correspondence in `SPECIAL_MODEL_NAMES` in utils/check_copies.py."
         )
 
     new_models = [README_TEMPLATE.format(model_name=name, model_type=key) for key, name in absents]
