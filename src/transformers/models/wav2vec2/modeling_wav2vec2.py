@@ -1853,7 +1853,7 @@ class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
             self.layer_weights = nn.Parameter(torch.ones(num_layers) / num_layers)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
         self.num_labels = config.num_labels
-        
+
         self.init_weights()
 
     def freeze_feature_extractor(self):
