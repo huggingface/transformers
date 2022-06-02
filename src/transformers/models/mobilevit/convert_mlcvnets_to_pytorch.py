@@ -80,6 +80,7 @@ def rename_key(name, base_model=False):
         name = name.replace("conv_1.", "conv_stem.")
     if ".block." in name:
         name = name.replace(".block.", ".")
+
     if "exp_1x1" in name:
         name = name.replace("exp_1x1", "expand_1x1")
     if "red_1x1" in name:
@@ -95,6 +96,22 @@ def rename_key(name, base_model=False):
     if ".conv_proj." in name:
         name = name.replace(".conv_proj.", ".conv_projection.")
 
+    for i in range(0, 2):
+        for j in range(0, 4):
+            if f".{i}.{j}." in name:
+                name = name.replace(f".{i}.{j}.", f".{i}.layer.{j}.")
+
+    for i in range(2, 6):
+        for j in range(0, 4):
+            if f".{i}.{j}." in name:
+                name = name.replace(f".{i}.{j}.", f".{i}.")
+                if "expand_1x1" in name:
+                    name = name.replace("expand_1x1", "downsampling_layer.expand_1x1")
+                if "conv_3x3" in name:
+                    name = name.replace("conv_3x3", "downsampling_layer.conv_3x3")
+                if "reduce_1x1" in name:
+                    name = name.replace("reduce_1x1", "downsampling_layer.reduce_1x1")
+                
     for i in range(2, 5):
         if f".global_rep.{i}.weight" in name:
             name = name.replace(f".global_rep.{i}.weight", ".layernorm.weight")
@@ -114,7 +131,7 @@ def rename_key(name, base_model=False):
     if ".pre_norm_ffn.4." in name:
         name = name.replace(".pre_norm_ffn.4.", ".output.dense.")
     if ".transformer." in name:
-        name = name.replace(".transformer.", ".transformer.layers.")
+        name = name.replace(".transformer.", ".transformer.layer.")
 
     if ".aspp_layer." in name:
         name = name.replace(".aspp_layer.", ".")
@@ -149,9 +166,9 @@ def convert_state_dict(orig_state_dict, model, base_model=False):
             key_split = key.split(".")
             layer_num = int(key_split[0][6:]) - 1
             transformer_num = int(key_split[3])
-            layer = model.get_submodule(f"{model_prefix}encoder.layer.{layer_num}.1")
-            dim = layer.transformer.layers[transformer_num].attention.attention.all_head_size
-            prefix = f"{model_prefix}encoder.layer.{layer_num}.1.transformer.layers.{transformer_num}.attention.attention."
+            layer = model.get_submodule(f"{model_prefix}encoder.layer.{layer_num}")
+            dim = layer.transformer.layer[transformer_num].attention.attention.all_head_size
+            prefix = f"{model_prefix}encoder.layer.{layer_num}.transformer.layer.{transformer_num}.attention.attention."
             if "weight" in key:
                 orig_state_dict[prefix + "query.weight"] = val[:dim, :]
                 orig_state_dict[prefix + "key.weight"] = val[dim : dim * 2, :]

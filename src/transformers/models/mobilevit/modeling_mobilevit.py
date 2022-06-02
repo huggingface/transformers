@@ -200,6 +200,29 @@ class MobileViTInvertedResidual(nn.Module):
         return residual + features if self.use_residual else features
 
 
+class MobileViTMobileNetLayer(nn.Module):
+    def __init__(
+        self, config: MobileViTConfig, in_channels: int, out_channels: int, stride: int = 1, num_stages: int = 1
+    ) -> None:
+        super().__init__()
+
+        self.layer = nn.ModuleList()
+        for i in range(num_stages):
+            layer = MobileViTInvertedResidual(
+                config,
+                in_channels=in_channels,
+                out_channels=out_channels,
+                stride=stride if i == 0 else 1,
+            )
+            self.layer.append(layer)
+            in_channels = out_channels
+
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        for layer_module in self.layer:
+            features = layer_module(features)
+        return features
+
+
 class MobileViTSelfAttention(nn.Module):
     def __init__(self, config: MobileViTConfig, hidden_size: int) -> None:
         super().__init__()
@@ -345,18 +368,18 @@ class MobileViTTransformer(nn.Module):
     def __init__(self, config: MobileViTConfig, hidden_size: int, num_stages: int) -> None:
         super().__init__()
 
-        self.layers = nn.ModuleList()
+        self.layer = nn.ModuleList()
         for _ in range(num_stages):
             transformer_layer = MobileViTTransformerLayer(
                 config,
                 hidden_size=hidden_size,
                 intermediate_size=int(hidden_size * config.mlp_ratio),
             )
-            self.layers.append(transformer_layer)
+            self.layer.append(transformer_layer)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        for layer in self.layers:
-            hidden_states = layer(hidden_states)
+        for layer_module in self.layer:
+            hidden_states = layer_module(hidden_states)
         return hidden_states
 
 
@@ -369,12 +392,27 @@ class MobileViTLayer(nn.Module):
         self,
         config: MobileViTConfig,
         in_channels: int,
+        out_channels: int,
+        stride: int,
         hidden_size: int,
         num_stages: int,
+        dilation: int = 1,
     ) -> None:
         super().__init__()
         self.patch_width = config.patch_size
         self.patch_height = config.patch_size
+
+        if stride == 2:
+            self.downsampling_layer = MobileViTInvertedResidual(
+                config,
+                in_channels=in_channels,
+                out_channels=out_channels,
+                stride=stride if dilation == 1 else 1,
+                dilation=dilation // 2 if dilation > 1 else 1,
+            )
+            in_channels = out_channels
+        else:
+            self.downsampling_layer = None
 
         self.conv_kxk = MobileViTConvLayer(
             config,
@@ -477,6 +515,10 @@ class MobileViTLayer(nn.Module):
         return features
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
+        # reduce spatial dimensions if needed
+        if self.downsampling_layer:
+            features = self.downsampling_layer(features)
+
         residual = features
 
         # local representation
@@ -517,7 +559,8 @@ class MobileViTEncoder(nn.Module):
 
         dilation = 1
 
-        layer_1 = self._make_mobilenet_layer(
+        layer_1 = MobileViTMobileNetLayer(
+            config,
             in_channels=config.neck_hidden_sizes[0],
             out_channels=config.neck_hidden_sizes[1],
             stride=1,
@@ -525,7 +568,8 @@ class MobileViTEncoder(nn.Module):
         )
         self.layer.append(layer_1)
 
-        layer_2 = self._make_mobilenet_layer(
+        layer_2 = MobileViTMobileNetLayer(
+            config,
             in_channels=config.neck_hidden_sizes[1],
             out_channels=config.neck_hidden_sizes[2],
             stride=2,
@@ -533,7 +577,8 @@ class MobileViTEncoder(nn.Module):
         )
         self.layer.append(layer_2)
 
-        layer_3 = self._make_mobilevit_layer(
+        layer_3 = MobileViTLayer(
+            config,
             in_channels=config.neck_hidden_sizes[2],
             out_channels=config.neck_hidden_sizes[3],
             stride=2,
@@ -545,7 +590,8 @@ class MobileViTEncoder(nn.Module):
         if dilate_layer_4:
             dilation *= 2
 
-        layer_4 = self._make_mobilevit_layer(
+        layer_4 = MobileViTLayer(
+            config,
             in_channels=config.neck_hidden_sizes[3],
             out_channels=config.neck_hidden_sizes[4],
             stride=2,
@@ -558,7 +604,8 @@ class MobileViTEncoder(nn.Module):
         if dilate_layer_5:
             dilation *= 2
 
-        layer_5 = self._make_mobilevit_layer(
+        layer_5 = MobileViTLayer(
+            config,
             in_channels=config.neck_hidden_sizes[4],
             out_channels=config.neck_hidden_sizes[5],
             stride=2,
@@ -567,57 +614,6 @@ class MobileViTEncoder(nn.Module):
             dilation=dilation,
         )
         self.layer.append(layer_5)
-
-    def _make_mobilenet_layer(
-        self,
-        in_channels: int,
-        out_channels: int,
-        stride: int,
-        num_stages: int,
-    ) -> nn.Sequential:
-        block = []
-        for i in range(num_stages):
-            layer = MobileViTInvertedResidual(
-                self.config,
-                in_channels=in_channels,
-                out_channels=out_channels,
-                stride=stride if i == 0 else 1,
-            )
-            block.append(layer)
-            in_channels = out_channels
-
-        return nn.Sequential(*block)
-
-    def _make_mobilevit_layer(
-        self,
-        in_channels: int,
-        out_channels: int,
-        stride: int,
-        hidden_size: int,
-        num_stages: int,
-        dilation: int = 1,
-    ) -> nn.Sequential:
-        block = []
-        if stride == 2:
-            layer = MobileViTInvertedResidual(
-                self.config,
-                in_channels=in_channels,
-                out_channels=out_channels,
-                stride=stride if dilation == 1 else 1,
-                dilation=dilation // 2 if dilation > 1 else 1,
-            )
-            block.append(layer)
-            in_channels = out_channels
-
-        layer = MobileViTLayer(
-            self.config,
-            in_channels=in_channels,
-            hidden_size=hidden_size,
-            num_stages=num_stages,
-        )
-        block.append(layer)
-
-        return nn.Sequential(*block)
 
     def forward(
         self,
