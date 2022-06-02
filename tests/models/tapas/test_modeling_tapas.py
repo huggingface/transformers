@@ -32,7 +32,13 @@ from transformers import (
     is_torch_available,
 )
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_scatter, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    require_scatter,
+    require_tensorflow_probability,
+    require_torch,
+    slow,
+    torch_device,
+)
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
@@ -498,6 +504,10 @@ class TapasModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
+
+    @require_tensorflow_probability
+    def test_pt_tf_model_equivalence(self):
+        super().test_pt_tf_model_equivalence()
 
 
 def prepare_tapas_single_inputs_for_inference():
