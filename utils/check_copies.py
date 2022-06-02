@@ -520,15 +520,16 @@ def check_readme(overwrite=False):
         )
 
     new_models = [README_TEMPLATE.format(model_name=name, model_type=key) for key, name in absents]
-    print("\n".join(new_models))
 
     all_models = models.strip().split("\n") + new_models
     all_models = sorted(all_models, key=lambda x: re.search(r"\*\*\[([^\]]*)", x).groups()[0].lower())
+    all_models = "\n".join(all_models) + "\n"
 
     if all_models != models:
         if overwrite:
+            print("Fixing the main README.")
             with open(os.path.join(REPO_PATH, "README.md"), "w", encoding="utf-8", newline="\n") as f:
-                f.writelines(lines[:start_index] + all_models + lines[end_index:])
+                f.writelines(lines[:start_index] + [all_models] + lines[end_index:])
         else:
             raise ValueError("The main README model list is not properly sorted. Run `make fix-copies` to fix this.")
 
@@ -539,5 +540,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     check_readme(args.fix_and_overwrite)
-    # check_copies(args.fix_and_overwrite)
-    # check_full_copies(args.fix_and_overwrite)
+    check_copies(args.fix_and_overwrite)
+    check_full_copies(args.fix_and_overwrite)
