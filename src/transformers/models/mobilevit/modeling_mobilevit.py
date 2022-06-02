@@ -1000,15 +1000,6 @@ class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def compute_loss(self, logits, labels):
-        # upsample logits to the images' original size
-        upsampled_logits = nn.functional.interpolate(
-            logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
-        )
-        loss_fct = CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
-        loss = loss_fct(upsampled_logits, labels)
-        return loss
-
     @add_start_docstrings_to_model_forward(MOBILEVIT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=SemanticSegmenterOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1066,7 +1057,12 @@ class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
             if self.config.num_labels == 1:
                 raise ValueError("The number of labels should be greater than one")
             else:
-                loss = self.compute_loss(logits, labels)
+                # upsample logits to the images' original size
+                upsampled_logits = nn.functional.interpolate(
+                    logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
+                )
+                loss_fct = CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
+                loss = loss_fct(upsampled_logits, labels)
 
         if not return_dict:
             if output_hidden_states:
