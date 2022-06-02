@@ -323,7 +323,9 @@ def _prepare_fsmt_decoder_inputs(
         decoder_padding_mask = make_padding_mask(decoder_input_ids, pad_token_id)
     else:
         decoder_padding_mask = invert_mask(decoder_padding_mask)
-    causal_mask = triu_onnx(fill_with_neg_inf(torch.zeros(tgt_len, tgt_len, dtype=causal_mask_dtype)), 1).to(device=decoder_input_ids.device)
+    causal_mask = triu_onnx(fill_with_neg_inf(torch.zeros(tgt_len, tgt_len, dtype=causal_mask_dtype)), 1).to(
+        device=decoder_input_ids.device
+    )
     return decoder_input_ids, decoder_padding_mask, causal_mask
 
 

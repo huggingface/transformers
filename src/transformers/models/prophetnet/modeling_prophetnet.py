@@ -187,7 +187,9 @@ def ngram_attention_bias(sequence_length, ngram, device, dtype):
     """
     This function computes the bias for the predict stream
     """
-    left_block = torch.ones((ngram, sequence_length, sequence_length), device=device, dtype=dtype) * torch.finfo(dtype).min
+    left_block = (
+        torch.ones((ngram, sequence_length, sequence_length), device=device, dtype=dtype) * torch.finfo(dtype).min
+    )
     right_block = left_block.detach().clone()
     # create bias
     for stream_idx in range(ngram):
@@ -1713,7 +1715,10 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
         # get causal mask
         causal_mask = torch.full(
-            (seq_length, seq_length), torch.finfo(hidden_states.dtype).min, dtype=hidden_states.dtype, device=hidden_states.device
+            (seq_length, seq_length),
+            torch.finfo(hidden_states.dtype).min,
+            dtype=hidden_states.dtype,
+            device=hidden_states.device,
         )
         causal_mask = torch.triu(causal_mask, 1)
         extended_causal_mask = causal_mask[:seq_length, :seq_length][None, :, :].expand(
