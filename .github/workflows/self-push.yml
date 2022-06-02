@@ -87,17 +87,6 @@ jobs:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
-      - name: NVIDIA-SMI
-        run: |
-          nvidia-smi
-
-      - name: Are GPUs recognized by our DL frameworks
-        working-directory: /transformers
-        run: |
-          utils/print_env_pt.py
-          TF_CPP_MIN_LOG_LEVEL=3 python3 -c "import tensorflow as tf; print('TF GPUs available:', bool(tf.config.list_physical_devices('GPU')))"
-          TF_CPP_MIN_LOG_LEVEL=3 python3 -c "import tensorflow as tf; print('Number of TF GPUs available:', len(tf.config.list_physical_devices('GPU')))"
-
       - name: Echo folder ${{ matrix.folders }}
         shell: bash
         # For folders like `models/bert`, set an env. var. (`matrix_folders`) to `models_bert`, which will be used to
@@ -113,6 +102,15 @@ jobs:
       - name: Update clone
         working-directory: /transformers
         run: git fetch && git checkout ${{ github.sha }}
+
+      - name: NVIDIA-SMI
+        run: |
+          nvidia-smi
+
+      - name: Environment
+        working-directory: /transformers
+        run: |
+          python3 utils/print_env.py
 
       - name: Run all non-slow selected tests on GPU
         working-directory: /transformers
@@ -146,17 +144,6 @@ jobs:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
-      - name: NVIDIA-SMI
-        run: |
-          nvidia-smi
-
-      - name: Are GPUs recognized by our DL frameworks
-        working-directory: /transformers
-        run: |
-          utils/print_env_pt.py
-          TF_CPP_MIN_LOG_LEVEL=3 python3 -c "import tensorflow as tf; print('TF GPUs available:', bool(tf.config.list_physical_devices('GPU')))"
-          TF_CPP_MIN_LOG_LEVEL=3 python3 -c "import tensorflow as tf; print('Number of TF GPUs available:', len(tf.config.list_physical_devices('GPU')))"
-
       - name: Echo folder ${{ matrix.folders }}
         shell: bash
         # For folders like `models/bert`, set an env. var. (`matrix_folders`) to `models_bert`, which will be used to
@@ -172,6 +159,15 @@ jobs:
       - name: Update clone
         working-directory: /transformers
         run: git fetch && git checkout ${{ github.sha }}
+
+      - name: NVIDIA-SMI
+        run: |
+          nvidia-smi
+
+      - name: Environment
+        working-directory: /transformers
+        run: |
+          python3 utils/print_env.py
 
       - name: Run all non-slow selected tests on GPU
         env:
@@ -210,19 +206,19 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: NVIDIA-SMI
-        run: |
-          nvidia-smi
-
       - name: Install dependencies
         run: |
           apt -y update && apt install -y libaio-dev
           pip install --upgrade pip
           pip install .[deepspeed-testing]
 
-      - name: Are GPUs recognized by our DL frameworks
+      - name: NVIDIA-SMI
         run: |
-          utils/print_env_pt.py
+          nvidia-smi
+
+      - name: Environment
+        run: |
+          python utils/print_env.py
 
       - name: Run all non-slow selected tests on GPU
         # TODO: Here we pass all tests in the 2 folders for simplicity. It's better to pass only the identified tests.
@@ -259,10 +255,6 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: NVIDIA-SMI
-        run: |
-          nvidia-smi
-
       - name: Install dependencies
         run: |
           apt -y update && apt install -y libaio-dev
@@ -270,9 +262,13 @@ jobs:
           rm -rf ~/.cache/torch_extensions/ # shared between conflicting builds
           pip install .[testing,deepspeed,fairscale]
 
-      - name: Are GPUs recognized by our DL frameworks
+      - name: NVIDIA-SMI
         run: |
-          utils/print_env_pt.py
+          nvidia-smi
+
+      - name: Environment
+        run: |
+          python utils/print_env.py
 
       - name: Run all non-slow selected tests on GPU
         # TODO: Here we pass all tests in the 2 folders for simplicity. It's better to pass only the identified tests.
