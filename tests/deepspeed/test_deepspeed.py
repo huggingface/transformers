@@ -20,6 +20,8 @@ import os
 import unittest
 from copy import deepcopy
 
+import datasets
+
 from parameterized import parameterized
 from tests.trainer.test_trainer import TrainerIntegrationCommon  # noqa
 from transformers import AutoModel, TrainingArguments, is_torch_available, logging
@@ -195,28 +197,7 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         self.assertNotIn("Detected DeepSpeed ZeRO-3", cl.out)
 
 
-@require_deepspeed
-@require_torch_gpu
-class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
-    """
-
-    This class is for testing directly via get_regression_trainer
-
-    It mixes in `TrainerIntegrationCommon` which already has a lot of helper validation methods
-    which we can re-use here.
-
-    Important: this class' setup can only work with a single gpu because it runs within the current
-    pytest worker. For multi-gpu tests use TestDeepSpeedWithLauncher.
-
-    Note: if any of the tests of this class get run there will be at least one gpu occupied by them
-    until this pytest worker exits. This is because the gpu memory allocated by the cuda-kernels
-    won't be released until this pytest worker exits.
-
-    This may appear as some run-away tests if you watch `nvidia-smi` while other tests that fork new
-    processes are run. So there will be one or two "stale" processes reported in `nvidia-smi`. This
-    is not a bug.
-    """
-
+class TrainerIntegrationDeepSpeedWithCustomConfig(TestCasePlus):
     def setUp(self):
         super().setUp()
 
@@ -251,6 +232,29 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
     def get_config_dict(self, stage):
         # As some tests modify the dict, always make a copy
         return deepcopy(self.ds_config_dict[stage])
+
+
+@require_deepspeed
+@require_torch_gpu
+class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, TrainerIntegrationCommon):
+    """
+
+    This class is for testing directly via get_regression_trainer
+
+    It mixes in `TrainerIntegrationCommon` which already has a lot of helper validation methods
+    which we can re-use here.
+
+    Important: this class' setup can only work with a single gpu because it runs within the current
+    pytest worker. For multi-gpu tests use TestDeepSpeedWithLauncher.
+
+    Note: if any of the tests of this class get run there will be at least one gpu occupied by them
+    until this pytest worker exits. This is because the gpu memory allocated by the cuda-kernels
+    won't be released until this pytest worker exits.
+
+    This may appear as some run-away tests if you watch `nvidia-smi` while other tests that fork new
+    processes are run. So there will be one or two "stale" processes reported in `nvidia-smi`. This
+    is not a bug.
+    """
 
     # --- These tests are enough to run on one of zero stages --- #
 
@@ -725,6 +729,95 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             self.assertFalse(is_deepspeed_zero3_enabled())
             self.assertFalse(bool(config), "Deepspeed config should not be accessible")
 
+    @parameterized.expand(params, name_func=parameterized_custom_name_func)
+    def test_load_best_model(self, stage, dtype):
+        # Test that forced deepspeed reinit doesn't break the model. the forced re-init after
+        # loading the best model in Trainer is there to workaround this bug in Deepspeed
+        # https://github.com/microsoft/DeepSpeed/issues/1612
+        #
+        # The test is derived from a repro script submitted in this Issue:
+        # https://github.com/huggingface/transformers/issues/17114
+        #
+        # One additional feature of this test is that we use a non-AdamW optimizer to test that
+        # deepspeed doesn't fallback to AdamW, which would prevent the optimizer states from loading
+        # correctly
+
+        from transformers import T5ForConditionalGeneration, T5Tokenizer, Trainer  # noqa
+
+        output_dir = self.get_auto_remove_tmp_dir()  # "./xxx", after=False, before=False)
+
+        ds_config_dict = self.get_config_dict(stage)
+        del ds_config_dict["optimizer"]  # will use HF Trainer optimizer
+        del ds_config_dict["scheduler"]  # will use HF Trainer scheduler
+        # must use this setting to get the reload path exercised
+        ds_config_dict["zero_optimization"]["stage3_gather_16bit_weights_on_model_save"] = True
+
+        tokenizer = T5Tokenizer.from_pretrained(T5_TINY)
+        model = T5ForConditionalGeneration.from_pretrained(T5_TINY)
+
+        def _add_eos_to_examples(example):
+            example["input_text"] = f"question: {example['question']}  context: {example['context']}"
+            example["target_text"] = example["answers"]["text"][0] if len(example["answers"]["text"]) > 0 else ""
+            return example
+
+        def _convert_to_features(example_batch):
+            input_encodings = tokenizer.batch_encode_plus(
+                example_batch["input_text"], pad_to_max_length=True, max_length=512, truncation=True
+            )
+            target_encodings = tokenizer.batch_encode_plus(
+                example_batch["target_text"], pad_to_max_length=True, max_length=16, truncation=True
+            )
+
+            encodings = {
+                "input_ids": input_encodings["input_ids"],
+                "attention_mask": input_encodings["attention_mask"],
+                "labels": target_encodings["input_ids"],
+            }
+
+            return encodings
+
+        def get_dataset():
+            data_file = str(self.tests_dir / "fixtures/tests_samples/SQUAD/sample.json")
+            data_files = dict(train=data_file, validation=data_file)
+            raw_datasets = datasets.load_dataset("json", data_files=data_files, field="data")
+            train_dataset = raw_datasets["train"].map(_add_eos_to_examples).map(_convert_to_features, batched=True)
+            valid_dataset = deepcopy(train_dataset)
+            return train_dataset, valid_dataset
+
+        train_dataset, eval_dataset = get_dataset()
+
+        args_dict = {
+            "per_gpu_train_batch_size": 1,
+            "per_gpu_eval_batch_size": 1,
+            "gradient_accumulation_steps": 1,
+            "learning_rate": 1e-4,
+            "num_train_epochs": 1,
+            "do_train": True,
+            "do_eval": True,
+            "optim": "adafactor",
+            "evaluation_strategy": "steps",
+            "eval_steps": 1,
+            "save_strategy": "steps",
+            "save_steps": 1,
+            "load_best_model_at_end": True,
+            "max_steps": 1,
+            "deepspeed": ds_config_dict,
+        }
+
+        with mockenv_context(**self.dist_env_1_gpu):
+
+            training_args = TrainingArguments(output_dir, **args_dict)
+
+            trainer = Trainer(
+                model=model,
+                tokenizer=tokenizer,
+                args=training_args,
+                train_dataset=train_dataset,
+                eval_dataset=eval_dataset,
+            )
+            trainer.train()  # crash 1 was here
+            trainer.evaluate()  # crash 2 was here
+
 
 @slow
 @require_deepspeed
@@ -1035,50 +1128,3 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         with CaptureStderr() as cs:
             execute_subprocess_async(cmd, env=self.get_env())
         self.assertIn("Detected DeepSpeed ZeRO-3", cs.err)
-
-    @parameterized.expand(params, name_func=parameterized_custom_name_func)
-    def test_load_best_model(self, stage, dtype):
-        # this test exercises --load_best_model_at_end - the key is being able to resume after some training
-
-        data_dir = self.tests_dir / "fixtures/tests_samples/wmt_en_ro"
-        output_dir = self.get_auto_remove_tmp_dir()
-        args = f"""
-            --model_name_or_path {T5_TINY}
-            --tokenizer_name {T5_TINY}
-            --train_file {data_dir}/train.json
-            --validation_file {data_dir}/val.json
-            --output_dir {output_dir}
-            --overwrite_output_dir
-            --source_lang en
-            --target_lang ro
-            --do_train
-            --max_train_samples 3
-            --do_eval
-            --max_eval_samples 1
-            --logging_strategy steps
-            --logging_steps 1
-            --evaluation_strategy steps
-            --eval_steps 1
-            --save_strategy steps
-            --save_steps 1
-            --load_best_model_at_end
-            --per_device_train_batch_size 1
-            --per_device_eval_batch_size 1
-            --num_train_epochs 1
-            --report_to none
-            """.split()
-        args.extend(["--source_prefix", "translate English to Romanian: "])
-
-        args.extend([f"--{dtype}"])
-
-        ds_args = f"--deepspeed {self.test_file_dir_str}/ds_config_{stage}.json".split()
-        script = [f"{self.examples_dir_str}/pytorch/translation/run_translation.py"]
-        launcher = get_launcher(distributed=False)
-
-        cmd = launcher + script + args + ds_args
-        # keep for quick debug
-        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
-        with CaptureStd() as cs:
-            execute_subprocess_async(cmd, env=self.get_env())
-        # enough to test it didn't fail
-        self.assertIn("DeepSpeed info", cs.out)
