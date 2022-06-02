@@ -111,7 +111,7 @@ def rename_key(name, base_model=False):
                     name = name.replace("conv_3x3", "downsampling_layer.conv_3x3")
                 if "reduce_1x1" in name:
                     name = name.replace("reduce_1x1", "downsampling_layer.reduce_1x1")
-                
+
     for i in range(2, 5):
         if f".global_rep.{i}.weight" in name:
             name = name.replace(f".global_rep.{i}.weight", ".layernorm.weight")
@@ -168,7 +168,9 @@ def convert_state_dict(orig_state_dict, model, base_model=False):
             transformer_num = int(key_split[3])
             layer = model.get_submodule(f"{model_prefix}encoder.layer.{layer_num}")
             dim = layer.transformer.layer[transformer_num].attention.attention.all_head_size
-            prefix = f"{model_prefix}encoder.layer.{layer_num}.transformer.layer.{transformer_num}.attention.attention."
+            prefix = (
+                f"{model_prefix}encoder.layer.{layer_num}.transformer.layer.{transformer_num}.attention.attention."
+            )
             if "weight" in key:
                 orig_state_dict[prefix + "query.weight"] = val[:dim, :]
                 orig_state_dict[prefix + "key.weight"] = val[dim : dim * 2, :]

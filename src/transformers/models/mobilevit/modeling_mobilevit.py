@@ -431,12 +431,16 @@ class MobileViTLayer(nn.Module):
         )
 
         self.transformer = MobileViTTransformer(
-            config, hidden_size=hidden_size, num_stages=num_stages,
+            config,
+            hidden_size=hidden_size,
+            num_stages=num_stages,
         )
 
         self.layernorm = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
 
-        self.conv_projection = MobileViTConvLayer(config, in_channels=hidden_size, out_channels=in_channels, kernel_size=1)
+        self.conv_projection = MobileViTConvLayer(
+            config, in_channels=hidden_size, out_channels=in_channels, kernel_size=1
+        )
 
         self.fusion = MobileViTConvLayer(
             config, in_channels=2 * in_channels, out_channels=in_channels, kernel_size=config.conv_kernel_size
