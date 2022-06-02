@@ -2394,7 +2394,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 del state_dict
                 gc.collect()
 
-            save_offload_index(offload_index, offload_folder)
+            if offload_index is not None and len(offload_index) > 0:
+                save_offload_index(offload_index, offload_folder)
 
             if offload_state_dict:
                 # Load back temporarily offloaded state dict
