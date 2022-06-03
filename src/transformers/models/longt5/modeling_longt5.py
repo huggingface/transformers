@@ -190,7 +190,9 @@ def _make_global_fixed_block_ids(
     if num_globals > 0:
         _sequence_block_ids_max = torch.max(global_block_ids, dim=-1).values.repeat(num_globals, 1).transpose(0, 1)
     else:
-        _sequence_block_ids_max = torch.zeros(batch_size, 0, dtype=global_block_ids.dtype)
+        _sequence_block_ids_max = torch.zeros(
+            batch_size, 0, dtype=global_block_ids.dtype, device=global_block_ids.device
+        )
     global_segment_ids = torch.cumsum(torch.ones(batch_size, num_globals), dim=-1) - 1
     global_segment_ids = global_segment_ids.to(attention_mask.device)
     global_segment_ids = torch.where(global_segment_ids <= _sequence_block_ids_max, 1, 0)
@@ -965,7 +967,7 @@ class LongT5TransientGlobalAttention(nn.Module):
             side_position_bias = self.compute_side_bias(mask, global_segment_ids)
             # (batch_size, num_blocks, num_heads, block_len, global_seq_len)
             side_position_bias = _split_into_blocks(side_position_bias, self.block_len, dim=-2).transpose(1, 2)
-            side_position_bias = side_position_bias.type(scores.dtype)
+            side_position_bias = side_position_bias.type(scores.dtype).to(scores.device)
             # (batch_size, num_blocks, num_heads, block_len, 3 * block_len + global_seq_len)
             position_bias = torch.cat([position_bias, side_position_bias], dim=-1)
 
