@@ -539,6 +539,12 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         config.feed_forward_proj = "gated-gelu"
         self.model_tester.create_and_check_model(config, *config_and_inputs[1:])
 
+    def test_config_and_model_silu_gated(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config = config_and_inputs[0]
+        config.feed_forward_proj = "gated-silu"
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
     def test_with_lm_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_with_lm_head(*config_and_inputs)
