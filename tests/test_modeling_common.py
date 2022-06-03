@@ -765,6 +765,8 @@ class ModelTesterMixin:
                         "input_values",
                         "pixel_values",
                         "token_type_ids",
+                        "visual_feats",
+                        "visual_pos",
                     ]
 
                     labels = inputs.get("labels", None)

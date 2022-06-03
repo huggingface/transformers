@@ -103,6 +103,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "gpt_neo",
     "gptj",
     "layoutlm",
+    "lxmert",
     "m2m_100",
     "marian",
     "mbart",
@@ -120,8 +121,8 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "trocr",
     "vit",
     "xglm",
-    # TODO: add support for them as it should be quite easy to do so (small blocking issues).
     # "xlnet",
+    # TODO: add support for them as it should be quite easy to do so (small blocking issues).
 ]
 
 _REGULAR_SUPPORTED_MODELS = []
@@ -612,7 +613,7 @@ class HFTracer(Tracer):
     # Feature flag for proxying accesses to buffer values
     proxy_buffer_attributes: bool = True
     allow_insert_stateless_mods: bool = True
-    _TORCH_METHODS_TO_PATCH = ["arange", "zeros", "ones", "full", "full_like", "eye", "empty"]
+    _TORCH_METHODS_TO_PATCH = ["arange", "zeros", "ones", "full", "full_like", "eye", "empty", "tensor"]
 
     def __init__(self, autowrap_modules=(math,), autowrap_functions=()):
 
@@ -710,6 +711,24 @@ class HFTracer(Tracer):
         elif "input_features" in input_name:
             inputs_dict[input_name] = torch.zeros(
                 *shape, model.config.input_feat_per_channel, dtype=torch.float, device=device
+            )
+        elif "visual_feats" in input_name:
+            inputs_dict[input_name] = torch.zeros(
+                shape
+                + [
+                    model.config.visual_feat_dim,
+                ],
+                dtype=torch.float,
+                device=device,
+            )
+        elif "visual_pos" in input_name:
+            inputs_dict[input_name] = torch.zeros(
+                shape
+                + [
+                    model.config.visual_pos_dim,
+                ],
+                dtype=torch.float,
+                device=device,
             )
         elif "inputs" in input_name:
             inputs_dict[input_name] = torch.zeros(*shape, dtype=torch.float, device=device)
