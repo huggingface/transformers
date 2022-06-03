@@ -644,7 +644,6 @@ class GenerationMixin:
         temperature: Optional[float] = None,
         num_beams: Optional[int] = None,
         renormalize_logits: Optional[bool] = None,
-        log_decoder: Optional[bool] = None,
     ) -> LogitsProcessorList:
         """
         This class returns a [`LogitsProcessorList`] list object that contains all relevant [`LogitsWarper`] instances
@@ -663,25 +662,20 @@ class GenerationMixin:
         # all samplers can be found in `generation_utils_samplers.py`
         if temperature is not None and temperature != 1.0:
             warpers.append(TemperatureLogitsWarper(temperature))
-            if log_decoder:
-                logger.info(f"Applying TemperatureLogitsWarper with temperature={temperature}")
+            logger.debug(f"Applying TemperatureLogitsWarper with temperature={temperature}")
         if top_k is not None and top_k != 0:
             warpers.append(TopKLogitsWarper(top_k=top_k, min_tokens_to_keep=(2 if num_beams > 1 else 1)))
-            if log_decoder:
-                logger.info(f"Applying TopKLogitsWarper with top_k={top_k}")
+            logger.debug(f"Applying TopKLogitsWarper with top_k={top_k}")
         if top_p is not None and top_p < 1.0:
             warpers.append(TopPLogitsWarper(top_p=top_p, min_tokens_to_keep=(2 if num_beams > 1 else 1)))
-            if log_decoder:
-                logger.info(f"Applying TopPLogitsWarper with top_p={top_p}")
+            logger.debug(f"Applying TopPLogitsWarper with top_p={top_p}")
         if typical_p is not None and typical_p < 1.0:
             warpers.append(TypicalLogitsWarper(mass=typical_p, min_tokens_to_keep=(2 if num_beams > 1 else 1)))
-            if log_decoder:
-                logger.info(f"Applying TypicalLogitsWarper with mass={typical_p}")
+            logger.debug(f"Applying TypicalLogitsWarper with mass={typical_p}")
         # `LogitNormalization` should always be the last logit processor, when present
         if renormalize_logits is True:
             warpers.append(LogitNormalization())
-            if log_decoder:
-                logger.info("Applying LogitNormalization")
+            logger.debug("Applying LogitNormalization")
         return warpers
 
     def _get_logits_processor(
@@ -897,7 +891,6 @@ class GenerationMixin:
         remove_invalid_values: Optional[bool] = None,
         synced_gpus: Optional[bool] = False,
         exponential_decay_length_penalty: Optional[Tuple[Union[int, float]]] = None,
-        log_decoder: Optional[bool] = False,
         **model_kwargs,
     ) -> Union[GreedySearchOutput, SampleOutput, BeamSearchOutput, BeamSampleOutput, torch.LongTensor]:
         r"""
@@ -1054,8 +1047,6 @@ class GenerationMixin:
                 This Tuple adds an exponentially increasing length penalty, after a certain amount of tokens have been
                 generated. The tuple shall consist of: `(start_index, decay_factor)` where `start_index` indicates
                 where penalty starts and `decay_factor` represents the factor of exponential decay
-            log_decoder (`bool`, *optional*, defaults to `False`):
-                Whether or not to log which decoders are selected by this call.
 
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the `forward` function of the model. If the model
@@ -1300,8 +1291,7 @@ class GenerationMixin:
                     f"num_return_sequences has to be 1, but is {num_return_sequences} when doing greedy search."
                 )
 
-            if log_decoder:
-                logger.info("Running greedy search")
+            logger.debug("Running greedy search")
 
             # 10. run greedy search
             return self.greedy_search(
@@ -1325,7 +1315,6 @@ class GenerationMixin:
                 temperature=temperature,
                 num_beams=num_beams,
                 renormalize_logits=renormalize_logits,
-                log_decoder=log_decoder,
             )
 
             # 11. expand input_ids with `num_return_sequences` additional sequences per batch
@@ -1336,8 +1325,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
 
-            if log_decoder:
-                logger.info("Running sample")
+            logger.debug("Running sample")
 
             # 12. run sample
             return self.sample(
@@ -1360,8 +1348,7 @@ class GenerationMixin:
             if stopping_criteria.max_length is None:
                 raise ValueError("`max_length` needs to be a stopping_criteria for now.")
 
-            if log_decoder:
-                logger.info("Running beam search")
+            logger.debug("Running beam search")
 
             # 10. prepare beam search scorer
             beam_scorer = BeamSearchScorer(
@@ -1399,14 +1386,12 @@ class GenerationMixin:
                 temperature=temperature,
                 num_beams=num_beams,
                 renormalize_logits=renormalize_logits,
-                log_decoder=log_decoder,
             )
 
             if stopping_criteria.max_length is None:
                 raise ValueError("`max_length` needs to be a stopping_criteria for now.")
 
-            if log_decoder:
-                logger.info("Running beam search")
+            logger.debug("Running beam search")
 
             # 11. prepare beam search scorer
             beam_scorer = BeamSearchScorer(
@@ -1450,8 +1435,7 @@ class GenerationMixin:
             if stopping_criteria.max_length is None:
                 raise ValueError("`max_length` needs to be a stopping_criteria for now.")
 
-            if log_decoder:
-                logger.info("Running beam search")
+            logger.debug("Running beam search")
 
             # 10. prepare beam search scorer
             beam_scorer = BeamSearchScorer(
@@ -1535,8 +1519,7 @@ class GenerationMixin:
                         constraint = PhrasalConstraint(word_ids)
                     final_constraints.append(constraint)
 
-            if log_decoder:
-                logger.info("Running constrained beam search")
+            logger.debug("Running constrained beam search")
 
             # 10. prepare beam search scorer
             constrained_beam_scorer = ConstrainedBeamSearchScorer(
