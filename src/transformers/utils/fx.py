@@ -32,7 +32,9 @@ from torch.fx.proxy import ParameterProxy
 from .. import PretrainedConfig, PreTrainedModel, logging
 from ..models.auto import get_values
 from ..models.auto.modeling_auto import (
+    MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
+    MODEL_FOR_CTC_MAPPING_NAMES,
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES,
     MODEL_FOR_MASKED_LM_MAPPING_NAMES,
@@ -72,6 +74,8 @@ def _generate_supported_model_class_names(
         "token-classification": MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
         "masked-image-modeling": MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES,
         "image-classification": MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+        "ctc": MODEL_FOR_CTC_MAPPING_NAMES,
+        "audio-classification": MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
     }
 
     if supported_tasks is None:
@@ -102,6 +106,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "gpt2",
     "gpt_neo",
     "gptj",
+    "hubert",
     "layoutlm",
     "lxmert",
     "m2m_100",
@@ -1026,11 +1031,11 @@ def symbolic_trace(
 
     concrete_args = {p.name: p.default for p in sig.parameters.values() if p.name not in input_names}
 
-    # if model.__class__.__name__ not in _SUPPORTED_MODELS:
-    #     supported_model_names = ", ".join(_SUPPORTED_MODELS)
-    #     raise NotImplementedError(
-    #         f"Model {model.__class__.__name__} is not supported yet, supported models: {supported_model_names}"
-    #     )
+    if model.__class__.__name__ not in _SUPPORTED_MODELS:
+        supported_model_names = ", ".join(_SUPPORTED_MODELS)
+        raise NotImplementedError(
+            f"Model {model.__class__.__name__} is not supported yet, supported models: {supported_model_names}"
+        )
 
     # Tracing.
     tracer = HFTracer()

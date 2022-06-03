@@ -795,9 +795,6 @@ class ModelTesterMixin:
                     traced_output = traced_model(**filtered_inputs)
 
             except Exception as e:
-                import pdb
-
-                pdb.set_trace()
                 self.fail(f"Couldn't trace module: {e}")
 
             def flatten_output(output):
