@@ -95,6 +95,8 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "blenderbot",
     "blenderbot-small",
     "clip",
+    "deberta",
+    "deberta-v2",
     "distilbert",
     "electra",
     "gpt2",
@@ -152,6 +154,10 @@ def torch_nn_functional_embedding(
 
 
 def torch_nn_layernorm(self, input):
+    return input
+
+
+def torch_nn_groupnorm(self, input):
     return input
 
 
@@ -446,6 +452,7 @@ _MANUAL_META_OVERRIDES: Dict[Callable, Callable] = {
     torch.nn.Embedding: torch_nn_embedding,
     torch.nn.functional.embedding: torch_nn_functional_embedding,
     torch.nn.LayerNorm: torch_nn_layernorm,
+    torch.nn.GroupNorm: torch_nn_groupnorm,
     torch.nn.Linear: torch_nn_linear,
     torch.relu: torch_relu,
     torch.nn.functional.relu: torch_nn_functional_relu,
@@ -706,6 +713,11 @@ class HFTracer(Tracer):
             )
         elif "inputs" in input_name:
             inputs_dict[input_name] = torch.zeros(*shape, dtype=torch.float, device=device)
+        elif "input_values" in input_name:
+            batch_size, _ = shape
+            # Generating big sequence length for audio inputs.
+            seq_length = _generate_random_int(low=10000, high=20000)
+            inputs_dict[input_name] = torch.zeros(batch_size, seq_length, dtype=torch.float, device=device)
         elif "mask" in input_name or "ids" in input_name:
             inputs_dict[input_name] = torch.zeros(shape, dtype=torch.long, device=device)
         else:
@@ -995,11 +1007,11 @@ def symbolic_trace(
 
     concrete_args = {p.name: p.default for p in sig.parameters.values() if p.name not in input_names}
 
-    if model.__class__.__name__ not in _SUPPORTED_MODELS:
-        supported_model_names = ", ".join(_SUPPORTED_MODELS)
-        raise NotImplementedError(
-            f"Model {model.__class__.__name__} is not supported yet, supported models: {supported_model_names}"
-        )
+    # if model.__class__.__name__ not in _SUPPORTED_MODELS:
+    #     supported_model_names = ", ".join(_SUPPORTED_MODELS)
+    #     raise NotImplementedError(
+    #         f"Model {model.__class__.__name__} is not supported yet, supported models: {supported_model_names}"
+    #     )
 
     # Tracing.
     tracer = HFTracer()
