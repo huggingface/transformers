@@ -574,7 +574,6 @@ def _load_state_dict_into_meta_model(
     for param_name, param in state_dict.items():
         # First part of the test is always true as load_state_dict_keys always contains state_dict keys.
         if param_name not in loaded_state_dict_keys or param_name not in expected_keys:
-            print(param_name)
             continue
 
         if param_name.startswith(start_prefix):
@@ -2124,6 +2123,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if model._no_split_modules is None:
                 raise ValueError(f"{model.__class__.__name__} does not support `device_map='auto'` yet.")
             no_split_modules = model._no_split_modules
+            # Make sure tied weights are tied before creating the device map.
+            model.tie_weights()
             device_map = infer_auto_device_map(
                 model, no_split_module_classes=no_split_modules, dtype=torch_dtype, max_memory=max_memory
             )
