@@ -312,6 +312,12 @@ class FeaturesManager:
             "seq2seq-lm-with-past",
             onnx_config_cls="models.m2m_100.M2M100OnnxConfig",
         ),
+        "perceiver": supported_features_mapping(
+            "image-classification",
+            "masked-lm",
+            "sequence-classification",
+            onnx_config_cls="models.perceiver.PerceiverOnnxConfig",
+        ),
         "roberta": supported_features_mapping(
             "default",
             "masked-lm",
@@ -500,3 +506,18 @@ class FeaturesManager:
             )
 
         return model.config.model_type, FeaturesManager._SUPPORTED_MODEL_TYPE[model_type][feature]
+
+    def get_config(model_type: str, feature: str) -> OnnxConfig:
+        """
+        Gets the OnnxConfig for a model_type and feature combination.
+
+        Args:
+            model_type (`str`):
+                The model type to retrieve the config for.
+            feature (`str`):
+                The feature to retrieve the config for.
+
+        Returns:
+            `OnnxConfig`: config for the combination
+        """
+        return FeaturesManager._SUPPORTED_MODEL_TYPE[model_type][feature]
