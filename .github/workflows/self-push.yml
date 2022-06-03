@@ -198,19 +198,12 @@ jobs:
         machine_type: [single-gpu]
     runs-on: [self-hosted, docker-gpu, '${{ matrix.machine_type }}']
     container:
-      image: nvcr.io/nvidia/pytorch:21.03-py3
+      image: huggingface/transformers-pytorch-deepspeed-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
-      - name: Checkout transformers
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: 2
-
-      - name: Install dependencies
-        run: |
-          apt -y update && apt install -y libaio-dev
-          pip install --upgrade pip
-          pip install .[deepspeed-testing]
+      - name: Update clone
+        working-directory: /workspace/transformers
+        run: git fetch && git checkout ${{ github.sha }}
 
       - name: NVIDIA-SMI
         run: |
@@ -250,10 +243,9 @@ jobs:
       image: huggingface/transformers-pytorch-deepspeed-latest-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
-      - name: Checkout transformers
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: 2
+      - name: Update clone
+        working-directory: /workspace/transformers
+        run: git fetch && git checkout ${{ github.sha }}
 
       - name: NVIDIA-SMI
         run: |
