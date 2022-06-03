@@ -395,7 +395,8 @@ class TFResNetMainLayer(tf.keras.layers.Layer):
         # Change to NCHW output format have uniformity in the modules
         last_hidden_state = tf.transpose(last_hidden_state, perm=(0, 3, 1, 2))
 
-        pooled_output = self.pooler(last_hidden_state)
+        pooled_output = self.pooler(encoder_outputs[0])
+
         # Change the other hidden state outputs to NCHW as well
         if output_hidden_states:
             hidden_states = tuple([tf.transpose(h, perm=(0, 3, 1, 2)) for h in encoder_outputs[1]])
