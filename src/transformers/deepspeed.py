@@ -295,6 +295,12 @@ def set_hf_deepspeed_config(hf_deepspeed_config_obj):
     _hf_deepspeed_config_weak_ref = weakref.ref(hf_deepspeed_config_obj)
 
 
+def unset_hf_deepspeed_config():
+    # useful for unit tests to ensure the global state doesn't leak - call from `tearDown` method
+    global _hf_deepspeed_config_weak_ref
+    _hf_deepspeed_config_weak_ref = None
+
+
 def is_deepspeed_zero3_enabled():
     if _hf_deepspeed_config_weak_ref is not None and _hf_deepspeed_config_weak_ref() is not None:
         return _hf_deepspeed_config_weak_ref().is_zero3()
