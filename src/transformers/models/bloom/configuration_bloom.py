@@ -145,7 +145,6 @@ class BloomConfig(PretrainedConfig):
         bos_token_id=1,
         eos_token_id=2,
         apply_residual_connection_post_layernorm=False,
-        bias_dropout_fusion=True,
         hidden_dropout=0.0,
         attention_dropout=0.0,
         attention_softmax_in_fp32=True,
@@ -166,7 +165,6 @@ class BloomConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.pretraining_tp = pretraining_tp
         self.apply_residual_connection_post_layernorm = apply_residual_connection_post_layernorm
-        self.bias_dropout_fusion = bias_dropout_fusion
         self.hidden_dropout = hidden_dropout
         self.attention_dropout = attention_dropout
         self.attention_softmax_in_fp32 = attention_softmax_in_fp32

@@ -168,30 +168,11 @@ def pre_process_alibi_for_pad(alibi, attention_mask, num_heads):
     return alibi
 
 
-def bias_dropout_add(x, bias, residual, prob, training):
-    # type: (Tensor, Tensor, Tensor, float, bool) -> Tensor
-    out = nn.functional.dropout(x + bias, p=prob, training=training)
+def bias_dropout_add(x, residual, prob, training):
+    # type: (Tensor, Tensor, float, bool) -> Tensor
+    out = nn.functional.dropout(x, p=prob, training=training)
     out = residual + out
     return out
-
-
-def get_bias_dropout_add(training):
-    def _bias_dropout_add(x, bias, residual, prob):
-        return bias_dropout_add(x, bias, residual, prob, training)
-
-    return _bias_dropout_add
-
-
-@torch.jit.script
-def bias_dropout_add_fused_train(x, bias, residual, prob):
-    # type: (Tensor, Tensor, Tensor, float) -> Tensor
-    return bias_dropout_add(x, bias, residual, prob, True)
-
-
-@torch.jit.script
-def bias_dropout_add_fused_inference(x, bias, residual, prob):
-    # type: (Tensor, Tensor, Tensor, float) -> Tensor
-    return bias_dropout_add(x, bias, residual, prob, False)
 
 
 class BloomScaledSoftmax(nn.Module):
@@ -262,6 +243,7 @@ class BloomAttention(nn.Module):
         self.split_size = self.hidden_size
         self.attention_softmax_in_fp32 = config.attention_softmax_in_fp32
         self.masked_softmax_fusion = config.masked_softmax_fusion
+        self.hidden_dropout = config.hidden_dropout
 
         if self.head_dim * self.num_heads != self.hidden_size:
             raise ValueError(
@@ -289,6 +271,7 @@ class BloomAttention(nn.Module):
     def forward(
         self,
         hidden_states,
+        residual,
         layer_past=None,
         attention_mask=None,
         alibi=None,
@@ -304,11 +287,7 @@ class BloomAttention(nn.Module):
         if attention_mask is not None and 0 in attention_mask:
             alibi = pre_process_alibi_for_pad(alibi, attention_mask, self.num_heads)
 
-        bias = self.query_key_value.bias
-
-        output_bias = None
-
-        mixed_x_layer = nn.functional.linear(hidden_states, self.query_key_value.weight, bias)
+        mixed_x_layer = self.query_key_value(hidden_states)
 
         # [batch_size, seq_length, 3 x hidden_size] --> [batch_size, seq_length, num_heads, 3 x head_dim]
         new_tensor_shape = mixed_x_layer.size()[:-1] + (self.num_heads, 3 * self.head_dim)
@@ -398,17 +377,17 @@ class BloomAttention(nn.Module):
                     self.dense.weight[:, int(i * slices) : int((i + 1) * slices)],
                 )
         else:
-            output_tensor = nn.functional.linear(context_layer, self.dense.weight)
-
-        output_tensor = output_tensor
-        output_bias = self.dense.bias
+            output_tensor = self.dense(context_layer)
 
         output = output_tensor.transpose(1, 0)
+        # re-enable torch grad to enable fused optimization.
+        output = bias_dropout_add(output, residual, self.hidden_dropout, self.training)
+
         outputs = (output, present)
         if output_attentions:
             outputs += (attention_probs,)
 
-        return outputs, output_bias
+        return outputs
 
 
 class BloomMLP(nn.Module):
@@ -421,16 +400,15 @@ class BloomMLP(nn.Module):
         self.activation_func = bias_gelu_impl
         self.dense_h_to_4h = nn.Linear(hidden_size, 4 * hidden_size)
         self.dense_4h_to_h = nn.Linear(4 * hidden_size, hidden_size)
+        self.hidden_dropout = config.hidden_dropout
 
-    def forward(self, hidden_states):
-        input_ = hidden_states
-
+    def forward(self, hidden_states, residual):
         hidden_states = self.activation_func(
             nn.functional.linear(hidden_states, self.dense_h_to_4h.weight), self.dense_h_to_4h.bias
         )
 
         if self.pretraining_tp > 1 and self.slow_but_exact:
-            intermediate_output = torch.zeros_like(input_)
+            intermediate_output = torch.zeros_like(residual)
             slices = self.dense_4h_to_h.weight.shape[-1] / self.pretraining_tp
             for i in range(self.pretraining_tp):
                 intermediate_output = intermediate_output + nn.functional.linear(
@@ -438,12 +416,12 @@ class BloomMLP(nn.Module):
                     self.dense_4h_to_h.weight[:, int(i * slices) : int((i + 1) * slices)],
                 )
         else:
-            intermediate_output = nn.functional.linear(hidden_states, self.dense_4h_to_h.weight)
+            intermediate_output = self.dense_4h_to_h(hidden_states)
 
-        output = intermediate_output
-        output_bias = self.dense_4h_to_h.bias
+        # re-enable torch grad to enable fused optimization.
+        output = bias_dropout_add(intermediate_output, residual, self.hidden_dropout, self.training)
 
-        return output, output_bias
+        return output
 
 
 class BloomBlock(nn.Module):
@@ -459,7 +437,6 @@ class BloomBlock(nn.Module):
         self.mlp = BloomMLP(config)
 
         self.apply_residual_connection_post_layernorm = config.apply_residual_connection_post_layernorm
-        self.bias_dropout_fusion = config.bias_dropout_fusion
         self.hidden_dropout = config.hidden_dropout
 
     def forward(
@@ -477,9 +454,16 @@ class BloomBlock(nn.Module):
         # Layer norm at the beginning of the transformer layer.
         layernorm_output = self.input_layernorm(hidden_states)
 
+        # Layer norm post the self attention.
+        if self.apply_residual_connection_post_layernorm:
+            residual = layernorm_output
+        else:
+            residual = hidden_states
+
         # Self attention.
-        attn_outputs, attention_bias = self.self_attention(
+        attn_outputs = self.self_attention(
             layernorm_output,
+            residual,
             layer_past=layer_past,
             attention_mask=attention_mask,
             alibi=alibi,
@@ -492,39 +476,16 @@ class BloomBlock(nn.Module):
 
         outputs = attn_outputs[1:]
 
-        # Layer norm post the self attention.
+        layernorm_output = self.post_attention_layernorm(attention_output)
+
+        # Get residual
         if self.apply_residual_connection_post_layernorm:
             residual = layernorm_output
         else:
-            residual = hidden_states
-
-        if self.bias_dropout_fusion:
-            if self.training:
-                bias_dropout_add_func = bias_dropout_add_fused_train
-            else:
-                bias_dropout_add_func = bias_dropout_add_fused_inference
-        else:
-            bias_dropout_add_func = get_bias_dropout_add(self.training)
-
-        # re-enable torch grad to enable fused optimization.
-        with torch.enable_grad():
-            layernorm_input = bias_dropout_add_func(
-                attention_output, attention_bias.expand_as(residual), residual, self.hidden_dropout
-            )
-
-        layernorm_output = self.post_attention_layernorm(layernorm_input)
+            residual = attention_output
 
         # MLP.
-
-        mlp_output, mlp_bias = self.mlp(layernorm_output)
-
-        if self.apply_residual_connection_post_layernorm:
-            residual = layernorm_output
-        else:
-            residual = layernorm_input
-
-        with torch.enable_grad():
-            output = bias_dropout_add_func(mlp_output, mlp_bias.expand_as(residual), residual, self.hidden_dropout)
+        output = self.mlp(layernorm_output, residual)
 
         if use_cache:
             outputs = (output,) + outputs

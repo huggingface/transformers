@@ -39,7 +39,7 @@ class BloomModelTester:
         batch_size=14,
         seq_length=7,
         is_training=True,
-        use_token_type_ids=True,
+        use_token_type_ids=False,
         use_input_mask=True,
         use_labels=True,
         use_mc_token_ids=True,
@@ -385,6 +385,8 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
 
         # test token values
         self.assertEqual(greedy_output[-1, 3:].tolist(), greedy_output_without_pad[0, :-3].tolist())
+
+        print(tokenizer.decode(greedy_output[-1, 3:], skip_special_tokens=True))
 
         # test reconstructions
         self.assertEqual(
