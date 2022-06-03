@@ -109,6 +109,7 @@ if os.environ.get("HUGGINGFACE_CO_RESOLVE_ENDPOINT", None) is not None:
     HUGGINGFACE_CO_RESOLVE_ENDPOINT = os.environ.get("HUGGINGFACE_CO_RESOLVE_ENDPOINT", None)
 HUGGINGFACE_CO_RESOLVE_ENDPOINT = os.environ.get("HF_ENDPOINT", HUGGINGFACE_CO_RESOLVE_ENDPOINT)
 HUGGINGFACE_CO_PREFIX = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/{model_id}/resolve/{revision}/{filename}"
+HUGGINGFACE_CO_EXAMPLES_TELEMETRY = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/telemetry/examples"
 
 
 def is_remote_url(url_or_filename):
@@ -1028,3 +1029,22 @@ def get_full_repo_name(model_id: str, organization: Optional[str] = None, token:
         return f"{username}/{model_id}"
     else:
         return f"{organization}/{model_id}"
+
+
+def send_example_telemetry(example_name, model_name=None, dataset_name=None):
+    if is_offline_mode():
+        return
+
+    data = {"example": example_name}
+    if model_name is not None:
+        data["model_name"] = model_name
+    if dataset_name is not None:
+        data["dataset_name"] = dataset_name
+
+    headers = {"user-agent": http_user_agent(data)}
+    try:
+        r = requests.head(HUGGINGFACE_CO_EXAMPLES_TELEMETRY, headers=headers)
+        r.raise_for_status()
+    except Exception:
+        # We don't want to error in case of connection errors of any kind.
+        pass
