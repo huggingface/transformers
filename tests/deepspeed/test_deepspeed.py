@@ -752,59 +752,59 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
         # must use this setting to get the reload path exercised
         ds_config_dict["zero_optimization"]["stage3_gather_16bit_weights_on_model_save"] = True
 
-        tokenizer = T5Tokenizer.from_pretrained(T5_TINY)
-        model = T5ForConditionalGeneration.from_pretrained(T5_TINY)
-
-        def _add_eos_to_examples(example):
-            example["input_text"] = f"question: {example['question']}  context: {example['context']}"
-            example["target_text"] = example["answers"]["text"][0] if len(example["answers"]["text"]) > 0 else ""
-            return example
-
-        def _convert_to_features(example_batch):
-            input_encodings = tokenizer.batch_encode_plus(
-                example_batch["input_text"], pad_to_max_length=True, max_length=512, truncation=True
-            )
-            target_encodings = tokenizer.batch_encode_plus(
-                example_batch["target_text"], pad_to_max_length=True, max_length=16, truncation=True
-            )
-
-            encodings = {
-                "input_ids": input_encodings["input_ids"],
-                "attention_mask": input_encodings["attention_mask"],
-                "labels": target_encodings["input_ids"],
-            }
-
-            return encodings
-
-        def get_dataset():
-            data_file = str(self.tests_dir / "fixtures/tests_samples/SQUAD/sample.json")
-            data_files = dict(train=data_file, validation=data_file)
-            raw_datasets = datasets.load_dataset("json", data_files=data_files, field="data")
-            train_dataset = raw_datasets["train"].map(_add_eos_to_examples).map(_convert_to_features, batched=True)
-            valid_dataset = deepcopy(train_dataset)
-            return train_dataset, valid_dataset
-
-        train_dataset, eval_dataset = get_dataset()
-
-        args_dict = {
-            "per_gpu_train_batch_size": 1,
-            "per_gpu_eval_batch_size": 1,
-            "gradient_accumulation_steps": 1,
-            "learning_rate": 1e-4,
-            "num_train_epochs": 1,
-            "do_train": True,
-            "do_eval": True,
-            "optim": "adafactor",
-            "evaluation_strategy": "steps",
-            "eval_steps": 1,
-            "save_strategy": "steps",
-            "save_steps": 1,
-            "load_best_model_at_end": True,
-            "max_steps": 1,
-            "deepspeed": ds_config_dict,
-        }
-
         with mockenv_context(**self.dist_env_1_gpu):
+
+            tokenizer = T5Tokenizer.from_pretrained(T5_TINY)
+            model = T5ForConditionalGeneration.from_pretrained(T5_TINY)
+
+            def _add_eos_to_examples(example):
+                example["input_text"] = f"question: {example['question']}  context: {example['context']}"
+                example["target_text"] = example["answers"]["text"][0] if len(example["answers"]["text"]) > 0 else ""
+                return example
+
+            def _convert_to_features(example_batch):
+                input_encodings = tokenizer.batch_encode_plus(
+                    example_batch["input_text"], pad_to_max_length=True, max_length=512, truncation=True
+                )
+                target_encodings = tokenizer.batch_encode_plus(
+                    example_batch["target_text"], pad_to_max_length=True, max_length=16, truncation=True
+                )
+
+                encodings = {
+                    "input_ids": input_encodings["input_ids"],
+                    "attention_mask": input_encodings["attention_mask"],
+                    "labels": target_encodings["input_ids"],
+                }
+
+                return encodings
+
+            def get_dataset():
+                data_file = str(self.tests_dir / "fixtures/tests_samples/SQUAD/sample.json")
+                data_files = dict(train=data_file, validation=data_file)
+                raw_datasets = datasets.load_dataset("json", data_files=data_files, field="data")
+                train_dataset = raw_datasets["train"].map(_add_eos_to_examples).map(_convert_to_features, batched=True)
+                valid_dataset = deepcopy(train_dataset)
+                return train_dataset, valid_dataset
+
+            train_dataset, eval_dataset = get_dataset()
+
+            args_dict = {
+                "per_gpu_train_batch_size": 1,
+                "per_gpu_eval_batch_size": 1,
+                "gradient_accumulation_steps": 1,
+                "learning_rate": 1e-4,
+                "num_train_epochs": 1,
+                "do_train": True,
+                "do_eval": True,
+                "optim": "adafactor",
+                "evaluation_strategy": "steps",
+                "eval_steps": 1,
+                "save_strategy": "steps",
+                "save_steps": 1,
+                "load_best_model_at_end": True,
+                "max_steps": 1,
+                "deepspeed": ds_config_dict,
+            }
 
             training_args = TrainingArguments(output_dir, **args_dict)
 
