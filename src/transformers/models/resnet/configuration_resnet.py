@@ -71,6 +71,7 @@ class ResNetConfig(PretrainedConfig):
     def __init__(
         self,
         num_channels=3,
+        image_size=224,
         embedding_size=64,
         hidden_sizes=[256, 512, 1024, 2048],
         depths=[3, 4, 6, 3],
@@ -83,6 +84,7 @@ class ResNetConfig(PretrainedConfig):
         if layer_type not in self.layer_types:
             raise ValueError(f"layer_type={layer_type} is not one of {','.join(self.layer_types)}")
         self.num_channels = num_channels
+        self.image_size = image_size  # For instantiating dummy inputs for the TF model.
         self.embedding_size = embedding_size
         self.hidden_sizes = hidden_sizes
         self.depths = depths
