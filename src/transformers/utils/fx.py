@@ -384,6 +384,27 @@ def torch_nn_conv2d(self, input):
     return torch.empty(shape, device="meta")
 
 
+def torch_squeeze(input, dim=None):
+    shape = list(input.shape)
+    if dim is not None:
+        if dim < 0:
+            dim = input.dim() + dim
+        if shape[dim] == 1:
+            shape.pop(dim)
+    else:
+        new_shape = []
+        for dim_value in shape:
+            if dim_value == 1:
+                continue
+            new_shape.append(dim_value)
+        shape = new_shape
+    return torch.empty(shape, device="meta")
+
+
+def torch_tensor_squeeze(self, dim=None):
+    return torch_squeeze(self, dim)
+
+
 def torch_unsqueeze(input, dim):
     shape = list(input.shape)
     if dim < 0:
@@ -482,6 +503,8 @@ _MANUAL_META_OVERRIDES: Dict[Callable, Callable] = {
     torch.Tensor.index_select: torch_tensor_index_select,
     torch.nn.Conv1d: torch_nn_conv1d,
     torch.nn.Conv2d: torch_nn_conv2d,
+    torch.squeeze: torch_squeeze,
+    torch.Tensor.squeeze: torch_tensor_squeeze,
     torch.unsqueeze: torch_unsqueeze,
     torch.Tensor.unsqueeze: torch_tensor_unsqueeze,
     torch.unique_consecutive: torch_unique_consecutive,
