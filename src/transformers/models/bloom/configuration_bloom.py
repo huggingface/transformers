@@ -67,7 +67,7 @@ class BloomConfig(PretrainedConfig):
         apply_residual_connection_post_layernorm (`bool`, *optional*, defaults to `False`):
             If enabled, use the layer norm of the hidden states as the residual in the transformer blocks
         bias_dropout_fusion (`bool`, *optional*, defaults to `True`):
-            If enabled, apply dropout when adding the attention output together with the attention bias in the
+            If enabled, apply fusion dropout when adding the attention output together with the attention bias in the
             transformer blocks
         skip_bias_add (`bool`, *optional*, defaults to `True`):
             If set to `True`, it will skip bias add for each linear layer in the transformer blocks
@@ -139,6 +139,7 @@ class BloomConfig(PretrainedConfig):
         n_head=8,
         n_inner=None,
         masked_softmax_fusion=True,
+        bias_dropout_fusion=True,
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
         use_cache=False,
@@ -168,6 +169,7 @@ class BloomConfig(PretrainedConfig):
         self.hidden_dropout = hidden_dropout
         self.attention_dropout = attention_dropout
         self.attention_softmax_in_fp32 = attention_softmax_in_fp32
+        self.bias_dropout_fusion = bias_dropout_fusion
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
