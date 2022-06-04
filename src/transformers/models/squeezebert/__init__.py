@@ -18,18 +18,32 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import _LazyModule, is_tokenizers_available, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
-    "configuration_squeezebert": ["SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "SqueezeBertConfig"],
+    "configuration_squeezebert": [
+        "SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "SqueezeBertConfig",
+        "SqueezeBertOnnxConfig",
+    ],
     "tokenization_squeezebert": ["SqueezeBertTokenizer"],
 }
 
-if is_tokenizers_available():
+try:
+    if not is_tokenizers_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["tokenization_squeezebert_fast"] = ["SqueezeBertTokenizerFast"]
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_squeezebert"] = [
         "SQUEEZEBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "SqueezeBertForMaskedLM",
@@ -44,13 +58,27 @@ if is_torch_available():
 
 
 if TYPE_CHECKING:
-    from .configuration_squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig
+    from .configuration_squeezebert import (
+        SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        SqueezeBertConfig,
+        SqueezeBertOnnxConfig,
+    )
     from .tokenization_squeezebert import SqueezeBertTokenizer
 
-    if is_tokenizers_available():
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .tokenization_squeezebert_fast import SqueezeBertTokenizerFast
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_squeezebert import (
             SQUEEZEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             SqueezeBertForMaskedLM,

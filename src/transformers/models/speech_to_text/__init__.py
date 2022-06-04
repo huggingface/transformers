@@ -17,26 +17,45 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import _LazyModule, is_sentencepiece_available, is_speech_available, is_tf_available, is_torch_available
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_sentencepiece_available,
+    is_speech_available,
+    is_tf_available,
+    is_torch_available,
+)
 
 
 _import_structure = {
-    "configuration_speech_to_text": [
-        "SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "Speech2TextConfig",
-    ],
+    "configuration_speech_to_text": ["SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "Speech2TextConfig"],
 }
 
-if is_sentencepiece_available():
+try:
+    if not is_sentencepiece_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["tokenization_speech_to_text"] = ["Speech2TextTokenizer"]
 
-if is_speech_available():
+try:
+    if not is_speech_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["feature_extraction_speech_to_text"] = ["Speech2TextFeatureExtractor"]
 
     if is_sentencepiece_available():
         _import_structure["processing_speech_to_text"] = ["Speech2TextProcessor"]
 
-if is_tf_available():
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_tf_speech_to_text"] = [
         "TF_SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFSpeech2TextForConditionalGeneration",
@@ -44,7 +63,12 @@ if is_tf_available():
         "TFSpeech2TextPreTrainedModel",
     ]
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_speech_to_text"] = [
         "SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "Speech2TextForConditionalGeneration",
@@ -56,16 +80,31 @@ if is_torch_available():
 if TYPE_CHECKING:
     from .configuration_speech_to_text import SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, Speech2TextConfig
 
-    if is_sentencepiece_available():
+    try:
+        if not is_sentencepiece_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .tokenization_speech_to_text import Speech2TextTokenizer
 
-    if is_speech_available():
+    try:
+        if not is_speech_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .feature_extraction_speech_to_text import Speech2TextFeatureExtractor
 
         if is_sentencepiece_available():
             from .processing_speech_to_text import Speech2TextProcessor
 
-    if is_tf_available():
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_tf_speech_to_text import (
             TF_SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFSpeech2TextForConditionalGeneration,
@@ -73,7 +112,12 @@ if TYPE_CHECKING:
             TFSpeech2TextPreTrainedModel,
         )
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_speech_to_text import (
             SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
             Speech2TextForConditionalGeneration,

@@ -218,6 +218,7 @@ class BlenderbotModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     all_model_classes = (BlenderbotModel, BlenderbotForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (BlenderbotForConditionalGeneration,) if is_torch_available() else ()
     is_encoder_decoder = True
+    fx_compatible = True
     test_pruning = False
     test_missing_keys = False
 
@@ -304,7 +305,10 @@ class Blenderbot3BIntegrationTests(unittest.TestCase):
         generated_txt = self.tokenizer.batch_decode(generated_utterances, **TOK_DECODE_KW)
         assert generated_txt[0].strip() == tgt_text
 
-        src_text = "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel like i'm going to throw up.\nand why is that?"
+        src_text = (
+            "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel"
+            " like i'm going to throw up.\nand why is that?"
+        )
 
         model_inputs = self.tokenizer([src_text], return_tensors="pt").to(torch_device)
 

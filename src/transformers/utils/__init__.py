@@ -38,6 +38,7 @@ from .generic import (
     TensorType,
     cached_property,
     find_labels,
+    flatten_dict,
     is_tensor,
     to_numpy,
     to_py_obj,
@@ -83,7 +84,9 @@ from .import_utils import (
     USE_TF,
     USE_TORCH,
     DummyObject,
+    OptionalDependencyNotAvailable,
     _LazyModule,
+    is_accelerate_available,
     is_apex_available,
     is_bitsandbytes_available,
     is_coloredlogs_available,
@@ -127,6 +130,7 @@ from .import_utils import (
     is_torch_tf32_available,
     is_torch_tpu_available,
     is_torchaudio_available,
+    is_torchdynamo_available,
     is_training_run_on_sagemaker,
     is_vision_available,
     requires_backends,
@@ -168,8 +172,6 @@ def check_min_version(min_version):
         error_message += f" but the version found is {__version__}.\n"
         raise ImportError(
             error_message
-            + (
-                "Check out https://huggingface.co/transformers/examples.html for the examples corresponding to other "
-                "versions of HuggingFace Transformers."
-            )
+            + "Check out https://huggingface.co/transformers/examples.html for the examples corresponding to other "
+            "versions of HuggingFace Transformers."
         )

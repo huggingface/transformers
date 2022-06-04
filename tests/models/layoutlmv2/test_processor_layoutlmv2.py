@@ -133,6 +133,39 @@ class LayoutLMv2ProcessorTest(unittest.TestCase):
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.feature_extractor, LayoutLMv2FeatureExtractor)
 
+    @slow
+    def test_overflowing_tokens(self):
+        # In the case of overflowing tokens, test that we still have 1-to-1 mapping between the images and input_ids (sequences that are too long are broken down into multiple sequences).
+
+        from datasets import load_dataset
+
+        # set up
+        datasets = load_dataset("nielsr/funsd")
+        processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased", revision="no_ocr")
+
+        def preprocess_data(examples):
+            images = [Image.open(path).convert("RGB") for path in examples["image_path"]]
+            words = examples["words"]
+            boxes = examples["bboxes"]
+            word_labels = examples["ner_tags"]
+            encoded_inputs = processor(
+                images,
+                words,
+                boxes=boxes,
+                word_labels=word_labels,
+                padding="max_length",
+                truncation=True,
+                return_overflowing_tokens=True,
+                stride=50,
+                return_offsets_mapping=True,
+                return_tensors="pt",
+            )
+            return encoded_inputs
+
+        train_data = preprocess_data(datasets["train"])
+
+        self.assertEqual(len(train_data["image"]), len(train_data["input_ids"]))
+
 
 # different use cases tests
 @require_torch
@@ -182,10 +215,11 @@ class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
             )
 
             # verify input_ids
+            # this was obtained with Tesseract 4.1.1
             # fmt: off
             expected_decoding = "[CLS] 11 : 14 to 11 : 39 a. m 11 : 39 to 11 : 44 a. m. 11 : 44 a. m. to 12 : 25 p. m. 12 : 25 to 12 : 58 p. m. 12 : 58 to 4 : 00 p. m. 2 : 00 to 5 : 00 p. m. coffee break coffee will be served for men and women in the lobby adjacent to exhibit area. please move into exhibit area. ( exhibits open ) trrf general session ( part | ) presiding : lee a. waller trrf vice president “ introductory remarks ” lee a. waller, trrf vice presi - dent individual interviews with trrf public board members and sci - entific advisory council mem - bers conducted by trrf treasurer philip g. kuehn to get answers which the public refrigerated warehousing industry is looking for. plus questions from the floor. dr. emil m. mrak, university of cal - ifornia, chairman, trrf board ; sam r. cecil, university of georgia college of agriculture ; dr. stanley charm, tufts university school of medicine ; dr. robert h. cotton, itt continental baking company ; dr. owen fennema, university of wis - consin ; dr. robert e. hardenburg, usda. questions and answers exhibits open capt. jack stoney room trrf scientific advisory council meeting ballroom foyer [SEP]"  # noqa: E231
             # fmt: on
-            decoding = tokenizer.decode(input_processor.input_ids.squeeze().tolist())
+            decoding = processor.decode(input_processor.input_ids.squeeze().tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
             # batched
@@ -203,10 +237,11 @@ class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
             )
 
             # verify input_ids
+            # this was obtained with Tesseract 4.1.1
             # fmt: off
             expected_decoding = "[CLS] 7 itc limited report and accounts 2013 itc ’ s brands : an asset for the nation the consumer needs and aspirations they fulfil, the benefit they generate for millions across itc ’ s value chains, the future - ready capabilities that support them, and the value that they create for the country, have made itc ’ s brands national assets, adding to india ’ s competitiveness. it is itc ’ s aspiration to be the no 1 fmcg player in the country, driven by its new fmcg businesses. a recent nielsen report has highlighted that itc's new fmcg businesses are the fastest growing among the top consumer goods companies operating in india. itc takes justifiable pride that, along with generating economic value, these celebrated indian brands also drive the creation of larger societal capital through the virtuous cycle of sustainable and inclusive growth. di wills * ; love delightfully soft skin? aia ans source : https : / / www. industrydocuments. ucsf. edu / docs / snbx0223 [SEP] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD]"  # noqa: E231
             # fmt: on
-            decoding = tokenizer.decode(input_processor.input_ids[1].tolist())
+            decoding = processor.decode(input_processor.input_ids[1].tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
     @slow
@@ -233,7 +268,7 @@ class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
 
             # verify input_ids
             expected_decoding = "[CLS] hello world [SEP]"
-            decoding = tokenizer.decode(input_processor.input_ids.squeeze().tolist())
+            decoding = processor.decode(input_processor.input_ids.squeeze().tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
             # batched
@@ -248,7 +283,7 @@ class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
 
             # verify input_ids
             expected_decoding = "[CLS] hello world [SEP] [PAD] [PAD] [PAD]"
-            decoding = tokenizer.decode(input_processor.input_ids[0].tolist())
+            decoding = processor.decode(input_processor.input_ids[0].tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
             # verify bbox
@@ -287,7 +322,7 @@ class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
 
             # verify input_ids
             expected_decoding = "[CLS] weirdly world [SEP]"
-            decoding = tokenizer.decode(input_processor.input_ids.squeeze().tolist())
+            decoding = processor.decode(input_processor.input_ids.squeeze().tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
             # verify labels
@@ -309,7 +344,7 @@ class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
 
             # verify input_ids
             expected_decoding = "[CLS] my name is niels [SEP]"
-            decoding = tokenizer.decode(input_processor.input_ids[1].tolist())
+            decoding = processor.decode(input_processor.input_ids[1].tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
             # verify bbox
@@ -349,10 +384,11 @@ class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
+            # this was obtained with Tesseract 4.1.1
             # fmt: off
             expected_decoding = "[CLS] what's his name? [SEP] 11 : 14 to 11 : 39 a. m 11 : 39 to 11 : 44 a. m. 11 : 44 a. m. to 12 : 25 p. m. 12 : 25 to 12 : 58 p. m. 12 : 58 to 4 : 00 p. m. 2 : 00 to 5 : 00 p. m. coffee break coffee will be served for men and women in the lobby adjacent to exhibit area. please move into exhibit area. ( exhibits open ) trrf general session ( part | ) presiding : lee a. waller trrf vice president “ introductory remarks ” lee a. waller, trrf vice presi - dent individual interviews with trrf public board members and sci - entific advisory council mem - bers conducted by trrf treasurer philip g. kuehn to get answers which the public refrigerated warehousing industry is looking for. plus questions from the floor. dr. emil m. mrak, university of cal - ifornia, chairman, trrf board ; sam r. cecil, university of georgia college of agriculture ; dr. stanley charm, tufts university school of medicine ; dr. robert h. cotton, itt continental baking company ; dr. owen fennema, university of wis - consin ; dr. robert e. hardenburg, usda. questions and answers exhibits open capt. jack stoney room trrf scientific advisory council meeting ballroom foyer [SEP]"  # noqa: E231
             # fmt: on
-            decoding = tokenizer.decode(input_processor.input_ids.squeeze().tolist())
+            decoding = processor.decode(input_processor.input_ids.squeeze().tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
             # batched
@@ -367,8 +403,9 @@ class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
+            # this was obtained with Tesseract 4.1.1
             expected_decoding = "[CLS] what's the time [SEP] 7 itc limited report and accounts 2013 itc ’ s [SEP]"
-            decoding = tokenizer.decode(input_processor.input_ids[1].tolist())
+            decoding = processor.decode(input_processor.input_ids[1].tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
             # verify bbox
@@ -401,7 +438,7 @@ class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
 
             # verify input_ids
             expected_decoding = "[CLS] what's his name? [SEP] hello world [SEP]"
-            decoding = tokenizer.decode(input_processor.input_ids.squeeze().tolist())
+            decoding = processor.decode(input_processor.input_ids.squeeze().tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
             # batched
@@ -417,11 +454,11 @@ class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
 
             # verify input_ids
             expected_decoding = "[CLS] how old is he? [SEP] hello world [SEP] [PAD] [PAD] [PAD]"
-            decoding = tokenizer.decode(input_processor.input_ids[0].tolist())
+            decoding = processor.decode(input_processor.input_ids[0].tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
             expected_decoding = "[CLS] what's the time [SEP] my name is niels [SEP]"
-            decoding = tokenizer.decode(input_processor.input_ids[1].tolist())
+            decoding = processor.decode(input_processor.input_ids[1].tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
             # verify bbox

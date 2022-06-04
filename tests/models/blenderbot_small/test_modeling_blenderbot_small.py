@@ -213,6 +213,7 @@ class BlenderbotSmallModelTest(ModelTesterMixin, GenerationTesterMixin, unittest
     all_model_classes = (BlenderbotSmallModel, BlenderbotSmallForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (BlenderbotSmallForConditionalGeneration,) if is_torch_available() else ()
     is_encoder_decoder = True
+    fx_compatible = True
     test_pruning = False
     test_missing_keys = False
 
@@ -290,8 +291,8 @@ class Blenderbot90MIntegrationTests(unittest.TestCase):
     def test_90_generation_from_long_input(self):
 
         src_text = [
-            "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel like\
-       i'm going to throw up.\nand why is that?"
+            "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel"
+            " like       i'm going to throw up.\nand why is that?"
         ]
 
         model_inputs = self.tokenizer(src_text, return_tensors="pt").to(torch_device)

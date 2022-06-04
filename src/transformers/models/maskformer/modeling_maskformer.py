@@ -496,7 +496,7 @@ def window_reverse(windows, window_size, height, width):
     """
     Merges windows to produce higher resolution features.
     """
-    batch_size = int(windows.shape[0] / (height * width / window_size / window_size))
+    batch_size = math.floor(windows.shape[0] / (height * width / window_size / window_size))
     windows = windows.view(batch_size, height // window_size, width // window_size, window_size, window_size, -1)
     windows = windows.permute(0, 1, 3, 2, 4, 5).contiguous().view(batch_size, height, width, -1)
     return windows
@@ -664,7 +664,7 @@ class MaskFormerSwinSelfAttention(nn.Module):
         super().__init__()
         if dim % num_heads != 0:
             raise ValueError(
-                f"The hidden size ({dim}) is not a multiple of the number of attention " f"heads ({num_heads})"
+                f"The hidden size ({dim}) is not a multiple of the number of attention heads ({num_heads})"
             )
 
         self.num_attention_heads = num_heads
@@ -697,16 +697,16 @@ class MaskFormerSwinSelfAttention(nn.Module):
 
     def transpose_for_scores(self, x):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(*new_x_shape)
+        x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
     def forward(
         self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        output_attentions=False,
-    ):
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor]:
         batch_size, dim, num_channels = hidden_states.shape
         mixed_query_layer = self.query(hidden_states)
 
@@ -750,7 +750,7 @@ class MaskFormerSwinSelfAttention(nn.Module):
         context_layer = torch.matmul(attention_probs, value_layer)
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(*new_context_layer_shape)
+        context_layer = context_layer.view(new_context_layer_shape)
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
@@ -764,7 +764,7 @@ class MaskFormerSwinSelfOutput(nn.Module):
         self.dense = nn.Linear(dim, dim)
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
-    def forward(self, hidden_states, input_tensor):
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -797,7 +797,13 @@ class MaskFormerSwinAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def forward(self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor]:
         self_outputs = self.self(hidden_states, attention_mask, head_mask, output_attentions)
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -814,7 +820,7 @@ class MaskFormerSwinIntermediate(nn.Module):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
@@ -827,7 +833,7 @@ class MaskFormerSwinOutput(nn.Module):
         self.dense = nn.Linear(int(config.mlp_ratio * dim), dim)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         return hidden_states
@@ -1188,7 +1194,8 @@ class DetrAttention(nn.Module):
         self.head_dim = embed_dim // num_heads
         if self.head_dim * num_heads != self.embed_dim:
             raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads})."
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {num_heads})."
             )
         self.scaling = self.head_dim**-0.5
 
@@ -1252,7 +1259,8 @@ class DetrAttention(nn.Module):
 
         if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
             raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
+                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
+                f" {attn_weights.size()}"
             )
 
         if attention_mask is not None:
@@ -1281,7 +1289,8 @@ class DetrAttention(nn.Module):
 
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}"
+                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
+                f" {attn_output.size()}"
             )
 
         attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
@@ -1949,7 +1958,7 @@ class MaskFormerSwinTransformerBackbone(nn.Module):
         return [layer.dim for layer in self.model.encoder.layers]
 
 
-class MaskFormerFPNConvLayer(nn.Sequential):
+class MaskFormerFPNConvLayer(nn.Module):
     def __init__(self, in_features: int, out_features: int, kernel_size: int = 3, padding: int = 1):
         """
         A basic module that executes conv - norm - in sequence used in MaskFormer.
@@ -1960,11 +1969,26 @@ class MaskFormerFPNConvLayer(nn.Sequential):
             out_features (`int`):
                 The number of outputs features (channels).
         """
-        super().__init__(
+        super().__init__()
+        self.layers = [
             nn.Conv2d(in_features, out_features, kernel_size=kernel_size, padding=padding, bias=False),
             nn.GroupNorm(32, out_features),
             nn.ReLU(inplace=True),
-        )
+        ]
+        for i, layer in enumerate(self.layers):
+            # Provide backwards compatibility from when the class inherited from nn.Sequential
+            # In nn.Sequential subclasses, the name given to the layer is its index in the sequence.
+            # In nn.Module subclasses they derived from the instance attribute they are assigned to e.g.
+            # self.my_layer_name = Layer()
+            # We can't give instance attributes integer names i.e. self.0 is not permitted and so need to register
+            # explicitly
+            self.add_module(str(i), layer)
+
+    def forward(self, input: Tensor) -> Tensor:
+        hidden_state = input
+        for layer in self.layers:
+            hidden_state = layer(hidden_state)
+        return hidden_state
 
 
 class MaskFormerFPNLayer(nn.Module):
@@ -2092,7 +2116,22 @@ class MaskFormerSinePositionEmbedding(nn.Module):
         return pos
 
 
-class MaskformerMLPPredictionHead(nn.Sequential):
+class PredictionBlock(nn.Module):
+    def __init__(self, in_dim: int, out_dim: int, activation: nn.Module) -> None:
+        super().__init__()
+        self.layers = [nn.Linear(in_dim, out_dim), activation]
+        # Maintain submodule indexing as if part of a Sequential block
+        for i, layer in enumerate(self.layers):
+            self.add_module(str(i), layer)
+
+    def forward(self, input: Tensor) -> Tensor:
+        hidden_state = input
+        for layer in self.layers:
+            hidden_state = layer(hidden_state)
+        return hidden_state
+
+
+class MaskformerMLPPredictionHead(nn.Module):
     def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int = 3):
         """
         A classic Multi Layer Perceptron (MLP).
@@ -2107,18 +2146,28 @@ class MaskformerMLPPredictionHead(nn.Sequential):
             num_layers (int, *optional*, defaults to 3):
                 The number of layers.
         """
+        super().__init__()
         in_dims = [input_dim] + [hidden_dim] * (num_layers - 1)
         out_dims = [hidden_dim] * (num_layers - 1) + [output_dim]
 
-        layers = []
+        self.layers = []
         for i, (in_dim, out_dim) in enumerate(zip(in_dims, out_dims)):
+            activation = nn.ReLU() if i < num_layers - 1 else nn.Identity()
+            layer = PredictionBlock(in_dim, out_dim, activation=activation)
+            self.layers.append(layer)
+            # Provide backwards compatibility from when the class inherited from nn.Sequential
+            # In nn.Sequential subclasses, the name given to the layer is its index in the sequence.
+            # In nn.Module subclasses they derived from the instance attribute they are assigned to e.g.
+            # self.my_layer_name = Layer()
+            # We can't give instance attributes integer names i.e. self.0 is not permitted and so need to register
+            # explicitly
+            self.add_module(str(i), layer)
 
-            layer = nn.Sequential(
-                nn.Linear(in_dim, out_dim), nn.ReLU(inplace=True) if i < num_layers - 1 else nn.Identity()
-            )
-            layers.append(layer)
-
-        super().__init__(*layers)
+    def forward(self, input: Tensor) -> Tensor:
+        hidden_state = input
+        for layer in self.layers:
+            hidden_state = layer(hidden_state)
+        return hidden_state
 
 
 class MaskFormerPixelLevelModule(nn.Module):
@@ -2244,20 +2293,21 @@ class MaskFormerPreTrainedModel(PreTrainedModel):
                 nn.init.constant_(module.input_projection.bias, 0)
         # FPN
         elif isinstance(module, MaskFormerFPNModel):
-            nn.init.xavier_uniform_(module.stem[0].weight, gain=xavier_std)
+            nn.init.xavier_uniform_(module.stem.get_submodule("0").weight, gain=xavier_std)
 
         elif isinstance(module, MaskFormerFPNLayer):
             nn.init.xavier_uniform_(module.proj[0].weight, gain=xavier_std)
 
         elif isinstance(module, MaskFormerFPNConvLayer):
-            nn.init.xavier_uniform_(module[0].weight, gain=xavier_std)
+            nn.init.xavier_uniform_(module.get_submodule("0").weight, gain=xavier_std)
         # The MLP head
         elif isinstance(module, MaskformerMLPPredictionHead):
             # I was not able to find the correct initializer in the original implementation
             # we'll use xavier
-            for layer in module:
-                nn.init.xavier_uniform_(layer[0].weight, gain=xavier_std)
-                nn.init.constant_(layer[0].bias, 0)
+            for submodule in module.modules():
+                if isinstance(submodule, nn.Linear):
+                    nn.init.xavier_uniform_(submodule.weight, gain=xavier_std)
+                    nn.init.constant_(submodule.bias, 0)
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)

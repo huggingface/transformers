@@ -261,6 +261,9 @@ TF_MODEL_FOR_CAUSAL_LM_MAPPING = None
 TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = None
 
 
+TF_MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING = None
+
+
 TF_MODEL_FOR_MASKED_LM_MAPPING = None
 
 
@@ -329,6 +332,13 @@ class TFAutoModelForMaskedLM(metaclass=DummyObject):
 
 
 class TFAutoModelForMultipleChoice(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFAutoModelForNextSentencePrediction(metaclass=DummyObject):
     _backends = ["tf"]
 
     def __init__(self, *args, **kwargs):
@@ -736,6 +746,27 @@ class TFCTRLModel(metaclass=DummyObject):
 
 
 class TFCTRLPreTrainedModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFData2VecVisionForImageClassification(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFData2VecVisionModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFData2VecVisionPreTrainedModel(metaclass=DummyObject):
     _backends = ["tf"]
 
     def __init__(self, *args, **kwargs):
@@ -1588,6 +1619,27 @@ class TFOpenAIGPTPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+class TFOPTForCausalLM(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFOPTModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFOPTPreTrainedModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 class TFPegasusForConditionalGeneration(metaclass=DummyObject):
     _backends = ["tf"]
 
@@ -1853,6 +1905,37 @@ class TFSpeech2TextModel(metaclass=DummyObject):
 
 
 class TFSpeech2TextPreTrainedModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFSwinForImageClassification(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFSwinForMaskedImageModeling(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFSwinModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFSwinPreTrainedModel(metaclass=DummyObject):
     _backends = ["tf"]
 
     def __init__(self, *args, **kwargs):
