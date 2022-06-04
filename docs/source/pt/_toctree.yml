@@ -1,4 +1,6 @@
 - sections:
+  - local: quicktour
+    title: Tour rápido
   - local: installation
     title: Instalação
   title: Iniciar
