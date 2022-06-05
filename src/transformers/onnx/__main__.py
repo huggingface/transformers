@@ -15,9 +15,8 @@
 from argparse import ArgumentParser
 from pathlib import Path
 
-from ..models.auto import AutoConfig, AutoFeatureExtractor, AutoTokenizer
-from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING_NAMES
-from ..models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES
+from ..models.auto import AutoFeatureExtractor, AutoProcessor, AutoTokenizer
+from ..onnx.utils import get_preprocessor
 from ..utils import logging
 from .convert import export, validate_model_outputs
 from .features import FeaturesManager
@@ -43,6 +42,13 @@ def main():
     )
     parser.add_argument("output", type=Path, help="Path indicating where to store generated ONNX model.")
     parser.add_argument("--cache_dir", type=str, default=None, help="Path indicating where to store cache.")
+    parser.add_argument(
+        "--preprocessor",
+        type=str,
+        choices=["auto", "tokenizer", "feature_extractor", "processor"],
+        default="auto",
+        help="Which type of preprocessor to use. 'auto' tries to automatically detect it.",
+    )
 
     # Retrieve CLI arguments
     args = parser.parse_args()
@@ -51,15 +57,17 @@ def main():
     if not args.output.parent.exists():
         args.output.parent.mkdir(parents=True)
 
-    # Check the modality of the inputs and instantiate the appropriate preprocessor
-    # TODO(lewtun): Refactor this as a function if we need to check modalities elsewhere as well
-    config = AutoConfig.from_pretrained(args.model)
-    if config.model_type in TOKENIZER_MAPPING_NAMES:
+    # Instantiate the appropriate preprocessor
+    if args.preprocessor == "auto":
+        preprocessor = get_preprocessor(args.model)
+    elif args.preprocessor == "tokenizer":
         preprocessor = AutoTokenizer.from_pretrained(args.model)
-    elif config.model_type in FEATURE_EXTRACTOR_MAPPING_NAMES:
+    elif args.preprocessor == "feature_extractor":
         preprocessor = AutoFeatureExtractor.from_pretrained(args.model)
+    elif args.preprocessor == "processor":
+        preprocessor = AutoProcessor.from_pretrained(args.model)
     else:
-        raise ValueError(f"Unsupported model type: {config.model_type}")
+        raise ValueError(f"Unknown preprocessor type '{args.preprocessor}'")
 
     # Allocate the model
     model = FeaturesManager.get_model_from_feature(

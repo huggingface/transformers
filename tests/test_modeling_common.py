@@ -153,6 +153,7 @@ class ModelTesterMixin:
     test_model_parallel = False
     is_encoder_decoder = False
     has_attentions = True
+    model_split_percents = [0.5, 0.7, 0.9]
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -2218,8 +2219,6 @@ class ModelTesterMixin:
     @require_torch_gpu
     def test_disk_offload(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        if isinstance(getattr(config, "num_hidden_layers", None), int) and config.num_hidden_layers < 5:
-            config.num_hidden_layers = 5
 
         for model_class in self.all_model_classes:
             if model_class._no_split_modules is None:
@@ -2231,8 +2230,7 @@ class ModelTesterMixin:
             base_output = model(**inputs_dict)
 
             model_size = compute_module_sizes(model)[""]
-            # We test several splits of sizes to make sure it works.
-            max_size = int(0.4 * model_size)
+            max_size = int(self.model_split_percents[0] * model_size)
             with tempfile.TemporaryDirectory() as tmp_dir:
                 model.cpu().save_pretrained(tmp_dir)
 
@@ -2254,8 +2252,6 @@ class ModelTesterMixin:
     @require_torch_gpu
     def test_cpu_offload(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        if isinstance(getattr(config, "num_hidden_layers", None), int) and config.num_hidden_layers < 5:
-            config.num_hidden_layers = 5
 
         for model_class in self.all_model_classes:
             if model_class._no_split_modules is None:
@@ -2268,7 +2264,7 @@ class ModelTesterMixin:
 
             model_size = compute_module_sizes(model)[""]
             # We test several splits of sizes to make sure it works.
-            max_gpu_sizes = [int(p * model_size) for p in [0.5, 0.7, 0.9]]
+            max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents]
             with tempfile.TemporaryDirectory() as tmp_dir:
                 model.cpu().save_pretrained(tmp_dir)
 
@@ -2287,8 +2283,6 @@ class ModelTesterMixin:
     @require_torch_multi_gpu
     def test_model_parallelism(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        if isinstance(getattr(config, "num_hidden_layers", None), int) and config.num_hidden_layers < 5:
-            config.num_hidden_layers = 5
 
         for model_class in self.all_model_classes:
             if model_class._no_split_modules is None:
@@ -2301,7 +2295,7 @@ class ModelTesterMixin:
 
             model_size = compute_module_sizes(model)[""]
             # We test several splits of sizes to make sure it works.
-            max_gpu_sizes = [int(p * model_size) for p in [0.5, 0.7, 0.9]]
+            max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents]
             with tempfile.TemporaryDirectory() as tmp_dir:
                 model.cpu().save_pretrained(tmp_dir)
 
