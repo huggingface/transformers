@@ -248,3 +248,36 @@ class TFXGLMModelLanguageGenerationTest(unittest.TestCase):
 
         EXPECTED_OUTPUT_STR = "Today is a nice day and the sun is shining. A nice day with warm rainy"
         self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
+
+    @slow
+    def test_lm_generate_xglm_left_padding(self):
+        """Tests that the generated text is the same, regarless of left padding"""
+        tokenizer = XGLMTokenizer.from_pretrained("facebook/xglm-564M")
+        model = TFXGLMForCausalLM.from_pretrained("facebook/xglm-564M", from_pt=True)
+
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
+
+        generation_kwargs = {
+            "bad_words_ids": [tokenizer("is").input_ids, tokenizer("angry about").input_ids],
+            "no_repeat_ngram_size": 2,
+            "do_sample": False,
+            "repetition_penalty": 1.3,
+        }
+        expected_output_string = (
+            "Today is a beautiful day and I am so glad that we have the opportunity to spend time with"
+        )
+
+        sentences = ["Today is a beautiful day and"]
+        input_ids = tokenizer(sentences, return_tensors="tf", padding=True)
+        # using default length
+        output_ids = model.generate(**input_ids, **generation_kwargs)
+        output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        self.assertEqual(output_strings[0], expected_output_string)
+
+        sentences = ["Today is a beautiful day and", "This is a very long input that we absolutely don't care about"]
+        input_ids = tokenizer(sentences, return_tensors="tf", padding=True)
+        # longer max length to capture the full length (remember: it is left padded)
+        output_ids = model.generate(**input_ids, **generation_kwargs, max_length=27)
+        output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        self.assertEqual(output_strings[0], expected_output_string)
