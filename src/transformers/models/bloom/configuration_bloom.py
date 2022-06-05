@@ -50,14 +50,6 @@ class BloomConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         n_head (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        n_inner (`int`, *optional*, defaults to None):
-            Dimensionality of the inner feed-forward layers. `None` will set it to 4 times hidden_size
-        activation_function (`str`, *optional*, defaults to `"gelu"`):
-            Activation function, to be selected in the list `["relu", "silu", "gelu", "tanh", "gelu_new"]`.
-        resid_pdrop (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        embd_pdrop (`int`, *optional*, defaults to 0.1):
-            The dropout ratio for the embeddings.
         attn_pdrop (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention.
         layer_norm_epsilon (`float`, *optional*, defaults to 1e-5):
@@ -77,18 +69,11 @@ class BloomConfig(PretrainedConfig):
             Dropout rate of the dropout function on the bias dropout.
         attention_dropout (`float`, *optional*, defaults to 0.1):
             Dropout rate applied to the attention probs
-        scale_attn_weights (`bool`, *optional*, defaults to `True`):
-            Scale attention weights by dividing by sqrt(hidden_size)..
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
         dtype (`str`, *optional*, defaults to `"bfloat16"`):
             Precision that has been used for the model's training in Megatron. Please load the model in the correct
             precision by doing `model = BloomModel.from_pretrained(model_name, torch_dtype="auto")`.`
-        scale_attn_by_inverse_layer_idx (`bool`, *optional*, defaults to `False`):
-            Whether to additionally scale attention weights by `1 / layer_idx + 1`.
-        reorder_and_upcast_attn (`bool`, *optional*, defaults to `False`):
-            Whether to scale keys (K) prior to computing attention (dot-product) and upcast attention
-            dot-product/softmax to float() when training with mixed precision.
         pretraining_tp (`int`, *optional*, defaults to `1`):
             Tensor parallelism rank used during pretraining with Megatron. Please refer to [this
             document](https://huggingface.co/docs/transformers/parallelism) to understand more about it. This value is
@@ -134,7 +119,6 @@ class BloomConfig(PretrainedConfig):
         hidden_size=64,
         n_layer=2,
         n_head=8,
-        n_inner=None,
         masked_softmax_fusion=True,
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
@@ -155,7 +139,6 @@ class BloomConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         self.n_layer = n_layer
         self.n_head = n_head
-        self.n_inner = n_inner
         self.masked_softmax_fusion = masked_softmax_fusion
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_range = initializer_range

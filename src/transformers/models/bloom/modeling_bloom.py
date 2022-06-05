@@ -27,7 +27,9 @@ from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, Causa
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_bloom import BloomConfig
-from .fused_bias_gelu import bias_gelu_impl
+
+
+# from .fused_bias_gelu import bias_gelu_impl
 
 
 logger = logging.get_logger(__name__)
@@ -168,10 +170,92 @@ def pre_process_alibi_for_pad(alibi, attention_mask, num_heads):
     return alibi
 
 
-def bias_dropout_add(x, residual, prob, training):
+def dropout_add(x, residual, prob, training):
+    """
+    Dropout add function
+
+    Args:
+        x (`torch.tensor`, *required*):
+            input tensor
+        residual (`torch.tensor`, *rquired*):
+            esidual tensor
+        prob (`float`, *required*):
+            dropout probability
+        training (`bool`, *required*):
+            training mode
+    """
     out = nn.functional.dropout(x, p=prob, training=training)
     out = residual + out
     return out
+
+
+def bias_gelu(y, bias):
+    """
+    Custom bias GELU function. Adapted from Megatron-DeepSpeed code. Here we use a simple implementation (inference) to
+    make the model jitable.
+
+    Args:
+        bias (`torch.tensor`, *required*):
+            bias tensor
+        y (`torch.tensor`, *required*):
+            input hidden states
+    """
+    x = bias + y
+    return x * 0.5 * (1.0 + torch.tanh(0.79788456 * x * (1 + 0.044715 * x * x)))
+
+
+def bias_gelu_back(g, bias, y):
+    """
+    gradient of tanh approximation of gelu gradient of actual gelu is: 0.5 * (1. + torch.erf(x * 0.70710678)) +
+    0.3989423 * x * torch.exp(-0.5 * x * x)
+
+    Args:
+        g (`torch.tensor`, *required*):
+            gradient output tensor
+        bias (`torch.tensor`, *required*):
+            bias tensor
+        y (`torch.tensor`, *required*):
+            input hidden states
+
+    """
+    x = bias + y
+    tanh_out = torch.tanh(0.79788456 * x * (1 + 0.044715 * x * x))
+    # sqrt(2/pi) * 3 * 0.044715 -> 0.1070322243
+    ff = 0.5 * x * ((1 - tanh_out * tanh_out) * (0.79788456 + 0.1070322243 * x * x)) + 0.5 * (1 + tanh_out)
+    return ff * g
+
+
+class GeLUFunction(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, input, bias):
+        ctx.save_for_backward(input, bias)
+        return bias_gelu(bias, input)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        input, bias = ctx.saved_tensors
+        tmp = bias_gelu_back(grad_output, bias, input)
+        return tmp, tmp
+
+
+class BloomBiasGelu(nn.Module):
+    """
+    BloomBiasGelu wrapper function that make use of the simple function on inference mode to make the model jitable and
+    use the autograd function in training mode to get the accurate results of the gradients Partly copied from
+    Megatron-DeepSpeed code and adapted for our needs
+
+    See here why autograd functions are not torchscriptable: https://github.com/pytorch/pytorch/issues/22329
+
+    """
+
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, bias, x):
+        if self.training:
+            return GeLUFunction.apply(x, bias)
+        else:
+            return bias_gelu(x, bias)
 
 
 class BloomScaledSoftmax(nn.Module):
@@ -380,7 +464,7 @@ class BloomAttention(nn.Module):
 
         output = output_tensor.transpose(1, 0)
 
-        output = bias_dropout_add(output, residual, self.hidden_dropout, self.training)
+        output = dropout_add(output, residual, self.hidden_dropout, self.training)
 
         outputs = (output, present)
         if output_attentions:
@@ -396,13 +480,13 @@ class BloomMLP(nn.Module):
 
         self.pretraining_tp = config.pretraining_tp
         self.slow_but_exact = config.slow_but_exact
-        self.activation_func = bias_gelu_impl
         self.dense_h_to_4h = nn.Linear(hidden_size, 4 * hidden_size)
         self.dense_4h_to_h = nn.Linear(4 * hidden_size, hidden_size)
         self.hidden_dropout = config.hidden_dropout
+        self.bias_gelu = BloomBiasGelu()
 
     def forward(self, hidden_states, residual):
-        hidden_states = self.activation_func(
+        hidden_states = self.bias_gelu(
             nn.functional.linear(hidden_states, self.dense_h_to_4h.weight), self.dense_h_to_4h.bias
         )
 
@@ -417,7 +501,7 @@ class BloomMLP(nn.Module):
         else:
             intermediate_output = self.dense_4h_to_h(hidden_states)
 
-        output = bias_dropout_add(intermediate_output, residual, self.hidden_dropout, self.training)
+        output = dropout_add(intermediate_output, residual, self.hidden_dropout, self.training)
 
         return output
 

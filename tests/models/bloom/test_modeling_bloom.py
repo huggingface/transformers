@@ -284,7 +284,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     fx_compatible = False
     test_missing_keys = False
     test_pruning = False
-    test_torchscript = False  # torch.autograd functions seems to be not supported
+    test_torchscript = True  # torch.autograd functions seems to be not supported
 
     def setUp(self):
         self.model_tester = BloomModelTester(self)
@@ -365,7 +365,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
             tokenizer.decode(greedy_output[1], skip_special_tokens=True),
         )
 
-    @slow
+    # @slow
     def test_batch_generation_padd(self):
         path_350m = "bigscience/bloom-350m"
         model = BloomForCausalLM.from_pretrained(path_350m)  # load in fp32
@@ -385,8 +385,6 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
 
         # test token values
         self.assertEqual(greedy_output[-1, 3:].tolist(), greedy_output_without_pad[0, :-3].tolist())
-
-        print(tokenizer.decode(greedy_output[-1, 3:], skip_special_tokens=True))
 
         # test reconstructions
         self.assertEqual(
