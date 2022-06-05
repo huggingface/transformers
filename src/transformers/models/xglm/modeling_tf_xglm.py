@@ -449,7 +449,7 @@ class TFXGLMMainLayer(tf.keras.layers.Layer):
             )
 
         self.offset = 2
-        self.embed_positions = create_sinusiodal_positions(
+        self._embed_positions_weights = create_sinusiodal_positions(
             num_positions=config.max_position_embeddings + self.offset,
             embedding_dim=config.d_model,
             padding_idx=config.pad_token_id,
@@ -487,6 +487,22 @@ class TFXGLMMainLayer(tf.keras.layers.Layer):
             )
 
         return combined_attention_mask
+
+    def embed_positions(
+        self,
+        input_ids: Optional[TFModelInputType] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        past_key_values_length: Optional[int] = None,
+    ) -> tf.Tensor:
+        if input_ids is not None:
+            position_ids = _create_position_ids_from_input_ids(input_ids, past_key_values_length, self.padding_idx)
+        else:
+            position_ids = _create_position_ids_from_inputs_embeds(
+                inputs_embeds, past_key_values_length, self.padding_idx
+            )
+
+        positions = tf.gather(self._embed_positions_weights, position_ids, axis=0)
+        return positions
 
     @unpack_inputs
     def call(
@@ -528,12 +544,7 @@ class TFXGLMMainLayer(tf.keras.layers.Layer):
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if inputs_embeds is None:
-            position_ids = _create_position_ids_from_input_ids(input_ids, past_key_values_length, self.padding_idx)
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
-        else:
-            position_ids = _create_position_ids_from_inputs_embeds(
-                inputs_embeds, past_key_values_length, self.padding_idx
-            )
 
         attention_mask = self._prepare_decoder_attention_mask(attention_mask, input_shape, past_key_values_length)
 
@@ -543,7 +554,7 @@ class TFXGLMMainLayer(tf.keras.layers.Layer):
             encoder_attention_mask = _expand_mask(encoder_attention_mask, tgt_len=input_shape[-1])
 
         # embed positions
-        positions = tf.gather(self.embed_positions, position_ids, axis=0)
+        positions = self.embed_positions(input_ids, inputs_embeds, past_key_values_length)
 
         hidden_states = tf.cast(inputs_embeds, dtype=tf.float32) + positions
 
@@ -868,20 +879,12 @@ class TFXGLMForCausalLM(TFXGLMPreTrainedModel, TFCausalLanguageModelingLoss):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    def prepare_inputs_for_generation(self, inputs, past=None, use_cache=None, use_xla=False, **kwargs):
-        # TODO: (Joao) after the TF generator is complete, update GPT2 TF generation to match PT's. NB -- some GPT2
-        # tests will need to be fixed after the change
-
+    def prepare_inputs_for_generation(self, inputs, past=None, use_cache=None, **kwargs):
         # only last token for inputs_ids if past is defined in kwargs
         if past:
             inputs = tf.expand_dims(inputs[:, -1], -1)
 
-        # TODO(pvp, Joao) - this `if use_xla` statement can be removed, but is left
-        # for a future PR to not change too many things for now.
-        # All statements in this if case apply for both xla and non-xla (as they already do in PyTorch)
-        attention_mask = None
-        if use_xla:
-            attention_mask = kwargs.get("attention_mask", None)
+        attention_mask = kwargs.get("attention_mask", None)
 
         return {
             "input_ids": inputs,
