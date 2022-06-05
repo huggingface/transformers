@@ -234,21 +234,24 @@ class MCTCTSelfAttention(nn.Module):
         # NOTE: should re-evaluate whether this re-implementation was truly necessary
         # or the reason why my complete re-haul worked was due to some other part
         # of the code. Adding this and the reshape fortrain code seems very undesirable.
+        scores = scores.permute(0, 2, 3, 1)  # e.g. [10, 1839, 14, 4]
 
-        scores = scores.permute(0, 2, 3, 1)
+        batch, hidden_state, seq_len, heads = scores.shape
 
-        batch, d0, d1, d2 = scores.shape
+        # e.g. [10, 1853, 14, 4]
+        scores = torch.cat((scores, torch.zeros((batch, seq_len, seq_len, heads), device=scores.device)), dim=1)
 
-        scores = torch.cat((scores, torch.zeros((batch, d1, d1, d2), device=scores.device)), dim=1)
+        # e.g. [10, 25942, 1, 4]
+        scores = self.reshape_fortran(scores, [batch, (hidden_state + seq_len) * seq_len, 1, heads])
 
-        scores = self.reshape_fortran(scores, [batch, (d0 + d1) * d1, 1, d2])
+        # e.g. [10, 25928, 1, 4]
+        scores = scores[:, : (seq_len + hidden_state - 1) * seq_len]
 
-        scores = scores[:, : (d1 + d0 - 1) * d1]
+        # e.g. [10, 1852, 14, 4]
+        scores = self.reshape_fortran(scores, [batch, hidden_state + seq_len - 1, seq_len, heads])
 
-        scores = self.reshape_fortran(scores, [batch, d0 + d1 - 1, d1, d2])
-
-        n = d0 // 2
-        scores = scores[:, n : n + d1].transpose(1, 2)
+        halfpoint = hidden_state // 2
+        scores = scores[:, halfpoint : halfpoint + seq_len].transpose(1, 2)  # e.g. [10, 14, 14, 4]
 
         return scores.permute(0, 3, 1, 2)
 
