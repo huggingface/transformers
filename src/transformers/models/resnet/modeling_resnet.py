@@ -181,19 +181,11 @@ class ResNetStage(nn.Module):
 
         layer = ResNetBottleNeckLayer if config.layer_type == "bottleneck" else ResNetBasicLayer
 
-        self.layers = [
+        self.layers = nn.Sequential(
             # downsampling is done in the first layer with stride of 2
             layer(in_channels, out_channels, stride=stride, activation=config.hidden_act),
             *[layer(out_channels, out_channels, activation=config.hidden_act) for _ in range(depth - 1)],
-        ]
-        # Provide backwards compatibility from when the class inherited from nn.Sequential
-        # In nn.Sequential subclasses, the name given to the layer is its index in the sequence.
-        # In nn.Module subclasses they derived from the instance attribute they are assigned to e.g.
-        # self.my_layer_name = Layer()
-        # We can't give instance attributes integer names i.e. self.0 is not permitted and so need to register
-        # the module explicitly
-        for i, layer in enumerate(self.layers):
-            self.add_module(str(i), layer)
+        )
 
     def forward(self, input: Tensor) -> Tensor:
         hidden_state = input

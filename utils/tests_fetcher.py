@@ -242,6 +242,67 @@ def get_test_dependencies(test_fname):
     return [f for f in [*parent_imports, *current_dir_imports] if os.path.isfile(f)]
 
 
+def create_reverse_dependency_tree():
+    """
+    Create a list of all edges (a, b) which mean that modifying a impacts b with a going over all module and test files.
+    """
+    modules = [
+        str(f.relative_to(PATH_TO_TRANFORMERS))
+        for f in (Path(PATH_TO_TRANFORMERS) / "src/transformers").glob("**/*.py")
+    ]
+    module_edges = [(d, m) for m in modules for d in get_module_dependencies(m)]
+
+    tests = [str(f.relative_to(PATH_TO_TRANFORMERS)) for f in (Path(PATH_TO_TRANFORMERS) / "tests").glob("**/*.py")]
+    test_edges = [(d, t) for t in tests for d in get_test_dependencies(t)]
+
+    return module_edges + test_edges
+
+
+def get_tree_starting_at(module, edges):
+    """
+    Returns the tree starting at a given module following all edges in the following format: [module, [list of edges
+    starting at module], [list of edges starting at the preceding level], ...]
+    """
+    vertices_seen = [module]
+    new_edges = [edge for edge in edges if edge[0] == module and edge[1] != module]
+    tree = [module]
+    while len(new_edges) > 0:
+        tree.append(new_edges)
+        final_vertices = list(set(edge[1] for edge in new_edges))
+        vertices_seen.extend(final_vertices)
+        new_edges = [edge for edge in edges if edge[0] in final_vertices and edge[1] not in vertices_seen]
+
+    return tree
+
+
+def print_tree_deps_of(module, all_edges=None):
+    """
+    Prints the tree of modules depending on a given module.
+    """
+    if all_edges is None:
+        all_edges = create_reverse_dependency_tree()
+    tree = get_tree_starting_at(module, all_edges)
+
+    # The list of lines is a list of tuples (line_to_be_printed, module)
+    # Keeping the modules lets us know where to insert each new lines in the list.
+    lines = [(tree[0], tree[0])]
+    for index in range(1, len(tree)):
+        edges = tree[index]
+        start_edges = set([edge[0] for edge in edges])
+
+        for start in start_edges:
+            end_edges = set([edge[1] for edge in edges if edge[0] == start])
+            # We will insert all those edges just after the line showing start.
+            pos = 0
+            while lines[pos][1] != start:
+                pos += 1
+            lines = lines[: pos + 1] + [(" " * (2 * index) + end, end) for end in end_edges] + lines[pos + 1 :]
+
+    for line in lines:
+        # We don't print the refs that where just here to help build lines.
+        print(line[0])
+
+
 def create_reverse_dependency_map():
     """
     Create the dependency map from module/test filename to the list of modules/tests that depend on it (even
@@ -585,8 +646,16 @@ if __name__ == "__main__":
         default=["tests"],
         help="Only keep the test files matching one of those filters.",
     )
+    parser.add_argument(
+        "--print_dependencies_of",
+        type=str,
+        help="Will only print the tree of modules depending on the file passed.",
+        default=None,
+    )
     args = parser.parse_args()
-    if args.sanity_check:
+    if args.print_dependencies_of is not None:
+        print_tree_deps_of(args.print_dependencies_of)
+    elif args.sanity_check:
         sanity_check()
     else:
         repo = Repo(PATH_TO_TRANFORMERS)
