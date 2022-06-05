@@ -365,7 +365,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
             tokenizer.decode(greedy_output[1], skip_special_tokens=True),
         )
 
-    # @slow
+    @slow
     def test_batch_generation_padd(self):
         path_350m = "bigscience/bloom-350m"
         model = BloomForCausalLM.from_pretrained(path_350m)  # load in fp32

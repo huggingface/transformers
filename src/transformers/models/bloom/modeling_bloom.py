@@ -29,9 +29,6 @@ from ...utils import logging
 from .configuration_bloom import BloomConfig
 
 
-# from .fused_bias_gelu import bias_gelu_impl
-
-
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "bigscience/Bloom"
