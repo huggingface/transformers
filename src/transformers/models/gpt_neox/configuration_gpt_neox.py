@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "eleutherai/gpt-neox-20b": "https://huggingface.co/eleutherai/gpt-neox-20b/resolve/main/config.json",
+    "EleutherAI/gpt-neox-20b": "https://huggingface.co/EleutherAI/gpt-neox-20b/resolve/main/config.json",
     # See all GPTNeoX models at https://huggingface.co/models?filter=gpt_neox
 }
 
@@ -31,7 +31,7 @@ class GPTNeoXConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`GPTNeoXModel`]. It is used to instantiate an
     GPTNeoX model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the GPTNeoX
-    [eleutherai/gpt-neox-20b](https://huggingface.co/eleutherai/gpt-neox-20b) architecture.
+    [EleutherAI/gpt-neox-20b](https://huggingface.co/EleutherAI/gpt-neox-20b) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
