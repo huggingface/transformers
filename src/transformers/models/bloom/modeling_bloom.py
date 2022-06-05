@@ -237,9 +237,9 @@ class GeLUFunction(torch.autograd.Function):
 
 class BloomBiasGelu(nn.Module):
     """
-    BloomBiasGelu wrapper function that make use of the simple function on inference mode to make the model torchscriptable and
-    use the autograd function in training mode to get the accurate results of the gradients Partly copied from
-    Megatron-DeepSpeed code and adapted for our needs
+    BloomBiasGelu wrapper function that make use of the simple function on inference mode to make the model
+    torchscriptable and use the autograd function in training mode to get the accurate results of the gradients Partly
+    copied from Megatron-DeepSpeed code and adapted for our needs
 
     See here why autograd functions are not torchscriptable: https://github.com/pytorch/pytorch/issues/22329
 
