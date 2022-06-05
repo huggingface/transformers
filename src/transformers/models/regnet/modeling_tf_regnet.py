@@ -14,7 +14,7 @@
 # limitations under the License.
 """ TesnorFlow RegNet model."""
 
-from typing import Optional
+from typing import Optional, List, Dict
 from responses import activate
 
 import tensorflow as tf
@@ -60,8 +60,9 @@ class TFRegNetConvLayer(tf.keras.layers.Layer):
         stride: int = 1,
         groups: int = 1,
         activation: Optional[str] = "relu",
+        **kwargs,
     ):
-        super().__init__()
+        super().__init__(**kwargs)
         # The padding and conv has been verified
         # https://colab.research.google.com/gist/sayakpaul/854bc10eeaf21c9ee2119e0b9f3841a7/scratchpad.ipynb
         self.padding = tf.keras.layers.ZeroPadding2D(padding=kernel_size // 2)
@@ -72,9 +73,10 @@ class TFRegNetConvLayer(tf.keras.layers.Layer):
             padding="VALID",
             groups=groups,
             bias=False,
+            name="convolution",
         )
-        self.normalization = tf.keras.layers.BatchNormalization()
-        self.activation = ACT2FN[activation] if activation is not None else tf.keras.layers.Activation("linear")
+        self.normalization = tf.keras.layers.BatchNormalization(name="normalization")
+        self.activation = ACT2FN[activation] if activation is not None else tf.identity()
 
     def call(self, hidden_state):
         hidden_state = self.convolution(hidden_state)
@@ -88,10 +90,10 @@ class TFRegNetEmbeddings(tf.keras.layers.Layer):
     RegNet Embedddings (stem) composed of a single aggressive convolution.
     """
 
-    def __init__(self, config: RegNetConfig):
-        super().__init__()
+    def __init__(self, config: RegNetConfig, **kwargs):
+        super().__init__(**kwargs)
         self.embedder = TFRegNetConvLayer(
-            config.num_channels, config.embedding_size, kernel_size=3, stride=2, activation=config.hidden_act
+            config.num_channels, config.embedding_size, kernel_size=3, stride=2, activation=config.hidden_act, name="embedder",
         )
 
     def call(self, hidden_state):
@@ -105,10 +107,10 @@ class TFRegNetShortCut(tf.keras.Sequential):
     downsample the input using `stride=2`.
     """
 
-    def __init__(self, in_channels: int, out_channels: int, stride: int = 2):
-        super().__init__()
-        self.convolution = tf.keras.layers.Conv2D(filters=out_channels, kernel_size=1, strides=stride, use_bias=False)
-        self.normalization = tf.keras.layers.BatchNormalization()
+    def __init__(self, in_channels: int, out_channels: int, stride: int = 2, **kwargs):
+        super().__init__(**kwargs)
+        self.convolution = tf.keras.layers.Conv2D(filters=out_channels, kernel_size=1, strides=stride, use_bias=False, name="convolution")
+        self.normalization = tf.keras.layers.BatchNormalization(name="normalization")
 
 
 # Copied from:
@@ -191,11 +193,11 @@ class TFRegNetSELayer(tf.keras.layers.Layer):
     def __init__(self, in_channels: int, reduced_channels: int, **kwargs):
         super().__init__(**kwargs)
 
-        self.pooler = TFAdaptiveAvgPool2D(output_shape=(1, 1))
+        self.pooler = TFAdaptiveAvgPool2D(output_shape=(1, 1), name="pooler")
         self.attention = tf.keras.Sequential([
             tf.keras.layers.Conv2D(filters=reduced_channels, kernel_size=1, activation="relu"),
             tf.keras.layers.Conv2D(filters=in_channels, kernel_size=1, activation="sigmoid"),
-        ])
+        ], name="attention")
 
     def forward(self, hidden_state):
         # b c h w -> b c 1 1
@@ -205,26 +207,26 @@ class TFRegNetSELayer(tf.keras.layers.Layer):
         return hidden_state
 
 
-class RegNetXLayer(nn.Module):
+class TFRegNetXLayer(tf.keras.layers.Layer):
     """
     RegNet's layer composed by three `3x3` convolutions, same as a ResNet bottleneck layer with reduction = 1.
     """
 
-    def __init__(self, config: RegNetConfig, in_channels: int, out_channels: int, stride: int = 1):
-        super().__init__()
+    def __init__(self, config: RegNetConfig, in_channels: int, out_channels: int, stride: int = 1, **kwargs):
+        super().__init__(**kwargs)
         should_apply_shortcut = in_channels != out_channels or stride != 1
         groups = max(1, out_channels // config.groups_width)
         self.shortcut = (
-            RegNetShortCut(in_channels, out_channels, stride=stride) if should_apply_shortcut else nn.Identity()
+            TFRegNetShortCut(in_channels, out_channels, stride=stride, name="shortcut") if should_apply_shortcut else tf.identity()
         )
-        self.layer = nn.Sequential(
-            RegNetConvLayer(in_channels, out_channels, kernel_size=1, activation=config.hidden_act),
-            RegNetConvLayer(out_channels, out_channels, stride=stride, groups=groups, activation=config.hidden_act),
-            RegNetConvLayer(out_channels, out_channels, kernel_size=1, activation=None),
-        )
+        self.layer = tf.keras.Sequential([
+            TFRegNetConvLayer(in_channels, out_channels, kernel_size=1, activation=config.hidden_act),
+            TFRegNetConvLayer(out_channels, out_channels, stride=stride, groups=groups, activation=config.hidden_act),
+            TFRegNetConvLayer(out_channels, out_channels, kernel_size=1, activation=None),
+        ], name="layer")
         self.activation = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_state):
+    def call(self, hidden_state):
         residual = hidden_state
         hidden_state = self.layer(hidden_state)
         residual = self.shortcut(residual)
@@ -233,27 +235,27 @@ class RegNetXLayer(nn.Module):
         return hidden_state
 
 
-class RegNetYLayer(nn.Module):
+class TFRegNetYLayer(tf.keras.layers.Layer):
     """
     RegNet's Y layer: an X layer with Squeeze and Excitation.
     """
 
-    def __init__(self, config: RegNetConfig, in_channels: int, out_channels: int, stride: int = 1):
-        super().__init__()
+    def __init__(self, config: RegNetConfig, in_channels: int, out_channels: int, stride: int = 1, **kwargs):
+        super().__init__(**kwargs)
         should_apply_shortcut = in_channels != out_channels or stride != 1
         groups = max(1, out_channels // config.groups_width)
         self.shortcut = (
-            RegNetShortCut(in_channels, out_channels, stride=stride) if should_apply_shortcut else nn.Identity()
+            TFRegNetShortCut(in_channels, out_channels, stride=stride, name="shortcut") if should_apply_shortcut else tf.identity()
         )
-        self.layer = nn.Sequential(
-            RegNetConvLayer(in_channels, out_channels, kernel_size=1, activation=config.hidden_act),
-            RegNetConvLayer(out_channels, out_channels, stride=stride, groups=groups, activation=config.hidden_act),
-            RegNetSELayer(out_channels, reduced_channels=int(round(in_channels / 4))),
-            RegNetConvLayer(out_channels, out_channels, kernel_size=1, activation=None),
-        )
+        self.layer = tf.keras.Sequential([
+            TFRegNetConvLayer(in_channels, out_channels, kernel_size=1, activation=config.hidden_act),
+            TFRegNetConvLayer(out_channels, out_channels, stride=stride, groups=groups, activation=config.hidden_act),
+            TFRegNetSELayer(out_channels, reduced_channels=int(round(in_channels / 4))),
+            TFRegNetConvLayer(out_channels, out_channels, kernel_size=1, activation=None),
+        ], name="layer")
         self.activation = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_state):
+    def call(self, hidden_state):
         residual = hidden_state
         hidden_state = self.layer(hidden_state)
         residual = self.shortcut(residual)
@@ -262,7 +264,7 @@ class RegNetYLayer(nn.Module):
         return hidden_state
 
 
-class RegNetStage(nn.Module):
+class TFRegNetStage(tf.keras.layers.Layer):
     """
     A RegNet stage composed by stacked layers.
     """
@@ -274,12 +276,13 @@ class RegNetStage(nn.Module):
         out_channels: int,
         stride: int = 2,
         depth: int = 2,
+        **kwargs
     ):
-        super().__init__()
+        super().__init__(**kwargs)
 
-        layer = RegNetXLayer if config.layer_type == "x" else RegNetYLayer
+        layer = TFRegNetXLayer if config.layer_type == "x" else TFRegNetYLayer
 
-        self.layers = nn.Sequential(
+        self.layers = tf.keras.Sequential([
             # downsampling is done in the first layer with stride of 2
             layer(
                 config,
@@ -288,20 +291,20 @@ class RegNetStage(nn.Module):
                 stride=stride,
             ),
             *[layer(config, out_channels, out_channels) for _ in range(depth - 1)],
-        )
+        ], name="layers")
 
     def forward(self, hidden_state):
         hidden_state = self.layers(hidden_state)
         return hidden_state
 
 
-class RegNetEncoder(nn.Module):
-    def __init__(self, config: RegNetConfig):
-        super().__init__()
-        self.stages = nn.ModuleList([])
+class TFRegNetEncoder(tf.keras.layers.Layer):
+    def __init__(self, config: RegNetConfig, **kwargs):
+        super().__init__(**kwargs)
+        self.stages = list()
         # based on `downsample_in_first_stage`, the first layer of the first stage may or may not downsample the input
         self.stages.append(
-            RegNetStage(
+            TFRegNetStage(
                 config,
                 config.embedding_size,
                 config.hidden_sizes[0],
@@ -311,11 +314,14 @@ class RegNetEncoder(nn.Module):
         )
         in_out_channels = zip(config.hidden_sizes, config.hidden_sizes[1:])
         for (in_channels, out_channels), depth in zip(in_out_channels, config.depths[1:]):
-            self.stages.append(RegNetStage(config, in_channels, out_channels, depth=depth))
+            self.stages.append(TFRegNetStage(config, in_channels, out_channels, depth=depth))
+        
+        # build the Sequentail model in TensorFlow
+        self.stages = tf.keras.Sequential(self.stages, name="stages")
 
-    def forward(
-        self, hidden_state: Tensor, output_hidden_states: bool = False, return_dict: bool = True
-    ) -> BaseModelOutputWithNoAttention:
+    def call(
+        self, hidden_state: tf.Tensor, output_hidden_states: bool = False, return_dict: bool = True
+    ) -> TFBaseModelOutputWithNoAttention:
         hidden_states = () if output_hidden_states else None
 
         for stage_module in self.stages:
@@ -330,11 +336,10 @@ class RegNetEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_state, hidden_states] if v is not None)
 
-        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_state, hidden_states=hidden_states)
+        return TFBaseModelOutputWithNoAttention(last_hidden_state=hidden_state, hidden_states=hidden_states)
 
 
-# Copied from transformers.models.resnet.modeling_resnet.ResNetPreTrainedModel with ResNet->RegNet,resnet->regnet
-class RegNetPreTrainedModel(PreTrainedModel):
+class TFRegNetPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
@@ -345,16 +350,41 @@ class RegNetPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
-    def _init_weights(self, module):
-        if isinstance(module, nn.Conv2d):
-            nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
-        elif isinstance(module, (nn.BatchNorm2d, nn.GroupNorm)):
-            nn.init.constant_(module.weight, 1)
-            nn.init.constant_(module.bias, 0)
+    @property
+    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
+        """
+        Dummy inputs to build the network.
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, RegNetModel):
-            module.gradient_checkpointing = value
+        Returns:
+            `Dict[str, tf.Tensor]`: The dummy inputs.
+        """
+        VISION_DUMMY_INPUTS = tf.random.uniform(
+            shape=(
+                3,
+                self.config.num_channels,
+                self.config.image_size,
+                self.config.image_size,
+            ),
+            dtype=tf.float32,
+        )
+        return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
+
+    @tf.function(
+        input_signature=[
+            {
+                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        """
+        Method used for serving the model.
+
+        Args:
+            inputs (`Dict[str, tf.Tensor]`):
+                The input of the saved model as a dictionary of tensors.
+        """
+        return self.call(inputs)
 
 
 REGNET_START_DOCSTRING = r"""
@@ -386,14 +416,13 @@ REGNET_INPUTS_DOCSTRING = r"""
     "The bare RegNet model outputting raw features without any specific head on top.",
     REGNET_START_DOCSTRING,
 )
-# Copied from transformers.models.resnet.modeling_resnet.ResNetModel with RESNET->REGNET,ResNet->RegNet
-class RegNetModel(RegNetPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
+class TFRegNetModel(TFRegNetPreTrainedModel):
+    def __init__(self, config, **kwargs):
+        super().__init__(config, **kwargs)
         self.config = config
-        self.embedder = RegNetEmbeddings(config)
-        self.encoder = RegNetEncoder(config)
-        self.pooler = nn.AdaptiveAvgPool2d((1, 1))
+        self.embedder = TFRegNetEmbeddings(config, name="embedder")
+        self.encoder = TFRegNetEncoder(config, name="encoder")
+        self.pooler = TFAdaptiveAvgPool2D((1, 1), name="pooler")
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -401,14 +430,14 @@ class RegNetModel(RegNetPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPoolingAndNoAttention,
+        output_type=TFBaseModelOutputWithPoolingAndNoAttention,
         config_class=_CONFIG_FOR_DOC,
         modality="vision",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
-    def forward(
-        self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
-    ) -> BaseModelOutputWithPoolingAndNoAttention:
+    def call(
+        self, pixel_values: tf.Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
+    ) -> TFBaseModelOutputWithPoolingAndNoAttention:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -427,7 +456,7 @@ class RegNetModel(RegNetPreTrainedModel):
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
 
-        return BaseModelOutputWithPoolingAndNoAttention(
+        return TFBaseModelOutputWithPoolingAndNoAttention(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
@@ -441,17 +470,16 @@ class RegNetModel(RegNetPreTrainedModel):
     """,
     REGNET_START_DOCSTRING,
 )
-# Copied from transformers.models.resnet.modeling_resnet.ResNetForImageClassification with RESNET->REGNET,ResNet->RegNet,resnet->regnet
-class RegNetForImageClassification(RegNetPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
+class TFRegNetForImageClassification(TFRegNetPreTrainedModel):
+    def __init__(self, config, **kwargs):
+        super().__init__(config, **kwargs)
         self.num_labels = config.num_labels
-        self.regnet = RegNetModel(config)
+        self.regnet = TFRegNetModel(config, name="regnet")
         # classification head
-        self.classifier = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(config.hidden_sizes[-1], config.num_labels) if config.num_labels > 0 else nn.Identity(),
-        )
+        self.classifier = tf.keras.Sequential([
+            tf.keras.layers.Flatten(),
+            tf.keras.Dense(config.num_labels) if config.num_labels > 0 else tf.identity(),
+        ], name="classifier")
         # initialize weights and apply final processing
         self.post_init()
 
@@ -459,19 +487,19 @@ class RegNetForImageClassification(RegNetPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=ImageClassifierOutputWithNoAttention,
+        output_type=TFImageClassifierOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
     )
-    def forward(
+    def call(
         self,
-        pixel_values: Tensor = None,
-        labels: Tensor = None,
+        pixel_values: tf.Tensor = None,
+        labels: tf.Tensor = None,
         output_hidden_states: bool = None,
         return_dict: bool = None,
-    ) -> ImageClassifierOutputWithNoAttention:
+    ) -> TFImageClassifierOutputWithNoAttention:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+        labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
@@ -489,25 +517,25 @@ class RegNetForImageClassification(RegNetPreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                elif self.num_labels > 1 and (labels.dtype == tf.float64 or labels.dtype == tf.int32):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
             if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
+                loss_fct = tf.keras.losses.MeanSquaredError()
                 if self.num_labels == 1:
                     loss = loss_fct(logits.squeeze(), labels.squeeze())
                 else:
                     loss = loss_fct(logits, labels)
             elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
+                loss_fct = tf.keras.losses.CategoricalCrossentropy()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
             elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
+                loss_fct = tf.keras.losses.BinaryCrossentropy(from_logits=True)
                 loss = loss_fct(logits, labels)
 
         if not return_dict:
             output = (logits,) + outputs[2:]
             return (loss,) + output if loss is not None else output
 
-        return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+        return TFImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
