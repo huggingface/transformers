@@ -704,6 +704,7 @@ else:
         "TemperatureLogitsWarper",
         "TopKLogitsWarper",
         "TopPLogitsWarper",
+        "TypicalLogitsWarper",
     ]
     _import_structure["generation_stopping_criteria"] = [
         "MaxLengthCriteria",
@@ -3232,6 +3233,7 @@ if TYPE_CHECKING:
             TemperatureLogitsWarper,
             TopKLogitsWarper,
             TopPLogitsWarper,
+            TypicalLogitsWarper,
         )
         from .generation_stopping_criteria import (
             MaxLengthCriteria,

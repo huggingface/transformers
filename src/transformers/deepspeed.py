@@ -364,18 +364,6 @@ def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps
     return optimizer, lr_scheduler
 
 
-def deepspeed_reinit(trainer):
-    """
-    this is a temp hack based on: https://github.com/microsoft/DeepSpeed/issues/1394#issuecomment-937405374 until
-    Deepspeed fixes a bug where it can't resume from a checkpoint after it did some stepping
-    https://github.com/microsoft/DeepSpeed/issues/1612
-    """
-    import deepspeed
-
-    deepspeed_engine, optimizer, _, lr_scheduler = deepspeed.initialize(**trainer.deepspeed_initialize_kwargs)
-    return deepspeed_engine, optimizer, lr_scheduler
-
-
 def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None, inference=False):
     """
     Init DeepSpeed, after updating the DeepSpeed configuration with any relevant Trainer's args.
@@ -390,6 +378,10 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None, inf
 
     Returns: model, optimizer, lr_scheduler
 
+    We may use `deepspeed_init` more than once during the life of Trainer, when we do - it's a temp hack based on:
+    https://github.com/microsoft/DeepSpeed/issues/1394#issuecomment-937405374 until Deepspeed fixes a bug where it
+    can't resume from a checkpoint after it did some stepping https://github.com/microsoft/DeepSpeed/issues/1612
+
     """
     import deepspeed
     from deepspeed.utils import logger as ds_logger
@@ -397,8 +389,13 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None, inf
     model = trainer.model
     args = trainer.args
 
+    if hasattr(trainer, "hf_deepspeed_config_orig"):
+        hf_deepspeed_config = deepcopy(trainer.hf_deepspeed_config_orig)
+    else:
+        hf_deepspeed_config = args.hf_deepspeed_config
+        trainer.hf_deepspeed_config_orig = deepcopy(args.hf_deepspeed_config)
+
     # resume config update - some bits like `model` and `num_training_steps` only become available during train
-    hf_deepspeed_config = args.hf_deepspeed_config
     hf_deepspeed_config.trainer_config_finalize(args, model, num_training_steps)
     config = hf_deepspeed_config.config
 
@@ -416,6 +413,7 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None, inf
         optimizer, lr_scheduler = None, None
         model_parameters = None
     else:
+        trainer.optimizer = None  # important for when deepspeed_init is used as re-init
         optimizer, lr_scheduler = deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps)
         model_parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
 
@@ -431,9 +429,6 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None, inf
     )
 
     deepspeed_engine, optimizer, _, lr_scheduler = deepspeed.initialize(**kwargs)
-
-    # stash kwargs to enabled a later deepspeed_reinit
-    trainer.deepspeed_initialize_kwargs = kwargs
 
     if resume_from_checkpoint is not None:
 
