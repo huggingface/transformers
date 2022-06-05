@@ -212,7 +212,7 @@ class TFElectraSelfOutput(tf.keras.layers.Layer):
         return hidden_states
 
 
-# Copied from from transformers.models.bert.modeling_tf_bert.TFBertAttention with Bert->Electra
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertAttention with Bert->Electra
 class TFElectraAttention(tf.keras.layers.Layer):
     def __init__(self, config: ElectraConfig, **kwargs):
         super().__init__(**kwargs)

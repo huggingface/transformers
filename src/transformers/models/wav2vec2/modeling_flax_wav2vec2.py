@@ -120,7 +120,7 @@ def _compute_mask_indices(
     CPU as part of the preprocessing during training.
 
     Args:
-        shape: the the shape for which to compute masks.
+        shape: the shape for which to compute masks.
             should be of size 2 where first element is batch size and 2nd is timesteps
         mask_prob:
             probability for each token to be chosen as start of the span to be masked. this will be multiplied by
