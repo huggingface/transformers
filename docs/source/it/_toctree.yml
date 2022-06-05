@@ -9,6 +9,4 @@
     title: Pipeline per l'inferenza
  - local: preprocessing
     title: Preprocess
-  - local: training
-    title: Ritoccare un modello preaddestrato
   title: Esercitazione
