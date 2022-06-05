@@ -56,6 +56,15 @@ class MCTCTProcessor(ProcessorMixin):
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
+    def pad(self, *args, **kwargs):
+        """
+        When used in normal mode, this method forwards all its arguments to MCTCTFeatureExtractor's
+        [`~MCTCTFeatureExtractor.pad`] and returns its output. If used in the context
+        [`~MCTCTProcessor.as_target_processor`] this method forwards all its arguments to PreTrainedTokenizer's
+        [`~PreTrainedTokenizer.pad`]. Please refer to the docstring of the above two methods for more information.
+        """
+        return self.current_processor.pad(*args, **kwargs)
+
     def decode(self, *args, **kwargs):
         """
         This method forwards all its arguments to AutoTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to the

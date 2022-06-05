@@ -257,22 +257,13 @@ class MCTCTSelfAttention(nn.Module):
         hidden_states,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        past_key_value=None,
         output_attentions=False,
     ):
         mixed_query_layer = self.query(hidden_states)
         mixed_query_layer = mixed_query_layer / math.sqrt(self.attention_head_size)
 
-        if past_key_value is not None:
-            key_layer = self.transpose_for_scores(self.key(hidden_states))
-            value_layer = self.transpose_for_scores(self.value(hidden_states))
-            key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
-            value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
-        else:
-            key_layer = self.transpose_for_scores(self.key(hidden_states))
-            value_layer = self.transpose_for_scores(self.value(hidden_states))
+        key_layer = self.transpose_for_scores(self.key(hidden_states))
+        value_layer = self.transpose_for_scores(self.value(hidden_states))
 
         query_layer = self.transpose_for_scores(mixed_query_layer)
 
@@ -365,18 +356,12 @@ class MCTCTAttention(nn.Module):
         hidden_states,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        past_key_value=None,
         output_attentions=False,
     ):
         self_outputs = self.self(
             hidden_states,
             attention_mask,
             head_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
-            past_key_value,
             output_attentions,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
