@@ -990,7 +990,7 @@ tokenizer.
 For [camelcase name of model], the tokenizer files can be found here:
 - [To be filled out by mentor]
 
-and having implemented the  🤗Transformers' version of the tokenizer can be loaded as follows:
+and having implemented the 🤗 Transformers' version of the tokenizer can be loaded as follows:
 
 [To be filled out by mentor]
 
