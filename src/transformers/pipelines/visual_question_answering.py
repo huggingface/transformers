@@ -25,8 +25,8 @@ class VisualQuestionAnsweringPipeline(Pipeline):
     identifiers: `"visual-question-answering", "vqa"`.
 
     The models that this pipeline can use are models that have been fine-tuned on a visual question answering task.
-    TODO: point to [huggingface.co/models](https://huggingface.co/models?filter=table-question-answering) after the
-    pipeline is added
+    See the up-to-date list of available models on
+    [huggingface.co/models](https://huggingface.co/models?filter=visual-question-answering).
     """
 
     def __init__(self, *args, **kwargs):
