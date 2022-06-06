@@ -1229,8 +1229,8 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel, TFQuestionAnsweringL
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        start_positions: Optional[bool] = None,
-        end_positions: Optional[bool] = None,
+        start_positions: Optional[tf.Tensor] = None,
+        end_positions: Optional[tf.Tensor] = None,
         training: Optional[bool] = False,
     ) -> Union[TFQuestionAnsweringModelOutput, Tuple[tf.Tensor]]:
         r"""
