@@ -1039,7 +1039,7 @@ class TFAdaptiveAvgPool1D(tf.keras.layers.Layer):
     def build(self, input_shape):
         super().build(input_shape)
         """We pre-compute the sparse matrix for the build() step once. The below code comes
-    from https://stackoverflow.com/questions/53841509/how-does-adaptive-pooling-in-pytorch-work/63603993#63603993."""
+        from https://stackoverflow.com/questions/53841509/how-does-adaptive-pooling-in-pytorch-work/63603993#63603993."""
 
         def get_kernels(ind, outd) -> List:
             """Returns a List [(kernel_offset_start,kernel_length)] defining all the pooling kernels for a 1-D adaptive
@@ -1082,8 +1082,8 @@ class TFAdaptiveAvgPool1D(tf.keras.layers.Layer):
 class TFAdaptiveAvgPool2D(tf.keras.layers.Layer):
     def __init__(self, output_shape, mode="dense", **kwargs):
         super().__init__(**kwargs)
-        self.h_pool = TFAdaptiveAvgPool1D(output_shape[0], mode=mode)
-        self.w_pool = TFAdaptiveAvgPool1D(output_shape[1], mode=mode)
+        self.h_pool = TFAdaptiveAvgPool1D(output_shape[0], mode=mode, name="h_pool")
+        self.w_pool = TFAdaptiveAvgPool1D(output_shape[1], mode=mode, name="w_pool")
 
     def call(self, inputs):
         # Rearrange from NHWC -> NCHW
@@ -1117,12 +1117,12 @@ class TFData2VecVisionPyramidPoolingModule(tf.keras.layers.Layer):
         self.channels = channels
 
         self.layer_list = []
-        for pool_scale in pool_scales:
+        for idx, pool_scale in enumerate(pool_scales):
             pool_scale = pool_scale if isinstance(pool_scale, collections.abc.Iterable) else (pool_scale, pool_scale)
             self.layer_list.append(
                 [
-                    TFAdaptiveAvgPool2D(output_shape=pool_scale, name="adavptive_avgpool"),
-                    TFData2VecVisionConvModule(out_channels=self.channels, kernel_size=1, name="conv_module"),
+                    TFAdaptiveAvgPool2D(output_shape=pool_scale, name=f"adavptive_avgpool_{idx}"),
+                    TFData2VecVisionConvModule(out_channels=self.channels, kernel_size=1, name=f"conv_module_{idx}"),
                 ]
             )
 
@@ -1162,14 +1162,16 @@ class TFData2VecVisionUperHead(tf.keras.layers.Layer):
         # FPN Module
         self.lateral_convs = []
         self.fpn_convs = []
-        for _ in self.in_channels[:-1]:  # skip the top layer
-            l_conv = TFData2VecVisionConvModule(self.channels, kernel_size=1, name="l_conv")
-            fpn_conv = TFData2VecVisionConvModule(self.channels, kernel_size=3, padding="same", name="fpn_conv")
+        for idx, _ in enumerate(self.in_channels[:-1]):  # skip the top layer
+            l_conv = TFData2VecVisionConvModule(out_channels=self.channels, kernel_size=1, name=f"l_conv_{idx}")
+            fpn_conv = TFData2VecVisionConvModule(
+                out_channels=self.channels, kernel_size=3, padding="same", name=f"fpn_conv_{idx}"
+            )
             self.lateral_convs.append(l_conv)
             self.fpn_convs.append(fpn_conv)
 
         self.fpn_bottleneck = TFData2VecVisionConvModule(
-            self.channels, kernel_size=3, padding="same", name="fpn_bottleneck"
+            out_channels=self.channels, kernel_size=3, padding="same", name="fpn_bottleneck"
         )
 
     def psp_forward(self, inputs):
@@ -1239,14 +1241,17 @@ class TFData2VecVisionFCNHead(tf.keras.layers.Layer):
         convs = []
         convs.append(
             TFData2VecVisionConvModule(
-                self.channels, kernel_size=kernel_size, padding="same", dilation=dilation, name="conv_module_1"
+                out_channels=self.channels,
+                kernel_size=kernel_size,
+                padding="same",
+                dilation=dilation,
+                name="conv_module_1",
             )
         )
         for i in range(self.num_convs - 1):
             convs.append(
                 TFData2VecVisionConvModule(
-                    self.channels,
-                    self.channels,
+                    out_channels=self.channels,
                     kernel_size=kernel_size,
                     padding="same",
                     dilation=dilation,
@@ -1259,7 +1264,7 @@ class TFData2VecVisionFCNHead(tf.keras.layers.Layer):
             self.convs = tf.keras.Sequential(convs)
         if self.concat_input:
             self.conv_cat = TFData2VecVisionConvModule(
-                self.channels, kernel_size=kernel_size, padding="same", name="conv_cat"
+                out_channels=self.channels, kernel_size=kernel_size, padding="same", name="conv_cat"
             )
 
         self.classifier = tf.keras.layers.Conv2D(config.num_labels, kernel_size=1, name="classifier")
@@ -1283,7 +1288,6 @@ class TFData2VecVisionFCNHead(tf.keras.layers.Layer):
 class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
     def __init__(self, config: Data2VecVisionConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
-
         self.num_labels = config.num_labels
         self.data2vec_vision = TFData2VecVisionMainLayer(config, add_pooling_layer=False, name="data2vec_vision")
 
@@ -1386,7 +1390,6 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
             output_hidden_states=True,  # we need the intermediate hidden states
             return_dict=return_dict,
         )
-
         encoder_hidden_states = outputs.hidden_states if return_dict else outputs[1]
 
         # only keep certain features, and reshape
