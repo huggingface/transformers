@@ -1700,7 +1700,7 @@ class GenerationMixin:
         )
 
         use_cache = model_kwargs.get("use_cache")
-        output_past_key_values = use_cache if use_cache is not None else self.config.use_cache
+        output_past_key_values = use_cache if use_cache is not None else getattr(self.config, "use_cache", False)
         return_dict_in_generate = (
             return_dict_in_generate if return_dict_in_generate is not None else self.config.return_dict_in_generate
         )
@@ -1962,7 +1962,7 @@ class GenerationMixin:
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = model_kwargs.get("use_cache")
-        output_past_key_values = use_cache if use_cache is not None else self.config.use_cache
+        output_past_key_values = use_cache if use_cache is not None else getattr(self.config, "use_cache", False)
         return_dict_in_generate = (
             return_dict_in_generate if return_dict_in_generate is not None else self.config.return_dict_in_generate
         )
@@ -2224,7 +2224,7 @@ class GenerationMixin:
         output_scores = output_scores if output_scores is not None else self.config.output_scores
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         use_cache = model_kwargs.get("use_cache")
-        output_past_key_values = use_cache if use_cache is not None else self.config.use_cache
+        output_past_key_values = use_cache if use_cache is not None else getattr(self.config, "use_cache", False)
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -2555,7 +2555,7 @@ class GenerationMixin:
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = model_kwargs.get("use_cache")
-        output_past_key_values = use_cache if use_cache is not None else self.config.use_cache
+        output_past_key_values = use_cache if use_cache is not None else getattr(self.config, "use_cache", False)
         return_dict_in_generate = (
             return_dict_in_generate if return_dict_in_generate is not None else self.config.return_dict_in_generate
         )
@@ -2873,7 +2873,7 @@ class GenerationMixin:
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = model_kwargs.get("use_cache")
-        output_past_key_values = use_cache if use_cache is not None else self.config.use_cache
+        output_past_key_values = use_cache if use_cache is not None else getattr(self.config, "use_cache", False)
         return_dict_in_generate = (
             return_dict_in_generate if return_dict_in_generate is not None else self.config.return_dict_in_generate
         )
@@ -3250,7 +3250,7 @@ class GenerationMixin:
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = model_kwargs.get("use_cache")
-        output_past_key_values = use_cache if use_cache is not None else self.config.use_cache
+        output_past_key_values = use_cache if use_cache is not None else getattr(self.config, "use_cache", False)
         return_dict_in_generate = (
             return_dict_in_generate if return_dict_in_generate is not None else self.config.return_dict_in_generate
         )
