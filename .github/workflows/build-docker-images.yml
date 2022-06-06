@@ -5,6 +5,7 @@ on:
     branches:
       - docker-image*
   repository_dispatch:
+  workflow_call:
   schedule:
     - cron: "0 1 * * *"
 
