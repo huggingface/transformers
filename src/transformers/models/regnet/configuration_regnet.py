@@ -36,6 +36,8 @@ class RegNetConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
+        image_size (`int`, *optional*, defaults to 224):
+            Size of the input images.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         embedding_size (`int`, *optional*, defaults to 64):
@@ -71,6 +73,7 @@ class RegNetConfig(PretrainedConfig):
 
     def __init__(
         self,
+        image_size=224,
         num_channels=3,
         embedding_size=32,
         hidden_sizes=[128, 192, 512, 1088],
@@ -83,6 +86,7 @@ class RegNetConfig(PretrainedConfig):
         super().__init__(**kwargs)
         if layer_type not in self.layer_types:
             raise ValueError(f"layer_type={layer_type} is not one of {','.join(self.layer_types)}")
+        self.image_size = image_size
         self.num_channels = num_channels
         self.embedding_size = embedding_size
         self.hidden_sizes = hidden_sizes
