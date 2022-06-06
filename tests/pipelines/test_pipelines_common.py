@@ -143,6 +143,18 @@ class PipelineTestCaseMeta(type):
             @skipIf(tiny_config is None, "TinyConfig does not exist")
             @skipIf(checkpoint is None, "checkpoint does not exist")
             def test(self):
+                if tokenizer_class is not None:
+                    try:
+                        tokenizer = get_tiny_tokenizer_from_checkpoint(checkpoint)
+                        tiny_config.vocab_size = len(tokenizer)
+                    # Rust Panic exception are NOT Exception subclass
+                    # Some test tokenizer contain broken vocabs or custom PreTokenizer, so we
+                    # provide some default tokenizer and hope for the best.
+                    except:  # noqa: E722
+                        self.skipTest(f"Ignoring {ModelClass}, cannot create a simple tokenizer")
+                else:
+                    tokenizer = None
+
                 if ModelClass.__name__.endswith("ForCausalLM"):
                     tiny_config.is_encoder_decoder = False
                     if hasattr(tiny_config, "encoder_no_repeat_ngram_size"):
@@ -160,24 +172,14 @@ class PipelineTestCaseMeta(type):
                     )
                 if hasattr(model, "eval"):
                     model = model.eval()
-                if tokenizer_class is not None:
-                    try:
-                        tokenizer = get_tiny_tokenizer_from_checkpoint(checkpoint)
-                        # XLNet actually defines it as -1.
-                        if isinstance(model.config, (RobertaConfig, IBertConfig)):
-                            tokenizer.model_max_length = model.config.max_position_embeddings - 2
-                        elif (
-                            hasattr(model.config, "max_position_embeddings")
-                            and model.config.max_position_embeddings > 0
-                        ):
-                            tokenizer.model_max_length = model.config.max_position_embeddings
-                    # Rust Panic exception are NOT Exception subclass
-                    # Some test tokenizer contain broken vocabs or custom PreTokenizer, so we
-                    # provide some default tokenizer and hope for the best.
-                    except:  # noqa: E722
-                        self.skipTest(f"Ignoring {ModelClass}, cannot create a simple tokenizer")
-                else:
-                    tokenizer = None
+
+                if tokenizer is not None:
+                    # XLNet actually defines it as -1.
+                    if isinstance(model.config, (RobertaConfig, IBertConfig)):
+                        tokenizer.model_max_length = model.config.max_position_embeddings - 2
+                    elif hasattr(model.config, "max_position_embeddings") and model.config.max_position_embeddings > 0:
+                        tokenizer.model_max_length = model.config.max_position_embeddings
+
                 feature_extractor = get_tiny_feature_extractor_from_checkpoint(
                     checkpoint, tiny_config, feature_extractor_class
                 )
