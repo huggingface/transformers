@@ -51,6 +51,7 @@ from transformers import (
 from transformers.testing_utils import (
     PASS,
     USER,
+    check_json_file_has_correct_format,
     get_tests_dir,
     is_pt_tf_cross_test,
     is_staging_test,
@@ -3324,6 +3325,11 @@ class TokenizerTesterMixin:
 
                 tokenizer_r_files = tokenizer_r.save_pretrained(tmpdirname2)
                 tokenizer_p_files = tokenizer_p.save_pretrained(tmpdirname2)
+
+                # make sure that all ".json" files are saved in the correct format
+                for file_path in tokenizer_r_files + tokenizer_p_files:
+                    if os.path.exists(file_path) and file_path.endswith(".json"):
+                        check_json_file_has_correct_format(file_path)
 
                 # Checks it save with the same files + the tokenizer.json file for the fast one
                 self.assertTrue(any("tokenizer.json" in f for f in tokenizer_r_files))

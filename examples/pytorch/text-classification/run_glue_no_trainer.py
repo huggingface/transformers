@@ -270,7 +270,7 @@ def main():
             data_files["train"] = args.train_file
         if args.validation_file is not None:
             data_files["validation"] = args.validation_file
-        extension = (args.train_file if args.train_file is not None else args.valid_file).split(".")[-1]
+        extension = (args.train_file if args.train_file is not None else args.validation_file).split(".")[-1]
         raw_datasets = load_dataset(extension, data_files=data_files)
     # See more about loading any type of standard or custom dataset at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
@@ -343,7 +343,7 @@ def main():
                 f"model labels: {list(sorted(label_name_to_id.keys()))}, dataset labels: {list(sorted(label_list))}."
                 "\nIgnoring the model labels as a result.",
             )
-    elif args.task_name is None:
+    elif args.task_name is None and not is_regression:
         label_to_id = {v: i for i, v in enumerate(label_list)}
 
     if label_to_id is not None:

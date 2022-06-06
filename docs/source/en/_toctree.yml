@@ -248,6 +248,8 @@
       title: LayoutXLM
     - local: model_doc/led
       title: LED
+    - local: model_doc/levit
+      title: LeViT
     - local: model_doc/longformer
       title: Longformer
     - local: model_doc/luke

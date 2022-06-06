@@ -509,12 +509,14 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     all_model_classes = (T5Model, T5ForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (T5ForConditionalGeneration,) if is_torch_available() else ()
-    fx_compatible = True
     all_parallelizable_model_classes = (T5Model, T5ForConditionalGeneration) if is_torch_available() else ()
+    fx_compatible = True
     test_pruning = False
     test_resize_embeddings = True
     test_model_parallel = True
     is_encoder_decoder = True
+    # The small T5 model needs higher percentages for CPU/MP tests
+    model_split_percents = [0.8, 0.9]
 
     def setUp(self):
         self.model_tester = T5ModelTester(self)
@@ -538,6 +540,12 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         config.tie_word_embeddings = False
         config.feed_forward_proj = "gated-gelu"
         self.model_tester.create_and_check_model(config, *config_and_inputs[1:])
+
+    def test_config_and_model_silu_gated(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config = config_and_inputs[0]
+        config.feed_forward_proj = "gated-silu"
+        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_with_lm_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

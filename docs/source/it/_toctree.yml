@@ -1,0 +1,12 @@
+- sections:
+  - local: index
+    title: 🤗 Transformers
+  - local: quicktour
+    title: Tour rapido
+  - local: installation
+    title: Installazione
+  title: Iniziare
+- sections:
+  - local: pipeline_tutorial
+    title: Pipeline per l'inferenza
+  title: Esercitazione
