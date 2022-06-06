@@ -23,9 +23,9 @@ from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_availab
 
 _import_structure = {
     "configuration_markuplm": ["MARKUPLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "MarkupLMConfig"],
-    "tokenization_markuplm": ["MarkupLMTokenizer"],
     "feature_extraction_markuplm": ["MarkupLMFeatureExtractor"],
     "processing_markuplm": ["MarkupLMProcessor"],
+    "tokenization_markuplm": ["MarkupLMTokenizer"],
 }
 
 if is_tokenizers_available():

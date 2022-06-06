@@ -101,8 +101,9 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
     r"""
     Construct a MarkupLM tokenizer. Based on byte-level Byte-Pair-Encoding (BPE).
 
-    [`MarkupLMTokenizerFast`] can be used to turn HTML strings into to token-level `input_ids`, `attention_mask`, `token_type_ids`,
-    `xpath_tags_seq` and `xpath_tags_seq`. This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods.
+    [`MarkupLMTokenizerFast`] can be used to turn HTML strings into to token-level `input_ids`, `attention_mask`,
+    `token_type_ids`, `xpath_tags_seq` and `xpath_tags_seq`. This tokenizer inherits from [`PreTrainedTokenizer`] which
+    contains most of the main methods.
 
     Users should refer to this superclass for more information regarding those methods.
 
@@ -371,7 +372,8 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         if is_batched:
             if text_pair is not None and len(text) != len(text_pair):
                 raise ValueError(
-                    f"batch length of `text`: {len(text)} does not match batch length of `text_pair`: {len(text_pair)}."
+                    f"batch length of `text`: {len(text)} does not match batch length of `text_pair`:"
+                    f" {len(text_pair)}."
                 )
             batch_text_or_text_pairs = list(zip(text, text_pair)) if text_pair is not None else text
             is_pair = bool(text_pair is not None)
@@ -582,9 +584,9 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
 
         if not isinstance(batch_text_or_text_pairs, list):
             raise TypeError(f"batch_text_or_text_pairs has to be a list (got {type(batch_text_or_text_pairs)})")
-        
+
         print("Max length:", max_length)
-        
+
         # Set the truncation and padding strategy and restore the initial configuration
         self.set_truncation_and_padding(
             padding_strategy=padding_strategy,
@@ -598,7 +600,7 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
             batch_text_or_text_pairs = [(text.split(), text_pair) for text, text_pair in batch_text_or_text_pairs]
 
         print("Batch text or text pairs:", batch_text_or_text_pairs)
-        
+
         encodings = self._tokenizer.encode_batch(
             batch_text_or_text_pairs,
             add_special_tokens=add_special_tokens,

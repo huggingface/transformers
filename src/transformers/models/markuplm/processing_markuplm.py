@@ -24,14 +24,14 @@ from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokeni
 
 class MarkupLMProcessor(ProcessorMixin):
     r"""
-    Constructs a MarkupLM processor which combines a MarkupLM feature extractor and a MarkupLM tokenizer into a
-    single processor.
+    Constructs a MarkupLM processor which combines a MarkupLM feature extractor and a MarkupLM tokenizer into a single
+    processor.
 
     [`MarkupLMProcessor`] offers all the functionalities you need to prepare data for the model.
 
-    It first uses [`MarkupLMFeatureExtractor`] to get nodes and corresponding xpaths from one or more HTML strings. Next,
-    these are provided to [`MarkupLMTokenizer`] or [`MarkupLMTokenizerFast`], which turns them into token-level `input_ids`, `attention_mask`,
-    `token_type_ids`, `xpath_tags_seq` and `xpath_subs_seq`.
+    It first uses [`MarkupLMFeatureExtractor`] to get nodes and corresponding xpaths from one or more HTML strings.
+    Next, these are provided to [`MarkupLMTokenizer`] or [`MarkupLMTokenizerFast`], which turns them into token-level
+    `input_ids`, `attention_mask`, `token_type_ids`, `xpath_tags_seq` and `xpath_subs_seq`.
 
     Args:
         feature_extractor (`MarkupLMFeatureExtractor`):
@@ -63,8 +63,9 @@ class MarkupLMProcessor(ProcessorMixin):
         **kwargs
     ) -> BatchEncoding:
         """
-        This method first forwards the `html_strings` argument to [`~MarkupLMFeatureExtractor.__call__`]. Next, it passes
-        the `nodes` and `xpaths` along with the additional arguments to [`~MarkupLMTokenizer.__call__`] and returns the output.
+        This method first forwards the `html_strings` argument to [`~MarkupLMFeatureExtractor.__call__`]. Next, it
+        passes the `nodes` and `xpaths` along with the additional arguments to [`~MarkupLMTokenizer.__call__`] and
+        returns the output.
 
         Optionally, one can also provide a `text` argument which is passed along as first sequence.
 

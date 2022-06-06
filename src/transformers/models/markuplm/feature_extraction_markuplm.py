@@ -117,7 +117,7 @@ class MarkupLMFeatureExtractor(FeatureExtractionMixin):
         >>> page_name_3 = "page3.html"
 
         >>> with open(page_name_1) as f:
-        ...    single_html_string = f.read()
+        ...     single_html_string = f.read()
 
         >>> feature_extractor = MarkupLMFeatureExtractor()
 
@@ -131,9 +131,9 @@ class MarkupLMFeatureExtractor(FeatureExtractionMixin):
         >>> multi_html_strings = []
 
         >>> with open(page_name_2) as f:
-        ...    multi_html_strings.append(f.read())
+        ...     multi_html_strings.append(f.read())
         >>> with open(page_name_3) as f:
-        ...    multi_html_strings.append(f.read())
+        ...     multi_html_strings.append(f.read())
 
         >>> encoding = feature_extractor(multi_html_strings)
         >>> print(encoding.keys())

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The Hugging Face Team.
+# Copyright 2022 The Hugging Face Team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,8 +19,8 @@ import unittest
 from transformers import MarkupLMConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
-from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import ModelTesterMixin, ids_tensor
 
 
 if is_torch_available():
