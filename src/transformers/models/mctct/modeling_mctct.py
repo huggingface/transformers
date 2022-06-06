@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Meta AI and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -50,7 +50,7 @@ _CHECKPOINT_FOR_DOC = "speechbrain/m-ctc-t-large"
 _EXPECTED_OUTPUT_SHAPE = [1, 195, 1536]
 
 # CTC docstring
-_CTC_EXPECTED_OUTPUT = '"|Mr. Quilter is the apostle of the middle classes, and we\'re glad to welcome his gospel."|'
+_CTC_EXPECTED_OUTPUT = '"Mr. Quilter is the apostle of the middle classes, and we\'re glad to welcome his gospel."'
 _CTC_EXPECTED_LOSS = 1885.65
 
 
