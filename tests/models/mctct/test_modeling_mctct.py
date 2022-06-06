@@ -616,7 +616,7 @@ class MCTCTModelIntegrationTest(unittest.TestCase):
 
         EXPECTED_TRANSCRIPTIONS = [
             "a man said to the universe, sir, i exist.",
-            '"|sweat-covered brion\'s body, trickling into the tight-lowing clossa was the only germent huor."|',
+            '"sweat-covered brion\'s body, trickling into the tight-lowing clossa was the only germent huor."',
         ]
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
 
@@ -639,11 +639,9 @@ class MCTCTModelIntegrationTest(unittest.TestCase):
 
         EXPECTED_TRANSCRIPTIONS = [
             "a man said to the universe, sir, i exist.",
-            '"|sweat-covered brion\'s body, trickling into the tight-lowing clossa was the only germent huor."| "|',
-            "\"|the cadona's chest still-dripping bloodthe acofis overstrained eyes, even the soring arena around him"
+            '"sweat-covered brion\'s body, trickling into the tight-lowing clossa was the only germent huor." "',
+            "\"the cadona's chest still-dripping bloodthe acofis overstrained eyes, even the soring arena around him"
             " with thousands of spectators retrivialities not worth-thinking about.",
             "his instant panic was followed by a small sharp blow high on his chestr.",
         ]
-
-        print("predicted_trans", predicted_trans)
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
