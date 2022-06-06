@@ -1,0 +1,8 @@
+- sections:
+  - local: index
+    title: 🤗 Transformers
+  - local: quicktour
+    title: Tour rapido
+  - local: installation
+    title: Installazione
+  title: Iniziare

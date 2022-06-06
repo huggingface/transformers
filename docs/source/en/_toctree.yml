@@ -242,10 +242,14 @@
       title: LayoutLM
     - local: model_doc/layoutlmv2
       title: LayoutLMV2
+    - local: model_doc/layoutlmv3
+      title: LayoutLMV3
     - local: model_doc/layoutxlm
       title: LayoutXLM
     - local: model_doc/led
       title: LED
+    - local: model_doc/levit
+      title: LeViT
     - local: model_doc/longformer
       title: Longformer
     - local: model_doc/luke
@@ -284,6 +288,8 @@
       title: GPT-J
     - local: model_doc/gpt_neo
       title: GPT Neo
+    - local: model_doc/gpt_neox
+      title: GPT NeoX
     - local: model_doc/hubert
       title: Hubert
     - local: model_doc/perceiver
