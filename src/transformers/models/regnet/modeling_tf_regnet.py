@@ -27,7 +27,7 @@ from ...modeling_tf_outputs import (
     TFBaseModelOutputWithPoolingAndNoAttention,
     TFSequenceClassifierOutput,
 )
-from ...modeling_tf_utils import TFPreTrainedModel, keras_serializable, unpack_inputs, TFSequenceClassificationLoss
+from ...modeling_tf_utils import TFPreTrainedModel, TFSequenceClassificationLoss, keras_serializable, unpack_inputs
 from ...utils import logging
 from .configuration_regnet import RegNetConfig
 
@@ -120,6 +120,7 @@ class TFRegNetShortCut(tf.keras.Sequential):
 
     def call(self, inputs):
         return self.normalization(self.convolution(inputs))
+
 
 # Copied from:
 # https://gist.github.com/Rocketknight1/43abbe6e73f1008e6e459486e01e0ceb
@@ -258,9 +259,7 @@ class TFRegNetYLayer(tf.keras.layers.Layer):
         should_apply_shortcut = in_channels != out_channels or stride != 1
         groups = max(1, out_channels // config.groups_width)
         self.shortcut = (
-            TFRegNetShortCut(out_channels, stride=stride, name="shortcut")
-            if should_apply_shortcut
-            else tf.identity
+            TFRegNetShortCut(out_channels, stride=stride, name="shortcut") if should_apply_shortcut else tf.identity
         )
         self.layers = [
             TFRegNetConvLayer(out_channels, kernel_size=1, activation=config.hidden_act, name="layer.0"),
@@ -356,7 +355,11 @@ class TFRegNetMainLayer(tf.keras.layers.Layer):
         self.pooler = TFAdaptiveAvgPool2D((1, 1), name="pooler")
 
     def call(
-        self, pixel_values: tf.Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None, training: bool = False
+        self,
+        pixel_values: tf.Tensor,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: bool = False,
     ) -> TFBaseModelOutputWithPoolingAndNoAttention:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -564,7 +567,9 @@ class TFRegNetForImageClassification(TFRegNetPreTrainedModel, TFSequenceClassifi
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.regnet(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict, training=training)
+        outputs = self.regnet(
+            pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict, training=training
+        )
 
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
 
