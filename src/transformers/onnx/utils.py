@@ -81,7 +81,8 @@ def get_preprocessor(model_name: str) -> Optional[Union["AutoTokenizer", "AutoFe
             returned. If both a tokenizer and a feature extractor exist, an error is raised. The function returns
             `None` if no preprocessor is found.
     """
-    from .. import AutoFeatureExtractor, AutoProcessor, AutoTokenizer
+    # Avoid circular imports by only importing this here.
+    from .. import AutoFeatureExtractor, AutoProcessor, AutoTokenizer # tests_ignore
 
     try:
         return AutoProcessor.from_pretrained(model_name)
