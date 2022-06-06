@@ -559,12 +559,12 @@ class WavLMAttention(nn.Module):
         relative_positions_if_large = torch.log(relative_positions.float() / max_exact)
         relative_positions_if_large = relative_positions_if_large / math.log(self.max_distance / max_exact)
         relative_positions_if_large = relative_positions_if_large * (num_buckets - max_exact)
-        relative_postion_if_large = (max_exact + relative_positions_if_large).to(torch.long)
-        relative_postion_if_large = torch.min(
-            relative_postion_if_large, torch.full_like(relative_postion_if_large, num_buckets - 1)
+        relative_position_if_large = (max_exact + relative_positions_if_large).to(torch.long)
+        relative_position_if_large = torch.min(
+            relative_position_if_large, torch.full_like(relative_position_if_large, num_buckets - 1)
         )
 
-        relative_buckets += torch.where(is_small, relative_positions, relative_postion_if_large)
+        relative_buckets += torch.where(is_small, relative_positions, relative_position_if_large)
         return relative_buckets
 
 
@@ -1545,6 +1545,7 @@ class WavLMForAudioFrameClassification(WavLMPreTrainedModel):
         if config.use_weighted_layer_sum:
             self.layer_weights = nn.Parameter(torch.ones(num_layers) / num_layers)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+        self.num_labels = config.num_labels
 
         self.init_weights()
 
@@ -1588,6 +1589,7 @@ class WavLMForAudioFrameClassification(WavLMPreTrainedModel):
         self,
         input_values: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1620,12 +1622,17 @@ class WavLMForAudioFrameClassification(WavLMPreTrainedModel):
 
         logits = self.classifier(hidden_states)
 
+        loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.num_labels), torch.argmax(labels.view(-1, self.num_labels), axis=1))
+
         if not return_dict:
             output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
             return output
 
         return TokenClassifierOutput(
-            loss=None,
+            loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,

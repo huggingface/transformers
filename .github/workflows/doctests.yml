@@ -32,9 +32,7 @@ jobs:
 
       - name: GPU visibility
         run: |
-          utils/print_env_pt.py
-          TF_CPP_MIN_LOG_LEVEL=3 python3 -c "import tensorflow as tf; print('TF GPUs available:', bool(tf.config.list_physical_devices('GPU')))"
-          TF_CPP_MIN_LOG_LEVEL=3 python3 -c "import tensorflow as tf; print('Number of TF GPUs available:', len(tf.config.list_physical_devices('GPU')))"
+          python3 utils/print_env.py
 
       - name: Prepare files for doctests
         run: |

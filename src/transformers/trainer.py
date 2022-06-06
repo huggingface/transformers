@@ -65,7 +65,7 @@ from . import __version__
 from .configuration_utils import PretrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
-from .deepspeed import deepspeed_init, deepspeed_reinit, is_deepspeed_zero3_enabled
+from .deepspeed import deepspeed_init, is_deepspeed_zero3_enabled
 from .dependency_versions_check import dep_version_check
 from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
@@ -140,8 +140,10 @@ from .utils import (
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_torch_tpu_available,
+    is_torchdynamo_available,
     logging,
 )
+from .utils.generic import ContextManagers
 
 
 _is_torch_generator_available = False
@@ -1749,7 +1751,7 @@ class Trainer:
         ):
             raise ValueError(f"Can't find a valid checkpoint at {resume_from_checkpoint}")
 
-        logger.info(f"Loading model from {resume_from_checkpoint}).")
+        logger.info(f"Loading model from {resume_from_checkpoint}.")
 
         if os.path.isfile(os.path.join(resume_from_checkpoint, CONFIG_NAME)):
             config = PretrainedConfig.from_json_file(os.path.join(resume_from_checkpoint, CONFIG_NAME))
@@ -1786,16 +1788,23 @@ class Trainer:
         model = self.model_wrapped if is_sagemaker_mp_enabled() else self.model
         if os.path.exists(best_model_path):
             if self.deepspeed:
+
+                if self.model_wrapped is not None:
+                    # this removes the pre-hooks from the previous engine
+                    self.model_wrapped.destroy()
+                    self.model_wrapped = None
+
                 # temp hack until Deepspeed fixes the problem with resume from an existing engine that did some stepping
-                deepspeed_engine, optimizer, lr_scheduler = deepspeed_reinit(self)
+                deepspeed_engine, optimizer, lr_scheduler = deepspeed_init(
+                    self,
+                    num_training_steps=self.args.max_steps,
+                    resume_from_checkpoint=self.state.best_model_checkpoint,
+                )
                 self.model = deepspeed_engine.module
                 self.model_wrapped = deepspeed_engine
                 self.deepspeed = deepspeed_engine
                 self.optimizer = optimizer
                 self.lr_scheduler = lr_scheduler
-                self.deepspeed.load_checkpoint(
-                    self.state.best_model_checkpoint, load_optimizer_states=True, load_lr_scheduler_states=True
-                )
             else:
                 # We load the model state dict on the CPU to avoid an OOM error.
                 state_dict = torch.load(best_model_path, map_location="cpu")
@@ -2211,6 +2220,32 @@ class Trainer:
 
         return inputs
 
+    def compute_loss_context_manager(self):
+        """
+        A helper wrapper to group together context managers.
+        """
+        return ContextManagers(
+            [
+                self.torchdynamo_smart_context_manager(),
+                self.autocast_smart_context_manager(),
+            ]
+        )
+
+    def torchdynamo_smart_context_manager(self):
+        """
+        A helper wrapper that creates an appropriate context manager for `torchdynamo`.
+        """
+        ctx_manager = contextlib.nullcontext()
+        if is_torchdynamo_available():
+            import torchdynamo
+            from torchdynamo.optimizations.training import aot_autograd_speedup_strategy
+
+            if self.args.torchdynamo == "eager":
+                ctx_manager = torchdynamo.optimize("eager")
+            elif self.args.torchdynamo == "nvfuser":
+                ctx_manager = torchdynamo.optimize(aot_autograd_speedup_strategy)
+        return ctx_manager
+
     def autocast_smart_context_manager(self):
         """
         A helper wrapper that creates an appropriate context manager for `autocast` while feeding it the desired
@@ -2256,7 +2291,7 @@ class Trainer:
             loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps, scaler=scaler)
             return loss_mb.reduce_mean().detach().to(self.args.device)
 
-        with self.autocast_smart_context_manager():
+        with self.compute_loss_context_manager():
             loss = self.compute_loss(model, inputs)
 
         if self.args.n_gpu > 1:
@@ -2950,7 +2985,7 @@ class Trainer:
                     logits = smp_nested_concat(logits_mb)
             else:
                 if has_labels:
-                    with self.autocast_smart_context_manager():
+                    with self.compute_loss_context_manager():
                         loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
                     loss = loss.mean().detach()
 
@@ -2960,7 +2995,7 @@ class Trainer:
                         logits = outputs[1:]
                 else:
                     loss = None
-                    with self.autocast_smart_context_manager():
+                    with self.compute_loss_context_manager():
                         outputs = model(**inputs)
                     if isinstance(outputs, dict):
                         logits = tuple(v for k, v in outputs.items() if k not in ignore_keys)

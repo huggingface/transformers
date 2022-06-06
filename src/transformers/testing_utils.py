@@ -71,6 +71,7 @@ from .utils import (
     is_torch_tf32_available,
     is_torch_tpu_available,
     is_torchaudio_available,
+    is_torchdynamo_available,
     is_vision_available,
 )
 
@@ -473,6 +474,11 @@ if is_flax_available():
     jax_device = jax.default_backend()
 else:
     jax_device = None
+
+
+def require_torchdynamo(test_case):
+    """Decorator marking a test that requires TorchDynamo"""
+    return unittest.skipUnless(is_torchdynamo_available(), "test requires TorchDynamo")(test_case)
 
 
 def require_torch_gpu(test_case):
@@ -1500,3 +1506,20 @@ def nested_simplify(obj, decimals=3):
         return nested_simplify(obj.item(), decimals)
     else:
         raise Exception(f"Not supported: {type(obj)}")
+
+
+def check_json_file_has_correct_format(file_path):
+    with open(file_path, "r") as f:
+        lines = f.readlines()
+        if len(lines) == 1:
+            # length can only be 1 if dict is empty
+            assert lines[0] == "{}"
+        else:
+            # otherwise make sure json has correct format (at least 3 lines)
+            assert len(lines) >= 3
+            # each key one line, ident should be 2, min length is 3
+            assert lines[0].strip() == "{"
+            for line in lines[1:-1]:
+                left_indent = len(lines[1]) - len(lines[1].lstrip())
+                assert left_indent == 2
+            assert lines[-1].strip() == "}"
