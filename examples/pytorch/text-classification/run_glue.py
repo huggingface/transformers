@@ -217,14 +217,7 @@ def main():
 
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
-    model_name = None if os.path.isdir(model_args.model_name_or_path) else model_args.model_name_or_path
-    if data_args.task_name is not None:
-        dataset_name = f"glue-{data_args.task_name}"
-    elif data_args.dataset_name is not None:
-        dataset_name = data_args.dataset_name
-    else:
-        dataset_name = None
-    send_example_telemetry("run_glue", model_name=model_name, dataset_name=dataset_name)
+    send_example_telemetry("run_glue", model_args, data_args)
 
     # Setup logging
     logging.basicConfig(
