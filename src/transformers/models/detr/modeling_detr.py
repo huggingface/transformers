@@ -335,7 +335,11 @@ class DetrTimmConvEncoder(nn.Module):
 
         requires_backends(self, ["timm"])
 
+        # This creates the backbone of the model using timm's create_model. It uses the name to instantiate
+        # the correct architecture, but these weights may get overridden by the weights within the checkpoints
+        # you load.
         backbone = create_model(name, pretrained=True, features_only=True, out_indices=(1, 2, 3, 4), **kwargs)
+
         # replace batch norm by frozen batch norm
         with torch.no_grad():
             replace_batch_norm(backbone)
