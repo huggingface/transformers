@@ -119,9 +119,9 @@ Nota che il tokenizer aggiunge alle sequenze degli `0` perchè sono troppo corte
 
 ### Truncation
 
-On the other end of the spectrum, sometimes a sequence may be too long for a model to handle. In this case, you will need to truncate the sequence to a shorter length.
+L'altra faccia della medaglia è che avolte le sequenze possono essere troppo lunghe per essere gestite dal modello. In questo caso, avrai bisogno di troncare la sequenza per avere una lunghezza minore.
 
-Set the `truncation` parameter to `True` to truncate a sequence to the maximum length accepted by the model:
+Imposta il parametro `truncation` a `True` per troncare una sequenza alla massima lunghezza accettata dal modello:
 
 ```py
 >>> batch_sentences = [
@@ -142,11 +142,11 @@ Set the `truncation` parameter to `True` to truncate a sequence to the maximum l
                     [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0]]}
 ```
 
-### Build tensors
+### Costruire i tensori
 
-Finally, you want the tokenizer to return the actual tensors that are fed to the model.
+Infine, vuoi che il tokenizer restituisca i tensori prodotti dal modello.
 
-Set the `return_tensors` parameter to either `pt` for PyTorch, or `tf` for TensorFlow:
+Imposta il parametro `return_tensors` su `pt` per PyTorch, o `tf` per TensorFlow:
 
 <frameworkcontent>
 <pt>
@@ -198,13 +198,13 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 
 ## Audio
 
-Audio inputs are preprocessed differently than textual inputs, but the end goal remains the same: create numerical sequences the model can understand. A [feature extractor](main_classes/feature_extractor) is designed for the express purpose of extracting features from raw image or audio data and converting them into tensors. Before you begin, install 🤗 Datasets to load an audio dataset to experiment with:
+Gli input audio sono processati in modo differente rispetto al testo, ma l'obiettivo rimane lo stesso: creare sequenze numeriche che il modello può capire. Un [estrattore di caratteristiche](main_classes/feature_extractor) è progettato con lo scopo preciso di estrarre caratteristiche da immagini o dati audio grezzi e convertirli in tensori. Prima di iniziare, installa 🤗 Datasets per caricare un dataset audio e sperimentare:
 
 ```bash
 pip install datasets
 ```
 
-Load the [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) dataset (see the 🤗 [Datasets tutorial](https://huggingface.co/docs/datasets/load_hub.html) for more details on how to load a dataset):
+Carica il dataset [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) (vedi il 🤗 [Datasets tutorial](https://huggingface.co/docs/datasets/load_hub.html) per avere maggiori dettagli su come caricare un dataset):
 
 ```py
 >>> from datasets import load_dataset, Audio
@@ -212,7 +212,7 @@ Load the [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) dataset (see
 >>> dataset = load_dataset("PolyAI/minds14", name="en-US", split="train")
 ```
 
-Access the first element of the `audio` column to take a look at the input. Calling the `audio` column will automatically load and resample the audio file:
+Accedi al primo elemento della colonna `audio` per dare uno sguardo all'input. Richiamando la colonna `audio` sarà caricato automaticamente e ricampionato il file audio:
 
 ```py
 >>> dataset[0]["audio"]
@@ -222,15 +222,15 @@ Access the first element of the `audio` column to take a look at the input. Call
  'sampling_rate': 8000}
 ```
 
-This returns three items:
+Questo restituisce tre oggetti:
 
-* `array` is the speech signal loaded - and potentially resampled - as a 1D array.
-* `path` points to the location of the audio file.
-* `sampling_rate` refers to how many data points in the speech signal are measured per second.
+* `array` è il segnale vocale caricato - e potenzialmente ricampionato - come vettore 1D.
+* `path` il percorso del file audio.
+* `sampling_rate` si riferisce al numero di campioni del segnale vocale misurati al secondo.
 
-### Resample
+### Ricampionamento
 
-For this tutorial, you will use the [Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base) model. As you can see from the model card, the Wav2Vec2 model is pretrained on 16kHz sampled speech audio. It is important your audio data's sampling rate matches the sampling rate of the dataset used to pretrain the model. If your data's sampling rate isn't the same, then you need to resample your audio data. 
+Per questo tutorial, puoi usare il modello [Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base). Come puoi vedere dalla model card, il modello Wav2Vec2 è preaddestrato su un campionamento vocale a 16kHz. E' importante che la frequenza di campionamento dei tuoi dati audio combaci con la frequenza di campionamento del dataset usato per preaddestrare il modello. Se la frequenza di campionamento dei tuoi dati non è uguale dovrai ricampionare i tuoi dati audio.
 
 For example, the [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) dataset has a sampling rate of 8000kHz. In order to use the Wav2Vec2 model with this dataset, upsample the sampling rate to 16kHz:
 
