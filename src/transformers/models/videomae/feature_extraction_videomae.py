@@ -20,7 +20,13 @@ import numpy as np
 from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ImageFeatureExtractionMixin, ImageInput
+from ...image_utils import (
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
+    ImageFeatureExtractionMixin,
+    ImageInput,
+    is_torch_tensor,
+)
 from ...utils import TensorType, logging
 
 
@@ -124,16 +130,19 @@ class VideoMAEFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
 
         # Check that videos have a valid type
         if isinstance(videos, (list, tuple)):
-            if isinstance(videos[0], (Image.Image, np.ndarray)):
+            if isinstance(videos[0], (Image.Image, np.ndarray)) or is_torch_tensor(videos[0]):
                 valid_videos = True
-            elif isinstance(videos[0], (list, tuple)) and isinstance(videos[0][0], (Image.Image, np.ndarray)):
+            elif isinstance(videos[0], (list, tuple)) and (
+                isinstance(videos[0][0], (Image.Image, np.ndarray)) or is_torch_tensor(videos[0][0])
+            ):
                 valid_videos = True
                 is_batched = True
 
         if not valid_videos:
             raise ValueError(
-                "Videos must of type `List[PIL.Image.Image]`, `List[np.ndarray]` (single example), "
-                "`List[List[PIL.Image.Image]]`, `List[List[np.ndarray]]` (batch of examples)."
+                "Videos must of type `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]` (single"
+                " example), `List[List[PIL.Image.Image]]`, `List[List[np.ndarray]]`, `List[List[torch.Tensor]]` (batch"
+                " of examples)."
             )
 
         if not is_batched:
