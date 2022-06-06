@@ -1194,6 +1194,9 @@ class TrainingArguments:
         if self.no_cuda:
             device = torch.device("cpu")
             self._n_gpu = 0
+            os.environ["RANK"] = str(os.environ.get("PMI_RANK", 0))
+            os.environ["WORLD_SIZE"] = str(os.environ.get("PMI_SIZE", 1))
+            self.local_rank = int(os.environ.get("MPI_LOCALRANKID", -1))
             if self.local_rank != -1 and not torch.distributed.is_initialized():
                 # Initializes distributed backend for cpu
                 if self.xpu_backend not in ("mpi", "ccl"):
