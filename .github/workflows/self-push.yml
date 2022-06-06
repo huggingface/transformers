@@ -252,10 +252,12 @@ jobs:
           nvidia-smi
 
       - name: Environment
+        working-directory: /workspace/transformers
         run: |
           python utils/print_env.py
 
       - name: Run all non-slow selected tests on GPU
+        working-directory: /workspace/transformers
         # TODO: Here we pass all tests in the 2 folders for simplicity. It's better to pass only the identified tests.
         run: |
           python -m pytest -n 1 --dist=loadfile -v --make-reports=${{ matrix.machine_type }}_tests_torch_cuda_extensions_gpu tests/deepspeed tests/extended
@@ -263,14 +265,14 @@ jobs:
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
-        run: cat reports/${{ matrix.machine_type }}_tests_torch_cuda_extensions_gpu/failures_short.txt
+        run: cat /workspace/transformers/reports/${{ matrix.machine_type }}_tests_torch_cuda_extensions_gpu/failures_short.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@v2
         with:
           name: ${{ matrix.machine_type }}_run_tests_torch_cuda_extensions_gpu_test_reports
-          path: reports/${{ matrix.machine_type }}_tests_torch_cuda_extensions_gpu
+          path: /workspace/transformers/reports/${{ matrix.machine_type }}_tests_torch_cuda_extensions_gpu
 
   send_results:
     name: Send results to webhook
