@@ -163,10 +163,7 @@ class MCTCTEmbeddings(nn.Module):
     def forward(
         self, input_features=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
     ):
-        if input_features is not None:
-            input_shape = input_features.size()
-        else:
-            input_shape = inputs_embeds.size()[:-1]
+        input_shape = input_features.size() if input_features is not None else inputs_embeds.size()[:-1]
 
         seq_length = input_shape[1]
 
