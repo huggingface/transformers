@@ -37,7 +37,6 @@ from .test_pipelines_common import ANY, PipelineTestCaseMeta
 DEFAULT_DEVICE_NUM = -1 if torch_device == "cpu" else 0
 
 
-@is_pipeline_test
 class ConversationalPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = dict(
         list(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.items())
@@ -107,7 +106,6 @@ class ConversationalPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
             conversation_agent(conversation_2)
 
     @require_torch
-    @slow
     def test_integration_torch_conversation(self):
         # When
         conversation_agent = pipeline(task="conversational", device=DEFAULT_DEVICE_NUM)
@@ -139,7 +137,6 @@ class ConversationalPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
         self.assertEqual(result.generated_responses[1], "It's a good book.")
 
     @require_torch
-    @slow
     def test_integration_torch_conversation_truncated_history(self):
         # When
         conversation_agent = pipeline(task="conversational", min_length_for_response=24, device=DEFAULT_DEVICE_NUM)
@@ -183,7 +180,6 @@ class ConversationalPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
         self.assertEqual(output, Conversation(past_user_inputs=["hello"], generated_responses=["Hi"]))
 
     @require_torch
-    @slow
     def test_integration_torch_conversation_dialogpt_input_ids(self):
         tokenizer = AutoTokenizer.from_pretrained("microsoft/DialoGPT-small")
         model = AutoModelForCausalLM.from_pretrained("microsoft/DialoGPT-small")
@@ -200,7 +196,6 @@ class ConversationalPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
         )
 
     @require_torch
-    @slow
     def test_integration_torch_conversation_blenderbot_400M_input_ids(self):
         tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
         model = AutoModelForSeq2SeqLM.from_pretrained("facebook/blenderbot-400M-distill")
@@ -270,7 +265,6 @@ class ConversationalPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
         )
 
     @require_torch
-    @slow
     def test_integration_torch_conversation_blenderbot_400M(self):
         tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
         model = AutoModelForSeq2SeqLM.from_pretrained("facebook/blenderbot-400M-distill")
@@ -308,7 +302,6 @@ class ConversationalPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
         )
 
     @require_torch
-    @slow
     def test_integration_torch_conversation_encoder_decoder(self):
         # When
         tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot_small-90M")
@@ -355,7 +348,6 @@ class ConversationalPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
         self.assertEqual(result[1].generated_responses[1], "i don't have a name, but i'm going to see a horror movie.")
 
     @require_torch
-    @slow
     def test_from_pipeline_conversation(self):
         model_id = "facebook/blenderbot_small-90M"
 
