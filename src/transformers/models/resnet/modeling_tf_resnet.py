@@ -49,14 +49,24 @@ TF_RESNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+class IdentityLayer(tf.keras.layers.Layer):
+    """Helper class to give identity a layer API."""
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+
+    def call(self, x: tf.Tensor, *args, **kwargs) -> tf.Tensor:
+        return x
+
+
 class TFResNetConvLayer(tf.keras.layers.Layer):
     def __init__(
         self, out_channels: int, kernel_size: int = 3, stride: int = 1, activation: str = "relu", **kwargs
     ) -> None:
         super().__init__(**kwargs)
-        padding = "same" if kernel_size // 2 else "valid"
-        self.convolution = tf.keras.layers.Conv2D(
-            out_channels, kernel_size=kernel_size, strides=stride, padding=padding, use_bias=False, name="convolution"
+        self.pad_value = kernel_size // 2
+        self.conv = tf.keras.layers.Conv2D(
+            out_channels, kernel_size=kernel_size, strides=stride, padding="valid", use_bias=False, name="convolution"
         )
         # Use same default momentum and epsilon as PyTorch equivalent
         self.normalization = tf.keras.layers.BatchNormalization(
@@ -64,13 +74,19 @@ class TFResNetConvLayer(tf.keras.layers.Layer):
         )
         self.activation = ACT2FN[activation] if activation is not None else IdentityLayer()
 
-    def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
-        hidden_state = x
+    def convolution(self, hidden_state: tf.Tensor) -> tf.Tensor:
+        # Pad to match that done in the PyTorch Conv2D model
+        height_pad = width_pad = (self.pad_value, self.pad_value)
+        hidden_state = tf.pad(hidden_state, [(0, 0), (0, 0), height_pad, width_pad])
         # B, C, H, W -> B, H, W, C
         hidden_state = tf.transpose(hidden_state, (0, 2, 3, 1))
-        hidden_state = self.convolution(hidden_state)
+        hidden_state = self.conv(hidden_state)
         # B, H, W, C -> B, C, H, W
         hidden_state = tf.transpose(hidden_state, (0, 3, 1, 2))
+        return hidden_state
+
+    def call(self, hidden_state: tf.Tensor, training: bool = False) -> tf.Tensor:
+        hidden_state = self.convolution(hidden_state)
         hidden_state = self.normalization(hidden_state, training=training)
         hidden_state = self.activation(hidden_state)
         return hidden_state
@@ -90,12 +106,12 @@ class TFResNetEmbeddings(tf.keras.layers.Layer):
             activation=config.hidden_act,
             name="embedder",
         )
-        self.pooler = tf.keras.layers.MaxPool2D(pool_size=3, strides=2, padding="same", name="pooler")
+        self.pooler = tf.keras.layers.MaxPool2D(pool_size=3, strides=2, padding="valid", name="pooler")
 
-    def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
-        hidden_state = x
-        hidden_state = self.embedder(hidden_state, training=training)
+    def call(self, inputs: tf.Tensor, training: bool = False) -> tf.Tensor:
+        hidden_state = inputs
         # B, C, H, W -> B, H, W, C
+        hidden_state = tf.pad(hidden_state, [[0, 0], [0, 0], [1, 1], [1, 1]])
         hidden_state = tf.transpose(hidden_state, (0, 2, 3, 1))
         hidden_state = self.pooler(hidden_state)
         # B, H, W, C -> B, C, H, W
@@ -157,16 +173,6 @@ class TFResNetBasicLayer(tf.keras.layers.Layer):
         hidden_state += residual
         hidden_state = self.activation(hidden_state)
         return hidden_state
-
-
-class IdentityLayer(tf.keras.layers.Layer):
-    """Helper class to give identity a layer API."""
-
-    def __init__(self, **kwargs) -> None:
-        super().__init__(**kwargs)
-
-    def call(self, x: tf.Tensor, *args, **kwargs) -> tf.Tensor:
-        return x
 
 
 class TFResNetBottleNeckLayer(tf.keras.layers.Layer):
