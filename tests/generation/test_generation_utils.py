@@ -1512,6 +1512,10 @@ class GenerationTesterMixin:
     def _check_past_key_values_for_generate(
         self, batch_size, past_key_values, min_length, max_length, config, num_beam_groups=1
     ):
+        if config.use_cache is False:
+            self.assertIsNone(past_key_values)
+            return
+
         self.assertIsInstance(past_key_values, tuple)
         self.assertListEqual(
             [isinstance(iter_past_key_values, tuple) for iter_past_key_values in past_key_values],
