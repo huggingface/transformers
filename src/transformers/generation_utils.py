@@ -84,6 +84,7 @@ class GreedySearchDecoderOnlyOutput(ModelOutput):
     scores: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None
 
 
 @dataclass
@@ -126,6 +127,7 @@ class GreedySearchEncoderDecoderOutput(ModelOutput):
     decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     cross_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     decoder_hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None
 
 
 @dataclass
@@ -155,6 +157,7 @@ class SampleDecoderOnlyOutput(ModelOutput):
     scores: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None
 
 
 @dataclass
@@ -198,6 +201,7 @@ class SampleEncoderDecoderOutput(ModelOutput):
     decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     cross_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     decoder_hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None
 
 
 @dataclass
@@ -233,6 +237,7 @@ class BeamSearchDecoderOnlyOutput(ModelOutput):
     beam_indices: Optional[torch.LongTensor] = None
     attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None
 
 
 @dataclass
@@ -284,6 +289,7 @@ class BeamSearchEncoderDecoderOutput(ModelOutput):
     decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     cross_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     decoder_hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None
 
 
 @dataclass
@@ -319,6 +325,7 @@ class BeamSampleDecoderOnlyOutput(ModelOutput):
     beam_indices: Optional[torch.LongTensor] = None
     attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None
 
 
 @dataclass
@@ -368,6 +375,7 @@ class BeamSampleEncoderDecoderOutput(ModelOutput):
     decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     cross_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     decoder_hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None
 
 
 GreedySearchOutput = Union[GreedySearchEncoderDecoderOutput, GreedySearchDecoderOnlyOutput]
@@ -1642,6 +1650,9 @@ class GenerationMixin:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+
+        use_cache = model_kwargs.get("use_cache")
+        output_past_key_values = use_cache if use_cache is not None else self.config.use_cache
         return_dict_in_generate = (
             return_dict_in_generate if return_dict_in_generate is not None else self.config.return_dict_in_generate
         )
@@ -1651,6 +1662,7 @@ class GenerationMixin:
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
         cross_attentions = () if (return_dict_in_generate and output_attentions) else None
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
+        past_key_values = () if (return_dict_in_generate and output_past_key_values) else None
 
         # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
         if return_dict_in_generate and self.config.is_encoder_decoder:
@@ -1714,6 +1726,9 @@ class GenerationMixin:
                         else (outputs.hidden_states,)
                     )
 
+                if output_past_key_values:
+                    past_key_values += (outputs.past_key_values,)
+
             # argmax
             next_tokens = torch.argmax(next_tokens_scores, dim=-1)
 
@@ -1751,6 +1766,7 @@ class GenerationMixin:
                     decoder_attentions=decoder_attentions,
                     cross_attentions=cross_attentions,
                     decoder_hidden_states=decoder_hidden_states,
+                    past_key_values=past_key_values,
                 )
             else:
                 return GreedySearchDecoderOnlyOutput(
@@ -1758,6 +1774,7 @@ class GenerationMixin:
                     scores=scores,
                     attentions=decoder_attentions,
                     hidden_states=decoder_hidden_states,
+                    past_key_values=past_key_values,
                 )
         else:
             return input_ids
@@ -1896,6 +1913,8 @@ class GenerationMixin:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        use_cache = model_kwargs.get("use_cache")
+        output_past_key_values = use_cache if use_cache is not None else self.config.use_cache
         return_dict_in_generate = (
             return_dict_in_generate if return_dict_in_generate is not None else self.config.return_dict_in_generate
         )
@@ -1905,6 +1924,7 @@ class GenerationMixin:
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
         cross_attentions = () if (return_dict_in_generate and output_attentions) else None
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
+        past_key_values = () if (return_dict_in_generate and output_past_key_values) else None
 
         # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
         if return_dict_in_generate and self.config.is_encoder_decoder:
@@ -1970,6 +1990,9 @@ class GenerationMixin:
                         else (outputs.hidden_states,)
                     )
 
+                if output_past_key_values:
+                    past_key_values += (outputs.past_key_values,)
+
             # sample
             probs = nn.functional.softmax(next_token_scores, dim=-1)
             next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
@@ -2008,6 +2031,7 @@ class GenerationMixin:
                     decoder_attentions=decoder_attentions,
                     cross_attentions=cross_attentions,
                     decoder_hidden_states=decoder_hidden_states,
+                    past_key_values=past_key_values,
                 )
             else:
                 return SampleDecoderOnlyOutput(
@@ -2015,6 +2039,7 @@ class GenerationMixin:
                     scores=scores,
                     attentions=decoder_attentions,
                     hidden_states=decoder_hidden_states,
+                    past_key_values=past_key_values,
                 )
         else:
             return input_ids
@@ -2150,6 +2175,8 @@ class GenerationMixin:
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
         output_scores = output_scores if output_scores is not None else self.config.output_scores
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        use_cache = model_kwargs.get("use_cache")
+        output_past_key_values = use_cache if use_cache is not None else self.config.use_cache
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -2175,6 +2202,7 @@ class GenerationMixin:
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
         cross_attentions = () if (return_dict_in_generate and output_attentions) else None
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
+        past_key_values = () if (return_dict_in_generate and output_past_key_values) else None
 
         # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
         if return_dict_in_generate and self.config.is_encoder_decoder:
@@ -2275,6 +2303,8 @@ class GenerationMixin:
             )
             if model_kwargs["past"] is not None:
                 model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], beam_idx)
+                if return_dict_in_generate:
+                    past_key_values += (model_kwargs["past"],)
 
             if return_dict_in_generate and output_scores:
                 beam_indices = tuple((beam_indices[beam_idx[i]] + (beam_idx[i],) for i in range(len(beam_indices))))
@@ -2303,6 +2333,8 @@ class GenerationMixin:
             if not output_scores:
                 sequence_outputs["sequence_scores"] = None
 
+            # past_key_values = model_kwargs["past"] if output_past_key_values else None
+
             if self.config.is_encoder_decoder:
                 return BeamSearchEncoderDecoderOutput(
                     sequences=sequence_outputs["sequences"],
@@ -2314,6 +2346,7 @@ class GenerationMixin:
                     decoder_attentions=decoder_attentions,
                     cross_attentions=cross_attentions,
                     decoder_hidden_states=decoder_hidden_states,
+                    past_key_values=past_key_values,
                 )
             else:
                 return BeamSearchDecoderOnlyOutput(
@@ -2323,6 +2356,7 @@ class GenerationMixin:
                     beam_indices=sequence_outputs["beam_indices"],
                     attentions=decoder_attentions,
                     hidden_states=decoder_hidden_states,
+                    past_key_values=past_key_values,
                 )
         else:
             return sequence_outputs["sequences"]
@@ -2472,6 +2506,8 @@ class GenerationMixin:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        use_cache = model_kwargs.get("use_cache")
+        output_past_key_values = use_cache if use_cache is not None else self.config.use_cache
         return_dict_in_generate = (
             return_dict_in_generate if return_dict_in_generate is not None else self.config.return_dict_in_generate
         )
@@ -2489,6 +2525,7 @@ class GenerationMixin:
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
         cross_attentions = () if (return_dict_in_generate and output_attentions) else None
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
+        past_key_values = () if (return_dict_in_generate and output_past_key_values) else None
 
         # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
         if return_dict_in_generate and self.config.is_encoder_decoder:
@@ -2593,6 +2630,8 @@ class GenerationMixin:
             )
             if model_kwargs["past"] is not None:
                 model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], beam_idx)
+                if return_dict_in_generate:
+                    past_key_values += (outputs.past_key_values,)
 
             if return_dict_in_generate and output_scores:
                 beam_indices = tuple((beam_indices[beam_idx[i]] + (beam_idx[i],) for i in range(len(beam_indices))))
@@ -2632,6 +2671,7 @@ class GenerationMixin:
                     decoder_attentions=decoder_attentions,
                     cross_attentions=cross_attentions,
                     decoder_hidden_states=decoder_hidden_states,
+                    past_key_values=past_key_values,
                 )
             else:
                 return BeamSampleDecoderOnlyOutput(
@@ -2641,6 +2681,7 @@ class GenerationMixin:
                     beam_indices=sequence_outputs["beam_indices"],
                     attentions=decoder_attentions,
                     hidden_states=decoder_hidden_states,
+                    past_key_values=past_key_values,
                 )
         else:
             return sequence_outputs["sequences"]
@@ -2783,6 +2824,8 @@ class GenerationMixin:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        use_cache = model_kwargs.get("use_cache")
+        output_past_key_values = use_cache if use_cache is not None else self.config.use_cache
         return_dict_in_generate = (
             return_dict_in_generate if return_dict_in_generate is not None else self.config.return_dict_in_generate
         )
@@ -2810,6 +2853,7 @@ class GenerationMixin:
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
         cross_attentions = () if (return_dict_in_generate and output_attentions) else None
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
+        past_key_values = () if (return_dict_in_generate and output_past_key_values) else None
 
         # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
         if return_dict_in_generate and self.config.is_encoder_decoder:
@@ -2958,6 +3002,8 @@ class GenerationMixin:
             )
             if model_kwargs["past"] is not None:
                 model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], reordering_indices)
+                if return_dict_in_generate:
+                    past_key_values += (model_kwargs["past"],)
 
             # increase cur_len
             cur_len = cur_len + 1
@@ -2995,6 +3041,7 @@ class GenerationMixin:
                     decoder_attentions=decoder_attentions,
                     cross_attentions=cross_attentions,
                     decoder_hidden_states=decoder_hidden_states,
+                    past_key_values=past_key_values,
                 )
             else:
                 return BeamSearchDecoderOnlyOutput(
@@ -3004,6 +3051,7 @@ class GenerationMixin:
                     beam_indices=sequence_outputs["beam_indices"],
                     attentions=decoder_attentions,
                     hidden_states=decoder_hidden_states,
+                    past_key_values=past_key_values,
                 )
         else:
             return sequence_outputs["sequences"]
@@ -3153,6 +3201,8 @@ class GenerationMixin:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        use_cache = model_kwargs.get("use_cache")
+        output_past_key_values = use_cache if use_cache is not None else self.config.use_cache
         return_dict_in_generate = (
             return_dict_in_generate if return_dict_in_generate is not None else self.config.return_dict_in_generate
         )
@@ -3162,6 +3212,7 @@ class GenerationMixin:
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
         cross_attentions = () if (return_dict_in_generate and output_attentions) else None
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
+        past_key_values = () if (return_dict_in_generate and output_past_key_values) else None
 
         # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
         if return_dict_in_generate and self.config.is_encoder_decoder:
@@ -3273,6 +3324,8 @@ class GenerationMixin:
             )
             if model_kwargs["past"] is not None:
                 model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], beam_idx)
+                if return_dict_in_generate:
+                    past_key_values += (model_kwargs["past"],)
 
             # increase cur_len
             cur_len = cur_len + 1
@@ -3306,6 +3359,7 @@ class GenerationMixin:
                     decoder_attentions=decoder_attentions,
                     cross_attentions=cross_attentions,
                     decoder_hidden_states=decoder_hidden_states,
+                    past_key_values=past_key_values,
                 )
             else:
                 return BeamSearchDecoderOnlyOutput(
@@ -3314,6 +3368,7 @@ class GenerationMixin:
                     scores=scores,
                     attentions=decoder_attentions,
                     hidden_states=decoder_hidden_states,
+                    past_key_values=past_key_values,
                 )
         else:
             return sequence_outputs["sequences"]

@@ -1433,6 +1433,17 @@ class GenerationTesterMixin:
                 use_cache=use_cache,
             )
 
+        # Past Key Value States
+        past_key_values = output.past_key_values
+        min_length = 1 if config.is_encoder_decoder else seq_length
+        self._check_past_key_values_for_generate(
+            num_sequences_in_output,
+            past_key_values,
+            min_length=min_length,
+            max_length=output.sequences.shape[-1],
+            config=config,
+        )
+
     def _check_scores(self, batch_size, scores, length, config):
         expected_shape = (batch_size, config.vocab_size)
         self.assertIsInstance(scores, tuple)
@@ -1497,6 +1508,35 @@ class GenerationTesterMixin:
             [layer_hidden_states.shape for layer_hidden_states in hidden_states],
             [encoder_expected_shape] * len(hidden_states),
         )
+
+    def _check_past_key_values_for_generate(
+        self, batch_size, past_key_values, min_length, max_length, config, num_beam_groups=1
+    ):
+        self.assertIsInstance(past_key_values, tuple)
+        self.assertListEqual(
+            [isinstance(iter_past_key_values, tuple) for iter_past_key_values in past_key_values],
+            [True] * len(past_key_values),
+        )
+        self.assertEqual(len(past_key_values), (max_length - min_length) * num_beam_groups)
+
+        for idx, iter_past_key_values in enumerate(past_key_values):
+            seq_len = min_length + idx
+            # (batch, head, seq_length, head_features)
+            expected_shape = (
+                batch_size * num_beam_groups,
+                config.num_attention_heads,
+                seq_len,
+                config.hidden_size // config.num_attention_heads,
+            )
+            # check shape key, value
+            self.assertListEqual(
+                [layer_past_key_values[0].shape for layer_past_key_values in iter_past_key_values],
+                [expected_shape] * len(iter_past_key_values),
+            )
+            self.assertListEqual(
+                [layer_past_key_values[1].shape for layer_past_key_values in iter_past_key_values],
+                [expected_shape] * len(iter_past_key_values),
+            )
 
     def _check_sequence_inside_sequence(self, tensor_1, tensor_2):
         # check if tensor_1 inside tensor_2 or tensor_2 inside tensor_1.
