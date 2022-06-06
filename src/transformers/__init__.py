@@ -236,6 +236,7 @@ _import_structure = {
     ],
     "models.layoutxlm": ["LayoutXLMProcessor"],
     "models.led": ["LED_PRETRAINED_CONFIG_ARCHIVE_MAP", "LEDConfig", "LEDTokenizer"],
+    "models.levit": ["LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LevitConfig"],
     "models.longformer": ["LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongformerConfig", "LongformerTokenizer"],
     "models.luke": ["LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP", "LukeConfig", "LukeTokenizer"],
     "models.lxmert": ["LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LxmertConfig", "LxmertTokenizer"],
@@ -601,6 +602,7 @@ else:
     _import_structure["models.imagegpt"].append("ImageGPTFeatureExtractor")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2FeatureExtractor")
     _import_structure["models.layoutlmv3"].append("LayoutLMv3FeatureExtractor")
+    _import_structure["models.levit"].append("LevitFeatureExtractor")
     _import_structure["models.maskformer"].append("MaskFormerFeatureExtractor")
     _import_structure["models.perceiver"].append("PerceiverFeatureExtractor")
     _import_structure["models.poolformer"].append("PoolFormerFeatureExtractor")
@@ -701,6 +703,7 @@ else:
         "TemperatureLogitsWarper",
         "TopKLogitsWarper",
         "TopPLogitsWarper",
+        "TypicalLogitsWarper",
     ]
     _import_structure["generation_stopping_criteria"] = [
         "MaxLengthCriteria",
@@ -1235,6 +1238,15 @@ else:
             "LEDForSequenceClassification",
             "LEDModel",
             "LEDPreTrainedModel",
+        ]
+    )
+    _import_structure["models.levit"].extend(
+        [
+            "LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "LevitForImageClassification",
+            "LevitForImageClassificationWithTeacher",
+            "LevitModel",
+            "LevitPreTrainedModel",
         ]
     )
     _import_structure["models.longformer"].extend(
@@ -2819,6 +2831,7 @@ if TYPE_CHECKING:
     )
     from .models.layoutxlm import LayoutXLMProcessor
     from .models.led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig, LEDTokenizer
+    from .models.levit import LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, LevitConfig
     from .models.longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig, LongformerTokenizer
     from .models.luke import LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP, LukeConfig, LukeTokenizer
     from .models.lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertConfig, LxmertTokenizer
@@ -3131,6 +3144,7 @@ if TYPE_CHECKING:
         from .models.imagegpt import ImageGPTFeatureExtractor
         from .models.layoutlmv2 import LayoutLMv2FeatureExtractor
         from .models.layoutlmv3 import LayoutLMv3FeatureExtractor
+        from .models.levit import LevitFeatureExtractor
         from .models.maskformer import MaskFormerFeatureExtractor
         from .models.perceiver import PerceiverFeatureExtractor
         from .models.poolformer import PoolFormerFeatureExtractor
@@ -3213,6 +3227,7 @@ if TYPE_CHECKING:
             TemperatureLogitsWarper,
             TopKLogitsWarper,
             TopPLogitsWarper,
+            TypicalLogitsWarper,
         )
         from .generation_stopping_criteria import (
             MaxLengthCriteria,
@@ -3663,6 +3678,13 @@ if TYPE_CHECKING:
             LEDForSequenceClassification,
             LEDModel,
             LEDPreTrainedModel,
+        )
+        from .models.levit import (
+            LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            LevitForImageClassification,
+            LevitForImageClassificationWithTeacher,
+            LevitModel,
+            LevitPreTrainedModel,
         )
         from .models.longformer import (
             LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
