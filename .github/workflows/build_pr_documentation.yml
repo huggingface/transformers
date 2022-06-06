@@ -15,3 +15,4 @@ jobs:
       pr_number: ${{ github.event.number }}
       package: transformers
       languages: en es pt
+      languages: en es it pt
