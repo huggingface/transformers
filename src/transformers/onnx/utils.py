@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Optional, Union
 
 
 if TYPE_CHECKING:
-    from .. import AutoFeatureExtractor, AutoProcessor, AutoTokenizer
+    from .. import AutoFeatureExtractor, AutoProcessor, AutoTokenizer # tests_ignore
 
 
 class ParameterFormat(Enum):
