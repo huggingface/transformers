@@ -1,4 +1,8 @@
 - sections:
+  - local: index
+    title: 🤗 Transformers
+  - local: quicktour
+    title: Gúia Rápido
   - local: installation
     title: Instalação
   title: Iniciar
