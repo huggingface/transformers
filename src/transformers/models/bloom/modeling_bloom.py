@@ -186,22 +186,19 @@ def dropout_add(x, residual, prob, training):
     return out
 
 
-def bias_gelu(y, bias):
+def bias_gelu(x):
     """
     Custom bias GELU function. Adapted from Megatron-DeepSpeed code. Here we use a simple implementation (inference) to
     make the model jitable.
 
     Args:
-        bias (`torch.tensor`, *required*):
-            bias tensor
-        y (`torch.tensor`, *required*):
+        x (`torch.tensor`, *required*):
             input hidden states
     """
-    x = bias + y
     return x * 0.5 * (1.0 + torch.tanh(0.79788456 * x * (1 + 0.044715 * x * x)))
 
 
-def bias_gelu_back(g, bias, y):
+def bias_gelu_back(g, x):
     """
     gradient of tanh approximation of gelu gradient of actual gelu is: 0.5 * (1. + torch.erf(x * 0.70710678)) +
     0.3989423 * x * torch.exp(-0.5 * x * x)
@@ -209,13 +206,10 @@ def bias_gelu_back(g, bias, y):
     Args:
         g (`torch.tensor`, *required*):
             gradient output tensor
-        bias (`torch.tensor`, *required*):
-            bias tensor
-        y (`torch.tensor`, *required*):
-            input hidden states
-
+        x (`torch.tensor`, *required*):
+            input tensor
     """
-    x = bias + y
+    x = x[0]  # x is a tuple of 1 element, needs to unpack it first
     tanh_out = torch.tanh(0.79788456 * x * (1 + 0.044715 * x * x))
     # sqrt(2/pi) * 3 * 0.044715 -> 0.1070322243
     ff = 0.5 * x * ((1 - tanh_out * tanh_out) * (0.79788456 + 0.1070322243 * x * x)) + 0.5 * (1 + tanh_out)
@@ -224,15 +218,15 @@ def bias_gelu_back(g, bias, y):
 
 class GeLUFunction(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, input, bias):
-        ctx.save_for_backward(input, bias)
-        return bias_gelu(bias, input)
+    def forward(ctx, input):
+        ctx.save_for_backward(input)
+        return bias_gelu(input)
 
     @staticmethod
     def backward(ctx, grad_output):
-        input, bias = ctx.saved_tensors
-        tmp = bias_gelu_back(grad_output, bias, input)
-        return tmp, tmp
+        input = ctx.saved_tensors
+        tmp = bias_gelu_back(grad_output, input)
+        return tmp
 
 
 class BloomBiasGelu(nn.Module):
@@ -248,11 +242,11 @@ class BloomBiasGelu(nn.Module):
     def __init__(self):
         super().__init__()
 
-    def forward(self, bias, x):
+    def forward(self, x):
         if self.training:
-            return GeLUFunction.apply(x, bias)
+            return GeLUFunction.apply(x)
         else:
-            return bias_gelu(x, bias)
+            return bias_gelu(x)
 
 
 class BloomScaledSoftmax(nn.Module):
@@ -483,9 +477,7 @@ class BloomMLP(nn.Module):
         self.bias_gelu = BloomBiasGelu()
 
     def forward(self, hidden_states, residual):
-        hidden_states = self.bias_gelu(
-            nn.functional.linear(hidden_states, self.dense_h_to_4h.weight), self.dense_h_to_4h.bias
-        )
+        hidden_states = self.bias_gelu(self.dense_h_to_4h(hidden_states))
 
         if self.pretraining_tp > 1 and self.slow_but_exact:
             intermediate_output = torch.zeros_like(residual)
