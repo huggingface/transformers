@@ -1166,6 +1166,7 @@ class Trainer:
         import intel_extension_for_pytorch as ipex
 
         if not training:
+            model.eval()
             model = ipex.optimize(model, dtype=dtype, level="O1")
         else:
             if not model.training:
