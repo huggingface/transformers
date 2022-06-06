@@ -1051,11 +1051,13 @@ def send_example_telemetry(example_name, *example_args):
             # Filter out local paths
             if not os.path.isdir(model_name):
                 data["model_name"] = args_as_dict["model_name_or_path"]
-        if "task_name" in args_as_dict:
-            name = example_name.replace("run_", "").replace("_no_trainer", "")
-            data["dataset_name"] = f"{name}-{args_as_dict['task_name']}"
-        elif "dataset_name" in args_as_dict:
+        if "dataset_name" in args_as_dict:
             data["dataset_name"] = args_as_dict["dataset_name"]
+        elif "task_name" in args_as_dict:
+            # Extract script name from the example_name
+            script_name = example_name.replace("tf_", "").replace("flax_", "").replace("run_", "")
+            script_name = script_name.replace("_no_trainer", "")
+            data["dataset_name"] = f"{script_name}-{args_as_dict['task_name']}"
 
     headers = {"user-agent": http_user_agent(data)}
     try:
