@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Meta AI and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""MCTCT model configuration"""
+"""M-CTC-T model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -39,7 +39,7 @@ class MCTCTConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 8065):
-            Vocabulary size of the MCTCT model. Defines the number of different tokens that can be represented by the
+            Vocabulary size of the M-CTC-T model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`MCTCTModel`].
         hidden_size (`int`, *optional*, defaults to 1536):
             Dimension of the encoder layers and the pooler layer.

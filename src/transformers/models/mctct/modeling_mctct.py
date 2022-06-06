@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Meta AI and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -50,7 +50,7 @@ _CHECKPOINT_FOR_DOC = "speechbrain/m-ctc-t-large"
 _EXPECTED_OUTPUT_SHAPE = [1, 195, 1536]
 
 # CTC docstring
-_CTC_EXPECTED_OUTPUT = '"|Mr. Quilter is the apostle of the middle classes, and we\'re glad to welcome his gospel."|'
+_CTC_EXPECTED_OUTPUT = '"Mr. Quilter is the apostle of the middle classes, and we\'re glad to welcome his gospel."'
 _CTC_EXPECTED_LOSS = 1885.65
 
 
@@ -163,10 +163,7 @@ class MCTCTEmbeddings(nn.Module):
     def forward(
         self, input_features=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
     ):
-        if input_features is not None:
-            input_shape = input_features.size()
-        else:
-            input_shape = inputs_embeds.size()[:-1]
+        input_shape = input_features.size() if input_features is not None else inputs_embeds.size()[:-1]
 
         seq_length = input_shape[1]
 
@@ -234,21 +231,24 @@ class MCTCTSelfAttention(nn.Module):
         # NOTE: should re-evaluate whether this re-implementation was truly necessary
         # or the reason why my complete re-haul worked was due to some other part
         # of the code. Adding this and the reshape fortrain code seems very undesirable.
+        scores = scores.permute(0, 2, 3, 1)  # e.g. [10, 1839, 14, 4]
 
-        scores = scores.permute(0, 2, 3, 1)
+        batch, hidden_state, seq_len, heads = scores.shape
 
-        batch, d0, d1, d2 = scores.shape
+        # e.g. [10, 1853, 14, 4]
+        scores = torch.cat((scores, torch.zeros((batch, seq_len, seq_len, heads), device=scores.device)), dim=1)
 
-        scores = torch.cat((scores, torch.zeros((batch, d1, d1, d2), device=scores.device)), dim=1)
+        # e.g. [10, 25942, 1, 4]
+        scores = self.reshape_fortran(scores, [batch, (hidden_state + seq_len) * seq_len, 1, heads])
 
-        scores = self.reshape_fortran(scores, [batch, (d0 + d1) * d1, 1, d2])
+        # e.g. [10, 25928, 1, 4]
+        scores = scores[:, : (seq_len + hidden_state - 1) * seq_len]
 
-        scores = scores[:, : (d1 + d0 - 1) * d1]
+        # e.g. [10, 1852, 14, 4]
+        scores = self.reshape_fortran(scores, [batch, hidden_state + seq_len - 1, seq_len, heads])
 
-        scores = self.reshape_fortran(scores, [batch, d0 + d1 - 1, d1, d2])
-
-        n = d0 // 2
-        scores = scores[:, n : n + d1].transpose(1, 2)
+        halfpoint = hidden_state // 2
+        scores = scores[:, halfpoint : halfpoint + seq_len].transpose(1, 2)  # e.g. [10, 14, 14, 4]
 
         return scores.permute(0, 3, 1, 2)
 
@@ -257,22 +257,13 @@ class MCTCTSelfAttention(nn.Module):
         hidden_states,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        past_key_value=None,
         output_attentions=False,
     ):
         mixed_query_layer = self.query(hidden_states)
         mixed_query_layer = mixed_query_layer / math.sqrt(self.attention_head_size)
 
-        if past_key_value is not None:
-            key_layer = self.transpose_for_scores(self.key(hidden_states))
-            value_layer = self.transpose_for_scores(self.value(hidden_states))
-            key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
-            value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
-        else:
-            key_layer = self.transpose_for_scores(self.key(hidden_states))
-            value_layer = self.transpose_for_scores(self.value(hidden_states))
+        key_layer = self.transpose_for_scores(self.key(hidden_states))
+        value_layer = self.transpose_for_scores(self.value(hidden_states))
 
         query_layer = self.transpose_for_scores(mixed_query_layer)
 
@@ -365,18 +356,12 @@ class MCTCTAttention(nn.Module):
         hidden_states,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        past_key_value=None,
         output_attentions=False,
     ):
         self_outputs = self.self(
             hidden_states,
             attention_mask,
             head_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
-            past_key_value,
             output_attentions,
         )
         attention_output = self.output(self_outputs[0], hidden_states)

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Meta AI and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Speech processor class for MCTCT
+Speech processor class for M-CTC-T
 """
 from contextlib import contextmanager
 
@@ -55,6 +55,15 @@ class MCTCTProcessor(ProcessorMixin):
         to the docstring of this method for more information.
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
+
+    def pad(self, *args, **kwargs):
+        """
+        When used in normal mode, this method forwards all its arguments to MCTCTFeatureExtractor's
+        [`~MCTCTFeatureExtractor.pad`] and returns its output. If used in the context
+        [`~MCTCTProcessor.as_target_processor`] this method forwards all its arguments to PreTrainedTokenizer's
+        [`~PreTrainedTokenizer.pad`]. Please refer to the docstring of the above two methods for more information.
+        """
+        return self.current_processor.pad(*args, **kwargs)
 
     def decode(self, *args, **kwargs):
         """
