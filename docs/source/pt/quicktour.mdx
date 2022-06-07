@@ -233,7 +233,18 @@ Assim como o [`pipeline`], o tokenizer aceitará uma lista de entradas. Além di
 ...     return_tensors="pt",
 ... )
 ```
-
+</pt>
+<tf>
+```py
+>>> tf_batch = tokenizer(
+...     ["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."],
+...     padding=True,
+...     truncation=True,
+...     max_length=512,
+...     return_tensors="tf",
+... )
+```
+</tf>
 </frameworkcontent>
 
 Leia o tutorial de [pré-processamento](./pré-processamento) para obter mais detalhes sobre tokenização.
@@ -366,10 +377,7 @@ Um recurso particularmente interessante dos 🤗 Transformers é a capacidade de
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained(tf_save_directory, from_tf=True)
 ```
 </pt>
-</frameworkcontent>
-
 <tf>
-<frameworkcontent>
 ```py
 >>> from transformers import TFAutoModel
 
