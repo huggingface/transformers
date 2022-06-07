@@ -91,8 +91,7 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         tf_outputs = tf_model(**tf_input, output_hidden_states=True)
 
         # 1. All keys must be the same
-        pt_output_names = set(pt_outputs.keys())
-        if pt_output_names != set(tf_outputs.keys()):
+        if set(pt_outputs.keys()) != set(tf_outputs.keys()):
             raise ValueError("The model outputs have different attributes, aborting.")
 
         # 2. For each key, ALL values must be the same
