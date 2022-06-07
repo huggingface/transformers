@@ -357,10 +357,10 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
             # Raise ValueError or option to project enc to dec hidden_size (eg EncAdapterLayer)
             if config.decoder.cross_attention_hidden_size != config.encoder.hidden_size:
                 raise ValueError(
-                    "If `cross_attention_hidden_size` is specified in the decoder's configuration, "
-                    "it has to be equal to the encoder's `hidden_size`. "
-                    f"Got {config.decoder.cross_attention_hidden_size} for `config.decoder.cross_attention_hidden_size` "
-                    f"and {config.encoder.hidden_size} for `config.encoder.hidden_size`."
+                    "If `cross_attention_hidden_size` is specified in the decoder's configuration, it has to be equal"
+                    f" to the encoder's `hidden_size`. Got {config.decoder.cross_attention_hidden_size} for"
+                    f" `config.decoder.cross_attention_hidden_size` and {config.encoder.hidden_size} for"
+                    " `config.encoder.hidden_size`."
                 )
 
         # make sure input & output embeddings are not tied
@@ -389,7 +389,8 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         decoder_batch_size, decoder_sequence_length = decoder_input_ids.shape
         if not decoder_batch_size == batch_size:
             raise ValueError(
-                f"The inputs of encoder and decoder should have the same batch size, but got {batch_size} for encoder and {decoder_batch_size} for decoder."
+                f"The inputs of encoder and decoder should have the same batch size, but got {batch_size} for encoder"
+                f" and {decoder_batch_size} for decoder."
             )
         decoder_position_ids = jnp.broadcast_to(
             jnp.arange(decoder_sequence_length)[None, :], (decoder_batch_size, decoder_sequence_length)
@@ -713,7 +714,8 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         # prepare decoder inputs
         if decoder_input_ids is None:
             raise ValueError(
-                "`decoder_input_ids` cannot be `None`. For sequence to sequence training, `decoder_position_ids` must be specified as an input argument."
+                "`decoder_input_ids` cannot be `None`. For sequence to sequence training, `decoder_position_ids` must"
+                " be specified as an input argument."
             )
         if decoder_attention_mask is None:
             decoder_attention_mask = jnp.ones_like(decoder_input_ids)
@@ -895,10 +897,9 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
                 )
                 if decoder_config.is_decoder is False or decoder_config.add_cross_attention is False:
                     logger.info(
-                        f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model. "
-                        f"Cross attention layers are added to {decoder_pretrained_model_name_or_path} "
-                        f"and randomly initialized if {decoder_pretrained_model_name_or_path}'s architecture allows for "
-                        "cross attention layers."
+                        f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model. Cross attention"
+                        f" layers are added to {decoder_pretrained_model_name_or_path} and randomly initialized if"
+                        f" {decoder_pretrained_model_name_or_path}'s architecture allows for cross attention layers."
                     )
                     decoder_config.is_decoder = True
                     decoder_config.add_cross_attention = True

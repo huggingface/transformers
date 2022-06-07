@@ -567,8 +567,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         if self.slow_tokenizer_class is None and legacy_format is True:
             raise ValueError(
-                "Your tokenizer does not have a legacy version defined and therefore cannot register this version. You "
-                "might consider leaving the legacy_format at `None` or setting it to `False`."
+                "Your tokenizer does not have a legacy version defined and therefore cannot register this version. You"
+                " might consider leaving the legacy_format at `None` or setting it to `False`."
             )
 
         save_slow = (
@@ -585,7 +585,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             added_vocab = self.get_added_vocab()
             if added_vocab:
                 with open(added_tokens_file, "w", encoding="utf-8") as f:
-                    out_str = json.dumps(added_vocab, ensure_ascii=False)
+                    out_str = json.dumps(added_vocab, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
                     f.write(out_str)
 
             vocab_files = self.save_vocabulary(save_directory, filename_prefix=filename_prefix)

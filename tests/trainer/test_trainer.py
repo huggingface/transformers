@@ -21,6 +21,7 @@ import os
 import random
 import re
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -58,8 +59,10 @@ from transformers.testing_utils import (
     require_torch_bf16,
     require_torch_gpu,
     require_torch_multi_gpu,
+    require_torch_non_multi_gpu,
     require_torch_tf32,
     require_torch_up_to_2_gpus,
+    require_torchdynamo,
     require_wandb,
     slow,
 )
@@ -1075,6 +1078,41 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertAlmostEqual(a, a1, delta=1e-8)
             self.assertAlmostEqual(b, b1, delta=1e-8)
 
+    @slow
+    @require_torch_non_multi_gpu
+    def test_auto_batch_size_finder(self):
+
+        if torch.cuda.is_available():
+            torch.backends.cudnn.deterministic = True
+
+        SRC_DIR = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "..", "examples", "pytorch", "text-classification")
+        )
+        sys.path.append(SRC_DIR)
+        import run_glue
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            testargs = f"""
+                run_glue.py
+                --model_name_or_path distilbert-base-uncased
+                --task_name mrpc
+                --do_train
+                --do_eval
+                --max_seq_len 128
+                --per_device_train_batch_size 4096
+                --learning_rate 2e-5
+                --num_train_epochs 1
+                --output_dir {tmpdir}
+                --auto_find_batch_size 0
+                """.split()
+            with self.assertRaises(RuntimeError):
+                with patch.object(sys, "argv", testargs):
+                    run_glue.main()
+
+        testargs[-1] = "1"
+        with patch.object(sys, "argv", testargs):
+            run_glue.main()
+
     # regression for this issue: https://github.com/huggingface/transformers/issues/12970
     def test_training_with_resume_from_checkpoint_false(self):
         train_dataset = RegressionDataset(length=128)
@@ -1292,7 +1330,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     def test_training_iterable_dataset(self):
         config = RegressionModelConfig()
         model = RegressionPreTrainedModel(config)
-        train_dataset = SampleIterableDataset()
+        # Adding one column not used by the model should have no impact
+        train_dataset = SampleIterableDataset(label_names=["labels", "extra"])
 
         args = RegressionTrainingArguments(output_dir="./examples", max_steps=4)
         trainer = Trainer(model=model, args=args, train_dataset=train_dataset)
@@ -1326,7 +1365,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     def test_evaluation_iterable_dataset(self):
         config = RegressionModelConfig(a=1.5, b=2.5)
         model = RegressionPreTrainedModel(config)
-        eval_dataset = SampleIterableDataset()
+        # Adding one column not used by the model should have no impact
+        eval_dataset = SampleIterableDataset(label_names=["labels", "extra"])
 
         args = RegressionTrainingArguments(output_dir="./examples")
         trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset, compute_metrics=AlmostAccuracy())
@@ -1363,7 +1403,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
 
         # With a number of elements not a round multiple of the batch size
-        test_dataset = SampleIterableDataset(length=66)
+        # Adding one column not used by the model should have no impact
+        test_dataset = SampleIterableDataset(length=66, label_names=["labels", "extra"])
         preds = trainer.predict(test_dataset).predictions
         x = test_dataset.dataset.x
         self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
@@ -1511,7 +1552,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         a = torch.ones(1000, bs) + 0.001
         b = torch.ones(1000, bs) - 0.001
 
-        # 1. with mem metrics enabled
+        # 1. with fp16_full_eval disabled
         trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, skip_memory_metrics=False)
         metrics = trainer.evaluate()
         del trainer
@@ -1532,7 +1573,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # perfect world: fp32_eval == close to zero
         self.assertLess(fp32_eval, 5_000)
 
-        # 2. with mem metrics disabled
+        # 2. with fp16_full_eval enabled
         trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, fp16_full_eval=True, skip_memory_metrics=False)
         metrics = trainer.evaluate()
         fp16_init = metrics["init_mem_gpu_alloc_delta"]
@@ -1554,6 +1595,100 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # perfect world: fp32_init/2 == fp16_eval
         self.assertAlmostEqual(fp16_eval, fp32_init / 2, delta=5_000)
 
+    @require_torch_non_multi_gpu
+    @require_torchdynamo
+    def test_torchdynamo_full_eval(self):
+        # torchdynamo at the moment doesn't support DP/DDP, therefore require a single gpu
+        n_gpus = get_gpu_count()
+
+        bs = 8
+        eval_len = 16 * n_gpus
+        # make the params are somewhat big so that there will be enough RAM consumed to be able to
+        # measure things. We should get about 64KB for a+b in fp32
+        a = torch.ones(1000, bs) + 0.001
+        b = torch.ones(1000, bs) - 0.001
+
+        # 1. Default - without TorchDynamo
+        trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len)
+        metrics = trainer.evaluate()
+        original_eval_loss = metrics["eval_loss"]
+        del trainer
+
+        # 2. TorchDynamo eager
+        trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, torchdynamo="eager")
+        metrics = trainer.evaluate()
+        self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss)
+        del trainer
+
+        # 3. TorchDynamo nvfuser
+        trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, torchdynamo="nvfuser")
+        metrics = trainer.evaluate()
+        self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss)
+
+    @require_torch_non_multi_gpu
+    @require_torchdynamo
+    def test_torchdynamo_memory(self):
+        # torchdynamo at the moment doesn't support DP/DDP, therefore require a single gpu
+        class CustomTrainer(Trainer):
+            def compute_loss(self, model, inputs, return_outputs=False):
+                x = inputs["x"]
+                output = model(x)
+                if self.args.n_gpu == 1:
+                    return output.mean()
+                return output
+
+        class MyModule(torch.nn.Module):
+            """Simple module that does aggressive fusion"""
+
+            def __init__(self):
+                super().__init__()
+
+            def forward(self, x):
+                for _ in range(20):
+                    x = torch.nn.functional.relu(x)
+                return x
+
+        mod = MyModule()
+
+        # 1. Default - without TorchDynamo
+        a = torch.ones(1024, 1024, device="cuda", requires_grad=True)
+        a.grad = None
+        trainer = CustomTrainer(model=mod)
+        # warmup
+        for _ in range(10):
+            orig_loss = trainer.training_step(mod, {"x": a})
+
+        torch.cuda.reset_peak_memory_stats()
+        orig_loss = trainer.training_step(mod, {"x": a})
+        orig_peak_mem = torch.cuda.max_memory_allocated()
+        del trainer
+
+        # Reset the peak for another measurement
+        gc.collect()
+        torch.cuda.empty_cache()
+        torch.cuda.reset_peak_memory_stats()
+
+        # 2. TorchDynamo nvfuser
+        a = torch.ones(1024, 1024, device="cuda", requires_grad=True)
+        a.grad = None
+        args = TrainingArguments(output_dir="None", torchdynamo="nvfuser")
+        trainer = CustomTrainer(model=mod, args=args)
+        # warmup
+        for _ in range(10):
+            loss = trainer.training_step(mod, {"x": a})
+
+        torch.cuda.reset_peak_memory_stats()
+        loss = trainer.training_step(mod, {"x": a})
+        peak_mem = torch.cuda.max_memory_allocated()
+        del trainer
+
+        # Functional check
+        self.assertAlmostEqual(loss, orig_loss)
+
+        # AOT Autograd recomputaion and nvfuser recomputation optimization
+        # aggressively fuses the operations and reduce the memory footprint.
+        self.assertGreater(orig_peak_mem, peak_mem * 2)
+
     @require_torch_gpu
     @require_torch_bf16
     def test_bf16_full_eval(self):
@@ -1571,7 +1706,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         a = torch.ones(1000, bs) + 0.001
         b = torch.ones(1000, bs) - 0.001
 
-        # 1. with mem metrics enabled
+        # 1. with bf16_full_eval disabled
         trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, skip_memory_metrics=False)
         metrics = trainer.evaluate()
         del trainer
@@ -1592,7 +1727,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # perfect world: fp32_eval == close to zero
         self.assertLess(fp32_eval, 5_000)
 
-        # 2. with mem metrics disabled
+        # 2. with bf16_full_eval enabled
         trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, bf16_full_eval=True, skip_memory_metrics=False)
         metrics = trainer.evaluate()
         bf16_init = metrics["init_mem_gpu_alloc_delta"]
@@ -1861,6 +1996,7 @@ class TrainerHyperParameterRayIntegrationTest(unittest.TestCase):
             self.ray_hyperparameter_search()
 
 
+@slow
 @require_torch
 @require_sigopt
 class TrainerHyperParameterSigOptIntegrationTest(unittest.TestCase):

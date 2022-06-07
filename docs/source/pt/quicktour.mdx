@@ -14,11 +14,11 @@ specific language governing permissions and limitations under the License.
 
 [[open-in-colab]]
 
-Inicie aqui a jornada com 🤗 Transformers! Comece usando [`pipeline`] para rápida inferência e facilmente carregue um modelo pré-treinado e um tokenizer com [AutoClass](./model_doc/auto) para resolver tarefas de texto, visão ou áudio.
+Comece a trabalhar com 🤗 Transformers! Comece usando [`pipeline`] para rápida inferência e facilmente carregue um modelo pré-treinado e um tokenizer com [AutoClass](./model_doc/auto) para resolver tarefas de texto, visão ou áudio.
 
 <Tip>
 
-Todos exemplos de código apresentados na documentação possuem um substituto no canto superior esquerdo entre PyTorch e TensorFlow. Caso contrário, é esperado que funcione para ambos back-ends sem nenhuma alteração.
+Todos os exemplos de código apresentados na documentação têm um botão no canto superior direito para escolher se você deseja ocultar ou mostrar o código no Pytorch ou no TensorFlow. Caso contrário, é esperado que funcione para ambos back-ends sem nenhuma alteração.
 
 </Tip>
 
@@ -215,24 +215,23 @@ Passe o texto para o tokenizer:
  'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
 ```
 
-The tokenizer will return a dictionary containing:
-
-* [input_ids](./glossary#input-ids): numerical representions of your tokens.
-* [atttention_mask](.glossary#attention-mask): indicates which tokens should be attended to.
-
-Just like the [`pipeline`], the tokenizer will accept a list of inputs. In addition, the tokenizer can also pad and truncate the text to return a batch with uniform length:
-
 O tokenizer retornará um dicionário contendo:
 
 * [input_ids](./glossary#input-ids): representações numéricas de seus tokens.
 * [atttention_mask](.glossary#attention-mask): indica quais tokens devem ser atendidos.
 
-Assim como o [`pipeline`], o tokenizer aceitará uma lista de entradas. Além disso, o tokenizer também pode preencher e truncar o texto para retornar um grupo com comprimento uniforme:
+Assim como o [`pipeline`], o tokenizer aceitará uma lista de entradas. Além disso, o tokenizer também pode preencher e truncar o texto para retornar um lote com comprimento uniforme:
 
 <frameworkcontent>
 <pt>
 ```py
->>> pt_batch = tokenizer(["We are very happy to show you the 🤗 transformers library.", "We hope you don't hate it."],padding=True, truncation=True, max_length=512, return_tensors="pt")
+>>> pt_batch = tokenizer(
+...     ["We are very happy to show you the 🤗 transformers library.", "We hope you don't hate it."],
+...     padding=True,
+...     truncation=True,
+...     max_length=512,
+...     return_tensors="pt",
+... )
 ```
 
 Leia o tutorial de [pré-processamento](./pré-processamento) para obter mais detalhes sobre tokenização.
@@ -312,13 +311,11 @@ O modelo gera as ativações finais no atributo `logits`. Aplique a função sof
 Todos os modelos de 🤗 Transformers (PyTorch ou TensorFlow) geram tensores *antes* da função de ativação final (como softmax) pois essa função algumas vezes é fundida com a perda.
 
 </Tip>
-Os modelos são um padrão [`torch.nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) ou um [`tf.keras.Model`](https: //www.tensorflow.org/api_docs/python/tf/keras/Model) para que você possa usá-los em seu loop de treinamento habitual. No entanto, para facilitar as coisas, 🤗 Transformers fornece uma classe [`Trainer`] para PyTorch que adiciona funcionalidade para treinamento distribuído, precisão mista e muito mais. Para o TensorFlow, você pode usar o método `fit` de [Keras](https://keras.io/). Consulte o [tutorial de treinamento](./training) para obter mais detalhes.
 
-Models are a standard [`torch.nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) or a [`tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) so you can use them in your usual training loop. However, to make things easier, 🤗 Transformers provides a [`Trainer`] class for PyTorch that adds functionality for distributed training, mixed precision, and more. For TensorFlow, you can use the `fit` method from [Keras](https://keras.io/). Refer to the [training tutorial](./training) for more details.
+Os modelos são um standard [`torch.nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) ou um [`tf.keras.Model`](https: //www.tensorflow.org/api_docs/python/tf/keras/Model) para que você possa usá-los em seu loop de treinamento habitual. No entanto, para facilitar as coisas, 🤗 Transformers fornece uma classe [`Trainer`] para PyTorch que adiciona funcionalidade para treinamento distribuído, precisão mista e muito mais. Para o TensorFlow, você pode usar o método `fit` de [Keras](https://keras.io/). Consulte o [tutorial de treinamento](./training) para obter mais detalhes.
 
 <Tip>
-
-🤗 As saídas do modelo Transformers são classes de dados especiais para que seus atributos sejam preenchidos automaticamente em um IDE.
+As saídas do modelo 🤗 Transformers são classes de dados especiais para que seus atributos sejam preenchidos automaticamente em um IDE.
 As saídas do modelo também se comportam como uma tupla ou um dicionário (por exemplo, você pode indexar com um inteiro, uma parte ou uma string), caso em que os atributos `None` são ignorados.
 
 </Tip>
@@ -358,7 +355,6 @@ Quando você estiver pronto para usá-lo novamente, recarregue com [`TFPreTraine
 </tf>
 </frameworkcontent>
 
-One particularly cool 🤗 Transformers feature is the ability to save a model and reload it as either a PyTorch or TensorFlow model. The `from_pt` or `from_tf` parameter can convert the model from one framework to the other:
 Um recurso particularmente interessante dos 🤗 Transformers é a capacidade de salvar um modelo e recarregá-lo como um modelo PyTorch ou TensorFlow. Use `from_pt` ou `from_tf` para converter o modelo de um framework para outro:
 
 <frameworkcontent>

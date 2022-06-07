@@ -407,7 +407,7 @@ class DebertaConverter(Converter):
         tokenizer.decoder = decoders.ByteLevel()
         tokenizer.post_processor = processors.TemplateProcessing(
             single="[CLS]:0 $A:0 [SEP]:0",
-            pair="[CLS]:0 $A:0 [SEP]:0 $B:0 [SEP]:0",
+            pair="[CLS]:0 $A:0 [SEP]:0 $B:1 [SEP]:1",
             special_tokens=[
                 ("[CLS]", self.original_tokenizer.convert_tokens_to_ids("[CLS]")),
                 ("[SEP]", self.original_tokenizer.convert_tokens_to_ids("[SEP]")),
@@ -1023,6 +1023,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "HerbertTokenizer": HerbertConverter,
     "LayoutLMTokenizer": BertConverter,
     "LayoutLMv2Tokenizer": BertConverter,
+    "LayoutLMv3Tokenizer": RobertaConverter,
     "LayoutXLMTokenizer": XLMRobertaConverter,
     "LongformerTokenizer": RobertaConverter,
     "LEDTokenizer": RobertaConverter,
@@ -1066,8 +1067,9 @@ def convert_slow_tokenizer(transformer_tokenizer) -> Tokenizer:
 
     if tokenizer_class_name not in SLOW_TO_FAST_CONVERTERS:
         raise ValueError(
-            f"An instance of tokenizer class {tokenizer_class_name} cannot be converted in a Fast tokenizer instance. "
-            f"No converter was found. Currently available slow->fast convertors: {list(SLOW_TO_FAST_CONVERTERS.keys())}"
+            f"An instance of tokenizer class {tokenizer_class_name} cannot be converted in a Fast tokenizer instance."
+            " No converter was found. Currently available slow->fast convertors:"
+            f" {list(SLOW_TO_FAST_CONVERTERS.keys())}"
         )
 
     converter_class = SLOW_TO_FAST_CONVERTERS[tokenizer_class_name]

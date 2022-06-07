@@ -18,17 +18,25 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import _LazyModule, is_sentencepiece_available, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_sentencepiece_available, is_torch_available
 
 
-_import_structure = {
-    "configuration_bert_generation": ["BertGenerationConfig"],
-}
+_import_structure = {"configuration_bert_generation": ["BertGenerationConfig"]}
 
-if is_sentencepiece_available():
+try:
+    if not is_sentencepiece_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["tokenization_bert_generation"] = ["BertGenerationTokenizer"]
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_bert_generation"] = [
         "BertGenerationDecoder",
         "BertGenerationEncoder",
@@ -40,10 +48,20 @@ if is_torch_available():
 if TYPE_CHECKING:
     from .configuration_bert_generation import BertGenerationConfig
 
-    if is_sentencepiece_available():
+    try:
+        if not is_sentencepiece_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .tokenization_bert_generation import BertGenerationTokenizer
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_bert_generation import (
             BertGenerationDecoder,
             BertGenerationEncoder,

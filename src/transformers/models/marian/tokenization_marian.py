@@ -47,7 +47,9 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "Helsinki-NLP/opus-mt-en-de": "https://huggingface.co/Helsinki-NLP/opus-mt-en-de/resolve/main/vocab.json"
     },
     "tokenizer_config_file": {
-        "Helsinki-NLP/opus-mt-en-de": "https://huggingface.co/Helsinki-NLP/opus-mt-en-de/resolve/main/tokenizer_config.json"
+        "Helsinki-NLP/opus-mt-en-de": (
+            "https://huggingface.co/Helsinki-NLP/opus-mt-en-de/resolve/main/tokenizer_config.json"
+        )
     },
 }
 

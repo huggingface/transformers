@@ -39,7 +39,9 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "roberta-large-mnli": "https://huggingface.co/roberta-large-mnli/resolve/main/vocab.json",
         "distilroberta-base": "https://huggingface.co/distilroberta-base/resolve/main/vocab.json",
         "roberta-base-openai-detector": "https://huggingface.co/roberta-base-openai-detector/resolve/main/vocab.json",
-        "roberta-large-openai-detector": "https://huggingface.co/roberta-large-openai-detector/resolve/main/vocab.json",
+        "roberta-large-openai-detector": (
+            "https://huggingface.co/roberta-large-openai-detector/resolve/main/vocab.json"
+        ),
     },
     "merges_file": {
         "roberta-base": "https://huggingface.co/roberta-base/resolve/main/merges.txt",
@@ -47,7 +49,9 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "roberta-large-mnli": "https://huggingface.co/roberta-large-mnli/resolve/main/merges.txt",
         "distilroberta-base": "https://huggingface.co/distilroberta-base/resolve/main/merges.txt",
         "roberta-base-openai-detector": "https://huggingface.co/roberta-base-openai-detector/resolve/main/merges.txt",
-        "roberta-large-openai-detector": "https://huggingface.co/roberta-large-openai-detector/resolve/main/merges.txt",
+        "roberta-large-openai-detector": (
+            "https://huggingface.co/roberta-large-openai-detector/resolve/main/merges.txt"
+        ),
     },
 }
 
@@ -320,7 +324,7 @@ class RobertaTokenizer(PreTrainedTokenizer):
         )
 
         with open(vocab_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(self.encoder, ensure_ascii=False))
+            f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
         index = 0
         with open(merge_file, "w", encoding="utf-8") as writer:

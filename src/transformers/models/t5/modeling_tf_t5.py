@@ -93,7 +93,7 @@ class TFT5LayerNorm(tf.keras.layers.Layer):
         return self.weight * hidden_states
 
 
-class TFT5DenseReluDense(tf.keras.layers.Layer):
+class TFT5DenseActDense(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         wi_initializer = tf.keras.initializers.RandomNormal(
@@ -109,7 +109,7 @@ class TFT5DenseReluDense(tf.keras.layers.Layer):
             config.d_model, use_bias=False, name="wo", kernel_initializer=wo_initializer
         )  # Update init weights as in flax
         self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
-        self.act = tf.keras.activations.relu
+        self.act = get_tf_activation(config.dense_act_fn)
 
     def call(self, hidden_states, training=False):
         hidden_states = self.wi(hidden_states)
@@ -119,7 +119,7 @@ class TFT5DenseReluDense(tf.keras.layers.Layer):
         return hidden_states
 
 
-class TFT5GatedGeluDense(tf.keras.layers.Layer):
+class TFT5DenseGatedActDense(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         wi_initializer = tf.keras.initializers.RandomNormal(
@@ -138,7 +138,7 @@ class TFT5GatedGeluDense(tf.keras.layers.Layer):
             config.d_model, use_bias=False, name="wo", kernel_initializer=wo_initializer
         )  # Update init weights as in flax
         self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
-        self.act = get_tf_activation("gelu_new")
+        self.act = get_tf_activation(config.dense_act_fn)
 
     def call(self, hidden_states, training=False):
         hidden_gelu = self.act(self.wi_0(hidden_states))
@@ -152,14 +152,11 @@ class TFT5GatedGeluDense(tf.keras.layers.Layer):
 class TFT5LayerFF(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        if config.feed_forward_proj == "relu":
-            self.DenseReluDense = TFT5DenseReluDense(config, name="DenseReluDense")
-        elif config.feed_forward_proj == "gated-gelu":
-            self.DenseReluDense = TFT5GatedGeluDense(config, name="DenseReluDense")
+        if config.is_gated_act:
+            self.DenseReluDense = TFT5DenseGatedActDense(config, name="DenseReluDense")
         else:
-            raise ValueError(
-                f"{self.config.feed_forward_proj} is not supported. Choose between `relu` and `gated-gelu`"
-            )
+            self.DenseReluDense = TFT5DenseActDense(config, name="DenseReluDense")
+
         self.layer_norm = TFT5LayerNorm(epsilon=config.layer_norm_epsilon, name="layer_norm")
         self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
 
@@ -406,7 +403,10 @@ class TFT5Attention(tf.keras.layers.Layer):
             tf.debugging.assert_equal(
                 shape_list(layer_head_mask),
                 [self.n_heads],
-                message=f"Head mask for a single layer should be of size {(self.n_heads)}, but is {shape_list(layer_head_mask)}",
+                message=(
+                    f"Head mask for a single layer should be of size {(self.n_heads)}, but is"
+                    f" {shape_list(layer_head_mask)}"
+                ),
             )
             weights = tf.reshape(layer_head_mask, (1, -1, 1, 1)) * weights
 
@@ -899,9 +899,10 @@ class TFT5PreTrainedModel(TFPreTrainedModel):
         decoder_start_token_id = self.config.decoder_start_token_id
         pad_token_id = self.config.pad_token_id
 
-        assert (
-            decoder_start_token_id is not None
-        ), "self.model.config.decoder_start_token_id has to be defined. In TF T5 it is usually set to the pad_token_id. See T5 docs for more information"
+        assert decoder_start_token_id is not None, (
+            "self.model.config.decoder_start_token_id has to be defined. In TF T5 it is usually set to the"
+            " pad_token_id. See T5 docs for more information"
+        )
 
         start_tokens = tf.fill((shape_list(input_ids)[0], 1), decoder_start_token_id)
         start_tokens = tf.cast(start_tokens, input_ids.dtype)  # Ensure compatible dtypes for concatenation
@@ -1102,13 +1103,15 @@ num_heads))`.
 
 
 @add_start_docstrings(
-    "The bare T5 Model transformer outputting raw hidden-states" "without any specific head on top.",
+    "The bare T5 Model transformer outputting raw hidden-stateswithout any specific head on top.",
     T5_START_DOCSTRING,
 )
 class TFT5Model(TFT5PreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, name="shared")
+        self.shared = TFSharedEmbeddings(
+            config.vocab_size, config.d_model, name="shared", initializer_range=self.config.initializer_factor
+        )
 
         # retrieve correct absolute scope for embed token wrapper
         with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
@@ -1255,8 +1258,9 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.model_dim = config.d_model
-
-        self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, name="shared")
+        self.shared = TFSharedEmbeddings(
+            config.vocab_size, config.d_model, name="shared", initializer_range=self.config.initializer_factor
+        )
 
         # retrieve correct absolute scope for embed token wrapper
         with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
@@ -1590,13 +1594,15 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
 
 
 @add_start_docstrings(
-    "The bare T5 Model transformer outputting encoder's raw hidden-states" "without any specific head on top.",
+    "The bare T5 Model transformer outputting encoder's raw hidden-stateswithout any specific head on top.",
     T5_START_DOCSTRING,
 )
 class TFT5EncoderModel(TFT5PreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, name="shared")
+        self.shared = TFSharedEmbeddings(
+            config.vocab_size, config.d_model, name="shared", initializer_range=self.config.initializer_factor
+        )
 
         # retrieve correct absolute scope for embed token wrapper
         with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:

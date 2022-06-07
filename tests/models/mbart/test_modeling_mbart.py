@@ -224,6 +224,7 @@ class MBartModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     )
     all_generative_model_classes = (MBartForConditionalGeneration,) if is_torch_available() else ()
     is_encoder_decoder = True
+    fx_compatible = True
     test_pruning = False
     test_missing_keys = False
 
@@ -348,7 +349,9 @@ class MBartEnroIntegrationTest(AbstractSeq2SeqIntegrationTest):
     ]
     tgt_text = [
         "Şeful ONU declară că nu există o soluţie militară în Siria",
-        'Secretarul General Ban Ki-moon declară că răspunsul său la intensificarea sprijinului militar al Rusiei pentru Siria este că "nu există o soluţie militară" la conflictul de aproape cinci ani şi că noi arme nu vor face decât să înrăutăţească violenţa şi mizeria pentru milioane de oameni.',
+        "Secretarul General Ban Ki-moon declară că răspunsul său la intensificarea sprijinului militar al Rusiei"
+        ' pentru Siria este că "nu există o soluţie militară" la conflictul de aproape cinci ani şi că noi arme nu vor'
+        " face decât să înrăutăţească violenţa şi mizeria pentru milioane de oameni.",
     ]
     expected_src_tokens = [8274, 127873, 25916, 7, 8622, 2071, 438, 67485, 53, 187895, 23, 51712, 2, 250004]
 
