@@ -89,7 +89,7 @@ class PTtoTFCommand(BaseTransformersCLICommand):
     @staticmethod
     def compare_pt_tf_models(pt_model, pt_input, tf_model, tf_input):
         """
-        Compares the TensorFload and PyTorch models, given their inputs, returning a tuple with the maximum observed
+        Compares the TensorFlow and PyTorch models, given their inputs, returning a tuple with the maximum observed
         difference and its source.
         """
         pt_outputs = pt_model(**pt_input, output_hidden_states=True)
@@ -105,7 +105,7 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             )
 
         # 2. For each output attribute, ALL values must be the same
-        def compate_pt_tf_values(pt_out, tf_out, attr_name=""):
+        def _compate_pt_tf_models(pt_out, tf_out, attr_name=""):
             max_difference = 0
             max_difference_source = ""
 
@@ -127,14 +127,14 @@ class PTtoTFCommand(BaseTransformersCLICommand):
                     else:
                         branch_name = root_name + f"[{i}]"
                         tf_item = tf_out[i]
-                    difference, difference_source = compate_pt_tf_values(pt_item, tf_item, branch_name)
+                    difference, difference_source = _compate_pt_tf_models(pt_item, tf_item, branch_name)
                     if difference > max_difference:
                         max_difference = difference
                         max_difference_source = difference_source
 
             return max_difference, max_difference_source
 
-        return compate_pt_tf_values(pt_outputs, tf_outputs)
+        return _compate_pt_tf_models(pt_outputs, tf_outputs)
 
     def __init__(self, model_name: str, local_dir: str, no_pr: bool, new_weights: bool, *args):
         self._logger = logging.get_logger("transformers-cli/pt_to_tf")
