@@ -84,7 +84,7 @@ class PTtoTFCommand(BaseTransformersCLICommand):
     @staticmethod
     def compare_pt_tf_models(pt_model, pt_input, tf_model, tf_input):
         """
-        Compares the tf and the pt models, given their inputs, returning a tuple with the maximum observed difference
+        Compares the TensorFload and PyTorch models, given their inputs, returning a tuple with the maximum observed difference
         and its source.
         """
         pt_outputs = pt_model(**pt_input, output_hidden_states=True)
@@ -171,7 +171,7 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         if architectures is None:  # No architecture defined -- use auto classes
             pt_class = getattr(import_module("transformers"), "AutoModel")
             tf_class = getattr(import_module("transformers"), "TFAutoModel")
-            self._logger.warn("No detected architecture, using auto classes")
+            self._logger.warn("No detected architecture, using AutoModel/TFAutoModel")
         else:  # Architecture defined -- use it
             if len(architectures) > 1:
                 raise ValueError(f"More than one architecture was found, aborting. (architectures = {architectures})")
