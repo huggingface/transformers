@@ -55,6 +55,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("layoutlmv3", "LayoutLMv3FeatureExtractor"),
         ("levit", "LevitFeatureExtractor"),
         ("maskformer", "MaskFormerFeatureExtractor"),
+        ("mctct", "MCTCTFeatureExtractor"),
         ("perceiver", "PerceiverFeatureExtractor"),
         ("poolformer", "PoolFormerFeatureExtractor"),
         ("regnet", "ConvNextFeatureExtractor"),
@@ -85,7 +86,7 @@ def feature_extractor_class_from_name(class_name: str):
             except AttributeError:
                 continue
 
-    for config, extractor in FEATURE_EXTRACTOR_MAPPING._extra_content.items():
+    for _, extractor in FEATURE_EXTRACTOR_MAPPING._extra_content.items():
         if getattr(extractor, "__name__", None) == class_name:
             return extractor
 
