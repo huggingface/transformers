@@ -95,11 +95,16 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         pt_outputs = pt_model(**pt_input, output_hidden_states=True)
         tf_outputs = tf_model(**tf_input, output_hidden_states=True)
 
-        # 1. All keys must be the same
-        if set(pt_outputs.keys()) != set(tf_outputs.keys()):
-            raise ValueError("The model outputs have different attributes, aborting.")
+        # 1. All output attributes must be the same
+        pt_out_attrs = set(pt_outputs.keys())
+        tf_out_attrs = set(tf_outputs.keys())
+        if pt_out_attrs != tf_out_attrs:
+            raise ValueError(
+                f"The model outputs have different attributes, aborting. (Pytorch: {pt_out_attrs}, TensorFlow:"
+                f" {tf_out_attrs})"
+            )
 
-        # 2. For each key, ALL values must be the same
+        # 2. For each output attribute, ALL values must be the same
         def compate_pt_tf_values(pt_out, tf_out, attr_name=""):
             max_difference = 0
             max_difference_source = ""
