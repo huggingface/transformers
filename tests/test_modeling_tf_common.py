@@ -1417,7 +1417,25 @@ class TFModelTesterMixin:
                 dataset = tf.data.Dataset.from_tensor_slices(prepared_for_class)
                 dataset = dataset.batch(1)
 
-                model.compile(optimizer=tf.keras.optimizers.SGD(0.0))
+                accuracy_classes = [
+                    "ForPreTraining",
+                    "ForCausalLM",
+                    "ForMaskedLM",
+                    "ForQuestionAnswering",
+                    "ForMultipleChoice",
+                    "ForSequenceClassification",
+                    "ForTokenClassification",
+                    "ForNextSentencePrediction",
+                    "LMHeadModel",
+                ]
+                for accuracy_class in accuracy_classes:
+                    if model.__class__.__name__.endswith(accuracy_class):
+                        metrics = [tf.keras.metrics.SparseCategoricalAccuracy()]
+                        break
+                else:
+                    metrics = []
+
+                model.compile(optimizer=tf.keras.optimizers.SGD(0.0), metrics=metrics)
                 # Check that a batched tf.data.Dataset can be passed to the model's fit method
                 model.fit(dataset)
 

@@ -559,7 +559,9 @@ class TFSwinSelfAttention(tf.keras.layers.Layer):
 
         context_layer = tf.matmul(attention_probs, value_layer)
         context_layer = tf.transpose(context_layer, (0, 2, 1, 3))
-        new_context_layer_shape = shape_list(context_layer)[:-2] + [self.all_head_size,]
+        new_context_layer_shape = shape_list(context_layer)[:-2] + [
+            self.all_head_size,
+        ]
         context_layer = tf.reshape(context_layer, new_context_layer_shape)
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
