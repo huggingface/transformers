@@ -109,6 +109,7 @@ if os.environ.get("HUGGINGFACE_CO_RESOLVE_ENDPOINT", None) is not None:
     HUGGINGFACE_CO_RESOLVE_ENDPOINT = os.environ.get("HUGGINGFACE_CO_RESOLVE_ENDPOINT", None)
 HUGGINGFACE_CO_RESOLVE_ENDPOINT = os.environ.get("HF_ENDPOINT", HUGGINGFACE_CO_RESOLVE_ENDPOINT)
 HUGGINGFACE_CO_PREFIX = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/{model_id}/resolve/{revision}/{filename}"
+HUGGINGFACE_CO_EXAMPLES_TELEMETRY = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/telemetry/examples"
 
 
 def is_remote_url(url_or_filename):
@@ -1028,3 +1029,41 @@ def get_full_repo_name(model_id: str, organization: Optional[str] = None, token:
         return f"{username}/{model_id}"
     else:
         return f"{organization}/{model_id}"
+
+
+def send_example_telemetry(example_name, *example_args, framework="pytorch"):
+    """
+    Sends telemetry that helps tracking the examples use.
+
+    Args:
+        example_name (`str`): The name of the example.
+        *example_args (dataclasses or `argparse.ArgumentParser`): The arguments to the script. This function will only
+            try to extract the model and dataset name from those. Nothing else is tracked.
+        framework (`str`, *optional*, defaults to `"pytorch"`): The framework for the example.
+    """
+    if is_offline_mode():
+        return
+
+    data = {"example": example_name, "framework": framework}
+    for args in example_args:
+        args_as_dict = {k: v for k, v in args.__dict__.items() if not k.startswith("_") and v is not None}
+        if "model_name_or_path" in args_as_dict:
+            model_name = args_as_dict["model_name_or_path"]
+            # Filter out local paths
+            if not os.path.isdir(model_name):
+                data["model_name"] = args_as_dict["model_name_or_path"]
+        if "dataset_name" in args_as_dict:
+            data["dataset_name"] = args_as_dict["dataset_name"]
+        elif "task_name" in args_as_dict:
+            # Extract script name from the example_name
+            script_name = example_name.replace("tf_", "").replace("flax_", "").replace("run_", "")
+            script_name = script_name.replace("_no_trainer", "")
+            data["dataset_name"] = f"{script_name}-{args_as_dict['task_name']}"
+
+    headers = {"user-agent": http_user_agent(data)}
+    try:
+        r = requests.head(HUGGINGFACE_CO_EXAMPLES_TELEMETRY, headers=headers)
+        r.raise_for_status()
+    except Exception:
+        # We don't want to error in case of connection errors of any kind.
+        pass
