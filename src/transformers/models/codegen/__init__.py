@@ -17,12 +17,21 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
-    "configuration_codegen": ["CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP", "CodeGenConfig", "CodeGenOnnxConfig"]
+    "configuration_codegen": ["CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP", "CodeGenConfig", "CodeGenOnnxConfig"],
+    "tokenization_codegen": ["CodeGenTokenizer"],
 }
+
+try:
+    if not is_tokenizers_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["tokenization_codegen_fast"] = ["CodeGenTokenizerFast"]
 
 try:
     if not is_torch_available():
@@ -39,6 +48,15 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_codegen import CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP, CodeGenConfig, CodeGenOnnxConfig
+    from .tokenization_codegen import CodeGenTokenizer
+
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .tokenization_codegen_fast import CodeGenTokenizerFast
 
     try:
         if not is_torch_available():
