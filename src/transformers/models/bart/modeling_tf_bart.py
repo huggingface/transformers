@@ -1075,7 +1075,7 @@ class TFBartMainLayer(tf.keras.layers.Layer):
 
         # different to other models, Bart automatically creates decoder_input_ids from
         # input_ids if no decoder_input_ids are provided
-        if decoder_input_ids is None and input_ids is not None:
+        if decoder_input_ids is None and decoder_inputs_embeds is not None:
             if input_ids is None:
                 raise ValueError(
                     "If no `decoder_input_ids` or `decoder_inputs_embeds` are "
