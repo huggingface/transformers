@@ -100,6 +100,7 @@ class CLIPTextConfig(PretrainedConfig):
         attention_dropout=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
+        use_padding_embeddings=False,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
@@ -119,6 +120,7 @@ class CLIPTextConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout
+        self.use_padding_embeddings = use_padding_embeddings
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":

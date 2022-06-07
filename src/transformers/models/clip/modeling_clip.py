@@ -146,6 +146,9 @@ class CLIPTextEmbeddings(nn.Module):
 
         self.token_embedding = nn.Embedding(config.vocab_size, embed_dim)
         self.position_embedding = nn.Embedding(config.max_position_embeddings, embed_dim)
+        self.use_padding_embeddings = config.use_padding_embeddings
+        if self.use_padding_embeddings:
+            self.padding_embedding = nn.Embedding(config.max_position_embeddings, embed_dim)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
@@ -155,6 +158,7 @@ class CLIPTextEmbeddings(nn.Module):
         input_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
 
@@ -166,6 +170,9 @@ class CLIPTextEmbeddings(nn.Module):
 
         position_embeddings = self.position_embedding(position_ids)
         embeddings = inputs_embeds + position_embeddings
+
+        if self.use_padding_embeddings and attention_mask is not None:
+            embeddings = torch.where(attention_mask, embeddings, self.padding_embedding(position_ids))
 
         return embeddings
 
@@ -356,6 +363,8 @@ class CLIPPreTrainedModel(PreTrainedModel):
         if isinstance(module, CLIPTextEmbeddings):
             module.token_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
             module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
+            if hasattr(module, "padding_embedding"):
+                module.padding_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
         elif isinstance(module, CLIPVisionEmbeddings):
             factor = self.config.initializer_factor
             nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
@@ -633,7 +642,7 @@ class CLIPTextTransformer(nn.Module):
         input_shape = input_ids.size()
         input_ids = input_ids.view(-1, input_shape[-1])
 
-        hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids)
+        hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids, attention_mask=attention_mask)
 
         bsz, seq_len = input_shape
         # CLIP's text model uses causal mask, prepare it here.
