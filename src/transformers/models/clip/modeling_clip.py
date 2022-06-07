@@ -172,7 +172,8 @@ class CLIPTextEmbeddings(nn.Module):
         embeddings = inputs_embeds + position_embeddings
 
         if self.use_padding_embeddings and attention_mask is not None:
-            embeddings = torch.where(attention_mask, embeddings, self.padding_embedding(position_ids))
+            padding_embeddings = self.padding_embedding(position_ids)
+            embeddings = torch.where(attention_mask.bool().unsqueeze(-1), embeddings, padding_embeddings)
 
         return embeddings
 
