@@ -15,23 +15,45 @@ This guide focuses on training large models efficiently on CPU.
 
 ## Mixed precision with IPEX
 
-XXX: Explain what it is - if you have an Intel CPU ...
+Low precision data type BFloat16 has been natively supported on the 3rd Generation Xeon® Scalable Processors (aka Cooper Lake) with AVX512 instruction set and will be supported on the next generation of Intel® Xeon® Scalable Processors with Intel® Advanced Matrix Extensions (Intel® AMX) instruction set with further boosted performance. The Auto Mixed Precision for CPU backend has been enabled since PyTorch-1.10. At the same time, the support of Auto Mixed Precision with BFloat16 for CPU and BFloat16 optimization of operators have been massively enabled in Intel® Extension for PyTorch, and partially upstreamed to PyTorch master branch. Users can get better performance and user experience with IPEX Auto Mixed Precision.
 
-Install the correct IPEX version for the right pytorch version:
+Check more detailed information for [Auto Mixed Precision](https://intel.github.io/intel-extension-for-pytorch/1.11.200/tutorials/features/amp.html).
 
-Find the correct version of the pytorch you will be running IPEX with here: https://software.intel.com/ipex-whl-stable
+### IPEX installation:
 
-Now install it, e.g. for pytorch-1.10:
+IPEX release is following PyTorch, to install via pip:
+
+For PyTorch-1.10:
 
 ```
 pip install intel_extension_for_pytorch==1.10.100+cpu -f https://software.intel.com/ipex-whl-stable
 ```
 
-for pytorch-1.11:
-
+For PyTorch-1.11:
 
 ```
-pip install intel_extension_for_pytorch==1.11.0+cpu -f https://software.intel.com/ipex-whl-stable
+pip install intel_extension_for_pytorch==1.11.200+cpu -f https://software.intel.com/ipex-whl-stable
 ```
 
-To use: XXX
+Check more approaches for [IPEX installation](https://intel.github.io/intel-extension-for-pytorch/1.11.200/tutorials/installation.html).
+
+### Usage in Trainer
+To enable auto mixed precision with IPEX in Trainer, users should add `use_ipex`, `bf16` and `no_cuda` in training command arguments.
+
+Take an example of the use cases on [Transformers question-answering](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering)
+
+- Training with IPEX using BF16 auto mixed precision on CPU:
+<pre> python run_qa.py \
+--model_name_or_path bert-base-uncased \
+--dataset_name squad \
+--do_train \
+--do_eval \
+--per_device_train_batch_size 12 \
+--learning_rate 3e-5 \
+--num_train_epochs 2 \
+--max_seq_length 384 \
+--doc_stride 128 \
+--output_dir /tmp/debug_squad/ \
+<b>--use_ipex \</b>
+<b>--bf16 --no_cuda</b></pre> 
+
