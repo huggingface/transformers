@@ -45,7 +45,7 @@ def convert_command_factory(args: Namespace):
 
     Returns: ServeCommand
     """
-    return PTtoTFCommand(args.model_name, args.local_dir, args.no_pr)
+    return PTtoTFCommand(args.model_name, args.local_dir, args.no_pr, args.new_weights)
 
 
 class PTtoTFCommand(BaseTransformersCLICommand):
@@ -78,6 +78,9 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         )
         train_parser.add_argument(
             "--no-pr", action="store_true", help="Optional flag to NOT open a PR with converted weights."
+        )
+        train_parser.add_argument(
+            "--new-weights", action="store_true", help="Optional flag to create new TensorFlow weights, even if they already exist."
         )
         train_parser.set_defaults(func=convert_command_factory)
 
@@ -126,11 +129,12 @@ class PTtoTFCommand(BaseTransformersCLICommand):
 
         return compate_pt_tf_values(pt_outputs, tf_outputs)
 
-    def __init__(self, model_name: str, local_dir: str, no_pr: bool, *args):
+    def __init__(self, model_name: str, local_dir: str, no_pr: bool, new_weights: bool, *args):
         self._logger = logging.get_logger("transformers-cli/pt_to_tf")
         self._model_name = model_name
         self._local_dir = local_dir if local_dir else os.path.join("/tmp", model_name)
         self._no_pr = no_pr
+        self._new_weights = new_weights
 
     def get_text_inputs(self):
         tokenizer = AutoTokenizer.from_pretrained(self._local_dir)
@@ -175,9 +179,12 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         else:  # Architecture defined -- use it
             if len(architectures) > 1:
                 raise ValueError(f"More than one architecture was found, aborting. (architectures = {architectures})")
-            pt_class = getattr(import_module("transformers"), architectures[0])
-            tf_class = getattr(import_module("transformers"), "TF" + architectures[0])
             self._logger.warn(f"Detected architecture: {architectures[0]}")
+            pt_class = getattr(import_module("transformers"), architectures[0])
+            try:
+                tf_class = getattr(import_module("transformers"), "TF" + architectures[0])
+            except AttributeError:
+                raise AttributeError(f"The TensorFlow equivalent of {architectures[0]} doesn't exist in transformers.")
 
         # Load models and acquire a basic input for its modality.
         pt_model = pt_class.from_pretrained(self._local_dir)
@@ -206,9 +213,9 @@ class PTtoTFCommand(BaseTransformersCLICommand):
                 f" {crossload_diff:.3e}, observed in {diff_source})"
             )
 
-        # Save the weights in a TF format (if they don't exist) and confirms that the results are still good
+        # Save the weights in a TF format (if needed) and confirms that the results are still good
         tf_weights_path = os.path.join(self._local_dir, TF_WEIGHTS_NAME)
-        if not os.path.exists(tf_weights_path):
+        if not os.path.exists(tf_weights_path) or self._new_weights:
             tf_from_pt_model.save_weights(tf_weights_path)
         del tf_from_pt_model  # will no longer be used, and may have a large memory footprint
         tf_model = tf_class.from_pretrained(self._local_dir)
