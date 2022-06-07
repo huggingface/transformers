@@ -232,6 +232,10 @@ class TFData2VecVisionModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_segmentation(*config_and_inputs)
 
+    @unittest.skip("Test was written for TF 1.x and isn't really relevant here")
+    def test_compile_tf_model(self):
+        pass
+
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
