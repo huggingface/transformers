@@ -12,7 +12,6 @@ RUN git clone https://github.com/huggingface/transformers && cd transformers && 
 RUN python3 -m pip install --no-cache-dir -e ./transformers[dev,onnxruntime]
 
 RUN python3 -m pip install --no-cache-dir -U torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu113
-
 RUN python3 -m pip install --no-cache-dir -U tensorflow
 RUN python3 -m pip uninstall -y flax jax
 
