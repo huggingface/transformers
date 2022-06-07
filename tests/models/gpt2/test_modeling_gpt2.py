@@ -165,7 +165,7 @@ class GPT2ModelTester:
             scale_attn_by_inverse_layer_idx=scale_attn_by_inverse_layer_idx,
             reorder_and_upcast_attn=reorder_and_upcast_attn,
         )
-        
+
     def get_pipeline_config(self):
         config = self.get_config()
         config.vocab_size = 300

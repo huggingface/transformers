@@ -112,7 +112,7 @@ class LongformerModelTester:
             initializer_range=self.initializer_range,
             attention_window=self.attention_window,
         )
-    
+
     def get_pipeline_config(self):
         config = self.get_config()
         config.vocab_size = 300

@@ -130,7 +130,7 @@ class YosoModelTester:
         config = self.get_config()
         config.vocab_size = 300
         return config
-        
+
     def prepare_config_and_inputs_for_decoder(self):
         (
             config,
