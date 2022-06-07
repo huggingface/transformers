@@ -3,7 +3,7 @@ LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-# If set to nothing, will install the latest version
+# So far mainly used to specify the versions explicitly here, and not meant to be used as arguments for docker build.
 ARG PYTORCH='1.11.0'
 ARG TORCH_VISION='0.12.0'
 ARG TORCH_AUDIO='0.11.0'
