@@ -208,7 +208,7 @@ def main():
 
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
-    send_example_telemetry("tf_run_glue", model_args, data_args)
+    send_example_telemetry("run_glue", model_args, data_args, framework="tensorflow")
 
     if not (training_args.do_train or training_args.do_eval or training_args.do_predict):
         exit("Must specify at least one of --do_train, --do_eval or --do_predict!")
