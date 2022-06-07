@@ -463,14 +463,6 @@ class Swinv2SelfAttention(nn.Module):
         self.query = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
         self.key = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
         self.value = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
-        if config.qkv_bias:
-            self.q_bias = nn.Parameter(torch.zeros(dim))
-            self.register_buffer("k_bias", torch.zeros(dim), persistent=False)
-            self.v_bias = nn.Parameter(torch.zeros(dim))
-        else:
-            self.q_bias = None
-            self.k_bias = None
-            self.v_bias = None
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
     def transpose_for_scores(self, x):
@@ -694,11 +686,9 @@ class Swinv2Layer(nn.Module):
         batch_size, _, channels = hidden_states.size()
         shortcut = hidden_states
 
-        # hidden_states = self.layernorm_before(hidden_states)
-        # hidden_states = hidden_states.view(batch_size, height, width, channels)
         # pad hidden_states to multiples of window size
         hidden_states, pad_values = self.maybe_pad(hidden_states, height, width)
-
+        hidden_states = hidden_states.view(batch_size, height, width, channels)
         _, height_pad, width_pad, _ = hidden_states.shape
         # cyclic shift
         if self.shift_size > 0:
@@ -734,7 +724,6 @@ class Swinv2Layer(nn.Module):
 
         attention_windows = attention_windows.view(batch_size, height * width, channels)
         hidden_states = self.layernorm_before(attention_windows)
-        hidden_states = hidden_states.view(batch_size, height, width, channels)
         hidden_states = shortcut + self.drop_path(hidden_states)
 
         layer_output = self.intermediate(hidden_states)

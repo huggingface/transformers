@@ -161,7 +161,7 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--swinv2_name",
-        default="swinv2_tiny_patch4_window7_224",
+        default="swinv2_tiny_patch4_window8_256",
         type=str,
         help="Name of the Swinv2 timm model you'd like to convert.",
     )
