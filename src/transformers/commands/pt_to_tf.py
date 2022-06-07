@@ -80,15 +80,17 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             "--no-pr", action="store_true", help="Optional flag to NOT open a PR with converted weights."
         )
         train_parser.add_argument(
-            "--new-weights", action="store_true", help="Optional flag to create new TensorFlow weights, even if they already exist."
+            "--new-weights",
+            action="store_true",
+            help="Optional flag to create new TensorFlow weights, even if they already exist.",
         )
         train_parser.set_defaults(func=convert_command_factory)
 
     @staticmethod
     def compare_pt_tf_models(pt_model, pt_input, tf_model, tf_input):
         """
-        Compares the TensorFload and PyTorch models, given their inputs, returning a tuple with the maximum observed difference
-        and its source.
+        Compares the TensorFload and PyTorch models, given their inputs, returning a tuple with the maximum observed
+        difference and its source.
         """
         pt_outputs = pt_model(**pt_input, output_hidden_states=True)
         tf_outputs = tf_model(**tf_input, output_hidden_states=True)
