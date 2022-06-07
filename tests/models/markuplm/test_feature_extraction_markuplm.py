@@ -19,7 +19,7 @@ import unittest
 # TODO add soft dependency check
 from transformers import MarkupLMFeatureExtractor
 
-from .test_feature_extraction_common import FeatureExtractionSavingTestMixin
+from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin
 
 
 class MarkupLMFeatureExtractionTester(unittest.TestCase):
