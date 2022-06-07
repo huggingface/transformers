@@ -33,6 +33,7 @@ from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..modelcard import ModelCard
 from ..models.auto.configuration_auto import AutoConfig
 from ..tokenization_utils import PreTrainedTokenizer
+from ..tokenization_utils_fast import PreTrainedTokenizerFast
 from ..utils import ModelOutput, add_end_docstrings, is_tf_available, is_torch_available, logging
 
 
@@ -739,7 +740,7 @@ class Pipeline(_ScikitCompat):
     def __init__(
         self,
         model: Union["PreTrainedModel", "TFPreTrainedModel"],
-        tokenizer: Optional[PreTrainedTokenizer] = None,
+        tokenizer: Optional[Union[PreTrainedTokenizer, PreTrainedTokenizerFast]] = None,
         feature_extractor: Optional[PreTrainedFeatureExtractor] = None,
         modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
