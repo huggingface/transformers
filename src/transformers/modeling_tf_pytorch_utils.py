@@ -163,12 +163,16 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
             new_key = key.replace("gamma", "weight")
         if "beta" in key:
             new_key = key.replace("beta", "bias")
+        if "running_var" in key:
+            new_key = key.replace("running_var", "moving_variance")
+        if "running_mean" in key:
+            new_key = key.replace("running_mean", "moving_mean")
         if new_key:
             old_keys.append(key)
             new_keys.append(new_key)
     for old_key, new_key in zip(old_keys, new_keys):
         pt_state_dict[new_key] = pt_state_dict.pop(old_key)
-
+    # print(f"From modeling_tf_pytorch_utils.py (changed param names): {list(pt_state_dict.keys())}.")
     # Make sure we are able to load PyTorch base models as well as derived models (with heads)
     # TF models always have a prefix, some of PyTorch models (base ones) don't
     start_prefix_to_remove = ""
@@ -182,6 +186,7 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
     missing_keys = []
     for symbolic_weight in symbolic_weights:
         sw_name = symbolic_weight.name
+        # print(f"Symbolic weight name: {sw_name}")
         name, transpose = convert_tf_weight_name_to_pt_weight_name(
             sw_name, start_prefix_to_remove=start_prefix_to_remove, tf_weight_shape=symbolic_weight.shape
         )

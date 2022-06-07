@@ -227,7 +227,9 @@ class TFRegNetXLayer(tf.keras.layers.Layer):
         should_apply_shortcut = in_channels != out_channels or stride != 1
         groups = max(1, out_channels // config.groups_width)
         self.shortcut = (
-            TFRegNetShortCut(out_channels, stride=stride, name="shortcut") if should_apply_shortcut else tf.identity
+            TFRegNetShortCut(out_channels, stride=stride, name="shortcut")
+            if should_apply_shortcut
+            else tf.keras.layers.Activation("linear", name="shortcut")
         )
         # `self.layers` instead of `self.layer` because that is a reserved argument.
         self.layers = [
@@ -259,7 +261,9 @@ class TFRegNetYLayer(tf.keras.layers.Layer):
         should_apply_shortcut = in_channels != out_channels or stride != 1
         groups = max(1, out_channels // config.groups_width)
         self.shortcut = (
-            TFRegNetShortCut(out_channels, stride=stride, name="shortcut") if should_apply_shortcut else tf.identity
+            TFRegNetShortCut(out_channels, stride=stride, name="shortcut")
+            if should_apply_shortcut
+            else tf.keras.layers.Activation("linear", name="shortcut")
         )
         self.layers = [
             TFRegNetConvLayer(out_channels, kernel_size=1, activation=config.hidden_act, name="layer.0"),
