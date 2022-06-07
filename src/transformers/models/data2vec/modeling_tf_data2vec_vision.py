@@ -1078,10 +1078,16 @@ class TFAdaptiveAvgPool1D(tf.keras.layers.Layer):
             out = tf.sparse.sparse_dense_matmul(input_matrix, self.map)
             return tf.reshape(out, input_dims[:-1].as_list() + [-1])
 
+    def get_config(self):
+        config = super().get_config()
+        config.update({"output_dim": self.output_dim, "mode": self.mode})
+        return config
+
 
 class TFAdaptiveAvgPool2D(tf.keras.layers.Layer):
     def __init__(self, output_shape, mode="dense", **kwargs):
         super().__init__(**kwargs)
+        self.mode = mode
         self.h_pool = TFAdaptiveAvgPool1D(output_shape[0], mode=mode, name="h_pool")
         self.w_pool = TFAdaptiveAvgPool1D(output_shape[1], mode=mode, name="w_pool")
 
@@ -1097,6 +1103,11 @@ class TFAdaptiveAvgPool2D(tf.keras.layers.Layer):
         # Rearrange from NCWH -> NHWC
         inputs = tf.transpose(inputs, perm=[0, 3, 2, 1])
         return inputs
+
+    def get_config(self):
+        config = super().get_config()
+        config.update({"mode": self.mode})
+        return config
 
 
 class TFData2VecVisionPyramidPoolingModule(tf.keras.layers.Layer):
