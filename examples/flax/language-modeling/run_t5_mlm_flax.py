@@ -500,7 +500,7 @@ def main():
 
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
-    send_example_telemetry("flax_run_t5_mlm", model_args, data_args)
+    send_example_telemetry("run_t5_mlm", model_args, data_args, framework="flax")
 
     if (
         os.path.exists(training_args.output_dir)

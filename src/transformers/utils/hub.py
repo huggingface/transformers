@@ -1031,7 +1031,7 @@ def get_full_repo_name(model_id: str, organization: Optional[str] = None, token:
         return f"{organization}/{model_id}"
 
 
-def send_example_telemetry(example_name, *example_args):
+def send_example_telemetry(example_name, *example_args, framework="pytorch"):
     """
     Sends telemetry that helps tracking the examples use.
 
@@ -1039,11 +1039,12 @@ def send_example_telemetry(example_name, *example_args):
         example_name (`str`): The name of the example.
         *example_args (dataclasses or `argparse.ArgumentParser`): The arguments to the script. This function will only
             try to extract the model and dataset name from those. Nothing else is tracked.
+        framework (`str`, *optional*, defaults to `"pytorch"`): The framework for the example.
     """
     if is_offline_mode():
         return
 
-    data = {"example": example_name}
+    data = {"example": example_name, "framework": framework}
     for args in example_args:
         args_as_dict = {k: v for k, v in args.__dict__.items() if not k.startswith("_") and v is not None}
         if "model_name_or_path" in args_as_dict:
