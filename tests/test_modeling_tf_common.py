@@ -1404,6 +1404,27 @@ class TFModelTesterMixin:
                 if metrics:
                     self.assertTrue(len(accuracy1) == len(accuracy2) > 0, "Missing metrics!")
 
+    def test_tf_dataset_inputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            if getattr(model, "hf_compute_loss", False):
+                prepared_for_class = self._prepare_for_class(
+                    inputs_dict.copy(),
+                    model_class,
+                    return_labels=True if "labels" in inspect.signature(model_class.call).parameters.keys() else False,
+                )
+                dataset = tf.data.Dataset.from_tensor_slices(prepared_for_class)
+                dataset = dataset.batch(1)
+
+                model.compile(optimizer=tf.keras.optimizers.SGD(0.0))
+                # Check that a batched tf.data.Dataset can be passed to the model's fit method
+                model.fit(dataset)
+
+                # Check that a batch can be passed to the __call__ method
+                batch = next(dataset.as_numpy_iterator())
+                model(batch)
+
     def test_int64_inputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
