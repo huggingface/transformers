@@ -12,9 +12,14 @@ RUN git clone https://github.com/huggingface/transformers && cd transformers && 
 RUN python3 -m pip install --no-cache-dir -e ./transformers[dev,onnxruntime]
 
 RUN python3 -m pip install --no-cache-dir -U torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu113
+RUN PYTORCH_VERSION=$(python3 -c "from torch import version; print(version.__version__.split('+')[0])")
+
 RUN python3 -m pip install --no-cache-dir -U tensorflow
 RUN python3 -m pip uninstall -y flax jax
-RUN python3 -m pip install --no-cache-dir torch-scatter -f https://data.pyg.org/whl/torch-$(python3 -c "from torch import version; print(version.__version__.split('+')[0])")+cu113.html
+
+RUN python3 -m pip install --no-cache-dir torch-scatter -f https://data.pyg.org/whl/torch-$PYTORCH_VERSION+cu113.html
+RUN python3 -m pip install --no-cache-dir intel_extension_for_pytorch==$PYTORCH_VERSION+cpu -f https://software.intel.com/ipex-whl-stable
+
 RUN python3 -m pip install --no-cache-dir git+https://github.com/facebookresearch/detectron2.git pytesseract https://github.com/kpu/kenlm/archive/master.zip
 RUN python3 -m pip install -U "itsdangerous<2.1.0"
 
