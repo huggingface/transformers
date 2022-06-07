@@ -115,6 +115,11 @@ class IBertModelTester:
             initializer_range=self.initializer_range,
             quant_mode=True,
         )
+    
+    def get_pipeline_config(self):
+        config = self.get_config()
+        config.vocab_size = 300
+        return config
 
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
