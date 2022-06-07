@@ -89,31 +89,43 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         """
         pt_outputs = pt_model(**pt_input, output_hidden_states=True)
         tf_outputs = tf_model(**tf_input, output_hidden_states=True)
-        max_difference = 0
-        max_difference_source = None
 
-        # 1. compares ALL hidden states
-        num_hidden_states = len(pt_outputs.hidden_states)
-        if num_hidden_states != len(tf_outputs.hidden_states):
-            raise ValueError("The two models have a different number of hidden states, aborting.")
-        for i in range(num_hidden_states):
-            difference = np.max(
-                np.abs(pt_outputs.hidden_states[i].detach().numpy() - tf_outputs.hidden_states[i].numpy())
-            )
-            if difference > max_difference:
-                max_difference = difference
-                max_difference_source = f"hidden_state_{i}"
+        # 1. All keys must be the same
+        pt_output_names = set(pt_outputs.keys())
+        if pt_output_names != set(tf_outputs.keys()):
+            raise ValueError("The model outputs have different attributes, aborting.")
 
-        # 2. compares the main output of the model, which oftens uses a head
-        main_out_name = list(pt_outputs.keys())[0]
-        if main_out_name != list(tf_outputs.keys())[0]:
-            raise ValueError("The two models have a different main output name, aborting.")
-        difference = np.max(np.abs(pt_outputs[0].detach().numpy() - tf_outputs[0].numpy()))
-        if difference > max_difference:
-            max_difference = difference
-            max_difference_source = main_out_name
+        # 2. For each key, ALL values must be the same
+        def compate_pt_tf_values(pt_out, tf_out, attr_name=""):
+            max_difference = 0
+            max_difference_source = ""
 
-        return max_difference, max_difference_source
+            # If the current attribute is a tensor, it is a leaf and we make the comparison. Otherwise, we will dig in
+            # recursivelly, keeping the name of the attribute.
+            if isinstance(pt_out, (torch.Tensor)):
+                difference = np.max(np.abs(pt_out.detach().numpy() - tf_out.numpy()))
+                if difference > max_difference:
+                    max_difference = difference
+                    max_difference_source = attr_name
+            else:
+                root_name = attr_name
+                for i, pt_item in enumerate(pt_out):
+                    # If it is a named attribute, we keep the name. Otherwise, just its index.
+                    if isinstance(pt_item, str):
+                        branch_name = root_name + pt_item
+                        tf_item = tf_out[pt_item]
+                        pt_item = pt_out[pt_item]
+                    else:
+                        branch_name = root_name + f"[{i}]"
+                        tf_item = tf_out[i]
+                    difference, difference_source = compate_pt_tf_values(pt_item, tf_item, branch_name)
+                    if difference > max_difference:
+                        max_difference = difference
+                        max_difference_source = difference_source
+
+            return max_difference, max_difference_source
+
+        return compate_pt_tf_values(pt_outputs, tf_outputs)
 
     def __init__(self, model_name: str, local_dir: str, no_pr: bool, *args):
         self._logger = logging.get_logger("transformers-cli/pt_to_tf")
