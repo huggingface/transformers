@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "speechbrain/mctct-large": "https://huggingface.co/speechbrain/m-ctc-t-large/resolve/main/config.json",
+    "speechbrain/m-ctc-t-large": "https://huggingface.co/speechbrain/m-ctc-t-large/resolve/main/config.json",
     # See all M-CTC-T models at https://huggingface.co/models?filter=mctct
 }
 
@@ -31,7 +31,7 @@ class MCTCTConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`MCTCTModel`]. It is used to instantiate an
     M-CTC-T model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the M-CTC-T
-    [speechbrain/mctct-large](https://huggingface.co/speechbrain/mctct-large) architecture.
+    [speechbrain/m-ctc-t-large](https://huggingface.co/speechbrain/m-ctc-t-large) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
