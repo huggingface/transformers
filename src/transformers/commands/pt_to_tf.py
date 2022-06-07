@@ -82,7 +82,7 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         train_parser.set_defaults(func=convert_command_factory)
 
     @staticmethod
-    def compare_pt_tf_models(pt_model: torch.nn.Module, pt_input: dict, tf_model: tf.keras.Model, tf_input: dict):
+    def compare_pt_tf_models(pt_model, pt_input, tf_model, tf_input):
         """
         Compares the tf and the pt models, given their inputs, returning a tuple with the maximum observed difference
         and its source.
