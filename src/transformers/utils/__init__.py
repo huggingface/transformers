@@ -74,6 +74,7 @@ from .hub import (
     is_local_clone,
     is_offline_mode,
     is_remote_url,
+    send_example_telemetry,
     url_to_filename,
 )
 from .import_utils import (
