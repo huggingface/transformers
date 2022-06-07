@@ -17,17 +17,23 @@
 
 import json
 import os
+import re
 from functools import lru_cache
 from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
-import regex as re
+import numpy as np
 
-from ...tokenization_utils import AddedToken, PreTrainedTokenizer
-from ...utils import logging
+from ...utils import is_tf_available, is_torch_available, logging
 
 
 if TYPE_CHECKING:
-    from transformers.pipelines.conversational import Conversation
+    if is_torch_available():
+        import torch
+    if is_tf_available():
+        import tensorflow as tf
+
+from ...tokenization_utils import AddedToken, PreTrainedTokenizer
+
 
 logger = logging.get_logger(__name__)
 

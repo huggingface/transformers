@@ -19,16 +19,22 @@ import json
 import re
 from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
+import numpy as np
+
+from ...utils import is_tf_available, is_torch_available, logging
+
+
+if TYPE_CHECKING:
+    if is_torch_available():
+        import torch
+    if is_tf_available():
+        import tensorflow as tf
+
 from tokenizers import pre_tokenizers
 
 from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
-from ...utils import logging
 from .tokenization_codegen import CodeGenTokenizer
-
-
-if TYPE_CHECKING:
-    from transformers.pipelines.conversational import Conversation
 
 
 logger = logging.get_logger(__name__)
