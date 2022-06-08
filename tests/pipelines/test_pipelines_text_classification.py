@@ -39,6 +39,27 @@ class TextClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestC
         outputs = text_classifier("This is great !")
         self.assertEqual(nested_simplify(outputs), [{"label": "LABEL_0", "score": 0.504}])
 
+        outputs = text_classifier("This is great !", top_k=2)
+        self.assertEqual(
+            nested_simplify(outputs), [{"label": "LABEL_0", "score": 0.504}, {"label": "LABEL_1", "score": 0.496}]
+        )
+
+        outputs = text_classifier(["This is great !", "This is bad"], top_k=2)
+        self.assertEqual(
+            nested_simplify(outputs),
+            [
+                [{"label": "LABEL_0", "score": 0.504}, {"label": "LABEL_1", "score": 0.496}],
+                [{"label": "LABEL_0", "score": 0.504}, {"label": "LABEL_1", "score": 0.496}],
+            ],
+        )
+
+        outputs = text_classifier("This is great !", top_k=1)
+        self.assertEqual(nested_simplify(outputs), [{"label": "LABEL_0", "score": 0.504}])
+
+        # Legacy behavior
+        outputs = text_classifier("This is great !", return_all_scores=False)
+        self.assertEqual(nested_simplify(outputs), [{"label": "LABEL_0", "score": 0.504}])
+
     @require_torch
     def test_accepts_torch_device(self):
         import torch
