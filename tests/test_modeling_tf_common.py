@@ -1404,44 +1404,22 @@ class TFModelTesterMixin:
                 if metrics:
                     self.assertTrue(len(accuracy1) == len(accuracy2) > 0, "Missing metrics!")
 
-    def test_tf_dataset_inputs(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            if getattr(model, "hf_compute_loss", False):
-                prepared_for_class = self._prepare_for_class(
-                    inputs_dict.copy(),
-                    model_class,
-                    return_labels=True if "labels" in inspect.signature(model_class.call).parameters.keys() else False,
-                )
+                # Make sure fit works with tf.data.Dataset and results are consistent
                 dataset = tf.data.Dataset.from_tensor_slices(prepared_for_class)
                 dataset = dataset.batch(1)
-
-                accuracy_classes = [
-                    "ForPreTraining",
-                    "ForCausalLM",
-                    "ForMaskedLM",
-                    "ForQuestionAnswering",
-                    "ForMultipleChoice",
-                    "ForSequenceClassification",
-                    "ForTokenClassification",
-                    "ForNextSentencePrediction",
-                    "LMHeadModel",
-                ]
-                for accuracy_class in accuracy_classes:
-                    if model.__class__.__name__.endswith(accuracy_class):
-                        metrics = [tf.keras.metrics.SparseCategoricalAccuracy()]
-                        break
-                else:
-                    metrics = []
-
-                model.compile(optimizer=tf.keras.optimizers.SGD(0.0), metrics=metrics)
-                # Check that a batched tf.data.Dataset can be passed to the model's fit method
-                model.fit(dataset)
-
-                # Check that a batch can be passed to the __call__ method
-                batch = next(dataset.as_numpy_iterator())
-                model(batch)
+                history3 = model.fit(
+                    dataset,
+                    validation_data=dataset,
+                    steps_per_epoch=1,
+                    validation_steps=1,
+                    shuffle=False,
+                )
+                val_loss3 = history3.history["val_loss"][0]
+                accuracy3 = {key: val[0] for key, val in history3.history.items() if key.endswith("accuracy")}
+                self.assertTrue(np.allclose(val_loss1, val_loss3, atol=1e-2, rtol=1e-3))
+                self.assertEqual(history1.history.keys(), history3.history.keys())
+                if metrics:
+                    self.assertTrue(len(accuracy1) == len(accuracy3) > 0, "Missing metrics!")
 
     def test_int64_inputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
