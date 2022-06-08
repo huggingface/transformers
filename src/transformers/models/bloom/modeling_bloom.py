@@ -186,7 +186,7 @@ def dropout_add(x, residual, prob, training):
     return out
 
 
-def bias_gelu(x):
+def bloom_gelu_forward(x):
     """
     Custom bias GELU function. Adapted from Megatron-DeepSpeed code. Here we use a simple implementation (inference) to
     make the model jitable.
@@ -198,7 +198,7 @@ def bias_gelu(x):
     return x * 0.5 * (1.0 + torch.tanh(0.79788456 * x * (1 + 0.044715 * x * x)))
 
 
-def bias_gelu_back(g, x):
+def bloom_gelu_back(g, x):
     """
     gradient of tanh approximation of gelu gradient of actual gelu is: 0.5 * (1. + torch.erf(x * 0.70710678)) +
     0.3989423 * x * torch.exp(-0.5 * x * x)
@@ -220,16 +220,16 @@ class GeLUFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input):
         ctx.save_for_backward(input)
-        return bias_gelu(input)
+        return bloom_gelu_forward(input)
 
     @staticmethod
     def backward(ctx, grad_output):
         input = ctx.saved_tensors
-        tmp = bias_gelu_back(grad_output, input)
+        tmp = bloom_gelu_back(grad_output, input)
         return tmp
 
 
-class BloomBiasGelu(nn.Module):
+class BloomGelu(nn.Module):
     """
     BloomBiasGelu wrapper function that make use of the simple function on inference mode to make the model
     torchscriptable and use the autograd function in training mode to get the accurate results of the gradients Partly
@@ -246,7 +246,7 @@ class BloomBiasGelu(nn.Module):
         if self.training:
             return GeLUFunction.apply(x)
         else:
-            return bias_gelu(x)
+            return bloom_gelu_forward(x)
 
 
 class BloomScaledSoftmax(nn.Module):
@@ -327,15 +327,14 @@ class BloomAttention(nn.Module):
 
         # Layer-wise attention scaling
         self.layer_number = max(1, layer_number)
-        coeff = self.layer_number
-        self.norm_factor = math.sqrt(self.head_dim) * coeff
+        self.norm_factor = math.sqrt(self.head_dim) * self.layer_number
 
         # Scaled Softmax
         self.scale_mask_softmax = BloomScaledSoftmax(
             self.masked_softmax_fusion,
             attention_mask_func,
             self.attention_softmax_in_fp32,
-            coeff,
+            self.layer_number,
         )
 
         self.query_key_value = nn.Linear(self.hidden_size, 3 * self.hidden_size, bias=True)
@@ -474,10 +473,10 @@ class BloomMLP(nn.Module):
         self.dense_h_to_4h = nn.Linear(hidden_size, 4 * hidden_size)
         self.dense_4h_to_h = nn.Linear(4 * hidden_size, hidden_size)
         self.hidden_dropout = config.hidden_dropout
-        self.bias_gelu = BloomBiasGelu()
+        self.gelu_impl = BloomGelu()
 
     def forward(self, hidden_states, residual):
-        hidden_states = self.bias_gelu(self.dense_h_to_4h(hidden_states))
+        hidden_states = self.gelu_impl(self.dense_h_to_4h(hidden_states))
 
         if self.pretraining_tp > 1 and self.slow_but_exact:
             intermediate_output = torch.zeros_like(residual)
