@@ -393,7 +393,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
 
         # save vocab_file
         with open(vocab_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(self.encoder, ensure_ascii=False))
+            f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
         # save merge_file
         index = 0
@@ -1350,8 +1350,8 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
             if len(pair_ids) > num_tokens_to_remove:
                 window_len = min(len(pair_ids), stride + num_tokens_to_remove)
                 overflowing_tokens = pair_ids[-window_len:]
-                overflowing_xpath_tags_seq = xpath_tags_seq[-window_len:]
-                overflowing_xpath_subs_seq = xpath_subs_seq[-window_len:]
+                overflowing_xpath_tags_seq = pair_xpath_tags_seq[-window_len:]
+                overflowing_xpath_subs_seq = pair_xpath_subs_seq[-window_len:]
                 pair_ids = pair_ids[:-num_tokens_to_remove]
                 pair_xpath_tags_seq = pair_xpath_tags_seq[:-num_tokens_to_remove]
                 pair_xpath_subs_seq = pair_xpath_subs_seq[:-num_tokens_to_remove]
