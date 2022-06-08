@@ -1406,7 +1406,7 @@ class TFModelTesterMixin:
 
                 # Make sure fit works with tf.data.Dataset and results are consistent
                 dataset = tf.data.Dataset.from_tensor_slices(prepared_for_class)
-                # Pass in all samples as a batch to match other `fit` calls 
+                # Pass in all samples as a batch to match other `fit` calls
                 dataset = dataset.batch(len(dataset))
                 history3 = model.fit(
                     dataset,
