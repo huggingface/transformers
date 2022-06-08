@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -259,7 +259,7 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="sGroupViTVisionModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(reason="GroupViTVisionModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
 
@@ -439,8 +439,8 @@ class GroupViTTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         pass
 
+    @unittest.skip(reason="GroupViTTextModel does not use inputs_embeds")
     def test_inputs_embeds(self):
-        # GROUPVIT does not use inputs_embeds
         pass
 
     @unittest.skip(reason="GroupViTTextModel has no base class and is not available in MODEL_MAPPING")

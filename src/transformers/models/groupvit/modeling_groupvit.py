@@ -110,7 +110,6 @@ def gumbel_softmax(logits: torch.Tensor, tau: float = 1, hard: bool = False, dim
 
 def resize_attention_map(attentions, height, width, align_corners=False):
     """
-
     Args:
         attentions (`torch.Tensor`): attention map of shape [batch_size, groups, feat_height*feat_width]
         height (`int`): height of the output attention map
@@ -342,10 +341,10 @@ class GroupViTOutput(ModelOutput):
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
             Contrastive loss for image-text similarity.
-        logits_per_image:(`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
+        logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
             The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
             similarity scores.
-        logits_per_text:(`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
+        logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
             The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
             similarity scores.
         segmentation_logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels, logits_height, logits_width)`):
@@ -359,15 +358,15 @@ class GroupViTOutput(ModelOutput):
 
             </Tip>
 
-        text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The text embeddings obtained by applying the projection layer to the pooled output of
             [`GroupViTTextModel`].
-        image_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The image embeddings obtained by applying the projection layer to the pooled output of
             [`GroupViTVisionModel`].
-        text_model_output(`BaseModelOutputWithPooling`):
+        text_model_output (`BaseModelOutputWithPooling`):
             The output of the [`GroupViTTextModel`].
-        vision_model_output(`BaseModelOutputWithPooling`):
+        vision_model_output (`BaseModelOutputWithPooling`):
             The output of the [`GroupViTVisionModel`].
     """
 
@@ -390,7 +389,6 @@ class GroupViTOutput(ModelOutput):
 class PatchEmbeddings(nn.Module):
     """
     Image to Patch Embedding.
-
     """
 
     def __init__(
@@ -825,7 +823,7 @@ class GroupViTVisionLayer(nn.Module):
 
 
 class GroupViTStage(nn.Module):
-    """This corresponds to the GroupingLayer class in the GroupViT implementation."""
+    """This corresponds to the `GroupingLayer` class in the GroupViT implementation."""
 
     def __init__(
         self,
@@ -1130,7 +1128,7 @@ GROUPVIT_INPUTS_DOCSTRING = r"""
 
             [What are position IDs?](../glossary#position-ids)
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
+            Pixel values. Pixel values can be obtained using
             [`CLIPFeatureExtractor`]. See [`CLIPFeatureExtractor.__call__`] for details.
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
@@ -1425,8 +1423,8 @@ class GroupViTTextModel(GroupViTPreTrainedModel):
         ```python
         >>> from transformers import CLIPTokenizer, GroupViTTextModel
 
-        >>> model = GroupViTTextModel.from_pretrained("nvidia/groupvit-gccyfcc")
         >>> tokenizer = CLIPTokenizer.from_pretrained("nvidia/groupvit-gccyfcc")
+        >>> model = GroupViTTextModel.from_pretrained("nvidia/groupvit-gccyfcc")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
 
