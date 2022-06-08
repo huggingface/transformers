@@ -75,10 +75,11 @@ class BloomConfig(PretrainedConfig):
             Precision that has been used for the model's training in Megatron. Please load the model in the correct
             precision by doing `model = BloomModel.from_pretrained(model_name, torch_dtype="auto")`.`
         pretraining_tp (`int`, *optional*, defaults to `1`):
-            Tensor parallelism rank used during pretraining with Megatron. Please refer to [this
+            Experimental feature. Tensor parallelism rank used during pretraining with Megatron. Please refer to [this
             document](https://huggingface.co/docs/transformers/parallelism) to understand more about it. This value is
             necessary to ensure exact reproducibility of the pretraining results. Please refer to [this
-            issue](https://github.com/pytorch/pytorch/issues/76232)
+            issue](https://github.com/pytorch/pytorch/issues/76232). Note also that this is enabled only when
+            `slow_but_exact=True`.
         slow_but_exact (`bool`, *optional*, defaults to `False`):
             Experimental feature. Whether to use slow but exact implementation of the attention mechanism. While
             merging the TP rank tensors, due to slicing operations the results may be slightly different between the
