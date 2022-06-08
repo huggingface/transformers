@@ -1194,9 +1194,7 @@ class TrainingArguments:
         if self.no_cuda:
             device = torch.device("cpu")
             self._n_gpu = 0
-            os.environ["RANK"] = str(os.environ.get("PMI_RANK", 0))
-            os.environ["WORLD_SIZE"] = str(os.environ.get("PMI_SIZE", 1))
-            self.local_rank = int(os.environ.get("MPI_LOCALRANKID", -1))
+            self.local_rank = int(os.environ.get("MPI_LOCALRANKID", self.local_rank))
             if self.local_rank != -1 and not torch.distributed.is_initialized():
                 # Initializes distributed backend for cpu
                 if self.xpu_backend not in ("mpi", "ccl"):
@@ -1204,7 +1202,15 @@ class TrainingArguments:
                         "CPU distributed training backend is not properly set. "
                         "Please set '--xpu_backend' to either 'mpi' or 'ccl'."
                     )
-                torch.distributed.init_process_group(backend=self.xpu_backend)
+                if self.xpu_backend == "ccl" and int(os.environ.get("CCL_WORKER_COUNT", 0)) < 1:
+                    raise ValueError(
+                        "CPU distributed training backend is ccl. but CCL_WORKER_COUNT is not correctly set. "
+                        "Please use like 'export CCL_WORKER_COUNT = 1' to set."
+                    )
+
+                rank = int(os.environ.get("PMI_RANK", 0))
+                size = int(os.environ.get("PMI_SIZE", 1))
+                torch.distributed.init_process_group(backend=self.xpu_backend, rank=rank, world_size=size)
         elif is_torch_tpu_available():
             device = xm.xla_device()
             self._n_gpu = 0
