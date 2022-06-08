@@ -15,6 +15,8 @@ This guide focuses on training large models efficiently on CPU.
 
 ## Mixed precision with IPEX
 
+IPEX optimizes for CPU with AVX-512 or above. It can also functionally work for CPUs with AVX2. So, both Intel CPUs and AMD CPUs are likely to result in a better performance under IPEX. IPEX provides performance optimizations for both Float32 and BFloat16. Float32 is used by default and the following parts will show the usage of BFloat16.
+
 Low precision data type BFloat16 has been natively supported on the 3rd Generation Xeon® Scalable Processors (aka Cooper Lake) with AVX512 instruction set and will be supported on the next generation of Intel® Xeon® Scalable Processors with Intel® Advanced Matrix Extensions (Intel® AMX) instruction set with further boosted performance. The Auto Mixed Precision for CPU backend has been enabled since PyTorch-1.10. At the same time, the support of Auto Mixed Precision with BFloat16 for CPU and BFloat16 optimization of operators has been massively enabled in Intel® Extension for PyTorch, and partially upstreamed to PyTorch master branch. Users can get better performance and user experience with IPEX Auto Mixed Precision.
 
 Check more detailed information for [Auto Mixed Precision](https://intel.github.io/intel-extension-for-pytorch/1.11.200/tutorials/features/amp.html).
