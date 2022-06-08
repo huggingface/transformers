@@ -87,7 +87,7 @@ class FlaxT5LayerNorm(nn.Module):
         return self.weight * hidden_states
 
 
-class FlaxT5DenseReluDense(nn.Module):
+class FlaxT5DenseActDense(nn.Module):
     config: T5Config
     dtype: jnp.dtype = jnp.float32
 
@@ -108,16 +108,17 @@ class FlaxT5DenseReluDense(nn.Module):
             dtype=self.dtype,
         )
         self.dropout = nn.Dropout(self.config.dropout_rate)
+        self.act = ACT2FN[self.config.dense_act_fn]
 
     def __call__(self, hidden_states, deterministic=True):
         hidden_states = self.wi(hidden_states)
-        hidden_states = jax.nn.relu(hidden_states)
+        hidden_states = self.act(hidden_states)
         hidden_states = self.dropout(hidden_states, deterministic=deterministic)
         hidden_states = self.wo(hidden_states)
         return hidden_states
 
 
-class FlaxT5DenseGatedGeluDense(nn.Module):
+class FlaxT5DenseGatedActDense(nn.Module):
     config: T5Config
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
@@ -144,10 +145,10 @@ class FlaxT5DenseGatedGeluDense(nn.Module):
             dtype=self.dtype,
         )
         self.dropout = nn.Dropout(self.config.dropout_rate)
-        self.gelu_act = ACT2FN["gelu_new"]
+        self.act = ACT2FN[self.config.dense_act_fn]
 
     def __call__(self, hidden_states, deterministic):
-        hidden_gelu = self.gelu_act(self.wi_0(hidden_states))
+        hidden_gelu = self.act(self.wi_0(hidden_states))
         hidden_linear = self.wi_1(hidden_states)
         hidden_states = hidden_gelu * hidden_linear
         hidden_states = self.dropout(hidden_states, deterministic=deterministic)
@@ -160,14 +161,10 @@ class FlaxT5LayerFF(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        if self.config.feed_forward_proj == "relu":
-            self.DenseReluDense = FlaxT5DenseReluDense(self.config, dtype=self.dtype)
-        elif self.config.feed_forward_proj == "gated-gelu":
-            self.DenseReluDense = FlaxT5DenseGatedGeluDense(self.config, dtype=self.dtype)
+        if self.config.is_gated_act:
+            self.DenseReluDense = FlaxT5DenseGatedActDense(self.config, dtype=self.dtype)
         else:
-            raise ValueError(
-                f"{self.config.feed_forward_proj} is not supported. Choose between `relu` and `gated-gelu`"
-            )
+            self.DenseReluDense = FlaxT5DenseActDense(self.config, dtype=self.dtype)
 
         self.layer_norm = FlaxT5LayerNorm(self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype)
         self.dropout = nn.Dropout(self.config.dropout_rate)

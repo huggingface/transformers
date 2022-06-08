@@ -63,7 +63,7 @@ class OPTModelTester:
         use_labels=False,
         vocab_size=99,
         hidden_size=16,
-        num_hidden_layers=2,
+        num_hidden_layers=5,
         num_attention_heads=4,
         intermediate_size=4,
         hidden_act="gelu",
@@ -178,6 +178,7 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (OPTModel, OPTForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (OPTForCausalLM,) if is_torch_available() else ()
     is_encoder_decoder = False
+    fx_compatible = True
     test_pruning = False
     test_missing_keys = False
 
@@ -333,7 +334,7 @@ class OPTGenerationTest(unittest.TestCase):
     @property
     def prompts(self):
         return [
-            "Today is a beautiful day and I want to",
+            "Today is a beautiful day and I want",
             "In the city of",
             "Paris is the capital of France and",
             "Computers and mobile phones have taken",
@@ -343,7 +344,7 @@ class OPTGenerationTest(unittest.TestCase):
         model_id = "facebook/opt-125m"
 
         EXPECTED_OUTPUTS = [
-            "Today is a beautiful day and I want to thank",
+            "Today is a beautiful day and I want everyone",
             "In the city of Rome Canaver Canaver Canaver Canaver",
             "Paris is the capital of France and Parisdylib",
             "Computers and mobile phones have taken precedence over",
@@ -408,7 +409,7 @@ class OPTGenerationTest(unittest.TestCase):
         model_id = "facebook/opt-350m"
 
         EXPECTED_OUTPUTS = [
-            "Today is a beautiful day and I want to share",
+            "Today is a beautiful day and I want to",
             "In the city of San Francisco, the city",
             "Paris is the capital of France and the capital",
             "Computers and mobile phones have taken over the",
