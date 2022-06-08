@@ -336,7 +336,7 @@ class GroupViTTokenAssign(nn.Module):
 
 
 @dataclass
-class GroupViTOutput(ModelOutput):
+class GroupViTModelOutput(ModelOutput):
     """
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
@@ -1128,8 +1128,8 @@ GROUPVIT_INPUTS_DOCSTRING = r"""
 
             [What are position IDs?](../glossary#position-ids)
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using
-            [`CLIPFeatureExtractor`]. See [`CLIPFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`CLIPFeatureExtractor`]. See
+            [`CLIPFeatureExtractor.__call__`] for details.
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
         output_attentions (`bool`, *optional*):
@@ -1147,7 +1147,7 @@ class GroupViTVisionEncoder(nn.Module):
     def __init__(self, config: GroupViTVisionConfig) -> None:
         super().__init__()
         self.config = config
-        self.stage = nn.ModuleList(
+        self.stages = nn.ModuleList(
             [
                 GroupViTStage(
                     config=config,
@@ -1180,11 +1180,11 @@ class GroupViTVisionEncoder(nn.Module):
 
         group_tokens = None
 
-        for i, layer_module in enumerate(self.stage):
+        for i, stage in enumerate(self.stages):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_outputs = layer_module(hidden_states, group_tokens, output_attentions)
+            layer_outputs = stage(hidden_states, group_tokens, output_attentions)
 
             hidden_states = layer_outputs[0]
             group_tokens = layer_outputs[1]
@@ -1696,7 +1696,7 @@ class GroupViTModel(GroupViTPreTrainedModel):
         return image_features
 
     @add_start_docstrings_to_model_forward(GROUPVIT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=GroupViTOutput, config_class=GroupViTConfig)
+    @replace_return_docstrings(output_type=GroupViTModelOutput, config_class=GroupViTConfig)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1708,7 +1708,7 @@ class GroupViTModel(GroupViTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_segmentation: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, GroupViTOutput]:
+    ) -> Union[Tuple, GroupViTModelOutput]:
         r"""
         Returns:
 
@@ -1827,7 +1827,7 @@ class GroupViTModel(GroupViTPreTrainedModel):
                 output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
             return ((loss,) + output) if loss is not None else output
 
-        return GroupViTOutput(
+        return GroupViTModelOutput(
             loss=loss,
             logits_per_image=logits_per_image,
             logits_per_text=logits_per_text,

@@ -31,9 +31,9 @@ GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class GroupViTTextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GroupViTTextModel`]. It is used to instantiate
-    an GroupViT model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the GroupViT
+    This is the configuration class to store the configuration of a [`GroupViTTextModel`]. It is used to instantiate an
+    GroupViT model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the GroupViT
     [nvidia/groupvit-gccyfcc](https://huggingface.co/nvidia/groupvit-gccyfcc) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -155,7 +155,7 @@ class GroupViTVisionConfig(PretrainedConfig):
             The number of layers in each encoder block.
         num_group_tokens (`List[int]`, *optional*, defaults to [64, 8, 0]):
             The number of group tokens for each stage.
-        num_output_group (`List[int]`, *optional*, defaults to [64, 8, 0]):
+        num_output_groups (`List[int]`, *optional*, defaults to [64, 8, 0]):
             The number of output groups for each stage, 0 means no group.
         num_attention_heads (`int`, *optional*, defaults to 6):
             Number of attention heads for each attention layer in the Transformer encoder.
