@@ -312,6 +312,7 @@ class TFBlenderbotSmallEncoderLayer(tf.keras.layers.Layer):
         self.fc1 = tf.keras.layers.Dense(config.encoder_ffn_dim, name="fc1")
         self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
         self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
+        self.normalize_before = config.encoder_normalize_before
 
     def call(
         self,
@@ -329,6 +330,8 @@ class TFBlenderbotSmallEncoderLayer(tf.keras.layers.Layer):
                 `(encoder_attention_heads,)`
         """
         residual = hidden_states
+        if self.normalize_before:
+            hidden_states = self.self_attn_layer_norm(hidden_states)
         hidden_states, self_attn_weights, _ = self.self_attn(
             hidden_states=hidden_states, attention_mask=attention_mask, layer_head_mask=layer_head_mask
         )
@@ -344,15 +347,19 @@ class TFBlenderbotSmallEncoderLayer(tf.keras.layers.Layer):
 
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
+        if not self.normalize_before:
+            hidden_states = self.self_attn_layer_norm(hidden_states)
 
         residual = hidden_states
+        if self.normalize_before:
+            hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = self.activation_dropout(hidden_states, training=training)
         hidden_states = self.fc2(hidden_states)
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
+        if not self.normalize_before:
+            hidden_states = self.final_layer_norm(hidden_states)
 
         return hidden_states, self_attn_weights
 
@@ -385,6 +392,7 @@ class TFBlenderbotSmallDecoderLayer(tf.keras.layers.Layer):
         self.fc1 = tf.keras.layers.Dense(config.decoder_ffn_dim, name="fc1")
         self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
         self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
+        self.normalize_before = config.decoder_normalize_before
 
     def call(
         self,
@@ -413,6 +421,8 @@ class TFBlenderbotSmallDecoderLayer(tf.keras.layers.Layer):
             past_key_value (`Tuple(tf.Tensor)`): cached past key and value projection states
         """
         residual = hidden_states
+        if self.normalize_before:
+            hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Self Attention
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
@@ -426,13 +436,16 @@ class TFBlenderbotSmallDecoderLayer(tf.keras.layers.Layer):
         )
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
+        if not self.normalize_before:
+            hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Cross-Attention Block
         cross_attn_present_key_value = None
         cross_attn_weights = None
         if encoder_hidden_states is not None:
             residual = hidden_states
+            if self.normalize_before:
+                hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
             # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
@@ -445,19 +458,23 @@ class TFBlenderbotSmallDecoderLayer(tf.keras.layers.Layer):
             )
             hidden_states = self.dropout(hidden_states, training=training)
             hidden_states = residual + hidden_states
-            hidden_states = self.encoder_attn_layer_norm(hidden_states)
+            if not self.normalize_before:
+                hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
             # add cross-attn to positions 3,4 of present_key_value tuple
             present_key_value = present_key_value + cross_attn_present_key_value
 
         # Fully Connected
         residual = hidden_states
+        if self.normalize_before:
+            hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = self.activation_dropout(hidden_states, training=training)
         hidden_states = self.fc2(hidden_states)
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
+        if not self.normalize_before:
+            hidden_states = self.final_layer_norm(hidden_states)
 
         return (
             hidden_states,

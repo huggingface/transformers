@@ -310,6 +310,7 @@ class TFBartEncoderLayer(tf.keras.layers.Layer):
         self.fc1 = tf.keras.layers.Dense(config.encoder_ffn_dim, name="fc1")
         self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
         self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
+        self.normalize_before = config.encoder_normalize_before
 
     def call(
         self,
@@ -327,6 +328,8 @@ class TFBartEncoderLayer(tf.keras.layers.Layer):
                 `(encoder_attention_heads,)`
         """
         residual = hidden_states
+        if self.normalize_before:
+            hidden_states = self.self_attn_layer_norm(hidden_states)
         hidden_states, self_attn_weights, _ = self.self_attn(
             hidden_states=hidden_states, attention_mask=attention_mask, layer_head_mask=layer_head_mask
         )
@@ -342,15 +345,19 @@ class TFBartEncoderLayer(tf.keras.layers.Layer):
 
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
+        if not self.normalize_before:
+            hidden_states = self.self_attn_layer_norm(hidden_states)
 
         residual = hidden_states
+        if self.normalize_before:
+            hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = self.activation_dropout(hidden_states, training=training)
         hidden_states = self.fc2(hidden_states)
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
+        if not self.normalize_before:
+            hidden_states = self.final_layer_norm(hidden_states)
 
         return hidden_states, self_attn_weights
 
@@ -382,6 +389,7 @@ class TFBartDecoderLayer(tf.keras.layers.Layer):
         self.fc1 = tf.keras.layers.Dense(config.decoder_ffn_dim, name="fc1")
         self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
         self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
+        self.normalize_before = config.decoder_normalize_before
 
     def call(
         self,
@@ -410,6 +418,8 @@ class TFBartDecoderLayer(tf.keras.layers.Layer):
             past_key_value (`Tuple(tf.Tensor)`): cached past key and value projection states
         """
         residual = hidden_states
+        if self.normalize_before:
+            hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Self Attention
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
@@ -423,13 +433,16 @@ class TFBartDecoderLayer(tf.keras.layers.Layer):
         )
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
+        if not self.normalize_before:
+            hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Cross-Attention Block
         cross_attn_present_key_value = None
         cross_attn_weights = None
         if encoder_hidden_states is not None:
             residual = hidden_states
+            if self.normalize_before:
+                hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
             # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
@@ -442,19 +455,23 @@ class TFBartDecoderLayer(tf.keras.layers.Layer):
             )
             hidden_states = self.dropout(hidden_states, training=training)
             hidden_states = residual + hidden_states
-            hidden_states = self.encoder_attn_layer_norm(hidden_states)
+            if not self.normalize_before:
+                hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
             # add cross-attn to positions 3,4 of present_key_value tuple
             present_key_value = present_key_value + cross_attn_present_key_value
 
         # Fully Connected
         residual = hidden_states
+        if self.normalize_before:
+            hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = self.activation_dropout(hidden_states, training=training)
         hidden_states = self.fc2(hidden_states)
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
+        if not self.normalize_before:
+            hidden_states = self.final_layer_norm(hidden_states)
 
         return (
             hidden_states,
@@ -674,6 +691,11 @@ class TFBartEncoder(tf.keras.layers.Layer):
         self.layers = [TFBartEncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
         self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
 
+        if config.encoder_normalize_before:
+            self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
+        else:
+            self.layer_norm = None
+
     def get_embed_tokens(self):
         return self.embed_tokens
 
@@ -788,6 +810,9 @@ class TFBartEncoder(tf.keras.layers.Layer):
             if output_attentions:
                 all_attentions += (attn,)
 
+        if self.layer_norm:
+            hidden_states = self.layer_norm(hidden_states)
+
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
 
@@ -812,9 +837,10 @@ class TFBartDecoder(tf.keras.layers.Layer):
     def __init__(self, config: BartConfig, embed_tokens: Optional[TFSharedEmbeddings] = None, **kwargs):
         super().__init__(**kwargs)
         self.config = config
+        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.layerdrop = config.decoder_layerdrop
         self.padding_idx = config.pad_token_id
         self.embed_tokens = embed_tokens
-        self.layerdrop = config.decoder_layerdrop
         self.embed_positions = TFBartLearnedPositionalEmbedding(
             config.max_position_embeddings,
             config.d_model,
@@ -824,7 +850,10 @@ class TFBartDecoder(tf.keras.layers.Layer):
         self.layers = [TFBartDecoderLayer(config, name=f"layers.{i}") for i in range(config.decoder_layers)]
         self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
 
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        if config.encoder_normalize_before:
+            self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
+        else:
+            self.layer_norm = None
 
     def get_embed_tokens(self):
         return self.embed_tokens
@@ -997,6 +1026,9 @@ class TFBartDecoder(tf.keras.layers.Layer):
 
                 if encoder_hidden_states is not None:
                     all_cross_attns += (layer_cross_attn,)
+
+        if self.layer_norm:
+            hidden_states = self.layer_norm(hidden_states)
 
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
