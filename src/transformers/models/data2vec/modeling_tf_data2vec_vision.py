@@ -1132,8 +1132,8 @@ class TFData2VecVisionPyramidPoolingModule(tf.keras.layers.Layer):
             pool_scale = pool_scale if isinstance(pool_scale, collections.abc.Iterable) else (pool_scale, pool_scale)
             self.layer_list.append(
                 [
-                    TFAdaptiveAvgPool2D(output_shape=pool_scale, name=f"adavptive_avgpool_{idx}"),
-                    TFData2VecVisionConvModule(out_channels=self.channels, kernel_size=1, name=f"conv_module_{idx}"),
+                    TFAdaptiveAvgPool2D(output_shape=pool_scale),
+                    TFData2VecVisionConvModule(out_channels=self.channels, kernel_size=1, name=f"{idx}.1"),
                 ]
             )
 
@@ -1174,9 +1174,9 @@ class TFData2VecVisionUperHead(tf.keras.layers.Layer):
         self.lateral_convs = []
         self.fpn_convs = []
         for idx, _ in enumerate(self.in_channels[:-1]):  # skip the top layer
-            l_conv = TFData2VecVisionConvModule(out_channels=self.channels, kernel_size=1, name=f"l_conv_{idx}")
+            l_conv = TFData2VecVisionConvModule(out_channels=self.channels, kernel_size=1, name=f"lateral_convs.{idx}")
             fpn_conv = TFData2VecVisionConvModule(
-                out_channels=self.channels, kernel_size=3, padding="same", name=f"fpn_conv_{idx}"
+                out_channels=self.channels, kernel_size=3, padding="same", name=f"fpn_convs.{idx}"
             )
             self.lateral_convs.append(l_conv)
             self.fpn_convs.append(fpn_conv)
@@ -1256,7 +1256,7 @@ class TFData2VecVisionFCNHead(tf.keras.layers.Layer):
                 kernel_size=kernel_size,
                 padding="same",
                 dilation=dilation,
-                name="conv_module_1",
+                name="convs.0",
             )
         )
         for i in range(self.num_convs - 1):
@@ -1311,7 +1311,7 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
             tf.keras.layers.Activation("gelu"),
             tf.keras.layers.Conv2DTranspose(config.hidden_size, kernel_size=2, strides=2, name="fpn1.3"),
         ]
-        self.fpn2 = tf.keras.layers.Conv2DTranspose(config.hidden_size, kernel_size=2, strides=2, name="fpn2")
+        self.fpn2 = [tf.keras.layers.Conv2DTranspose(config.hidden_size, kernel_size=2, strides=2, name="fpn2.0")]
 
         self.fpn3 = tf.identity
         self.fpn4 = tf.keras.layers.MaxPool2D(pool_size=2, strides=2)
@@ -1385,7 +1385,7 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
-        >>> # logits are of shape (batch_size, height, width, num_labels)
+        >>> # logits are of shape (batch_size, num_labels, height, width)
         >>> logits = outputs.logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1418,10 +1418,13 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
         ops = [self.fpn1, self.fpn2, self.fpn3, self.fpn4]
         for module in ops[0]:
             features[0] = module(features[0])
-        for i in range(len(features[1:])):
-            features[i + 1] = ops[i + 1](features[i + 1])
+        features[1] = ops[1][0](features[1])
+        for i in range(len(features[2:])):
+            features[i + 2] = ops[i + 2](features[i + 2])
 
         logits = self.decode_head(features)
+        # Tranpose the logits to maintain consistency in the output formats.
+        transposed_logits = tf.transpose(logits, perm=[0, 3, 1, 2])
 
         auxiliary_logits = None
         if self.auxiliary_head is not None:
@@ -1443,7 +1446,7 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
 
         return TFSemanticSegmenterOutput(
             loss=loss,
-            logits=logits,
+            logits=transposed_logits,
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )

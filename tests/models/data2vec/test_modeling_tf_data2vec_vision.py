@@ -151,11 +151,11 @@ class TFData2VecVisionModelTester:
         model = TFData2VecVisionForSemanticSegmentation(config)
         result = model(pixel_values, training=False)
         self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.image_size * 2, self.image_size * 2, self.num_labels)
+            result.logits.shape, (self.batch_size, self.num_labels, self.image_size * 2, self.image_size * 2)
         )
         result = model(pixel_values, labels=pixel_labels)
         self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.image_size * 2, self.image_size * 2, self.num_labels)
+            result.logits.shape, (self.batch_size, self.num_labels, self.image_size * 2, self.image_size * 2)
         )
 
     def prepare_config_and_inputs_for_common(self):
