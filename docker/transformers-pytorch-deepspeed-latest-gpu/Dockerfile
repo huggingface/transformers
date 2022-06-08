@@ -15,7 +15,7 @@ RUN git clone https://github.com/huggingface/transformers && cd transformers && 
 # (https://www.deepspeed.ai/tutorials/advanced-install/#pre-install-deepspeed-ops)
 RUN python3 -m pip install --no-cache-dir -U torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu113
 
-RUN python3 -m pip install --no-cache-dir -e ./transformers[deepspeed-testing]
+RUN python3 -m pip install --no-cache-dir ./transformers[deepspeed-testing]
 
 # Pre-build DeepSpeed, so it would be ready for testing (otherwise, the 1st deepspeed test will timeout)
 RUN python3 -m pip uninstall -y deepspeed
