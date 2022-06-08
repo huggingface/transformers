@@ -131,10 +131,10 @@ class DPTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         return (new_width, new_height)
 
     def __call__(
-        self, images: ImageInput, return_tensors: Optional[Union[str, TensorType]] = None, **kwargs
+        self, images: ImageInput, return_tensors: Optional[Union[str, TensorType]] = "np", **kwargs
     ) -> BatchFeature:
         """
-        Main method to prepare for the model one or several image(s).
+        Main method to preprocess one or several image(s) to be fed as input to the model.
 
         <Tip warning={true}>
 

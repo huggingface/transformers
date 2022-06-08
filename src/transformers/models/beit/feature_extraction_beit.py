@@ -98,11 +98,11 @@ class BeitFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         self,
         images: ImageInput,
         segmentation_maps: ImageInput = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_tensors: Optional[Union[str, TensorType]] = "np",
         **kwargs
     ) -> BatchFeature:
         """
-        Main method to prepare for the model one or several image(s).
+        Main method to preprocess one or several image(s) to be fed as input to the model.
 
         <Tip warning={true}>
 

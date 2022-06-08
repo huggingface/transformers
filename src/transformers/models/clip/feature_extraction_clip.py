@@ -89,11 +89,11 @@ class CLIPFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         images: Union[
             Image.Image, np.ndarray, "torch.Tensor", List[Image.Image], List[np.ndarray], List["torch.Tensor"]  # noqa
         ],
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_tensors: Optional[Union[str, TensorType]] = "np",
         **kwargs
     ) -> BatchFeature:
         """
-        Main method to prepare for the model one or several image(s).
+        Main method to preprocess one or several image(s) to be fed as input to the model.
 
         <Tip warning={true}>
 

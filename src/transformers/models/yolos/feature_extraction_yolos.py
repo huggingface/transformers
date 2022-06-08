@@ -414,7 +414,7 @@ class YolosFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
         return_segmentation_masks: Optional[bool] = False,
         masks_path: Optional[pathlib.Path] = None,
         padding: Optional[bool] = True,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_tensors: Optional[Union[str, TensorType]] = "np",
         **kwargs,
     ) -> BatchFeature:
         """
