@@ -129,6 +129,15 @@ class TextClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestC
         self.assertTrue(outputs[0]["label"] in model.config.id2label.values())
         self.assertTrue(outputs[1]["label"] in model.config.id2label.values())
 
+        # Forcing to get all results with `top_k=None`
+        # This is NOT the legacy format
+        self.assertEqual(
+            nested_simplify(outputs, top_k=None),
+            [[{"label": ANY(str), "score": ANY(float)}], [{"label": ANY(str), "score": ANY(float)}]],
+        )
+        self.assertTrue(outputs[0]["label"] in model.config.id2label.values())
+        self.assertTrue(outputs[1]["label"] in model.config.id2label.values())
+
         valid_inputs = {"text": "HuggingFace is in ", "text_pair": "Paris is in France"}
         outputs = text_classifier(valid_inputs)
         self.assertEqual(

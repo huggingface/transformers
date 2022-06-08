@@ -73,15 +73,19 @@ class TextClassificationPipeline(Pipeline):
             else MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
         )
 
-    def _sanitize_parameters(
-        self, return_all_scores=None, function_to_apply=None, top_k=None, sort=False, **tokenizer_kwargs
-    ):
+    def _sanitize_parameters(self, return_all_scores=None, function_to_apply=None, top_k="", **tokenizer_kwargs):
+        # Using "" as default argument because we're going to use `top_k=None` in user code to declare
+        # "No top_k"
         preprocess_params = tokenizer_kwargs
 
         postprocess_params = {}
         if hasattr(self.model.config, "return_all_scores") and return_all_scores is None:
             return_all_scores = self.model.config.return_all_scores
-        if return_all_scores is not None:
+
+        if isinstance(top_k, int) or top_k is None:
+            postprocess_params["top_k"] = top_k
+            postprocess_params["_legacy"] = False
+        elif return_all_scores is not None:
             warnings.warn(
                 "`return_all_scores` is now deprecated, use `top_k=1` if you want similar functionnality", UserWarning
             )
@@ -89,16 +93,6 @@ class TextClassificationPipeline(Pipeline):
                 postprocess_params["top_k"] = None
             else:
                 postprocess_params["top_k"] = 1
-
-        if top_k is not None:
-            postprocess_params["top_k"] = top_k
-            postprocess_params["_legacy"] = False
-            if sort is not None and sort is False:
-                warnings.warn("`top_k` implies sort=True", UserWarning)
-            sort = True
-
-        if sort is not None:
-            postprocess_params["sort"] = sort
 
         if isinstance(function_to_apply, str):
             function_to_apply = ClassificationFunction[function_to_apply.upper()]
@@ -170,7 +164,7 @@ class TextClassificationPipeline(Pipeline):
     def _forward(self, model_inputs):
         return self.model(**model_inputs)
 
-    def postprocess(self, model_outputs, function_to_apply=None, top_k=1, sort=False, _legacy=True):
+    def postprocess(self, model_outputs, function_to_apply=None, top_k=1, _legacy=True):
         # `_legacy` is used to determine if we're running the naked pipeline and in backward
         # compatibility mode, or if running the pipeline with `pipeline(..., top_k=1)` we're running
         # the more natural result containing the list.
@@ -197,14 +191,14 @@ class TextClassificationPipeline(Pipeline):
         else:
             raise ValueError(f"Unrecognized `function_to_apply` argument: {function_to_apply}")
 
+        if top_k == 1 and _legacy:
+            return {"label": self.model.config.id2label[scores.argmax().item()], "score": scores.max().item()}
+
         dict_scores = [
             {"label": self.model.config.id2label[i], "score": score.item()} for i, score in enumerate(scores)
         ]
-        if sort or top_k == 1:
+        if not _legacy:
             dict_scores.sort(key=lambda x: x["score"], reverse=True)
-
-        if top_k == 1 and _legacy:
-            return {"label": self.model.config.id2label[scores.argmax().item()], "score": scores.max().item()}
-        if top_k is not None:
-            dict_scores = dict_scores[:top_k]
+            if top_k is not None:
+                dict_scores = dict_scores[:top_k]
         return dict_scores
