@@ -105,7 +105,7 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             )
 
         # 2. For each output attribute, ALL values must be the same
-        def _compate_pt_tf_models(pt_out, tf_out, differences, attr_name=""):
+        def _compare_pt_tf_models(pt_out, tf_out, differences, attr_name=""):
 
             # If the current attribute is a tensor, it is a leaf and we make the comparison. Otherwise, we will dig in
             # recursivelly, keeping the name of the attribute.
@@ -124,11 +124,11 @@ class PTtoTFCommand(BaseTransformersCLICommand):
                     else:
                         branch_name = root_name + f"[{i}]"
                         tf_item = tf_out[i]
-                    differences = _compate_pt_tf_models(pt_item, tf_item, differences, branch_name)
+                    differences = _compare_pt_tf_models(pt_item, tf_item, differences, branch_name)
 
             return differences
 
-        return _compate_pt_tf_models(pt_outputs, tf_outputs, {})
+        return _compare_pt_tf_models(pt_outputs, tf_outputs, {})
 
     def __init__(self, model_name: str, local_dir: str, no_pr: bool, new_weights: bool, *args):
         self._logger = logging.get_logger("transformers-cli/pt_to_tf")
