@@ -258,7 +258,7 @@ class LineByLineWithSOPTextDataset(Dataset):
 
         # We DON'T just concatenate all of the tokens from a document into a long
         # sequence and choose an arbitrary split point because this would make the
-        # next sentence prediction task too easy. Instead, we split the input into
+        # next sentence prediction task too easy. Instead, we split the input to
         # segments "A" and "B" based on the actual "sentences" provided by the user
         # input.
         examples = []

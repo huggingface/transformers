@@ -802,7 +802,7 @@ class LongformerSelfAttention(nn.Module):
     def _sliding_chunks_query_key_matmul(self, query: torch.Tensor, key: torch.Tensor, window_overlap: int):
         """
         Matrix multiplication of query and key tensors using with a sliding window attention pattern. This
-        implementation splits the input into overlapping chunks of size 2w (e.g. 512 for pretrained Longformer) with an
+        implementation splits the input to overlapping chunks of size 2w (e.g. 512 for pretrained Longformer) with an
         overlap of size window_overlap
         """
         batch_size, seq_len, num_heads, head_dim = query.size()

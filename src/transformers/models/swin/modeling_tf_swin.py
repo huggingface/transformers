@@ -211,7 +211,7 @@ def to_2tuple(x) -> Tuple[Any, Any]:
 
 def window_partition(input_feature: tf.Tensor, window_size: int) -> tf.Tensor:
     """
-    Partitions the given input into windows.
+    Partitions the given input to windows.
     """
     batch_size, height, width, num_channels = input_feature.shape
     input_feature = tf.reshape(

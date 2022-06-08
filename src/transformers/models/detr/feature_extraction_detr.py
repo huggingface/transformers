@@ -407,7 +407,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         return_segmentation_masks: Optional[bool] = False,
         masks_path: Optional[pathlib.Path] = None,
         pad_and_return_pixel_mask: Optional[bool] = True,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_tensors: Optional[Union[str, TensorType]] = "np",
         **kwargs,
     ) -> BatchFeature:
         """
