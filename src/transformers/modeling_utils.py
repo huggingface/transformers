@@ -154,6 +154,8 @@ def get_parameter_first_float_dtype_or_any_dtype(parameter: Union[nn.Module, Gen
         for t in parameter.parameters():
             if t.is_floating_point():
                 return t.dtype
+        # if no floating dtype was found return whatever the first dtype is
+        return t.dtype
 
     except StopIteration:
         # For nn.DataParallel compatibility in PyTorch 1.5
