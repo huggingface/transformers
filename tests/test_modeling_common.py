@@ -153,6 +153,7 @@ class ModelTesterMixin:
     test_model_parallel = False
     is_encoder_decoder = False
     has_attentions = True
+    model_split_percents = [0.5, 0.7, 0.9]
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -739,11 +740,12 @@ class ModelTesterMixin:
                     model.config.use_cache = False  # FSTM still requires this hack -> FSTM should probably be refactored similar to BART afterward
                     labels = inputs.get("labels", None)
                     input_names = [
-                        "input_ids",
                         "attention_mask",
-                        "decoder_input_ids",
                         "decoder_attention_mask",
+                        "decoder_input_ids",
                         "input_features",
+                        "input_ids",
+                        "input_values",
                     ]
                     if labels is not None:
                         input_names.append("labels")
@@ -757,12 +759,15 @@ class ModelTesterMixin:
                     traced_output = traced_model(**filtered_inputs)
                 else:
                     input_names = [
-                        "input_ids",
                         "attention_mask",
-                        "token_type_ids",
-                        "pixel_values",
                         "bbox",
                         "input_features",
+                        "input_ids",
+                        "input_values",
+                        "pixel_values",
+                        "token_type_ids",
+                        "visual_feats",
+                        "visual_pos",
                     ]
 
                     labels = inputs.get("labels", None)
@@ -780,10 +785,17 @@ class ModelTesterMixin:
 
                     model_output = model(**filtered_inputs)
 
+                    if (
+                        isinstance(model, tuple(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.values()))
+                        and not hasattr(model.config, "problem_type")
+                        or model.config.problem_type is None
+                    ):
+                        model.config.problem_type = "single_label_classification"
+
                     traced_model = symbolic_trace(model, input_names)
                     traced_output = traced_model(**filtered_inputs)
 
-            except RuntimeError as e:
+            except Exception as e:
                 self.fail(f"Couldn't trace module: {e}")
 
             def flatten_output(output):
@@ -2217,12 +2229,7 @@ class ModelTesterMixin:
     @require_accelerate
     @require_torch_gpu
     def test_disk_offload(self):
-        if all([model_class._no_split_modules is None for model_class in self.all_model_classes]):
-            return
-
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        if isinstance(getattr(config, "num_hidden_layers", None), int) and config.num_hidden_layers < 4:
-            config.num_hidden_layers = 4
 
         for model_class in self.all_model_classes:
             if model_class._no_split_modules is None:
@@ -2234,8 +2241,7 @@ class ModelTesterMixin:
             base_output = model(**inputs_dict)
 
             model_size = compute_module_sizes(model)[""]
-            # We test several splits of sizes to make sure it works.
-            max_size = int(0.4 * model_size)
+            max_size = int(self.model_split_percents[0] * model_size)
             with tempfile.TemporaryDirectory() as tmp_dir:
                 model.cpu().save_pretrained(tmp_dir)
 
@@ -2256,12 +2262,7 @@ class ModelTesterMixin:
     @require_accelerate
     @require_torch_gpu
     def test_cpu_offload(self):
-        if all([model_class._no_split_modules is None for model_class in self.all_model_classes]):
-            return
-
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        if isinstance(getattr(config, "num_hidden_layers", None), int) and config.num_hidden_layers < 4:
-            config.num_hidden_layers = 4
 
         for model_class in self.all_model_classes:
             if model_class._no_split_modules is None:
@@ -2274,7 +2275,7 @@ class ModelTesterMixin:
 
             model_size = compute_module_sizes(model)[""]
             # We test several splits of sizes to make sure it works.
-            max_gpu_sizes = [int(p * model_size) for p in [0.5, 0.7, 0.9]]
+            max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents]
             with tempfile.TemporaryDirectory() as tmp_dir:
                 model.cpu().save_pretrained(tmp_dir)
 
@@ -2292,12 +2293,7 @@ class ModelTesterMixin:
     @require_accelerate
     @require_torch_multi_gpu
     def test_model_parallelism(self):
-        if all([model_class._no_split_modules is None for model_class in self.all_model_classes]):
-            return
-
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        if isinstance(getattr(config, "num_hidden_layers", None), int) and config.num_hidden_layers < 4:
-            config.num_hidden_layers = 4
 
         for model_class in self.all_model_classes:
             if model_class._no_split_modules is None:
@@ -2310,7 +2306,7 @@ class ModelTesterMixin:
 
             model_size = compute_module_sizes(model)[""]
             # We test several splits of sizes to make sure it works.
-            max_gpu_sizes = [int(p * model_size) for p in [0.5, 0.7, 0.9]]
+            max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents]
             with tempfile.TemporaryDirectory() as tmp_dir:
                 model.cpu().save_pretrained(tmp_dir)
 

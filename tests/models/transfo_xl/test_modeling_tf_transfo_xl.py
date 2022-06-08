@@ -216,6 +216,10 @@ class TFTransfoXLModelTest(TFModelTesterMixin, unittest.TestCase):
             model = TFTransfoXLModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    @unittest.skip(reason="This model doesn't play well with fit() due to not returning a single loss.")
+    def test_dataset_conversion(self):
+        pass
+
 
 @require_tf
 class TFTransfoXLModelLanguageGenerationTest(unittest.TestCase):

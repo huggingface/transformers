@@ -1,4 +1,6 @@
 - sections:
+  - local: quicktour
+    title: Tour rápido
   - local: installation
     title: Instalação
   title: Iniciar
@@ -16,6 +18,8 @@
   - sections:
     - local: tasks/sequence_classification
       title: Classificação de texto
+    - local: tasks/token_classification
+      title: Classificação de tokens
     title: Fine-tuning para tarefas específicas
   - local: multilingual
     title: Modelos multilinguísticos para inferência
