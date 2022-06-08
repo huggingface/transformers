@@ -335,7 +335,9 @@ class FeaturesManager:
             onnx_config_cls="models.mobilebert.MobileBertOnnxConfig",
         ),
         "mobilevit": supported_features_mapping(
-            "default", "image-classification", onnx_config_cls=MobileViTOnnxConfig
+            "default",
+            "image-classification",
+            onnx_config_cls="models.mobilevit.MobileViTOnnxConfig",
         ),
         "m2m-100": supported_features_mapping(
             "default",
