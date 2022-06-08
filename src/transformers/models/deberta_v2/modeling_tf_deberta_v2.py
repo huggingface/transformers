@@ -622,12 +622,12 @@ class TFDebertaV2DisentangledSelfAttention(tf.keras.layers.Layer):
     def transpose_for_scores(self, tensor: tf.Tensor, attention_heads: int) -> tf.Tensor:
         tensor_shape = shape_list(tensor)
         # In graph mode mode, we can't reshape with -1 as the final dimension if the first dimension (batch size) is None
-        shape = tensor_shape[:-1] + [attention_heads, tensor_shape[-1] // attention_heads] # seems necessary
+        shape = tensor_shape[:-1] + [attention_heads, tensor_shape[-1] // attention_heads]
         # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
-        tensor = tf.reshape(tensor=tensor, shape=shape)   # [batch_size, seq_length, num_attention_heads, attention_head_size]
-        tensor = tf.transpose(tensor, perm=[0, 2, 1, 3])  # [batch_size, num_attention_heads, seq_length, attention_head_size]
+        tensor = tf.reshape(tensor=tensor, shape=shape)
+        tensor = tf.transpose(tensor, perm=[0, 2, 1, 3])
         x_shape = shape_list(tensor)
-        tensor = tf.reshape(tensor, shape=[-1, x_shape[-2], x_shape[-1]]) # [batch_size * num_attention_heads, seq_length, attention_head_size]
+        tensor = tf.reshape(tensor, shape=[-1, x_shape[-2], x_shape[-1]])
         return tensor
 
     def call(
@@ -705,7 +705,7 @@ class TFDebertaV2DisentangledSelfAttention(tf.keras.layers.Layer):
         context_layer = tf.transpose(
             tf.reshape(
                 context_layer,
-                [-1, self.num_attention_heads, shape_list(context_layer)[-2], shape_list(context_layer)[-1]]
+                [-1, self.num_attention_heads, shape_list(context_layer)[-2], shape_list(context_layer)[-1]],
             ),
             [0, 2, 1, 3],
         )
