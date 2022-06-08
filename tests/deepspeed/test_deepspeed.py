@@ -25,7 +25,7 @@ import datasets
 from parameterized import parameterized
 from tests.trainer.test_trainer import TrainerIntegrationCommon  # noqa
 from transformers import AutoModel, TrainingArguments, is_torch_available, logging
-from transformers.deepspeed import HfDeepSpeedConfig, is_deepspeed_available
+from transformers.deepspeed import HfDeepSpeedConfig, is_deepspeed_available, unset_hf_deepspeed_config
 from transformers.testing_utils import (
     CaptureLogger,
     CaptureStd,
@@ -161,6 +161,12 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             MASTER_ADDR="localhost", MASTER_PORT=master_port, RANK="0", LOCAL_RANK="0", WORLD_SIZE="1"
         )
 
+    def tearDown(self):
+        super().tearDown()
+
+        # reset the ds config global so that tests state doesn't leak
+        unset_hf_deepspeed_config()
+
     def test_init_zero3_fp16(self):
         # test that zero.Init() works correctly under zero3/fp16
         ds_config = {
@@ -228,6 +234,12 @@ class TrainerIntegrationDeepSpeedWithCustomConfig(TestCasePlus):
             zero2=config_zero2,
             zero3=config_zero3,
         )
+
+    def tearDown(self):
+        super().tearDown()
+
+        # reset the ds config global so that tests state doesn't leak
+        unset_hf_deepspeed_config()
 
     def get_config_dict(self, stage):
         # As some tests modify the dict, always make a copy
@@ -754,6 +766,25 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
 
         with mockenv_context(**self.dist_env_1_gpu):
 
+            args_dict = {
+                "per_gpu_train_batch_size": 1,
+                "per_gpu_eval_batch_size": 1,
+                "gradient_accumulation_steps": 1,
+                "learning_rate": 1e-4,
+                "num_train_epochs": 1,
+                "do_train": True,
+                "do_eval": True,
+                "optim": "adafactor",
+                "evaluation_strategy": "steps",
+                "eval_steps": 1,
+                "save_strategy": "steps",
+                "save_steps": 1,
+                "load_best_model_at_end": True,
+                "max_steps": 1,
+                "deepspeed": ds_config_dict,
+            }
+
+            training_args = TrainingArguments(output_dir, **args_dict)
             tokenizer = T5Tokenizer.from_pretrained(T5_TINY)
             model = T5ForConditionalGeneration.from_pretrained(T5_TINY)
 
@@ -787,26 +818,6 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
                 return train_dataset, valid_dataset
 
             train_dataset, eval_dataset = get_dataset()
-
-            args_dict = {
-                "per_gpu_train_batch_size": 1,
-                "per_gpu_eval_batch_size": 1,
-                "gradient_accumulation_steps": 1,
-                "learning_rate": 1e-4,
-                "num_train_epochs": 1,
-                "do_train": True,
-                "do_eval": True,
-                "optim": "adafactor",
-                "evaluation_strategy": "steps",
-                "eval_steps": 1,
-                "save_strategy": "steps",
-                "save_steps": 1,
-                "load_best_model_at_end": True,
-                "max_steps": 1,
-                "deepspeed": ds_config_dict,
-            }
-
-            training_args = TrainingArguments(output_dir, **args_dict)
 
             trainer = Trainer(
                 model=model,

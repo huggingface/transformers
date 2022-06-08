@@ -46,6 +46,7 @@ from transformers import (
     set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint
+from transformers.utils import send_example_telemetry
 
 
 logger = logging.getLogger(__name__)
@@ -206,6 +207,10 @@ def main():
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
+    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
+    # information sent is the one passed as arguments along with your Python/PyTorch versions.
+    send_example_telemetry("run_{{cookiecutter.example_shortcut}}", model_args, data_args)
 
     # Detecting last checkpoint.
     last_checkpoint = None
@@ -519,6 +524,7 @@ from transformers import (
     get_scheduler,
     set_seed,
 )
+from transformers.utils import send_example_telemetry
 
 
 logger = logging.getLogger(__name__)
@@ -661,6 +667,10 @@ def parse_args():
 
 def main():
     args = parse_args()
+
+    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
+    # information sent is the one passed as arguments along with your Python/PyTorch versions.
+    send_example_telemetry("run_{{cookiecutter.example_shortcut}", args)
 
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
     accelerator = Accelerator()
