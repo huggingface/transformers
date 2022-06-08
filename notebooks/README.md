@@ -88,4 +88,4 @@ You can open any page of the documentation as a notebook in colab (there is a bu
 
 ## Community notebooks:
 
-More notebooks developed by the community are available [here](community#community-notebooks).
+More notebooks developed by the community are available [here](../../main/docs/source/en/community.mdx).
