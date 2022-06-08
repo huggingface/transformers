@@ -130,6 +130,11 @@ class DebertaModelTester(object):
             pos_att_type=self.pos_att_type,
         )
 
+    def get_pipeline_config(self):
+        config = self.get_config()
+        config.vocab_size = 300
+        return config
+
     def check_loss_output(self, result):
         self.parent.assertListEqual(list(result.loss.size()), [])
 

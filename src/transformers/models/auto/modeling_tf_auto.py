@@ -178,6 +178,13 @@ TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+TF_MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Semantic Segmentation mapping
+        ("data2vec-vision", "TFData2VecVisionForSemanticSegmentation"),
+    ]
+)
+
 TF_MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
     [
         ("vision-encoder-decoder", "TFVisionEncoderDecoderModel"),
@@ -365,6 +372,9 @@ TF_MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING = _LazyAutoMapping(
 TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES
 )
+TF_MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, TF_MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES
+)
 TF_MODEL_FOR_VISION_2_SEQ_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES)
 TF_MODEL_FOR_MASKED_LM_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL_FOR_MASKED_LM_MAPPING_NAMES)
 TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = _LazyAutoMapping(
@@ -437,6 +447,15 @@ class TFAutoModelForImageClassification(_BaseAutoModelClass):
 
 TFAutoModelForImageClassification = auto_class_update(
     TFAutoModelForImageClassification, head_doc="image classification"
+)
+
+
+class TFAutoModelForSemanticSegmentation(_BaseAutoModelClass):
+    _model_mapping = TF_MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING
+
+
+TF_AutoModelForSemanticSegmentation = auto_class_update(
+    TFAutoModelForSemanticSegmentation, head_doc="semantic segmentation"
 )
 
 
