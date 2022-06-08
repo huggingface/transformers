@@ -305,6 +305,7 @@ class PLBartEncoderLayer(nn.Module):
         self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
         self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.normalize_before = config.encoder_normalize_before
 
     def forward(
         self,
@@ -325,6 +326,8 @@ class PLBartEncoderLayer(nn.Module):
                 returned tensors for more detail.
         """
         residual = hidden_states
+        if self.normalize_before:
+            hidden_states = self.self_attn_layer_norm(hidden_states)
         hidden_states, attn_weights, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -333,15 +336,19 @@ class PLBartEncoderLayer(nn.Module):
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
+        if not self.normalize_before:
+            hidden_states = self.self_attn_layer_norm(hidden_states)
 
         residual = hidden_states
+        if self.normalize_before:
+            hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.fc2(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
+        if not self.normalize_before:
+            hidden_states = self.final_layer_norm(hidden_states)
 
         if hidden_states.dtype == torch.float16 and (
             torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any()
@@ -384,6 +391,7 @@ class PLBartDecoderLayer(nn.Module):
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.normalize_before = config.decoder_normalize_before
 
     def forward(
         self,
@@ -416,6 +424,8 @@ class PLBartDecoderLayer(nn.Module):
                 returned tensors for more detail.
         """
         residual = hidden_states
+        if self.normalize_before:
+            hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Self Attention
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
@@ -430,13 +440,16 @@ class PLBartDecoderLayer(nn.Module):
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
+        if not self.normalize_before:
+            hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Cross-Attention Block
         cross_attn_present_key_value = None
         cross_attn_weights = None
         if encoder_hidden_states is not None:
             residual = hidden_states
+            if self.normalize_before:
+                hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
             # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
@@ -450,19 +463,23 @@ class PLBartDecoderLayer(nn.Module):
             )
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
             hidden_states = residual + hidden_states
-            hidden_states = self.encoder_attn_layer_norm(hidden_states)
+            if not self.normalize_before:
+                hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
             # add cross-attn to positions 3,4 of present_key_value tuple
             present_key_value = present_key_value + cross_attn_present_key_value
 
         # Fully Connected
         residual = hidden_states
+        if self.normalize_before:
+            hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.fc2(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
+        if not self.normalize_before:
+            hidden_states = self.final_layer_norm(hidden_states)
 
         outputs = (hidden_states,)
 
@@ -694,6 +711,11 @@ class PLBartEncoder(PLBartPreTrainedModel):
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
 
         self.gradient_checkpointing = False
+        if config.encoder_normalize_before:
+            self.layer_norm = nn.LayerNorm(embed_dim)
+        else:
+            self.layer_norm = None
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -826,6 +848,9 @@ class PLBartEncoder(PLBartPreTrainedModel):
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
 
+        if self.layer_norm:
+            hidden_states = self.layer_norm(hidden_states)
+
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
 
@@ -867,6 +892,11 @@ class PLBartDecoder(PLBartPreTrainedModel):
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
+        if config.encoder_normalize_before:
+            self.layer_norm = nn.LayerNorm(config.d_model)
+        else:
+            self.layer_norm = None
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1090,6 +1120,9 @@ class PLBartDecoder(PLBartPreTrainedModel):
 
                 if encoder_hidden_states is not None:
                     all_cross_attentions += (layer_outputs[2],)
+
+        if self.layer_norm:
+            hidden_states = self.layer_norm(hidden_states)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:

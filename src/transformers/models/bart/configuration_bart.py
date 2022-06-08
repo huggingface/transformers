@@ -92,7 +92,12 @@ class BartConfig(PretrainedConfig):
         forced_eos_token_id (`int`, *optional*, defaults to 2):
             The id of the token to force as the last generated token when `max_length` is reached. Usually set to
             `eos_token_id`.
-
+        encoder_normalize_before (`bool`, *optional*, defaults to `False`):
+            Whether or not the LayerNorm is applied before each block in the encoder (not used by all models -- often
+            helps the model learn).
+        decoder_normalize_before (`bool`, *optional*, defaults to `False`):
+            Whether or not the LayerNorm is applied before each block in the decoder (not used by all models -- often
+            helps the model learn).
     Example:
 
     ```python
@@ -139,6 +144,8 @@ class BartConfig(PretrainedConfig):
         is_encoder_decoder=True,
         decoder_start_token_id=2,
         forced_eos_token_id=2,
+        encoder_normalize_before=False,
+        decoder_normalize_before=False,
         **kwargs
     ):
         self.vocab_size = vocab_size
@@ -161,6 +168,8 @@ class BartConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.num_hidden_layers = encoder_layers
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+        self.encoder_normalize_before = encoder_normalize_before
+        self.decoder_normalize_before = decoder_normalize_before
 
         super().__init__(
             num_labels=num_labels,
