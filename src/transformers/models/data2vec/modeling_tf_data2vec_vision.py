@@ -1270,9 +1270,9 @@ class TFData2VecVisionFCNHead(tf.keras.layers.Layer):
                 )
             )
         if self.num_convs == 0:
-            self.convs = tf.identity
+            self.convs = [tf.identity]
         else:
-            self.convs = tf.keras.Sequential(convs)
+            self.convs = convs
         if self.concat_input:
             self.conv_cat = TFData2VecVisionConvModule(
                 out_channels=self.channels, kernel_size=kernel_size, padding="same", name="conv_cat"
@@ -1283,7 +1283,9 @@ class TFData2VecVisionFCNHead(tf.keras.layers.Layer):
     def call(self, encoder_hidden_states: tf.Tensor) -> tf.Tensor:
         # just take the relevant feature maps
         hidden_states = encoder_hidden_states[self.in_index]
-        output = self.convs(hidden_states)
+        output = hidden_states
+        for layer_module in self.convs:
+            output = layer_module(output)
         if self.concat_input:
             output = self.conv_cat(tf.concat([hidden_states, output], axis=-1))
         output = self.classifier(output)
@@ -1303,15 +1305,12 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
         self.data2vec_vision = TFData2VecVisionMainLayer(config, add_pooling_layer=False, name="data2vec_vision")
 
         # FPNs
-        self.fpn1 = tf.keras.Sequential(
-            [
-                tf.keras.layers.Conv2DTranspose(config.hidden_size, kernel_size=2, strides=2),
-                tf.keras.layers.BatchNormalization(),
-                tf.keras.layers.Activation("gelu"),
-                tf.keras.layers.Conv2DTranspose(config.hidden_size, kernel_size=2, strides=2),
-            ],
-            name="fpn1",
-        )
+        self.fpn1 = [
+            tf.keras.layers.Conv2DTranspose(config.hidden_size, kernel_size=2, strides=2, name="fpn1.0"),
+            tf.keras.layers.BatchNormalization(name="fpn1.1"),
+            tf.keras.layers.Activation("gelu"),
+            tf.keras.layers.Conv2DTranspose(config.hidden_size, kernel_size=2, strides=2, name="fpn1.3"),
+        ]
         self.fpn2 = tf.keras.layers.Conv2DTranspose(config.hidden_size, kernel_size=2, strides=2, name="fpn2")
 
         self.fpn3 = tf.identity
@@ -1417,8 +1416,10 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
 
         # apply FPNs
         ops = [self.fpn1, self.fpn2, self.fpn3, self.fpn4]
-        for i in range(len(features)):
-            features[i] = ops[i](features[i])
+        for module in ops[0]:
+            features[0] = module(features[0])
+        for i in range(len(features[1:])):
+            features[i + 1] = ops[i + 1](features[i + 1])
 
         logits = self.decode_head(features)
 

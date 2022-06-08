@@ -171,30 +171,11 @@ class TFModelTesterMixin:
             model = model_class(config)
             outputs = model(self._prepare_for_class(inputs_dict, model_class))
 
-            before_trainable_params = model.variables
-            param_names = []
-            for v in before_trainable_params:
-                param_names.append(v.name)
-            total_params = len(param_names)
-
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname, saved_model=False)
                 model = model_class.from_pretrained(tmpdirname)
-                after_trainable_params = model.variables
-
-                mismatched_params = 0
-                for name in param_names:
-                    try:
-                        np.testing.assert_allclose(
-                            before_trainable_params[name], after_trainable_params[name], atol=1e-4, rtol=1e-4
-                        )
-                    except:
-                        mismatched_params += 1
-                        print(f"{name} param is the culprit.")
-                
-                print(f"Total number of params: {total_params}, mismatched: {mismatched_params}")
-
                 after_outputs = model(self._prepare_for_class(inputs_dict, model_class))
+
                 self.assert_outputs_same(after_outputs, outputs)
 
     def test_save_load_config(self):
@@ -710,6 +691,7 @@ class TFModelTesterMixin:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname, saved_model=False)
                 model = model_class.from_pretrained(tmpdirname)
+
             outputs_dict = model(inputs)
             hidden_states = outputs_dict[0]
 
