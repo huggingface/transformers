@@ -87,10 +87,10 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         train_parser.set_defaults(func=convert_command_factory)
 
     @staticmethod
-    def compare_pt_tf_models(pt_model, pt_input, tf_model, tf_input):
+    def find_pt_tf_differences(pt_model, pt_input, tf_model, tf_input):
         """
         Compares the TensorFlow and PyTorch models, given their inputs, returning a dictionary with all tensor
-        differences above the predefined threshold.
+        differences.
         """
         pt_outputs = pt_model(**pt_input, output_hidden_states=True)
         tf_outputs = tf_model(**tf_input, output_hidden_states=True)
@@ -104,15 +104,14 @@ class PTtoTFCommand(BaseTransformersCLICommand):
                 f" {tf_out_attrs})"
             )
 
-        # 2. For each output attribute, ALL values must be the same
-        def _compare_pt_tf_models(pt_out, tf_out, differences, attr_name=""):
+        # 2. For each output attribute, computes the difference
+        def _find_pt_tf_differences(pt_out, tf_out, differences, attr_name=""):
 
             # If the current attribute is a tensor, it is a leaf and we make the comparison. Otherwise, we will dig in
             # recursivelly, keeping the name of the attribute.
-            if isinstance(pt_out, (torch.Tensor)):
+            if isinstance(pt_out, torch.Tensor):
                 tensor_difference = np.max(np.abs(pt_out.detach().numpy() - tf_out.numpy()))
-                if tensor_difference > MAX_ERROR:
-                    differences[attr_name] = tensor_difference
+                differences[attr_name] = tensor_difference
             else:
                 root_name = attr_name
                 for i, pt_item in enumerate(pt_out):
@@ -124,11 +123,11 @@ class PTtoTFCommand(BaseTransformersCLICommand):
                     else:
                         branch_name = root_name + f"[{i}]"
                         tf_item = tf_out[i]
-                    differences = _compare_pt_tf_models(pt_item, tf_item, differences, branch_name)
+                    differences = _find_pt_tf_differences(pt_item, tf_item, differences, branch_name)
 
             return differences
 
-        return _compare_pt_tf_models(pt_outputs, tf_outputs, {})
+        return _find_pt_tf_differences(pt_outputs, tf_outputs, {})
 
     def __init__(self, model_name: str, local_dir: str, no_pr: bool, new_weights: bool, *args):
         self._logger = logging.get_logger("transformers-cli/pt_to_tf")
@@ -207,13 +206,15 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             tf_input.update({"decoder_input_ids": tf.convert_to_tensor(decoder_input_ids)})
 
         # Confirms that cross loading PT weights into TF worked.
-        crossload_differences = self.compare_pt_tf_models(pt_model, pt_input, tf_from_pt_model, tf_input)
+        crossload_differences = self.find_pt_tf_differences(pt_model, pt_input, tf_from_pt_model, tf_input)
         max_crossload_diff = max(crossload_differences.values())
-        if crossload_differences:
+        if max_crossload_diff > MAX_ERROR:
             raise ValueError(
                 "The cross-loaded TensorFlow model has different outputs, something went wrong! Exaustive list of"
-                " maximum tensor differences:\n"
-                + "\n".join([f"{key}: {value:.3e}" for key, value in crossload_differences.items()])
+                f" maximum tensor differences above the error threshold ({MAX_ERROR}):\n"
+                + "\n".join(
+                    [f"{key}: {value:.3e}" for key, value in crossload_differences.items() if value > MAX_ERROR]
+                )
             )
 
         # Save the weights in a TF format (if needed) and confirms that the results are still good
@@ -222,13 +223,15 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             tf_from_pt_model.save_weights(tf_weights_path)
         del tf_from_pt_model  # will no longer be used, and may have a large memory footprint
         tf_model = tf_class.from_pretrained(self._local_dir)
-        conversion_differences = self.compare_pt_tf_models(pt_model, pt_input, tf_model, tf_input)
+        conversion_differences = self.find_pt_tf_differences(pt_model, pt_input, tf_model, tf_input)
         max_conversion_diff = max(conversion_differences.values())
-        if conversion_differences:
+        if max_conversion_diff > MAX_ERROR:
             raise ValueError(
                 "The converted TensorFlow model has different outputs, something went wrong! Exaustive list of maximum"
-                " tensor differences:\n"
-                + "\n".join([f"{key}: {value:.3e}" for key, value in conversion_differences.items()])
+                f" tensor differences above the error threshold ({MAX_ERROR}):\n"
+                + "\n".join(
+                    [f"{key}: {value:.3e}" for key, value in conversion_differences.items() if value > MAX_ERROR]
+                )
             )
 
         if not self._no_pr:
