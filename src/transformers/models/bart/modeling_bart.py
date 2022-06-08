@@ -920,7 +920,7 @@ class BartDecoder(BartPretrainedModel):
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
-        if config.encoder_normalize_before:
+        if config.decoder_normalize_before:
             self.layer_norm = nn.LayerNorm(config.d_model)
         else:
             self.layer_norm = None

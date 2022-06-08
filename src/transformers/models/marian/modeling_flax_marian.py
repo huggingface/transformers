@@ -436,6 +436,7 @@ class FlaxMarianEncoderLayer(nn.Module):
             self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std)
         )
         self.final_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
+        self.normalize_before = self.config.encoder_normalize_before
 
     def __call__(
         self,
@@ -445,19 +446,25 @@ class FlaxMarianEncoderLayer(nn.Module):
         deterministic: bool = True,
     ) -> Tuple[jnp.ndarray]:
         residual = hidden_states
+        if self.normalize_before:
+            hidden_states = self.self_attn_layer_norm(hidden_states)
         hidden_states, attn_weights = self.self_attn(hidden_states=hidden_states, attention_mask=attention_mask)
 
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
+        if not self.normalize_before:
+            hidden_states = self.self_attn_layer_norm(hidden_states)
 
         residual = hidden_states
+        if self.normalize_before:
+            hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = self.activation_dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = self.fc2(hidden_states)
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
+        if not self.normalize_before:
+            hidden_states = self.final_layer_norm(hidden_states)
 
         outputs = (hidden_states,)
 
@@ -559,6 +566,7 @@ class FlaxMarianDecoderLayer(nn.Module):
             self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std)
         )
         self.final_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
+        self.normalize_before = self.config.decoder_normalize_before
 
     def __call__(
         self,
@@ -571,6 +579,8 @@ class FlaxMarianDecoderLayer(nn.Module):
         deterministic: bool = True,
     ) -> Tuple[jnp.ndarray]:
         residual = hidden_states
+        if self.normalize_before:
+            hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
@@ -578,12 +588,15 @@ class FlaxMarianDecoderLayer(nn.Module):
         )
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
+        if not self.normalize_before:
+            hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Cross-Attention Block
         cross_attn_weights = None
         if encoder_hidden_states is not None:
             residual = hidden_states
+            if self.normalize_before:
+                hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
             hidden_states, cross_attn_weights = self.encoder_attn(
                 hidden_states=hidden_states,
@@ -592,16 +605,20 @@ class FlaxMarianDecoderLayer(nn.Module):
             )
             hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
             hidden_states = residual + hidden_states
-            hidden_states = self.encoder_attn_layer_norm(hidden_states)
+            if not self.normalize_before:
+                hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
         # Fully Connected
         residual = hidden_states
+        if self.normalize_before:
+            hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = self.activation_dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = self.fc2(hidden_states)
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
+        if not self.normalize_before:
+            hidden_states = self.final_layer_norm(hidden_states)
 
         outputs = (hidden_states,)
 

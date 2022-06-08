@@ -850,7 +850,7 @@ class TFBartDecoder(tf.keras.layers.Layer):
         self.layers = [TFBartDecoderLayer(config, name=f"layers.{i}") for i in range(config.decoder_layers)]
         self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
 
-        if config.encoder_normalize_before:
+        if config.decoder_normalize_before:
             self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
         else:
             self.layer_norm = None
