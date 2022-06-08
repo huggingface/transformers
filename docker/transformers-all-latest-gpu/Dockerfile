@@ -8,7 +8,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 ARG PYTORCH='1.11.0'
 # (not always a valid torch version)
-ARG INTEL_TORCH_EXT = '1.11.0'
+ARG INTEL_TORCH_EXT='1.11.0'
 # Example: `cu102`, `cu113`, etc.
 ARG CUDA='cu113'
 
