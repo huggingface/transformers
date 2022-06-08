@@ -89,6 +89,12 @@ class MarianConfig(PretrainedConfig):
         forced_eos_token_id (`int`, *optional*, defaults to 0):
             The id of the token to force as the last generated token when `max_length` is reached. Usually set to
             `eos_token_id`.
+        encoder_normalize_before (`bool`, *optional*, defaults to `False`):
+            Whether or not the LayerNorm is applied before each block in the encoder (not used by all models -- often
+            helps the model learn).
+        decoder_normalize_before (`bool`, *optional*, defaults to `False`):
+            Whether or not the LayerNorm is applied before each block in the decoder (not used by all models -- often
+            helps the model learn).
 
     Examples:
 
@@ -136,6 +142,8 @@ class MarianConfig(PretrainedConfig):
         eos_token_id=0,
         forced_eos_token_id=0,
         share_encoder_decoder_embeddings=True,
+        encoder_normalize_before=False,
+        decoder_normalize_before=False,
         **kwargs
     ):
         self.vocab_size = vocab_size
@@ -160,6 +168,9 @@ class MarianConfig(PretrainedConfig):
         self.num_hidden_layers = encoder_layers
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.share_encoder_decoder_embeddings = share_encoder_decoder_embeddings
+        self.encoder_normalize_before = encoder_normalize_before
+        self.decoder_normalize_before = decoder_normalize_before
+
         super().__init__(
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
