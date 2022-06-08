@@ -207,7 +207,7 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         tf_from_pt_model = tf_class.from_pretrained(self._local_dir, from_pt=True)
 
         # Extra input requirements, in addition to the input modality
-        if hasattr(pt_model, "encoder") and hasattr(pt_model, "decoder"):
+        if config.is_encoder_decoder or (hasattr(pt_model, "encoder") and hasattr(pt_model, "decoder")):
             decoder_input_ids = np.asarray([[1], [1]], dtype=int) * pt_model.config.decoder_start_token_id
             pt_input.update({"decoder_input_ids": torch.tensor(decoder_input_ids)})
             tf_input.update({"decoder_input_ids": tf.convert_to_tensor(decoder_input_ids)})
