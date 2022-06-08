@@ -132,8 +132,10 @@ def get_parameter_device(parameter: Union[nn.Module, GenerationMixin, "ModuleUti
         return first_tuple[1].device
 
 
-def get_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtilsMixin"]):
-    """returns the first found dtype (can be non-floating) in parameters or asserts if none were found"""
+def get_first_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtilsMixin"]):
+    """
+    Returns the first parameter dtype (can be non-floating) or asserts if none were found.
+    """
     try:
         return next(parameter.parameters()).dtype
     except StopIteration:
@@ -148,8 +150,10 @@ def get_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtil
         return first_tuple[1].dtype
 
 
-def get_parameter_first_float_dtype_or_any_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtilsMixin"]):
-    """returns the first found floating dtype in parameters if there is one, otherwise returns the first dtype it finds"""
+def get_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtilsMixin"]):
+    """
+    Returns the first found floating dtype in parameters if there is one, otherwise returns the last dtype it found.
+    """
     try:
         for t in parameter.parameters():
             if t.is_floating_point():
@@ -172,8 +176,10 @@ def get_parameter_first_float_dtype_or_any_dtype(parameter: Union[nn.Module, Gen
         return tuple[1].dtype
 
 
-def get_state_dict_first_float_dtype(state_dict):
-    """returns the first found floating dtype in state_dict or asserts if none were found"""
+def get_state_dict_float_dtype(state_dict):
+    """
+    Returns the first found floating dtype in `state_dict` or asserts if none were found.
+    """
     for t in state_dict.values():
         if t.is_floating_point():
             return t.dtype
@@ -181,14 +187,16 @@ def get_state_dict_first_float_dtype(state_dict):
     raise ValueError("couldn't find any floating point dtypes in state_dict")
 
 
-def get_state_dict_first_float_dtype_or_any_dtype(state_dict):
-    """returns the first found floating dtype in state_dict if there is one, otherwise returns the first dtype it finds"""
+def get_state_dict_dtype(state_dict):
+    """
+    Returns the first found floating dtype in `state_dict` if there is one, otherwise returns the last dtype.
+    """
     for t in state_dict.values():
         if t.is_floating_point():
             return t.dtype
 
     # if no floating dtype was found return whatever the first dtype is
-    return next(iter(state_dict.values())).dtype
+    return t.dtype
 
 
 def convert_file_size_to_int(size: Union[int, str]):
@@ -2129,10 +2137,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         if is_sharded and "dtype" in sharded_metadata:
                             torch_dtype = sharded_metadata["dtype"]
                         elif not is_sharded:
-                            torch_dtype = get_state_dict_first_float_dtype_or_any_dtype(state_dict)
+                            torch_dtype = get_state_dict_dtype(state_dict)
                         else:
                             one_state_dict = load_state_dict(resolved_archive_file)
-                            torch_dtype = get_state_dict_first_float_dtype_or_any_dtype(one_state_dict)
+                            torch_dtype = get_state_dict_dtype(one_state_dict)
                             del one_state_dict  # free CPU memory
                     else:
                         raise ValueError(
