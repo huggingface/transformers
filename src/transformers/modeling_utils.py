@@ -133,6 +133,7 @@ def get_parameter_device(parameter: Union[nn.Module, GenerationMixin, "ModuleUti
 
 
 def get_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtilsMixin"]):
+    """returns the first found dtype (can be non-floating) in parameters or asserts if none were found"""
     try:
         return next(parameter.parameters()).dtype
     except StopIteration:
