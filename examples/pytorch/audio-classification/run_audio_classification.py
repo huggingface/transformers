@@ -37,7 +37,7 @@ from transformers import (
     set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint
-from transformers.utils import check_min_version
+from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
 
 
@@ -163,6 +163,10 @@ class ModelArguments:
     freeze_feature_extractor: Optional[bool] = field(
         default=None, metadata={"help": "Whether to freeze the feature extractor layers of the model."}
     )
+    ignore_mismatched_sizes: bool = field(
+        default=False,
+        metadata={"help": "Will enable to load a pretrained model whose head dimensions are different."},
+    )
 
     def __post_init__(self):
         if not self.freeze_feature_extractor and self.freeze_feature_encoder:
@@ -192,6 +196,10 @@ def main():
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
+    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
+    # information sent is the one passed as arguments along with your Python/PyTorch versions.
+    send_example_telemetry("run_audio_classification", model_args, data_args)
 
     # Setup logging
     logging.basicConfig(
@@ -333,6 +341,7 @@ def main():
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
+        ignore_mismatched_sizes=model_args.ignore_mismatched_sizes,
     )
 
     # freeze the convolutional waveform encoder

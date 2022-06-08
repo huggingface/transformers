@@ -15,6 +15,7 @@
 
 import argparse
 import collections
+import json
 import os
 import re
 from contextlib import contextmanager
@@ -63,6 +64,32 @@ def clean_code(content):
             continue
         lines_to_keep.append(line)
     return "\n".join(lines_to_keep)
+
+
+def get_all_tests():
+    """
+    Return a list of paths to all test folders and files under `tests`. All paths are rooted at `tests`.
+
+    - folders under `tests`: `tokenization`, `pipelines`, etc. The folder `models` is excluded.
+    - folders under `tests/models`: `bert`, `gpt2`, etc.
+    - test files under `tests`: `test_modeling_common.py`, `test_tokenization_common.py`, etc.
+    """
+    test_root_dir = os.path.join(PATH_TO_TRANFORMERS, "tests")
+
+    # test folders/files directly under `tests` folder
+    tests = os.listdir(test_root_dir)
+    tests = sorted(
+        list(filter(lambda x: os.path.isdir(x) or x.startswith("tests/test_"), [f"tests/{x}" for x in tests]))
+    )
+
+    # model specific test folders
+    model_tests_folders = os.listdir(os.path.join(test_root_dir, "models"))
+    model_test_folders = sorted(list(filter(os.path.isdir, [f"tests/models/{x}" for x in model_tests_folders])))
+
+    tests.remove("tests/models")
+    tests = model_test_folders + tests
+
+    return tests
 
 
 def diff_is_docstring_only(repo, branching_point, filename):
@@ -213,6 +240,67 @@ def get_test_dependencies(test_fname):
     ]
 
     return [f for f in [*parent_imports, *current_dir_imports] if os.path.isfile(f)]
+
+
+def create_reverse_dependency_tree():
+    """
+    Create a list of all edges (a, b) which mean that modifying a impacts b with a going over all module and test files.
+    """
+    modules = [
+        str(f.relative_to(PATH_TO_TRANFORMERS))
+        for f in (Path(PATH_TO_TRANFORMERS) / "src/transformers").glob("**/*.py")
+    ]
+    module_edges = [(d, m) for m in modules for d in get_module_dependencies(m)]
+
+    tests = [str(f.relative_to(PATH_TO_TRANFORMERS)) for f in (Path(PATH_TO_TRANFORMERS) / "tests").glob("**/*.py")]
+    test_edges = [(d, t) for t in tests for d in get_test_dependencies(t)]
+
+    return module_edges + test_edges
+
+
+def get_tree_starting_at(module, edges):
+    """
+    Returns the tree starting at a given module following all edges in the following format: [module, [list of edges
+    starting at module], [list of edges starting at the preceding level], ...]
+    """
+    vertices_seen = [module]
+    new_edges = [edge for edge in edges if edge[0] == module and edge[1] != module]
+    tree = [module]
+    while len(new_edges) > 0:
+        tree.append(new_edges)
+        final_vertices = list(set(edge[1] for edge in new_edges))
+        vertices_seen.extend(final_vertices)
+        new_edges = [edge for edge in edges if edge[0] in final_vertices and edge[1] not in vertices_seen]
+
+    return tree
+
+
+def print_tree_deps_of(module, all_edges=None):
+    """
+    Prints the tree of modules depending on a given module.
+    """
+    if all_edges is None:
+        all_edges = create_reverse_dependency_tree()
+    tree = get_tree_starting_at(module, all_edges)
+
+    # The list of lines is a list of tuples (line_to_be_printed, module)
+    # Keeping the modules lets us know where to insert each new lines in the list.
+    lines = [(tree[0], tree[0])]
+    for index in range(1, len(tree)):
+        edges = tree[index]
+        start_edges = set([edge[0] for edge in edges])
+
+        for start in start_edges:
+            end_edges = set([edge[1] for edge in edges if edge[0] == start])
+            # We will insert all those edges just after the line showing start.
+            pos = 0
+            while lines[pos][1] != start:
+                pos += 1
+            lines = lines[: pos + 1] + [(" " * (2 * index) + end, end) for end in end_edges] + lines[pos + 1 :]
+
+    for line in lines:
+        # We don't print the refs that where just here to help build lines.
+        print(line[0])
 
 
 def create_reverse_dependency_map():
@@ -441,7 +529,7 @@ def sanity_check():
         )
 
 
-def infer_tests_to_run(output_file, diff_with_last_commit=False, filters=None):
+def infer_tests_to_run(output_file, diff_with_last_commit=False, filters=None, json_output_file=None):
     modified_files = get_modified_python_files(diff_with_last_commit=diff_with_last_commit)
     print(f"\n### MODIFIED FILES ###\n{_print_list(modified_files)}")
 
@@ -495,6 +583,42 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filters=None):
         with open(output_file, "w", encoding="utf-8") as f:
             f.write(" ".join(test_files_to_run))
 
+        # Create a map that maps test categories to test files, i.e. `models/bert` -> [...test_modeling_bert.py, ...]
+
+        # Get all test directories (and some common test files) under `tests` and `tests/models` if `test_files_to_run`
+        # contains `tests` (i.e. when `setup.py` is changed).
+        if "tests" in test_files_to_run:
+            test_files_to_run = get_all_tests()
+
+        if json_output_file is not None:
+            test_map = {}
+            for test_file in test_files_to_run:
+                # `test_file` is a path to a test folder/file, starting with `tests/`. For example,
+                #   - `tests/models/bert/test_modeling_bert.py` or `tests/models/bert`
+                #   - `tests/trainer/test_trainer.py` or `tests/trainer`
+                #   - `tests/test_modeling_common.py`
+                names = test_file.split(os.path.sep)
+                if names[1] == "models":
+                    # take the part like `models/bert` for modeling tests
+                    key = "/".join(names[1:3])
+                elif len(names) > 2 or not test_file.endswith(".py"):
+                    # test folders under `tests` or python files under them
+                    # take the part like tokenization, `pipeline`, etc. for other test categories
+                    key = "/".join(names[1:2])
+                else:
+                    # common test files directly under `tests/`
+                    key = "common"
+
+                if key not in test_map:
+                    test_map[key] = []
+                test_map[key].append(test_file)
+
+            # sort the keys & values
+            keys = sorted(test_map.keys())
+            test_map = {k: " ".join(sorted(test_map[k])) for k in keys}
+            with open(json_output_file, "w", encoding="UTF-8") as fp:
+                json.dump(test_map, fp, ensure_ascii=False)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -503,6 +627,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--output_file", type=str, default="test_list.txt", help="Where to store the list of tests to run"
+    )
+    parser.add_argument(
+        "--json_output_file",
+        type=str,
+        default="test_map.json",
+        help="Where to store the tests to run in a dictionary format mapping test categories to test files",
     )
     parser.add_argument(
         "--diff_with_last_commit",
@@ -516,8 +646,16 @@ if __name__ == "__main__":
         default=["tests"],
         help="Only keep the test files matching one of those filters.",
     )
+    parser.add_argument(
+        "--print_dependencies_of",
+        type=str,
+        help="Will only print the tree of modules depending on the file passed.",
+        default=None,
+    )
     args = parser.parse_args()
-    if args.sanity_check:
+    if args.print_dependencies_of is not None:
+        print_tree_deps_of(args.print_dependencies_of)
+    elif args.sanity_check:
         sanity_check()
     else:
         repo = Repo(PATH_TO_TRANFORMERS)
@@ -528,7 +666,12 @@ if __name__ == "__main__":
             diff_with_last_commit = True
 
         try:
-            infer_tests_to_run(args.output_file, diff_with_last_commit=diff_with_last_commit, filters=args.filters)
+            infer_tests_to_run(
+                args.output_file,
+                diff_with_last_commit=diff_with_last_commit,
+                filters=args.filters,
+                json_output_file=args.json_output_file,
+            )
         except Exception as e:
             print(f"\nError when trying to grab the relevant tests: {e}\n\nRunning all tests.")
             with open(args.output_file, "w", encoding="utf-8") as f:

@@ -40,7 +40,6 @@ from huggingface_hub import Repository
 from transformers import (
     CONFIG_MAPPING,
     MODEL_MAPPING,
-    AdamW,
     AutoConfig,
     AutoModelForTokenClassification,
     AutoTokenizer,
@@ -50,7 +49,7 @@ from transformers import (
     default_data_collator,
     get_scheduler,
 )
-from transformers.utils import get_full_repo_name
+from transformers.utils import get_full_repo_name, send_example_telemetry
 from transformers.utils.versions import require_version
 
 
@@ -114,7 +113,7 @@ def parse_args():
         "--model_name_or_path",
         type=str,
         help="Path to pretrained model or model identifier from huggingface.co/models.",
-        required=True,
+        required=False,
     )
     parser.add_argument(
         "--config_name",
@@ -221,7 +220,22 @@ def parse_args():
     parser.add_argument(
         "--with_tracking",
         action="store_true",
-        help="Whether to load in all available experiment trackers from the environment and use them for logging.",
+        help="Whether to enable experiment trackers for logging.",
+    )
+    parser.add_argument(
+        "--report_to",
+        type=str,
+        default="all",
+        help=(
+            'The integration to report the results and logs to. Supported platforms are `"tensorboard"`,'
+            ' `"wandb"` and `"comet_ml"`. Use `"all"` (default) to report to all integrations.'
+            "Only applicable when `--with_tracking` is passed."
+        ),
+    )
+    parser.add_argument(
+        "--ignore_mismatched_sizes",
+        action="store_true",
+        help="Whether or not to enable to load a pretrained model whose head dimensions are different.",
     )
     args = parser.parse_args()
 
@@ -245,9 +259,16 @@ def parse_args():
 def main():
     args = parse_args()
 
+    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
+    # information sent is the one passed as arguments along with your Python/PyTorch versions.
+    send_example_telemetry("run_ner_no_trainer", args)
+
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
-    # If we're using tracking, we also need to initialize it here and it will pick up all supported trackers in the environment
-    accelerator = Accelerator(log_with="all", logging_dir=args.output_dir) if args.with_tracking else Accelerator()
+    # If we're using tracking, we also need to initialize it here and it will by default pick up all supported trackers
+    # in the environment
+    accelerator = (
+        Accelerator(log_with=args.report_to, logging_dir=args.output_dir) if args.with_tracking else Accelerator()
+    )
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
@@ -383,6 +404,7 @@ def main():
             args.model_name_or_path,
             from_tf=bool(".ckpt" in args.model_name_or_path),
             config=config,
+            ignore_mismatched_sizes=args.ignore_mismatched_sizes,
         )
     else:
         logger.info("Training new model from scratch")
@@ -507,7 +529,7 @@ def main():
             "weight_decay": 0.0,
         },
     ]
-    optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
+    optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
 
     # Use the device given by the `accelerator` object.
     device = accelerator.device
@@ -544,12 +566,15 @@ def main():
     else:
         checkpointing_steps = None
 
-    # We need to initialize the trackers we use, and also store our configuration
+    # We need to initialize the trackers we use, and also store our configuration.
+    # We initialize the trackers only on main process because `accelerator.log`
+    # only logs on main process and we don't want empty logs/runs on other processes.
     if args.with_tracking:
-        experiment_config = vars(args)
-        # TensorBoard cannot log Enums, need the raw value
-        experiment_config["lr_scheduler_type"] = experiment_config["lr_scheduler_type"].value
-        accelerator.init_trackers("ner_no_trainer", experiment_config)
+        if accelerator.is_main_process:
+            experiment_config = vars(args)
+            # TensorBoard cannot log Enums, need the raw value
+            experiment_config["lr_scheduler_type"] = experiment_config["lr_scheduler_type"].value
+            accelerator.init_trackers("ner_no_trainer", experiment_config)
 
     # Metrics
     metric = load_metric("seqeval")
@@ -677,7 +702,7 @@ def main():
             predictions_gathered, labels_gathered = accelerator.gather((predictions, labels))
             # If we are in a multiprocess environment, the last batch has duplicates
             if accelerator.num_processes > 1:
-                if step == len(eval_dataloader):
+                if step == len(eval_dataloader) - 1:
                     predictions_gathered = predictions_gathered[: len(eval_dataloader.dataset) - samples_seen]
                     labels_gathered = labels_gathered[: len(eval_dataloader.dataset) - samples_seen]
                 else:
@@ -692,7 +717,13 @@ def main():
         accelerator.print(f"epoch {epoch}:", eval_metric)
         if args.with_tracking:
             accelerator.log(
-                {"seqeval": eval_metric, "train_loss": total_loss, "epoch": epoch, "step": completed_steps},
+                {
+                    "seqeval": eval_metric,
+                    "train_loss": total_loss.item() / len(train_dataloader),
+                    "epoch": epoch,
+                    "step": completed_steps,
+                },
+                step=completed_steps,
             )
 
         if args.push_to_hub and epoch < args.num_train_epochs - 1:
@@ -725,7 +756,9 @@ def main():
                 repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
 
         with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
-            json.dump({"eval_accuracy": eval_metric["accuracy"], "train_loss": float(loss.cpu().detach().numpy())}, f)
+            json.dump(
+                {"eval_accuracy": eval_metric["accuracy"], "train_loss": total_loss.item() / len(train_dataloader)}, f
+            )
 
 
 if __name__ == "__main__":

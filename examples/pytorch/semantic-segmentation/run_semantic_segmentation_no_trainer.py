@@ -44,7 +44,7 @@ from transformers import (
     default_data_collator,
     get_scheduler,
 )
-from transformers.utils import get_full_repo_name
+from transformers.utils import get_full_repo_name, send_example_telemetry
 from transformers.utils.versions import require_version
 
 
@@ -285,7 +285,17 @@ def parse_args():
         "--with_tracking",
         required=False,
         action="store_true",
-        help="Whether to load in all available experiment trackers from the environment and use them for logging.",
+        help="Whether to enable experiment trackers for logging.",
+    )
+    parser.add_argument(
+        "--report_to",
+        type=str,
+        default="all",
+        help=(
+            'The integration to report the results and logs to. Supported platforms are `"tensorboard"`,'
+            ' `"wandb"` and `"comet_ml"`. Use `"all"` (default) to report to all integrations.'
+            "Only applicable when `--with_tracking` is passed."
+        ),
     )
     args = parser.parse_args()
 
@@ -305,9 +315,16 @@ def parse_args():
 def main():
     args = parse_args()
 
+    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
+    # information sent is the one passed as arguments along with your Python/PyTorch versions.
+    send_example_telemetry("run_semantic_segmentation_no_trainer", args)
+
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
-    # If we're using tracking, we also need to initialize it here and it will pick up all supported trackers in the environment
-    accelerator = Accelerator(log_with="all", logging_dir=args.output_dir) if args.with_tracking else Accelerator()
+    # If we're using tracking, we also need to initialize it here and it will by default pick up all supported trackers
+    # in the environment
+    accelerator = (
+        Accelerator(log_with=args.report_to, logging_dir=args.output_dir) if args.with_tracking else Accelerator()
+    )
     logger.info(accelerator.state, main_process_only=False)
     if accelerator.is_local_main_process:
         datasets.utils.logging.set_verbosity_warning()
@@ -482,11 +499,15 @@ def main():
     # Instantiate metric
     metric = load_metric("mean_iou")
 
+    # We need to initialize the trackers we use, and also store our configuration.
+    # We initialize the trackers only on main process because `accelerator.log`
+    # only logs on main process and we don't want empty logs/runs on other processes.
     if args.with_tracking:
-        experiment_config = vars(args)
-        # TensorBoard cannot log Enums, need the raw value
-        experiment_config["lr_scheduler_type"] = experiment_config["lr_scheduler_type"].value
-        accelerator.init_trackers("semantic_segmentation_no_trainer", experiment_config)
+        if accelerator.is_main_process:
+            experiment_config = vars(args)
+            # TensorBoard cannot log Enums, need the raw value
+            experiment_config["lr_scheduler_type"] = experiment_config["lr_scheduler_type"].value
+            accelerator.init_trackers("semantic_segmentation_no_trainer", experiment_config)
 
     # Train!
     total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
@@ -591,7 +612,7 @@ def main():
 
             # If we are in a multiprocess environment, the last batch has duplicates
             if accelerator.num_processes > 1:
-                if step == len(eval_dataloader):
+                if step == len(eval_dataloader) - 1:
                     predictions = predictions[: len(eval_dataloader.dataset) - samples_seen]
                     references = references[: len(eval_dataloader.dataset) - samples_seen]
                 else:
@@ -615,10 +636,11 @@ def main():
                     "mean_iou": eval_metrics["mean_iou"],
                     "mean_accuracy": eval_metrics["mean_accuracy"],
                     "overall_accuracy": eval_metrics["overall_accuracy"],
-                    "train_loss": total_loss,
+                    "train_loss": total_loss.item() / len(train_dataloader),
                     "epoch": epoch,
                     "step": completed_steps,
                 },
+                step=completed_steps,
             )
 
         if args.push_to_hub and epoch < args.num_train_epochs - 1:

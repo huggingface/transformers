@@ -29,6 +29,7 @@ from ...utils import (
 
 _import_structure = {
     "configuration_layoutlmv2": ["LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMv2Config"],
+    "processing_layoutlmv2": ["LayoutLMv2Processor"],
     "tokenization_layoutlmv2": ["LayoutLMv2Tokenizer"],
 }
 
@@ -47,7 +48,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_layoutlmv2"] = ["LayoutLMv2FeatureExtractor"]
-    _import_structure["processing_layoutlmv2"] = ["LayoutLMv2Processor"]
 
 try:
     if not is_torch_available():
@@ -67,6 +67,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_layoutlmv2 import LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMv2Config
+    from .processing_layoutlmv2 import LayoutLMv2Processor
     from .tokenization_layoutlmv2 import LayoutLMv2Tokenizer
 
     try:
@@ -84,7 +85,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_layoutlmv2 import LayoutLMv2FeatureExtractor
-        from .processing_layoutlmv2 import LayoutLMv2Processor
 
     try:
         if not is_torch_available():

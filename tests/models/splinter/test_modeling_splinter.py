@@ -14,7 +14,7 @@
 # limitations under the License.
 """ Testing suite for the PyTorch Splinter model. """
 
-
+import copy
 import unittest
 
 from transformers import is_torch_available
@@ -27,7 +27,7 @@ from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attenti
 if is_torch_available():
     import torch
 
-    from transformers import SplinterConfig, SplinterForQuestionAnswering, SplinterModel
+    from transformers import SplinterConfig, SplinterForPreTraining, SplinterForQuestionAnswering, SplinterModel
     from transformers.models.splinter.modeling_splinter import SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -36,6 +36,7 @@ class SplinterModelTester:
         self,
         parent,
         batch_size=13,
+        num_questions=3,
         seq_length=7,
         is_training=True,
         use_input_mask=True,
@@ -43,6 +44,7 @@ class SplinterModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
+        question_token_id=1,
         num_hidden_layers=5,
         num_attention_heads=4,
         intermediate_size=37,
@@ -59,6 +61,7 @@ class SplinterModelTester:
     ):
         self.parent = parent
         self.batch_size = batch_size
+        self.num_questions = num_questions
         self.seq_length = seq_length
         self.is_training = is_training
         self.use_input_mask = use_input_mask
@@ -66,6 +69,7 @@ class SplinterModelTester:
         self.use_labels = use_labels
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
+        self.question_token_id = question_token_id
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
@@ -82,6 +86,7 @@ class SplinterModelTester:
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        input_ids[:, 1] = self.question_token_id
 
         input_mask = None
         if self.use_input_mask:
@@ -91,13 +96,13 @@ class SplinterModelTester:
         if self.use_token_type_ids:
             token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
 
-        sequence_labels = None
-        token_labels = None
-        choice_labels = None
+        start_positions = None
+        end_positions = None
+        question_positions = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-            choice_labels = ids_tensor([self.batch_size], self.num_choices)
+            start_positions = ids_tensor([self.batch_size, self.num_questions], self.type_sequence_label_size)
+            end_positions = ids_tensor([self.batch_size, self.num_questions], self.type_sequence_label_size)
+            question_positions = ids_tensor([self.batch_size, self.num_questions], self.num_labels)
 
         config = SplinterConfig(
             vocab_size=self.vocab_size,
@@ -112,12 +117,20 @@ class SplinterModelTester:
             type_vocab_size=self.type_vocab_size,
             is_decoder=False,
             initializer_range=self.initializer_range,
+            question_token_id=self.question_token_id,
         )
 
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return (config, input_ids, token_type_ids, input_mask, start_positions, end_positions, question_positions)
 
     def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        start_positions,
+        end_positions,
+        question_positions,
     ):
         model = SplinterModel(config=config)
         model.to(torch_device)
@@ -128,7 +141,14 @@ class SplinterModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_for_question_answering(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        start_positions,
+        end_positions,
+        question_positions,
     ):
         model = SplinterForQuestionAnswering(config=config)
         model.to(torch_device)
@@ -137,11 +157,35 @@ class SplinterModelTester:
             input_ids,
             attention_mask=input_mask,
             token_type_ids=token_type_ids,
-            start_positions=sequence_labels,
-            end_positions=sequence_labels,
+            start_positions=start_positions[:, 0],
+            end_positions=end_positions[:, 0],
         )
         self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
+
+    def create_and_check_for_pretraining(
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        start_positions,
+        end_positions,
+        question_positions,
+    ):
+        model = SplinterForPreTraining(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            start_positions=start_positions,
+            end_positions=end_positions,
+            question_positions=question_positions,
+        )
+        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.num_questions, self.seq_length))
+        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.num_questions, self.seq_length))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -150,11 +194,15 @@ class SplinterModelTester:
             input_ids,
             token_type_ids,
             input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
+            start_positions,
+            end_positions,
+            question_positions,
         ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
+        inputs_dict = {
+            "input_ids": input_ids,
+            "token_type_ids": token_type_ids,
+            "attention_mask": input_mask,
+        }
         return config, inputs_dict
 
 
@@ -165,10 +213,43 @@ class SplinterModelTest(ModelTesterMixin, unittest.TestCase):
         (
             SplinterModel,
             SplinterForQuestionAnswering,
+            SplinterForPreTraining,
         )
         if is_torch_available()
         else ()
     )
+
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = copy.deepcopy(inputs_dict)
+        if return_labels:
+            if issubclass(model_class, SplinterForPreTraining):
+                inputs_dict["start_positions"] = torch.zeros(
+                    self.model_tester.batch_size,
+                    self.model_tester.num_questions,
+                    dtype=torch.long,
+                    device=torch_device,
+                )
+                inputs_dict["end_positions"] = torch.zeros(
+                    self.model_tester.batch_size,
+                    self.model_tester.num_questions,
+                    dtype=torch.long,
+                    device=torch_device,
+                )
+                inputs_dict["question_positions"] = torch.zeros(
+                    self.model_tester.batch_size,
+                    self.model_tester.num_questions,
+                    dtype=torch.long,
+                    device=torch_device,
+                )
+            elif issubclass(model_class, SplinterForQuestionAnswering):
+                inputs_dict["start_positions"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+                inputs_dict["end_positions"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+
+        return inputs_dict
 
     def setUp(self):
         self.model_tester = SplinterModelTester(self)
@@ -190,6 +271,44 @@ class SplinterModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
+
+    def test_for_pretraining(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_pretraining(*config_and_inputs)
+
+    def test_inputs_embeds(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+
+            if not self.is_encoder_decoder:
+                input_ids = inputs["input_ids"]
+                del inputs["input_ids"]
+            else:
+                encoder_input_ids = inputs["input_ids"]
+                decoder_input_ids = inputs.get("decoder_input_ids", encoder_input_ids)
+                del inputs["input_ids"]
+                inputs.pop("decoder_input_ids", None)
+
+            wte = model.get_input_embeddings()
+            if not self.is_encoder_decoder:
+                inputs["inputs_embeds"] = wte(input_ids)
+            else:
+                inputs["inputs_embeds"] = wte(encoder_input_ids)
+                inputs["decoder_inputs_embeds"] = wte(decoder_input_ids)
+
+            with torch.no_grad():
+                if isinstance(model, SplinterForPreTraining):
+                    with self.assertRaises(TypeError):
+                        # question_positions must not be None.
+                        model(**inputs)[0]
+                else:
+                    model(**inputs)[0]
 
     @slow
     def test_model_from_pretrained(self):
@@ -217,3 +336,122 @@ class SplinterModelIntegrationTest(unittest.TestCase):
 
         self.assertEqual(torch.argmax(output.start_logits), 10)
         self.assertEqual(torch.argmax(output.end_logits), 12)
+
+    @slow
+    def test_splinter_pretraining(self):
+        model = SplinterForPreTraining.from_pretrained("tau/splinter-base-qass")
+
+        # Input: "[CLS] [QUESTION] was born in [QUESTION] . Brad returned to the United Kingdom later . [SEP]"
+        # Output should be the spans "Brad" and "the United Kingdom"
+        input_ids = torch.tensor(
+            [[101, 104, 1108, 1255, 1107, 104, 119, 7796, 1608, 1106, 1103, 1244, 2325, 1224, 119, 102]]
+        )
+        question_positions = torch.tensor([[1, 5]], dtype=torch.long)
+        output = model(input_ids, question_positions=question_positions)
+
+        expected_shape = torch.Size((1, 2, 16))
+        self.assertEqual(output.start_logits.shape, expected_shape)
+        self.assertEqual(output.end_logits.shape, expected_shape)
+
+        self.assertEqual(torch.argmax(output.start_logits[0, 0]), 7)
+        self.assertEqual(torch.argmax(output.end_logits[0, 0]), 7)
+        self.assertEqual(torch.argmax(output.start_logits[0, 1]), 10)
+        self.assertEqual(torch.argmax(output.end_logits[0, 1]), 12)
+
+    @slow
+    def test_splinter_pretraining_loss_requires_question_positions(self):
+        model = SplinterForPreTraining.from_pretrained("tau/splinter-base-qass")
+
+        # Input: "[CLS] [QUESTION] was born in [QUESTION] . Brad returned to the United Kingdom later . [SEP]"
+        # Output should be the spans "Brad" and "the United Kingdom"
+        input_ids = torch.tensor(
+            [[101, 104, 1108, 1255, 1107, 104, 119, 7796, 1608, 1106, 1103, 1244, 2325, 1224, 119, 102]]
+        )
+        start_positions = torch.tensor([[7, 10]], dtype=torch.long)
+        end_positions = torch.tensor([7, 12], dtype=torch.long)
+        with self.assertRaises(TypeError):
+            model(
+                input_ids,
+                start_positions=start_positions,
+                end_positions=end_positions,
+            )
+
+    @slow
+    def test_splinter_pretraining_loss(self):
+        model = SplinterForPreTraining.from_pretrained("tau/splinter-base-qass")
+
+        # Input: "[CLS] [QUESTION] was born in [QUESTION] . Brad returned to the United Kingdom later . [SEP]"
+        # Output should be the spans "Brad" and "the United Kingdom"
+        input_ids = torch.tensor(
+            [
+                [101, 104, 1108, 1255, 1107, 104, 119, 7796, 1608, 1106, 1103, 1244, 2325, 1224, 119, 102],
+                [101, 104, 1108, 1255, 1107, 104, 119, 7796, 1608, 1106, 1103, 1244, 2325, 1224, 119, 102],
+            ]
+        )
+        start_positions = torch.tensor([[7, 10], [7, 10]], dtype=torch.long)
+        end_positions = torch.tensor([[7, 12], [7, 12]], dtype=torch.long)
+        question_positions = torch.tensor([[1, 5], [1, 5]], dtype=torch.long)
+        output = model(
+            input_ids,
+            start_positions=start_positions,
+            end_positions=end_positions,
+            question_positions=question_positions,
+        )
+        self.assertAlmostEqual(output.loss.item(), 0.0024, 4)
+
+    @slow
+    def test_splinter_pretraining_loss_with_padding(self):
+        model = SplinterForPreTraining.from_pretrained("tau/splinter-base-qass")
+
+        # Input: "[CLS] [QUESTION] was born in [QUESTION] . Brad returned to the United Kingdom later . [SEP]"
+        # Output should be the spans "Brad" and "the United Kingdom"
+        input_ids = torch.tensor(
+            [
+                [101, 104, 1108, 1255, 1107, 104, 119, 7796, 1608, 1106, 1103, 1244, 2325, 1224, 119, 102],
+            ]
+        )
+        start_positions = torch.tensor([[7, 10]], dtype=torch.long)
+        end_positions = torch.tensor([7, 12], dtype=torch.long)
+        question_positions = torch.tensor([[1, 5]], dtype=torch.long)
+        start_positions_with_padding = torch.tensor([[7, 10, 0]], dtype=torch.long)
+        end_positions_with_padding = torch.tensor([7, 12, 0], dtype=torch.long)
+        question_positions_with_padding = torch.tensor([[1, 5, 0]], dtype=torch.long)
+        output = model(
+            input_ids,
+            start_positions=start_positions,
+            end_positions=end_positions,
+            question_positions=question_positions,
+        )
+        output_with_padding = model(
+            input_ids,
+            start_positions=start_positions_with_padding,
+            end_positions=end_positions_with_padding,
+            question_positions=question_positions_with_padding,
+        )
+
+        self.assertAlmostEqual(output.loss.item(), output_with_padding.loss.item(), 4)
+
+        # Note that the original code uses 0 to denote padded question tokens
+        # and their start and end positions. As the pad_token_id of the model's
+        # config is used for the losse's ignore_index in SplinterForPreTraining,
+        # we add this test to ensure anybody making changes to the default
+        # value of the config, will be aware of the implication.
+        self.assertEqual(model.config.pad_token_id, 0)
+
+    @slow
+    def test_splinter_pretraining_prepare_question_positions(self):
+        model = SplinterForPreTraining.from_pretrained("tau/splinter-base-qass")
+
+        input_ids = torch.tensor(
+            [
+                [101, 104, 1, 2, 104, 3, 4, 102],
+                [101, 1, 104, 2, 104, 3, 104, 102],
+                [101, 1, 2, 104, 104, 3, 4, 102],
+                [101, 1, 2, 3, 4, 5, 104, 102],
+            ]
+        )
+        question_positions = torch.tensor([[1, 4, 0], [2, 4, 6], [3, 4, 0], [6, 0, 0]], dtype=torch.long)
+        output_without_positions = model(input_ids)
+        output_with_positions = model(input_ids, question_positions=question_positions)
+        self.assertTrue((output_without_positions.start_logits == output_with_positions.start_logits).all())
+        self.assertTrue((output_without_positions.end_logits == output_with_positions.end_logits).all())

@@ -21,9 +21,7 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_available, is_torch_available
 
 
-_import_structure = {
-    "configuration_yoso": ["YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP", "YosoConfig"],
-}
+_import_structure = {"configuration_yoso": ["YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP", "YosoConfig"]}
 
 try:
     if not is_torch_available():
