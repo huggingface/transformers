@@ -147,6 +147,37 @@ def get_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtil
         return first_tuple[1].dtype
 
 
+def get_parameter_first_float_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtilsMixin"]):
+    """returns the first found floating dtype in parameters or asserts if none were found"""
+    try:
+        for t in parameter.parameters():
+            if t.is_floating_point():
+                return t.dtype
+
+    except StopIteration:
+        # For nn.DataParallel compatibility in PyTorch 1.5
+
+        def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
+            tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
+            return tuples
+
+        gen = parameter._named_members(get_members_fn=find_tensor_attributes)
+        for tuple in gen:
+            if tuple[1].is_floating_point():
+                return tuple[1].dtype
+
+        raise ValueError("couldn't find any floating point dtypes in parameter")
+
+
+def get_state_dict_first_float_dtype(state_dict):
+    """returns the first found floating dtype in state_dict or asserts if none were found"""
+    for t in state_dict.values():
+        if t.is_floating_point():
+            return t.dtype
+
+    raise ValueError("couldn't find any floating point dtypes in state_dict")
+
+
 def convert_file_size_to_int(size: Union[int, str]):
     """
     Converts a size expressed as a string with digits an unit (like `"5MB"`) to an integer (in bytes).
@@ -2076,7 +2107,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # set dtype to instantiate the model under:
             # 1. If torch_dtype is not None, we use that dtype
             # 2. If torch_dtype is "auto", we auto-detect dtype from the loaded state_dict, by checking its first
-            #    weights entry - we assume all weights are of the same dtype
+            #    weights entry that is of a floating type - we assume all floating weights are of the same dtype
             # we also may have config.torch_dtype available, but we won't rely on it till v5
             dtype_orig = None
             if torch_dtype is not None:
@@ -2085,10 +2116,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         if is_sharded and "dtype" in sharded_metadata:
                             torch_dtype = sharded_metadata["dtype"]
                         elif not is_sharded:
-                            torch_dtype = next(iter(state_dict.values())).dtype
+                            torch_dtype = get_state_dict_first_float_dtype(state_dict)
                         else:
                             one_state_dict = load_state_dict(resolved_archive_file)
-                            torch_dtype = next(iter(one_state_dict.values())).dtype
+                            torch_dtype = get_state_dict_first_float_dtype(one_state_dict)
                             del one_state_dict  # free CPU memory
                     else:
                         raise ValueError(
