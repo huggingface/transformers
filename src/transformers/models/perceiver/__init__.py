@@ -27,7 +27,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig"],
+    "configuration_perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverOnnxConfig"],
     "tokenization_perceiver": ["PerceiverTokenizer"],
 }
 
@@ -61,7 +61,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig
+    from .configuration_perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverOnnxConfig
     from .tokenization_perceiver import PerceiverTokenizer
 
     try:

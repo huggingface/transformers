@@ -113,6 +113,11 @@ class LongformerModelTester:
             attention_window=self.attention_window,
         )
 
+    def get_pipeline_config(self):
+        config = self.get_config()
+        config.vocab_size = 300
+        return config
+
     def create_and_check_attention_mask_determinism(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
