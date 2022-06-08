@@ -31,7 +31,7 @@ GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class GroupViTTextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GroupViTTextModel `]. It is used to instantiate
+    This is the configuration class to store the configuration of a [`GroupViTTextModel`]. It is used to instantiate
     an GroupViT model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the GroupViT
     [nvidia/groupvit-gccyfcc](https://huggingface.co/nvidia/groupvit-gccyfcc) architecture.
@@ -77,7 +77,6 @@ class GroupViTTextConfig(PretrainedConfig):
     >>> # Initializing a GroupViTTextModel with nvidia/groupvit-gccyfcc style configuration
     >>> configuration = GroupViTTextConfig()
 
-    >>> # Initializing a GroupViTTextConfig from the nvidia/groupvit-gccyfcc style configuration
     >>> model = GroupViTTextModel(configuration)
 
     >>> # Accessing the model configuration
@@ -139,14 +138,13 @@ class GroupViTTextConfig(PretrainedConfig):
 
 class GroupViTVisionConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GroupViTVisionModel `]. It is used to instantiate
+    This is the configuration class to store the configuration of a [`GroupViTVisionModel`]. It is used to instantiate
     an GroupViT model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the GroupViT
     [nvidia/groupvit-gccyfcc](https://huggingface.co/nvidia/groupvit-gccyfcc) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
-
 
     Args:
         hidden_size (`int`, *optional*, defaults to 384):
@@ -188,7 +186,6 @@ class GroupViTVisionConfig(PretrainedConfig):
     >>> # Initializing a GroupViTVisionModel with nvidia/groupvit-gccyfcc style configuration
     >>> configuration = GroupViTVisionConfig()
 
-    >>> # Initializing a GroupViTVisionModel model from the nvidia/groupvit-gccyfcc style configuration
     >>> model = GroupViTVisionModel(configuration)
 
     >>> # Accessing the model configuration
