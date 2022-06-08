@@ -109,10 +109,8 @@ class TextClassificationPipeline(Pipeline):
             args (`str` or `List[str]` or `Dict[str]`, or `List[Dict[str]]`):
                 One or several texts to classify. In order to use text pairs for your classification, you can send a
                 dictionnary containing `{"text", "text_pair"}` keys, or a list of those.
-            top_k (`int`, *optional*):
-                How many results to return, implies `sort=True`.
-            sort (`bool`, *optional*, default to `False`):
-                Sort the results by decreasing score.
+            top_k (`int`, *optional*, defaults to `1`):
+                How many results to return.
             function_to_apply (`str`, *optional*, defaults to `"default"`):
                 The function to apply to the model outputs in order to retrieve the scores. Accepts four different
                 values:
