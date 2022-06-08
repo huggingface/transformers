@@ -163,7 +163,7 @@ $ pip install -r requirements.txt
 	- Load the given common voice dataset
 	- Create vocab for the language
 	- Load the model with given hyperparameters
-	- Pre-process the dataset to input into the model
+	- Pre-process the dataset to input to the model
 	- Run training
 	- Run evaluation
 

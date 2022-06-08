@@ -39,7 +39,7 @@ class CLIPProcessor(ProcessorMixin):
         super().__init__(feature_extractor, tokenizer)
         self.current_processor = self.feature_extractor
 
-    def __call__(self, text=None, images=None, return_tensors=None, **kwargs):
+    def __call__(self, text=None, images=None, return_tensors="np", **kwargs):
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to CLIPTokenizerFast's [`~CLIPTokenizerFast.__call__`] if `text` is not `None` to encode

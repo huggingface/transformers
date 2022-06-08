@@ -258,11 +258,11 @@ class FlavaFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
         ],
         return_image_mask: Optional[bool] = None,
         return_codebook_pixels: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_tensors: Optional[Union[str, TensorType]] = "np",
         **kwargs: Any
     ) -> BatchFeature:
         """
-        Main method to prepare for the model one or several image(s).
+        Main method to preprocess one or several image(s) to be fed as input to the model.
 
         <Tip warning={true}>
 

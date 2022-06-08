@@ -481,7 +481,7 @@ def to_2tuple(x):
 # Copied from transformers.models.swin.modeling_swin.window_partition
 def window_partition(input_feature, window_size):
     """
-    Partitions the given input into windows.
+    Partitions the given input to windows.
     """
     batch_size, height, width, num_channels = input_feature.shape
     input_feature = input_feature.view(

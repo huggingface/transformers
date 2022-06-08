@@ -182,7 +182,7 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         self,
         images: ImageInput,
         pad_and_return_pixel_mask: Optional[bool] = True,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_tensors: Optional[Union[str, TensorType]] = "np",
         **kwargs
     ) -> BatchFeature:
         """
