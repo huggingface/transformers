@@ -388,14 +388,14 @@ class BloomAttention(nn.Module):
         # [batch_size, k_length, num_heads, head_dim] -> [k_length, batch_size * num_heads, head_dim]
         key_layer = key_layer.transpose(1, 0).reshape(output_size[3], output_size[0] * output_size[1], -1)
 
-        # alibi
-        matmul_result = alibi[: output_size[0] * output_size[1], :, : output_size[3]]
+        # slice alibi tensor until the query length
+        sliced_alibi = alibi[: output_size[0] * output_size[1], :, : output_size[3]]
 
         # Raw attention scores. [batch_size * num_heads, q_length, k_length]
         beta = 1.0 / self.layer_number
 
         matmul_result = torch.baddbmm(
-            matmul_result,
+            sliced_alibi,
             query_layer.transpose(1, 0),
             key_layer.transpose(1, 0).transpose(1, 2),
             beta=beta,
