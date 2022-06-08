@@ -39,6 +39,7 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
         self.test_rust_tokenizer = True
 
         model_paths = ["robot-test/dummy-tokenizer-fast", "robot-test/dummy-tokenizer-wordlevel"]
+        self.bytelevel_bpe_model_name = "SaulLu/dummy-tokenizer-bytelevel-bpe"
 
         # Inclusion of 2 tokenizers to test different types of models (Unigram and WordLevel for the moment)
         self.tokenizers_list = [(PreTrainedTokenizerFast, model_path, {}) for model_path in model_paths]
@@ -98,6 +99,15 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
                     # is restored
                     shutil.rmtree(self.tmpdirname)
                     self.tmpdirname = tmpdirname_orig
+
+    def test_training_new_tokenizer_with_bytelevel(self):
+        tokenizer = self.rust_tokenizer_class.from_pretrained(self.bytelevel_bpe_model_name)
+
+        toy_text_iterator = ("a" for _ in range(1000))
+        new_tokenizer = tokenizer.train_new_from_iterator(text_iterator=toy_text_iterator, length=1000, vocab_size=50)
+
+        encoding_ids = new_tokenizer.encode("a🤗")
+        self.assertEqual(encoding_ids, [64, 172, 253, 97, 245])
 
 
 @require_tokenizers
