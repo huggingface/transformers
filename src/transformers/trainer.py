@@ -136,6 +136,7 @@ from .utils import (
     is_apex_available,
     is_datasets_available,
     is_in_notebook,
+    is_ipex_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_torch_tpu_available,
@@ -146,7 +147,8 @@ from .utils.generic import ContextManagers
 
 
 _is_torch_generator_available = False
-_is_native_amp_available = False
+_is_native_cuda_amp_available = False
+_is_native_cpu_amp_available = False
 
 DEFAULT_CALLBACKS = [DefaultFlowCallback]
 DEFAULT_PROGRESS_CALLBACK = ProgressCallback
@@ -161,8 +163,10 @@ if is_apex_available():
 
 if version.parse(torch.__version__) >= version.parse("1.6"):
     _is_torch_generator_available = True
-    _is_native_amp_available = True
-    from torch.cuda.amp import autocast
+    _is_native_cuda_amp_available = True
+
+if version.parse(torch.__version__) >= version.parse("1.10"):
+    _is_native_cpu_amp_available = True
 
 if is_datasets_available():
     import datasets
@@ -487,7 +491,8 @@ class Trainer:
 
         # Mixed precision setup
         self.use_apex = False
-        self.use_amp = False
+        self.use_cuda_amp = False
+        self.use_cpu_amp = False
 
         if args.fp16 or args.bf16:
             if self.fsdp is not None:
@@ -496,19 +501,27 @@ class Trainer:
                     "Please do not set arguments related to `mixed_precision`"
                 )
             if args.half_precision_backend == "auto":
-                if _is_native_amp_available:
-                    args.half_precision_backend = "amp"
+                if args.device == torch.device("cpu"):
+                    if args.fp16:
+                        raise ValueError("Tried to use `fp16` but it is not supported on cpu")
+                    elif _is_native_cpu_amp_available:
+                        args.half_precision_backend = "cpu_amp"
+                    else:
+                        raise ValueError("Tried to use cpu amp but native cpu amp is not available")
                 else:
-                    if args.bf16:
+                    if _is_native_cuda_amp_available:
+                        args.half_precision_backend = "cuda_amp"
+                    elif args.bf16:
                         raise ValueError("Tried to use `bf16` but native amp is not available")
                     else:
                         args.half_precision_backend = "apex"
+
             logger.info(f"Using {args.half_precision_backend} half precision backend")
 
         self.do_grad_scaling = False
         if (args.fp16 or args.bf16) and not args.deepspeed:  # deepspeed manages its own half precision
-            if args.half_precision_backend == "amp":
-                self.use_amp = True
+            if args.half_precision_backend == "cuda_amp":
+                self.use_cuda_amp = True
                 self.amp_dtype = torch.float16 if args.fp16 else torch.bfloat16
                 self.do_grad_scaling = True
                 if is_sagemaker_mp_enabled():
@@ -521,6 +534,9 @@ class Trainer:
                     self.scaler = GradScaler()
                 else:
                     self.scaler = torch.cuda.amp.GradScaler()
+            elif args.half_precision_backend == "cpu_amp":
+                self.use_cpu_amp = True
+                self.amp_dtype = torch.bfloat16
             else:
                 if not is_apex_available():
                     raise ImportError(
@@ -1142,7 +1158,30 @@ class Trainer:
 
         return model
 
+    def ipex_optimize_model(self, model, training=False, dtype=torch.float32):
+        if not is_ipex_available():
+            raise ImportError(
+                "Using IPEX but IPEX is not installed, please refer to"
+                " https://github.com/intel/intel-extension-for-pytorch."
+            )
+
+        import intel_extension_for_pytorch as ipex
+
+        if not training:
+            model.eval()
+            model = ipex.optimize(model, dtype=dtype, level="O1")
+        else:
+            if not model.training:
+                model.train()
+            model, self.optimizer = ipex.optimize(model, dtype=dtype, optimizer=self.optimizer, level="O1")
+
+        return model
+
     def _wrap_model(self, model, training=True):
+        if self.args.use_ipex:
+            dtype = torch.bfloat16 if self.use_cpu_amp else torch.float32
+            model = self.ipex_optimize_model(model, training, dtype=dtype)
+
         if is_sagemaker_mp_enabled():
             # Wrapping the base model twice in a DistributedModel will raise an error.
             if isinstance(self.model_wrapped, smp.model.DistributedModel):
@@ -2212,11 +2251,15 @@ class Trainer:
         A helper wrapper that creates an appropriate context manager for `autocast` while feeding it the desired
         arguments, depending on the situation.
         """
-        if self.use_amp:
+        if self.use_cuda_amp or self.use_cpu_amp:
             if version.parse(torch.__version__) >= version.parse("1.10"):
-                ctx_manager = autocast(dtype=self.amp_dtype)
+                ctx_manager = (
+                    torch.cpu.amp.autocast(dtype=self.amp_dtype)
+                    if self.use_cpu_amp
+                    else torch.cuda.amp.autocast(dtype=self.amp_dtype)
+                )
             else:
-                ctx_manager = autocast()
+                ctx_manager = torch.cuda.amp.autocast()
         else:
             ctx_manager = contextlib.nullcontext() if sys.version_info >= (3, 7) else contextlib.suppress()
 
