@@ -517,9 +517,15 @@ class VectorQuantizer(nn.Module):
             - 2 * torch.matmul(hidden_states_flattended, emb_weights.T)
         )
 
-        # get quantized latent vectors
         min_encoding_indices = torch.argmin(distance, axis=1)
-        z_q = self.embedding(min_encoding_indices).reshape(hidden_states.shape)
+        min_encodings = torch.zeros(
+            min_encoding_indices.shape[0], self.n_e).to(hidden_states)
+        min_encodings.scatter_(1, min_encoding_indices, 1)
+
+        # get quantized latent vectors
+        # z_q = self.embedding(min_encoding_indices).reshape(hidden_states.shape)
+        z_q = torch.matmul(min_encodings, self.embedding.weight).view(hidden_states.shape)
+
         # reshape back to match original input shape
         z_q = z_q.permute(0, 3, 1, 2).contiguous()
 
