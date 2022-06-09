@@ -25,7 +25,7 @@ from pathlib import Path
 from huggingface_hub import Repository, delete_repo, login
 from requests.exceptions import HTTPError
 from transformers import AutoFeatureExtractor, Wav2Vec2FeatureExtractor
-from transformers.testing_utils import PASS, USER, get_tests_dir, is_staging_test
+from transformers.testing_utils import PASS, USER, check_json_file_has_correct_format, get_tests_dir, is_staging_test
 from transformers.utils import is_torch_available, is_vision_available
 
 
@@ -107,7 +107,8 @@ class FeatureExtractionSavingTestMixin:
         feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)
 
         with tempfile.TemporaryDirectory() as tmpdirname:
-            feat_extract_first.save_pretrained(tmpdirname)
+            saved_file = feat_extract_first.save_pretrained(tmpdirname)[0]
+            check_json_file_has_correct_format(saved_file)
             feat_extract_second = self.feature_extraction_class.from_pretrained(tmpdirname)
 
         self.assertEqual(feat_extract_second.to_dict(), feat_extract_first.to_dict())

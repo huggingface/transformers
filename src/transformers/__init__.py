@@ -213,6 +213,7 @@ _import_structure = {
     "models.glpn": ["GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP", "GLPNConfig"],
     "models.gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2Tokenizer"],
     "models.gpt_neo": ["GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoConfig"],
+    "models.gpt_neox": ["GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXConfig"],
     "models.gptj": ["GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTJConfig"],
     "models.herbert": ["HerbertTokenizer"],
     "models.hubert": ["HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "HubertConfig"],
@@ -226,8 +227,16 @@ _import_structure = {
         "LayoutLMv2Processor",
         "LayoutLMv2Tokenizer",
     ],
+    "models.layoutlmv3": [
+        "LAYOUTLMV3_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "LayoutLMv3Config",
+        "LayoutLMv3FeatureExtractor",
+        "LayoutLMv3Processor",
+        "LayoutLMv3Tokenizer",
+    ],
     "models.layoutxlm": ["LayoutXLMProcessor"],
     "models.led": ["LED_PRETRAINED_CONFIG_ARCHIVE_MAP", "LEDConfig", "LEDTokenizer"],
+    "models.levit": ["LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LevitConfig"],
     "models.longformer": ["LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongformerConfig", "LongformerTokenizer"],
     "models.luke": ["LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP", "LukeConfig", "LukeTokenizer"],
     "models.lxmert": ["LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LxmertConfig", "LxmertTokenizer"],
@@ -236,6 +245,7 @@ _import_structure = {
     "models.maskformer": ["MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "MaskFormerConfig"],
     "models.mbart": ["MBartConfig"],
     "models.mbart50": [],
+    "models.mctct": ["MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MCTCTConfig", "MCTCTProcessor"],
     "models.megatron_bert": ["MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MegatronBertConfig"],
     "models.megatron_gpt2": [],
     "models.mluke": [],
@@ -501,9 +511,11 @@ else:
     _import_structure["models.fnet"].append("FNetTokenizerFast")
     _import_structure["models.funnel"].append("FunnelTokenizerFast")
     _import_structure["models.gpt2"].append("GPT2TokenizerFast")
+    _import_structure["models.gpt_neox"].append("GPTNeoXTokenizerFast")
     _import_structure["models.herbert"].append("HerbertTokenizerFast")
     _import_structure["models.layoutlm"].append("LayoutLMTokenizerFast")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2TokenizerFast")
+    _import_structure["models.layoutlmv3"].append("LayoutLMv3TokenizerFast")
     _import_structure["models.layoutxlm"].append("LayoutXLMTokenizerFast")
     _import_structure["models.led"].append("LEDTokenizerFast")
     _import_structure["models.longformer"].append("LongformerTokenizerFast")
@@ -553,6 +565,7 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_speech_objects) if not name.startswith("_")
     ]
 else:
+    _import_structure["models.mctct"].append("MCTCTFeatureExtractor")
     _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
 
 try:
@@ -590,8 +603,8 @@ else:
     _import_structure["models.glpn"].append("GLPNFeatureExtractor")
     _import_structure["models.imagegpt"].append("ImageGPTFeatureExtractor")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2FeatureExtractor")
-    _import_structure["models.layoutlmv2"].append("LayoutLMv2Processor")
-    _import_structure["models.layoutxlm"].append("LayoutXLMProcessor")
+    _import_structure["models.layoutlmv3"].append("LayoutLMv3FeatureExtractor")
+    _import_structure["models.levit"].append("LevitFeatureExtractor")
     _import_structure["models.maskformer"].append("MaskFormerFeatureExtractor")
     _import_structure["models.perceiver"].append("PerceiverFeatureExtractor")
     _import_structure["models.poolformer"].append("PoolFormerFeatureExtractor")
@@ -692,6 +705,7 @@ else:
         "TemperatureLogitsWarper",
         "TopKLogitsWarper",
         "TopPLogitsWarper",
+        "TypicalLogitsWarper",
     ]
     _import_structure["generation_stopping_criteria"] = [
         "MaxLengthCriteria",
@@ -1138,6 +1152,15 @@ else:
             "load_tf_weights_in_gpt_neo",
         ]
     )
+    _import_structure["models.gpt_neox"].extend(
+        [
+            "GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GPTNeoXForCausalLM",
+            "GPTNeoXLayer",
+            "GPTNeoXModel",
+            "GPTNeoXPreTrainedModel",
+        ]
+    )
     _import_structure["models.gptj"].extend(
         [
             "GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1199,6 +1222,16 @@ else:
             "LayoutLMv2PreTrainedModel",
         ]
     )
+    _import_structure["models.layoutlmv3"].extend(
+        [
+            "LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "LayoutLMv3ForQuestionAnswering",
+            "LayoutLMv3ForSequenceClassification",
+            "LayoutLMv3ForTokenClassification",
+            "LayoutLMv3Model",
+            "LayoutLMv3PreTrainedModel",
+        ]
+    )
     _import_structure["models.led"].extend(
         [
             "LED_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1207,6 +1240,15 @@ else:
             "LEDForSequenceClassification",
             "LEDModel",
             "LEDPreTrainedModel",
+        ]
+    )
+    _import_structure["models.levit"].extend(
+        [
+            "LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "LevitForImageClassification",
+            "LevitForImageClassificationWithTeacher",
+            "LevitModel",
+            "LevitPreTrainedModel",
         ]
     )
     _import_structure["models.longformer"].extend(
@@ -1269,6 +1311,14 @@ else:
             "MBartForSequenceClassification",
             "MBartModel",
             "MBartPreTrainedModel",
+        ]
+    )
+    _import_structure["models.mctct"].extend(
+        [
+            "MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MCTCTForCTC",
+            "MCTCTModel",
+            "MCTCTPreTrainedModel",
         ]
     )
     _import_structure["models.megatron_bert"].extend(
@@ -1986,6 +2036,7 @@ else:
     _import_structure["models.data2vec"].extend(
         [
             "TFData2VecVisionForImageClassification",
+            "TFData2VecVisionForSemanticSegmentation",
             "TFData2VecVisionModel",
             "TFData2VecVisionPreTrainedModel",
         ]
@@ -2183,6 +2234,13 @@ else:
             "TFOpenAIGPTMainLayer",
             "TFOpenAIGPTModel",
             "TFOpenAIGPTPreTrainedModel",
+        ]
+    )
+    _import_structure["models.opt"].extend(
+        [
+            "TFOPTForCausalLM",
+            "TFOPTModel",
+            "TFOPTPreTrainedModel",
         ]
     )
     _import_structure["models.pegasus"].extend(
@@ -2532,6 +2590,13 @@ else:
         ]
     )
     _import_structure["models.mt5"].extend(["FlaxMT5ForConditionalGeneration", "FlaxMT5Model"])
+    _import_structure["models.opt"].extend(
+        [
+            "FlaxOPTForCausalLM",
+            "FlaxOPTModel",
+            "FlaxOPTPreTrainedModel",
+        ]
+    )
     _import_structure["models.pegasus"].extend(
         [
             "FlaxPegasusForConditionalGeneration",
@@ -2746,6 +2811,7 @@ if TYPE_CHECKING:
     from .models.glpn import GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP, GLPNConfig
     from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
     from .models.gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
+    from .models.gpt_neox import GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXConfig
     from .models.gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig
     from .models.herbert import HerbertTokenizer
     from .models.hubert import HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, HubertConfig
@@ -2759,8 +2825,16 @@ if TYPE_CHECKING:
         LayoutLMv2Processor,
         LayoutLMv2Tokenizer,
     )
+    from .models.layoutlmv3 import (
+        LAYOUTLMV3_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        LayoutLMv3Config,
+        LayoutLMv3FeatureExtractor,
+        LayoutLMv3Processor,
+        LayoutLMv3Tokenizer,
+    )
     from .models.layoutxlm import LayoutXLMProcessor
     from .models.led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig, LEDTokenizer
+    from .models.levit import LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, LevitConfig
     from .models.longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig, LongformerTokenizer
     from .models.luke import LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP, LukeConfig, LukeTokenizer
     from .models.lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertConfig, LxmertTokenizer
@@ -2768,6 +2842,7 @@ if TYPE_CHECKING:
     from .models.marian import MarianConfig
     from .models.maskformer import MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskFormerConfig
     from .models.mbart import MBartConfig
+    from .models.mctct import MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP, MCTCTConfig, MCTCTProcessor
     from .models.megatron_bert import MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MegatronBertConfig
     from .models.mmbt import MMBTConfig
     from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer
@@ -3001,9 +3076,11 @@ if TYPE_CHECKING:
         from .models.fnet import FNetTokenizerFast
         from .models.funnel import FunnelTokenizerFast
         from .models.gpt2 import GPT2TokenizerFast
+        from .models.gpt_neox import GPTNeoXTokenizerFast
         from .models.herbert import HerbertTokenizerFast
         from .models.layoutlm import LayoutLMTokenizerFast
         from .models.layoutlmv2 import LayoutLMv2TokenizerFast
+        from .models.layoutlmv3 import LayoutLMv3TokenizerFast
         from .models.layoutxlm import LayoutXLMTokenizerFast
         from .models.led import LEDTokenizerFast
         from .models.longformer import LongformerTokenizerFast
@@ -3043,6 +3120,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_speech_objects import *
     else:
+        from .models.mctct import MCTCTFeatureExtractor
         from .models.speech_to_text import Speech2TextFeatureExtractor
 
     try:
@@ -3069,8 +3147,9 @@ if TYPE_CHECKING:
         from .models.flava import FlavaFeatureExtractor, FlavaProcessor
         from .models.glpn import GLPNFeatureExtractor
         from .models.imagegpt import ImageGPTFeatureExtractor
-        from .models.layoutlmv2 import LayoutLMv2FeatureExtractor, LayoutLMv2Processor
-        from .models.layoutxlm import LayoutXLMProcessor
+        from .models.layoutlmv2 import LayoutLMv2FeatureExtractor
+        from .models.layoutlmv3 import LayoutLMv3FeatureExtractor
+        from .models.levit import LevitFeatureExtractor
         from .models.maskformer import MaskFormerFeatureExtractor
         from .models.perceiver import PerceiverFeatureExtractor
         from .models.poolformer import PoolFormerFeatureExtractor
@@ -3153,6 +3232,7 @@ if TYPE_CHECKING:
             TemperatureLogitsWarper,
             TopKLogitsWarper,
             TopPLogitsWarper,
+            TypicalLogitsWarper,
         )
         from .generation_stopping_criteria import (
             MaxLengthCriteria,
@@ -3532,6 +3612,13 @@ if TYPE_CHECKING:
             GPTNeoPreTrainedModel,
             load_tf_weights_in_gpt_neo,
         )
+        from .models.gpt_neox import (
+            GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GPTNeoXForCausalLM,
+            GPTNeoXLayer,
+            GPTNeoXModel,
+            GPTNeoXPreTrainedModel,
+        )
         from .models.gptj import (
             GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPTJForCausalLM,
@@ -3581,6 +3668,14 @@ if TYPE_CHECKING:
             LayoutLMv2Model,
             LayoutLMv2PreTrainedModel,
         )
+        from .models.layoutlmv3 import (
+            LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST,
+            LayoutLMv3ForQuestionAnswering,
+            LayoutLMv3ForSequenceClassification,
+            LayoutLMv3ForTokenClassification,
+            LayoutLMv3Model,
+            LayoutLMv3PreTrainedModel,
+        )
         from .models.led import (
             LED_PRETRAINED_MODEL_ARCHIVE_LIST,
             LEDForConditionalGeneration,
@@ -3588,6 +3683,13 @@ if TYPE_CHECKING:
             LEDForSequenceClassification,
             LEDModel,
             LEDPreTrainedModel,
+        )
+        from .models.levit import (
+            LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            LevitForImageClassification,
+            LevitForImageClassificationWithTeacher,
+            LevitModel,
+            LevitPreTrainedModel,
         )
         from .models.longformer import (
             LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -3639,6 +3741,7 @@ if TYPE_CHECKING:
             MBartModel,
             MBartPreTrainedModel,
         )
+        from .models.mctct import MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST, MCTCTForCTC, MCTCTModel, MCTCTPreTrainedModel
         from .models.megatron_bert import (
             MEGATRON_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             MegatronBertForCausalLM,
@@ -4240,6 +4343,7 @@ if TYPE_CHECKING:
         )
         from .models.data2vec import (
             TFData2VecVisionForImageClassification,
+            TFData2VecVisionForSemanticSegmentation,
             TFData2VecVisionModel,
             TFData2VecVisionPreTrainedModel,
         )
@@ -4395,6 +4499,7 @@ if TYPE_CHECKING:
             TFOpenAIGPTModel,
             TFOpenAIGPTPreTrainedModel,
         )
+        from .models.opt import TFOPTForCausalLM, TFOPTModel, TFOPTPreTrainedModel
         from .models.pegasus import TFPegasusForConditionalGeneration, TFPegasusModel, TFPegasusPreTrainedModel
         from .models.rag import TFRagModel, TFRagPreTrainedModel, TFRagSequenceForGeneration, TFRagTokenForGeneration
         from .models.rembert import (
@@ -4664,6 +4769,7 @@ if TYPE_CHECKING:
             FlaxMBartPreTrainedModel,
         )
         from .models.mt5 import FlaxMT5ForConditionalGeneration, FlaxMT5Model
+        from .models.opt import FlaxOPTForCausalLM, FlaxOPTModel, FlaxOPTPreTrainedModel
         from .models.pegasus import FlaxPegasusForConditionalGeneration, FlaxPegasusModel, FlaxPegasusPreTrainedModel
         from .models.roberta import (
             FlaxRobertaForCausalLM,

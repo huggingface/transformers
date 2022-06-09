@@ -237,10 +237,13 @@ class TrainingArguments:
             same seed as `seed`. This can be used to ensure reproducibility of data sampling, independent of the model
             seed.
         jit_mode(`bool`, *optional*, defaults to `False`):
-            Whether ot not to use PyTorch jit trace for inference.
+            Whether or not to use PyTorch jit trace for inference.
+        use_ipex (`bool`, *optional*, defaults to `False`):
+            Use Intel extension for PyTorch when it is available. [IPEX
+            installation](https://github.com/intel/intel-extension-for-pytorch).
         bf16 (`bool`, *optional*, defaults to `False`):
             Whether to use bf16 16-bit (mixed) precision training instead of 32-bit training. Requires Ampere or higher
-            NVIDIA architecture. This is an experimental API and it may change.
+            NVIDIA architecture or using CPU (no_cuda). This is an experimental API and it may change.
         fp16 (`bool`, *optional*, defaults to `False`):
             Whether to use fp16 16-bit (mixed) precision training instead of 32-bit training.
         fp16_opt_level (`str`, *optional*, defaults to 'O1'):
@@ -249,9 +252,9 @@ class TrainingArguments:
         fp16_backend (`str`, *optional*, defaults to `"auto"`):
             This argument is deprecated. Use `half_precision_backend` instead.
         half_precision_backend (`str`, *optional*, defaults to `"auto"`):
-            The backend to use for mixed precision training. Must be one of `"auto"`, `"amp"` or `"apex"`. `"auto"`
-            will use AMP or APEX depending on the PyTorch version detected, while the other choices will force the
-            requested backend.
+            The backend to use for mixed precision training. Must be one of `"auto", "cuda_amp", "apex", "cpu_amp"`.
+            `"auto"` will use CPU/CUDA AMP or APEX depending on the PyTorch version detected, while the other choices
+            will force the requested backend.
         bf16_full_eval (`bool`, *optional*, defaults to `False`):
             Whether to use full bfloat16 evaluation instead of 32-bit. This will be faster and save memory but can harm
             metric values. This is an experimental API and it may change.
@@ -452,6 +455,9 @@ class TrainingArguments:
         full_determinism (`bool`, *optional*, defaults to `False`)
             If `True`, [`enable_full_determinism`] is called instead of [`set_seed`] to ensure reproducible results in
             distributed training
+        torchdynamo (`str`, *optional*):
+            The token that is used to set the backend compiler for TorchDynamo. Possible choices are ["eager",
+            "nvfuser]. This is an experimental API and subject to change.
     """
 
     output_dir: str = field(
@@ -607,12 +613,21 @@ class TrainingArguments:
     seed: int = field(default=42, metadata={"help": "Random seed that will be set at the beginning of training."})
     data_seed: Optional[int] = field(default=None, metadata={"help": "Random seed to be used with data samplers."})
     jit_mode: bool = field(default=False, metadata={"help": "Whether or not to use PyTorch jit trace for inference"})
+    use_ipex: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Use Intel extension for PyTorch when it is available, installation:"
+                " 'https://github.com/intel/intel-extension-for-pytorch'"
+            )
+        },
+    )
     bf16: bool = field(
         default=False,
         metadata={
             "help": (
                 "Whether to use bf16 (mixed) precision instead of 32-bit. Requires Ampere or higher NVIDIA"
-                " architecture. This is an experimental API and it may change."
+                " architecture or using CPU (no_cuda). This is an experimental API and it may change."
             )
         },
     )
@@ -631,7 +646,10 @@ class TrainingArguments:
     )
     half_precision_backend: str = field(
         default="auto",
-        metadata={"help": "The backend to be used for half precision.", "choices": ["auto", "amp", "apex"]},
+        metadata={
+            "help": "The backend to be used for half precision.",
+            "choices": ["auto", "cuda_amp", "apex", "cpu_amp"],
+        },
     )
     bf16_full_eval: bool = field(
         default=False,
@@ -849,7 +867,10 @@ class TrainingArguments:
     # Deprecated arguments
     fp16_backend: str = field(
         default="auto",
-        metadata={"help": "Deprecated. Use half_precision_backend instead", "choices": ["auto", "amp", "apex"]},
+        metadata={
+            "help": "Deprecated. Use half_precision_backend instead",
+            "choices": ["auto", "cuda_amp", "apex", "cpu_amp"],
+        },
     )
     push_to_hub_model_id: Optional[str] = field(
         default=None, metadata={"help": "The name of the repository to which push the `Trainer`."}
@@ -882,6 +903,20 @@ class TrainingArguments:
                 "Whether to call enable_full_determinism instead of set_seed for reproducibility in distributed"
                 " training"
             )
+        },
+    )
+    torchdynamo: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Sets up the backend compiler for TorchDynamo. TorchDynamo is a Python level JIT compiler designed to"
+                " make unmodified PyTorch programs faster. TorchDynamo dynamically modifies the Python bytecode right"
+                " before its executed. It rewrites Python bytecode to extract sequences of PyTorch operations"
+                " and lifts them up into Fx graph. We can then pass these Fx graphs to other backend compilers. There"
+                " are two options - eager and nvfuser. Eager defaults to pytorch eager and is useful for debugging."
+                " nvfuser path uses AOT Autograd and nvfuser compiler to optimize the models."
+            ),
+            "choices": ["eager", "nvfuser"],
         },
     )
 
@@ -970,16 +1005,19 @@ class TrainingArguments:
             )
             self.half_precision_backend = self.fp16_backend
 
-        if (self.bf16 or self.bf16_full_eval) and not is_torch_bf16_available():
-            raise ValueError("Your setup doesn't support bf16. You need Ampere GPU, torch>=1.10, cuda>=11.0")
+        if (self.bf16 or self.bf16_full_eval) and not is_torch_bf16_available() and not self.no_cuda:
+            raise ValueError(
+                "Your setup doesn't support bf16. You need torch>=1.10, using Ampere GPU with cuda>=11.0 or using CPU"
+                " (no_cuda)"
+            )
 
         if self.fp16 and self.bf16:
             raise ValueError("At most one of fp16 and bf16 can be True, but not both")
         if self.bf16:
             if self.half_precision_backend == "apex":
                 raise ValueError(
-                    " `--half_precision_backend apex`: bf16 is not supported by apex. Use `--half_precision_backend"
-                    " amp` instead"
+                    " `--half_precision_backend apex`: GPU bf16 is not supported by apex. Use"
+                    " `--half_precision_backend cuda_amp` instead"
                 )
             if not (self.sharded_ddp == "" or not self.sharded_ddp):
                 raise ValueError("sharded_ddp is not supported with bf16")
@@ -997,11 +1035,23 @@ class TrainingArguments:
             is_torch_available()
             and (self.device.type != "cuda")
             and not (self.device.type == "xla" and "GPU_NUM_DEVICES" in os.environ)
-            and (self.fp16 or self.fp16_full_eval or self.bf16 or self.bf16_full_eval)
+            and (self.fp16 or self.fp16_full_eval)
         ):
             raise ValueError(
-                "Mixed precision training with AMP or APEX (`--fp16` or `--bf16`) and half precision evaluation"
-                " (`--fp16_full_eval` or `--bf16_full_eval`) can only be used on CUDA devices."
+                "FP16 Mixed precision training with AMP or APEX (`--fp16`) and FP16 half precision evaluation"
+                " (`--fp16_full_eval`) can only be used on CUDA devices."
+            )
+
+        if (
+            is_torch_available()
+            and (self.device.type != "cuda")
+            and not (self.device.type == "xla" and "GPU_NUM_DEVICES" in os.environ)
+            and (self.device.type != "cpu")
+            and (self.bf16 or self.bf16_full_eval)
+        ):
+            raise ValueError(
+                "BF16 Mixed precision training with AMP (`--bf16`) and BF16 half precision evaluation"
+                " (`--bf16_full_eval`) can only be used on CUDA or CPU devices."
             )
 
         if is_torch_available() and self.tf32 is not None:

@@ -27,7 +27,7 @@ To create the package for pypi.
 
 3. Unpin specific versions from setup.py that use a git install.
 
-4. Checkout the release branch (v<RELEASE>-release, for example v4.19-release), and commit these changes with the 
+4. Checkout the release branch (v<RELEASE>-release, for example v4.19-release), and commit these changes with the
    message: "Release: <VERSION>" and push.
 
 5. Wait for the tests on main to be completed and be green (otherwise revert and fix bugs)
@@ -63,7 +63,7 @@ To create the package for pypi.
 
 10. Copy the release notes from RELEASE.md to the tag in github once everything is looking hunky-dory.
 
-11. Run `make post-release` (or, for a patch release, `make post-patch`). If you were on a branch for the release,
+11. Run `make post-release` then run `make fix-copies`. If you were on a branch for the release,
     you need to go back to main before executing this.
 """
 
@@ -97,13 +97,14 @@ if stale_egg_info.exists():
 # 2. once modified, run: `make deps_table_update` to update src/transformers/dependency_versions_table.py
 _deps = [
     "Pillow",
-    "accelerate>=0.7.1",
+    "accelerate>=0.9.0",
     "black~=22.0,>=22.3",
     "codecarbon==1.2.0",
     "cookiecutter==1.7.3",
     "dataclasses",
     "datasets",
-    "deepspeed>=0.6.4",
+    "deepspeed>=0.6.5",
+    "dill<0.3.5",
     "fairscale>0.3",
     "faiss-cpu",
     "fastapi",
@@ -131,7 +132,7 @@ _deps = [
     "packaging>=20.0",
     "parameterized",
     "phonemizer",
-    "protobuf",
+    "protobuf<=3.20.1",
     "psutil",
     "pyyaml>=5.1",
     "pydantic",
@@ -284,6 +285,7 @@ extras["testing"] = (
         "parameterized",
         "psutil",
         "datasets",
+        "dill",
         "pytest-timeout",
         "black",
         "sacrebleu",
@@ -291,6 +293,7 @@ extras["testing"] = (
         "nltk",
         "GitPython",
         "hf-doc-builder",
+        "protobuf", # Can be removed once we can unpin protobuf
         "sacremoses",
         "rjieba"
     )

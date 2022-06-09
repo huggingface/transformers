@@ -179,6 +179,7 @@ class Speech2Text2StandaloneDecoderModelTester:
 class Speech2Text2StandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Speech2Text2Decoder, Speech2Text2ForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (Speech2Text2ForCausalLM,) if is_torch_available() else ()
+    fx_compatible = True
     test_pruning = False
 
     def setUp(
