@@ -10,3 +10,7 @@
   - local: pipeline_tutorial
     title: Pipeline per l'inferenza
   title: Esercitazione
+- sections:
+  - local: create_a_model
+    title: Create a custom architecture
+  title: How-to guides
