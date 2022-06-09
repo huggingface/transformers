@@ -305,12 +305,12 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             --learning_rate 1e-4
             --per_device_train_batch_size 2
             --per_device_eval_batch_size 1
-            --max_train_steps 10
+            --max_train_steps 1
             --train_val_split 0.1
             --seed 42
             --output_dir {tmp_dir}
             --with_tracking
-            --checkpointing_steps epoch
+            --checkpointing_steps 1
         """.split()
 
         if is_cuda_and_apex_available():
@@ -318,6 +318,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
 
         _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
         result = get_results(tmp_dir)
-        self.assertGreaterEqual(result["eval_accuracy"], 0.8)
-        self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
+        # The base model scores a 25%
+        self.assertGreaterEqual(result["eval_accuracy"], 0.625)
+        self.assertTrue(os.path.exists(os.path.join(tmp_dir, "step_0")))
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "image_classification_no_trainer")))
