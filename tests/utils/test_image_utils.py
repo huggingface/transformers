@@ -421,45 +421,6 @@ class ImageFeatureExtractionTester(unittest.TestCase):
             cropped_image = feature_extractor.center_crop(image, size)
             self.assertTrue(torch.equal(cropped_tensor, torch.tensor(feature_extractor.to_numpy_array(cropped_image))))
 
-    @require_torch
-    def test_center_crop_channel_last(self):
-        feature_extractor = ImageFeatureExtractionMixin()
-        image = get_random_image(16, 32)
-
-        # Test on numpy array
-        array = feature_extractor.to_numpy_array(image)
-        array = array.transpose(1, 2, 0)
-
-        # Test various crop sizes: bigger on all dimensions, on one of the dimensions only and on both dimensions.
-        crop_sizes = [8, (8, 64), 20, (32, 64)]
-        for size in crop_sizes:
-            cropped_array = feature_extractor.center_crop(array, size)
-            self.assertTrue(isinstance(cropped_array, np.ndarray))
-
-            expected_size = (size, size) if isinstance(size, int) else size
-            self.assertEqual(cropped_array.shape[-2:], expected_size)
-
-            # Check result is consistent with PIL.Image.crop
-            cropped_image = feature_extractor.center_crop(image, size)
-            self.assertTrue(np.array_equal(cropped_array, feature_extractor.to_numpy_array(cropped_image)))
-
-        array = feature_extractor.to_numpy_array(image)
-        tensor = torch.tensor(array)
-        array = array.permute(2, 0, 1)
-
-        # Test various crop sizes: bigger on all dimensions, on one of the dimensions only and on both dimensions.
-        for size in crop_sizes:
-            cropped_tensor = feature_extractor.center_crop(tensor, size)
-            self.assertTrue(isinstance(cropped_tensor, torch.Tensor))
-
-            expected_size = (size, size) if isinstance(size, int) else size
-            self.assertEqual(cropped_tensor.shape[-2:], expected_size)
-
-            # Check result is consistent with PIL.Image.crop
-            cropped_image = feature_extractor.center_crop(image, size)
-            self.assertTrue(torch.equal(cropped_tensor, torch.tensor(feature_extractor.to_numpy_array(cropped_image))))
-
-
 @require_vision
 class LoadImageTester(unittest.TestCase):
     def test_load_img_local(self):
