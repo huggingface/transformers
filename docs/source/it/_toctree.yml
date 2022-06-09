@@ -12,5 +12,5 @@
   title: Esercitazione
 - sections:
   - local: custom_models
-  - title: Condividere modelli personalizzati
+    title: Condividere modelli personalizzati
   title: How-to-guides
