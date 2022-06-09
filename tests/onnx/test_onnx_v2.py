@@ -182,6 +182,7 @@ PYTORCH_EXPORT_MODELS = {
     ("convbert", "YituTech/conv-bert-base"),
     ("distilbert", "distilbert-base-cased"),
     ("electra", "google/electra-base-generator"),
+    ("resnet", "microsoft/resnet-50"),
     ("roberta", "roberta-base"),
     ("roformer", "junnyu/roformer_chinese_base"),
     ("squeezebert", "squeezebert/squeezebert-uncased"),
