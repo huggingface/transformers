@@ -17,7 +17,7 @@ modello e modificarlo in base ai tuoi bisogni.
 
 Se stai scrivendo un nuovo modello, potrebbe essere più semplice iniziare da zero. In questo tutorial, ti mostreremo
 come scrivere un modello personalizzato e la sua configurazione in modo che possa essere utilizzato all’interno di
-Transformers, e come condividerlo con la community (assieme al relativo codice) così che tutti possano usarlo, anche
+Transformers, e come condividerlo con la community (assieme al relativo codice) così che tutte le persone possano usarlo, anche
 se non presente nella libreria 🤗 Transformers.
 
 Illustriamo tutto questo su un modello ResNet, avvolgendo la classe ResNet della 
@@ -77,14 +77,14 @@ Le tre cose più importanti da ricordare quando scrivi le tue configurazioni son
 
 L’eredità è importante per assicurarsi di ottenere tutte le funzionalità della libreria 🤗 transformers, 
 mentre gli altri due vincoli derivano dal fatto che un `Pretrainedconfig` ha più campi di quelli che stai settando. 
-Quando ricarichi una config da un metodo `from_pretrained`, questi campi devono essere accettati dal tuo config e
+Quando ricarichi una config da un metodo `from_pretrained`, questi campi devono essere accettati dalla tua config e
 poi inviati alla superclasse.
 
 Definire un `model_type` per la tua configurazione (qua `model_type = “resnet”`) non è obbligatorio, a meno che tu
 non voglia registrare il modello con le classi Auto (vedi l'ultima sezione).
 
 Una volta completato, puoi facilmente creare e salvare la tua configurazione come faresti con ogni altra configurazione
-di modelli della libreria. Ecco come possiamo creare il config di un resnet50d e salvarlo:
+di modelli della libreria. Ecco come possiamo creare la config di un resnet50d e salvarlo:
 
 ```py
 resnet50d_config = ResnetConfig(block_type="bottleneck", stem_width=32, stem_type="deep", avg_down=True)
@@ -178,7 +178,7 @@ non è obbligatoria, a meno che tu non voglia registrare il modello con le class
 
 <Tip>
 
-Se il to modello è molto simile a un modello all'interno della libreria, puoi ri-usare la stessa configurazione di quel modello.
+Se il tuo modello è molto simile a un modello all'interno della libreria, puoi ri-usare la stessa configurazione di quel modello.
 
 </Tip>
 
@@ -237,7 +237,7 @@ Il file `__init__.py` può essere vuoto, serve solo perchè Python capisca che `
 
 <Tip warning={true}>
 
-Se stai copiando i file un modello dalla libreria, dovrai sostituire tutti gli import relativi in cima al file con import del 
+Se stai copiando i file relativi alla modellazione della libreria, dovrai sostituire tutti gli import relativi in cima al file con import del 
     pacchetto `transformers`.
 
 </Tip>
@@ -253,7 +253,7 @@ from resnet_model.modeling_resnet import ResnetModel, ResnetModelForImageClassif
 ```
 
 Dopodichè dovrai dire alla libreria che vuoi copiare i file con il codice di quegli oggetti quando utilizzi il metodo
-`save_pretrained` e registrare in modo corretto con una Auto classe (specialmente per i modelli). Utilizza semplicemente:
+`save_pretrained` e registrarli in modo corretto con una Auto classe (specialmente per i modelli). Utilizza semplicemente:
 
 ```py
 ResnetConfig.register_for_auto_class()
@@ -265,7 +265,7 @@ Nota che non c'è bisogno di specificare una Auto classe per la configurazione (
 [`AutoConfig`], ma è diversa per i modelli). Il tuo modello personalizato potrebbe essere utilizzato per diverse tasks, 
 per cui devi specificare quale delle classi Auto è quella corretta per il tuo modello.
 
-Successivamente, creiamo i modelli e il config come abbiamo fatto in precedenza:
+Successivamente, creiamo i modelli e la config come abbiamo fatto in precedenza:
 
 ```py
 resnet50d_config = ResnetConfig(block_type="bottleneck", stem_width=32, stem_type="deep", avg_down=True)
@@ -275,7 +275,7 @@ pretrained_model = timm.create_model("resnet50d", pretrained=True)
 resnet50d.model.load_state_dict(pretrained_model.state_dict())
 ```
 
-Adesso, per inviare il modello all'Hub, assicurati che di essere loggato. Lancia dal tuo terminal:
+Adesso, per inviare il modello all'Hub, assicurati di aver effettuato l'accesso. Lancia dal tuo terminale:
 
 ```bash
 huggingface-cli login
@@ -316,8 +316,8 @@ from transformers import AutoModelForImageClassification
 model = AutoModelForImageClassification.from_pretrained("sgugger/custom-resnet50d", trust_remote_code=True)
 ```
 
-Inoltre, raccomandiamo fortemente di passare un hash del commit come `revision` per assicurarti che l'autore del modello 
-non abbiano aggiornato il codice con alcune nuove righe dannose (a meno che non ti fidi completamente degli autori del modello):
+Inoltre, raccomandiamo fortemente di passare un hash del commit come `revision` per assicurarti che le autrici o gli autori del modello 
+non abbiano modificato il codice con alcune nuove righe dannose (a meno che non ti fidi completamente della fonte):
 
 ```py
 commit_hash = "ed94a7c6247d8aedce4647f00f20de6875b5b292"
