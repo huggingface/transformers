@@ -172,7 +172,7 @@ class ResnetModelForImageClassification(PreTrainedModel):
         return {"logits": logits}
 ```
 
-Nota come, in entrambi i casi, ereditiamo da PreTrainedModel` e chiamiamo l'inizializzazione della superclasse 
+Nota come, in entrambi i casi, ereditiamo da `PreTrainedModel` e chiamiamo l'inizializzazione della superclasse 
 con il metodo `config` (un po' come quando scrivi un normale `torch.nn.Module`). La riga che imposta la  `config_class`
 non è obbligatoria, a meno che tu non voglia registrare il modello con le classi Auto (vedi l'ultima sezione).
 
