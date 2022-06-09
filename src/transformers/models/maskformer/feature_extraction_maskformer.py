@@ -285,6 +285,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
         if self.do_normalize:
             images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]
+
         # NOTE I will be always forced to pad them them since they have to be stacked in the batch dim
         encoded_inputs = self.encode_inputs(
             images,
@@ -293,18 +294,6 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             instance_id_to_semantic_id=instance_id_to_semantic_id,
             return_tensors=return_tensors,
         )
-
-        # Convert to TensorType
-        tensor_type = return_tensors
-        if not isinstance(tensor_type, TensorType):
-            tensor_type = TensorType(tensor_type)
-
-        if not tensor_type == TensorType.PYTORCH:
-            raise ValueError("Only PyTorch is supported for the moment.")
-        else:
-            if not is_torch_available():
-                raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
-
         return encoded_inputs
 
     def _max_by_axis(self, the_list: List[List[int]]) -> List[int]:
@@ -347,7 +336,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         segmentation_maps: ImageInput = None,
         pad_and_return_pixel_mask: bool = True,
         instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_tensors: Optional[Union[str, TensorType]] = "np",
     ):
         """
         Pad images up to the largest image in a batch and create a corresponding `pixel_mask`.
@@ -442,11 +431,16 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         # return as BatchFeature
         data = {"pixel_values": pixel_values, "pixel_mask": pixel_mask}
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
+        
         # we cannot batch them since they don't share a common class size
         if annotations:
             for label in annotations:
-                mask_labels.append(torch.from_numpy(label["masks"]))
-                class_labels.append(torch.from_numpy(label["classes"]))
+                if return_tensors == "pt":
+                    mask_labels.append(torch.from_numpy(label["masks"]))
+                    class_labels.append(torch.from_numpy(label["classes"]))
+                else:
+                    mask_labels.append(label["masks"])
+                    class_labels.append(label["classes"])
 
             encoded_inputs["mask_labels"] = mask_labels
             encoded_inputs["class_labels"] = class_labels
