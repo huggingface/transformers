@@ -866,6 +866,8 @@ else:
             "BloomForCausalLM",
             "BloomModel",
             "BloomPreTrainedModel",
+            "BloomForSequenceClassification",
+            "BloomForTokenClassification",
         ]
     )
     _import_structure["models.blenderbot"].extend(
@@ -3399,6 +3401,8 @@ if TYPE_CHECKING:
             BloomForCausalLM,
             BloomModel,
             BloomPreTrainedModel,
+            BloomForSequenceClassification,
+            BloomForTokenClassification,
         )
         from .models.camembert import (
             CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,

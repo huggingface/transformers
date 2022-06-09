@@ -46,6 +46,8 @@ else:
         "BloomForCausalLM",
         "BloomModel",
         "BloomPreTrainedModel",
+        "BloomForSequenceClassification",
+        "BloomForTokenClassification",
     ]
 
 if TYPE_CHECKING:
@@ -70,6 +72,8 @@ if TYPE_CHECKING:
             BloomForCausalLM,
             BloomModel,
             BloomPreTrainedModel,
+            BloomForSequenceClassification,
+            BloomForTokenClassification,
         )
 
 else:
