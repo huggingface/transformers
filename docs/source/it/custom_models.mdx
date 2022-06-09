@@ -91,25 +91,26 @@ resnet50d_config = ResnetConfig(block_type="bottleneck", stem_width=32, stem_typ
 resnet50d_config.save_pretrained("custom-resnet")
 ```
 
-This will save a file named `config.json` inside the folder `custom-resnet`. You can then reload your config with the
-`from_pretrained` method:
+Questo salverà un file chiamato `config.json` all'interno della cartella `custom-resnet`. Potrai poi ricaricare la tua
+config con il metodo `from_pretrained`.
 
 ```py
 resnet50d_config = ResnetConfig.from_pretrained("custom-resnet")
 ```
 
-You can also use any other method of the [`PretrainedConfig`] class, like [`~PretrainedConfig.push_to_hub`] to
-directly upload your config to the Hub.
+Puoi anche usare qualunque altro metodo della classe [`PretrainedConfig`], come [`~PretrainedConfig.push_to_hub`]
+per caricare direttamente la tua configurazione nell'hub.
 
-## Writing a custom model
+## Scrivere un modello personalizzato
 
-Now that we have our ResNet configuration, we can go on writing the model. We will actually write two: one that
-extracts the hidden features from a batch of images (like [`BertModel`]) and one that is suitable for image
-classification (like [`BertModelForSequenceClassification`]).
+Ora che abbiamo la nostra configurazione ResNet, possiamo continuare a scrivere il modello. In realtà, ne scriveremo
+due: uno che estrae le features nascoste da una batch di immagini (come [`BertModel`]) e uno che è utilizzabile per 
+la classificazione di immagini (come [`BertModelForSequenceClassification`]).
 
-As we mentioned before, we'll only write a loose wrapper of the model to keep it simple for this example. The only
-thing we need to do before writing this class is a map between the block types and actual block classes. Then the
-model is defined from the configuration by passing everything to the `ResNet` class:
+Come abbiamo menzionato in precedenza, scriveremo soltanto un wrapper del modello, per mantenerlo semplice ai fini di 
+questo esempio. L'unica cosa che dobbiamo fare prima di scrivere questa classe è una mappatura fra i tipi di blocco e 
+le vere classi dei blocchi. Successivamente il modello è definito tramite la configurazione, passando tutto quanto alla
+classe `ResNet`.
 
 ```py
 from transformers import PreTrainedModel
@@ -142,7 +143,7 @@ class ResnetModel(PreTrainedModel):
         return self.model.forward_features(tensor)
 ```
 
-For the model that will classify images, we just change the forward method:
+Per il modello che classificherà le immagini, cambiamo soltanto il metodo forward:
 
 ```py
 class ResnetModelForImageClassification(PreTrainedModel):
@@ -171,34 +172,34 @@ class ResnetModelForImageClassification(PreTrainedModel):
         return {"logits": logits}
 ```
 
-In both cases, notice how we inherit from `PreTrainedModel` and call the superclass initialization with the `config`
-(a bit like when you write a regular `torch.nn.Module`). The line that sets the `config_class` is not mandatory, unless
-you want to register your model with the auto classes (see last section).
+Nota come, in entrambi i casi, ereditiamo da PreTrainedModel` e chiamiamo l'inizializzazione della superclasse 
+con il metodo `config` (un po' come quando scrivi un normale `torch.nn.Module`). La riga che imposta la  `config_class`
+non è obbligatoria, a meno che tu non voglia registrare il modello con le auto classi (vedi l'ultima sezione).
 
 <Tip>
 
-If your model is very similar to a model inside the library, you can re-use the same configuration as this model.
+Se il to modello è molto simile a un modello all'interno della libreria, puoi ri-usare la stessa configurazione di quel modello.
 
 </Tip>
 
-You can have your model return anything you want, but returning a dictionary like we did for
-`ResnetModelForImageClassification`, with the loss included when labels are passed, will make your model directly
-usable inside the [`Trainer`] class. Using another output format is fine as long as you are planning on using your own
-training loop or another library for training.
+Puoi fare in modo che il tuo modello restituisca in output qualunque cosa tu voglia, ma far restituire un dizionario 
+come abbiamo fatto per `ResnetModelForImageClassification`, con la funzione di perdita inclusa quando vengono passate le labels,
+renderà il tuo modello direttamente utilizzabile all'interno della classe [`Trainer`]. Utilizzare altri formati di output va bene
+se hai in progetto di utilizzare un tuo loop di allenamento, o se utilizzerai un'altra libreria per l'addestramento.
 
-Now that we have our model class, let's create one:
+Ora che abbiamo la classe del nostro modello, creiamone uno:
 
 ```py
 resnet50d = ResnetModelForImageClassification(resnet50d_config)
 ```
 
-Again, you can use any of the methods of [`PreTrainedModel`], like [`~PreTrainedModel.save_pretrained`] or
-[`~PreTrainedModel.push_to_hub`]. We will use the second in the next section, and see how to push the model weights
-with the code of our model. But first, let's load some pretrained weights inside our model.
+Ribadiamo, puoi usare qualunque metodo dei [`PreTrainedModel`], come [`~PreTrainedModel.save_pretrained`] o
+[`~PreTrainedModel.push_to_hub`]. Utilizzeremo quest'ultimo nella prossima sezione, e vedremo come caricare i pesi del
+modello assieme al codice del modello stesso. Ma prima, carichiamo alcuni pesi pre-allenati all'interno del nostro modello.
 
-In your own use case, you will probably be training your custom model on your own data. To go fast for this tutorial,
-we will use the pretrained version of the resnet50d. Since our model is just a wrapper around it, it's going to be
-easy to transfer those weights:
+Nel tuo caso specifico, probabilmente allenerai il tuo modello sui tuoi dati. Per velocizzare in questo tutorial, 
+utilizzeremo la versione pre-allenata del resnet50d. Dato che il nostro modello è soltanto un wrapper attorno a quel modello,
+sarà facile trasferirne i pesi:
 
 ```py
 import timm
@@ -207,22 +208,22 @@ pretrained_model = timm.create_model("resnet50d", pretrained=True)
 resnet50d.model.load_state_dict(pretrained_model.state_dict())
 ```
 
-Now let's see how to make sure that when we do [`~PreTrainedModel.save_pretrained`] or [`~PreTrainedModel.push_to_hub`], the
-code of the model is saved.
+Vediamo adesso come assicurarci che quando facciamo [`~PreTrainedModel.save_pretrained`] o [`~PreTrainedModel.push_to_hub`], 
+il codice del modello venga salvato.
 
-## Sending the code to the Hub
+## Inviare il codice all'Hub
 
 <Tip warning={true}>
 
-This API is experimental and may have some slight breaking changes in the next releases.
+Questa API è sperimentale e potrebbe avere alcuni cambiamenti nei prossimi rilasci.
 
 </Tip>
 
-First, make sure your model is fully defined in a `.py` file. It can rely on relative imports to some other files as
-long as all the files are in the same directory (we don't support submodules for this feature yet). For our example,
-we'll define a `modeling_resnet.py` file and a `configuration_resnet.py` file in a folder of the current working
-directory named `resnet_model`. The configuration file contains the code for `ResnetConfig` and the modeling file
-contains the code of `ResnetModel` and `ResnetModelForImageClassification`.
+Innanzitutto, assicurati che il tuo modello sia completamente definito in un file `.py`. Può sfruttare import relativi
+ad altri file, purchè questi siano nella stessa directory (non supportiamo ancora sotto-moduli per questa funzionalità).
+Per questo esempio, definiremo un file `modeling_resnet.py` e un file `configuration_resnet.py` in una cartella dell'attuale
+working directory chiamata `resnet_model`. Il file configuration contiene il codice per `ResnetConfig` e il file modeling 
+contiene il codice di `ResnetModel` e `ResnetModelForImageClassification`.
 
 ```
 .
@@ -232,27 +233,27 @@ contains the code of `ResnetModel` and `ResnetModelForImageClassification`.
     └── modeling_resnet.py
 ```
 
-The `__init__.py` can be empty, it's just there so that Python detects `resnet_model` can be use as a module.
+Il file `__init__.py` può essere vuoto, serve solo perchè Python capisca che `resnet_model` può essere utilizzato come un modulo.
 
 <Tip warning={true}>
 
-If copying a modeling files from the library, you will need to replace all the relative imports at the top of the file
-to import from the `transformers` package.
+Se stai copiando i file un modello dalla libreria, dovrai sostituire tutti gli import relativi in cima al file con import del 
+    pacchetto `transformers`.
 
 </Tip>
 
-Note that you can re-use (or subclass) an existing configuration/model.
+Nota che puoi ri-utilizzare (o usare come sottoclassi) un modello/configurazione esistente.
 
-To share your model with the community, follow those steps: first import the ResNet model and config from the newly
-created files:
+Per condividere il tuo modello con la community, segui questi passi: prima importa il modello ResNet e la sua configurazione 
+dai nuovi file creati:
 
 ```py
 from resnet_model.configuration_resnet import ResnetConfig
 from resnet_model.modeling_resnet import ResnetModel, ResnetModelForImageClassification
 ```
 
-Then you have to tell the library you want to copy the code files of those objects when using the `save_pretrained`
-method and properly register them with a given Auto class (especially for models), just run:
+Dopodichè dovrai dire alla libreria che vuoi copiare i file con il codice di quegli oggetti quando utilizzi il metodo
+`save_pretrained` e registrare in modo corretto con una Auto classe (specialmente per i modelli). Utilizza semplicemente:
 
 ```py
 ResnetConfig.register_for_auto_class()
@@ -260,11 +261,11 @@ ResnetModel.register_for_auto_class("AutoModel")
 ResnetModelForImageClassification.register_for_auto_class("AutoModelForImageClassification")
 ```
 
-Note that there is no need to specify an auto class for the configuration (there is only one auto class for them,
-[`AutoConfig`]) but it's different for models. Your custom model could be suitable for many different tasks, so you
-have to specify which one of the auto classes is the correct one for your model.
+Nota che non c'è bisogno di specificare una Auto classe per la configurazione (c'è solo una Auto classe per le configurazioni,
+[`AutoConfig`], ma è diversa per i modelli). Il tuo modello personalizato potrebbe essere utilizzato per diverse tasks, 
+per cui devi specificare quale delle Auto classi è quella corretta per il tuo modello.
 
-Next, let's create the config and models as we did before:
+Successivamente, creiamo i modelli e il config come abbiamo fatto in precedenza:
 
 ```py
 resnet50d_config = ResnetConfig(block_type="bottleneck", stem_width=32, stem_type="deep", avg_down=True)
@@ -274,13 +275,13 @@ pretrained_model = timm.create_model("resnet50d", pretrained=True)
 resnet50d.model.load_state_dict(pretrained_model.state_dict())
 ```
 
-Now to send the model to the Hub, make sure you are logged in. Either run in your terminal:
+Adesso, per inviare il modello all'Hub, assicurati che di essere loggato. Lancia dal tuo terminal:
 
 ```bash
 huggingface-cli login
 ```
 
-or from a notebook:
+O da un notebook:
 
 ```py
 from huggingface_hub import notebook_login
@@ -288,19 +289,23 @@ from huggingface_hub import notebook_login
 notebook_login()
 ```
 
-You can then push to to your own namespace (or an organization you are a member of) like this:
+Potrai poi inviare il tutto sul tuo profilo (o di un'organizzazione di cui fai parte) in questo modo:
 
 ```py
 resnet50d.push_to_hub("custom-resnet50d")
 ```
 
-On top of the modeling weights and the configuration in json format, this also copied the modeling and
-configuration `.py` files in the folder `custom-resnet50d` and uploaded the result to the Hub. You can check the result
-in this [model repo](https://huggingface.co/sgugger/custom-resnet50d).
+Oltre ai pesi del modello e alla configurazione in formato json, questo ha anche copiato i file `.py` modeling e
+configuration all'interno della cartella `custom-resnet50d` e ha caricato i risultati sull'Hub. Puoi controllare
+i risultati in questa [model repo](https://huggingface.co/sgugger/custom-resnet50d).
 
-See the [sharing tutorial](model_sharing) for more information on the push to Hub method.
+Puoi controllare il tutorial di condivisione [tutorial di condivisione](model_sharing) per più informazioni sul 
+metodo con cui inviare all'Hub.
 
-## Using a model with custom code
+## Usare un modello con codice personalizzato
+
+Puoi usare ogni configurazione, modello o tokenizer con file di codice personalizzati nella sua repositoruy 
+
 
 You can use any configuration, model or tokenizer with custom code files in its repository with the auto-classes and
 the `from_pretrained` method. All files and code uploaded to the Hub are scanned for malware (refer to the [Hub security](https://huggingface.co/docs/hub/security#malware-scanning) documentation for more information), but you should still 
