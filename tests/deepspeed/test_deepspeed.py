@@ -22,10 +22,12 @@ from copy import deepcopy
 
 import datasets
 
+from accelerate import Accelerator
+from accelerate.utils import DeepSpeedPlugin
 from parameterized import parameterized
 from tests.trainer.test_trainer import TrainerIntegrationCommon  # noqa
 from transformers import AutoModel, TrainingArguments, is_torch_available, logging
-from transformers.deepspeed import HfDeepSpeedConfig, is_deepspeed_available, unset_hf_deepspeed_config
+from transformers.deepspeed import HfTrainerDeepSpeedConfig, is_deepspeed_available
 from transformers.testing_utils import (
     CaptureLogger,
     CaptureStd,
@@ -165,7 +167,9 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         super().tearDown()
 
         # reset the ds config global so that tests state doesn't leak
-        unset_hf_deepspeed_config()
+        with mockenv_context(**self.dist_env_1_gpu):
+            accelerator = Accelerator()
+            accelerator.state.initialized = False
 
     def test_init_zero3_fp16(self):
         # test that zero.Init() works correctly under zero3/fp16
@@ -176,27 +180,27 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             },
         }
 
-        dschf = HfDeepSpeedConfig(ds_config)
-
-        self.assertTrue(dschf.is_zero3())
-        self.assertTrue(is_deepspeed_zero3_enabled())
-
         with LoggingLevel(logging.INFO):
             with mockenv_context(**self.dist_env_1_gpu):
+                dschf = HfTrainerDeepSpeedConfig(ds_config)
+                accelerator = Accelerator(deepspeed_plugin=DeepSpeedPlugin(hf_ds_config=dschf, zero3_init_flag=True))
+                self.assertTrue(dschf.is_zero3())
+                self.assertTrue(is_deepspeed_zero3_enabled())
                 logger = logging.get_logger("transformers.modeling_utils")
                 with CaptureLogger(logger) as cl:
                     AutoModel.from_pretrained(T5_TINY)
         self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
 
-        # now remove zero optimization
-        del ds_config["zero_optimization"]
-        dschf = HfDeepSpeedConfig(ds_config)
-
-        self.assertFalse(dschf.is_zero3())
-        self.assertFalse(is_deepspeed_zero3_enabled())
+        # now change zero optimization
+        ds_config["zero_optimization"]["stage"] = 0
+        accelerator.state.initialized = False
 
         with LoggingLevel(logging.INFO):
             with mockenv_context(**self.dist_env_1_gpu):
+                dschf = HfTrainerDeepSpeedConfig(ds_config)
+                accelerator = Accelerator(deepspeed_plugin=DeepSpeedPlugin(hf_ds_config=dschf, zero3_init_flag=True))
+                self.assertFalse(dschf.is_zero3())
+                self.assertFalse(is_deepspeed_zero3_enabled())
                 logger = logging.get_logger("transformers.modeling_utils")
                 with CaptureLogger(logger) as cl:
                     AutoModel.from_pretrained(T5_TINY)
@@ -237,9 +241,9 @@ class TrainerIntegrationDeepSpeedWithCustomConfig(TestCasePlus):
 
     def tearDown(self):
         super().tearDown()
-
-        # reset the ds config global so that tests state doesn't leak
-        unset_hf_deepspeed_config()
+        with mockenv_context(**self.dist_env_1_gpu):
+            accelerator = Accelerator()
+            accelerator.state.initialized = False
 
     def get_config_dict(self, stage):
         # As some tests modify the dict, always make a copy
@@ -728,6 +732,9 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
             self.assertTrue(is_deepspeed_zero3_enabled())
 
             # test zero3 is disabled
+            with mockenv_context(**self.dist_env_1_gpu):
+                accelerator = Accelerator()
+                accelerator.state.initialized = False
             trainer = get_regression_trainer(deepspeed=ds_config_zero2_dict, **kwargs)
             self.assertFalse(is_deepspeed_zero3_enabled())
 
@@ -736,7 +743,9 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
             self.assertTrue(bool(config), "Deepspeed config should be accessible")
 
             del trainer
-            # now weakref should gc the global and we shouldn't get anything here
+            with mockenv_context(**self.dist_env_1_gpu):
+                accelerator = Accelerator()
+                del accelerator.state.deepspeed_plugin
             config = deepspeed_config()
             self.assertFalse(is_deepspeed_zero3_enabled())
             self.assertFalse(bool(config), "Deepspeed config should not be accessible")

@@ -16,11 +16,11 @@ Integration with Deepspeed
 """
 
 import importlib.util
-import io
-import json
-import weakref
 from copy import deepcopy
 from functools import partialmethod
+
+from accelerate import Accelerator
+from accelerate.utils import HfDeepSpeedConfig
 
 from .dependency_versions_check import dep_version_check
 from .utils import is_torch_available, logging
@@ -36,130 +36,6 @@ def is_deepspeed_available():
     return importlib.util.find_spec("deepspeed") is not None
 
 
-class HfDeepSpeedConfig:
-    """
-    This object contains a DeepSpeed configuration dictionary and can be quickly queried for things like zero stage.
-
-    A `weakref` of this object is stored in the module's globals to be able to access the config from areas where
-    things like the Trainer object is not available (e.g. `from_pretrained` and `_get_resized_embeddings`). Therefore
-    it's important that this object remains alive while the program is still running.
-
-    [`Trainer`] uses the `HfTrainerDeepSpeedConfig` subclass instead. That subclass has logic to sync the configuration
-    with values of [`TrainingArguments`] by replacing special placeholder values: `"auto"`. Without this special logic
-    the DeepSpeed configuration is not modified in any way.
-
-    Args:
-        config_file_or_dict (`Union[str, Dict]`): path to DeepSpeed config file or dict.
-
-    """
-
-    def __init__(self, config_file_or_dict):
-        # set global weakref object
-        set_hf_deepspeed_config(self)
-
-        dep_version_check("deepspeed")
-
-        if isinstance(config_file_or_dict, dict):
-            # Don't modify user's data should they want to reuse it (e.g. in tests), because once we
-            # modified it, it will not be accepted here again, since `auto` values would have been overridden
-            config = deepcopy(config_file_or_dict)
-        elif isinstance(config_file_or_dict, str):
-            with io.open(config_file_or_dict, "r", encoding="utf-8") as f:
-                config = json.load(f)
-        else:
-            raise ValueError("expecting either a path to a DeepSpeed config file or a pre-populated dict")
-        self.config = config
-
-        # zero stage - this is done as early as possible, before model is created, to allow
-        # ``is_deepspeed_zero3_enabled`` query and getting to the early deepspeed config object
-        # during ``zero.Init()`` which needs to know the dtype, and some other hparams.
-        self._stage = self.get_value("zero_optimization.stage", -1)
-
-        # offload
-        self._offload = False
-        if self.is_zero2() or self.is_zero3():
-            offload_devices_valid = set(["cpu", "nvme"])
-            offload_devices = set(
-                [
-                    self.get_value("zero_optimization.offload_optimizer.device"),
-                    self.get_value("zero_optimization.offload_param.device"),
-                ]
-            )
-            if len(offload_devices & offload_devices_valid) > 0:
-                self._offload = True
-
-    def find_config_node(self, ds_key_long):
-        config = self.config
-
-        # find the config node of interest if it exists
-        nodes = ds_key_long.split(".")
-        ds_key = nodes.pop()
-        for node in nodes:
-            config = config.get(node)
-            if config is None:
-                return None, ds_key
-
-        return config, ds_key
-
-    def get_value(self, ds_key_long, default=None):
-        """
-        Returns the set value or `default` if no value is set
-        """
-        config, ds_key = self.find_config_node(ds_key_long)
-        if config is None:
-            return default
-        return config.get(ds_key, default)
-
-    def del_config_sub_tree(self, ds_key_long, must_exist=False):
-        """
-        Deletes a sub-section of the config file if it's found.
-
-        Unless `must_exist` is `True` the section doesn't have to exist.
-        """
-        config = self.config
-
-        # find the config node of interest if it exists
-        nodes = ds_key_long.split(".")
-        for node in nodes:
-            parent_config = config
-            config = config.get(node)
-            if config is None:
-                if must_exist:
-                    raise ValueError(f"Can't find {ds_key_long} entry in the config: {self.config}")
-                else:
-                    return
-
-        # if found remove it
-        if parent_config is not None:
-            parent_config.pop(node)
-
-    def is_true(self, ds_key_long):
-        """
-        Returns `True`/``False` only if the value is set, always `False` otherwise. So use this method to ask the very
-        specific question of whether the value is set to `True` (and it's not set to `False`` or isn't set).
-
-        """
-        value = self.get_value(ds_key_long)
-        return False if value is None else bool(value)
-
-    def is_false(self, ds_key_long):
-        """
-        Returns `True`/``False` only if the value is set, always `False` otherwise. So use this method to ask the very
-        specific question of whether the value is set to `False` (and it's not set to `True`` or isn't set).
-        """
-        value = self.get_value(ds_key_long)
-        return False if value is None else not bool(value)
-
-    def is_zero2(self):
-        return self._stage == 2
-
-    def is_zero3(self):
-        return self._stage == 3
-
-    def is_offload(self):
-        return self._offload
-
-
 class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
     """
     The `HfTrainerDeepSpeedConfig` object is meant to be created during `TrainingArguments` object creation and has the
@@ -167,6 +43,7 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
     """
 
     def __init__(self, config_file_or_dict):
+        dep_version_check("deepspeed")
         super().__init__(config_file_or_dict)
         self._dtype = None
         self.mismatches = []
@@ -283,36 +160,28 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
             )
 
 
-# keep the config object global to be able to access it anywhere during TrainingArguments life-cycle
-_hf_deepspeed_config_weak_ref = None
-
-
-def set_hf_deepspeed_config(hf_deepspeed_config_obj):
-    # this is a special weakref global object to allow us to get to Deepspeed config from APIs
-    # that don't have an easy way to get to the Deepspeed config outside of the Trainer domain.
-    global _hf_deepspeed_config_weak_ref
-    # will go away automatically when HfDeepSpeedConfig is destroyed (when TrainingArguments is destroyed)
-    _hf_deepspeed_config_weak_ref = weakref.ref(hf_deepspeed_config_obj)
-
-
-def unset_hf_deepspeed_config():
-    # useful for unit tests to ensure the global state doesn't leak - call from `tearDown` method
-    global _hf_deepspeed_config_weak_ref
-    _hf_deepspeed_config_weak_ref = None
-
-
 def is_deepspeed_zero3_enabled():
-    if _hf_deepspeed_config_weak_ref is not None and _hf_deepspeed_config_weak_ref() is not None:
-        return _hf_deepspeed_config_weak_ref().is_zero3()
-    else:
-        return False
+    accelerator = Accelerator()
+    if hasattr(accelerator.state, "deepspeed_plugin"):
+        return (
+            accelerator.state.deepspeed_plugin.hf_ds_config.is_zero3()
+            and accelerator.state.deepspeed_plugin.zero3_init_flag
+        )
+    return False
 
 
 def deepspeed_config():
-    if _hf_deepspeed_config_weak_ref is not None and _hf_deepspeed_config_weak_ref() is not None:
-        return _hf_deepspeed_config_weak_ref().config
-    else:
-        return None
+    ds_config = None
+    accelerator = Accelerator()
+    if hasattr(accelerator.state, "deepspeed_plugin"):
+        ds_config = deepcopy(accelerator.state.deepspeed_plugin.hf_ds_config.config)
+        if ds_config["gradient_accumulation_steps"] == "auto":
+            ds_config["gradient_accumulation_steps"] = 1
+        if "train_micro_batch_size_per_gpu" not in ds_config or ds_config["train_micro_batch_size_per_gpu"] == "auto":
+            ds_config["train_micro_batch_size_per_gpu"] = 1
+        if ds_config["train_batch_size"] == "auto":
+            del ds_config["train_batch_size"]
+    return ds_config
 
 
 def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps):

@@ -35,6 +35,7 @@ from .utils import (
     ExplicitEnum,
     cached_property,
     get_full_repo_name,
+    is_accelerate_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_torch_available,
@@ -1097,12 +1098,21 @@ class TrainingArguments:
         if self.deepspeed:
             # - must be run very last in arg parsing, since it will use a lot of these settings.
             # - must be run before the model is created.
+            if not is_accelerate_available():
+                raise ValueError("--deepspeed requires Accelerate to be installed: `pip install accelerate`.")
             from transformers.deepspeed import HfTrainerDeepSpeedConfig
 
             # will be used later by the Trainer
             # note: leave self.deepspeed unmodified in case a user relies on it not to be modified)
             self.hf_deepspeed_config = HfTrainerDeepSpeedConfig(self.deepspeed)
             self.hf_deepspeed_config.trainer_config_process(self)
+
+            from accelerate import Accelerator
+            from accelerate.utils import DeepSpeedPlugin
+
+            _ = Accelerator(
+                deepspeed_plugin=DeepSpeedPlugin(hf_ds_config=self.hf_deepspeed_config, zero3_init_flag=True)
+            )
 
         if self.push_to_hub_token is not None:
             warnings.warn(

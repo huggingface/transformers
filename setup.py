@@ -257,7 +257,7 @@ extras["onnx"] = deps_list("onnxconverter-common", "tf2onnx") + extras["onnxrunt
 extras["modelcreation"] = deps_list("cookiecutter")
 
 extras["sagemaker"] = deps_list("sagemaker")
-extras["deepspeed"] = deps_list("deepspeed")
+extras["deepspeed"] = deps_list("deepspeed", "accelerate")
 extras["fairscale"] = deps_list("fairscale")
 extras["optuna"] = deps_list("optuna")
 extras["ray"] = deps_list("ray[tune]")
@@ -293,9 +293,9 @@ extras["testing"] = (
         "nltk",
         "GitPython",
         "hf-doc-builder",
-        "protobuf", # Can be removed once we can unpin protobuf
+        "protobuf",  # Can be removed once we can unpin protobuf
         "sacremoses",
-        "rjieba"
+        "rjieba",
     )
     + extras["retrieval"]
     + extras["modelcreation"]
@@ -325,8 +325,8 @@ extras["docs_specific"] = ["hf-doc-builder"]
 extras["docs"] = extras["all"] + extras["docs_specific"]
 
 extras["dev-torch"] = (
-    extras['testing']
-    + extras['torch']
+    extras["testing"]
+    + extras["torch"]
     + extras["sentencepiece"]
     + extras["tokenizers"]
     + extras["torch-speech"]
@@ -342,17 +342,17 @@ extras["dev-torch"] = (
     + extras["onnxruntime"]
 )
 extras["dev-tensorflow"] = (
-        extras['testing']
-        + extras['tf']
-        + extras["sentencepiece"]
-        + extras["tokenizers"]
-        + extras["vision"]
-        + extras["quality"]
-        + extras["docs_specific"]
-        + extras["sklearn"]
-        + extras["modelcreation"]
-        + extras["onnx"]
-        + extras["tf-speech"]
+    extras["testing"]
+    + extras["tf"]
+    + extras["sentencepiece"]
+    + extras["tokenizers"]
+    + extras["vision"]
+    + extras["quality"]
+    + extras["docs_specific"]
+    + extras["sklearn"]
+    + extras["modelcreation"]
+    + extras["onnx"]
+    + extras["tf-speech"]
 )
 extras["dev"] = (
     extras["all"]
