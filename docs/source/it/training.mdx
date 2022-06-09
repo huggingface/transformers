@@ -39,7 +39,7 @@ Inizia caricando il dataset [Yelp Reviews](https://huggingface.co/datasets/yelp_
  'text': 'My expectations for McDonalds are t rarely high. But for one to still fail so spectacularly...that takes something special!\\nThe cashier took my friends\'s order, then promptly ignored me. I had to force myself in front of a cashier who opened his register to wait on the person BEHIND me. I waited over five minutes for a gigantic order that included precisely one kid\'s meal. After watching two people who ordered after me be handed their food, I asked where mine was. The manager started yelling at the cashiers for \\"serving off their orders\\" when they didn\'t have their food. But neither cashier was anywhere near those controls, and the manager was the one serving food to customers and clearing the boards.\\nThe manager was rude when giving me my order. She didn\'t make sure that I had everything ON MY RECEIPT, and never even had the decency to apologize that I felt I was getting poor service.\\nI\'ve eaten at various McDonalds restaurants for over 30 years. I\'ve worked at more than one location. I expect bad days, bad moods, and the occasional mistake. But I have yet to have a decent experience at this store. It will remain a place I avoid unless someone in my party needs to avoid illness from low blood sugar. Perhaps I should go back to the racially biased service of Steak n Shake instead!'}
 ```
 
-As you now know, you need a tokenizer to process the text and include a padding and truncation strategy to handle any variable sequence lengths. To process your dataset in one step, use 🤗 Datasets [`map`](https://huggingface.co/docs/datasets/process.html#map) method to apply a preprocessing function over the entire dataset:
+Come già sai, hai bisogno di un tokenizer per processare il testo e includere una stratergia di padding e truncation per gestire sequenze di lunghezza variabile. Per processare il dataset in un unico passo, usa il metodo [`map`](https://huggingface.co/docs/datasets/process.html#map) di 🤗 Datasets che applica la funzione di preprocessamento all'intero dataset:
 
 ```py
 >>> from transformers import AutoTokenizer
@@ -63,15 +63,15 @@ If you like, you can create a smaller subset of the full dataset to fine-tune on
 
 <a id='trainer'></a>
 
-## Train
+## Addestranento
 
 <frameworkcontent>
 <pt>
 <Youtube id="nvBXf7s7vTI"/>
 
-🤗 Transformers provides a [`Trainer`] class optimized for training 🤗 Transformers models, making it easier to start training without manually writing your own training loop. The [`Trainer`] API supports a wide range of training options and features such as logging, gradient accumulation, and mixed precision.
+🤗 Transformers mette a disposizione la classe [`Trainer`] ottimizzata per addestrare modelli 🤗 Transformers, rendendo semplice iniziare l'addestramento senza scrivere manualmente il tuo ciclo di allenamento. Le [`Trainer`] API supporta un'ampia gamma di opzioni e funzionalità di addestramento come logging, gradient accumulation, e mixed precision.
 
-Start by loading your model and specify the number of expected labels. From the Yelp Review [dataset card](https://huggingface.co/datasets/yelp_review_full#data-fields), you know there are five labels:
+Inizia caricando il tuo modello e specificando il numero di etichette attese. Nel dataset Yelp Review [dataset card](https://huggingface.co/datasets/yelp_review_full#data-fields), sai che ci sono cinque etichette:
 
 ```py
 >>> from transformers import AutoModelForSequenceClassification
