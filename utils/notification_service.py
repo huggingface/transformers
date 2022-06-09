@@ -407,8 +407,19 @@ class Message:
         )
 
     def get_reply_blocks(self, job_name, job_result, failures, device, text):
-        if len(failures) > 2500:
-            failures = "\n".join(failures.split("\n")[:20]) + "\n\n[Truncated]"
+        """
+        failures: A list with elements of the form {"line": full test name, "trace": error trace}
+        """
+        # `text` must be less than 3001 characters in Slack SDK
+        MAX_ERROR_TEXT = 3000 - len("[Truncated]")
+
+        text = ""
+        for idx, error in enumerate(failures):
+            new_text = text + f'*{error["line"]}*\n_{error["trace"]}_\n\n'
+            if len(new_text) > MAX_ERROR_TEXT:
+                text = text + "[Truncated]"
+                break
+            text = new_text
 
         title = job_name
         if device is not None:
@@ -638,11 +649,11 @@ if __name__ == "__main__":
                         line = line.split()[0].replace("\n", "")
 
                         if artifact_path["gpu"] not in model_results[model]["failures"]:
-                            model_results[model]["failures"][artifact_path["gpu"]] = ""
+                            model_results[model]["failures"][artifact_path["gpu"]] = []
 
                         model_results[model]["failures"][
                             artifact_path["gpu"]
-                        ] += f"*{line}*\n_{stacktraces.pop(0)}_\n\n"
+                        ].append({"line": line, "trace": stacktraces.pop(0)})
 
                         if re.search("test_modeling_tf_", line):
                             model_results[model]["failed"]["TensorFlow"][artifact_path["gpu"]] += 1
@@ -727,11 +738,11 @@ if __name__ == "__main__":
                         line = line.split()[0].replace("\n", "")
 
                         if artifact_path["gpu"] not in additional_results[key]["failures"]:
-                            additional_results[key]["failures"][artifact_path["gpu"]] = ""
+                            additional_results[key]["failures"][artifact_path["gpu"]] = []
 
                         additional_results[key]["failures"][
                             artifact_path["gpu"]
-                        ] += f"*{line}*\n_{stacktraces.pop(0)}_\n\n"
+                        ].append({"line": line, "trace": stacktraces.pop(0)})
 
     # To find the PR number in a commit title, for example, `Add AwesomeFormer model (#99999)`
     pr_number_re = re.compile(r"\(#(\d+)\)$")
