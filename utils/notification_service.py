@@ -411,15 +411,18 @@ class Message:
         failures: A list with elements of the form {"line": full test name, "trace": error trace}
         """
         # `text` must be less than 3001 characters in Slack SDK
+        # keep some room for adding "[Truncated]" when necessary
         MAX_ERROR_TEXT = 3000 - len("[Truncated]")
 
-        text = ""
+        failure_text = ""
         for idx, error in enumerate(failures):
-            new_text = text + f'*{error["line"]}*\n_{error["trace"]}_\n\n'
+            new_text = failure_text + f'*{error["line"]}*\n_{error["trace"]}_\n\n'
             if len(new_text) > MAX_ERROR_TEXT:
-                text = text + "[Truncated]"
+                # `failure_text` here has length <= 3000
+                failure_text = failure_text + "[Truncated]"
                 break
-            text = new_text
+            # `failure_text` here has length <= MAX_ERROR_TEXT
+            failure_text = new_text
 
         title = job_name
         if device is not None:
@@ -437,7 +440,7 @@ class Message:
         return [
             {"type": "header", "text": {"type": "plain_text", "text": title.upper(), "emoji": True}},
             content,
-            {"type": "section", "text": {"type": "mrkdwn", "text": failures}},
+            {"type": "section", "text": {"type": "mrkdwn", "text": failure_text}},
         ]
 
     def post_reply(self):
