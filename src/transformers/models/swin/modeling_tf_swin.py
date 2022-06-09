@@ -345,7 +345,7 @@ class TFSwinPatchEmbeddings(tf.keras.layers.Layer):
         return pixel_values
 
     def call(self, pixel_values: tf.Tensor, training: bool = False) -> Tuple[tf.Tensor, Tuple[int, int]]:
-        _, _, height, width = shape_list(pixel_values)
+        _, _, height, width = tf.shape(pixel_values)
         # pad the input to be divisible by self.patch_size, if needed
         pixel_values = self.maybe_pad(pixel_values, height, width)
 

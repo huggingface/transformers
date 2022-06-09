@@ -126,7 +126,7 @@ class TFRemBertEmbeddings(tf.keras.layers.Layer):
         if input_ids is not None:
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
 
-        input_shape = shape_list(inputs_embeds)[:-1]
+        input_shape = tf.shape(inputs_embeds)[:-1]
 
         if token_type_ids is None:
             token_type_ids = tf.fill(dims=input_shape, value=0)
@@ -192,7 +192,7 @@ class TFRemBertSelfAttention(tf.keras.layers.Layer):
         output_attentions: bool,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
-        batch_size = shape_list(hidden_states)[0]
+        batch_size = tf.shape(hidden_states)[0]
         mixed_query_layer = self.query(inputs=hidden_states)
 
         # If this is instantiated as a cross-attention module, the keys
@@ -580,19 +580,19 @@ class TFRemBertLMPredictionHead(tf.keras.layers.Layer):
 
     def set_output_embeddings(self, value):
         self.decoder = value
-        self.decoder.vocab_size = shape_list(value)[0]
+        self.decoder.vocab_size = tf.shape(value)[0]
 
     def get_bias(self) -> Dict[str, tf.Variable]:
         return {"decoder_bias": self.decoder_bias}
 
     def set_bias(self, value: tf.Variable):
         self.decoder_bias = value["decoder_bias"]
-        self.vocab_size = shape_list(value["decoder_bias"])[0]
+        self.vocab_size = tf.shape(value["decoder_bias"])[0]
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
         hidden_states = self.activation(hidden_states)
-        seq_length = shape_list(tensor=hidden_states)[1]
+        seq_length = tf.shape(tensor=hidden_states)[1]
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.output_embedding_size])
         hidden_states = self.LayerNorm(hidden_states)
         hidden_states = tf.matmul(a=hidden_states, b=self.decoder, transpose_b=True)
@@ -633,7 +633,7 @@ class TFRemBertMainLayer(tf.keras.layers.Layer):
 
     def set_input_embeddings(self, value: tf.Variable):
         self.embeddings.weight = value
-        self.embeddings.vocab_size = shape_list(value)[0]
+        self.embeddings.vocab_size = tf.shape(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -668,9 +668,9 @@ class TFRemBertMainLayer(tf.keras.layers.Layer):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            input_shape = shape_list(input_ids)
+            input_shape = tf.shape(input_ids)
         elif inputs_embeds is not None:
-            input_shape = shape_list(inputs_embeds)[:-1]
+            input_shape = tf.shape(inputs_embeds)[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
@@ -680,7 +680,7 @@ class TFRemBertMainLayer(tf.keras.layers.Layer):
             past_key_values_length = 0
             past_key_values = [None] * len(self.encoder.layer)
         else:
-            past_key_values_length = shape_list(past_key_values[0][0])[-2]
+            past_key_values_length = tf.shape(past_key_values[0][0])[-2]
 
         if attention_mask is None:
             attention_mask = tf.fill(dims=(batch_size, seq_length + past_key_values_length), value=1)
@@ -702,7 +702,7 @@ class TFRemBertMainLayer(tf.keras.layers.Layer):
         # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
         # this attention mask is more simple than the triangular masking of causal attention
         # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-        attention_mask_shape = shape_list(attention_mask)
+        attention_mask_shape = tf.shape(attention_mask)
 
         mask_seq_length = seq_length + past_key_values_length
         # Copied from `modeling_tf_t5.py`
@@ -717,7 +717,7 @@ class TFRemBertMainLayer(tf.keras.layers.Layer):
             )
             causal_mask = tf.cast(causal_mask, dtype=attention_mask.dtype)
             extended_attention_mask = causal_mask * attention_mask[:, None, :]
-            attention_mask_shape = shape_list(extended_attention_mask)
+            attention_mask_shape = tf.shape(extended_attention_mask)
             extended_attention_mask = tf.reshape(
                 extended_attention_mask, (attention_mask_shape[0], 1, attention_mask_shape[1], attention_mask_shape[2])
             )
@@ -745,7 +745,7 @@ class TFRemBertMainLayer(tf.keras.layers.Layer):
             # we need to make broadcastable to [batch_size, num_heads, mask_seq_length, mask_seq_length]
             # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
             encoder_attention_mask = tf.cast(encoder_attention_mask, dtype=extended_attention_mask.dtype)
-            num_dims_encoder_attention_mask = len(shape_list(encoder_attention_mask))
+            num_dims_encoder_attention_mask = len(tf.shape(encoder_attention_mask))
             if num_dims_encoder_attention_mask == 3:
                 encoder_extended_attention_mask = encoder_attention_mask[:, None, :, :]
             if num_dims_encoder_attention_mask == 2:
@@ -1377,11 +1377,11 @@ class TFRemBertForMultipleChoice(TFRemBertPreTrainedModel, TFMultipleChoiceLoss)
         """
 
         if input_ids is not None:
-            num_choices = shape_list(input_ids)[1]
-            seq_length = shape_list(input_ids)[2]
+            num_choices = tf.shape(input_ids)[1]
+            seq_length = tf.shape(input_ids)[2]
         else:
-            num_choices = shape_list(inputs_embeds)[1]
-            seq_length = shape_list(inputs_embeds)[2]
+            num_choices = tf.shape(inputs_embeds)[1]
+            seq_length = tf.shape(inputs_embeds)[2]
 
         flat_input_ids = tf.reshape(tensor=input_ids, shape=(-1, seq_length)) if input_ids is not None else None
         flat_attention_mask = (
@@ -1394,7 +1394,7 @@ class TFRemBertForMultipleChoice(TFRemBertPreTrainedModel, TFMultipleChoiceLoss)
             tf.reshape(tensor=position_ids, shape=(-1, seq_length)) if position_ids is not None else None
         )
         flat_inputs_embeds = (
-            tf.reshape(tensor=inputs_embeds, shape=(-1, seq_length, shape_list(inputs_embeds)[3]))
+            tf.reshape(tensor=inputs_embeds, shape=(-1, seq_length, tf.shape(inputs_embeds)[3]))
             if inputs_embeds is not None
             else None
         )

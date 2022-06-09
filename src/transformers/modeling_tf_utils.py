@@ -191,7 +191,7 @@ class TFCausalLanguageModelingLoss:
         )
         # make sure only labels that are not equal to -100 affect the loss
         active_loss = tf.not_equal(tf.reshape(labels, (-1,)), -100)
-        reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
+        reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, tf.shape(logits)[2])), active_loss)
         labels = tf.boolean_mask(tf.reshape(labels, (-1,)), active_loss)
         return loss_fn(labels, reduced_logits)
 
@@ -233,7 +233,7 @@ class TFTokenClassificationLoss:
             active_loss = tf.reshape(labels, (-1,)) != -1
         else:
             active_loss = tf.reshape(labels, (-1,)) != -100
-        reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
+        reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, tf.shape(logits)[2])), active_loss)
         labels = tf.boolean_mask(tf.reshape(labels, (-1,)), active_loss)
 
         return loss_fn(labels, reduced_logits)
@@ -245,7 +245,7 @@ class TFSequenceClassificationLoss:
     """
 
     def hf_compute_loss(self, labels, logits):
-        if len(shape_list(logits)) == 1 or shape_list(logits)[1] == 1:
+        if len(tf.shape(logits)) == 1 or tf.shape(logits)[1] == 1:
             loss_fn = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
         else:
             loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
@@ -678,7 +678,7 @@ def init_copy_embeddings(old_embeddings, new_num_tokens):
 
             - mask=[True,True,True,True] and current_weights=[w1,w2,w3,w4]
     """
-    old_num_tokens, old_embedding_dim = shape_list(old_embeddings)
+    old_num_tokens, old_embedding_dim = tf.shape(old_embeddings)
     size_diff = new_num_tokens - old_num_tokens
 
     # initialize new embeddings
@@ -1508,7 +1508,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         new_lm_head_bias = {}
 
         for attr, weight in old_lm_head_bias.items():
-            first_dim, old_num_tokens = (None, shape_list(weight)[0]) if tf.rank(weight) == 1 else shape_list(weight)
+            first_dim, old_num_tokens = (None, tf.shape(weight)[0]) if tf.rank(weight) == 1 else tf.shape(weight)
             size_diff = new_num_tokens - old_num_tokens
             final_shape = [new_num_tokens] if first_dim is None else [first_dim, new_num_tokens]
 
@@ -1564,7 +1564,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         )
 
         if old_lm_head_decoder is not None and not is_input_output_equals:
-            old_embedding_dim = shape_list(old_lm_head_decoder)[1]
+            old_embedding_dim = tf.shape(old_lm_head_decoder)[1]
             decoder_mask, current_decoder = init_copy_embeddings(old_lm_head_decoder, new_num_tokens)
             new_lm_head_decoder = self.add_weight(
                 shape=(new_num_tokens, old_embedding_dim),
@@ -1597,7 +1597,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             `tf.Variable`: Pointer to the resized Embedding Module or the old Embedding Module if `new_num_tokens` is
             `None`
         """
-        old_embedding_dim = shape_list(old_embeddings)[1]
+        old_embedding_dim = tf.shape(old_embeddings)[1]
         init_range = getattr(self.config, "initializer_range", 0.02)
         embeddings_mask, current_embeddings = init_copy_embeddings(old_embeddings, new_num_tokens)
         new_embeddings = self.add_weight(
@@ -2104,7 +2104,7 @@ class TFConv1D(tf.keras.layers.Layer):
         self.bias = self.add_weight("bias", shape=[1, self.nf], initializer=tf.zeros_initializer())
 
     def call(self, x):
-        bz, sl = shape_list(x)[:2]
+        bz, sl = tf.shape(x)[:2]
 
         x = tf.reshape(x, [-1, self.nx])
         x = tf.matmul(x, self.weight) + self.bias
@@ -2205,7 +2205,7 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
         Returns:
             float32 tensor with shape [..., vocab_size].
         """
-        first_dims = shape_list(inputs)[:-1]
+        first_dims = tf.shape(inputs)[:-1]
         x = tf.reshape(inputs, [-1, self.hidden_size])
         logits = tf.matmul(x, self.weight, transpose_b=True)
 
@@ -2294,12 +2294,12 @@ class TFSequenceSummary(tf.keras.layers.Layer):
         elif self.summary_type == "mean":
             output = tf.reduce_mean(hidden_states, axis=1)
         elif self.summary_type == "cls_index":
-            hidden_shape = shape_list(hidden_states)  # e.g. [batch, num choices, seq length, hidden dims]
+            hidden_shape = tf.shape(hidden_states)  # e.g. [batch, num choices, seq length, hidden dims]
             if cls_index is None:
                 cls_index = tf.fill(
                     hidden_shape[:-2], hidden_shape[-2] - 1
                 )  # A tensor full of shape [batch] or [batch, num choices] full of sequence length
-            cls_shape = shape_list(cls_index)
+            cls_shape = tf.shape(cls_index)
             if len(cls_shape) <= len(hidden_shape) - 2:
                 cls_index = tf.expand_dims(cls_index, axis=-1)
             # else:

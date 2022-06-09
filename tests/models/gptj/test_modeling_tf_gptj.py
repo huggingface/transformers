@@ -161,7 +161,7 @@ class TFGPTJModelTester:
         output_from_past = model(next_tokens, token_type_ids=next_token_types, past=past)["last_hidden_state"]
 
         # select random slice
-        random_slice_idx = int(ids_tensor((1,), shape_list(output_from_past)[-1]))
+        random_slice_idx = int(ids_tensor((1,), tf.shape(output_from_past)[-1]))
         output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx]
         output_from_past_slice = output_from_past[:, 0, random_slice_idx]
 
@@ -196,14 +196,14 @@ class TFGPTJModelTester:
 
         # append to next input_ids and attn_mask
         next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
-        attn_mask = tf.concat([attn_mask, tf.ones((shape_list(attn_mask)[0], 1), dtype=tf.int32)], axis=1)
+        attn_mask = tf.concat([attn_mask, tf.ones((tf.shape(attn_mask)[0], 1), dtype=tf.int32)], axis=1)
 
         # get two different outputs
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
         output_from_past = model(next_tokens, past=past, attention_mask=attn_mask)["last_hidden_state"]
 
         # select random slice
-        random_slice_idx = int(ids_tensor((1,), shape_list(output_from_past)[-1]))
+        random_slice_idx = int(ids_tensor((1,), tf.shape(output_from_past)[-1]))
         output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx]
         output_from_past_slice = output_from_past[:, 0, random_slice_idx]
 
@@ -244,7 +244,7 @@ class TFGPTJModelTester:
         self.parent.assertTrue(output_from_past.shape[1] == next_tokens.shape[1])
 
         # select random slice
-        random_slice_idx = int(ids_tensor((1,), shape_list(output_from_past)[-1]))
+        random_slice_idx = int(ids_tensor((1,), tf.shape(output_from_past)[-1]))
         output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx]
         output_from_past_slice = output_from_past[:, :, random_slice_idx]
 
@@ -476,7 +476,7 @@ class TFGPTJModelLanguageGenerationTest(unittest.TestCase):
         output_non_padded = model.generate(input_ids=inputs_non_padded)
 
         num_paddings = (
-            shape_list(inputs_non_padded)[-1] - tf.reduce_sum(tf.cast(inputs["attention_mask"][-1], tf.int64)).numpy()
+            tf.shape(inputs_non_padded)[-1] - tf.reduce_sum(tf.cast(inputs["attention_mask"][-1], tf.int64)).numpy()
         )
         inputs_padded = tokenizer(sentences[1], return_tensors="tf").input_ids
         output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)

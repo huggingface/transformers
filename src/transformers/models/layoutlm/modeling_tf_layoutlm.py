@@ -142,7 +142,7 @@ class TFLayoutLMEmbeddings(tf.keras.layers.Layer):
         if input_ids is not None:
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
 
-        input_shape = shape_list(inputs_embeds)[:-1]
+        input_shape = tf.shape(inputs_embeds)[:-1]
 
         if token_type_ids is None:
             token_type_ids = tf.fill(dims=input_shape, value=0)
@@ -231,7 +231,7 @@ class TFLayoutLMSelfAttention(tf.keras.layers.Layer):
         output_attentions: bool,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
-        batch_size = shape_list(hidden_states)[0]
+        batch_size = tf.shape(hidden_states)[0]
         mixed_query_layer = self.query(inputs=hidden_states)
 
         # If this is instantiated as a cross-attention module, the keys
@@ -630,18 +630,18 @@ class TFLayoutLMLMPredictionHead(tf.keras.layers.Layer):
 
     def set_output_embeddings(self, value: tf.Variable):
         self.input_embeddings.weight = value
-        self.input_embeddings.vocab_size = shape_list(value)[0]
+        self.input_embeddings.vocab_size = tf.shape(value)[0]
 
     def get_bias(self) -> Dict[str, tf.Variable]:
         return {"bias": self.bias}
 
     def set_bias(self, value: tf.Variable):
         self.bias = value["bias"]
-        self.vocab_size = shape_list(value["bias"])[0]
+        self.vocab_size = tf.shape(value["bias"])[0]
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.transform(hidden_states=hidden_states)
-        seq_length = shape_list(hidden_states)[1]
+        seq_length = tf.shape(hidden_states)[1]
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
         hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
@@ -681,7 +681,7 @@ class TFLayoutLMMainLayer(tf.keras.layers.Layer):
 
     def set_input_embeddings(self, value: tf.Variable):
         self.embeddings.weight = value
-        self.embeddings.vocab_size = shape_list(value)[0]
+        self.embeddings.vocab_size = tf.shape(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -711,9 +711,9 @@ class TFLayoutLMMainLayer(tf.keras.layers.Layer):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            input_shape = shape_list(input_ids)
+            input_shape = tf.shape(input_ids)
         elif inputs_embeds is not None:
-            input_shape = shape_list(inputs_embeds)[:-1]
+            input_shape = tf.shape(inputs_embeds)[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 

@@ -23,29 +23,6 @@ from .utils import logging
 logger = logging.get_logger(__name__)
 
 
-def shape_list(tensor: Union[tf.Tensor, np.ndarray]) -> List[int]:
-    """
-    Deal with dynamic shape in tensorflow cleanly.
-
-    Args:
-        tensor (`tf.Tensor` or `np.ndarray`): The tensor we want the shape of.
-
-    Returns:
-        `List[int]`: The shape of the tensor as a list.
-    """
-    if isinstance(tensor, np.ndarray):
-        return list(tensor.shape)
-
-    dynamic = tf.shape(tensor)
-
-    if tensor.shape == tf.TensorShape(None):
-        return dynamic
-
-    static = tensor.shape.as_list()
-
-    return [dynamic[i] if s is None else s for i, s in enumerate(static)]
-
-
 def stable_softmax(logits: tf.Tensor, axis: Optional[int] = None, name: Optional[str] = None) -> tf.Tensor:
     """
     Stable wrapper that returns the same output as `tf.nn.softmax`, but that works reliably with XLA on CPU. It is

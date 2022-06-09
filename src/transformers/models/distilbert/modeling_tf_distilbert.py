@@ -112,7 +112,7 @@ class TFEmbeddings(tf.keras.layers.Layer):
         if input_ids is not None:
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
 
-        input_shape = shape_list(inputs_embeds)[:-1]
+        input_shape = tf.shape(inputs_embeds)[:-1]
 
         if position_ids is None:
             position_ids = tf.expand_dims(tf.range(start=0, limit=input_shape[-1]), axis=0)
@@ -166,8 +166,8 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
             weights: tf.Tensor(bs, n_heads, seq_length, seq_length) Attention weights context: tf.Tensor(bs,
             seq_length, dim) Contextualized layer. Optional: only if `output_attentions=True`
         """
-        bs, q_length, dim = shape_list(query)
-        k_length = shape_list(key)[1]
+        bs, q_length, dim = tf.shape(query)
+        k_length = tf.shape(key)[1]
         # assert dim == self.dim, f'Dimensions do not match: {dim} input vs {self.dim} configured'
         # assert key.size() == value.size()
         dim_per_head = int(self.dim / self.n_heads)
@@ -376,9 +376,9 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            input_shape = shape_list(input_ids)
+            input_shape = tf.shape(input_ids)
         elif inputs_embeds is not None:
-            input_shape = shape_list(inputs_embeds)[:-1]
+            input_shape = tf.shape(inputs_embeds)[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
@@ -583,17 +583,17 @@ class TFDistilBertLMHead(tf.keras.layers.Layer):
 
     def set_output_embeddings(self, value):
         self.input_embeddings.weight = value
-        self.input_embeddings.vocab_size = shape_list(value)[0]
+        self.input_embeddings.vocab_size = tf.shape(value)[0]
 
     def get_bias(self):
         return {"bias": self.bias}
 
     def set_bias(self, value):
         self.bias = value["bias"]
-        self.vocab_size = shape_list(value["bias"])[0]
+        self.vocab_size = tf.shape(value["bias"])[0]
 
     def call(self, hidden_states):
-        seq_length = shape_list(tensor=hidden_states)[1]
+        seq_length = tf.shape(tensor=hidden_states)[1]
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.dim])
         hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
@@ -913,16 +913,16 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
             where `num_choices` is the size of the second dimension of the input tensors. (See `input_ids` above)
         """
         if input_ids is not None:
-            num_choices = shape_list(input_ids)[1]
-            seq_length = shape_list(input_ids)[2]
+            num_choices = tf.shape(input_ids)[1]
+            seq_length = tf.shape(input_ids)[2]
         else:
-            num_choices = shape_list(inputs_embeds)[1]
-            seq_length = shape_list(inputs_embeds)[2]
+            num_choices = tf.shape(inputs_embeds)[1]
+            seq_length = tf.shape(inputs_embeds)[2]
 
         flat_input_ids = tf.reshape(input_ids, (-1, seq_length)) if input_ids is not None else None
         flat_attention_mask = tf.reshape(attention_mask, (-1, seq_length)) if attention_mask is not None else None
         flat_inputs_embeds = (
-            tf.reshape(inputs_embeds, (-1, seq_length, shape_list(inputs_embeds)[3]))
+            tf.reshape(inputs_embeds, (-1, seq_length, tf.shape(inputs_embeds)[3]))
             if inputs_embeds is not None
             else None
         )

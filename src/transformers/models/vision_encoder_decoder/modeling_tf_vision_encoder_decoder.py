@@ -154,11 +154,11 @@ def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, decoder_start_to
         raise ValueError("Make sure to set the decoder_start_token_id attribute of the model's configuration.")
     decoder_start_token_id = tf.cast(decoder_start_token_id, input_ids.dtype)
 
-    start_tokens = tf.fill((shape_list(input_ids)[0], 1), decoder_start_token_id)
+    start_tokens = tf.fill((tf.shape(input_ids)[0], 1), decoder_start_token_id)
     shifted_input_ids = tf.concat([start_tokens, input_ids[:, :-1]], -1)
     # replace possible -100 values in labels by `pad_token_id`
     shifted_input_ids = tf.where(
-        shifted_input_ids == -100, tf.fill(shape_list(shifted_input_ids), pad_token_id), shifted_input_ids
+        shifted_input_ids == -100, tf.fill(tf.shape(shifted_input_ids), pad_token_id), shifted_input_ids
     )
 
     if tf.executing_eagerly():
@@ -633,7 +633,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
                 labels, self.config.pad_token_id, self.config.decoder_start_token_id
             )
 
-        batch_size, sequence_length = shape_list(encoder_hidden_states)[:2]
+        batch_size, sequence_length = tf.shape(encoder_hidden_states)[:2]
         encoder_attention_mask = tf.ones(shape=(batch_size, sequence_length), dtype=tf.int32)
 
         decoder_inputs = {

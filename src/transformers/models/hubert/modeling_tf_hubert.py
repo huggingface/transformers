@@ -171,7 +171,7 @@ def _sample_without_replacement(distribution, num_samples):
     Categorical sampling without replacement is currently not implemented. The gumbel-max trick will do for now - see
     https://github.com/tensorflow/tensorflow/issues/9260 for more info
     """
-    z = -tf.math.log(tf.random.uniform(shape_list(distribution), 0, 1))
+    z = -tf.math.log(tf.random.uniform(tf.shape(distribution), 0, 1))
     _, indices = tf.nn.top_k(distribution + z, num_samples)
     return indices
 
@@ -181,7 +181,7 @@ def _scatter_values_on_batch_indices(values, batch_indices, output_shape):
     """
     Scatter function as in PyTorch with indices in format (batch_dim, indixes)
     """
-    indices_shape = shape_list(batch_indices)
+    indices_shape = tf.shape(batch_indices)
     # broadcast batch dim to indices_shape
     broad_casted_batch_dims = tf.reshape(
         tf.broadcast_to(tf.expand_dims(tf.range(indices_shape[0]), axis=-1), indices_shape), [1, -1]
@@ -267,7 +267,7 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
-    src_len = shape_list(mask)[1]
+    src_len = tf.shape(mask)[1]
     tgt_len = tgt_len if tgt_len is not None else src_len
     one_cst = tf.constant(1.0)
     mask = tf.cast(mask, dtype=one_cst.dtype)
@@ -773,7 +773,7 @@ class TFHubertAttention(tf.keras.layers.Layer):
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
-        bsz, tgt_len, embed_dim = shape_list(hidden_states)
+        bsz, tgt_len, embed_dim = tf.shape(hidden_states)
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
@@ -812,18 +812,18 @@ class TFHubertAttention(tf.keras.layers.Layer):
         key_states = tf.reshape(key_states, proj_shape)
         value_states = tf.reshape(value_states, proj_shape)
 
-        src_len = shape_list(key_states)[1]
+        src_len = tf.shape(key_states)[1]
         attn_weights = tf.matmul(query_states, key_states, transpose_b=True)
 
         # The tf.debugging asserts are not compliant with XLA then they
         # have to be disabled in other modes than eager.
         if tf.executing_eagerly():
             tf.debugging.assert_equal(
-                shape_list(attn_weights),
+                tf.shape(attn_weights),
                 [bsz * self.num_heads, tgt_len, src_len],
                 message=(
                     f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
-                    f" {shape_list(attn_weights)}"
+                    f" {tf.shape(attn_weights)}"
                 ),
             )
 
@@ -832,11 +832,11 @@ class TFHubertAttention(tf.keras.layers.Layer):
             # have to be disabled in other modes than eager.
             if tf.executing_eagerly():
                 tf.debugging.assert_equal(
-                    shape_list(attention_mask),
+                    tf.shape(attention_mask),
                     [bsz, 1, tgt_len, src_len],
                     message=(
                         f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is"
-                        f" {shape_list(attention_mask)}"
+                        f" {tf.shape(attention_mask)}"
                     ),
                 )
 
@@ -851,11 +851,11 @@ class TFHubertAttention(tf.keras.layers.Layer):
             # have to be disabled in other modes than eager.
             if tf.executing_eagerly():
                 tf.debugging.assert_equal(
-                    shape_list(layer_head_mask),
+                    tf.shape(layer_head_mask),
                     [self.num_heads],
                     message=(
                         f"Head mask for a single layer should be of size {(self.num_heads)}, but is"
-                        f" {shape_list(layer_head_mask)}"
+                        f" {tf.shape(layer_head_mask)}"
                     ),
                 )
 
@@ -871,11 +871,11 @@ class TFHubertAttention(tf.keras.layers.Layer):
         # have to be disabled in other modes than eager.
         if tf.executing_eagerly():
             tf.debugging.assert_equal(
-                shape_list(attn_output),
+                tf.shape(attn_output),
                 [bsz * self.num_heads, tgt_len, self.head_dim],
                 message=(
                     f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
-                    f" {shape_list(attn_output)}"
+                    f" {tf.shape(attn_output)}"
                 ),
             )
 
@@ -1185,7 +1185,7 @@ class TFHubertMainLayer(tf.keras.layers.Layer):
         Masks extracted features along time axis and/or along feature axis according to
         [SpecAugment](https://arxiv.org/abs/1904.08779).
         """
-        batch_size, sequence_length, hidden_size = shape_list(hidden_states)
+        batch_size, sequence_length, hidden_size = tf.shape(hidden_states)
 
         # `config.apply_spec_augment` can set masking to False
         if not getattr(self.config, "apply_spec_augment", True):
@@ -1263,7 +1263,7 @@ class TFHubertMainLayer(tf.keras.layers.Layer):
             output_lengths = self._get_feat_extract_output_lengths(tf.reduce_sum(inputs["attention_mask"], -1))
 
             attention_mask = tf.sequence_mask(
-                output_lengths, maxlen=shape_list(hidden_states)[1], dtype=hidden_states.dtype
+                output_lengths, maxlen=tf.shape(hidden_states)[1], dtype=hidden_states.dtype
             )
 
         hidden_states = self.feature_projection(hidden_states, training=inputs["training"])

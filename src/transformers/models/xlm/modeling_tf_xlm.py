@@ -87,7 +87,7 @@ def get_masks(slen, lengths, causal, padding_mask=None):
     """
     Generate hidden states mask, and optionally an attention mask.
     """
-    bs = shape_list(lengths)[0]
+    bs = tf.shape(lengths)[0]
     if padding_mask is not None:
         mask = padding_mask
     else:
@@ -104,10 +104,10 @@ def get_masks(slen, lengths, causal, padding_mask=None):
         attn_mask = mask
 
     # sanity check
-    # assert shape_list(mask) == [bs, slen]
+    # assert tf.shape(mask) == [bs, slen]
     if tf.executing_eagerly():
-        tf.debugging.assert_equal(shape_list(mask), [bs, slen])
-        assert causal is False or shape_list(attn_mask) == [bs, slen, slen]
+        tf.debugging.assert_equal(tf.shape(mask), [bs, slen])
+        assert causal is False or tf.shape(attn_mask).as_list() == [bs, slen, slen]
 
     return mask, attn_mask
 
@@ -139,16 +139,16 @@ class TFXLMMultiHeadAttention(tf.keras.layers.Layer):
         """
         # Input is (bs, qlen, dim)
         # Mask is (bs, klen) (non-causal) or (bs, klen, klen)
-        bs, qlen, dim = shape_list(input)
+        bs, qlen, dim = tf.shape(input)
 
         if kv is None:
             klen = qlen if cache is None else cache["slen"] + qlen
         else:
-            klen = shape_list(kv)[1]
+            klen = tf.shape(kv)[1]
 
         # assert dim == self.dim, f'Dimensions do not match: {dim} input vs {self.dim} configured'
         dim_per_head = self.dim // self.n_heads
-        mask_reshape = (bs, 1, qlen, klen) if len(shape_list(mask)) == 3 else (bs, 1, 1, klen)
+        mask_reshape = (bs, 1, qlen, klen) if len(mask.shape) == 3 else (bs, 1, 1, klen)
 
         def shape(x):
             """projection"""
@@ -336,7 +336,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
 
     def set_input_embeddings(self, value):
         self.embeddings.weight = value
-        self.embeddings.vocab_size = shape_list(value)[0]
+        self.embeddings.vocab_size = tf.shape(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -367,9 +367,9 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            bs, slen = shape_list(input_ids)
+            bs, slen = tf.shape(input_ids)
         elif inputs_embeds is not None:
-            bs, slen = shape_list(inputs_embeds)[:2]
+            bs, slen = tf.shape(inputs_embeds)[:2]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
@@ -383,11 +383,11 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
         # mask = input_ids != self.pad_index
 
         # check inputs
-        # assert shape_list(lengths)[0] == bs
+        # assert tf.shape(lengths)[0] == bs
         if tf.executing_eagerly():
             tf.debugging.assert_equal(
-                shape_list(lengths)[0], bs
-            ), f"Expected batch size {shape_list(lengths)[0]} and received batch size {bs} mismatched"
+                tf.shape(lengths)[0], bs
+            ), f"Expected batch size {tf.shape(lengths)[0]} and received batch size {bs} mismatched"
         # assert lengths.max().item() <= slen
         # input_ids = input_ids.transpose(0, 1)  # batch size as dimension 0
         # assert (src_enc is None) == (src_len is None)
@@ -406,18 +406,18 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
             position_ids = tf.tile(position_ids, (bs, 1))
 
         if tf.executing_eagerly():
-            # assert shape_list(position_ids) == [bs, slen]  # (slen, bs)
+            # assert tf.shape(position_ids) == [bs, slen]  # (slen, bs)
             tf.debugging.assert_equal(
-                shape_list(position_ids), [bs, slen]
-            ), f"Position id shape {shape_list(position_ids)} and input shape {[bs, slen]} mismatched"
+                tf.shape(position_ids), [bs, slen]
+            ), f"Position id shape {tf.shape(position_ids)} and input shape {[bs, slen]} mismatched"
             # position_ids = position_ids.transpose(0, 1)
 
         # langs
         if langs is not None and tf.executing_eagerly():
-            # assert shape_list(langs) == [bs, slen]  # (slen, bs)
+            # assert tf.shape(langs) == [bs, slen]  # (slen, bs)
             tf.debugging.assert_equal(
-                shape_list(langs), [bs, slen]
-            ), f"Lang shape {shape_list(langs)} and input shape {[bs, slen]} mismatched"
+                tf.shape(langs), [bs, slen]
+            ), f"Lang shape {tf.shape(langs)} and input shape {[bs, slen]} mismatched"
             # langs = langs.transpose(0, 1)
 
         # Prepare head mask if needed
@@ -769,14 +769,14 @@ class TFXLMPredLayer(tf.keras.layers.Layer):
 
     def set_output_embeddings(self, value):
         self.input_embeddings.weight = value
-        self.input_embeddings.vocab_size = shape_list(value)[0]
+        self.input_embeddings.vocab_size = tf.shape(value)[0]
 
     def get_bias(self):
         return {"bias": self.bias}
 
     def set_bias(self, value):
         self.bias = value["bias"]
-        self.vocab_size = shape_list(value["bias"])[0]
+        self.vocab_size = tf.shape(value["bias"])[0]
 
     def call(self, hidden_states):
         hidden_states = self.input_embeddings(hidden_states, mode="linear")
@@ -1024,11 +1024,11 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
         training=False,
     ):
         if input_ids is not None:
-            num_choices = shape_list(input_ids)[1]
-            seq_length = shape_list(input_ids)[2]
+            num_choices = tf.shape(input_ids)[1]
+            seq_length = tf.shape(input_ids)[2]
         else:
-            num_choices = shape_list(inputs_embeds)[1]
-            seq_length = shape_list(inputs_embeds)[2]
+            num_choices = tf.shape(inputs_embeds)[1]
+            seq_length = tf.shape(inputs_embeds)[2]
 
         flat_input_ids = tf.reshape(input_ids, (-1, seq_length)) if input_ids is not None else None
         flat_attention_mask = tf.reshape(attention_mask, (-1, seq_length)) if attention_mask is not None else None
@@ -1036,7 +1036,7 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
         flat_position_ids = tf.reshape(position_ids, (-1, seq_length)) if position_ids is not None else None
         flat_langs = tf.reshape(langs, (-1, seq_length)) if langs is not None else None
         flat_inputs_embeds = (
-            tf.reshape(inputs_embeds, (-1, seq_length, shape_list(inputs_embeds)[3]))
+            tf.reshape(inputs_embeds, (-1, seq_length, tf.shape(inputs_embeds)[3]))
             if inputs_embeds is not None
             else None
         )

@@ -61,9 +61,9 @@ GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 def fixed_pos_embedding(x: tf.Tensor, seq_dim: int = 1, seq_len: Optional[int] = None) -> Tuple[tf.Tensor, tf.Tensor]:
-    dim = shape_list(x)[-1]
+    dim = tf.shape(x)[-1]
     if seq_len is None:
-        seq_len = shape_list(x)[seq_dim]
+        seq_len = tf.shape(x)[seq_dim]
     inv_freq = tf.cast(1.0 / (10000 ** (tf.range(0, dim, 2) / dim)), tf.float32)
     seq_len_range = tf.cast(tf.range(seq_len), tf.float32)
     sinusoid_inp = tf.cast(tf.einsum("i , j -> i j", seq_len_range, inv_freq), tf.float32)
@@ -72,15 +72,15 @@ def fixed_pos_embedding(x: tf.Tensor, seq_dim: int = 1, seq_len: Optional[int] =
 
 def rotate_every_two(x: tf.Tensor) -> tf.Tensor:
     rotate_half_tensor = tf.stack((-x[:, :, :, 1::2], x[:, :, :, ::2]), axis=-1)
-    new_shape = shape_list(rotate_half_tensor)[:-2] + [tf.math.reduce_prod(shape_list(rotate_half_tensor)[-2:])]
+    new_shape = tf.shape(rotate_half_tensor)[:-2] + [tf.math.reduce_prod(tf.shape(rotate_half_tensor)[-2:])]
     rotate_half_tensor = tf.reshape(rotate_half_tensor, new_shape)
     return rotate_half_tensor
 
 
 def apply_rotary_pos_emb(x: tf.Tensor, sincos: tf.Tensor, offset: int = 0) -> tf.Tensor:
     sin_pos, cos_pos = sincos
-    sin_pos = tf.repeat(sin_pos[None, offset : shape_list(x)[1] + offset, None, :], 2, 3)
-    cos_pos = tf.repeat(cos_pos[None, offset : shape_list(x)[1] + offset, None, :], 2, 3)
+    sin_pos = tf.repeat(sin_pos[None, offset : tf.shape(x)[1] + offset, None, :], 2, 3)
+    cos_pos = tf.repeat(cos_pos[None, offset : tf.shape(x)[1] + offset, None, :], 2, 3)
     return (x * cos_pos) + (rotate_every_two(x) * sin_pos)
 
 
@@ -144,27 +144,27 @@ class TFGPTJAttention(tf.keras.layers.Layer):
         """
         Splits hidden dim into attn_head_size and num_attention_heads
         """
-        new_shape = shape_list(hidden_states)[:-1] + [self.num_attention_heads, self.head_dim]
+        new_shape = tf.shape(hidden_states)[:-1] + [self.num_attention_heads, self.head_dim]
         hidden_states = tf.reshape(hidden_states, new_shape)
         if rotary:
             return hidden_states
-        if len(shape_list(hidden_states)) == 4:
+        if len(tf.shape(hidden_states)) == 4:
             return tf.transpose(hidden_states, (0, 2, 1, 3))  # (batch, head, seq_length, head_features)
-        if len(shape_list(hidden_states)) == 5:
+        if len(tf.shape(hidden_states)) == 5:
             return tf.transpose(hidden_states, (0, 1, 3, 2, 4))  # (batch, blocks, head, block_length, head_features)
-        raise ValueError(f"Input tensor rank should be one of [4, 5], but is: {len(shape_list(hidden_states))}")
+        raise ValueError(f"Input tensor rank should be one of [4, 5], but is: {len(tf.shape(hidden_states))}")
 
     def _merge_heads(self, hidden_states: tf.Tensor) -> tf.Tensor:
         """
         Merges attn_head_size dim and num_attn_heads dim into hidden dim
         """
-        if len(shape_list(hidden_states)) == 4:
+        if len(tf.shape(hidden_states)) == 4:
             hidden_states = tf.transpose(hidden_states, (0, 2, 1, 3))
-        elif len(shape_list(hidden_states)) == 5:
+        elif len(tf.shape(hidden_states)) == 5:
             hidden_states = tf.transpose(hidden_states, (0, 1, 3, 2, 4))
         else:
-            raise ValueError(f"Input tensor rank should be one of [4, 5], but is: {len(shape_list(hidden_states))}")
-        new_shape = shape_list(hidden_states)[:-2] + [self.num_attention_heads * self.head_dim]
+            raise ValueError(f"Input tensor rank should be one of [4, 5], but is: {len(tf.shape(hidden_states))}")
+        new_shape = tf.shape(hidden_states)[:-2] + [self.num_attention_heads * self.head_dim]
         return tf.reshape(hidden_states, new_shape)
 
     def _attn(
@@ -176,7 +176,7 @@ class TFGPTJAttention(tf.keras.layers.Layer):
         head_mask: Optional[tf.Tensor] = None,
     ) -> Tuple[tf.Tensor, tf.Tensor]:
         # compute causal mask from causal mask buffer
-        query_length, key_length = shape_list(query)[-2], shape_list(key)[-2]
+        query_length, key_length = tf.shape(query)[-2], tf.shape(key)[-2]
         causal_mask = self.get_causal_mask(key_length, query_length)
 
         # Keep the attention weights computation in fp32 to avoid overflow issues
@@ -221,11 +221,11 @@ class TFGPTJAttention(tf.keras.layers.Layer):
         key = self._split_heads(key, True)
         value = self._split_heads(value, False)
 
-        seq_len = shape_list(key)[1]
+        seq_len = tf.shape(key)[1]
         offset = 0
 
         if layer_past is not None:
-            offset = shape_list(layer_past[0])[-2]
+            offset = tf.shape(layer_past[0])[-2]
             seq_len += offset
 
         if self.rotary_dim is not None:
@@ -368,7 +368,7 @@ class TFGPTJMainLayer(tf.keras.layers.Layer):
 
     def set_input_embeddings(self, value: tf.Tensor):
         self.wte.weight = value
-        self.wte.vocab_size = shape_list(value)[0]
+        self.wte.vocab_size = tf.shape(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -396,10 +396,10 @@ class TFGPTJMainLayer(tf.keras.layers.Layer):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            input_shape = shape_list(input_ids)
+            input_shape = tf.shape(input_ids)
             input_ids = tf.reshape(input_ids, [-1, input_shape[-1]])
         elif inputs_embeds is not None:
-            input_shape = shape_list(inputs_embeds)[:-1]
+            input_shape = tf.shape(inputs_embeds)[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
@@ -407,7 +407,7 @@ class TFGPTJMainLayer(tf.keras.layers.Layer):
             past_length = 0
             past_key_values = [None] * len(self.h)
         else:
-            past_length = shape_list(past_key_values[0][0])[-2]
+            past_length = tf.shape(past_key_values[0][0])[-2]
 
         if position_ids is None:
             position_ids = tf.expand_dims(tf.range(past_length, input_shape[-1] + past_length), axis=0)
@@ -418,7 +418,7 @@ class TFGPTJMainLayer(tf.keras.layers.Layer):
             # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
             # this attention mask is more simple than the triangular masking of causal attention
             # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-            attention_mask_shape = shape_list(attention_mask)
+            attention_mask_shape = tf.shape(attention_mask)
             attention_mask = tf.reshape(attention_mask, (attention_mask_shape[0], 1, 1, attention_mask_shape[1]))
 
             # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
@@ -441,13 +441,13 @@ class TFGPTJMainLayer(tf.keras.layers.Layer):
             head_mask = [None] * self.num_hidden_layers
             # head_mask = tf.constant([0] * self.num_hidden_layers)
 
-        position_ids = tf.reshape(position_ids, [-1, shape_list(position_ids)[-1]])
+        position_ids = tf.reshape(position_ids, [-1, tf.shape(position_ids)[-1]])
 
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids, mode="embedding")
 
         if token_type_ids is not None:
-            token_type_ids = tf.reshape(token_type_ids, [-1, shape_list(token_type_ids)[-1]])
+            token_type_ids = tf.reshape(token_type_ids, [-1, tf.shape(token_type_ids)[-1]])
             token_type_embeds = self.wte(token_type_ids, mode="embedding")
         else:
             token_type_embeds = tf.constant(0.0)
@@ -456,7 +456,7 @@ class TFGPTJMainLayer(tf.keras.layers.Layer):
         hidden_states = inputs_embeds + token_type_embeds
         hidden_states = self.drop(hidden_states, training=training)
 
-        output_shape = input_shape + [shape_list(hidden_states)[-1]]
+        output_shape = input_shape + [tf.shape(hidden_states)[-1]]
 
         presents = () if use_cache else None
         all_attentions = () if output_attentions else None
@@ -491,7 +491,7 @@ class TFGPTJMainLayer(tf.keras.layers.Layer):
 
         if output_attentions:
             # let the number of heads free (-1) so we can extract attention even after head pruning
-            attention_output_shape = input_shape[:-1] + [-1] + shape_list(all_attentions[0])[-2:]
+            attention_output_shape = input_shape[:-1] + [-1] + tf.shape(all_attentions[0])[-2:]
             all_attentions = tuple(tf.reshape(t, attention_output_shape) for t in all_attentions)
 
         if not return_dict:
@@ -908,7 +908,7 @@ class TFGPTJForSequenceClassification(TFGPTJPreTrainedModel, TFSequenceClassific
         )
         hidden_states = transformer_outputs[0]
         logits = self.score(hidden_states)
-        logits_shape = shape_list(logits)
+        logits_shape = tf.shape(logits)
         in_logits = None
         if self.config.pad_token_id is None:
             sequence_lengths = -1

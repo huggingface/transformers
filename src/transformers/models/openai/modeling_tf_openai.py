@@ -97,11 +97,11 @@ class TFAttention(tf.keras.layers.Layer):
         # q, k, v have shape [batch, heads, sequence, features]
         w = tf.matmul(q, k, transpose_b=True)
         if self.scale:
-            dk = tf.cast(shape_list(k)[-1], dtype=w.dtype)  # scale attention_scores
+            dk = tf.cast(tf.shape(k)[-1], dtype=w.dtype)  # scale attention_scores
             w = w / tf.math.sqrt(dk)
 
         # w has shape [batch, heads, dst_sequence, src_sequence], where information flows from src to dst.
-        _, _, nd, ns = shape_list(w)
+        _, _, nd, ns = tf.shape(w)
         b = tf.cast(self.causal_attention_mask(nd, ns), dtype=w.dtype)
         b = tf.reshape(b, [1, 1, nd, ns])
         w = w * b - 1e4 * (1 - b)
@@ -125,12 +125,12 @@ class TFAttention(tf.keras.layers.Layer):
 
     def merge_heads(self, x):
         x = tf.transpose(x, [0, 2, 1, 3])
-        x_shape = shape_list(x)
+        x_shape = tf.shape(x)
         new_x_shape = x_shape[:-2] + [x_shape[-2] * x_shape[-1]]
         return tf.reshape(x, new_x_shape)
 
     def split_heads(self, x):
-        x_shape = shape_list(x)
+        x_shape = tf.shape(x)
         new_x_shape = x_shape[:-1] + [self.n_head, x_shape[-1] // self.n_head]
         x = tf.reshape(x, new_x_shape)
         return tf.transpose(x, (0, 2, 1, 3))  # (batch, head, seq_length, head_features)
@@ -228,7 +228,7 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
 
     def set_input_embeddings(self, value):
         self.tokens_embed.weight = value
-        self.tokens_embed.vocab_size = shape_list(value)[0]
+        self.tokens_embed.vocab_size = tf.shape(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -254,10 +254,10 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            input_shape = shape_list(input_ids)
+            input_shape = tf.shape(input_ids)
             input_ids = tf.reshape(input_ids, [-1, input_shape[-1]])
         elif inputs_embeds is not None:
-            input_shape = shape_list(inputs_embeds)[:-1]
+            input_shape = tf.shape(inputs_embeds)[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
@@ -295,20 +295,20 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
             head_mask = [None] * self.num_hidden_layers
             # head_mask = tf.constant([0] * self.num_hidden_layers)
 
-        position_ids = tf.reshape(position_ids, [-1, shape_list(position_ids)[-1]])
+        position_ids = tf.reshape(position_ids, [-1, tf.shape(position_ids)[-1]])
 
         if inputs_embeds is None:
             inputs_embeds = self.tokens_embed(input_ids, mode="embedding")
         position_embeds = tf.gather(self.positions_embed, position_ids)
         if token_type_ids is not None:
-            token_type_ids = tf.reshape(token_type_ids, [-1, shape_list(token_type_ids)[-1]])
+            token_type_ids = tf.reshape(token_type_ids, [-1, tf.shape(token_type_ids)[-1]])
             token_type_embeds = self.tokens_embed(token_type_ids, mode="embedding")
         else:
             token_type_embeds = 0
         hidden_states = inputs_embeds + position_embeds + token_type_embeds
         hidden_states = self.drop(hidden_states, training=training)
 
-        output_shape = input_shape + [shape_list(hidden_states)[-1]]
+        output_shape = input_shape + [tf.shape(hidden_states)[-1]]
 
         all_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
@@ -334,7 +334,7 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
 
         if output_attentions:
             # let the number of heads free (-1) so we can extract attention even after head pruning
-            attention_output_shape = input_shape[:-1] + [-1] + shape_list(all_attentions[0])[-2:]
+            attention_output_shape = input_shape[:-1] + [-1] + tf.shape(all_attentions[0])[-2:]
             all_attentions = tuple(tf.reshape(t, attention_output_shape) for t in all_attentions)
 
         if not return_dict:
@@ -701,9 +701,9 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
         ```"""
 
         if input_ids is not None:
-            input_shapes = shape_list(input_ids)
+            input_shapes = tf.shape(input_ids)
         else:
-            input_shapes = shape_list(inputs_embeds)[:-1]
+            input_shapes = tf.shape(inputs_embeds)[:-1]
 
         seq_length = input_shapes[-1]
         flat_input_ids = tf.reshape(input_ids, (-1, seq_length)) if input_ids is not None else None
@@ -723,7 +723,7 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
             training=training,
         )
         hidden_states = transformer_outputs[0]
-        hidden_states = tf.reshape(hidden_states, input_shapes + shape_list(hidden_states)[-1:])
+        hidden_states = tf.reshape(hidden_states, input_shapes + tf.shape(hidden_states)[-1:])
         lm_logits = self.transformer.tokens_embed(hidden_states, mode="linear")
         mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids, training=training)
         mc_logits = tf.squeeze(mc_logits, axis=-1)
@@ -857,9 +857,9 @@ class TFOpenAIGPTForSequenceClassification(TFOpenAIGPTPreTrainedModel, TFSequenc
 
         if labels is not None:
             if input_ids is not None:
-                batch_size, sequence_length = shape_list(input_ids)[:2]
+                batch_size, sequence_length = tf.shape(input_ids)[:2]
             else:
-                batch_size, sequence_length = shape_list(inputs_embeds)[:2]
+                batch_size, sequence_length = tf.shape(inputs_embeds)[:2]
             assert (
                 self.config.pad_token_id is not None or batch_size == 1
             ), "Cannot handle batch sizes > 1 if no padding token is defined."

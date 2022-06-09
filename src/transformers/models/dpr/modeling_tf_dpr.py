@@ -237,7 +237,7 @@ class TFDPRSpanPredictorLayer(tf.keras.layers.Layer):
         training: bool = False,
     ) -> Union[TFDPRReaderOutput, Tuple[tf.Tensor, ...]]:
         # notations: N - number of questions in a batch, M - number of passages per questions, L - sequence length
-        n_passages, sequence_length = shape_list(input_ids) if input_ids is not None else shape_list(inputs_embeds)[:2]
+        n_passages, sequence_length = tf.shape(input_ids) if input_ids is not None else tf.shape(inputs_embeds)[:2]
         # feed encoder
         outputs = self.encoder(
             input_ids=input_ids,
@@ -575,9 +575,9 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            input_shape = shape_list(input_ids)
+            input_shape = tf.shape(input_ids)
         elif inputs_embeds is not None:
-            input_shape = shape_list(inputs_embeds)[:-1]
+            input_shape = tf.shape(inputs_embeds)[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
@@ -662,9 +662,9 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            input_shape = shape_list(input_ids)
+            input_shape = tf.shape(input_ids)
         elif inputs_embeds is not None:
-            input_shape = shape_list(inputs_embeds)[:-1]
+            input_shape = tf.shape(inputs_embeds)[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
@@ -755,9 +755,9 @@ class TFDPRReader(TFDPRPretrainedReader):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            input_shape = shape_list(input_ids)
+            input_shape = tf.shape(input_ids)
         elif inputs_embeds is not None:
-            input_shape = shape_list(inputs_embeds)[:-1]
+            input_shape = tf.shape(inputs_embeds)[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 

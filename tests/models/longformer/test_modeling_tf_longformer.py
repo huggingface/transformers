@@ -130,16 +130,16 @@ class TFLongformerModelTester:
         result = model(input_ids)
 
         self.parent.assertListEqual(
-            shape_list(result.last_hidden_state), [self.batch_size, self.seq_length, self.hidden_size]
+            tf.shape(result.last_hidden_state), [self.batch_size, self.seq_length, self.hidden_size]
         )
-        self.parent.assertListEqual(shape_list(result.pooler_output), [self.batch_size, self.hidden_size])
+        self.parent.assertListEqual(tf.shape(result.pooler_output), [self.batch_size, self.hidden_size])
 
     def create_and_check_model_with_global_attention_mask(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.return_dict = True
         model = TFLongformerModel(config=config)
-        half_input_mask_length = shape_list(input_mask)[-1] // 2
+        half_input_mask_length = tf.shape(input_mask)[-1] // 2
         global_attention_mask = tf.concat(
             [
                 tf.zeros_like(input_mask)[:, :half_input_mask_length],
@@ -158,9 +158,9 @@ class TFLongformerModelTester:
         result = model(input_ids, global_attention_mask=global_attention_mask)
 
         self.parent.assertListEqual(
-            shape_list(result.last_hidden_state), [self.batch_size, self.seq_length, self.hidden_size]
+            tf.shape(result.last_hidden_state), [self.batch_size, self.seq_length, self.hidden_size]
         )
-        self.parent.assertListEqual(shape_list(result.pooler_output), [self.batch_size, self.hidden_size])
+        self.parent.assertListEqual(tf.shape(result.pooler_output), [self.batch_size, self.hidden_size])
 
     def create_and_check_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -168,7 +168,7 @@ class TFLongformerModelTester:
         config.return_dict = True
         model = TFLongformerForMaskedLM(config=config)
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertListEqual(shape_list(result.logits), [self.batch_size, self.seq_length, self.vocab_size])
+        self.parent.assertListEqual(tf.shape(result.logits), [self.batch_size, self.seq_length, self.vocab_size])
 
     def create_and_check_for_question_answering(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -183,8 +183,8 @@ class TFLongformerModelTester:
             end_positions=sequence_labels,
         )
 
-        self.parent.assertListEqual(shape_list(result.start_logits), [self.batch_size, self.seq_length])
-        self.parent.assertListEqual(shape_list(result.end_logits), [self.batch_size, self.seq_length])
+        self.parent.assertListEqual(tf.shape(result.start_logits), [self.batch_size, self.seq_length])
+        self.parent.assertListEqual(tf.shape(result.end_logits), [self.batch_size, self.seq_length])
 
     def create_and_check_for_sequence_classification(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -194,7 +194,7 @@ class TFLongformerModelTester:
         output = model(
             input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels
         ).logits
-        self.parent.assertListEqual(shape_list(output), [self.batch_size, self.num_labels])
+        self.parent.assertListEqual(tf.shape(output), [self.batch_size, self.num_labels])
 
     def create_and_check_for_token_classification(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -202,7 +202,7 @@ class TFLongformerModelTester:
         config.num_labels = self.num_labels
         model = TFLongformerForTokenClassification(config=config)
         output = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels).logits
-        self.parent.assertListEqual(shape_list(output), [self.batch_size, self.seq_length, self.num_labels])
+        self.parent.assertListEqual(tf.shape(output), [self.batch_size, self.seq_length, self.num_labels])
 
     def create_and_check_for_multiple_choice(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -392,13 +392,13 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
         hidden_states = self._get_hidden_states()
         hidden_states = tf.reshape(hidden_states, (1, 8, 4))  # set seq length = 8, hidden dim = 4
         chunked_hidden_states = TFLongformerSelfAttention._chunk(hidden_states, window_overlap=2)
-        window_overlap_size = shape_list(chunked_hidden_states)[2]
+        window_overlap_size = tf.shape(chunked_hidden_states)[2]
         self.assertTrue(window_overlap_size == 4)
 
         padded_hidden_states = TFLongformerSelfAttention._pad_and_diagonalize(chunked_hidden_states)
 
         self.assertTrue(
-            shape_list(padded_hidden_states)[-1] == shape_list(chunked_hidden_states)[-1] + window_overlap_size - 1
+            tf.shape(padded_hidden_states)[-1] == tf.shape(chunked_hidden_states)[-1] + window_overlap_size - 1
         )
 
         # first row => [0.4983,  2.6918, -0.0071,  1.0492, 0.0000,  0.0000,  0.0000]
@@ -413,14 +413,14 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
 
     def test_pad_and_transpose_last_two_dims(self):
         hidden_states = self._get_hidden_states()
-        self.assertEqual(shape_list(hidden_states), [1, 4, 8])
+        self.assertEqual(tf.shape(hidden_states), [1, 4, 8])
 
         # pad along seq length dim
         paddings = tf.constant([[0, 0], [0, 0], [0, 1], [0, 0]], dtype=tf.dtypes.int32)
 
         hidden_states = TFLongformerSelfAttention._chunk(hidden_states, window_overlap=2)
         padded_hidden_states = TFLongformerSelfAttention._pad_and_transpose_last_two_dims(hidden_states, paddings)
-        self.assertTrue(shape_list(padded_hidden_states) == [1, 1, 8, 5])
+        self.assertTrue(tf.shape(padded_hidden_states) == [1, 1, 8, 5])
 
         expected_added_dim = tf.zeros((5,), dtype=tf.dtypes.float32)
         tf.debugging.assert_near(expected_added_dim, padded_hidden_states[0, 0, -1, :], rtol=1e-6)
@@ -459,7 +459,7 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
         expected_slice_along_seq_length = tf.convert_to_tensor([0.4983, -0.7584, -1.6944], dtype=tf.dtypes.float32)
         expected_slice_along_chunk = tf.convert_to_tensor([0.4983, -1.8348, -0.7584, 2.0514], dtype=tf.dtypes.float32)
 
-        self.assertTrue(shape_list(chunked_hidden_states) == [1, 3, 4, 4])
+        self.assertTrue(tf.shape(chunked_hidden_states) == [1, 3, 4, 4])
         tf.debugging.assert_near(chunked_hidden_states[0, :, 0, 0], expected_slice_along_seq_length, rtol=1e-3)
         tf.debugging.assert_near(chunked_hidden_states[0, 0, :, 0], expected_slice_along_chunk, rtol=1e-3)
 
@@ -618,7 +618,7 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
 
         # 'Hello world!'
         input_ids = tf.convert_to_tensor([[0, 20920, 232, 328, 1437, 2]], dtype=tf.dtypes.int32)
-        attention_mask = tf.ones(shape_list(input_ids), dtype=tf.dtypes.int32)
+        attention_mask = tf.ones(tf.shape(input_ids), dtype=tf.dtypes.int32)
 
         output = model(input_ids, attention_mask=attention_mask)[0]
         output_without_mask = model(input_ids)[0]
@@ -637,8 +637,8 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
         # 'Hello world! ' repeated 1000 times
         input_ids = tf.convert_to_tensor([[0] + [20920, 232, 328, 1437] * 1000 + [2]], dtype=tf.dtypes.int32)
 
-        attention_mask = tf.ones(shape_list(input_ids), dtype=tf.dtypes.int32)
-        global_attention_mask = tf.zeros(shape_list(input_ids), dtype=tf.dtypes.int32)
+        attention_mask = tf.ones(tf.shape(input_ids), dtype=tf.dtypes.int32)
+        global_attention_mask = tf.zeros(tf.shape(input_ids), dtype=tf.dtypes.int32)
         # Set global attention on a few random positions
         global_attention_mask = tf.tensor_scatter_nd_update(
             global_attention_mask, tf.constant([[0, 1], [0, 4], [0, 21]]), tf.constant([1, 1, 1])

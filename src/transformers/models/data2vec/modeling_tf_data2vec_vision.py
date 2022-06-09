@@ -172,7 +172,7 @@ class TFData2VecVisionEmbeddings(tf.keras.layers.Layer):
     def call(self, pixel_values: tf.Tensor, bool_masked_pos: Optional[tf.Tensor] = None) -> tf.Tensor:
 
         embeddings = self.patch_embeddings(pixel_values)
-        batch_size, seq_len, projection_dim = shape_list(embeddings)
+        batch_size, seq_len, projection_dim = tf.shape(embeddings)
 
         cls_tokens = tf.tile(self.cls_token, (batch_size, 1, 1))
 
@@ -234,7 +234,7 @@ class TFPatchEmbeddings(tf.keras.layers.Layer):
         )
 
     def call(self, pixel_values: tf.Tensor, training: bool = False) -> tf.Tensor:
-        batch_size, num_channels, height, width = shape_list(pixel_values)
+        batch_size, num_channels, height, width = tf.shape(pixel_values)
         if getattr(height, "numpy", None) and getattr(width, "numpy", None):
             if height != self.image_size[0] or width != self.image_size[1]:
                 raise ValueError(
@@ -307,7 +307,7 @@ class TFData2VecVisionSelfAttention(tf.keras.layers.Layer):
         relative_position_bias: Optional["TFData2VecVisionRelativePositionBias"] = None,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
-        batch_size = shape_list(hidden_states)[0]
+        batch_size = tf.shape(hidden_states)[0]
         mixed_query_layer = self.query(inputs=hidden_states)
         mixed_key_layer = self.key(inputs=hidden_states)
         mixed_value_layer = self.value(inputs=hidden_states)
@@ -1146,7 +1146,7 @@ class TFData2VecVisionPyramidPoolingModule(tf.keras.layers.Layer):
                 ppm_out = layer_module(x)
                 x = ppm_out
 
-            upsampled_ppm_out = tf.image.resize(ppm_out, size=shape_list(inputs)[1:-1], method="bilinear")
+            upsampled_ppm_out = tf.image.resize(ppm_out, size=tf.shape(inputs)[1:-1], method="bilinear")
             ppm_outs.append(upsampled_ppm_out)
         return ppm_outs
 
@@ -1203,7 +1203,7 @@ class TFData2VecVisionUperHead(tf.keras.layers.Layer):
         # build top-down path
         used_backbone_levels = len(laterals)
         for i in range(used_backbone_levels - 1, 0, -1):
-            prev_shape = shape_list(laterals[i - 1])[1:-1]
+            prev_shape = tf.shape(laterals[i - 1])[1:-1]
             laterals[i - 1] = laterals[i - 1] + tf.image.resize(laterals[i], size=prev_shape, method="bilinear")
 
         # build outputs
@@ -1212,7 +1212,7 @@ class TFData2VecVisionUperHead(tf.keras.layers.Layer):
         fpn_outs.append(laterals[-1])
 
         for i in range(used_backbone_levels - 1, 0, -1):
-            fpn_outs[i] = tf.image.resize(fpn_outs[i], size=shape_list(fpn_outs[0])[1:-1], method="bilinear")
+            fpn_outs[i] = tf.image.resize(fpn_outs[i], size=tf.shape(fpn_outs[0])[1:-1], method="bilinear")
         fpn_outs = tf.concat(fpn_outs, axis=-1)
         output = self.fpn_bottleneck(fpn_outs)
         output = self.classifier(output)
@@ -1324,10 +1324,10 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
 
     def compute_loss(self, logits, auxiliary_logits, labels):
         # upsample logits to the images' original size
-        if len(shape_list(labels)) > 3:
-            label_interp_shape = shape_list(labels)[1:-1]
+        if len(tf.shape(labels)) > 3:
+            label_interp_shape = tf.shape(labels)[1:-1]
         else:
-            label_interp_shape = shape_list(labels)[-2:]
+            label_interp_shape = tf.shape(labels)[-2:]
 
         upsampled_logits = tf.image.resize(logits, size=label_interp_shape, method="bilinear")
         if auxiliary_logits is not None:
@@ -1405,7 +1405,7 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
         # only keep certain features, and reshape
         # note that we do +1 as the encoder_hidden_states also includes the initial embeddings
         features = [feature for idx, feature in enumerate(encoder_hidden_states) if idx + 1 in self.config.out_indices]
-        batch_size = shape_list(pixel_values)[0]
+        batch_size = tf.shape(pixel_values)[0]
         patch_resolution = self.config.image_size // self.config.patch_size
 
         def reshape_features(x):

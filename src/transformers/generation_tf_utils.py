@@ -650,7 +650,7 @@ class TFGenerationMixin:
             model_kwargs["encoder_hidden_states"] = None
 
         if input_ids is not None:
-            batch_size = shape_list(input_ids)[0]  # overridden by the input batch_size
+            batch_size = tf.shape(input_ids)[0]  # overridden by the input batch_size
         else:
             batch_size = 1
 
@@ -715,14 +715,14 @@ class TFGenerationMixin:
             if (attention_mask is None) and (pad_token_id is not None) and (pad_token_id in input_ids.numpy()):
                 attention_mask = tf.cast(tf.math.not_equal(input_ids, pad_token_id), dtype=tf.int32)
             elif attention_mask is None:
-                attention_mask = tf.ones(shape_list(input_ids)[:2], dtype=tf.int32)
+                attention_mask = tf.ones(tf.shape(input_ids)[:2], dtype=tf.int32)
 
         if pad_token_id is None and eos_token_id is not None:
             logger.warning(f"Setting `pad_token_id` to {eos_token_id} (first `eos_token_id`) to generate sequence")
             pad_token_id = eos_token_id
 
         # current position and vocab size
-        cur_len = shape_list(input_ids)[1]  # unused
+        cur_len = tf.shape(input_ids)[1]  # unused
         vocab_size = getattr(self.config, "vocab_size", None)
         if vocab_size is None and self.config.is_encoder_decoder:
             decoder_config = getattr(self.config, "decoder", None)
@@ -770,7 +770,7 @@ class TFGenerationMixin:
             shape=(-1,),
         )
         # prepares text-based inputs
-        if len(shape_list(input_ids)) == 2:
+        if len(tf.shape(input_ids)) == 2:
             input_ids = tf.gather(input_ids, expanded_batch_idxs, axis=0)
         if accepts_attention_mask:
             attention_mask = tf.gather(attention_mask, expanded_batch_idxs, axis=0)
@@ -795,7 +795,7 @@ class TFGenerationMixin:
             encoder_outputs = (tf.gather(encoder_outputs[0], expanded_batch_idxs, axis=0),)
         else:
             encoder_outputs = None
-            cur_len = shape_list(input_ids)[-1]
+            cur_len = tf.shape(input_ids)[-1]
 
         assert cur_len < max_length, (
             f"The context has {cur_len} number of tokens, but `max_length` is only {max_length}. Please make sure that"
@@ -994,7 +994,7 @@ class TFGenerationMixin:
                     tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf"), scores
                 )
 
-            assert shape_list(scores) == [batch_size * num_beams, vocab_size]
+            assert tf.shape(scores) == [batch_size * num_beams, vocab_size]
 
             if do_sample:
                 _scores = scores + tf.broadcast_to(
@@ -1031,7 +1031,7 @@ class TFGenerationMixin:
 
                 next_scores, next_tokens = tf.math.top_k(next_scores, k=2 * num_beams, sorted=True)
 
-            assert shape_list(next_scores) == shape_list(next_tokens) == [batch_size, 2 * num_beams]
+            assert tf.shape(next_scores) == tf.shape(next_tokens) == [batch_size, 2 * num_beams]
 
             # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
@@ -1129,7 +1129,7 @@ class TFGenerationMixin:
             # extend attention_mask for new generated input if only decoder
             if self.config.is_encoder_decoder is False:
                 attention_mask = tf.concat(
-                    [attention_mask, tf.ones((shape_list(attention_mask)[0], 1), dtype=tf.int32)], axis=-1
+                    [attention_mask, tf.ones((tf.shape(attention_mask)[0], 1), dtype=tf.int32)], axis=-1
                 )
 
         # finalize all open beam hypotheses and end to generated hypotheses
@@ -1185,7 +1185,7 @@ class TFGenerationMixin:
 
             # fill with hypothesis and eos_token_id if necessary
             for i, hypo in enumerate(best):
-                assert sent_lengths[i] == shape_list(hypo)[0]
+                assert sent_lengths[i] == tf.shape(hypo)[0]
                 # if sent_length is max_len do not pad
                 if sent_lengths[i] == sent_max_len:
                     decoded_slice = hypo
@@ -1802,7 +1802,7 @@ class TFGenerationMixin:
             if "attention_mask" in model_kwargs:
                 attention_mask = model_kwargs["attention_mask"]
                 model_kwargs["attention_mask"] = tf.concat(
-                    [attention_mask, tf.ones((shape_list(attention_mask)[0], 1), dtype=tf.int32)], axis=-1
+                    [attention_mask, tf.ones((tf.shape(attention_mask)[0], 1), dtype=tf.int32)], axis=-1
                 )
 
         return model_kwargs
@@ -2969,7 +2969,7 @@ class TFGenerationMixin:
 
 def _create_next_token_logits_penalties(input_ids, logits, repetition_penalty):
     # create logit penalties for already seen input_ids
-    token_penalties = np.ones(shape_list(logits))
+    token_penalties = np.ones(tf.shape(logits))
     prev_input_ids = [np.unique(input_id) for input_id in input_ids.numpy()]
     for i, prev_input_id in enumerate(prev_input_ids):
         logit_penalized = logits[i].numpy()[prev_input_id]
@@ -3056,7 +3056,7 @@ def tf_top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float("In
 
     From: https://gist.github.com/thomwolf/1a5a29f6962089e871b94cbd09daf317
     """
-    logits_shape = shape_list(logits)
+    logits_shape = tf.shape(logits)
 
     if top_k > 0:
         top_k = min(max(top_k, min_tokens_to_keep), logits_shape[-1])  # Safety check
@@ -3096,7 +3096,7 @@ def tf_top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float("In
 
 
 def scatter_values_on_batch_indices(values, batch_indices):
-    shape = shape_list(batch_indices)
+    shape = tf.shape(batch_indices)
     # broadcast batch dim to shape
     broad_casted_batch_dims = tf.reshape(tf.broadcast_to(tf.expand_dims(tf.range(shape[0]), axis=-1), shape), [1, -1])
     # transform batch_indices to pair_indices
@@ -3110,7 +3110,7 @@ def sample_without_replacement(logits, num_samples):
     categorical sampling without replacement is currently not implemented the gumbel-max trick will do for now see
     https://github.com/tensorflow/tensorflow/issues/9260 for more info
     """
-    z = -tf.math.log(tf.random.uniform(shape_list(logits), 0, 1))
+    z = -tf.math.log(tf.random.uniform(tf.shape(logits), 0, 1))
     _, indices = tf.nn.top_k(logits + z, num_samples)
     return indices
 

@@ -315,7 +315,7 @@ class TFT5Attention(tf.keras.layers.Layer):
         # Input is (batch_size, query_length, dim)
         # Mask is (batch_size, key_length) (non-causal) or (batch_size, key_length, key_length)
         # past_key_value[0] is (batch_size, n_heads, q_len - 1, dim_per_head)
-        batch_size, seq_length = shape_list(hidden_states)[:2]
+        batch_size, seq_length = tf.shape(hidden_states)[:2]
 
         real_seq_length = seq_length
 
@@ -323,9 +323,9 @@ class TFT5Attention(tf.keras.layers.Layer):
             assert (
                 len(past_key_value) == 2
             ), f"past_key_value should have 2 past states: keys and values. Got {len(past_key_value)} past states"
-            real_seq_length += shape_list(past_key_value[0])[2] if query_length is None else query_length
+            real_seq_length += tf.shape(past_key_value[0])[2] if query_length is None else query_length
 
-        key_length = real_seq_length if key_value_states is None else shape_list(key_value_states)[1]
+        key_length = real_seq_length if key_value_states is None else tf.shape(key_value_states)[1]
 
         def shape(hidden_states):
             """projection"""
@@ -401,11 +401,11 @@ class TFT5Attention(tf.keras.layers.Layer):
         # Mask heads if we want to
         if layer_head_mask is not None:
             tf.debugging.assert_equal(
-                shape_list(layer_head_mask),
+                tf.shape(layer_head_mask),
                 [self.n_heads],
                 message=(
                     f"Head mask for a single layer should be of size {(self.n_heads)}, but is"
-                    f" {shape_list(layer_head_mask)}"
+                    f" {tf.shape(layer_head_mask)}"
                 ),
             )
             weights = tf.reshape(layer_head_mask, (1, -1, 1, 1)) * weights
@@ -573,7 +573,7 @@ class TFT5Block(tf.keras.layers.Layer):
             # the actual query length is unknown for cross attention
             # if using past key value states. Need to inject it here
             if present_key_value_state is not None:
-                query_length = shape_list(present_key_value_state[0])[2]
+                query_length = tf.shape(present_key_value_state[0])[2]
             else:
                 query_length = None
 
@@ -662,10 +662,10 @@ class TFT5MainLayer(tf.keras.layers.Layer):
                 f"You cannot specify both {err_msg_prefix}input_ids and {err_msg_prefix}inputs_embeds at the same time"
             )
         elif input_ids is not None:
-            input_shape = shape_list(input_ids)
+            input_shape = tf.shape(input_ids)
             input_ids = tf.reshape(input_ids, (-1, input_shape[-1]))
         elif inputs_embeds is not None:
-            input_shape = shape_list(inputs_embeds)[:-1]
+            input_shape = tf.shape(inputs_embeds)[:-1]
         else:
             err_msg_prefix = "decoder_" if self.is_decoder else ""
             raise ValueError(f"You have to specify either {err_msg_prefix}input_ids or {err_msg_prefix}inputs_embeds")
@@ -678,13 +678,13 @@ class TFT5MainLayer(tf.keras.layers.Layer):
 
         # required mask seq length can be calculated via length of past
         mask_seq_length = (
-            shape_list(past_key_values[0][0])[2] + seq_length if past_key_values is not None else seq_length
+            tf.shape(past_key_values[0][0])[2] + seq_length if past_key_values is not None else seq_length
         )
 
         if attention_mask is None:
             attention_mask = tf.fill((batch_size, mask_seq_length), 1)
         if self.is_decoder and encoder_attention_mask is None and encoder_hidden_states is not None:
-            encoder_seq_length = shape_list(encoder_hidden_states)[1]
+            encoder_seq_length = tf.shape(encoder_hidden_states)[1]
             encoder_attention_mask = tf.fill((batch_size, encoder_seq_length), 1)
 
         # initialize past_key_values with `None` if past does not exist
@@ -694,7 +694,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
         attention_mask = tf.cast(attention_mask, dtype=inputs_embeds.dtype)
-        num_dims_attention_mask = len(shape_list(attention_mask))
+        num_dims_attention_mask = len(tf.shape(attention_mask))
         if num_dims_attention_mask == 3:
             extended_attention_mask = attention_mask[:, None, :, :]
         elif num_dims_attention_mask == 2:
@@ -732,7 +732,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             # we need to make broadcastable to [batch_size, num_heads, mask_seq_length, mask_seq_length]
             # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
             encoder_attention_mask = tf.cast(encoder_attention_mask, dtype=extended_attention_mask.dtype)
-            num_dims_encoder_attention_mask = len(shape_list(encoder_attention_mask))
+            num_dims_encoder_attention_mask = len(tf.shape(encoder_attention_mask))
             if num_dims_encoder_attention_mask == 3:
                 encoder_extended_attention_mask = encoder_attention_mask[:, None, :, :]
             if num_dims_encoder_attention_mask == 2:
@@ -885,7 +885,7 @@ class TFT5PreTrainedModel(TFPreTrainedModel):
             self(self.dummy_inputs)
             self.shared.weight = value
 
-        self.shared.vocab_size = shape_list(value)[0]
+        self.shared.vocab_size = tf.shape(value)[0]
         # retrieve correct absolute scope for embed token wrapper
         with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
             pass
@@ -904,7 +904,7 @@ class TFT5PreTrainedModel(TFPreTrainedModel):
             " pad_token_id. See T5 docs for more information"
         )
 
-        start_tokens = tf.fill((shape_list(input_ids)[0], 1), decoder_start_token_id)
+        start_tokens = tf.fill((tf.shape(input_ids)[0], 1), decoder_start_token_id)
         start_tokens = tf.cast(start_tokens, input_ids.dtype)  # Ensure compatible dtypes for concatenation
         shifted_input_ids = tf.concat([start_tokens, input_ids[:, :-1]], -1)
 
@@ -912,7 +912,7 @@ class TFT5PreTrainedModel(TFPreTrainedModel):
         # replace possible -100 values in labels by `pad_token_id`
         shifted_input_ids = tf.where(
             shifted_input_ids == -100,
-            tf.cast(tf.fill(shape_list(shifted_input_ids), pad_token_id), shifted_input_ids.dtype),
+            tf.cast(tf.fill(tf.shape(shifted_input_ids), pad_token_id), shifted_input_ids.dtype),
             shifted_input_ids,
         )
 
@@ -1297,7 +1297,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         else:
             lm_head_initializer = tf.keras.initializers.RandomNormal(mean=0, stddev=self.config.initializer_factor)
             self.lm_head = tf.keras.layers.Dense(
-                shape_list(value)[0], use_bias=False, name="lm_head", kernel_initializer=lm_head_initializer
+                tf.shape(value)[0], use_bias=False, name="lm_head", kernel_initializer=lm_head_initializer
             )  # Update init weights as in flax
             # in a dense layer the kernel has a shape (last_dim, units), for us (dim, num_tokens)
             # value has a shape (num_tokens, dim) then needs to be transposed

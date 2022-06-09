@@ -121,7 +121,7 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
 
     def rel_shift(self, x, klen=-1):
         """perform relative shift to form the relative attention score."""
-        x_size = shape_list(x)
+        x_size = tf.shape(x)
 
         x = tf.reshape(x, (x_size[1], x_size[0], x_size[2], x_size[3]))
         x = x[1:, ...]
@@ -140,7 +140,7 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
 
         # position based attention score
         bd = tf.einsum("ibnd,jbnd->ijbn", q_head + self.r_r_bias, k_head_r)
-        bd = self.rel_shift(bd, klen=shape_list(ac)[1])
+        bd = self.rel_shift(bd, klen=tf.shape(ac)[1])
 
         # segment based attention score
         if seg_mat is None:
@@ -205,7 +205,7 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
         if g is not None:
             # Two-stream attention with relative positional encoding.
             # content based attention score
-            if mems is not None and len(shape_list(mems)) > 1:
+            if mems is not None and len(tf.shape(mems)) > 1:
                 cat = tf.concat([mems, h], axis=0)
             else:
                 cat = h
@@ -289,7 +289,7 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
 
         else:
             # Multi-head attention with relative positional encoding
-            if mems is not None and len(shape_list(mems)) > 1:
+            if mems is not None and len(tf.shape(mems)) > 1:
                 cat = tf.concat([mems, h], axis=0)
             else:
                 cat = h
@@ -416,14 +416,14 @@ class TFXLNetLMHead(tf.keras.layers.Layer):
 
     def set_output_embeddings(self, value):
         self.input_embeddings.weight = value
-        self.input_embeddings.vocab_size = shape_list(value)[0]
+        self.input_embeddings.vocab_size = tf.shape(value)[0]
 
     def get_bias(self):
         return {"bias": self.bias}
 
     def set_bias(self, value):
         self.bias = value["bias"]
-        self.vocab_size = shape_list(value["bias"])[0]
+        self.vocab_size = tf.shape(value["bias"])[0]
 
     def call(self, hidden_states):
         hidden_states = self.input_embeddings(hidden_states, mode="linear")
@@ -468,7 +468,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
 
     def set_input_embeddings(self, value):
         self.word_embedding.weight = value
-        self.word_embedding.vocab_size = shape_list(value)[0]
+        self.word_embedding.vocab_size = tf.shape(value)[0]
 
     def build(self, input_shape):
         initializer = get_initializer(self.initializer_range)
@@ -612,10 +612,10 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             input_ids = tf.transpose(input_ids, perm=(1, 0))
-            qlen, bsz = shape_list(input_ids)[:2]
+            qlen, bsz = tf.shape(input_ids)[:2]
         elif inputs_embeds is not None:
             inputs_embeds = tf.transpose(inputs_embeds, perm=(1, 0, 2))
-            qlen, bsz = shape_list(inputs_embeds)[:2]
+            qlen, bsz = tf.shape(inputs_embeds)[:2]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
@@ -625,7 +625,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         perm_mask = tf.transpose(perm_mask, perm=(1, 2, 0)) if perm_mask is not None else None
         target_mapping = tf.transpose(target_mapping, perm=(1, 2, 0)) if target_mapping is not None else None
 
-        mlen = shape_list(mems[0])[0] if mems is not None and mems[0] is not None else 0
+        mlen = tf.shape(mems[0])[0] if mems is not None and mems[0] is not None else 0
         klen = mlen + qlen
 
         # Attention mask
@@ -658,7 +658,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         if data_mask is not None:
             # all mems can be attended to
             if mlen > 0:
-                mems_mask = tf.zeros([shape_list(data_mask)[0], mlen, bsz])
+                mems_mask = tf.zeros([tf.shape(data_mask)[0], mlen, bsz])
                 data_mask = tf.concat([mems_mask, data_mask], axis=1)
             if attn_mask is None:
                 attn_mask = data_mask[:, :, :, None]
@@ -683,7 +683,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             word_emb_k = self.word_embedding(input_ids)
         output_h = self.dropout(word_emb_k, training=training)
         if target_mapping is not None:
-            word_emb_q = tf.tile(self.mask_emb, [shape_list(target_mapping)[0], bsz, 1])
+            word_emb_q = tf.tile(self.mask_emb, [tf.shape(target_mapping)[0], bsz, 1])
             # else:  # We removed the inp_q input which was same as target mapping
             #     inp_q_ext = inp_q[:, :, None]
             #     word_emb_q = inp_q_ext * self.mask_emb + (1 - inp_q_ext) * word_emb_k
@@ -1505,18 +1505,18 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
         """
 
         if input_ids is not None:
-            num_choices = shape_list(input_ids)[1]
-            seq_length = shape_list(input_ids)[2]
+            num_choices = tf.shape(input_ids)[1]
+            seq_length = tf.shape(input_ids)[2]
         else:
-            num_choices = shape_list(inputs_embeds)[1]
-            seq_length = shape_list(inputs_embeds)[2]
+            num_choices = tf.shape(inputs_embeds)[1]
+            seq_length = tf.shape(inputs_embeds)[2]
 
         flat_input_ids = tf.reshape(input_ids, (-1, seq_length)) if input_ids is not None else None
         flat_attention_mask = tf.reshape(attention_mask, (-1, seq_length)) if attention_mask is not None else None
         flat_token_type_ids = tf.reshape(token_type_ids, (-1, seq_length)) if token_type_ids is not None else None
         flat_input_mask = tf.reshape(input_mask, (-1, seq_length)) if input_mask is not None else None
         flat_inputs_embeds = (
-            tf.reshape(inputs_embeds, (-1, seq_length, shape_list(inputs_embeds)[3]))
+            tf.reshape(inputs_embeds, (-1, seq_length, tf.shape(inputs_embeds)[3]))
             if inputs_embeds is not None
             else None
         )

@@ -90,7 +90,7 @@ class TFAlbertPreTrainingLoss:
         # are taken into account as loss
         masked_lm_active_loss = tf.not_equal(tf.reshape(tensor=labels["labels"], shape=(-1,)), -100)
         masked_lm_reduced_logits = tf.boolean_mask(
-            tensor=tf.reshape(tensor=logits[0], shape=(-1, shape_list(logits[0])[2])),
+            tensor=tf.reshape(tensor=logits[0], shape=(-1, tf.shape(logits[0])[2])),
             mask=masked_lm_active_loss,
         )
         masked_lm_labels = tf.boolean_mask(
@@ -105,7 +105,7 @@ class TFAlbertPreTrainingLoss:
         )
         masked_lm_loss = loss_fn(y_true=masked_lm_labels, y_pred=masked_lm_reduced_logits)
         sentence_order_loss = loss_fn(y_true=sentence_order_label, y_pred=sentence_order_reduced_logits)
-        masked_lm_loss = tf.reshape(tensor=masked_lm_loss, shape=(-1, shape_list(sentence_order_loss)[0]))
+        masked_lm_loss = tf.reshape(tensor=masked_lm_loss, shape=(-1, tf.shape(sentence_order_loss)[0]))
         masked_lm_loss = tf.reduce_mean(input_tensor=masked_lm_loss, axis=0)
 
         return masked_lm_loss + sentence_order_loss
@@ -171,7 +171,7 @@ class TFAlbertEmbeddings(tf.keras.layers.Layer):
         if input_ids is not None:
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
 
-        input_shape = shape_list(inputs_embeds)[:-1]
+        input_shape = tf.shape(inputs_embeds)[:-1]
 
         if token_type_ids is None:
             token_type_ids = tf.fill(dims=input_shape, value=0)
@@ -240,7 +240,7 @@ class TFAlbertAttention(tf.keras.layers.Layer):
         output_attentions: bool,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
-        batch_size = shape_list(input_tensor)[0]
+        batch_size = tf.shape(input_tensor)[0]
         mixed_query_layer = self.query(inputs=input_tensor)
         mixed_key_layer = self.key(inputs=input_tensor)
         mixed_value_layer = self.value(inputs=input_tensor)
@@ -479,7 +479,7 @@ class TFAlbertMLMHead(tf.keras.layers.Layer):
 
     def set_output_embeddings(self, value: tf.Variable):
         self.decoder.weight = value
-        self.decoder.vocab_size = shape_list(value)[0]
+        self.decoder.vocab_size = tf.shape(value)[0]
 
     def get_bias(self) -> Dict[str, tf.Variable]:
         return {"bias": self.bias, "decoder_bias": self.decoder_bias}
@@ -487,13 +487,13 @@ class TFAlbertMLMHead(tf.keras.layers.Layer):
     def set_bias(self, value: tf.Variable):
         self.bias = value["bias"]
         self.decoder_bias = value["decoder_bias"]
-        self.vocab_size = shape_list(value["bias"])[0]
+        self.vocab_size = tf.shape(value["bias"])[0]
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
         hidden_states = self.activation(hidden_states)
         hidden_states = self.LayerNorm(inputs=hidden_states)
-        seq_length = shape_list(tensor=hidden_states)[1]
+        seq_length = tf.shape(tensor=hidden_states)[1]
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.embedding_size])
         hidden_states = tf.matmul(a=hidden_states, b=self.decoder.weight, transpose_b=True)
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
@@ -529,7 +529,7 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
 
     def set_input_embeddings(self, value: tf.Variable):
         self.embeddings.weight = value
-        self.embeddings.vocab_size = shape_list(value)[0]
+        self.embeddings.vocab_size = tf.shape(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -556,9 +556,9 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            input_shape = shape_list(input_ids)
+            input_shape = tf.shape(input_ids)
         elif inputs_embeds is not None:
-            input_shape = shape_list(inputs_embeds)[:-1]
+            input_shape = tf.shape(inputs_embeds)[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
@@ -1391,11 +1391,11 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
         """
 
         if input_ids is not None:
-            num_choices = shape_list(input_ids)[1]
-            seq_length = shape_list(input_ids)[2]
+            num_choices = tf.shape(input_ids)[1]
+            seq_length = tf.shape(input_ids)[2]
         else:
-            num_choices = shape_list(inputs_embeds)[1]
-            seq_length = shape_list(inputs_embeds)[2]
+            num_choices = tf.shape(inputs_embeds)[1]
+            seq_length = tf.shape(inputs_embeds)[2]
 
         flat_input_ids = tf.reshape(input_ids, (-1, seq_length)) if input_ids is not None else None
         flat_attention_mask = (
@@ -1408,7 +1408,7 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
             tf.reshape(tensor=position_ids, shape=(-1, seq_length)) if position_ids is not None else None
         )
         flat_inputs_embeds = (
-            tf.reshape(tensor=inputs_embeds, shape=(-1, seq_length, shape_list(inputs_embeds)[3]))
+            tf.reshape(tensor=inputs_embeds, shape=(-1, seq_length, tf.shape(inputs_embeds)[3]))
             if inputs_embeds is not None
             else None
         )

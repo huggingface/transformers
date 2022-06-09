@@ -203,9 +203,9 @@ class TFTapasEmbeddings(tf.keras.layers.Layer):
         """
         assert not (input_ids is None and inputs_embeds is None)
         if input_ids is not None:
-            input_shape = shape_list(input_ids)
+            input_shape = tf.shape(input_ids)
         else:
-            input_shape = shape_list(inputs_embeds)[:-1]
+            input_shape = tf.shape(inputs_embeds)[:-1]
 
         seq_length = input_shape[1]
 
@@ -297,7 +297,7 @@ class TFTapasSelfAttention(tf.keras.layers.Layer):
         output_attentions: bool,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
-        batch_size = shape_list(hidden_states)[0]
+        batch_size = tf.shape(hidden_states)[0]
         mixed_query_layer = self.query(inputs=hidden_states)
 
         # If this is instantiated as a cross-attention module, the keys
@@ -696,18 +696,18 @@ class TFTapasLMPredictionHead(tf.keras.layers.Layer):
 
     def set_output_embeddings(self, value: tf.Variable):
         self.input_embeddings.weight = value
-        self.input_embeddings.vocab_size = shape_list(value)[0]
+        self.input_embeddings.vocab_size = tf.shape(value)[0]
 
     def get_bias(self) -> Dict[str, tf.Variable]:
         return {"bias": self.bias}
 
     def set_bias(self, value: tf.Variable):
         self.bias = value["bias"]
-        self.vocab_size = shape_list(value["bias"])[0]
+        self.vocab_size = tf.shape(value["bias"])[0]
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.transform(hidden_states=hidden_states)
-        seq_length = shape_list(hidden_states)[1]
+        seq_length = tf.shape(hidden_states)[1]
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
         hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
@@ -748,7 +748,7 @@ class TFTapasMainLayer(tf.keras.layers.Layer):
 
     def set_input_embeddings(self, value: tf.Variable):
         self.embeddings.weight = value
-        self.embeddings.vocab_size = shape_list(value)[0]
+        self.embeddings.vocab_size = tf.shape(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -775,9 +775,9 @@ class TFTapasMainLayer(tf.keras.layers.Layer):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            input_shape = shape_list(input_ids)
+            input_shape = tf.shape(input_ids)
         elif inputs_embeds is not None:
-            input_shape = shape_list(inputs_embeds)[:-1]
+            input_shape = tf.shape(inputs_embeds)[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
@@ -1354,9 +1354,9 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
         sequence_output = self.dropout(sequence_output)
 
         if input_ids is not None:
-            input_shape = shape_list(input_ids)
+            input_shape = tf.shape(input_ids)
         else:
-            input_shape = shape_list(inputs_embeds)[:-1]
+            input_shape = tf.shape(inputs_embeds)[:-1]
 
         # Construct indices for the table.
         if token_type_ids is None:
@@ -1389,7 +1389,7 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
         cell_index = ProductIndexMap(row_index, col_index)
 
         # Masks.
-        input_shape = shape_list(input_ids) if input_ids is not None else shape_list(inputs_embeds)[:-1]
+        input_shape = tf.shape(input_ids) if input_ids is not None else tf.shape(inputs_embeds)[:-1]
         if attention_mask is None:
             attention_mask = tf.ones(input_shape)
         # Table cells only, without question tokens and table headers.
@@ -1436,7 +1436,7 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
             else:
                 if float_answer is not None:
                     assert (
-                        shape_list(labels)[0] == shape_list(float_answer)[0]
+                        tf.shape(labels)[0] == tf.shape(float_answer)[0]
                     ), "Make sure the answers are a FloatTensor of shape (batch_size,)"
                     # <float32>[batch_size]
                     aggregate_mask = _calculate_aggregate_mask(
@@ -1489,7 +1489,7 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
                     # Note that `aggregate_mask` is None if the setting is supervised.
                     if aggregation_labels is not None:
                         assert (
-                            shape_list(labels)[0] == shape_list(aggregation_labels)[0]
+                            tf.shape(labels)[0] == tf.shape(aggregation_labels)[0]
                         ), "Make sure the aggregation labels are a LongTensor of shape (batch_size,)"
                         per_example_additional_loss = _calculate_aggregation_loss(
                             logits_aggregation,
@@ -1504,7 +1504,7 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
                             "You have to specify aggregation labels in order to calculate the aggregation loss"
                         )
                 else:
-                    aggregation_labels = tf.zeros(shape_list(labels)[0], dtype=tf.int32)
+                    aggregation_labels = tf.zeros(tf.shape(labels)[0], dtype=tf.int32)
                     per_example_additional_loss = _calculate_aggregation_loss(
                         logits_aggregation,
                         aggregate_mask,
@@ -1516,7 +1516,7 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
 
                 if self.config.use_answer_as_supervision:
                     if numeric_values is not None and numeric_values_scale is not None:
-                        assert shape_list(numeric_values) == shape_list(numeric_values_scale)
+                        assert tf.shape(numeric_values) == tf.shape(numeric_values_scale)
                         # Add regression loss for numeric answers which require aggregation.
                         answer_loss, large_answer_loss_mask = _calculate_regression_loss(
                             float_answer,

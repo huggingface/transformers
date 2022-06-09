@@ -185,7 +185,7 @@ class TFSharedEmbeddings(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
-def shape_list(*args, **kwargs):
+def tf.shape(*args, **kwargs):
     requires_backends(shape_list, ["tf"])
 
 

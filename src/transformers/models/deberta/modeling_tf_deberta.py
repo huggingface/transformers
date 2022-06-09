@@ -103,7 +103,7 @@ class TFDebertaXSoftmax(tf.keras.layers.Layer):
 
 def get_mask(input, dropout):
     mask = tf.cast(
-        1 - tf.compat.v1.distributions.Bernoulli(probs=1 - dropout).sample(sample_shape=shape_list(input)), tf.bool
+        1 - tf.compat.v1.distributions.Bernoulli(probs=1 - dropout).sample(sample_shape=tf.shape(input)), tf.bool
     )
     return mask, dropout
 
@@ -312,19 +312,19 @@ class TFDebertaEncoder(tf.keras.layers.Layer):
         return rel_embeddings
 
     def get_attention_mask(self, attention_mask):
-        if len(shape_list(attention_mask)) <= 2:
+        if len(tf.shape(attention_mask)) <= 2:
             extended_attention_mask = tf.expand_dims(tf.expand_dims(attention_mask, 1), 2)
             attention_mask = extended_attention_mask * tf.expand_dims(tf.squeeze(extended_attention_mask, -2), -1)
             attention_mask = tf.cast(attention_mask, tf.uint8)
-        elif len(shape_list(attention_mask)) == 3:
+        elif len(tf.shape(attention_mask)) == 3:
             attention_mask = tf.expand_dims(attention_mask, 1)
 
         return attention_mask
 
     def get_rel_pos(self, hidden_states, query_states=None, relative_pos=None):
         if self.relative_attention and relative_pos is None:
-            q = shape_list(query_states)[-2] if query_states is not None else shape_list(hidden_states)[-2]
-            relative_pos = build_relative_position(q, shape_list(hidden_states)[-2])
+            q = tf.shape(query_states)[-2] if query_states is not None else tf.shape(hidden_states)[-2]
+            relative_pos = build_relative_position(q, tf.shape(hidden_states)[-2])
         return relative_pos
 
     def call(
@@ -415,26 +415,26 @@ def build_relative_position(query_size, key_size):
 
 def c2p_dynamic_expand(c2p_pos, query_layer, relative_pos):
     shapes = [
-        shape_list(query_layer)[0],
-        shape_list(query_layer)[1],
-        shape_list(query_layer)[2],
-        shape_list(relative_pos)[-1],
+        tf.shape(query_layer)[0],
+        tf.shape(query_layer)[1],
+        tf.shape(query_layer)[2],
+        tf.shape(relative_pos)[-1],
     ]
     return tf.broadcast_to(c2p_pos, shapes)
 
 
 def p2c_dynamic_expand(c2p_pos, query_layer, key_layer):
     shapes = [
-        shape_list(query_layer)[0],
-        shape_list(query_layer)[1],
-        shape_list(key_layer)[-2],
-        shape_list(key_layer)[-2],
+        tf.shape(query_layer)[0],
+        tf.shape(query_layer)[1],
+        tf.shape(key_layer)[-2],
+        tf.shape(key_layer)[-2],
     ]
     return tf.broadcast_to(c2p_pos, shapes)
 
 
 def pos_dynamic_expand(pos_index, p2c_att, key_layer):
-    shapes = shape_list(p2c_att)[:2] + [shape_list(pos_index)[-2], shape_list(key_layer)[-2]]
+    shapes = tf.shape(p2c_att)[:2] + [tf.shape(pos_index)[-2], tf.shape(key_layer)[-2]]
     return tf.broadcast_to(pos_index, shapes)
 
 
@@ -539,7 +539,7 @@ class TFDebertaDisentangledSelfAttention(tf.keras.layers.Layer):
         return super().build(input_shape)
 
     def transpose_for_scores(self, tensor: tf.Tensor) -> tf.Tensor:
-        shape = shape_list(tensor)[:-1] + [self.num_attention_heads, -1]
+        shape = tf.shape(tensor)[:-1] + [self.num_attention_heads, -1]
         # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
         tensor = tf.reshape(tensor=tensor, shape=shape)
 
@@ -623,7 +623,7 @@ class TFDebertaDisentangledSelfAttention(tf.keras.layers.Layer):
         rel_att = None
         # Take the dot product between "query" and "key" to get the raw attention scores.
         scale_factor = 1 + len(self.pos_att_type)
-        scale = math.sqrt(shape_list(query_layer)[-1] * scale_factor)
+        scale = math.sqrt(tf.shape(query_layer)[-1] * scale_factor)
         query_layer = query_layer / scale
 
         attention_scores = tf.matmul(query_layer, tf.transpose(key_layer, [0, 1, 3, 2]))
@@ -648,7 +648,7 @@ class TFDebertaDisentangledSelfAttention(tf.keras.layers.Layer):
 
         context_layer = tf.matmul(attention_probs, value_layer)
         context_layer = tf.transpose(context_layer, [0, 2, 1, 3])
-        new_context_layer_shape = shape_list(context_layer)[:-2] + [-1]
+        new_context_layer_shape = tf.shape(context_layer)[:-2] + [-1]
         context_layer = tf.reshape(context_layer, new_context_layer_shape)
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
         return outputs
@@ -656,9 +656,9 @@ class TFDebertaDisentangledSelfAttention(tf.keras.layers.Layer):
     def disentangled_att_bias(self, query_layer, key_layer, relative_pos, rel_embeddings, scale_factor):
 
         if relative_pos is None:
-            q = shape_list(query_layer)[-2]
-            relative_pos = build_relative_position(q, shape_list(key_layer)[-2])
-        shape_list_pos = shape_list(relative_pos)
+            q = tf.shape(query_layer)[-2]
+            relative_pos = build_relative_position(q, tf.shape(key_layer)[-2])
+        shape_list_pos = tf.shape(relative_pos)
         if len(shape_list_pos) == 2:
             relative_pos = tf.expand_dims(tf.expand_dims(relative_pos, 0), 0)
         elif len(shape_list_pos) == 3:
@@ -669,7 +669,7 @@ class TFDebertaDisentangledSelfAttention(tf.keras.layers.Layer):
 
         att_span = tf.cast(
             tf.minimum(
-                tf.maximum(shape_list(query_layer)[-2], shape_list(key_layer)[-2]), self.max_relative_positions
+                tf.maximum(tf.shape(query_layer)[-2], tf.shape(key_layer)[-2]), self.max_relative_positions
             ),
             tf.int64,
         )
@@ -692,9 +692,9 @@ class TFDebertaDisentangledSelfAttention(tf.keras.layers.Layer):
         if "p2c" in self.pos_att_type:
             pos_query_layer = self.pos_q_proj(rel_embeddings)
             pos_query_layer = self.transpose_for_scores(pos_query_layer)
-            pos_query_layer /= tf.math.sqrt(tf.cast(shape_list(pos_query_layer)[-1] * scale_factor, dtype=tf.float32))
-            if shape_list(query_layer)[-2] != shape_list(key_layer)[-2]:
-                r_pos = build_relative_position(shape_list(key_layer)[-2], shape_list(key_layer)[-2])
+            pos_query_layer /= tf.math.sqrt(tf.cast(tf.shape(pos_query_layer)[-1] * scale_factor, dtype=tf.float32))
+            if tf.shape(query_layer)[-2] != tf.shape(key_layer)[-2]:
+                r_pos = build_relative_position(tf.shape(key_layer)[-2], tf.shape(key_layer)[-2])
             else:
                 r_pos = relative_pos
             p2c_pos = tf.clip_by_value(-r_pos + att_span, 0, att_span * 2 - 1)
@@ -702,7 +702,7 @@ class TFDebertaDisentangledSelfAttention(tf.keras.layers.Layer):
             p2c_att = tf.transpose(
                 torch_gather(p2c_att, p2c_dynamic_expand(p2c_pos, query_layer, key_layer), -1), [0, 1, 3, 2]
             )
-            if shape_list(query_layer)[-2] != shape_list(key_layer)[-2]:
+            if tf.shape(query_layer)[-2] != tf.shape(key_layer)[-2]:
                 pos_index = tf.expand_dims(relative_pos[:, :, :, 0], -1)
                 p2c_att = torch_gather(p2c_att, pos_dynamic_expand(pos_index, p2c_att, key_layer), -2)
             score += p2c_att
@@ -778,7 +778,7 @@ class TFDebertaEmbeddings(tf.keras.layers.Layer):
         if input_ids is not None:
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
 
-        input_shape = shape_list(inputs_embeds)[:-1]
+        input_shape = tf.shape(inputs_embeds)[:-1]
 
         if token_type_ids is None:
             token_type_ids = tf.fill(dims=input_shape, value=0)
@@ -800,8 +800,8 @@ class TFDebertaEmbeddings(tf.keras.layers.Layer):
         final_embeddings = self.LayerNorm(final_embeddings)
 
         if mask is not None:
-            if len(shape_list(mask)) != len(shape_list(final_embeddings)):
-                if len(shape_list(mask)) == 4:
+            if len(tf.shape(mask)) != len(tf.shape(final_embeddings)):
+                if len(tf.shape(mask)) == 4:
                     mask = tf.squeeze(tf.squeeze(mask, axis=1), axis=1)
                 mask = tf.cast(tf.expand_dims(mask, axis=2), tf.float32)
 
@@ -859,18 +859,18 @@ class TFDebertaLMPredictionHead(tf.keras.layers.Layer):
 
     def set_output_embeddings(self, value: tf.Variable):
         self.input_embeddings.weight = value
-        self.input_embeddings.vocab_size = shape_list(value)[0]
+        self.input_embeddings.vocab_size = tf.shape(value)[0]
 
     def get_bias(self) -> Dict[str, tf.Variable]:
         return {"bias": self.bias}
 
     def set_bias(self, value: tf.Variable):
         self.bias = value["bias"]
-        self.vocab_size = shape_list(value["bias"])[0]
+        self.vocab_size = tf.shape(value["bias"])[0]
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.transform(hidden_states=hidden_states)
-        seq_length = shape_list(hidden_states)[1]
+        seq_length = tf.shape(hidden_states)[1]
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
         hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
@@ -907,7 +907,7 @@ class TFDebertaMainLayer(tf.keras.layers.Layer):
 
     def set_input_embeddings(self, value: tf.Variable):
         self.embeddings.weight = value
-        self.embeddings.vocab_size = shape_list(value)[0]
+        self.embeddings.vocab_size = tf.shape(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -933,9 +933,9 @@ class TFDebertaMainLayer(tf.keras.layers.Layer):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            input_shape = shape_list(input_ids)
+            input_shape = tf.shape(input_ids)
         elif inputs_embeds is not None:
-            input_shape = shape_list(inputs_embeds)[:-1]
+            input_shape = tf.shape(inputs_embeds)[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 

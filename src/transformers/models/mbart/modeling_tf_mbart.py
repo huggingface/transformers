@@ -69,11 +69,11 @@ def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int):
     if pad_token_id is None:
         raise ValueError("self.model.config.pad_token_id has to be defined.")
     # replace possible -100 values in labels by `pad_token_id`
-    input_ids = tf.where(input_ids == -100, tf.fill(shape_list(input_ids), pad_token_id), input_ids)
+    input_ids = tf.where(input_ids == -100, tf.fill(tf.shape(input_ids), pad_token_id), input_ids)
     language_id_index = (
         tf.reduce_sum(tf.cast(tf.math.not_equal(input_ids, pad_token_id), dtype=input_ids.dtype), axis=-1) - 1
     )
-    language_id_index = tf.stack([tf.range(shape_list(input_ids)[0]), language_id_index], axis=-1)
+    language_id_index = tf.stack([tf.range(tf.shape(input_ids)[0]), language_id_index], axis=-1)
     languages_ids = tf.gather_nd(input_ids, language_id_index)
 
     shifted_input_ids = tf.concat([tf.expand_dims(languages_ids, axis=-1), input_ids[:, :-1]], axis=-1)
@@ -88,9 +88,9 @@ def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: i
     """
     bsz, tgt_len = input_ids_shape
     mask = tf.ones((tgt_len, tgt_len)) * LARGE_NEGATIVE
-    mask_cond = tf.range(shape_list(mask)[-1])
+    mask_cond = tf.range(tf.shape(mask)[-1])
 
-    mask = tf.where(mask_cond < tf.reshape(mask_cond + 1, (shape_list(mask)[-1], 1)), 0.0, mask)
+    mask = tf.where(mask_cond < tf.reshape(mask_cond + 1, (tf.shape(mask)[-1], 1)), 0.0, mask)
 
     if past_key_values_length > 0:
         mask = tf.concat([tf.zeros((tgt_len, past_key_values_length)), mask], axis=-1)
@@ -103,7 +103,7 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
-    src_len = shape_list(mask)[1]
+    src_len = tf.shape(mask)[1]
     tgt_len = tgt_len if tgt_len is not None else src_len
     one_cst = tf.constant(1.0)
     mask = tf.cast(mask, dtype=one_cst.dtype)
@@ -181,7 +181,7 @@ class TFMBartAttention(tf.keras.layers.Layer):
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
-        bsz, tgt_len, embed_dim = shape_list(hidden_states)
+        bsz, tgt_len, embed_dim = tf.shape(hidden_states)
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
@@ -220,18 +220,18 @@ class TFMBartAttention(tf.keras.layers.Layer):
         key_states = tf.reshape(key_states, proj_shape)
         value_states = tf.reshape(value_states, proj_shape)
 
-        src_len = shape_list(key_states)[1]
+        src_len = tf.shape(key_states)[1]
         attn_weights = tf.matmul(query_states, key_states, transpose_b=True)
 
         # The tf.debugging asserts are not compliant with XLA then they
         # have to be disabled in other modes than eager.
         if tf.executing_eagerly():
             tf.debugging.assert_equal(
-                shape_list(attn_weights),
+                tf.shape(attn_weights),
                 [bsz * self.num_heads, tgt_len, src_len],
                 message=(
                     f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
-                    f" {shape_list(attn_weights)}"
+                    f" {tf.shape(attn_weights)}"
                 ),
             )
 
@@ -240,11 +240,11 @@ class TFMBartAttention(tf.keras.layers.Layer):
             # have to be disabled in other modes than eager.
             if tf.executing_eagerly():
                 tf.debugging.assert_equal(
-                    shape_list(attention_mask),
+                    tf.shape(attention_mask),
                     [bsz, 1, tgt_len, src_len],
                     message=(
                         f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is"
-                        f" {shape_list(attention_mask)}"
+                        f" {tf.shape(attention_mask)}"
                     ),
                 )
 
@@ -259,11 +259,11 @@ class TFMBartAttention(tf.keras.layers.Layer):
             # have to be disabled in other modes than eager.
             if tf.executing_eagerly():
                 tf.debugging.assert_equal(
-                    shape_list(layer_head_mask),
+                    tf.shape(layer_head_mask),
                     [self.num_heads],
                     message=(
                         f"Head mask for a single layer should be of size {(self.num_heads)}, but is"
-                        f" {shape_list(layer_head_mask)}"
+                        f" {tf.shape(layer_head_mask)}"
                     ),
                 )
 
@@ -279,11 +279,11 @@ class TFMBartAttention(tf.keras.layers.Layer):
         # have to be disabled in other modes than eager.
         if tf.executing_eagerly():
             tf.debugging.assert_equal(
-                shape_list(attn_output),
+                tf.shape(attn_output),
                 [bsz * self.num_heads, tgt_len, self.head_dim],
                 message=(
                     f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
-                    f" {shape_list(attn_output)}"
+                    f" {tf.shape(attn_output)}"
                 ),
             )
 
@@ -338,9 +338,9 @@ class TFMBartEncoderLayer(tf.keras.layers.Layer):
         # have to be disabled in other modes than eager.
         if tf.executing_eagerly():
             tf.debugging.assert_equal(
-                shape_list(hidden_states),
-                shape_list(residual),
-                message=f"Self attn modified the shape of query {shape_list(residual)} to {shape_list(hidden_states)}",
+                tf.shape(hidden_states),
+                tf.shape(residual),
+                message=f"Self attn modified the shape of query {tf.shape(residual)} to {tf.shape(hidden_states)}",
             )
 
         hidden_states = self.dropout(hidden_states, training=training)
@@ -744,9 +744,9 @@ class TFMBartEncoder(tf.keras.layers.Layer):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            input_shape = shape_list(input_ids)
+            input_shape = tf.shape(input_ids)
         elif inputs_embeds is not None:
-            input_shape = shape_list(inputs_embeds)[:-1]
+            input_shape = tf.shape(inputs_embeds)[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
@@ -773,11 +773,11 @@ class TFMBartEncoder(tf.keras.layers.Layer):
         # have to be disabled in other modes than eager.
         if head_mask is not None and tf.executing_eagerly():
             tf.debugging.assert_equal(
-                shape_list(head_mask)[0],
+                tf.shape(head_mask)[0],
                 len(self.layers),
                 message=(
                     f"The head_mask should be specified for {len(self.layers)} layers, but it is for"
-                    f" {shape_list(head_mask)[0]}."
+                    f" {tf.shape(head_mask)[0]}."
                 ),
             )
 
@@ -936,13 +936,13 @@ class TFMBartDecoder(tf.keras.layers.Layer):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
         elif input_ids is not None:
-            input_shape = shape_list(input_ids)
+            input_shape = tf.shape(input_ids)
         elif inputs_embeds is not None:
-            input_shape = shape_list(inputs_embeds)[:-1]
+            input_shape = tf.shape(inputs_embeds)[:-1]
         else:
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
-        past_key_values_length = shape_list(past_key_values[0][0])[2] if past_key_values is not None else 0
+        past_key_values_length = tf.shape(past_key_values[0][0])[2] if past_key_values is not None else 0
 
         # embed positions
         positions = self.embed_positions(input_shape, past_key_values_length)
@@ -982,11 +982,11 @@ class TFMBartDecoder(tf.keras.layers.Layer):
         for attn_mask_name, attn_mask in [("head_mask", head_mask), ("cross_attn_head_mask", cross_attn_head_mask)]:
             if attn_mask is not None and tf.executing_eagerly():
                 tf.debugging.assert_equal(
-                    shape_list(attn_mask)[0],
+                    tf.shape(attn_mask)[0],
                     len(self.layers),
                     message=(
                         f"The {attn_mask_name} should be specified for {len(self.layers)} layers, but it is for"
-                        f" {shape_list(attn_mask)[0]}."
+                        f" {tf.shape(attn_mask)[0]}."
                     ),
                 )
 
@@ -1318,7 +1318,7 @@ class TFMBartForConditionalGeneration(TFMBartPreTrainedModel, TFCausalLanguageMo
         if labels is not None:
             labels = tf.where(
                 labels == self.config.pad_token_id,
-                tf.cast(tf.fill(shape_list(labels), -100), labels.dtype),
+                tf.cast(tf.fill(tf.shape(labels), -100), labels.dtype),
                 labels,
             )
             use_cache = False

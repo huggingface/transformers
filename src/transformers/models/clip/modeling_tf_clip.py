@@ -63,7 +63,7 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
-    src_len = shape_list(mask)[1]
+    src_len = tf.shape(mask)[1]
     tgt_len = tgt_len if tgt_len is not None else src_len
     one_cst = tf.constant(1.0)
     mask = tf.cast(mask, dtype=one_cst.dtype)
@@ -77,7 +77,7 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values
 def contrastive_loss(logits: tf.Tensor) -> tf.Tensor:
     return tf.math.reduce_mean(
         tf.keras.metrics.sparse_categorical_crossentropy(
-            y_true=tf.range(shape_list(logits)[0]), y_pred=logits, from_logits=True
+            y_true=tf.range(tf.shape(logits)[0]), y_pred=logits, from_logits=True
         )
     )
 
@@ -174,7 +174,7 @@ class TFCLIPVisionEmbeddings(tf.keras.layers.Layer):
     def call(self, pixel_values: tf.Tensor) -> tf.Tensor:
         """`pixel_values` is expected to be of NCHW format."""
 
-        batch_size, num_channels, height, width = shape_list(pixel_values)
+        batch_size, num_channels, height, width = tf.shape(pixel_values)
 
         # When running on CPU, `tf.nn.conv2d` doesn't support `NCHW` format.
         # So change the input format from `NCHW` to `NHWC`.
@@ -243,7 +243,7 @@ class TFCLIPTextEmbeddings(tf.keras.layers.Layer):
         if inputs_embeds is None:
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
 
-        input_shape = shape_list(inputs_embeds)[:-1]
+        input_shape = tf.shape(inputs_embeds)[:-1]
 
         if position_ids is None:
             position_ids = tf.expand_dims(tf.range(start=0, limit=input_shape[-1]), axis=0)
@@ -310,7 +310,7 @@ class TFCLIPAttention(tf.keras.layers.Layer):
     ) -> Tuple[tf.Tensor]:
         """Input shape: Batch x Time x Channel"""
 
-        batch_size = shape_list(hidden_states)[0]
+        batch_size = tf.shape(hidden_states)[0]
         mixed_query_layer = self.q_proj(inputs=hidden_states)
         mixed_key_layer = self.k_proj(inputs=hidden_states)
         mixed_value_layer = self.v_proj(inputs=hidden_states)
@@ -506,7 +506,7 @@ class TFCLIPTextTransformer(tf.keras.layers.Layer):
         return_dict: bool,
         training: bool = False,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
-        input_shape = shape_list(input_ids)
+        input_shape = tf.shape(input_ids)
 
         embedding_output = self.embeddings(input_ids=input_ids, position_ids=position_ids)
 
@@ -584,7 +584,7 @@ class TFCLIPTextMainLayer(tf.keras.layers.Layer):
 
     def set_input_embeddings(self, value: tf.Variable):
         self.text_model.embeddings.weight = value
-        self.text_model.embeddings.vocab_size = shape_list(value)[0]
+        self.text_model.embeddings.vocab_size = tf.shape(value)[0]
 
     @unpack_inputs
     def call(
@@ -600,7 +600,7 @@ class TFCLIPTextMainLayer(tf.keras.layers.Layer):
         if input_ids is None:
             raise ValueError("You have to specify input_ids")
 
-        input_shape = shape_list(input_ids)
+        input_shape = tf.shape(input_ids)
 
         if attention_mask is None:
             attention_mask = tf.fill(dims=input_shape, value=1)
@@ -769,7 +769,7 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
         if input_ids is None:
             raise ValueError("You have to specify either input_ids")
 
-        input_shape = shape_list(input_ids)
+        input_shape = tf.shape(input_ids)
 
         if attention_mask is None:
             attention_mask = tf.fill(dims=input_shape, value=1)
@@ -833,7 +833,7 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        input_shape = shape_list(input_ids)
+        input_shape = tf.shape(input_ids)
 
         if attention_mask is None:
             attention_mask = tf.fill(dims=input_shape, value=1)

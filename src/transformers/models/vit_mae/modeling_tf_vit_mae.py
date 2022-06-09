@@ -249,7 +249,7 @@ class TFViTMAEEmbeddings(tf.keras.layers.Layer):
             noise (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*) which is
                 mainly used for testing purposes to control randomness and maintain the reproducibility
         """
-        batch_size, seq_length, dim = shape_list(sequence)
+        batch_size, seq_length, dim = tf.shape(sequence)
         len_keep = int(seq_length * (1 - self.config.mask_ratio))
 
         if noise is None:
@@ -291,7 +291,7 @@ class TFViTMAEEmbeddings(tf.keras.layers.Layer):
 
         # append cls token
         cls_token = self.cls_token + self.position_embeddings[:, :1, :]
-        cls_tokens = tf.tile(cls_token, (shape_list(embeddings)[0], 1, 1))
+        cls_tokens = tf.tile(cls_token, (tf.shape(embeddings)[0], 1, 1))
         embeddings = tf.concat([cls_tokens, embeddings], axis=1)
 
         return embeddings, mask, ids_restore
@@ -329,7 +329,7 @@ class TFPatchEmbeddings(tf.keras.layers.Layer):
         )
 
     def call(self, pixel_values: tf.Tensor, training: bool = False) -> tf.Tensor:
-        batch_size, num_channels, height, width = shape_list(pixel_values)
+        batch_size, num_channels, height, width = tf.shape(pixel_values)
         if getattr(height, "numpy", None) and getattr(width, "numpy", None):
             if height != self.image_size[0] or width != self.image_size[1]:
                 raise ValueError(
@@ -393,7 +393,7 @@ class TFViTMAESelfAttention(tf.keras.layers.Layer):
         output_attentions: bool,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
-        batch_size = shape_list(hidden_states)[0]
+        batch_size = tf.shape(hidden_states)[0]
         mixed_query_layer = self.query(inputs=hidden_states)
         mixed_key_layer = self.key(inputs=hidden_states)
         mixed_value_layer = self.value(inputs=hidden_states)
@@ -904,7 +904,7 @@ class TFViTMAEDecoder(tf.keras.layers.Layer):
         # append mask tokens to sequence
         mask_tokens = tf.tile(
             self.mask_token,
-            (shape_list(x)[0], shape_list(ids_restore)[1] + 1 - shape_list(x)[1], 1),
+            (tf.shape(x)[0], tf.shape(ids_restore)[1] + 1 - tf.shape(x)[1], 1),
         )
         x_ = tf.concat([x[:, 1:, :], mask_tokens], axis=1)  # no cls token
         x_ = tf.gather(x_, axis=1, batch_dims=1, indices=ids_restore)  # unshuffle
@@ -974,17 +974,17 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
         imgs: (batch_size, height, width, 3) x: (batch_size, num_patches, patch_size**2 *3)
         """
         imgs = tf.cond(
-            tf.math.equal(shape_list(imgs)[1], 3), lambda: tf.transpose(imgs, perm=(0, 2, 3, 1)), lambda: imgs
+            tf.math.equal(tf.shape(imgs)[1], 3), lambda: tf.transpose(imgs, perm=(0, 2, 3, 1)), lambda: imgs
         )
 
         p = self.vit.embeddings.patch_embeddings.patch_size[0]
-        tf.debugging.assert_equal(shape_list(imgs)[1], shape_list(imgs)[2])
-        tf.debugging.assert_equal(shape_list(imgs)[1] % p, 0)
+        tf.debugging.assert_equal(tf.shape(imgs)[1], tf.shape(imgs)[2])
+        tf.debugging.assert_equal(tf.shape(imgs)[1] % p, 0)
 
-        h = w = shape_list(imgs)[2] // p
-        x = tf.reshape(imgs, (shape_list(imgs)[0], h, p, w, p, 3))
+        h = w = tf.shape(imgs)[2] // p
+        x = tf.reshape(imgs, (tf.shape(imgs)[0], h, p, w, p, 3))
         x = tf.einsum("nhpwqc->nhwpqc", x)
-        x = tf.reshape(x, (shape_list(imgs)[0], h * w, p**2 * 3))
+        x = tf.reshape(x, (tf.shape(imgs)[0], h * w, p**2 * 3))
         return x
 
     def unpatchify(self, x):
@@ -992,12 +992,12 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
         x: (batch_size, num_patches, patch_size**2 *3) imgs: (batch_size, height, width, 3)
         """
         p = self.vit.embeddings.patch_embeddings.patch_size[0]
-        h = w = int(shape_list(x)[1] ** 0.5)
-        tf.debugging.assert_equal(h * w, shape_list(x)[1])
+        h = w = int(tf.shape(x)[1] ** 0.5)
+        tf.debugging.assert_equal(h * w, tf.shape(x)[1])
 
-        x = tf.reshape(x, (shape_list(x)[0], h, w, p, p, 3))
+        x = tf.reshape(x, (tf.shape(x)[0], h, w, p, p, 3))
         x = tf.einsum("nhwpqc->nhpwqc", x)
-        imgs = tf.reshape(x, (shape_list(x)[0], h * p, h * p, 3))
+        imgs = tf.reshape(x, (tf.shape(x)[0], h * p, h * p, 3))
         return imgs
 
     def forward_loss(self, imgs, pred, mask):

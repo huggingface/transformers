@@ -102,10 +102,10 @@ class TFViTEmbeddings(tf.keras.layers.Layer):
         https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
         """
 
-        batch_size, seq_len, dim = shape_list(embeddings)
+        batch_size, seq_len, dim = tf.shape(embeddings)
         npatch = seq_len - 1
 
-        _, N, _ = shape_list(self.position_embeddings)
+        _, N, _ = tf.shape(self.position_embeddings)
         N -= 1
 
         if npatch == N and height == width:
@@ -120,7 +120,7 @@ class TFViTEmbeddings(tf.keras.layers.Layer):
             method="bicubic",
         )
 
-        shape = shape_list(patch_pos_embed)
+        shape = tf.shape(patch_pos_embed)
         assert h0 == shape[-3] and w0 == shape[-2]
         patch_pos_embed = tf.reshape(tensor=patch_pos_embed, shape=(1, -1, dim))
         return tf.concat(values=(class_pos_embed, patch_pos_embed), axis=1)
@@ -128,7 +128,7 @@ class TFViTEmbeddings(tf.keras.layers.Layer):
     def call(
         self, pixel_values: tf.Tensor, interpolate_pos_encoding: bool = False, training: bool = False
     ) -> tf.Tensor:
-        batch_size, num_channels, height, width = shape_list(pixel_values)
+        batch_size, num_channels, height, width = tf.shape(pixel_values)
         embeddings = self.patch_embeddings(
             pixel_values, interpolate_pos_encoding=interpolate_pos_encoding, training=training
         )
@@ -182,7 +182,7 @@ class TFPatchEmbeddings(tf.keras.layers.Layer):
     def call(
         self, pixel_values: tf.Tensor, interpolate_pos_encoding: bool = False, training: bool = False
     ) -> tf.Tensor:
-        batch_size, num_channels, height, width = shape_list(pixel_values)
+        batch_size, num_channels, height, width = tf.shape(pixel_values)
         if not interpolate_pos_encoding:
             if getattr(height, "numpy", None) and getattr(width, "numpy", None):
                 if height != self.image_size[0] or width != self.image_size[1]:
@@ -246,7 +246,7 @@ class TFViTSelfAttention(tf.keras.layers.Layer):
         output_attentions: bool,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
-        batch_size = shape_list(hidden_states)[0]
+        batch_size = tf.shape(hidden_states)[0]
         mixed_query_layer = self.query(inputs=hidden_states)
         mixed_key_layer = self.key(inputs=hidden_states)
         mixed_value_layer = self.value(inputs=hidden_states)

@@ -145,7 +145,7 @@ class TFFunnelAttentionStructure:
         # inputs_embeds has shape batch_size x seq_len x d_model
         # attention_mask and token_type_ids have shape batch_size x seq_len
         self.pooling_mult = 1
-        self.seq_len = seq_len = shape_list(inputs_embeds)[1]
+        self.seq_len = seq_len = tf.shape(inputs_embeds)[1]
         position_embeds = self.get_position_embeds(seq_len, training=training)
         token_type_mat = self.token_type_ids_to_mat(token_type_ids) if token_type_ids is not None else None
         cls_mask = (
@@ -268,7 +268,7 @@ class TFFunnelAttentionStructure:
             pooled_pos = pos
 
         ref_point = pooled_pos[0] - pos[0]
-        num_remove = shift * shape_list(pooled_pos)[0]
+        num_remove = shift * tf.shape(pooled_pos)[0]
         max_dist = ref_point + num_remove * stride
         min_dist = pooled_pos[0] - pos[-1]
 
@@ -292,7 +292,7 @@ class TFFunnelAttentionStructure:
             return type(tensor)(self.stride_pool(x, axis) for x in tensor)
 
         # Deal with negative axis
-        axis %= len(shape_list(tensor))
+        axis %= len(tf.shape(tensor))
 
         axis_slice = slice(None, -1, 2) if self.separate_cls and self.truncate_seq else slice(None, None, 2)
         enc_slice = [slice(None)] * axis + [axis_slice]
@@ -314,7 +314,7 @@ class TFFunnelAttentionStructure:
             suffix = tensor[:, :-1] if self.truncate_seq else tensor
             tensor = tf.concat([tensor[:, :1], suffix], axis=1)
 
-        ndim = len(shape_list(tensor))
+        ndim = len(tf.shape(tensor))
         if ndim == 2:
             tensor = tensor[:, :, None]
 
@@ -364,7 +364,7 @@ class TFFunnelAttentionStructure:
 
 
 def _relative_shift_gather(positional_attn, context_len, shift):
-    batch_size, n_head, seq_len, max_rel_len = shape_list(positional_attn)
+    batch_size, n_head, seq_len, max_rel_len = tf.shape(positional_attn)
     # max_rel_len = 2 * context_len + shift -1 is the numbers of possible relative positions i-j
 
     # What's next is the same as doing the following gather in PyTorch, which might be clearer code but less efficient.
@@ -449,7 +449,7 @@ class TFFunnelRelMultiheadAttention(tf.keras.layers.Layer):
         else:
             # Notations from the paper, appending A.2.1, final formula (https://arxiv.org/abs/2006.03236)
             # Grab the proper positional encoding, shape max_rel_len x d_model
-            if shape_list(q_head)[1] != context_len:
+            if tf.shape(q_head)[1] != context_len:
                 shift = 2
                 r = position_embeds[self.block_index][1]
             else:
@@ -475,7 +475,7 @@ class TFFunnelRelMultiheadAttention(tf.keras.layers.Layer):
         """Relative attention score for the token_type_ids"""
         if token_type_mat is None:
             return 0
-        batch_size, seq_len, context_len = shape_list(token_type_mat)
+        batch_size, seq_len, context_len = tf.shape(token_type_mat)
         # q_head has shape batch_size x seq_len x n_head x d_head
         # Shape n_head x d_head
         r_s_bias = self.r_s_bias * self.scale
@@ -483,7 +483,7 @@ class TFFunnelRelMultiheadAttention(tf.keras.layers.Layer):
         # Shape batch_size x n_head x seq_len x 2
         token_type_bias = tf.einsum("bind,snd->bnis", q_head + r_s_bias, self.seg_embed)
         # Shape batch_size x n_head x seq_len x context_len
-        token_type_mat = tf.tile(token_type_mat[:, None], [1, shape_list(q_head)[2], 1, 1])
+        token_type_mat = tf.tile(token_type_mat[:, None], [1, tf.shape(q_head)[2], 1, 1])
         # token_type_mat = tf.broadcast_to(token_type_mat[:, None], new_shape)
         # Shapes batch_size x n_head x seq_len
         diff_token_type, same_token_type = tf.split(token_type_bias, 2, axis=-1)
@@ -503,8 +503,8 @@ class TFFunnelRelMultiheadAttention(tf.keras.layers.Layer):
         # key and value have shapes batch_size x context_len x d_model
         position_embeds, token_type_mat, attention_mask, cls_mask = attention_inputs
 
-        batch_size, seq_len, _ = shape_list(query)
-        context_len = shape_list(key)[1]
+        batch_size, seq_len, _ = tf.shape(query)
+        context_len = tf.shape(key)[1]
         n_head, d_head = self.n_head, self.d_head
 
         # Shape batch_size x seq_len x n_head x d_head
@@ -614,9 +614,9 @@ class TFFunnelEncoder(tf.keras.layers.Layer):
         all_attentions = () if output_attentions else None
 
         for block_index, block in enumerate(self.blocks):
-            pooling_flag = shape_list(hidden)[1] > (2 if self.separate_cls else 1)
+            pooling_flag = tf.shape(hidden)[1] > (2 if self.separate_cls else 1)
             pooling_flag = pooling_flag and block_index > 0
-            pooled_hidden = tf.zeros(shape_list(hidden))
+            pooled_hidden = tf.zeros(tf.shape(hidden))
 
             if pooling_flag:
                 pooled_hidden, attention_inputs = self.attention_structure.pre_attention_pooling(
@@ -691,7 +691,7 @@ class TFFunnelDecoder(tf.keras.layers.Layer):
         upsampled_hidden = upsample(
             final_hidden,
             stride=self.stride,
-            target_len=shape_list(first_block_hidden)[1],
+            target_len=tf.shape(first_block_hidden)[1],
             separate_cls=self.separate_cls,
             truncate_seq=self.truncate_seq,
         )
@@ -745,7 +745,7 @@ class TFFunnelBaseLayer(tf.keras.layers.Layer):
 
     def set_input_embeddings(self, value):
         self.embeddings.weight = value
-        self.embeddings.vocab_size = shape_list(value)[0]
+        self.embeddings.vocab_size = tf.shape(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError  # Not implemented yet in the library fr TF 2.0 models
@@ -766,9 +766,9 @@ class TFFunnelBaseLayer(tf.keras.layers.Layer):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            input_shape = shape_list(input_ids)
+            input_shape = tf.shape(input_ids)
         elif inputs_embeds is not None:
-            input_shape = shape_list(inputs_embeds)[:-1]
+            input_shape = tf.shape(inputs_embeds)[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
@@ -818,7 +818,7 @@ class TFFunnelMainLayer(tf.keras.layers.Layer):
 
     def set_input_embeddings(self, value):
         self.embeddings.weight = value
-        self.embeddings.vocab_size = shape_list(value)[0]
+        self.embeddings.vocab_size = tf.shape(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError  # Not implemented yet in the library fr TF 2.0 models
@@ -838,9 +838,9 @@ class TFFunnelMainLayer(tf.keras.layers.Layer):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            input_shape = shape_list(input_ids)
+            input_shape = tf.shape(input_ids)
         elif inputs_embeds is not None:
-            input_shape = shape_list(inputs_embeds)[:-1]
+            input_shape = tf.shape(inputs_embeds)[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
@@ -928,17 +928,17 @@ class TFFunnelMaskedLMHead(tf.keras.layers.Layer):
 
     def set_output_embeddings(self, value):
         self.input_embeddings.weight = value
-        self.input_embeddings.vocab_size = shape_list(value)[0]
+        self.input_embeddings.vocab_size = tf.shape(value)[0]
 
     def get_bias(self):
         return {"bias": self.bias}
 
     def set_bias(self, value):
         self.bias = value["bias"]
-        self.vocab_size = shape_list(value["bias"])[0]
+        self.vocab_size = tf.shape(value["bias"])[0]
 
     def call(self, hidden_states, training=False):
-        seq_length = shape_list(tensor=hidden_states)[1]
+        seq_length = tf.shape(tensor=hidden_states)[1]
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
         hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
@@ -1456,17 +1456,17 @@ class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
             where `num_choices` is the size of the second dimension of the input tensors. (See `input_ids` above)
         """
         if input_ids is not None:
-            num_choices = shape_list(input_ids)[1]
-            seq_length = shape_list(input_ids)[2]
+            num_choices = tf.shape(input_ids)[1]
+            seq_length = tf.shape(input_ids)[2]
         else:
-            num_choices = shape_list(inputs_embeds)[1]
-            seq_length = shape_list(inputs_embeds)[2]
+            num_choices = tf.shape(inputs_embeds)[1]
+            seq_length = tf.shape(inputs_embeds)[2]
 
         flat_input_ids = tf.reshape(input_ids, (-1, seq_length)) if input_ids is not None else None
         flat_attention_mask = tf.reshape(attention_mask, (-1, seq_length)) if attention_mask is not None else None
         flat_token_type_ids = tf.reshape(token_type_ids, (-1, seq_length)) if token_type_ids is not None else None
         flat_inputs_embeds = (
-            tf.reshape(inputs_embeds, (-1, seq_length, shape_list(inputs_embeds)[3]))
+            tf.reshape(inputs_embeds, (-1, seq_length, tf.shape(inputs_embeds)[3]))
             if inputs_embeds is not None
             else None
         )

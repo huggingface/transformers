@@ -129,7 +129,7 @@ class TF{{cookiecutter.camelcase_modelname}}Embeddings(tf.keras.layers.Layer):
         if input_ids is not None:
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
 
-        input_shape = shape_list(inputs_embeds)[:-1]
+        input_shape = tf.shape(inputs_embeds)[:-1]
 
         if token_type_ids is None:
             token_type_ids = tf.fill(dims=input_shape, value=0)
@@ -195,7 +195,7 @@ class TF{{cookiecutter.camelcase_modelname}}SelfAttention(tf.keras.layers.Layer)
         output_attentions: bool,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
-        batch_size = shape_list(hidden_states)[0]
+        batch_size = tf.shape(hidden_states)[0]
         mixed_query_layer = self.query(inputs=hidden_states)
 
         # If this is instantiated as a cross-attention module, the keys
@@ -573,18 +573,18 @@ class TF{{cookiecutter.camelcase_modelname}}LMPredictionHead(tf.keras.layers.Lay
 
     def set_output_embeddings(self, value: tf.Variable):
         self.input_embeddings.weight = value
-        self.input_embeddings.vocab_size = shape_list(value)[0]
+        self.input_embeddings.vocab_size = tf.shape(value)[0]
 
     def get_bias(self) -> Dict[str, tf.Variable]:
         return {"bias": self.bias}
 
     def set_bias(self, value: tf.Variable):
         self.bias = value["bias"]
-        self.vocab_size = shape_list(value["bias"])[0]
+        self.vocab_size = tf.shape(value["bias"])[0]
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.transform(hidden_states=hidden_states)
-        seq_length = shape_list(hidden_states)[1]
+        seq_length = tf.shape(hidden_states)[1]
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
         hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
@@ -626,7 +626,7 @@ class TF{{cookiecutter.camelcase_modelname}}MainLayer(tf.keras.layers.Layer):
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.set_input_embeddings
     def set_input_embeddings(self, value: tf.Variable):
         self.embeddings.weight = value
-        self.embeddings.vocab_size = shape_list(value)[0]
+        self.embeddings.vocab_size = tf.shape(value)[0]
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer._prune_heads
     def _prune_heads(self, heads_to_prune):
@@ -661,9 +661,9 @@ class TF{{cookiecutter.camelcase_modelname}}MainLayer(tf.keras.layers.Layer):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            input_shape = shape_list(input_ids)
+            input_shape = tf.shape(input_ids)
         elif inputs_embeds is not None:
-            input_shape = shape_list(inputs_embeds)[:-1]
+            input_shape = tf.shape(inputs_embeds)[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
@@ -673,7 +673,7 @@ class TF{{cookiecutter.camelcase_modelname}}MainLayer(tf.keras.layers.Layer):
             past_key_values_length = 0
             past_key_values = [None] * len(self.encoder.layer)
         else:
-            past_key_values_length = shape_list(past_key_values[0][0])[-2]
+            past_key_values_length = tf.shape(past_key_values[0][0])[-2]
 
         if attention_mask is None:
             attention_mask = tf.fill(dims=(batch_size, seq_length + past_key_values_length), value=1)
@@ -695,7 +695,7 @@ class TF{{cookiecutter.camelcase_modelname}}MainLayer(tf.keras.layers.Layer):
         # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
         # this attention mask is more simple than the triangular masking of causal attention
         # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-        attention_mask_shape = shape_list(attention_mask)
+        attention_mask_shape = tf.shape(attention_mask)
 
         mask_seq_length = seq_length + past_key_values_length
         # Copied from `modeling_tf_t5.py`
@@ -710,7 +710,7 @@ class TF{{cookiecutter.camelcase_modelname}}MainLayer(tf.keras.layers.Layer):
             )
             causal_mask = tf.cast(causal_mask, dtype=attention_mask.dtype)
             extended_attention_mask = causal_mask * attention_mask[:, None, :]
-            attention_mask_shape = shape_list(extended_attention_mask)
+            attention_mask_shape = tf.shape(extended_attention_mask)
             extended_attention_mask = tf.reshape(
                 extended_attention_mask, (attention_mask_shape[0], 1, attention_mask_shape[1], attention_mask_shape[2])
             )
@@ -740,7 +740,7 @@ class TF{{cookiecutter.camelcase_modelname}}MainLayer(tf.keras.layers.Layer):
             encoder_attention_mask = tf.cast(
                 encoder_attention_mask, dtype=extended_attention_mask.dtype
             )
-            num_dims_encoder_attention_mask = len(shape_list(encoder_attention_mask))
+            num_dims_encoder_attention_mask = len(tf.shape(encoder_attention_mask))
             if num_dims_encoder_attention_mask == 3:
                 encoder_extended_attention_mask = encoder_attention_mask[:, None, :, :]
             if num_dims_encoder_attention_mask == 2:
@@ -1382,11 +1382,11 @@ class TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice(TF{{cookiecutter.c
         """
 
         if input_ids is not None:
-            num_choices = shape_list(input_ids)[1]
-            seq_length = shape_list(input_ids)[2]
+            num_choices = tf.shape(input_ids)[1]
+            seq_length = tf.shape(input_ids)[2]
         else:
-            num_choices = shape_list(inputs_embeds)[1]
-            seq_length = shape_list(inputs_embeds)[2]
+            num_choices = tf.shape(inputs_embeds)[1]
+            seq_length = tf.shape(inputs_embeds)[2]
 
         flat_input_ids = (
             tf.reshape(tensor=input_ids, shape=(-1, seq_length)) if input_ids is not None else None
@@ -1408,7 +1408,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice(TF{{cookiecutter.c
         )
         flat_inputs_embeds = (
             tf.reshape(
-                tensor=inputs_embeds, shape=(-1, seq_length, shape_list(inputs_embeds)[3])
+                tensor=inputs_embeds, shape=(-1, seq_length, tf.shape(inputs_embeds)[3])
             )
             if inputs_embeds is not None
             else None
@@ -1682,11 +1682,11 @@ LARGE_NEGATIVE = -1e8
 
 
 def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, decoder_start_token_id: int):
-    start_tokens = tf.fill((shape_list(input_ids)[0], 1), decoder_start_token_id)
+    start_tokens = tf.fill((tf.shape(input_ids)[0], 1), decoder_start_token_id)
     shifted_input_ids = tf.concat([start_tokens, input_ids[:, :-1]], -1)
     # replace possible -100 values in labels by `pad_token_id`
     shifted_input_ids = tf.where(
-        shifted_input_ids == -100, tf.fill(shape_list(shifted_input_ids), pad_token_id), shifted_input_ids
+        shifted_input_ids == -100, tf.fill(tf.shape(shifted_input_ids), pad_token_id), shifted_input_ids
     )
 
     if tf.executing_eagerly():
@@ -1706,9 +1706,9 @@ def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: i
     """
     bsz, tgt_len = input_ids_shape
     mask = tf.ones((tgt_len, tgt_len)) * LARGE_NEGATIVE
-    mask_cond = tf.range(shape_list(mask)[-1])
+    mask_cond = tf.range(tf.shape(mask)[-1])
 
-    mask = tf.where(mask_cond < tf.reshape(mask_cond + 1, (shape_list(mask)[-1], 1)), 0.0, mask)
+    mask = tf.where(mask_cond < tf.reshape(mask_cond + 1, (tf.shape(mask)[-1], 1)), 0.0, mask)
 
     if past_key_values_length > 0:
         mask = tf.concat([tf.zeros((tgt_len, past_key_values_length)), mask], axis=-1)
@@ -1720,7 +1720,7 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
-    src_len = shape_list(mask)[1]
+    src_len = tf.shape(mask)[1]
     tgt_len = tgt_len if tgt_len is not None else src_len
     one_cst = tf.constant(1.0)
     mask = tf.cast(mask, dtype=one_cst.dtype)
@@ -1791,7 +1791,7 @@ class TF{{cookiecutter.camelcase_modelname}}Attention(tf.keras.layers.Layer):
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
-        bsz, tgt_len, embed_dim = shape_list(hidden_states)
+        bsz, tgt_len, embed_dim = tf.shape(hidden_states)
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
@@ -1830,16 +1830,16 @@ class TF{{cookiecutter.camelcase_modelname}}Attention(tf.keras.layers.Layer):
         key_states = tf.reshape(key_states, proj_shape)
         value_states = tf.reshape(value_states, proj_shape)
 
-        src_len = shape_list(key_states)[1]
+        src_len = tf.shape(key_states)[1]
         attn_weights = tf.matmul(query_states, key_states, transpose_b=True)
 
         # The tf.debugging asserts are not compliant with XLA then they
         # have to be disabled in other modes than eager.
         if tf.executing_eagerly():
             tf.debugging.assert_equal(
-                shape_list(attn_weights),
+                tf.shape(attn_weights),
                 [bsz * self.num_heads, tgt_len, src_len],
-                message=f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {shape_list(attn_weights)}",
+                message=f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {tf.shape(attn_weights)}",
             )
 
         if attention_mask is not None:
@@ -1847,9 +1847,9 @@ class TF{{cookiecutter.camelcase_modelname}}Attention(tf.keras.layers.Layer):
             # have to be disabled in other modes than eager.
             if tf.executing_eagerly():
                 tf.debugging.assert_equal(
-                    shape_list(attention_mask),
+                    tf.shape(attention_mask),
                     [bsz, 1, tgt_len, src_len],
-                    message=f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {shape_list(attention_mask)}",
+                    message=f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {tf.shape(attention_mask)}",
                 )
 
             attn_weights = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len)) + attention_mask
@@ -1862,9 +1862,9 @@ class TF{{cookiecutter.camelcase_modelname}}Attention(tf.keras.layers.Layer):
             # have to be disabled in other modes than eager.
             if tf.executing_eagerly():
                 tf.debugging.assert_equal(
-                    shape_list(layer_head_mask),
+                    tf.shape(layer_head_mask),
                     [self.num_heads],
-                    message=f"Head mask for a single layer should be of size {(self.num_heads)}, but is {shape_list(layer_head_mask)}",
+                    message=f"Head mask for a single layer should be of size {(self.num_heads)}, but is {tf.shape(layer_head_mask)}",
                 )
 
             attn_weights = tf.reshape(layer_head_mask, (1, -1, 1, 1)) * tf.reshape(
@@ -1880,9 +1880,9 @@ class TF{{cookiecutter.camelcase_modelname}}Attention(tf.keras.layers.Layer):
         # have to be disabled in other modes than eager.
         if tf.executing_eagerly():
             tf.debugging.assert_equal(
-                shape_list(attn_output),
+                tf.shape(attn_output),
                 [bsz * self.num_heads, tgt_len, self.head_dim],
-                message=f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {shape_list(attn_output)}",
+                message=f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {tf.shape(attn_output)}",
             )
 
         attn_output = tf.transpose(
@@ -1929,9 +1929,9 @@ class TF{{cookiecutter.camelcase_modelname}}EncoderLayer(tf.keras.layers.Layer):
         # have to be disabled in other modes than eager.
         if tf.executing_eagerly():
             tf.debugging.assert_equal(
-                shape_list(hidden_states),
-                shape_list(residual),
-                message=f"Self attn modified the shape of query {shape_list(residual)} to {shape_list(hidden_states)}",
+                tf.shape(hidden_states),
+                tf.shape(residual),
+                message=f"Self attn modified the shape of query {tf.shape(residual)} to {tf.shape(hidden_states)}",
             )
 
         hidden_states = self.dropout(hidden_states, training=training)
@@ -2301,9 +2301,9 @@ class TF{{cookiecutter.camelcase_modelname}}Encoder(tf.keras.layers.Layer):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            input_shape = shape_list(input_ids)
+            input_shape = tf.shape(input_ids)
         elif inputs_embeds is not None:
-            input_shape = shape_list(inputs_embeds)[:-1]
+            input_shape = tf.shape(inputs_embeds)[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
@@ -2328,9 +2328,9 @@ class TF{{cookiecutter.camelcase_modelname}}Encoder(tf.keras.layers.Layer):
         # have to be disabled in other modes than eager.
         if head_mask is not None and tf.executing_eagerly():
             tf.debugging.assert_equal(
-                shape_list(head_mask)[0],
+                tf.shape(head_mask)[0],
                 len(self.layers),
-                message=f"The head_mask should be specified for {len(self.layers)} layers, but it is for {shape_list(head_mask)[0]}.",
+                message=f"The head_mask should be specified for {len(self.layers)} layers, but it is for {tf.shape(head_mask)[0]}.",
             )
 
         # encoder layers
@@ -2485,14 +2485,14 @@ class TF{{cookiecutter.camelcase_modelname}}Decoder(tf.keras.layers.Layer):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
         elif input_ids is not None:
-            input_shape = shape_list(input_ids)
+            input_shape = tf.shape(input_ids)
         elif inputs_embeds is not None:
-            input_shape = shape_list(inputs_embeds)[:-1]
+            input_shape = tf.shape(inputs_embeds)[:-1]
         else:
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
         past_key_values_length = (
-            shape_list(past_key_values[0][0])[2] if past_key_values is not None else 0
+            tf.shape(past_key_values[0][0])[2] if past_key_values is not None else 0
         )
 
         # embed positions
@@ -2526,9 +2526,9 @@ class TF{{cookiecutter.camelcase_modelname}}Decoder(tf.keras.layers.Layer):
         for attn_mask_name, attn_mask in [("head_mask", head_mask), ("cross_attn_head_mask", cross_attn_head_mask)]:
             if attn_mask is not None and tf.executing_eagerly():
                 tf.debugging.assert_equal(
-                    shape_list(attn_mask)[0],
+                    tf.shape(attn_mask)[0],
                     len(self.layers),
-                    message=f"The {attn_mask_name} should be specified for {len(self.layers)} layers, but it is for {shape_list(attn_mask)[0]}.",
+                    message=f"The {attn_mask_name} should be specified for {len(self.layers)} layers, but it is for {tf.shape(attn_mask)[0]}.",
                 )
 
         for idx, decoder_layer in enumerate(self.layers):
@@ -2992,7 +2992,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration(TF{{cookiec
         )
         melted_labels = tf.reshape(labels, (-1,))
         active_loss = tf.not_equal(melted_labels, self.config.pad_token_id)
-        reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
+        reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, tf.shape(logits)[2])), active_loss)
         labels = tf.boolean_mask(melted_labels, active_loss)
         return loss_fn(labels, reduced_logits)
 {% endif -%}

@@ -179,7 +179,7 @@ class TFRoFormerEmbeddings(tf.keras.layers.Layer):
         if input_ids is not None:
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
 
-        input_shape = shape_list(inputs_embeds)[:-1]
+        input_shape = tf.shape(inputs_embeds)[:-1]
 
         if token_type_ids is None:
             token_type_ids = tf.fill(dims=input_shape, value=0)
@@ -235,7 +235,7 @@ class TFRoFormerSelfAttention(tf.keras.layers.Layer):
         output_attentions: bool,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
-        batch_size = shape_list(hidden_states)[0]
+        batch_size = tf.shape(hidden_states)[0]
         mixed_query_layer = self.query(inputs=hidden_states)
         mixed_key_layer = self.key(inputs=hidden_states)
         mixed_value_layer = self.value(inputs=hidden_states)
@@ -293,16 +293,16 @@ class TFRoFormerSelfAttention(tf.keras.layers.Layer):
         cos_pos = tf.repeat(cos, 2, axis=-1)
         # rotate_half_query_layer [-q1,q0,-q3,q2......,-qd-1,qd-2]
         rotate_half_query_layer = tf.stack([-query_layer[..., 1::2], query_layer[..., ::2]], axis=-1)
-        rotate_half_query_layer = tf.reshape(rotate_half_query_layer, shape_list(query_layer))
+        rotate_half_query_layer = tf.reshape(rotate_half_query_layer, tf.shape(query_layer))
         query_layer = query_layer * cos_pos + rotate_half_query_layer * sin_pos
         # rotate_half_key_layer [-k1,k0,-k3,k2......,-kd-1,kd-2]
         rotate_half_key_layer = tf.stack([-key_layer[..., 1::2], key_layer[..., ::2]], axis=-1)
-        rotate_half_key_layer = tf.reshape(rotate_half_key_layer, shape_list(key_layer))
+        rotate_half_key_layer = tf.reshape(rotate_half_key_layer, tf.shape(key_layer))
         key_layer = key_layer * cos_pos + rotate_half_key_layer * sin_pos
         if value_layer is not None:
             # rotate_half_value_layer [-v1,v0,-v3,v2......,-vd-1,vd-2]
             rotate_half_value_layer = tf.stack([-value_layer[..., 1::2], value_layer[..., ::2]], axis=-1)
-            rotate_half_value_layer = tf.reshape(rotate_half_value_layer, shape_list(value_layer))
+            rotate_half_value_layer = tf.reshape(rotate_half_value_layer, tf.shape(value_layer))
             value_layer = value_layer * cos_pos + rotate_half_value_layer * sin_pos
             return query_layer, key_layer, value_layer
         return query_layer, key_layer
@@ -461,7 +461,7 @@ class TFRoFormerEncoder(tf.keras.layers.Layer):
         all_attentions = () if output_attentions else None
 
         # [sequence_length, embed_size_per_head] -> [batch_size, num_heads, sequence_length, embed_size_per_head]
-        sinusoidal_pos = self.embed_positions(shape_list(hidden_states)[:-1])[None, None, :, :]
+        sinusoidal_pos = self.embed_positions(tf.shape(hidden_states)[:-1])[None, None, :, :]
 
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
@@ -540,18 +540,18 @@ class TFRoFormerLMPredictionHead(tf.keras.layers.Layer):
 
     def set_output_embeddings(self, value: tf.Variable):
         self.input_embeddings.weight = value
-        self.input_embeddings.vocab_size = shape_list(value)[0]
+        self.input_embeddings.vocab_size = tf.shape(value)[0]
 
     def get_bias(self) -> Dict[str, tf.Variable]:
         return {"bias": self.bias}
 
     def set_bias(self, value: tf.Variable):
         self.bias = value["bias"]
-        self.vocab_size = shape_list(value["bias"])[0]
+        self.vocab_size = tf.shape(value["bias"])[0]
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.transform(hidden_states=hidden_states)
-        seq_length = shape_list(hidden_states)[1]
+        seq_length = tf.shape(hidden_states)[1]
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.embedding_size])
         hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
@@ -593,7 +593,7 @@ class TFRoFormerMainLayer(tf.keras.layers.Layer):
 
     def set_input_embeddings(self, value: tf.Variable):
         self.embeddings.weight = value
-        self.embeddings.vocab_size = shape_list(value)[0]
+        self.embeddings.vocab_size = tf.shape(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -619,9 +619,9 @@ class TFRoFormerMainLayer(tf.keras.layers.Layer):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            input_shape = shape_list(input_ids)
+            input_shape = tf.shape(input_ids)
         elif inputs_embeds is not None:
-            input_shape = shape_list(inputs_embeds)[:-1]
+            input_shape = tf.shape(inputs_embeds)[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
@@ -1157,11 +1157,11 @@ class TFRoFormerForMultipleChoice(TFRoFormerPreTrainedModel, TFMultipleChoiceLos
             where `num_choices` is the size of the second dimension of the input tensors. (See `input_ids` above)
         """
         if input_ids is not None:
-            num_choices = shape_list(input_ids)[1]
-            seq_length = shape_list(input_ids)[2]
+            num_choices = tf.shape(input_ids)[1]
+            seq_length = tf.shape(input_ids)[2]
         else:
-            num_choices = shape_list(inputs_embeds)[1]
-            seq_length = shape_list(inputs_embeds)[2]
+            num_choices = tf.shape(inputs_embeds)[1]
+            seq_length = tf.shape(inputs_embeds)[2]
 
         flat_input_ids = tf.reshape(tensor=input_ids, shape=(-1, seq_length)) if input_ids is not None else None
         flat_attention_mask = (
@@ -1171,7 +1171,7 @@ class TFRoFormerForMultipleChoice(TFRoFormerPreTrainedModel, TFMultipleChoiceLos
             tf.reshape(tensor=token_type_ids, shape=(-1, seq_length)) if token_type_ids is not None else None
         )
         flat_inputs_embeds = (
-            tf.reshape(tensor=inputs_embeds, shape=(-1, seq_length, shape_list(inputs_embeds)[3]))
+            tf.reshape(tensor=inputs_embeds, shape=(-1, seq_length, tf.shape(inputs_embeds)[3]))
             if inputs_embeds is not None
             else None
         )

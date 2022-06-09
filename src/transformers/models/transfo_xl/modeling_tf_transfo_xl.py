@@ -177,7 +177,7 @@ class TFRelPartialLearnableMultiHeadAttn(tf.keras.layers.Layer):
         super().build(input_shape)
 
     def _rel_shift(self, x):
-        x_size = shape_list(x)
+        x_size = tf.shape(x)
 
         x = tf.pad(x, [[0, 0], [1, 0], [0, 0], [0, 0]])
         x = tf.reshape(x, [x_size[1] + 1, x_size[0], x_size[2], x_size[3]])
@@ -187,7 +187,7 @@ class TFRelPartialLearnableMultiHeadAttn(tf.keras.layers.Layer):
         return x
 
     def call(self, w, r, attn_mask, mems, head_mask, output_attentions, training=False):
-        qlen, rlen, bsz = shape_list(w)[0], shape_list(r)[0], shape_list(w)[1]
+        qlen, rlen, bsz = tf.shape(w)[0], tf.shape(r)[0], tf.shape(w)[1]
 
         if mems is not None:
             mems = tf.cast(mems, dtype=w.dtype)
@@ -209,7 +209,7 @@ class TFRelPartialLearnableMultiHeadAttn(tf.keras.layers.Layer):
 
             w_head_q, w_head_k, w_head_v = tf.split(w_heads, 3, axis=-1)
 
-        klen = shape_list(w_head_k)[0]
+        klen = tf.shape(w_head_k)[0]
 
         w_head_q = tf.reshape(w_head_q, (qlen, bsz, self.n_head, self.d_head))  # qlen x bsz x n_head x d_head
         w_head_k = tf.reshape(w_head_k, (klen, bsz, self.n_head, self.d_head))  # qlen x bsz x n_head x d_head
@@ -247,7 +247,7 @@ class TFRelPartialLearnableMultiHeadAttn(tf.keras.layers.Layer):
         attn_vec = tf.einsum("ijbn,jbnd->ibnd", attn_prob, w_head_v)
 
         # [qlen x bsz x n_head x d_head]
-        attn_vec_sizes = shape_list(attn_vec)
+        attn_vec_sizes = tf.shape(attn_vec)
         attn_vec = tf.reshape(attn_vec, (attn_vec_sizes[0], attn_vec_sizes[1], self.n_head * self.d_head))
 
         # linear projection
@@ -393,7 +393,7 @@ class TFAdaptiveEmbedding(tf.keras.layers.Layer):
             raise NotImplementedError  # Removed these to avoid maintaining dead code - They are not used in our pretrained checkpoint
         else:
             inp_flat = tf.reshape(inp, (-1,))
-            emb_flat = tf.zeros([shape_list(inp_flat)[0], self.d_proj])
+            emb_flat = tf.zeros([tf.shape(inp_flat)[0], self.d_proj])
             for i in range(len(self.cutoffs)):
                 l_idx, r_idx = self.cutoff_ends[i], self.cutoff_ends[i + 1]
 
@@ -404,11 +404,11 @@ class TFAdaptiveEmbedding(tf.keras.layers.Layer):
                 emb_i = tf.einsum("id,de->ie", emb_i, self.emb_projs[i])
 
                 mask_idx = tf.where(mask_i)
-                scatter = tf.scatter_nd(mask_idx, emb_i, shape_list(emb_flat))
+                scatter = tf.scatter_nd(mask_idx, emb_i, tf.shape(emb_flat))
                 emb_flat = tf.cast(emb_flat, dtype=scatter.dtype)
                 emb_flat += scatter
 
-            embed_shape = shape_list(inp) + [self.d_proj]
+            embed_shape = tf.shape(inp) + [self.d_proj]
             embed = tf.reshape(emb_flat, embed_shape)
 
         embed *= self.emb_scale
@@ -558,10 +558,10 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             input_ids = tf.transpose(input_ids, perm=(1, 0))
-            qlen, bsz = shape_list(input_ids)
+            qlen, bsz = tf.shape(input_ids)
         elif inputs_embeds is not None:
             inputs_embeds = tf.transpose(inputs_embeds, perm=(1, 0, 2))
-            qlen, bsz = shape_list(inputs_embeds)[:2]
+            qlen, bsz = tf.shape(inputs_embeds)[:2]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
@@ -583,7 +583,7 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
         else:
             word_emb = self.word_emb(input_ids)
 
-        mlen = shape_list(mems[0])[0] if mems is not None else 0
+        mlen = tf.shape(mems[0])[0] if mems is not None else 0
         klen = mlen + qlen
 
         # Compute decoder attention mask
@@ -980,9 +980,9 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
         training=False,
     ):
         if input_ids is not None:
-            bsz, tgt_len = shape_list(input_ids)[:2]
+            bsz, tgt_len = tf.shape(input_ids)[:2]
         else:
-            bsz, tgt_len = shape_list(inputs_embeds)[:2]
+            bsz, tgt_len = tf.shape(inputs_embeds)[:2]
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -1133,9 +1133,9 @@ class TFTransfoXLForSequenceClassification(TFTransfoXLPreTrainedModel, TFSequenc
 
         if labels is not None:
             if input_ids is not None:
-                batch_size, sequence_length = shape_list(input_ids)[:2]
+                batch_size, sequence_length = tf.shape(input_ids)[:2]
             else:
-                batch_size, sequence_length = shape_list(inputs_embeds)[:2]
+                batch_size, sequence_length = tf.shape(inputs_embeds)[:2]
             assert (
                 self.config.pad_token_id is not None or batch_size == 1
             ), "Cannot handle batch sizes > 1 if no padding token is defined."

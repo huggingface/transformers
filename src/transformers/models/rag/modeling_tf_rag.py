@@ -1302,12 +1302,12 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
 
         shifted_input_ids = tf.cast(input_ids, tf.int32)
-        start_tokens = tf.fill((shape_list(shifted_input_ids)[0], 1), start_token_id)
+        start_tokens = tf.fill((tf.shape(shifted_input_ids)[0], 1), start_token_id)
         shifted_input_ids = tf.concat([start_tokens, shifted_input_ids[:, :-1]], -1)
 
         # replace possible -100 values in labels by `pad_token_id`
         shifted_input_ids = tf.where(
-            shifted_input_ids == -100, tf.fill(shape_list(shifted_input_ids), pad_token_id), shifted_input_ids
+            shifted_input_ids == -100, tf.fill(tf.shape(shifted_input_ids), pad_token_id), shifted_input_ids
         )
 
         # "Verify that `labels` has only positive values and -100"

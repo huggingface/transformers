@@ -68,7 +68,7 @@ def scaled_dot_product_attention(q, k, v, mask, attention_mask=None, head_mask=N
     # calculate attention
     matmul_qk = tf.matmul(q, k, transpose_b=True)
 
-    dk = tf.cast(shape_list(k)[-1], dtype=matmul_qk.dtype)
+    dk = tf.cast(tf.shape(k)[-1], dtype=matmul_qk.dtype)
     scaled_attention_logits = matmul_qk / tf.math.sqrt(dk)
 
     if mask is not None:
@@ -110,7 +110,7 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
         return tf.transpose(x, perm=[0, 2, 1, 3])
 
     def call(self, v, k, q, mask, layer_past, attention_mask, head_mask, use_cache, output_attentions, training=False):
-        batch_size = shape_list(q)[0]
+        batch_size = tf.shape(q)[0]
 
         q = self.Wq(q)
         k = self.Wk(k)
@@ -245,7 +245,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
 
     def set_input_embeddings(self, value):
         self.w.weight = value
-        self.w.vocab_size = shape_list(value)[0]
+        self.w.vocab_size = tf.shape(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -283,10 +283,10 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            input_shape = shape_list(input_ids)
+            input_shape = tf.shape(input_ids)
             input_ids = tf.reshape(input_ids, [-1, input_shape[-1]])
         elif inputs_embeds is not None:
-            input_shape = shape_list(inputs_embeds)[:-1]
+            input_shape = tf.shape(inputs_embeds)[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
@@ -294,7 +294,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
             past_length = 0
             past_key_values = [None] * len(self.h)
         else:
-            past_length = shape_list(past_key_values[0][0])[-2]
+            past_length = tf.shape(past_key_values[0][0])[-2]
         if position_ids is None:
             position_ids = tf.expand_dims(tf.range(past_length, input_shape[-1] + past_length, dtype=tf.int32), axis=0)
             position_ids = tf.tile(position_ids, [input_shape[0], 1])
@@ -329,12 +329,12 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
             head_mask = [None] * self.num_layers
 
         if token_type_ids is not None:
-            token_type_ids = tf.reshape(token_type_ids, [-1, shape_list(token_type_ids)[-1]])
+            token_type_ids = tf.reshape(token_type_ids, [-1, tf.shape(token_type_ids)[-1]])
             token_type_embeds = self.w(token_type_ids, mode="embedding")
             token_type_embeds *= tf.math.sqrt(tf.cast(self.d_model_size, dtype=token_type_embeds.dtype))
         else:
             token_type_embeds = tf.constant(0.0)
-        position_ids = tf.reshape(position_ids, [-1, shape_list(position_ids)[-1]])
+        position_ids = tf.reshape(position_ids, [-1, tf.shape(position_ids)[-1]])
 
         if inputs_embeds is None:
             inputs_embeds = self.w(input_ids, mode="embedding")
@@ -349,7 +349,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
 
         hidden_states = self.dropout(hidden_states, training=training)
 
-        output_shape = input_shape + [shape_list(hidden_states)[-1]]
+        output_shape = input_shape + [tf.shape(hidden_states)[-1]]
         presents = () if use_cache else None
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -381,7 +381,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
 
         if output_attentions:
             # let the number of heads free (-1) so we can extract attention even after head pruning
-            attention_output_shape = input_shape[:-1] + [-1] + shape_list(all_attentions[0])[-2:]
+            attention_output_shape = input_shape[:-1] + [-1] + tf.shape(all_attentions[0])[-2:]
             all_attentions = tuple(tf.reshape(t, attention_output_shape) for t in all_attentions)
 
         if not return_dict:
@@ -585,14 +585,14 @@ class TFCTRLLMHead(tf.keras.layers.Layer):
 
     def set_output_embeddings(self, value):
         self.input_embeddings.weight = value
-        self.input_embeddings.vocab_size = shape_list(value)[0]
+        self.input_embeddings.vocab_size = tf.shape(value)[0]
 
     def get_bias(self):
         return {"bias": self.bias}
 
     def set_bias(self, value):
         self.bias = value["bias"]
-        self.vocab_size = shape_list(value["bias"])[0]
+        self.vocab_size = tf.shape(value["bias"])[0]
 
     def call(self, hidden_states):
         hidden_states = self.input_embeddings(hidden_states, mode="linear")
@@ -813,9 +813,9 @@ class TFCTRLForSequenceClassification(TFCTRLPreTrainedModel, TFSequenceClassific
 
         if labels is not None:
             if input_ids is not None:
-                batch_size, sequence_length = shape_list(input_ids)[:2]
+                batch_size, sequence_length = tf.shape(input_ids)[:2]
             else:
-                batch_size, sequence_length = shape_list(inputs_embeds)[:2]
+                batch_size, sequence_length = tf.shape(inputs_embeds)[:2]
             if self.config.pad_token_id is None and batch_size != 1:
                 raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
 
