@@ -654,9 +654,9 @@ if __name__ == "__main__":
                         if artifact_path["gpu"] not in model_results[model]["failures"]:
                             model_results[model]["failures"][artifact_path["gpu"]] = []
 
-                        model_results[model]["failures"][
-                            artifact_path["gpu"]
-                        ].append({"line": line, "trace": stacktraces.pop(0)})
+                        model_results[model]["failures"][artifact_path["gpu"]].append(
+                            {"line": line, "trace": stacktraces.pop(0)}
+                        )
 
                         if re.search("test_modeling_tf_", line):
                             model_results[model]["failed"]["TensorFlow"][artifact_path["gpu"]] += 1
@@ -743,9 +743,9 @@ if __name__ == "__main__":
                         if artifact_path["gpu"] not in additional_results[key]["failures"]:
                             additional_results[key]["failures"][artifact_path["gpu"]] = []
 
-                        additional_results[key]["failures"][
-                            artifact_path["gpu"]
-                        ].append({"line": line, "trace": stacktraces.pop(0)})
+                        additional_results[key]["failures"][artifact_path["gpu"]].append(
+                            {"line": line, "trace": stacktraces.pop(0)}
+                        )
 
     # To find the PR number in a commit title, for example, `Add AwesomeFormer model (#99999)`
     pr_number_re = re.compile(r"\(#(\d+)\)$")
