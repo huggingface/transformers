@@ -75,7 +75,11 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_deberta_v2 import DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaV2Config, DebertaV2OnnxConfig
+    from .configuration_deberta_v2 import (
+        DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        DebertaV2Config,
+        DebertaV2OnnxConfig,
+    )
     from .tokenization_deberta_v2 import DebertaV2Tokenizer
 
     try:

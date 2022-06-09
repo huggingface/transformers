@@ -143,7 +143,8 @@ class DebertaV2Config(PretrainedConfig):
         self.pooler_dropout = pooler_dropout
         self.pooler_hidden_act = pooler_hidden_act
 
-# Copied from transformers.models.roberta.configuration_roberta.XLMRobertaOnnxConfig with XLMRoberta->DebertaV2
+
+# Copied from transformers.models.xlm_roberta.configuration_xlm_roberta.XLMRobertaOnnxConfig with XLMRoberta->DebertaV2
 class DebertaV2OnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
