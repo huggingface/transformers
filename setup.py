@@ -279,6 +279,7 @@ extras["codecarbon"] = deps_list("codecarbon")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
     deps_list(
+        "accelerate",
         "pytest",
         "pytest-xdist",
         "timeout-decorator",
