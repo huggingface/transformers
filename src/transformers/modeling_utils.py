@@ -159,7 +159,8 @@ def get_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtil
             if t.is_floating_point():
                 return t.dtype
         # if no floating dtype was found return whatever the first dtype is
-        return t.dtype
+        else:
+            return t.dtype
 
     except StopIteration:
         # For nn.DataParallel compatibility in PyTorch 1.5
@@ -173,7 +174,8 @@ def get_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtil
             if tuple[1].is_floating_point():
                 return tuple[1].dtype
         # fallback to any dtype the model has even if not floating
-        return tuple[1].dtype
+        else:
+            return tuple[1].dtype
 
 
 def get_state_dict_float_dtype(state_dict):
@@ -196,7 +198,8 @@ def get_state_dict_dtype(state_dict):
             return t.dtype
 
     # if no floating dtype was found return whatever the first dtype is
-    return t.dtype
+    else:
+        return t.dtype
 
 
 def convert_file_size_to_int(size: Union[int, str]):
