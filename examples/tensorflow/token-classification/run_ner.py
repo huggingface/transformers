@@ -41,6 +41,7 @@ from transformers import (
     create_optimizer,
     set_seed,
 )
+from transformers.utils import send_example_telemetry
 from transformers.utils.versions import require_version
 
 
@@ -252,6 +253,10 @@ def main():
     # region Argument Parsing
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TFTrainingArguments))
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
+    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
+    # information sent is the one passed as arguments along with your Python/PyTorch versions.
+    send_example_telemetry("run_ner", model_args, data_args, framework="tensorflow")
     # endregion
 
     # region Setup logging
