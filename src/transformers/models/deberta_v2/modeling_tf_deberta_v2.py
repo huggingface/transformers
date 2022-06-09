@@ -871,7 +871,7 @@ class TFDebertaV2Embeddings(tf.keras.layers.Layer):
             final_embeddings (`tf.Tensor`): output embedding tensor.
         """
         if input_ids is None and inputs_embeds is None:
-            raise ValueError("input_ids and input_embeds can not both be None")
+            raise ValueError("Need to provide either `input_ids` or `input_embeds`.")
 
         if input_ids is not None:
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
