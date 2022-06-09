@@ -180,6 +180,7 @@ PYTORCH_EXPORT_MODELS = {
     ("ibert", "kssteven/ibert-roberta-base"),
     ("camembert", "camembert-base"),
     ("convbert", "YituTech/conv-bert-base"),
+    ("deberta-v2", "microsoft/deberta-v2-xlarge"),
     ("distilbert", "distilbert-base-cased"),
     ("electra", "google/electra-base-generator"),
     ("roberta", "roberta-base"),
