@@ -309,7 +309,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             --train_val_split 0.1
             --seed 42
             --output_dir {tmp_dir}
-            """.split()
+        """.split()
 
         if is_cuda_and_apex_available():
             testargs.append("--fp16")
