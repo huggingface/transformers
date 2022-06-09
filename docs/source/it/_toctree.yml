@@ -13,4 +13,6 @@
 - sections:
   - local: fast_tokenizers
     title: "Usare i tokenizzatori di 🤗 Tokenizers"
+  - local: sagemaker
+    title: Addestra su Amazon SageMaker
   title: Guide
