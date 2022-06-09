@@ -1151,12 +1151,14 @@ class Trainer:
                 jit_inputs.append(example_tensor)
             jit_inputs = tuple(jit_inputs)
             try:
+                jit_model = model.eval()
                 with ContextManagers([self.autocast_smart_context_manager(), torch.no_grad()]):
-                    model = torch.jit.trace(model, jit_inputs, strict=False)
-                model = torch.jit.freeze(model)
-            except RuntimeError:
-                logger.info("fail to use PyTorch jit mode")
-                pass
+                    jit_model = torch.jit.trace(jit_model, jit_inputs, strict=False)
+                jit_model = torch.jit.freeze(jit_model)
+                jit_model(**example_batch)
+                model = jit_model
+            except:
+                logger.warning("fail to use PyTorch jit mode")
 
         return model
 
