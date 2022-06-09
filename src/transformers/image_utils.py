@@ -159,6 +159,10 @@ class ImageFeatureExtractionMixin:
         """
         self._ensure_format_supported(image)
 
+        # Do nothing if PIL image
+        if isinstance(image, PIL.Image.Image):
+            return image
+
         if is_torch_tensor(image):
             image = image.unsqueeze(0)
         else:
@@ -269,12 +273,19 @@ class ImageFeatureExtractionMixin:
         size given, it will be padded (so the returned result has the size asked).
 
         Args:
-            image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
+            image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor` of shape (n_channels, height, width) or (height, width, n_channels)): 
                 The image to resize.
             size (`int` or `Tuple[int, int]`):
                 The size to which crop the image.
+
+        Returns:
+            new_image: A center cropped `PIL.Image.Image` or `np.ndarray` or `torch.Tensor` of shape: 
+            (n_channels, height, width).
         """
         self._ensure_format_supported(image)
+
+        if is_torch_tensor(image):
+            import torch
 
         if not isinstance(size, tuple):
             size = (size, size)
@@ -300,10 +311,10 @@ class ImageFeatureExtractionMixin:
             return image.crop((left, top, right, bottom))
 
         # Check if image is in (n_channels, height, width) or (height, width, n_channels) format
-        transpose = True if image.shape[2] in [1, 3] else False
+        channel_first = True if image.shape[0] in [1, 3] else False
 
         # Transpose (height, width, n_channels) format images
-        if transpose:
+        if not channel_first:
             if isinstance(image, np.ndarray):
                 image = image.transpose(2, 0, 1)
             if is_torch_tensor(image):
