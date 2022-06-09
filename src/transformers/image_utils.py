@@ -273,19 +273,16 @@ class ImageFeatureExtractionMixin:
         size given, it will be padded (so the returned result has the size asked).
 
         Args:
-            image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor` of shape (n_channels, height, width) or (height, width, n_channels)): 
+            image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor` of shape (n_channels, height, width) or (height, width, n_channels)):
                 The image to resize.
             size (`int` or `Tuple[int, int]`):
                 The size to which crop the image.
 
         Returns:
-            new_image: A center cropped `PIL.Image.Image` or `np.ndarray` or `torch.Tensor` of shape: 
-            (n_channels, height, width).
+            new_image: A center cropped `PIL.Image.Image` or `np.ndarray` or `torch.Tensor` of shape: (n_channels,
+            height, width).
         """
         self._ensure_format_supported(image)
-
-        if is_torch_tensor(image):
-            import torch
 
         if not isinstance(size, tuple):
             size = (size, size)
@@ -345,5 +342,5 @@ class ImageFeatureExtractionMixin:
         new_image = new_image[
             ..., max(0, top) : min(new_image.shape[-2], bottom), max(0, left) : min(new_image.shape[-1], right)
         ]
-        
+
         return new_image
