@@ -139,6 +139,10 @@ class ViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         # transformations (resizing + normalization)
         if self.do_resize and self.size is not None:
             images = [self.resize(image=image, size=self.size, resample=self.resample) for image in images]
+
+            if isinstance(images[0], Image.Image):
+                images = [np.array(image) for image in images]
+
         if self.do_normalize:
             images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]
 
