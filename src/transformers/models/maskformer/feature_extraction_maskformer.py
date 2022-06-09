@@ -431,7 +431,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         # return as BatchFeature
         data = {"pixel_values": pixel_values, "pixel_mask": pixel_mask}
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
-        
+
         # we cannot batch them since they don't share a common class size
         if annotations:
             for label in annotations:

@@ -429,7 +429,7 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         # Test on numpy array
         array = feature_extractor.to_numpy_array(image)
         array = array.transpose(1, 2, 0)
-        
+
         # Test various crop sizes: bigger on all dimensions, on one of the dimensions only and on both dimensions.
         crop_sizes = [8, (8, 64), 20, (32, 64)]
         for size in crop_sizes:
@@ -458,6 +458,7 @@ class ImageFeatureExtractionTester(unittest.TestCase):
             # Check result is consistent with PIL.Image.crop
             cropped_image = feature_extractor.center_crop(image, size)
             self.assertTrue(torch.equal(cropped_tensor, torch.tensor(feature_extractor.to_numpy_array(cropped_image))))
+
 
 @require_vision
 class LoadImageTester(unittest.TestCase):
