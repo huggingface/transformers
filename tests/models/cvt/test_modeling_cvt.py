@@ -173,6 +173,10 @@ class CvtModelTest(ModelTesterMixin, unittest.TestCase):
     def create_and_test_config_common_properties(self):
         return
 
+    @unittest.skip(reason="Cvt does not output attentions")
+    def test_attention_outputs(self):
+        pass
+
     @unittest.skip(reason="Cvt does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
