@@ -1,0 +1,71 @@
+<!--Copyright 2020 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# Usa i tokenizzatori di 🤗 Tokenizers!
+
+Il tokenizzatore [`PreTrainedTokenizerFast`] dipende dalla libreria [🤗 Tokenizers](https://huggingface.co/docs/tokenizers). I tokenizzatori 
+disponibili nella libreria 🤗 Tokenizers possono essere caricati facilmente con 🤗 Transformers.
+
+Prima di entrare nei dettagli, iniziamo creando un tokenizzatore con poche righe di codice:
+
+```python
+>>> from tokenizers import Tokenizer
+>>> from tokenizers.models import BPE
+>>> from tokenizers.trainers import BpeTrainer
+>>> from tokenizers.pre_tokenizers import Whitespace
+
+>>> tokenizer = Tokenizer(BPE(unk_token="[UNK]"))
+>>> trainer = BpeTrainer(special_tokens=["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]"])
+
+>>> tokenizer.pre_tokenizer = Whitespace()
+>>> files = [...]
+>>> tokenizer.train(files, trainer)
+```
+
+Adesso abbiamo un tokenizzatore addestrato sui file che abbiamo definito. Da qui possiamo sia continuare a usarlo in quel runtume o salvarlo in un file JSON per riutilizzarlo in seguito.
+
+
+## Caricare un tokenizzatore da un oggetto
+
+Vediamo ora come utilizzare questo oggetto con la libreria 🤗 Transformers. La classe
+[`PreTrainedTokenizerFast`] può essere istanziata in modo semplice, accettando il tokenizzatore che abbiamo definito
+come argomento:
+
+```python
+>>> from transformers import PreTrainedTokenizerFast
+
+>>> fast_tokenizer = PreTrainedTokenizerFast(tokenizer_object=tokenizer)
+```
+
+Questo oggetto può ora essere usato con tutti i metodi condivisi dai tokenizzatori in 🤗 Transformers! Vai alla [documentazione dei tokenizzatori](main_classes/tokenizer) per maggiori informazioni.
+
+
+## Caricare da un file JSON
+
+Per caricare un tokenizzatore da un file JSON, iniziamo salvando il nostro tokenizzatore:
+
+```python
+>>> tokenizer.save("tokenizer.json")
+```
+
+Il percorso in cui abbiamo salvato il file può essere passato al metodo di inizializzazione di [`PreTrainedTokenizerFast`] utilizzando il
+parametro `tokenizer_file`:
+
+```python
+>>> from transformers import PreTrainedTokenizerFast
+
+>>> fast_tokenizer = PreTrainedTokenizerFast(tokenizer_file="tokenizer.json")
+```
+
+Questo oggetto può ora essere usato con tutti i metodi condivisi dai tokenizzatori in 🤗 Transformers! Vai alla [documentazione dei tokenizzatori](main_classes/tokenizer) per maggiori informazioni.
+
+
