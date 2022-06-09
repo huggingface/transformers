@@ -68,7 +68,7 @@ class GLPNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         return image
 
     def __call__(
-        self, images: ImageInput, return_tensors: Optional[Union[str, TensorType]] = None, **kwargs
+        self, images: ImageInput, return_tensors: Optional[Union[str, TensorType]] = "np", **kwargs
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several image(s).
