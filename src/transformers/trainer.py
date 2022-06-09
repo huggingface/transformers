@@ -1174,8 +1174,8 @@ class Trainer:
                 jit_model = torch.jit.freeze(jit_model)
                 jit_model(**example_batch)
                 model = jit_model
-            except (RuntimeError, TypeError):
-                logger.warning("fail to use PyTorch jit mode")
+            except (RuntimeError, TypeError) as ex:
+                logger.warning(f"fail to use PyTorch jit mode due to: {ex}.")
 
         return model
 
@@ -1203,7 +1203,7 @@ class Trainer:
             dtype = torch.bfloat16 if self.use_cpu_amp else torch.float32
             model = self.ipex_optimize_model(model, training, dtype=dtype)
 
-        if self.args.jit_mode:
+        if self.args.jit_mode_eval:
             model = self.torch_jit_model(model, training, dataloader)
 
         if is_sagemaker_mp_enabled():
