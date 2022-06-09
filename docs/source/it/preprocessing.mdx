@@ -14,7 +14,7 @@ specific language governing permissions and limitations under the License.
 
 [[open-in-colab]]
 
-Prima di poter usare i dati in un modello, bisogna processarli in un formato accettabile per quest'ultimo. Un modello non comprende il testo piano, le immagini o l'audio. Bisogna convertire questi input in numeri e assemblarli all'interno di tensori. In questa esercitazione, tu potrai:
+Prima di poter usare i dati in un modello, bisogna processarli in un formato accettabile per quest'ultimo. Un modello non comprende il testo grezzo, le immagini o l'audio. Bisogna convertire questi input in numeri e assemblarli all'interno di tensori. In questa esercitazione, tu potrai:
 
 * Preprocessare dati testuali con un tokenizer.
 * Preprocessare immagini o dati audio con un estrattore di caratteristiche.
@@ -67,7 +67,7 @@ Si possono decodificare gli `input_ids` per farsi restituire l'input originale:
 '[CLS] Do not meddle in the affairs of wizards, for they are subtle and quick to anger. [SEP]'
 ```
 
-Come si può vedere, il tokenizer aggiunge due token speciali - `CLS` and `SEP` (classifier and separator) - alla frase. Non tutti i modelli hanno bisogno dei token speciali, ma se servono, il tokenizer li aggiungerà automaticamente.
+Come si può vedere, il tokenizer aggiunge due token speciali - `CLS` e `SEP` (classificatore e separatore) - alla frase. Non tutti i modelli hanno bisogno dei token speciali, ma se servono, il tokenizer li aggiungerà automaticamente.
 
 Se ci sono più frasi che vuoi processare, passale come una lista al tokenizer:
 
@@ -148,53 +148,39 @@ Infine, vuoi che il tokenizer restituisca i tensori prodotti dal modello.
 
 Imposta il parametro `return_tensors` su `pt` per PyTorch, o `tf` per TensorFlow:
 
-<frameworkcontent>
-<pt>
-
 ```py
 >>> batch_sentences = [
 ...     "But what about second breakfast?",
 ...     "Don't think he knows about second breakfast, Pip.",
 ...     "What about elevensies?",
 ... ]
->>> encoded_input = tokenizer(batch_sentences, padding=True, truncation=True, return_tensors="pt")
+>>> encoded_input = tokenizer(batch, padding=True, truncation=True, return_tensors="pt")
 >>> print(encoded_input)
-{'input_ids': tensor([[101, 1252, 1184, 1164, 1248, 6462, 136, 102, 0, 0, 0, 0, 0, 0, 0],
-                      [101, 1790, 112, 189, 1341, 1119, 3520, 1164, 1248, 6462, 117, 21902, 1643, 119, 102],
-                      [101, 1327, 1164, 5450, 23434, 136, 102, 0, 0, 0, 0, 0, 0, 0, 0]]), 
- 'token_type_ids': tensor([[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                           [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                           [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]), 
- 'attention_mask': tensor([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
-                           [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                           [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0]])}
-```
-</pt>
-<tf>
-```py
+{'input_ids': tensor([[  101,   153,  7719, 21490,  1122,  1114,  9582,  1623,   102],
+                      [  101,  5226,  1122,  9649,  1199,  2610,  1236,   102,     0]]), 
+ 'token_type_ids': tensor([[0, 0, 0, 0, 0, 0, 0, 0, 0],
+                           [0, 0, 0, 0, 0, 0, 0, 0, 0]]), 
+ 'attention_mask': tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1],
+                           [1, 1, 1, 1, 1, 1, 1, 1, 0]])}
+===PT-TF-SPLIT===
 >>> batch_sentences = [
 ...     "But what about second breakfast?",
 ...     "Don't think he knows about second breakfast, Pip.",
 ...     "What about elevensies?",
 ... ]
->>> encoded_input = tokenizer(batch_sentences, padding=True, truncation=True, return_tensors="tf")
+>>> encoded_input = tokenizer(batch, padding=True, truncation=True, return_tensors="tf")
 >>> print(encoded_input)
 {'input_ids': <tf.Tensor: shape=(2, 9), dtype=int32, numpy=
-array([[101, 1252, 1184, 1164, 1248, 6462, 136, 102, 0, 0, 0, 0, 0, 0, 0],
-       [101, 1790, 112, 189, 1341, 1119, 3520, 1164, 1248, 6462, 117, 21902, 1643, 119, 102],
-       [101, 1327, 1164, 5450, 23434, 136, 102, 0, 0, 0, 0, 0, 0, 0, 0]],
+array([[  101,   153,  7719, 21490,  1122,  1114,  9582,  1623,   102],
+       [  101,  5226,  1122,  9649,  1199,  2610,  1236,   102,     0]],
       dtype=int32)>, 
  'token_type_ids': <tf.Tensor: shape=(2, 9), dtype=int32, numpy=
-array([[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-       [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-       [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], dtype=int32)>, 
+array([[0, 0, 0, 0, 0, 0, 0, 0, 0],
+       [0, 0, 0, 0, 0, 0, 0, 0, 0]], dtype=int32)>, 
  'attention_mask': <tf.Tensor: shape=(2, 9), dtype=int32, numpy=
-array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
-       [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-       [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0]], dtype=int32)>}
+array([[1, 1, 1, 1, 1, 1, 1, 1, 1],
+       [1, 1, 1, 1, 1, 1, 1, 1, 0]], dtype=int32)>}
 ```
-</tf>
-</frameworkcontent>
 
 ## Audio
 
@@ -230,9 +216,9 @@ Questo restituisce tre oggetti:
 
 ### Ricampionamento
 
-Per questo tutorial, puoi usare il modello [Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base). Come puoi vedere dalla model card, il modello Wav2Vec2 è preaddestrato su un campionamento vocale a 16kHz. E' importante che la frequenza di campionamento dei tuoi dati audio combaci con la frequenza di campionamento del dataset usato per preaddestrare il modello. Se la frequenza di campionamento dei tuoi dati non è uguale dovrai ricampionare i tuoi dati audio.
+Per questo tutorial, puoi usare il modello [Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base). Come puoi vedere dalla model card, il modello Wav2Vec2 è preaddestrato su un campionamento vocale a 16kHz.È importante che la frequenza di campionamento dei tuoi dati audio combaci con la frequenza di campionamento del dataset usato per preaddestrare il modello. Se la frequenza di campionamento dei tuoi dati non è uguale dovrai ricampionare i tuoi dati audio.
 
-Per esempio, il dataset [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) ha una frequenza di campionamento di 8000kHz. Utilizzando il modello Wav2Vec2 msu questo dataset, alzala a 16kHz:
+Per esempio, il dataset [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) ha una frequenza di campionamento di 8000kHz. Utilizzando il modello Wav2Vec2 su questo dataset, alzala a 16kHz:
 
 ```py
 >>> dataset = load_dataset("PolyAI/minds14", name="en-US", split="train")
@@ -243,7 +229,7 @@ Per esempio, il dataset [MInDS-14](https://huggingface.co/datasets/PolyAI/minds1
  'sampling_rate': 8000}
 ```
 
-1. Usa il metodo in 🤗 Datasets' [`cast_column`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.cast_column) per alzare della frequenza di campionamento a 16kHz:
+1. Usa il metodo di 🤗 Datasets' [`cast_column`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.cast_column) per alzare la frequenza di campionamento a 16kHz:
 
 ```py
 >>> dataset = dataset.cast_column("audio", Audio(sampling_rate=16_000))
@@ -263,7 +249,7 @@ Come puoi notare, la `sampling_rate` adesso è 16kHz!
 
 ### Feature extractor
 
-Il prossimo passo è caricare un estrattore di caratteristiche per normalizzare e fare padding sull'input. Quando applichiamo il padding sui dati testuali, uno `0` è aggiunto alle sequenze più brevi. La stessa idea si applica ai dati audio, l'estrattore di caratteristiche per gli audio aggiungerà uno `0` - interpretato come silenzaio - agli `array`.
+Il prossimo passo è caricare un estrattore di caratteristiche per normalizzare e fare padding sull'input. Quando applichiamo il padding sui dati testuali, uno `0` è aggiunto alle sequenze più brevi. La stessa idea si applica ai dati audio, l'estrattore di caratteristiche per gli audio aggiungerà uno `0` - interpretato come silenzio - agli `array`.
 
 Carica l'estrattore delle caratteristiche con [`AutoFeatureExtractor.from_pretrained`]:
 
@@ -282,7 +268,7 @@ Inserisci l' `array` audio nell'estrattore delle caratteristiche. Noi raccomandi
         5.6335266e-04,  4.6588284e-06, -1.7142107e-04], dtype=float32)]}
 ```
 
-### Pad and truncate
+### Pad e truncate
 
 Come per il tokenizer, puoi applicare le operazioni padding o truncation per manipolare sequenze di variabili a lotti. Dai uno sguaro alla lunghezza delle sequenze di questi due campioni audio:
 
@@ -294,7 +280,7 @@ Come per il tokenizer, puoi applicare le operazioni padding o truncation per man
 (106496,)
 ```
 
-Come puoi vedere, il primo campione ga una sequenza più lunga del secondo. LCrea una funzione che preprocesserà il dataset. Specifica una lunghezza massima del campione, e l'estrattore di features si occuperà di riempire o troncare la sequenza per coincidervi:
+Come puoi vedere, il primo campione ha una sequenza più lunga del secondo. Crea una funzione che preprocesserà il dataset. Specifica una lunghezza massima del campione, e l'estrattore di features si occuperà di riempire o troncare la sequenza per coincidervi:
 
 ```py
 >>> def preprocess_function(examples):
@@ -380,7 +366,7 @@ Per le attività di visione, è usuale aggiungere alcuni tipi di data augmentati
 ...     return examples
 ```
 
-3. Poi utilizza 🤗 Datasets [`set_transform`](https://huggingface.co/docs/datasets/process.html#format-transform)per applicare al volo la trasformzazione:
+3. Poi utilizza 🤗 Datasets [`set_transform`](https://huggingface.co/docs/datasets/process.html#format-transform)per applicare al volo la trasformazione:
 
 ```py
 >>> dataset.set_transform(transforms)
@@ -434,7 +420,7 @@ Di seguito come si vede l'immagine dopo la fase di preprocessing. Come ci si asp
 Per attività multimodali userai una combinazione di tutto quello che hai imparato poco fa e applicherai le tue competenze alla comprensione automatica del parlato (Automatic Speech Recognition -  ASR). Questo significa che avrai bisogno di:
 
 * Un estrattore delle caratteristiche per processare i dati audio.
-* Il Tokenizer per processarfe i testi.
+* Il Tokenizer per processare i testi.
 
 Ritorna sul datasere [LJ Speech](https://huggingface.co/datasets/lj_speech):
 
@@ -479,7 +465,7 @@ Un processor combina un estrattore di caratteristiche e un tokenizer. Carica un 
 >>> processor = AutoProcessor.from_pretrained("facebook/wav2vec2-base-960h")
 ```
 
-1. Crea una funzione che processi i dati audio in `input_values`, e tokenizza il in to `labels`. Questi sono i tuoi input per il modello:
+1. Crea una funzione che processi i dati audio in `input_values`, e tokenizza il testo in `labels`. Questi sono i tuoi input per il modello:
 
 ```py
 >>> def prepare_dataset(example):
@@ -500,4 +486,4 @@ Un processor combina un estrattore di caratteristiche e un tokenizer. Carica un 
 
 Nota che il processor ha aggiunto `input_values` e `labels`. La frequenza di campionamento è stata corretta riducendola a 16kHz.
 
-Fantastico, ora dovreste essere in grado di preelaborare i dati per qualsiasi modalità e persino di combinare modalità diverse! Nella prossima esercitazione, impareremo a mettere a punto un modello sui dati appena pre-elaborati.
+Fantastico, ora dovresti essere in grado di preelaborare i dati per qualsiasi modalità e persino di combinare modalità diverse! Nella prossima esercitazione, impareremo a mettere a punto un modello sui dati appena pre-elaborati.
