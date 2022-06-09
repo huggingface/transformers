@@ -23,6 +23,10 @@ from .utils import logging
 logger = logging.get_logger(__name__)
 
 
+def shape_list(*args, **kwargs):
+    pass
+
+
 def stable_softmax(logits: tf.Tensor, axis: Optional[int] = None, name: Optional[str] = None) -> tf.Tensor:
     """
     Stable wrapper that returns the same output as `tf.nn.softmax`, but that works reliably with XLA on CPU. It is
