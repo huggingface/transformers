@@ -10,3 +10,6 @@
   - local: pipeline_tutorial
     title: Pipeline per l'inferenza
   title: Esercitazione
+- sections:
+  - local: custom_models
+  - title: Condividere modelli personalizzati
