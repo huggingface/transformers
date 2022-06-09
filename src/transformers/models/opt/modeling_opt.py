@@ -109,7 +109,6 @@ class OPTLearnedPositionalEmbedding(nn.Embedding):
         return super().forward(positions + self.offset)
 
 
-# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->OPT
 class OPTAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -226,7 +225,6 @@ class OPTAttention(nn.Module):
                     f" {layer_head_mask.size()}"
                 )
             attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = torch.max(attn_weights, torch.tensor(torch.finfo(attn_weights.dtype).min))
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         if output_attentions:
