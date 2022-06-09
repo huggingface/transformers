@@ -70,10 +70,10 @@ if TYPE_CHECKING:
         from .modeling_bloom import (
             BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST,
             BloomForCausalLM,
-            BloomModel,
-            BloomPreTrainedModel,
             BloomForSequenceClassification,
             BloomForTokenClassification,
+            BloomModel,
+            BloomPreTrainedModel,
         )
 
 else:

@@ -18,6 +18,7 @@ import math
 import unittest
 
 from transformers import BloomConfig, is_torch_available
+from transformers.models.bloom.modeling_bloom import BloomForSequenceClassification, BloomForTokenClassification
 from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
 
 from ...generation.test_generation_utils import GenerationTesterMixin
@@ -245,6 +246,23 @@ class BloomModelTester:
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
+    def create_and_check_sequence_classification_model(self, config, input_ids, input_mask, *args):
+        model = BloomForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+
+        result = model(input_ids, labels=input_ids)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+
+    def create_and_check_token_classification_model(self, config, input_ids, input_mask, *args):
+        model = BloomForTokenClassification(config)
+        model.to(torch_device)
+        model.eval()
+
+        result = model(input_ids, labels=input_ids)
+        self.parent.assertEqual(result.loss.shape, ())
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+
     def create_and_check_forward_and_backwards(
         self, config, input_ids, input_mask, *args, gradient_checkpointing=False
     ):
@@ -279,7 +297,16 @@ class BloomModelTester:
 @require_torch
 class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
-    all_model_classes = (BloomModel, BloomForCausalLM) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            BloomModel,
+            BloomForCausalLM,
+            BloomForSequenceClassification,
+            BloomForTokenClassification,
+        )
+        if is_torch_available()
+        else ()
+    )
     all_generative_model_classes = (BloomForCausalLM,) if is_torch_available() else ()
     fx_compatible = False
     test_missing_keys = False
@@ -312,6 +339,14 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     def test_bloom_lm_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_lm_head_model(*config_and_inputs)
+
+    def test_bloom_sequence_classification_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_sequence_classification_model(*config_and_inputs)
+
+    def test_bloom_token_classification_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_token_classification_model(*config_and_inputs)
 
     def test_bloom_gradient_checkpointing(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

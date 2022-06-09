@@ -20,11 +20,11 @@ from typing import Tuple
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss, LayerNorm
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_outputs import (
-    BaseModelOutputWithPastAndCrossAttentions, 
+    BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
@@ -965,6 +965,7 @@ class BloomForCausalLM(BloomPreTrainedModel):
             for layer_past in past
         )
 
+
 @add_start_docstrings(
     """
     The Bloom Model transformer with a sequence classification head on top (linear layer).
@@ -981,7 +982,7 @@ class BloomForCausalLM(BloomPreTrainedModel):
     BLOOM_START_DOCSTRING,
 )
 class BloomForSequenceClassification(BloomPreTrainedModel):
-    _keys_to_ignore_on_load_missing = # TODO: add these names.
+    _keys_to_ignore_on_load_missing = [r"h.*.self_attention.scale_mask_softmax.causal_mask", r"lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -991,7 +992,7 @@ class BloomForSequenceClassification(BloomPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-    
+
     @add_start_docstrings_to_model_forward(BLOOM_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -1042,7 +1043,7 @@ class BloomForSequenceClassification(BloomPreTrainedModel):
             batch_size = input_ids.shape[0]
         else:
             batch_size = inputs_embeds.shape[0]
-        
+
         if self.config.pad_token_id is not None and batch_size != 1:
             raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
         if self.config.pad_token_id is not None:
@@ -1056,7 +1057,7 @@ class BloomForSequenceClassification(BloomPreTrainedModel):
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
                     "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )
-        
+
         pooled_logits = logits[torch.arange(batch_size, device=logits.device), sequence_lengths]
 
         loss = None
@@ -1084,7 +1085,7 @@ class BloomForSequenceClassification(BloomPreTrainedModel):
         if not return_dict:
             output = (pooled_logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
-        
+
         return SequenceClassifierOutputWithPast(
             loss=loss,
             logits=pooled_logits,
@@ -1092,6 +1093,7 @@ class BloomForSequenceClassification(BloomPreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
 
 @add_start_docstrings(
     """
@@ -1101,7 +1103,7 @@ class BloomForSequenceClassification(BloomPreTrainedModel):
     BLOOM_START_DOCSTRING,
 )
 class BloomForTokenClassification(BloomPreTrainedModel):
-    _keys_to_ignore_on_load_missing = # TODO: add these names.
+    _keys_to_ignore_on_load_missing = [r"h.*.self_attention.scale_mask_softmax.causal_mask", r"lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1182,5 +1184,3 @@ class BloomForTokenClassification(BloomPreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
-
-

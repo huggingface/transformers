@@ -3399,10 +3399,10 @@ if TYPE_CHECKING:
         from .models.bloom import (
             BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST,
             BloomForCausalLM,
-            BloomModel,
-            BloomPreTrainedModel,
             BloomForSequenceClassification,
             BloomForTokenClassification,
+            BloomModel,
+            BloomPreTrainedModel,
         )
         from .models.camembert import (
             CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
