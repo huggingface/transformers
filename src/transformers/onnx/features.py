@@ -202,7 +202,7 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls="models.data2vec.Data2VecTextOnnxConfig",
         ),
-        "debertav2": supported_features_mapping(
+        "deberta-v2": supported_features_mapping(
             "default",
             "masked-lm",
             "causal-lm",
