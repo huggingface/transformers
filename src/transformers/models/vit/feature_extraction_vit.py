@@ -141,10 +141,13 @@ class ViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             images = [self.resize(image=image, size=self.size, resample=self.resample) for image in images]
 
             if isinstance(images[0], Image.Image):
-                images = [np.array(image) for image in images]
+                images = [np.array(image).transpose(2, 0, 1) for image in images]
 
         if self.do_normalize:
             images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]
+
+        if isinstance(images[0], Image.Image):
+            images = [np.array(image).transpose(2, 0, 1) for image in images]
 
         # return as BatchFeature
         data = {"pixel_values": images}

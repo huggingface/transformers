@@ -166,7 +166,6 @@ class BatchFeature(UserDict):
             try:
                 if not is_tensor(value):
                     tensor = as_tensor(value)
-
                     self[key] = tensor
             except:  # noqa E722
                 if key == "overflowing_values":

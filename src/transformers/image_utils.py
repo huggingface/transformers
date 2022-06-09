@@ -207,7 +207,7 @@ class ImageFeatureExtractionMixin:
 
     def resize(self, image, size, resample=PIL.Image.BILINEAR, default_to_square=True, max_size=None):
         """
-        Resizes `image`.
+        Resizes `image`. Enforces conversion of input to PIL.Image.
 
         Args:
             image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
@@ -233,17 +233,9 @@ class ImageFeatureExtractionMixin:
                 edge may be shorter than `size`. Only used if `default_to_square` is `False`.
 
         Returns:
-            image: A resized `PIL.Image.Image` or `np.ndarray` or `torch.Tensor` of shape: (n_channels,
-            height, width).
+            image: A resized `PIL.Image.Image`.
         """
         self._ensure_format_supported(image)
-
-        if isinstance(image, PIL.Image.Image):
-            image_format = "pil"
-        elif isinstance(image, np.ndarray):
-            image_format = "np"
-        else:
-            image_format = "pt"
 
         if not isinstance(image, PIL.Image.Image):
             image = self.to_pil_image(image)
@@ -276,17 +268,7 @@ class ImageFeatureExtractionMixin:
 
                 size = (new_short, new_long) if width <= height else (new_long, new_short)
 
-        image.resize(size, resample=resample)
-
-        # Convert back to original image format
-        if image_format in ["np", "pt"]:
-            image = self.to_numpy_array(image)
-
-            if image_format == "pt":
-                import torch
-                image = torch.from_numpy(image)
-
-        return image
+        return image.resize(size, resample=resample)
 
     def center_crop(self, image, size):
         """
