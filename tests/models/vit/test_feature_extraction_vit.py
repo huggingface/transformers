@@ -64,8 +64,6 @@ class ViTFeatureExtractionTester(unittest.TestCase):
         return {
             "image_mean": self.image_mean,
             "image_std": self.image_std,
-            "do_normalize": self.do_normalize,
-            "do_resize": self.do_resize,
             "size": self.size,
         }
 
