@@ -205,7 +205,6 @@ class FeaturesManager:
         "deberta-v2": supported_features_mapping(
             "default",
             "masked-lm",
-            "causal-lm",
             "sequence-classification",
             "multiple-choice",
             "token-classification",
