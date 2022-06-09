@@ -131,7 +131,6 @@ from .utils import (
     CONFIG_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
-    ContextManagers,
     find_labels,
     get_full_repo_name,
     is_apex_available,
@@ -1175,7 +1174,7 @@ class Trainer:
                 jit_model = torch.jit.freeze(jit_model)
                 jit_model(**example_batch)
                 model = jit_model
-            except:
+            except (RuntimeError, TypeError):
                 logger.warning("fail to use PyTorch jit mode")
 
         return model
