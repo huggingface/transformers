@@ -360,10 +360,10 @@ class GenerativeQAModule(BaseTransformer):
 
                     isEmUpdateBusy = False
                     isAddIndexBusy = False
-
-        self.trainer.accelerator_connector.accelerator.barrier(
-            "barrier"
-        )  # waint untill the index and kb get re-initialized.
+        self.trainer.strategy.barrier("barrier")
+        # self.trainer.connectors.accelerator_connector.accelerator.barrier(
+        #     "barrier"
+        # )  # waint untill the index and kb get re-initialized.
 
         loss_tensors = self._step(batch)
 
@@ -724,7 +724,7 @@ def main(args=None, model=None) -> GenerativeQAModule:
             raise RuntimeError("Please install Ray to use the Ray distributed retriever.")
         # Connect to an existing Ray cluster.
         try:
-            ray.init(address=args.ray_address)
+            ray.init(address=args.ray_address, namespace="rag")
         except (ConnectionError, ValueError):
             logger.warning(
                 "Connection to Ray cluster failed. Make sure a Ray"

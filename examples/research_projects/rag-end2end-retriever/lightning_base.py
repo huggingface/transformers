@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any, Dict
 
 import pytorch_lightning as pl
-from pytorch_lightning.plugins.training_type import DDPPlugin
 from pytorch_lightning.utilities import rank_zero_info
 
 from transformers import (
@@ -389,21 +388,20 @@ def generic_train(
     # TODO: remove with PyTorch 1.6 since pl uses native amp
     if args.fp16:
         train_params["precision"] = 16
-        train_params["amp_level"] = args.fp16_opt_level
 
     if args.gpus > 1:
-        train_params["accelerator"] = "ddp"
+        train_params["accelerator"] = "auto"
+        train_params["strategy"] = "ddp"
 
     train_params["accumulate_grad_batches"] = args.accumulate_grad_batches
-    # train_params["accelerator"] = extra_train_kwargs.get("accelerator", None)
     train_params["profiler"] = None  # extra_train_kwargs.get("profiler", None)
+    train_params["devices"] = "auto"
 
     trainer = pl.Trainer.from_argparse_args(
         args,
         weights_summary=None,
         callbacks=[logging_callback] + extra_callbacks + [InitCallback()] + [checkpoint_callback],
         logger=logger,
-        plugins=[DDPPlugin(find_unused_parameters=True)],  # this is needed in new pytorch-lightning new version
         val_check_interval=1,
         num_sanity_val_steps=2,
         **train_params,
