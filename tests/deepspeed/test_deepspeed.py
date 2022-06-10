@@ -162,11 +162,10 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         self.dist_env_1_gpu = dict(
             MASTER_ADDR="localhost", MASTER_PORT=master_port, RANK="0", LOCAL_RANK="0", WORLD_SIZE="1"
         )
-        self.state = AcceleratorState(_from_accelerator=True)
 
     def tearDown(self):
         super().tearDown()
-        del self.state
+        AcceleratorState._shared_state = {}
 
     def test_init_zero3_fp16(self):
         # test that zero.Init() works correctly under zero3/fp16
@@ -180,7 +179,9 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         with LoggingLevel(logging.INFO):
             with mockenv_context(**self.dist_env_1_gpu):
                 dschf = HfTrainerDeepSpeedConfig(ds_config)
-                self.state.deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=dschf, zero3_init_flag=True)
+                AcceleratorState._shared_state["deepspeed_plugin"] = DeepSpeedPlugin(
+                    hf_ds_config=dschf, zero3_init_flag=True
+                )
                 self.assertTrue(dschf.is_zero3())
                 self.assertTrue(is_deepspeed_zero3_enabled())
                 logger = logging.get_logger("transformers.modeling_utils")
@@ -194,7 +195,9 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         with LoggingLevel(logging.INFO):
             with mockenv_context(**self.dist_env_1_gpu):
                 dschf = HfTrainerDeepSpeedConfig(ds_config)
-                self.state.deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=dschf, zero3_init_flag=True)
+                AcceleratorState._shared_state["deepspeed_plugin"] = DeepSpeedPlugin(
+                    hf_ds_config=dschf, zero3_init_flag=True
+                )
                 self.assertFalse(dschf.is_zero3())
                 self.assertFalse(is_deepspeed_zero3_enabled())
                 logger = logging.get_logger("transformers.modeling_utils")
@@ -235,11 +238,9 @@ class TrainerIntegrationDeepSpeedWithCustomConfig(TestCasePlus):
             zero3=config_zero3,
         )
 
-        self.state = AcceleratorState(_from_accelerator=True)
-
     def tearDown(self):
         super().tearDown()
-        del self.state
+        AcceleratorState._shared_state = {}
 
     def get_config_dict(self, stage):
         # As some tests modify the dict, always make a copy
@@ -736,7 +737,8 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
             self.assertTrue(bool(config), "Deepspeed config should be accessible")
 
             del trainer
-            del self.state.deepspeed_plugin
+            if "deepspeed_plugin" in AcceleratorState._shared_state:
+                del AcceleratorState._shared_state["deepspeed_plugin"]
             config = deepspeed_config()
             self.assertFalse(is_deepspeed_zero3_enabled())
             self.assertFalse(bool(config), "Deepspeed config should not be accessible")

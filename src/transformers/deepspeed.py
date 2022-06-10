@@ -161,17 +161,22 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
 
 
 def is_deepspeed_zero3_enabled():
-    state = AcceleratorState(_from_accelerator=True)
-    if hasattr(state, "deepspeed_plugin") and state.deepspeed_plugin is not None:
-        return state.deepspeed_plugin.hf_ds_config.is_zero3() and state.deepspeed_plugin.zero3_init_flag
+    if (
+        "deepspeed_plugin" in AcceleratorState._shared_state
+        and AcceleratorState._shared_state["deepspeed_plugin"] is not None
+    ):
+        deepspeed_plugin = AcceleratorState._shared_state["deepspeed_plugin"]
+        return deepspeed_plugin.hf_ds_config.is_zero3() and deepspeed_plugin.zero3_init_flag
     return False
 
 
 def deepspeed_config():
     ds_config = None
-    state = AcceleratorState(_from_accelerator=True)
-    if hasattr(state, "deepspeed_plugin") and state.deepspeed_plugin is not None:
-        ds_config = deepcopy(state.deepspeed_plugin.hf_ds_config.config)
+    if (
+        "deepspeed_plugin" in AcceleratorState._shared_state
+        and AcceleratorState._shared_state["deepspeed_plugin"] is not None
+    ):
+        ds_config = deepcopy(AcceleratorState._shared_state["deepspeed_plugin"].hf_ds_config.config)
         if ds_config["gradient_accumulation_steps"] == "auto":
             ds_config["gradient_accumulation_steps"] = 1
         if "train_micro_batch_size_per_gpu" not in ds_config or ds_config["train_micro_batch_size_per_gpu"] == "auto":
