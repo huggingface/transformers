@@ -1173,8 +1173,8 @@ class Trainer:
                 jit_model = torch.jit.freeze(jit_model)
                 jit_model(**example_batch)
                 model = jit_model
-            except (RuntimeError, TypeError) as ex:
-                logger.warning(f"fail to use PyTorch jit mode due to: {ex}.")
+            except (RuntimeError, TypeError) as e:
+                logger.warning(f"failed to use PyTorch jit mode due to: {e}.")
 
         return model
 
