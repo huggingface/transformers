@@ -140,6 +140,7 @@ class BlenderbotModelTester:
     def get_pipeline_config(self):
         config = self.get_config()
         config.max_position_embeddings = 100
+        config.vocab_size = 300
         return config
 
     def prepare_config_and_inputs_for_common(self):
