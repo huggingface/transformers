@@ -7,6 +7,7 @@ import pytest
 
 from parameterized import parameterized
 from transformers import AutoConfig, PreTrainedTokenizerBase, is_tf_available, is_torch_available
+from transformers.models.deberta_v2 import DebertaV2OnnxConfig
 from transformers.onnx import (
     EXTERNAL_DATA_FORMAT_SIZE_LIMIT,
     OnnxConfig,
@@ -263,6 +264,8 @@ class OnnxExportTestCaseV2(TestCase):
 
         model_class = FeaturesManager.get_model_class_for_feature(feature)
         config = AutoConfig.from_pretrained(model_name)
+        if model_name == "microsoft/deberta-v2-xlarge":
+            config.type_vocab_size = 2
         model = model_class.from_config(config)
         onnx_config = onnx_config_class_constructor(model.config)
 

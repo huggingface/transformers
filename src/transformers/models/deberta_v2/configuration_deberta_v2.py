@@ -14,12 +14,12 @@
 # limitations under the License.
 """ DeBERTa-v2 model configuration"""
 from collections import OrderedDict
-from typing import Mapping
+from typing import Mapping, Union, Optional, Any, List
 
+from ... import TensorType
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
+from ...onnx import OnnxConfig, PatchingSpec
 from ...utils import logging
-
 
 logger = logging.get_logger(__name__)
 
@@ -155,11 +155,16 @@ class DebertaV2OnnxConfig(OnnxConfig):
         return OrderedDict(
             [
                 ("input_ids", dynamic_axis),
-                ("token_type_ids", dynamic_axis),
                 ("attention_mask", dynamic_axis),
+                ("token_type_ids", dynamic_axis)
             ]
         )
 
     @property
     def default_onnx_opset(self) -> int:
-        return 15
+        return 12
+
+    @property
+    def values_override(self) -> Optional[Mapping[str, Any]]:
+        if hasattr(self._config, "use_cache"):
+            return {"token_vocab_size": 2}
