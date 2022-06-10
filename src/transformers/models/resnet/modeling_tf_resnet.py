@@ -110,8 +110,9 @@ class TFResNetEmbeddings(tf.keras.layers.Layer):
 
     def call(self, inputs: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_state = inputs
-        # B, C, H, W -> B, H, W, C
+        hidden_state = self.embedder(hidden_state)
         hidden_state = tf.pad(hidden_state, [[0, 0], [0, 0], [1, 1], [1, 1]])
+        # B, C, H, W -> B, H, W, C
         hidden_state = tf.transpose(hidden_state, (0, 2, 3, 1))
         hidden_state = self.pooler(hidden_state)
         # B, H, W, C -> B, C, H, W
