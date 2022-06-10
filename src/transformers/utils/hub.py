@@ -413,6 +413,7 @@ def _raise_for_status(response: Response):
             raise RevisionNotFoundError(f"404 Client Error: Revision Not Found for url: {response.url}")
 
     if response.status_code == 401:
+        # The repo was not found and the user is not Authenticated
         raise RepositoryNotFoundError(
             f"401 Client Error: Repository not found for url: {response.url}. "
             "If the repo is private, make sure you are authenticated."
