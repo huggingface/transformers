@@ -1161,8 +1161,7 @@ class Trainer:
     def torch_jit_model(self, model, training=False, dataloader=None):
         if not training:
             jit_inputs = []
-            for example_batch in dataloader:
-                break
+            example_batch = next(iter(dataloader))
             for key in example_batch:
                 example_tensor = torch.ones_like(example_batch[key])
                 jit_inputs.append(example_tensor)
