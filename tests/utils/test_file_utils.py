@@ -99,12 +99,19 @@ class GetFromCacheTests(unittest.TestCase):
         with self.assertRaisesRegex(EntryNotFoundError, "404 Client Error"):
             _ = get_from_cache(url)
 
-    @unittest.skip("Temp bug in the Hub not returning RepoNotFound errors.")
-    def test_model_not_found(self):
-        # Invalid model file.
+    def test_model_not_found_not_authenticated(self):
+        # Invalid model id.
+        url = hf_bucket_url("bert-base", filename="pytorch_model.bin")
+        with self.assertRaisesRegex(RepositoryNotFoundError, "401 Client Error"):
+            _ = get_from_cache(url)
+
+    @unittest.skip("No authentication when testing against prod")
+    def test_model_not_found_authenticated(self):
+        # Invalid model id.
         url = hf_bucket_url("bert-base", filename="pytorch_model.bin")
         with self.assertRaisesRegex(RepositoryNotFoundError, "404 Client Error"):
-            _ = get_from_cache(url)
+            _ = get_from_cache(url, use_auth_token="hf_sometoken")
+            # ^ TODO - if we decide to unskip this: use a real / functional token
 
     def test_revision_not_found(self):
         # Valid file but missing revision
@@ -142,9 +149,8 @@ class GetFromCacheTests(unittest.TestCase):
         self.assertIsNone(get_file_from_repo("bert-base-cased", "ahah.txt"))
 
         # The function raises if the repository does not exist.
-        # Uncomment when bug is fixed.
-        # with self.assertRaisesRegex(EnvironmentError, "is not a valid model identifier"):
-        #     get_file_from_repo("bert-base-case", "config.json")
+        with self.assertRaisesRegex(EnvironmentError, "is not a valid model identifier"):
+            get_file_from_repo("bert-base-case", "config.json")
 
         # The function raises if the revision does not exist.
         with self.assertRaisesRegex(EnvironmentError, "is not a valid git identifier"):
