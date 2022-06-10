@@ -725,7 +725,7 @@ def check_docstrings_are_in_md():
     """Check all docstrings are in md"""
     files_with_rst = []
     for file in Path(PATH_TO_TRANSFORMERS).glob("**/*.py"):
-        with open(file, "r") as f:
+        with open(file, encoding="utf-8") as f:
             code = f.read()
         docstrings = code.split('"""')
 
