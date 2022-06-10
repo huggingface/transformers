@@ -41,7 +41,7 @@ Nonostante ogni compito abbia una [`pipeline`] associata, è più semplice utili
 ```py
 >>> generator(
 ...     "Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone"
-... )  # doctest: +SKIP
+>>> )  # doctest: +SKIP
 [{'generated_text': 'Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone, Seven for the Iron-priests at the door to the east, and thirteen for the Lord Kings at the end of the mountain'}]
 ```
 
@@ -53,7 +53,7 @@ Se hai più di un input, inseriscilo in una lista:
 ...         "Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone",
 ...         "Nine for Mortal Men, doomed to die, One for the Dark Lord on his dark throne",
 ...     ]
-... )  # doctest: +SKIP
+>>> )  # doctest: +SKIP
 ```
 
 Qualsiasi parametro addizionale per il tuo compito può essere incluso nella [`pipeline`]. La mansione `text-generation` ha un metodo [`~generation_utils.GenerationMixin.generate`] con diversi parametri per controllare l'output. Ad esempio, se desideri generare più di un output, utilizza il parametro `num_return_sequences`:
@@ -62,7 +62,7 @@ Qualsiasi parametro addizionale per il tuo compito può essere incluso nella [`p
 >>> generator(
 ...     "Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone",
 ...     num_return_sequences=2,
-... )  # doctest: +SKIP
+>>> )  # doctest: +SKIP
 ```
 
 ### Scegliere modello e tokenizer
@@ -89,7 +89,7 @@ Inserisci il testo di input nella [`pipeline`] per generare del testo:
 ```py
 >>> generator(
 ...     "Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone"
-... )  # doctest: +SKIP
+>>> )  # doctest: +SKIP
 [{'generated_text': 'Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone, Seven for the Dragon-lords (for them to rule in a world ruled by their rulers, and all who live within the realm'}]
 ```
 
