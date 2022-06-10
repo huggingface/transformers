@@ -154,7 +154,7 @@ def get_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtil
     """
     Returns the first found floating dtype in parameters if there is one, otherwise returns the last dtype it found.
     """
-    lastt_dtype = None
+    last_dtype = None
     for t in parameter.parameters():
         last_dtype = t.dtype
         if t.is_floating_point():
