@@ -966,25 +966,47 @@ workflow_filters: &workflow_filters
         branches:
             only:
                 - main
+
+job_filters: &job_filters
+    filters:
+        branches:
+            ignore:
+                - push-ci
+
 workflows:
     version: 2
     build_and_test:
         jobs:
-            - check_code_quality
-            - check_repository_consistency
-            - run_examples_torch
-            - run_examples_flax
-            - run_tests_custom_tokenizers
-            - run_tests_torch_and_tf
-            - run_tests_torch_and_flax
-            - run_tests_torch
-            - run_tests_tf
-            - run_tests_flax
-            - run_tests_pipelines_torch
-            - run_tests_pipelines_tf
-            - run_tests_onnxruntime
-            - run_tests_hub
-            - run_tests_layoutlmv2_and_v3
+            - check_code_quality:
+                <<: *job_filters
+            - check_repository_consistency:
+                <<: *job_filters
+            - run_examples_torch:
+                <<: *job_filters
+            - run_examples_flax:
+                <<: *job_filters
+            - run_tests_custom_tokenizers:
+                <<: *job_filters
+            - run_tests_torch_and_tf:
+                <<: *job_filters
+            - run_tests_torch_and_flax:
+                <<: *job_filters
+            - run_tests_torch:
+                <<: *job_filters
+            - run_tests_tf:
+                <<: *job_filters
+            - run_tests_flax:
+                <<: *job_filters
+            - run_tests_pipelines_torch:
+                <<: *job_filters
+            - run_tests_pipelines_tf:
+                <<: *job_filters
+            - run_tests_onnxruntime:
+                <<: *job_filters
+            - run_tests_hub:
+                <<: *job_filters
+            - run_tests_layoutlmv2_and_v3:
+                <<: *job_filters
     nightly:
         triggers:
             - schedule:
