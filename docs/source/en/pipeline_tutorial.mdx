@@ -41,7 +41,7 @@ While each task has an associated [`pipeline`], it is simpler to use the general
 ```py
 >>> generator(
 ...     "Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone"
->>> )  # doctest: +SKIP
+... )  # doctest: +SKIP
 [{'generated_text': 'Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone, Seven for the Iron-priests at the door to the east, and thirteen for the Lord Kings at the end of the mountain'}]
 ```
 
@@ -53,7 +53,7 @@ If you have more than one input, pass your input as a list:
 ...         "Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone",
 ...         "Nine for Mortal Men, doomed to die, One for the Dark Lord on his dark throne",
 ...     ]
->>> )  # doctest: +SKIP
+... )  # doctest: +SKIP
 ```
 
 Any additional parameters for your task can also be included in the [`pipeline`]. The `text-generation` task has a [`~generation_utils.GenerationMixin.generate`] method with several parameters for controlling the output. For example, if you want to generate more than one output, set the `num_return_sequences` parameter:
@@ -62,7 +62,7 @@ Any additional parameters for your task can also be included in the [`pipeline`]
 >>> generator(
 ...     "Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone",
 ...     num_return_sequences=2,
->>> )  # doctest: +SKIP
+... )  # doctest: +SKIP
 ```
 
 ### Choose a model and tokenizer
@@ -89,7 +89,7 @@ Pass your input text to the [`pipeline`] to generate some text:
 ```py
 >>> generator(
 ...     "Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone"
->>> )  # doctest: +SKIP
+... )  # doctest: +SKIP
 [{'generated_text': 'Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone, Seven for the Dragon-lords (for them to rule in a world ruled by their rulers, and all who live within the realm'}]
 ```
 

@@ -954,11 +954,11 @@ class LukeModel(LukePreTrainedModel):
         >>> entities = [
         ...     "Beyoncé",
         ...     "Los Angeles",
-        >>> ]  # Wikipedia entity titles corresponding to the entity mentions "Beyoncé" and "Los Angeles"
+        ... ]  # Wikipedia entity titles corresponding to the entity mentions "Beyoncé" and "Los Angeles"
         >>> entity_spans = [
         ...     (0, 7),
         ...     (17, 28),
-        >>> ]  # character-based entity spans corresponding to "Beyoncé" and "Los Angeles"
+        ... ]  # character-based entity spans corresponding to "Beyoncé" and "Los Angeles"
 
         >>> encoding = tokenizer(
         ...     text, entities=entities, entity_spans=entity_spans, add_prefix_space=True, return_tensors="pt"
@@ -1438,7 +1438,7 @@ class LukeForEntityPairClassification(LukePreTrainedModel):
         >>> entity_spans = [
         ...     (0, 7),
         ...     (17, 28),
-        >>> ]  # character-based entity spans corresponding to "Beyoncé" and "Los Angeles"
+        ... ]  # character-based entity spans corresponding to "Beyoncé" and "Los Angeles"
         >>> inputs = tokenizer(text, entity_spans=entity_spans, return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> logits = outputs.logits
