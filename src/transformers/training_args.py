@@ -460,7 +460,8 @@ class TrainingArguments:
             The scope to use when doing hyperparameter search with Ray. By default, `"last"` will be used. Ray will
             then use the last checkpoint of all trials, compare those, and select the best one. However, other options
             are also available. See the
-            [Ray documentation](https://docs.ray.io/en/latest/tune/api_docs/analysis.html#ray.tune.ExperimentAnalysis.get_best_trial)
+            [Ray documentation](
+            https://docs.ray.io/en/latest/tune/api_docs/analysis.html#ray.tune.ExperimentAnalysis.get_best_trial)
             for more options.
     """
 
@@ -928,8 +929,9 @@ class TrainingArguments:
             "help": (
                 'The scope to use when doing hyperparameter search with Ray. By default, `"last"` will be used. Ray'
                 " will then use the last checkpoint of all trials, compare those, and select the best one. However,"
-                " other options are also available. See the Ray documentation"
-                " (https://docs.ray.io/en/latest/tune/api_docs/analysis.html#ray.tune.ExperimentAnalysis.get_best_trial)"
+                " other options are also available. See the Ray documentation ("
+                "https://docs.ray.io/en/latest/tune/api_docs/analysis.html#ray.tune.ExperimentAnalysis.get_best_trial"
+                ")"
                 " for more options."
             )
         },
