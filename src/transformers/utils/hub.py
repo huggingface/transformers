@@ -38,7 +38,7 @@ import requests
 from filelock import FileLock
 from huggingface_hub import HfFolder, Repository, create_repo, list_repo_files, whoami
 from requests.exceptions import HTTPError
-from requests.models import Request, Response
+from requests.models import Response
 from transformers.utils.logging import tqdm
 
 from . import __version__, logging
