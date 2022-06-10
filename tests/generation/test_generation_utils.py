@@ -2633,8 +2633,8 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertListEqual(outputs, ["Wie alter sind Sie?"])
 
     def test_constrained_beam_search_mixin_type_checks(self):
-        tokenizer = AutoTokenizer.from_pretrained("t5-base")
-        model = AutoModelForSeq2SeqLM.from_pretrained("t5-base")
+        tokenizer = AutoTokenizer.from_pretrained("patrickvonplaten/t5-tiny-random")
+        model = AutoModelForSeq2SeqLM.from_pretrained("patrickvonplaten/t5-tiny-random")
 
         encoder_input_str = "translate English to German: How old are you?"
         input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids
