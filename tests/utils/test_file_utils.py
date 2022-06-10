@@ -24,7 +24,7 @@ import transformers
 
 # Try to import everything from transformers to ensure every object can be loaded.
 from transformers import *  # noqa F406
-from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, ACCESS_TOKEN
+from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER
 from transformers.utils import (
     CONFIG_NAME,
     FLAX_WEIGHTS_NAME,
@@ -100,16 +100,18 @@ class GetFromCacheTests(unittest.TestCase):
             _ = get_from_cache(url)
 
     def test_model_not_found_not_authenticated(self):
-        # Invalid model file.
+        # Invalid model id.
         url = hf_bucket_url("bert-base", filename="pytorch_model.bin")
         with self.assertRaisesRegex(RepositoryNotFoundError, "401 Client Error"):
             _ = get_from_cache(url)
 
+    @unittest.skip("No authentication when testing against prod")
     def test_model_not_found_authenticated(self):
-        # Invalid model file.
+        # Invalid model id.
         url = hf_bucket_url("bert-base", filename="pytorch_model.bin")
         with self.assertRaisesRegex(RepositoryNotFoundError, "404 Client Error"):
-            _ = get_from_cache(url, use_auth_token=ACCESS_TOKEN)
+            _ = get_from_cache(url, use_auth_token="hf_sometoken")
+            # ^ TODO - if we decide to unskip this: use a real / functional token
 
     def test_revision_not_found(self):
         # Valid file but missing revision
