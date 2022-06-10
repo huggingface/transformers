@@ -127,7 +127,7 @@ SUPPORTED_TASKS = {
         "impl": AudioClassificationPipeline,
         "tf": (),
         "pt": (AutoModelForAudioClassification,) if is_torch_available() else (),
-        "default": {"model": {"pt": "superb/wav2vec2-base-superb-ks"}},
+        "default": {"model": {"pt": ("superb/wav2vec2-base-superb-ks", "372e048")}},
         "type": "audio",
     },
     "automatic-speech-recognition": {
