@@ -520,9 +520,8 @@ class Trainer:
             logger.info(f"Using {args.half_precision_backend} half precision backend")
 
         self.do_grad_scaling = False
-        if (args.fp16 or args.bf16) and not (
-            args.deepspeed or is_sagemaker_mp_enabled()
-        ):  # deepspeed and SageMaker Model Parallel manage their own half precision
+        if (args.fp16 or args.bf16) and not (args.deepspeed or is_sagemaker_mp_enabled()):  
+            # deepspeed and SageMaker Model Parallel manage their own half precision
             if args.half_precision_backend == "amp":
                 self.use_amp = True
                 self.amp_dtype = torch.float16 if args.fp16 else torch.bfloat16
