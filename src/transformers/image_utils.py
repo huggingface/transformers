@@ -116,6 +116,20 @@ class ImageFeatureExtractionMixin:
             return PIL.Image.fromarray(image)
         return image
 
+    def convert_rgb(self, image):
+        """
+        Converts `PIL.Image.Image` to RGB format. 
+
+        Args:
+            image (`PIL.Image.Image`):
+                The image to convert.
+        """
+        self._ensure_format_supported(image)
+        if not isinstance(image, PIL.Image.Image):
+            return image
+
+        return image.convert("RGB")
+
     def to_numpy_array(self, image, rescale=None, channel_first=True):
         """
         Converts `image` to a numpy array. Optionally rescales it and puts the channel dimension as the first
