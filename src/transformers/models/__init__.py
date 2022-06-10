@@ -31,6 +31,7 @@ from . import (
     bigbird_pegasus,
     blenderbot,
     blenderbot_small,
+    bloom,
     bort,
     byt5,
     camembert,
