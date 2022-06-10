@@ -18,7 +18,6 @@ import math
 import unittest
 
 from transformers import BloomConfig, is_torch_available
-from transformers.models.bloom.modeling_bloom import BloomForSequenceClassification, BloomForTokenClassification
 from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
 
 from ...generation.test_generation_utils import GenerationTesterMixin
@@ -29,7 +28,14 @@ from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attenti
 if is_torch_available():
     import torch
 
-    from transformers import BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST, BloomForCausalLM, BloomModel, BloomTokenizerFast
+    from transformers import (
+        BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST,
+        BloomForCausalLM,
+        BloomForSequenceClassification,
+        BloomForTokenClassification,
+        BloomModel,
+        BloomTokenizerFast,
+    )
 
 
 @require_torch
@@ -307,6 +313,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         if is_torch_available()
         else ()
     )
+
     all_generative_model_classes = (BloomForCausalLM,) if is_torch_available() else ()
     fx_compatible = False
     test_missing_keys = False
