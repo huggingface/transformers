@@ -155,6 +155,7 @@ class DebertaV2OnnxConfig(OnnxConfig):
         return OrderedDict(
             [
                 ("input_ids", dynamic_axis),
+                ("token_type_ids", dynamic_axis),
                 ("attention_mask", dynamic_axis),
             ]
         )
