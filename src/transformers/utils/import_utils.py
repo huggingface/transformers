@@ -305,7 +305,10 @@ def is_torch_bf16_available():
         is_torch_gpu_bf16_available = False
 
     # checking CPU
-    if not hasattr(torch.cpu.amp, "autocast"):
+    try:
+        # multiple levels of AttributeError depending on the pytorch version so do them all in one check
+        _ = torch.cpu.amp.autocast
+    except AttributeError:
         is_torch_cpu_bf16_available = False
 
     return is_torch_cpu_bf16_available or is_torch_gpu_bf16_available
