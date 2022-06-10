@@ -195,7 +195,7 @@ def get_state_dict_float_dtype(state_dict):
 
 def get_state_dict_dtype(state_dict):
     """
-    Returns the first found floating dtype in `state_dict` if there is one, otherwise returns the last dtype.
+    Returns the first found floating dtype in `state_dict` if there is one, otherwise returns the first dtype.
     """
     for t in state_dict.values():
         if t.is_floating_point():
@@ -203,7 +203,7 @@ def get_state_dict_dtype(state_dict):
 
     # if no floating dtype was found return whatever the first dtype is
     else:
-        return t.dtype
+        return next(state_dict.values()).dtype
 
 
 def convert_file_size_to_int(size: Union[int, str]):
