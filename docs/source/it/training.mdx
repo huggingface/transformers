@@ -81,16 +81,15 @@ Inizia caricando il tuo modello e specificando il numero di etichette attese. Ne
 
 <Tip>
 
-You will see a warning about some of the pretrained weights not being used and some weights being randomly
-initialized. Don't worry, this is completely normal! The pretrained head of the BERT model is discarded, and replaced with a randomly initialized classification head. You will fine-tune this new model head on your sequence classification task, transferring the knowledge of the pretrained model to it.
+Potresti vedere un'allerta dato che alcuni dei pesi pre-addestrati non sono stati utilizzati e altri pesi sono stati inizializzati casualmente. Non preoccuparti, è completamente normale! La testa pre-allenata del modello BERT viene scartata, e rimpiazzata da una testa per la classificazione inizializzata casualmente. Tu metterai a punto la nuova testa del modello sulla tua sequenza per il compito di classificazione, trasferendogli la conoscenza del modello pre-allenato.
 
 </Tip>
 
-### Training hyperparameters
+### Addestrare gli iperparametri
 
-Next, create a [`TrainingArguments`] class which contains all the hyperparameters you can tune as well as flags for activating different training options. For this tutorial you can start with the default training [hyperparameters](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments), but feel free to experiment with these to find your optimal settings.
+Successivamente, crea una classe [`TrainingArguments`] contenente tutti gli iperparametri che puoi impostare nonchè le variabili per attivare le differenti opzioni di addestramento. Per questa esercitazione puoi iniziare con gli [iperparametri](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments) di allenamento predefiniti, ma sentiti libero di sperimentare per trovare la configurazione ottimale per te.
 
-Specify where to save the checkpoints from your training:
+Specifica dove salvare i checkpoints del tuo addestramento:
 
 ```py
 >>> from transformers import TrainingArguments
@@ -98,9 +97,9 @@ Specify where to save the checkpoints from your training:
 >>> training_args = TrainingArguments(output_dir="test_trainer")
 ```
 
-### Metrics
+### Metriche
 
-[`Trainer`] does not automatically evaluate model performance during training. You will need to pass [`Trainer`] a function to compute and report metrics. The 🤗 Datasets library provides a simple [`accuracy`](https://huggingface.co/metrics/accuracy) function you can load with the `load_metric` (see this [tutorial](https://huggingface.co/docs/datasets/metrics.html) for more information) function:
+[`Trainer`] non valuta automaticamente le performance del modello durante l'addestramento. Dovrai passare a [`Trainer`] una funzione che calcola e restituisce le metriche. La libreria 🤗 Datasets mette a disposizione una semplice funzione [`accuratezza`](https://huggingface.co/metrics/accuracy) che puoi caricare con la funzione `load_metric` (guarda questa [esercitazione](https://huggingface.co/docs/datasets/metrics.html) per maggiorni informazioni):
 
 ```py
 >>> import numpy as np
@@ -109,7 +108,7 @@ Specify where to save the checkpoints from your training:
 >>> metric = load_metric("accuracy")
 ```
 
-Call `compute` on `metric` to calculate the accuracy of your predictions. Before passing your predictions to `compute`, you need to convert the predictions to logits (remember all 🤗 Transformers models return logits):
+Richiama `compute` su `metric` per calcolare l'accuratezza delle tue previsioni. Prima di passare le tue previsioni a `compute`, hai bisogno di convertirle in logits (ricorda che tutti i modelli 🤗 Transformers restituiscono logits):
 
 ```py
 >>> def compute_metrics(eval_pred):
@@ -118,7 +117,7 @@ Call `compute` on `metric` to calculate the accuracy of your predictions. Before
 ...     return metric.compute(predictions=predictions, references=labels)
 ```
 
-If you'd like to monitor your evaluation metrics during fine-tuning, specify the `evaluation_strategy` parameter in your training arguments to report the evaluation metric at the end of each epoch:
+Se preferisci monitorare le tue metriche di valutazione durante il fine-tuning, specifica il parametro `evaluation_strategy` nei tuoi training arguments per restituire le metriche di valutazione ad ogni epoca di addestramento:
 
 ```py
 >>> from transformers import TrainingArguments, Trainer
@@ -128,7 +127,7 @@ If you'd like to monitor your evaluation metrics during fine-tuning, specify the
 
 ### Trainer
 
-Create a [`Trainer`] object with your model, training arguments, training and test datasets, and evaluation function:
+Crea un oggetto [`Trainer`] col tuo modello, training arguments, dataset di training e test, e funzione di valutazione:
 
 ```py
 >>> trainer = Trainer(
@@ -140,7 +139,7 @@ Create a [`Trainer`] object with your model, training arguments, training and te
 ... )
 ```
 
-Then fine-tune your model by calling [`~transformers.Trainer.train`]:
+Poi metti a punto il modello richiamando [`~transformers.Trainer.train`]:
 
 ```py
 >>> trainer.train()
@@ -151,11 +150,11 @@ Then fine-tune your model by calling [`~transformers.Trainer.train`]:
 
 <Youtube id="rnTGBy2ax1c"/>
 
-🤗 Transformers models also supports training in TensorFlow with the Keras API.
+I modelli 🤗 Transformers supportano anche l'addestramento in TensorFlow usando le Keras API.
 
-### Convert dataset to TensorFlow format
+### Convertire dataset nel formato per TensorFlow
 
-The [`DefaultDataCollator`] assembles tensors into a batch for the model to train on. Make sure you specify `return_tensors` to return TensorFlow tensors:
+Il [`DefaultDataCollator`] assembla tensori in lotti su cui il modello si addestrerà. Sii sicuro di sepecificare di restituire tensori per TensorFlow in `return_tensors`:
 
 ```py
 >>> from transformers import DefaultDataCollator
@@ -165,11 +164,11 @@ The [`DefaultDataCollator`] assembles tensors into a batch for the model to trai
 
 <Tip>
 
-[`Trainer`] uses [`DataCollatorWithPadding`] by default so you don't need to explicitly specify a data collator.
+[`Trainer`] usa [`DataCollatorWithPadding`] in maniera predefinita in modo da non dover specificare esplicitamente un collettore di dati.
 
 </Tip>
 
-Next, convert the tokenized datasets to TensorFlow datasets with the [`to_tf_dataset`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.to_tf_dataset) method. Specify your inputs in `columns`, and your label in `label_cols`:
+Successivamente, converti i datasets tokenizzati in TensorFlow datasets con il metodo [`to_tf_dataset`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.to_tf_dataset). Specifica il tuo input in `columns`, e le tue etichette in `label_cols`:
 
 ```py
 >>> tf_train_dataset = small_train_dataset.to_tf_dataset(
@@ -189,9 +188,9 @@ Next, convert the tokenized datasets to TensorFlow datasets with the [`to_tf_dat
 ... )
 ```
 
-### Compile and fit
+### Compila e fit
 
-Load a TensorFlow model with the expected number of labels:
+Carica un modello TensorFlow col numero atteso di etichette:
 
 ```py
 >>> import tensorflow as tf
@@ -200,7 +199,7 @@ Load a TensorFlow model with the expected number of labels:
 >>> model = TFAutoModelForSequenceClassification.from_pretrained("bert-base-cased", num_labels=5)
 ```
 
-Then compile and fine-tune your model with [`fit`](https://keras.io/api/models/model_training_apis/) as you would with any other Keras model:
+Poi compila e metti a punto il tuo modello usando [`fit`](https://keras.io/api/models/model_training_apis/) come si farebbe con qualsiasi altro modello di Keras:
 
 ```py
 >>> model.compile(
@@ -216,15 +215,15 @@ Then compile and fine-tune your model with [`fit`](https://keras.io/api/models/m
 
 <a id='pytorch_native'></a>
 
-## Train in native PyTorch
+## Addestramento in PyTorch nativo
 
 <frameworkcontent>
 <pt>
 <Youtube id="Dh9CL8fyG80"/>
 
-[`Trainer`] takes care of the training loop and allows you to fine-tune a model in a single line of code. For users who prefer to write their own training loop, you can also fine-tune a 🤗 Transformers model in native PyTorch.
+[`Trainer`] si occupa del ciclo di addestramento e ti consente di mettere a punto un modello con una sola riga di codice. Per gli utenti che preferiscono scrivere il loro personale ciclo di addestramento, puoi anche mettere a punto un modello 🤗 Transformers in PyTorch nativo.
 
-At this point, you may need to restart your notebook or execute the following code to free some memory:
+A questo punto, potresti avere bisogno di riavviare il tuo notebook o eseguire il seguente codice per liberare un pò di memoria:
 
 ```py
 del model
@@ -233,27 +232,27 @@ del trainer
 torch.cuda.empty_cache()
 ```
 
-Next, manually postprocess `tokenized_dataset` to prepare it for training.
+Successivamente, postprocessa manualmente il `tokenized_dataset` per prepararlo ad essere allenato.
 
-1. Remove the `text` column because the model does not accept raw text as an input:
+1. Rimuovi la colonna `text` perchè il modello non accetta testo grezzo come input:
 
     ```py
     >>> tokenized_datasets = tokenized_datasets.remove_columns(["text"])
     ```
 
-2. Rename the `label` column to `labels` because the model expects the argument to be named `labels`:
+2. Rinomina la colonna `label` in `labels` perchè il modello si aspetta che questo argomento si chiami `labels`:
 
     ```py
     >>> tokenized_datasets = tokenized_datasets.rename_column("label", "labels")
     ```
 
-3. Set the format of the dataset to return PyTorch tensors instead of lists:
+3. Imposta il formato del dataset per farti restituire tensori di PyTorch all'interno delle liste:
 
     ```py
     >>> tokenized_datasets.set_format("torch")
     ```
 
-Then create a smaller subset of the dataset as previously shown to speed up the fine-tuning:
+Poi crea un piccolo sottocampione del dataset come visto precedentemente per velocizzare il fine-tuning:
 
 ```py
 >>> small_train_dataset = tokenized_datasets["train"].shuffle(seed=42).select(range(1000))
@@ -262,7 +261,7 @@ Then create a smaller subset of the dataset as previously shown to speed up the 
 
 ### DataLoader
 
-Create a `DataLoader` for your training and test datasets so you can iterate over batches of data:
+Crea un `DataLoader` per i tuoi datasets di train e test così puoi iterare sui lotti di dati:
 
 ```py
 >>> from torch.utils.data import DataLoader
@@ -271,7 +270,7 @@ Create a `DataLoader` for your training and test datasets so you can iterate ove
 >>> eval_dataloader = DataLoader(small_eval_dataset, batch_size=8)
 ```
 
-Load your model with the number of expected labels:
+Carica il tuo modello con il numero atteso di etichette:
 
 ```py
 >>> from transformers import AutoModelForSequenceClassification
@@ -279,9 +278,9 @@ Load your model with the number of expected labels:
 >>> model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", num_labels=5)
 ```
 
-### Optimizer and learning rate scheduler
+### Ottimizzatore e pianificatore del tasso di apprendimento
 
-Create an optimizer and learning rate scheduler to fine-tune the model. Let's use the [`AdamW`](https://pytorch.org/docs/stable/generated/torch.optim.AdamW.html) optimizer from PyTorch:
+Crea un ottimizzatore e pianificatore del tasso di apprendimento per mettere a punto il modello. Usa l'ottimizzatore [`AdamW`](https://pytorch.org/docs/stable/generated/torch.optim.AdamW.html) di PyTorch:
 
 ```py
 >>> from torch.optim import AdamW
@@ -289,7 +288,7 @@ Create an optimizer and learning rate scheduler to fine-tune the model. Let's us
 >>> optimizer = AdamW(model.parameters(), lr=5e-5)
 ```
 
-Create the default learning rate scheduler from [`Trainer`]:
+Crea il pianificatore del tasso di apprendimento predefinito da [`Trainer`]:
 
 ```py
 >>> from transformers import get_scheduler
@@ -301,7 +300,7 @@ Create the default learning rate scheduler from [`Trainer`]:
 ... )
 ```
 
-Lastly, specify `device` to use a GPU if you have access to one. Otherwise, training on a CPU may take several hours instead of a couple of minutes.
+Infine, specifica come `device` da usare una GPU se ne hai una. Altrimenti, l'addestramento su una CPU può richiedere diverse ore invece di un paio di minuti.
 
 ```py
 >>> import torch
@@ -312,15 +311,15 @@ Lastly, specify `device` to use a GPU if you have access to one. Otherwise, trai
 
 <Tip>
 
-Get free access to a cloud GPU if you don't have one with a hosted notebook like [Colaboratory](https://colab.research.google.com/) or [SageMaker StudioLab](https://studiolab.sagemaker.aws/).
+Ottieni l'accesso gratuito a una GPU sul cloud se non ne possiedi una usando un notebook sul web come [Colaboratory](https://colab.research.google.com/) o [SageMaker StudioLab](https://studiolab.sagemaker.aws/).
 
 </Tip>
 
-Great, now you are ready to train! 🥳 
+Ottimo, adesso sei pronto per addestrare! 🥳 
 
 ### Training loop
 
-To keep track of your training progress, use the [tqdm](https://tqdm.github.io/) library to add a progress bar over the number of training steps:
+Per tenere traccia dei tuoi progressi durante l'addestramento, usa la libreria [tqdm](https://tqdm.github.io/) per aggiungere una progress bar sopra il numero dei passi di addestramento:
 
 ```py
 >>> from tqdm.auto import tqdm
@@ -341,9 +340,9 @@ To keep track of your training progress, use the [tqdm](https://tqdm.github.io/)
 ...         progress_bar.update(1)
 ```
 
-### Metrics
+### Metriche
 
-Just like how you need to add an evaluation function to [`Trainer`], you need to do the same when you write your own training loop. But instead of calculating and reporting the metric at the end of each epoch, this time you will accumulate all the batches with [`add_batch`](https://huggingface.co/docs/datasets/package_reference/main_classes.html?highlight=add_batch#datasets.Metric.add_batch) and calculate the metric at the very end.
+Proprio come è necessario aggiungere una funzione di valutazione del [`Trainer`], è necessario fare lo stesso quando si scrive il proprio ciclo di allenamento. Ma invece di calcolare e riportare la metrica alla fine di ogni epoca, questa volta accumulerai tutti i batch con [`add_batch`](https://huggingface.co/docs/datasets/package_reference/main_classes.html?highlight=add_batch#datasets.Metric.add_batch) e calcolerai la metrica alla fine.
 
 ```py
 >>> metric = load_metric("accuracy")
@@ -364,11 +363,10 @@ Just like how you need to add an evaluation function to [`Trainer`], you need to
 
 <a id='additional-resources'></a>
 
-## Additional resources
+## Altre risorse
 
-For more fine-tuning examples, refer to:
+Per altri esempi sul fine-tuning, fai riferimento a:
 
-- [🤗 Transformers Examples](https://github.com/huggingface/transformers/tree/main/examples) includes scripts
-  to train common NLP tasks in PyTorch and TensorFlow.
+- [🤗 Transformers Examples](https://github.com/huggingface/transformers/tree/main/examples) include scripts per addestrare compiti comuni di NLP in PyTorch e TensorFlow.
 
-- [🤗 Transformers Notebooks](notebooks) contains various notebooks on how to fine-tune a model for specific tasks in PyTorch and TensorFlow.
+- [🤗 Transformers Notebooks](notebooks) contiene diversi notebooks su come mettere a punto un modello per compiti specifici in PyTorch e TensorFlow.
