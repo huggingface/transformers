@@ -1107,12 +1107,11 @@ class TrainingArguments:
             self.hf_deepspeed_config = HfTrainerDeepSpeedConfig(self.deepspeed)
             self.hf_deepspeed_config.trainer_config_process(self)
 
-            from accelerate import Accelerator
+            from accelerate.state import AcceleratorState
             from accelerate.utils import DeepSpeedPlugin
 
-            _ = Accelerator(
-                deepspeed_plugin=DeepSpeedPlugin(hf_ds_config=self.hf_deepspeed_config, zero3_init_flag=True)
-            )
+            state = AcceleratorState(_from_accelerator=True)
+            state.deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=self.hf_deepspeed_config, zero3_init_flag=True)
 
         if self.push_to_hub_token is not None:
             warnings.warn(

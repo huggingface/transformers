@@ -19,7 +19,7 @@ import importlib.util
 from copy import deepcopy
 from functools import partialmethod
 
-from accelerate import Accelerator
+from accelerate.state import AcceleratorState
 from accelerate.utils import HfDeepSpeedConfig
 
 from .dependency_versions_check import dep_version_check
@@ -161,20 +161,17 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
 
 
 def is_deepspeed_zero3_enabled():
-    accelerator = Accelerator()
-    if hasattr(accelerator.state, "deepspeed_plugin"):
-        return (
-            accelerator.state.deepspeed_plugin.hf_ds_config.is_zero3()
-            and accelerator.state.deepspeed_plugin.zero3_init_flag
-        )
+    state = AcceleratorState(_from_accelerator=True)
+    if hasattr(state, "deepspeed_plugin") and state.deepspeed_plugin is not None:
+        return state.deepspeed_plugin.hf_ds_config.is_zero3() and state.deepspeed_plugin.zero3_init_flag
     return False
 
 
 def deepspeed_config():
     ds_config = None
-    accelerator = Accelerator()
-    if hasattr(accelerator.state, "deepspeed_plugin"):
-        ds_config = deepcopy(accelerator.state.deepspeed_plugin.hf_ds_config.config)
+    state = AcceleratorState(_from_accelerator=True)
+    if hasattr(state, "deepspeed_plugin") and state.deepspeed_plugin is not None:
+        ds_config = deepcopy(state.deepspeed_plugin.hf_ds_config.config)
         if ds_config["gradient_accumulation_steps"] == "auto":
             ds_config["gradient_accumulation_steps"] = 1
         if "train_micro_batch_size_per_gpu" not in ds_config or ds_config["train_micro_batch_size_per_gpu"] == "auto":
