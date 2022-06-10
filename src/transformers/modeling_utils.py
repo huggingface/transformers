@@ -154,29 +154,32 @@ def get_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtil
     """
     Returns the first found floating dtype in parameters if there is one, otherwise returns the first dtype it found.
     """
-    try:
-        for t in parameter.parameters():
-            if t.is_floating_point():
-                return t.dtype
+    first_dtype = None
+    for t in parameter.parameters():
+        if first_dtype is None:
+            first_dtype = t.dtype
+        if t.is_floating_point():
+            return t.dtype
+    
+    if first_dtype is not None:
         # if no floating dtype was found return whatever the first dtype is
-        else:
-            return next(parameter.parameters()).dtype
+        return first_dtype
 
-    except StopIteration:
+    else:
         # For nn.DataParallel compatibility in PyTorch 1.5
-
         def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
             tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
             return tuples
 
         gen = parameter._named_members(get_members_fn=find_tensor_attributes)
+        first_tuple = None
         for tuple in gen:
+            first_tuple = tuple
             if tuple[1].is_floating_point():
                 return tuple[1].dtype
-        # fallback to any dtype the model has even if not floating
-        else:
-            first_tuple = next(gen)
-            return first_tuple[1].dtype
+
+        # fallback to the first_dtype
+        return first_tuple[1].dtype
 
 
 def get_state_dict_float_dtype(state_dict):
@@ -192,7 +195,7 @@ def get_state_dict_float_dtype(state_dict):
 
 def get_state_dict_dtype(state_dict):
     """
-    Returns the first found floating dtype in `state_dict` if there is one, otherwise returns the first dtype.
+    Returns the first found floating dtype in `state_dict` if there is one, otherwise returns the last dtype.
     """
     for t in state_dict.values():
         if t.is_floating_point():
@@ -200,7 +203,7 @@ def get_state_dict_dtype(state_dict):
 
     # if no floating dtype was found return whatever the first dtype is
     else:
-        return next(state_dict.values()).dtype
+        return t.dtype
 
 
 def convert_file_size_to_int(size: Union[int, str]):
