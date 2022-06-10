@@ -2189,7 +2189,7 @@ class GreaseLMModel(GreaseLMPreTrainedModel):
         self.pooler = GreaseLMPooler(config) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
-        self.post_init()
+        self.apply(self._init_weights)
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -2446,7 +2446,7 @@ class GreaseLMForMultipleChoice(GreaseLMPreTrainedModel):
 
         self.dropout_fc = nn.Dropout(config.p_fc)
         self.layer_id = config.layer_id
-        self.init_weights()
+        self.apply(self._init_weights)
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *model_args, **kwargs):
