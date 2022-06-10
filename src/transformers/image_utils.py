@@ -118,7 +118,7 @@ class ImageFeatureExtractionMixin:
 
     def convert_rgb(self, image):
         """
-        Converts `PIL.Image.Image` to RGB format. 
+        Converts `PIL.Image.Image` to RGB format.
 
         Args:
             image (`PIL.Image.Image`):
