@@ -152,18 +152,17 @@ def get_first_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "Modu
 
 def get_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtilsMixin"]):
     """
-    Returns the first found floating dtype in parameters if there is one, otherwise returns the first dtype it found.
+    Returns the first found floating dtype in parameters if there is one, otherwise returns the last dtype it found.
     """
-    first_dtype = None
+    lastt_dtype = None
     for t in parameter.parameters():
-        if first_dtype is None:
-            first_dtype = t.dtype
+        last_dtype = t.dtype
         if t.is_floating_point():
             return t.dtype
 
-    if first_dtype is not None:
+    if last_dtype is not None:
         # if no floating dtype was found return whatever the first dtype is
-        return first_dtype
+        return last_dtype
 
     else:
         # For nn.DataParallel compatibility in PyTorch > 1.5
@@ -172,14 +171,14 @@ def get_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtil
             return tuples
 
         gen = parameter._named_members(get_members_fn=find_tensor_attributes)
-        first_tuple = None
+        last_tuple = None
         for tuple in gen:
-            first_tuple = tuple
+            last_tuple = tuple
             if tuple[1].is_floating_point():
                 return tuple[1].dtype
 
-        # fallback to the first_dtype
-        return first_tuple[1].dtype
+        # fallback to the last dtype
+        return last_tuple[1].dtype
 
 
 def get_state_dict_float_dtype(state_dict):
