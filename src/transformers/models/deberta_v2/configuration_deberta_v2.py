@@ -158,3 +158,7 @@ class DebertaV2OnnxConfig(OnnxConfig):
                 ("attention_mask", dynamic_axis),
             ]
         )
+
+    @property
+    def default_onnx_opset(self) -> int:
+        return 15
