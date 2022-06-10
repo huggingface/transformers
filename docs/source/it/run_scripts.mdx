@@ -14,9 +14,9 @@ specific language governing permissions and limitations under the License.
 
 Insieme ai [notebooks](./noteboks/README) 🤗 Transformers, ci sono anche esempi di script che dimostrano come addestrare un modello per un task con [PyTorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch), [TensorFlow](https://github.com/huggingface/transformers/tree/main/examples/tensorflow), o [JAX/Flax](https://github.com/huggingface/transformers/tree/main/examples/flax).
 
-Troverai anche script che abbiamo usato nei nostri [progetti di ricerca](https://github.com/huggingface/transformers/tree/main/examples/research_projects) e [precedenti esempi](https://github.com/huggingface/transformers/tree/main/examples/legacy) cui contribuisce per lo più la comunità. Questi script non sono attivamente mantenuti e richiedono una specifica versione di 🤗 Transformers che sarà molto probabilmente incompatibile con l'ultima versione della libreria.
+Troverai anche script che abbiamo usato nei nostri [progetti di ricerca](https://github.com/huggingface/transformers/tree/main/examples/research_projects) e [precedenti esempi](https://github.com/huggingface/transformers/tree/main/examples/legacy) a cui contribuisce per lo più la comunità. Questi script non sono attivamente mantenuti e richiedono una specifica versione di 🤗 Transformers che sarà molto probabilmente incompatibile con l'ultima versione della libreria.
 
-Non è dato per scontato che gli script di esempio funzionino senza apportare modifiche ad ogni problema, bensì potrebbe essere necessario adattare lo script al tuo caso specifico. Per aiutarti in ciò, la maggioranza degli script espone le modalità di pre-processamento dei dati, consentendoti di modificare lo script come preferisci.
+Non è dato per scontato che gli script di esempio funzionino senza apportare modifiche per ogni problema, bensì potrebbe essere necessario adattare lo script al tuo caso specifico. Per aiutarti in ciò, la maggioranza degli script espone le modalità di pre-processamento dei dati, consentendoti di modificare lo script come preferisci.
 
 Per qualsiasi feature che vorresti implementare in uno script d'esempio, per favore discutine nel [forum](https://discuss.huggingface.co/) o in un'[issue](https://github.com/huggingface/transformers/issues) prima di inviare una Pull Request. Mentre accogliamo con piacere la correzione di bug, è più improbabile che faremo la stessa con una PR che aggiunge funzionalità sacrificando la leggibilità. 
 
@@ -72,7 +72,7 @@ Successivamente, cambia la tua attuale copia di 🤗 Transformers specificandone
 git checkout tags/v3.5.1
 ```
 
-Dopo che hai configurato correttamente la versione della libreria, naviga nella cartella degli esempi di tua scelta e installa i requisiti:
+ Dopo aver configurato correttamente la versione della libreria, naviga nella cartella degli esempi di tua scelta e installa i requisiti:
 
 ```bash
 pip install -r requirements.txt
@@ -278,7 +278,7 @@ examples/pytorch/summarization/run_summarization.py -h
 
 ## Riavviare addestramento da un checkpoint
 
-Un'altra utile opzione è riavviare un addestramento da un checkpoint precedente. Questo garantirò che tu possa riprendere da dove hai interrotto senza ricominciare se l'addestramento viene interrotto. Ci sono due metodi per riavviare l'addestramento da un checkpoint: 
+Un'altra utile opzione è riavviare un addestramento da un checkpoint precedente. Questo garantirà che tu possa riprendere da dove hai interrotto senza ricominciare se l'addestramento viene interrotto. Ci sono due metodi per riavviare l'addestramento da un checkpoint: 
 
 Il primo metodo usa l'argomento `output_dir previous_output_dir` per riavviare l'addestramento dall'ultima versione del checkpoint contenuto in `output_dir`. In questo caso, dovresti rimuovere `overwrite_output_dir`:
 
