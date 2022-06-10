@@ -59,6 +59,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "DetrDecoderWrapper",  # Building part of bigger (tested) model.
     "M2M100Encoder",  # Building part of bigger (tested) model.
     "M2M100Decoder",  # Building part of bigger (tested) model.
+    "MCTCTEncoder",  # Building part of bigger (tested) model.
     "Speech2TextEncoder",  # Building part of bigger (tested) model.
     "Speech2TextDecoder",  # Building part of bigger (tested) model.
     "LEDEncoder",  # Building part of bigger (tested) model.

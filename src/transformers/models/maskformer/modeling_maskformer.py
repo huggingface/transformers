@@ -2116,26 +2116,10 @@ class MaskFormerSinePositionEmbedding(nn.Module):
         return pos
 
 
-class IdentityBlock(nn.Module):
-    def __init__(self):
+class PredictionBlock(nn.Module):
+    def __init__(self, in_dim: int, out_dim: int, activation: nn.Module) -> None:
         super().__init__()
-        # Create as an iterable here so that the identity layer isn't registered
-        # with the name of the instance variable its assigned to
-        self.layers = [nn.Identity()]
-        # Maintain submodule indexing as if part of a Sequential block
-        self.add_module("0", self.layers[0])
-
-    def forward(self, input: Tensor) -> Tensor:
-        hidden_state = input
-        for layer in self.layers:
-            hidden_state = layer(hidden_state)
-        return hidden_state
-
-
-class NonLinearBlock(nn.Module):
-    def __init__(self, in_dim: int, out_dim: int) -> None:
-        super().__init__()
-        self.layers = [nn.Linear(in_dim, out_dim), nn.ReLU(inplace=True)]
+        self.layers = [nn.Linear(in_dim, out_dim), activation]
         # Maintain submodule indexing as if part of a Sequential block
         for i, layer in enumerate(self.layers):
             self.add_module(str(i), layer)
@@ -2168,7 +2152,8 @@ class MaskformerMLPPredictionHead(nn.Module):
 
         self.layers = []
         for i, (in_dim, out_dim) in enumerate(zip(in_dims, out_dims)):
-            layer = NonLinearBlock(in_dim, out_dim) if i < num_layers - 1 else IdentityBlock()
+            activation = nn.ReLU() if i < num_layers - 1 else nn.Identity()
+            layer = PredictionBlock(in_dim, out_dim, activation=activation)
             self.layers.append(layer)
             # Provide backwards compatibility from when the class inherited from nn.Sequential
             # In nn.Sequential subclasses, the name given to the layer is its index in the sequence.
