@@ -139,7 +139,7 @@ def get_first_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "Modu
     try:
         return next(parameter.parameters()).dtype
     except StopIteration:
-        # For nn.DataParallel compatibility in PyTorch 1.5
+        # For nn.DataParallel compatibility in PyTorch > 1.5
 
         def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
             tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
@@ -160,13 +160,13 @@ def get_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtil
             first_dtype = t.dtype
         if t.is_floating_point():
             return t.dtype
-    
+
     if first_dtype is not None:
         # if no floating dtype was found return whatever the first dtype is
         return first_dtype
 
     else:
-        # For nn.DataParallel compatibility in PyTorch 1.5
+        # For nn.DataParallel compatibility in PyTorch > 1.5
         def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
             tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
             return tuples
