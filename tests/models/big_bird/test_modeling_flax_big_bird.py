@@ -157,6 +157,21 @@ class FlaxBigBirdModelTest(FlaxModelTesterMixin, unittest.TestCase):
         self.model_tester = FlaxBigBirdModelTester(self)
 
     @slow
+    # copied from `test_modeling_flax_common` because it takes much longer than other models
+    def test_from_pretrained_with_no_automatic_init(self):
+        super().test_from_pretrained_with_no_automatic_init()
+
+    @slow
+    # copied from `test_modeling_flax_common` because it takes much longer than other models
+    def test_no_automatic_init(self):
+        super().test_no_automatic_init()
+
+    @slow
+    # copied from `test_modeling_flax_common` because it takes much longer than other models
+    def test_model_outputs_equivalence(self):
+        super().test_model_outputs_equivalence()
+
+    @slow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
             model = model_class_name.from_pretrained("google/bigbird-roberta-base", from_pt=True)
