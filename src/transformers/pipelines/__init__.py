@@ -41,7 +41,7 @@ from .base import (
     Pipeline,
     PipelineDataFormat,
     PipelineException,
-    get_default_model,
+    get_default_model_and_revision,
     infer_framework_load_model,
 )
 from .conversational import Conversation, ConversationalPipeline
@@ -528,8 +528,11 @@ def pipeline(
     # Use default model/config/tokenizer for the task if no model is provided
     if model is None:
         # At that point framework might still be undetermined
-        model = get_default_model(targeted_task, framework, task_options)
-        logger.warning(f"No model was supplied, defaulted to {model} (https://huggingface.co/{model})")
+        model, default_revision = get_default_model_and_revision(targeted_task, framework, task_options)
+        revision = revision if revision is not None else default_revision
+        logger.warning(
+            f"No model was supplied, defaulted to {model} and revision {revision} (https://huggingface.co/{model})"
+        )
 
     # Retrieve use_auth_token and add it to model_kwargs to be used in .from_pretrained
     model_kwargs["use_auth_token"] = model_kwargs.get("use_auth_token", use_auth_token)
