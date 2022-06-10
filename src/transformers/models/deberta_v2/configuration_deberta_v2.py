@@ -14,12 +14,12 @@
 # limitations under the License.
 """ DeBERTa-v2 model configuration"""
 from collections import OrderedDict
-from typing import Mapping, Union, Optional, Any, List
+from typing import Any, Mapping, Optional
 
-from ... import TensorType
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig, PatchingSpec
+from ...onnx import OnnxConfig
 from ...utils import logging
+
 
 logger = logging.get_logger(__name__)
 
@@ -144,7 +144,6 @@ class DebertaV2Config(PretrainedConfig):
         self.pooler_hidden_act = pooler_hidden_act
 
 
-# Copied from transformers.models.xlm_roberta.configuration_xlm_roberta.XLMRobertaOnnxConfig with XLMRoberta->DebertaV2
 class DebertaV2OnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -153,11 +152,7 @@ class DebertaV2OnnxConfig(OnnxConfig):
         else:
             dynamic_axis = {0: "batch", 1: "sequence"}
         return OrderedDict(
-            [
-                ("input_ids", dynamic_axis),
-                ("attention_mask", dynamic_axis),
-                ("token_type_ids", dynamic_axis)
-            ]
+            [("input_ids", dynamic_axis), ("attention_mask", dynamic_axis), ("token_type_ids", dynamic_axis)]
         )
 
     @property

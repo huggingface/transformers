@@ -7,7 +7,6 @@ import pytest
 
 from parameterized import parameterized
 from transformers import AutoConfig, PreTrainedTokenizerBase, is_tf_available, is_torch_available
-from transformers.models.deberta_v2 import DebertaV2OnnxConfig
 from transformers.onnx import (
     EXTERNAL_DATA_FORMAT_SIZE_LIMIT,
     OnnxConfig,
