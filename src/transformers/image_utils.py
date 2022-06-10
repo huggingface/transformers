@@ -168,7 +168,7 @@ class ImageFeatureExtractionMixin:
         Expands 2-dimensional `image` to 3 dimensions.
 
         Args:
-            image (`np.ndarray` or `torch.Tensor`):
+            image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
                 The image to expand.
         """
         self._ensure_format_supported(image)
@@ -308,10 +308,7 @@ class ImageFeatureExtractionMixin:
         if is_torch_tensor(image) or isinstance(image, np.ndarray):
             if image.ndim == 2:
                 image = self.expand_dims(image)
-            if image.shape[0] in [1, 3]:
-                image_shape = image.shape[1:]
-            else:
-                image_shape = image.shape[:2]
+            image_shape = image.shape[1:] if image.shape[0] in [1, 3] else image.shape[:2]
         else:
             image_shape = (image.size[1], image.size[0])
 
