@@ -165,7 +165,7 @@ python scripts/validation_loss.py \
 In addition we evaluate the model on OpenAI's _HumanEval_ benchmark. You can run the evaluation with the following command:
 
 ```bash
-python scripts/human_eval.py --model_ckpt lvwerra/codeparrot \
+accelerate launch  scripts/human_eval.py --model_ckpt lvwerra/codeparrot \
 --do_sample True \
 --temperature 0.2 \
 --top_p 0.95 \
@@ -178,7 +178,7 @@ The results as well as reference values are shown in the following table:
 | Model | pass@1 | pass@10 | pass@100|
 |-------|--------|---------|---------|
 |CodeParrot 🦜 (110M) | 3.80% | 6.57% | 12.78% |
-|CodeParrot 🦜 (1.5B) | 3.58% | 8.03% | 14.96% |
+|CodeParrot 🦜 (1.5B) | 3.99% | 8.69% | 17.88% |
 |||||
 |Codex (25M)| 3.21% | 7.1% |	12.89%|
 |Codex (85M)| 8.22%	| 12.81% | 22.40% |
