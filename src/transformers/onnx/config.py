@@ -76,6 +76,9 @@ class OnnxConfig(ABC):
     _tasks_to_common_outputs = {
         "causal-lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
         "default": OrderedDict({"last_hidden_state": {0: "batch", 1: "sequence"}}),
+        "entity-classification": OrderedDict({"logits": {0: "batch"}}),
+        "entity-pair-classification": OrderedDict({"logits": {0: "batch"}}),
+        "entity-span-classification": OrderedDict({"logits": {0: "batch"}}),
         "image-classification": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
         "masked-im": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
         "masked-lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
