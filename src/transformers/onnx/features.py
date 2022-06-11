@@ -295,7 +295,7 @@ class FeaturesManager:
             "entity-classification",
             "entity-pair-classification",
             "entity-span-classification",
-            onnx_config_cls=LukeOnnxConfig,
+            onnx_config_cls="models.luke.LukeOnnxConfig",
         ),
         
         "marian": supported_features_mapping(
