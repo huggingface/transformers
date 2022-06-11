@@ -259,7 +259,7 @@ class TransformerBlock(nn.Module):
     def __init__(self, config: PretrainedConfig):
         super().__init__()
 
-        if self.dim % self.n_heads != 0:
+        if config.dim % config.n_heads != 0:
             raise ValueError(
                 f"Expected `n_heads` to divide `dim`, but is n_heads={self.n_heads} "
                 f"and dim={self.dim}."
