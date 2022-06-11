@@ -350,6 +350,7 @@ class GenerativeQAModule(BaseTransformer):
                     concat.save_to_disk(self.config.passages_path)  # here we update the main passage file on the disk
                     logger.info("done updating the dataset")
 
+                    # To Do (@Aaron) : Useful in the future dynamic memory implementation.
                     # if you load the index from the disk make sure to update the index file here, otherwise it is ok to update the index file from the worker.
                     # logger.info("then updating the index")
                     # shutil.copy(self.custom_config.temp_index, self.config.idex_path)
@@ -361,9 +362,6 @@ class GenerativeQAModule(BaseTransformer):
                     isEmUpdateBusy = False
                     isAddIndexBusy = False
         self.trainer.strategy.barrier("barrier")
-        # self.trainer.connectors.accelerator_connector.accelerator.barrier(
-        #     "barrier"
-        # )  # waint untill the index and kb get re-initialized.
 
         loss_tensors = self._step(batch)
 

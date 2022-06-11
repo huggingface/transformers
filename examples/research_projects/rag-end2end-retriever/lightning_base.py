@@ -385,7 +385,6 @@ def generic_train(
 
     train_params = {}
 
-    # TODO: remove with PyTorch 1.6 since pl uses native amp
     if args.fp16:
         train_params["precision"] = 16
 
@@ -394,7 +393,7 @@ def generic_train(
         train_params["strategy"] = "ddp"
 
     train_params["accumulate_grad_batches"] = args.accumulate_grad_batches
-    train_params["profiler"] = None  # extra_train_kwargs.get("profiler", None)
+    train_params["profiler"] = None
     train_params["devices"] = "auto"
 
     trainer = pl.Trainer.from_argparse_args(
@@ -410,6 +409,6 @@ def generic_train(
     if args.do_train:
         trainer.fit(model)
 
-    # else:
-    #     print("RAG modeling tests with new set functions successfuly executed!")
+    else:
+        print("RAG modeling tests with new set functions successfuly executed!")
     return trainer
