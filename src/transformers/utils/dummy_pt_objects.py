@@ -966,6 +966,30 @@ class BlenderbotSmallPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class BloomForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class BloomModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class BloomPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -2770,6 +2794,30 @@ class MBartModel(metaclass=DummyObject):
 
 
 class MBartPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class MCTCTForCTC(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MCTCTModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MCTCTPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
