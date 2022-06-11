@@ -72,7 +72,7 @@ class AlbertTokenizer(PreTrainedTokenizer):
         {'input_ids': [1, 97, 9, 16, 5, 20, 2], 'token_type_ids': [0, 0, 0, 0, 0, 0, 0], 'attention_mask': [1, 1, 1, 1, 1, 1, 1]}
         ```
 
-        You could still use AlbertTokenizer with the [`pipeline`]：
+        You could still use AlbertTokenizer with the [`pipeline`]:
         ```python
         >>> tokenizer=AlbertTokenizer.from_pretrained('albert-base-v2')
         >>> tokenizer('I love huggingface.')
@@ -80,7 +80,8 @@ class AlbertTokenizer(PreTrainedTokenizer):
         ```
         <Tip>
 
-        Due to some internal reasons, unexpected word segmentation may occur when initializing a tokenizer from scratch. You could try to use [`from_pretrained`].
+        Due to some internal reasons, unexpected word segmentation may occur when initializing a tokenizer from scratch.
+        You could try to use [`from_pretrained`].
 
         For example:
 
@@ -89,8 +90,8 @@ class AlbertTokenizer(PreTrainedTokenizer):
         >>> tokenizer.tokenize('[CLS][SEP]')
         ['[', 'CL', 'S', '][', 'SE', 'P', ']']
         ```
+        
         Using [`from_pretrained`]:
-
         ```python
         >>> tokenizer.save_pretrained('Your/Save/Path')
         >>> tokenizer = AlbertTokenizer.from_pretrained('Your/Save/Path')
