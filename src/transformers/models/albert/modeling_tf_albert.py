@@ -865,8 +865,11 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel, TFAlbertPreTrainingLoss):
         >>> tokenizer = AlbertTokenizer.from_pretrained("albert-base-v2")
         >>> model = TFAlbertForPreTraining.from_pretrained("albert-base-v2")
 
-        >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]
-        >>> # Batch size 1
+
+        >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[
+        ...     None, :
+        ... ]  # Batch size 1
+        
         >>> outputs = model(input_ids)
 
         >>> prediction_logits = outputs.prediction_logits
