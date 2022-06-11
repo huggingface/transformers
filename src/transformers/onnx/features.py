@@ -2,7 +2,7 @@ from functools import partial, reduce
 from typing import Callable, Dict, Optional, Tuple, Type, Union
 
 import transformers
-from transformers.utils.dummy_pt_objects import (
+from transformers.models.luke import (
     LukeForEntityClassification,
     LukeForEntityPairClassification,
     LukeForEntitySpanClassification,
