@@ -24,7 +24,7 @@ from transformers import AddedToken, LongformerTokenizer, LongformerTokenizerFas
 from transformers.models.longformer.tokenization_longformer import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers, slow
 
-from ..test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 # Copied from transformers.tests.roberta.test_modeling_roberta.py with Roberta->Longformer
