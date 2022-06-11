@@ -106,8 +106,11 @@ class TFFunnelEmbeddings(tf.keras.layers.Layer):
         Returns:
             final_embeddings (`tf.Tensor`): output embedding tensor.
         """
-        assert not (input_ids is None and inputs_embeds is None)
-        assert not (input_ids is not None and inputs_embeds is not None)
+        both_none = (input_ids is None and inputs_embeds is None)
+        both_not_none = (input_ids is not None and inputs_embeds is not None)
+
+        if both_none or both_not_none:
+            raise ValueError('Only one of `input_ids` and `input_embeds should be provided.')
 
         if input_ids is not None:
             inputs_embeds = tf.gather(self.weight, input_ids)

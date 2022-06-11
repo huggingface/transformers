@@ -558,10 +558,19 @@ class LayoutLMv2VisualBackbone(nn.Module):
         self.cfg = config.get_detectron2_config()
         meta_arch = self.cfg.MODEL.META_ARCHITECTURE
         model = META_ARCH_REGISTRY.get(meta_arch)(self.cfg)
-        assert isinstance(model.backbone, detectron2.modeling.backbone.FPN)
+        if not isinstance(model.backbone, detectron2.modeling.backbone.FPN):
+            raise ValueError(
+                'Expected `model.backbone` to be of type `detectron2.modeling.backbone.FPN`,'
+                f' but is {type(model.backbone)}.'
+            )
         self.backbone = model.backbone
 
-        assert len(self.cfg.MODEL.PIXEL_MEAN) == len(self.cfg.MODEL.PIXEL_STD)
+        if len(self.cfg.MODEL.PIXEL_MEAN) != len(self.cfg.MODEL.PIXEL_STD):
+            raise ValueError(
+                'Expected `len(self.cfg.MODEL.PIXEL_MEAN)` to be equal to `len(self.cfg.MODEL.PIXEL_STD)`,'
+                f'but is {len(self.cfg.MODEL.PIXEL_STD)} and {len(self.cfg.MODEL.PIXEL_STD)}.'
+            )
+
         num_channels = len(self.cfg.MODEL.PIXEL_MEAN)
         self.register_buffer(
             "pixel_mean",
@@ -583,6 +592,7 @@ class LayoutLMv2VisualBackbone(nn.Module):
             self.pool = nn.AdaptiveAvgPool2d(config.image_feature_pool_shape[:2])
         if len(config.image_feature_pool_shape) == 2:
             config.image_feature_pool_shape.append(self.backbone.output_shape()[self.out_feature_key].channels)
+
         assert self.backbone.output_shape()[self.out_feature_key].channels == config.image_feature_pool_shape[2]
 
     def forward(self, images):

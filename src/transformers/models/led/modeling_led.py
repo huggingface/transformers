@@ -151,12 +151,11 @@ class LEDEncoderSelfAttention(nn.Module):
 
         self.layer_id = layer_id
         attention_window = config.attention_window[self.layer_id]
-        assert (
-            attention_window % 2 == 0
-        ), f"`attention_window` for layer {self.layer_id} has to be an even value. Given {attention_window}"
-        assert (
-            attention_window > 0
-        ), f"`attention_window` for layer {self.layer_id} has to be positive. Given {attention_window}"
+        if attention_window % 2 != 0:
+            raise ValueError(f"`attention_window` for layer {self.layer_id} has to be an even value. Given {attention_window}")
+
+        if attention_window <= 0:
+            raise ValueError(f"`attention_window` for layer {self.layer_id} has to be positive. Given {attention_window}")
 
         self.one_sided_attn_window_size = attention_window // 2
 
@@ -188,9 +187,8 @@ class LEDEncoderSelfAttention(nn.Module):
         value_vectors = self.value(hidden_states)
 
         seq_len, batch_size, embed_dim = hidden_states.size()
-        assert (
-            embed_dim == self.embed_dim
-        ), f"hidden_states should have embed_dim = {self.embed_dim}, but has {embed_dim}"
+        if embed_dim != self.embed_dim:
+            raise ValueError(f"hidden_states should have embed_dim = {self.embed_dim}, but has {embed_dim}")
 
         # normalize query
         query_vectors /= math.sqrt(self.head_dim)
@@ -217,15 +215,16 @@ class LEDEncoderSelfAttention(nn.Module):
         # pad local attention probs
         attn_scores += diagonal_mask
 
-        assert list(attn_scores.size()) == [
+        if list(attn_scores.size()) != [
             batch_size,
             seq_len,
             self.num_heads,
             self.one_sided_attn_window_size * 2 + 1,
-        ], (
-            f"local_attn_probs should be of size ({batch_size}, {seq_len}, {self.num_heads},"
-            f" {self.one_sided_attn_window_size * 2 + 1}), but is of size {attn_scores.size()}"
-        )
+        ]:
+            raise ValueError(
+                f"local_attn_probs should be of size ({batch_size}, {seq_len}, {self.num_heads},"
+                f" {self.one_sided_attn_window_size * 2 + 1}), but is of size {attn_scores.size()}"
+            )
 
         # compute local attention probs from global attention keys and contact over window dim
         if is_global_attn:
@@ -258,9 +257,11 @@ class LEDEncoderSelfAttention(nn.Module):
         )  # use fp32 for numerical stability
 
         if layer_head_mask is not None:
-            assert layer_head_mask.size() == (
+            if layer_head_mask.size() != (
                 self.num_heads,
-            ), f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
+            ):
+                raise ValueError(f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}")
+
             attn_probs = layer_head_mask.view(1, 1, -1, 1) * attn_probs
 
         # softmax sometimes inserts NaN if all positions are masked, replace them with 0
@@ -291,7 +292,11 @@ class LEDEncoderSelfAttention(nn.Module):
                 attn_probs, value_vectors, self.one_sided_attn_window_size
             )
 
-        assert attn_output.size() == (batch_size, seq_len, self.num_heads, self.head_dim), "Unexpected size"
+        if attn_output.size() != (batch_size, seq_len, self.num_heads, self.head_dim):
+            raise ValueError(
+                f"Unexpected size for `attn_output`. Expected to be {(batch_size, seq_len, self.num_heads, self.head_dim)}"
+                f" but is {attn_output.size()}."
+            )
         attn_output = attn_output.transpose(0, 1).reshape(seq_len, batch_size, embed_dim).contiguous()
 
         # compute value for global attention and overwrite to attention output
@@ -427,10 +432,14 @@ class LEDEncoderSelfAttention(nn.Module):
         overlap of size window_overlap
         """
         batch_size, seq_len, num_heads, head_dim = query.size()
-        assert (
-            seq_len % (window_overlap * 2) == 0
-        ), f"Sequence length should be multiple of {window_overlap * 2}. Given {seq_len}"
-        assert query.size() == key.size()
+        if seq_len % (window_overlap * 2) != 0:
+            raise ValueError(f"Sequence length should be multiple of {window_overlap * 2}. Given {seq_len}")
+
+        if query.size() != key.size():
+            raise ValueError(
+                'Expected `query` to have the same dimensions as `key`, but is '
+                f'{query.size()} and {key.size()}.'
+            )
 
         chunks_count = seq_len // window_overlap - 1
 

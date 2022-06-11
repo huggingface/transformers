@@ -75,7 +75,12 @@ class TFAttention(tf.keras.layers.Layer):
 
         n_state = nx  # in Attention: n_state=768 (nx=n_embd)
         # [switch nx => n_state from Block to Attention to keep identical to TF implementation]
-        assert n_state % config.n_head == 0
+        if n_state % config.n_head != 0:
+            raise ValueError(
+                f"Expected `n_state` to divide `config.n_head`, but is n_state={n_state} "
+                f"and config.n_head={config.n_head}."
+            )
+
         self.n_head = config.n_head
         self.split_size = n_state
         self.scale = scale
@@ -1242,9 +1247,8 @@ class TFGPT2ForSequenceClassification(TFGPT2PreTrainedModel, TFSequenceClassific
         loss = None
 
         if labels is not None:
-            assert (
-                self.config.pad_token_id is not None or logits_shape[0] == 1
-            ), "Cannot handle batch sizes > 1 if no padding token is defined."
+            if self.config.pad_token_id is None and logits_shape[0] == 1:
+                raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
 
             if not tf.is_tensor(sequence_lengths):
                 in_logits = logits[0 : logits_shape[0], sequence_lengths]

@@ -136,9 +136,8 @@ class FunnelConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.block_sizes = block_sizes
         self.block_repeats = [1] * len(block_sizes) if block_repeats is None else block_repeats
-        assert len(block_sizes) == len(
-            self.block_repeats
-        ), "`block_sizes` and `block_repeats` should have the same length."
+        if len(block_sizes) != len(self.block_repeats):
+            raise ValueError("`block_sizes` and `block_repeats` should have the same length.")
         self.num_decoder_layers = num_decoder_layers
         self.d_model = d_model
         self.n_head = n_head
@@ -153,15 +152,13 @@ class FunnelConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.initializer_std = initializer_std
         self.layer_norm_eps = layer_norm_eps
-        assert pooling_type in [
-            "mean",
-            "max",
-        ], f"Got {pooling_type} for `pooling_type` but only 'mean' and 'max' are supported."
+        if pooling_type not in ["mean", "max"]:
+            raise ValueError(f"Got {pooling_type} for `pooling_type` but only 'mean' and 'max' are supported.")
+        
         self.pooling_type = pooling_type
-        assert attention_type in [
-            "relative_shift",
-            "factorized",
-        ], f"Got {attention_type} for `attention_type` but only 'relative_shift' and 'factorized' are supported."
+        if attenion_type not in  ["relative_shift", "factorized"]:
+            raise ValueError(f"Got {attention_type} for `attention_type` but only 'relative_shift' and 'factorized' are supported.")
+        
         self.attention_type = attention_type
         self.separate_cls = separate_cls
         self.truncate_seq = truncate_seq

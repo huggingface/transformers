@@ -107,7 +107,8 @@ class TFEmbeddings(tf.keras.layers.Layer):
         Returns:
             final_embeddings (`tf.Tensor`): output embedding tensor.
         """
-        assert not (input_ids is None and inputs_embeds is None)
+        if input_ids is None and inputs_embeds is None:
+            raise ValueError('`input_ids` and `input_embeds` can not both be None.')
 
         if input_ids is not None:
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
@@ -134,7 +135,8 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(config.attention_dropout)
         self.output_attentions = config.output_attentions
 
-        assert self.dim % self.n_heads == 0, f"Hidden size {self.dim} not dividable by number of heads {self.n_heads}"
+        if self.dim % self.n_heads == 0:
+            raise ValueError(f"Hidden size {self.dim} not dividable by number of heads {self.n_heads}")
 
         self.q_lin = tf.keras.layers.Dense(
             config.dim, kernel_initializer=get_initializer(config.initializer_range), name="q_lin"
@@ -242,9 +244,8 @@ class TFTransformerBlock(tf.keras.layers.Layer):
         self.activation = config.activation
         self.output_attentions = config.output_attentions
 
-        assert (
-            config.dim % config.n_heads == 0
-        ), f"Hidden size {config.dim} not dividable by number of heads {config.n_heads}"
+        if config.dim % config.n_heads == 0:
+            raise ValueError(f"Hidden size {config.dim} not dividable by number of heads {config.n_heads}")
 
         self.attention = TFMultiHeadSelfAttention(config, name="attention")
         self.sa_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="sa_layer_norm")

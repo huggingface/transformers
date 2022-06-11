@@ -188,8 +188,18 @@ class FlaubertModel(XLMModel):
         # mask = input_ids != self.pad_index
 
         # check inputs
-        assert lengths.size(0) == bs
-        assert lengths.max().item() <= slen
+        if lengths.size(0) != bs:
+            raise ValueError(
+                '`lengths` should have the same batch size as `input_ids`, but is '
+                f'{lengths.size(0)} and {input_ids.size(0)}.'
+            )
+
+        if lengths.max().item() > slen:
+            raise ValueError(
+                'Maximum value in `lengths` should be smaller or equal to the '
+                f'padded length of `input_ids`, but is {lengths.max().item()} and {slen}.'
+            )
+
         # input_ids = input_ids.transpose(0, 1)  # batch size as dimension 0
         # assert (src_enc is None) == (src_len is None)
         # if src_enc is not None:
@@ -212,12 +222,20 @@ class FlaubertModel(XLMModel):
                 position_ids = torch.arange(slen, dtype=torch.long, device=device)
                 position_ids = position_ids.unsqueeze(0).expand((bs, slen))
         else:
-            assert position_ids.size() == (bs, slen)  # (slen, bs)
+            if position_ids.size() != (bs, slen):
+                raise ValueError(
+                    'Dimensions for `position_ids` should be the same as `input_ids` '
+                    f'but is {position_ids.size()} and {(bs, slen)}.'
+                )
             # position_ids = position_ids.transpose(0, 1)
 
         # langs
         if langs is not None:
-            assert langs.size() == (bs, slen)  # (slen, bs)
+            if langs.size() == (bs, slen):
+                raise ValueError(
+                    'Dimensions for `langs` should be the same as `input_ids` '
+                    f'but is {langs.size()} and {(bs, slen)}.'
+                )
             # langs = langs.transpose(0, 1)
 
         # Prepare head mask if needed

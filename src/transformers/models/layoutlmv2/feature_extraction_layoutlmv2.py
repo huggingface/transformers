@@ -74,7 +74,8 @@ def apply_tesseract(image: Image.Image, lang: Optional[str]):
     for box in actual_boxes:
         normalized_boxes.append(normalize_box(box, image_width, image_height))
 
-    assert len(words) == len(normalized_boxes), "Not as many words as there are bounding boxes"
+    if len(words) != len(normalized_boxes):
+        raise ValueError("Not as many words as there are bounding boxes")
 
     return words, normalized_boxes
 
