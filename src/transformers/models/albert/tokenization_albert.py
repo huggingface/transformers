@@ -63,6 +63,43 @@ class AlbertTokenizer(PreTrainedTokenizer):
     This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
     this superclass for more information regarding those methods.
 
+    Example:
+        You could use your sentincepiece model to build the AlbertTokenizer:
+        ```python
+        >>> from transformers import AlbertTokenizer
+        >>> tokenizer = AlbertTokenizer(vocab_file='Your/Sentincepiece/Model/Path',do_lower_case=False)
+        >>> tokenizer('I love huggingface.')
+        {'input_ids': [1, 97, 9, 16, 5, 20, 2], 'token_type_ids': [0, 0, 0, 0, 0, 0, 0], 'attention_mask': [1, 1, 1, 1, 1, 1, 1]}
+        ```
+
+        You could still use AlbertTokenizer with the [`pipeline`]：
+        ```python
+        >>> tokenizer=AlbertTokenizer.from_pretrained('albert-base-v2')
+        >>> tokenizer('I love huggingface.')
+        {'input_ids': [2, 31, 339, 20676, 6413, 9, 3], 'token_type_ids': [0, 0, 0, 0, 0, 0, 0], 'attention_mask': [1, 1, 1, 1, 1, 1, 1]}
+        ```
+        <Tip>
+
+        Due to some internal reasons, unexpected word segmentation may occur when initializing a tokenizer from scratch. You could try to use [`from_pretrained`].
+
+        For example:
+
+        ```python
+        >>> tokenizer = AlbertTokenizer(vocab_file='Your/Sentincepiece/Model/Path',do_lower_case=False)
+        >>> tokenizer.tokenize('[CLS][SEP]')
+        ['[', 'CL', 'S', '][', 'SE', 'P', ']']
+        ```
+        Using [`from_pretrained`]:
+
+        ```python
+        >>> tokenizer.save_pretrained('Your/Save/Path')
+        >>> tokenizer = AlbertTokenizer.from_pretrained('Your/Save/Path')
+        >>> tokenizer.tokenize('[CLS][SEP]')
+        ['[CLS]', '[SEP]']
+        ```
+
+        </Tip>
+
     Args:
         vocab_file (`str`):
             [SentencePiece](https://github.com/google/sentencepiece) file (generally has a *.spm* extension) that
