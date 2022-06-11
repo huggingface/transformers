@@ -96,7 +96,7 @@ class LongformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         input_bpe_tokens = [0, 1, 2, 15, 10, 9, 3, 2, 15, 19]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
-    def roberta_dict_integration_testing(self):
+    def longformer_dict_integration_testing(self):
         tokenizer = self.get_tokenizer()
 
         self.assertListEqual(tokenizer.encode("Hello world!", add_special_tokens=False), [0, 31414, 232, 328, 2])
