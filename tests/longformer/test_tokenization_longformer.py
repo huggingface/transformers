@@ -107,7 +107,7 @@ class LongformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @slow
     def test_sequence_builders(self):
-        tokenizer = self.tokenizer_class.from_pretrained("roberta-base")
+        tokenizer = self.tokenizer_class.from_pretrained("allenai/longformer-base-4096")
 
         text = tokenizer.encode("sequence builders", add_special_tokens=False)
         text_2 = tokenizer.encode("multi-sequence build", add_special_tokens=False)
