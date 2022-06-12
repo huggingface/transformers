@@ -215,29 +215,29 @@ def infer_framework_load_model(
         class_tuple = ()
         look_pt = is_torch_available() and framework in {"pt", None}
         look_tf = is_tf_available() and framework in {"tf", None}
-        if model_classes:
-            if look_pt:
+        transformers_module = importlib.import_module("transformers")
+
+        if look_pt:
+            if model_classes:
                 class_tuple = class_tuple + model_classes.get("pt", (AutoModel,))
-            if look_tf:
+            if config.architectures:
+                for architecture in config.architectures:
+                    if architecture in dir(transformers_module):
+                        class_tuple = class_tuple + (architecture,)
+        
+        if look_tf:
+            if model_classes:
                 class_tuple = class_tuple + model_classes.get("tf", (TFAutoModel,))
-        if config.architectures:
-            classes = []
-            for architecture in config.architectures:
-                transformers_module = importlib.import_module("transformers")
-                if look_pt:
-                    _class = getattr(transformers_module, architecture, None)
-                    if _class is not None:
-                        classes.append(_class)
-                if look_tf:
-                    _class = getattr(transformers_module, f"TF{architecture}", None)
-                    if _class is not None:
-                        classes.append(_class)
-            class_tuple = class_tuple + tuple(classes)
+            if config.architectures:
+                for architecture in config.architectures:
+                    # avoid loading tensorflow if not used
+                    if f"TF{architecture}" in dir(transformers_module):
+                        class_tuple = class_tuple + (f"TF{architecture}",)
 
         if len(class_tuple) == 0:
             raise ValueError(f"Pipeline cannot infer suitable model classes from {model}")
 
-        for model_class in class_tuple:
+        for model_class_or_name in class_tuple:
             kwargs = model_kwargs.copy()
             if framework == "pt" and model.endswith(".h5"):
                 kwargs["from_tf"] = True
@@ -253,7 +253,9 @@ def infer_framework_load_model(
                 )
 
             try:
-                model = model_class.from_pretrained(model, **kwargs)
+                if isinstance(model_class_or_name, str):
+                    model_class_or_name = getattr(transformers_module, model_class_or_name)
+                model = model_class_or_name.from_pretrained(model, **kwargs)
                 if hasattr(model, "eval"):
                     model = model.eval()
                 # Stop loading on the first successful load.
