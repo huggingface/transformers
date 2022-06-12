@@ -224,7 +224,7 @@ def infer_framework_load_model(
                 for architecture in config.architectures:
                     if architecture in dir(transformers_module):
                         class_tuple = class_tuple + (architecture,)
-        
+
         if look_tf:
             if model_classes:
                 class_tuple = class_tuple + model_classes.get("tf", (TFAutoModel,))
