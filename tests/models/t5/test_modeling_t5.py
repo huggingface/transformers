@@ -662,6 +662,10 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
             self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
 
+    @unittest.skip("Does not work on the tiny model as we keep hitting edge cases.")
+    def test_disk_offload(self):
+        pass
+
 
 class T5EncoderOnlyModelTester:
     def __init__(

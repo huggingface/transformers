@@ -759,6 +759,13 @@ class TFData2VecVisionForImageClassification(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+class TFData2VecVisionForSemanticSegmentation(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 class TFData2VecVisionModel(metaclass=DummyObject):
     _backends = ["tf"]
 
