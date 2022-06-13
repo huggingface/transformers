@@ -6,3 +6,9 @@
   - local: installation
     title: Installazione
   title: Iniziare
+- sections:
+  - local: pipeline_tutorial
+    title: Pipeline per l'inferenza
+  - local: autoclass_tutorial
+    title: Carica istanze pre-allenate con AutoClass
+  title: Esercitazione

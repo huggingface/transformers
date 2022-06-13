@@ -336,7 +336,7 @@ class LxmertAttention(nn.Module):
             self.num_attention_heads,
             self.attention_head_size,
         )
-        x = x.view(*new_x_shape)
+        x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
     def forward(self, hidden_states, context, attention_mask=None, output_attentions=False):
@@ -365,7 +365,7 @@ class LxmertAttention(nn.Module):
         context_layer = torch.matmul(attention_probs, value_layer)
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.head_size,)
-        context_layer = context_layer.view(*new_context_layer_shape)
+        context_layer = context_layer.view(new_context_layer_shape)
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
         return outputs
@@ -1253,7 +1253,7 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
                 visual_prediction_scores = visual_prediction_scores_dict[key]
                 visual_loss = visual_loss_fct(
                     visual_prediction_scores.view(-1, output_dim),
-                    label.view(*label_shape),
+                    label.view(label_shape),
                 )
                 if visual_loss.dim() > 1:  # Regression Losses
                     visual_loss = visual_loss.mean(1)

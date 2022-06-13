@@ -59,6 +59,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "DetrDecoderWrapper",  # Building part of bigger (tested) model.
     "M2M100Encoder",  # Building part of bigger (tested) model.
     "M2M100Decoder",  # Building part of bigger (tested) model.
+    "MCTCTEncoder",  # Building part of bigger (tested) model.
     "Speech2TextEncoder",  # Building part of bigger (tested) model.
     "Speech2TextDecoder",  # Building part of bigger (tested) model.
     "LEDEncoder",  # Building part of bigger (tested) model.
@@ -724,7 +725,7 @@ def check_docstrings_are_in_md():
     """Check all docstrings are in md"""
     files_with_rst = []
     for file in Path(PATH_TO_TRANSFORMERS).glob("**/*.py"):
-        with open(file, "r") as f:
+        with open(file, encoding="utf-8") as f:
             code = f.read()
         docstrings = code.split('"""')
 
