@@ -21,6 +21,7 @@ import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import ACT2FN
+from ...configuration_utils import PretrainedConfig
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_tf_outputs import (
     TFBaseModelOutputWithNoAttention,
@@ -46,7 +47,7 @@ _EXPECTED_OUTPUT_SHAPE = [1, 1088, 7, 7]
 _IMAGE_CLASS_CHECKPOINT = "facebook/regnet-y-040"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "'tabby, tabby cat'"
 
-REGNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
+TF_REGNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/regnet-y-040",
     # See all regnet models at https://huggingface.co/models?filter=regnet
 ]
@@ -410,7 +411,6 @@ class TFRegNetPreTrainedModel(TFPreTrainedModel):
     config_class = RegNetConfig
     base_model_prefix = "regnet"
     main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
 
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
@@ -421,13 +421,7 @@ class TFRegNetPreTrainedModel(TFPreTrainedModel):
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
         VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(
-                3,
-                self.config.num_channels,
-                self.config.image_size,
-                self.config.image_size,
-            ),
-            dtype=tf.float32,
+            shape=(3, self.config.num_channels, self.config.image_size, self.config.image_size), dtype=tf.float32
         )
         return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
 
@@ -479,7 +473,7 @@ REGNET_INPUTS_DOCSTRING = r"""
     REGNET_START_DOCSTRING,
 )
 class TFRegNetModel(TFRegNetPreTrainedModel):
-    def __init__(self, config, **kwargs):
+    def __init__(self, config: RegNetConfig, **kwargs):
         super().__init__(config, **kwargs)
         self.config = config
         self.regnet = TFRegNetMainLayer(config, name="regnet")
@@ -533,7 +527,7 @@ class TFRegNetModel(TFRegNetPreTrainedModel):
     REGNET_START_DOCSTRING,
 )
 class TFRegNetForImageClassification(TFRegNetPreTrainedModel, TFSequenceClassificationLoss):
-    def __init__(self, config, **kwargs):
+    def __init__(self, config: RegNetConfig, **kwargs):
         super().__init__(config, **kwargs)
         self.num_labels = config.num_labels
         self.regnet = TFRegNetMainLayer(config, name="regnet")
