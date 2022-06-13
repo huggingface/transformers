@@ -21,7 +21,6 @@ import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import ACT2FN
-from ...configuration_utils import PretrainedConfig
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_tf_outputs import (
     TFBaseModelOutputWithNoAttention,
@@ -443,7 +442,6 @@ class TFRegNetPreTrainedModel(TFPreTrainedModel):
         return self.call(inputs)
 
 
-# tbu
 REGNET_START_DOCSTRING = r"""
     Parameters:
     This model is a Tensorflow

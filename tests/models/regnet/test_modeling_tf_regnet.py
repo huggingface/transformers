@@ -79,8 +79,6 @@ class TFRegNetModelTester:
             labels = ids_tensor([self.batch_size], self.num_labels)
 
         config = self.get_config()
-        print(f"Config type is {type(config)}.")
-
         return config, pixel_values, labels
 
     def get_config(self):
