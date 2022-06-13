@@ -1237,11 +1237,15 @@ class LongT5ModelIntegrationTests(unittest.TestCase):
         return AutoTokenizer.from_pretrained("Stancld/longt5-tglobal-large-16384-pubmed-3k_steps")
 
     def expected_summary(self):
-        return (
-            'prosecutor: "so far no videos were used in the crash investigation" two magazines claim to have found a'
-            " cell phone video of the final seconds . \"one can hear cries of 'My God' in several languages,\" one"
-            " magazine says .",
-        )
+        return [
+            "background : coronary artery disease ( cad ) is the emerging cause of morbidity and mortality in "
+            "developing world . it provides an excellent resolution for visualization of the coronaryarteries for "
+            "catheter - based or operating interventions . although the association of this technique with major "
+            "complications such as mortality is highly uncommon , it is frequently associated with various cardiac and "
+            "noncardiac complications.materials and methods : in aortic stenosis , we aimed to report the diagnostic "
+            "performance of 128-slice computed tomography coronary angiogram in 50 patients undergoing for major "
+            "noncoron ary cardiac surgery referred"
+        ]
 
     @slow
     def test_summarization(self):
@@ -1306,11 +1310,11 @@ class LongT5ModelIntegrationTests(unittest.TestCase):
 
         dct = tok(
             [ARTICLE],
+            max_length=1024,
             padding="max_length",
             truncation=True,
             return_tensors="pt",
         ).to(torch_device)
-        self.assertEqual(512, dct["input_ids"].shape[1])
 
         hypotheses_batch = model.generate(
             **dct,
@@ -1324,29 +1328,12 @@ class LongT5ModelIntegrationTests(unittest.TestCase):
         )
 
         decoded = tok.batch_decode(hypotheses_batch, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        with open("test_results.txt", "a") as f:
+            f.write(decoded[0])
+            f.write("\n\n\n")
         self.assertListEqual(
             self.expected_summary(),
             decoded,
-        )
-
-
-@require_torch
-@require_sentencepiece
-@require_tokenizers
-class LongT5TGlobalModelIntegrationTests(LongT5ModelIntegrationTests):
-    @cached_property
-    def model(self):
-        return LongT5ForConditionalGeneration.from_pretrained("Stancld/LongT5-TGlobal-Base").to(torch_device)
-
-    @cached_property
-    def tokenizer(self):
-        return AutoTokenizer.from_pretrained("Stancld/LongT5-TGlobal-Base")
-
-    def expected_summary(self):
-        return (
-            'prosecutor: "so far no videos were used in the crash investigation" two magazines claim to have found a'
-            " cell phone video of the final seconds . \"one can hear cries of 'My God' in several languages,\" one"
-            " magazine says .",
         )
 
     @slow

@@ -751,17 +751,3 @@ class FlaxLongT5ModelIntegrationTests(unittest.TestCase):
             self.expected_summary(),
             decoded,
         )
-
-
-@require_sentencepiece
-@require_tokenizers
-@require_flax
-class FlaxLongT5TGlobalModelIntegrationTests(FlaxLongT5ModelIntegrationTests):
-    model_path = "Stancld/LongT5-TGlobal-Base"
-
-    def expected_summary(self):
-        return (
-            'prosecutor: "so far no videos were used in the crash investigation" two magazines claim to have found a'
-            " cell phone video of the final seconds . \"one can hear cries of 'My God' in several languages,\" one"
-            " magazine says .",
-        )
