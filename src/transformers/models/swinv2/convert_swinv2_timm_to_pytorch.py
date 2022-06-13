@@ -75,7 +75,12 @@ def rename_key(name):
         name = name.replace("mlp.fc1", "intermediate.dense")
     if "mlp.fc2" in name:
         name = name.replace("mlp.fc2", "output.dense")
-
+    if "q_bias" in name:
+        name = name.replace("q_bias", "query.bias")
+    if "k_bias" in name:
+        name = name.replace("k_bias", "key.bias")
+    if "v_bias" in name:
+        name = name.replace("v_bias", "value.bias")
     if name == "norm.weight":
         name = "layernorm.weight"
     if name == "norm.bias":

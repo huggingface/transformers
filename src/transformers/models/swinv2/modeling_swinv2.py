@@ -461,7 +461,7 @@ class Swinv2SelfAttention(nn.Module):
         self.register_buffer("relative_position_index", relative_position_index, persistent=False)
 
         self.query = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
-        self.key = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
+        self.key = nn.Linear(self.all_head_size, self.all_head_size, bias=False)
         self.value = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
@@ -552,9 +552,11 @@ class Swinv2SelfOutput(nn.Module):
 
 # Copied from transformers.models.swin.modeling_swin.SwinAttention with Swin->Swinv2
 class Swinv2Attention(nn.Module):
-    def __init__(self, config, dim, num_heads):
+    def __init__(self, config, dim, num_heads, pretrained_window_size=0):
         super().__init__()
-        self.self = Swinv2SelfAttention(config, dim, num_heads)
+        self.self = Swinv2SelfAttention(
+            config, dim, num_heads, pretrained_window_size=to_2tuple(pretrained_window_size)
+        )
         self.output = Swinv2SelfOutput(config, dim)
         self.pruned_heads = set()
 
@@ -619,19 +621,21 @@ class Swinv2Output(nn.Module):
 
 
 class Swinv2Layer(nn.Module):
-    def __init__(self, config, dim, input_resolution, num_heads, shift_size=0):
+    def __init__(self, config, dim, input_resolution, num_heads, shift_size=0, pretrained_window_size=0):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.shift_size = shift_size
         self.window_size = config.window_size
         self.input_resolution = input_resolution
         self.set_shift_and_window_size(input_resolution)
+        self.attention = Swinv2Attention(
+            config, dim, num_heads, pretrained_window_size=to_2tuple(pretrained_window_size)
+        )
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
-        self.attention = Swinv2Attention(config, dim, num_heads)
         self.drop_path = Swinv2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
-        self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.intermediate = Swinv2Intermediate(config, dim)
         self.output = Swinv2Output(config, dim)
+        self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
 
     def set_shift_and_window_size(self, input_resolution):
         if min(input_resolution) <= self.window_size:
@@ -736,7 +740,9 @@ class Swinv2Layer(nn.Module):
 
 # Copied from transformers.models.swin.modeling_swin.SwinStage with Swin->Swinv2
 class Swinv2Stage(nn.Module):
-    def __init__(self, config, dim, input_resolution, depth, num_heads, drop_path, downsample):
+    def __init__(
+        self, config, dim, input_resolution, depth, num_heads, drop_path, downsample, pretrained_window_size=0
+    ):
         super().__init__()
         self.config = config
         self.dim = dim
@@ -748,6 +754,7 @@ class Swinv2Stage(nn.Module):
                     input_resolution=input_resolution,
                     num_heads=num_heads,
                     shift_size=0 if (i % 2 == 0) else config.window_size // 2,
+                    pretrained_window_size=pretrained_window_size,
                 )
                 for i in range(depth)
             ]
@@ -793,7 +800,7 @@ class Swinv2Stage(nn.Module):
 
 # Copied from transformers.models.swin.modeling_swin.SwinEncoder with Swin->Swinv2
 class Swinv2Encoder(nn.Module):
-    def __init__(self, config, grid_size):
+    def __init__(self, config, grid_size, pretrained_window_sizes=(0, 0, 0, 0)):
         super().__init__()
         self.num_layers = len(config.depths)
         self.config = config
@@ -808,6 +815,7 @@ class Swinv2Encoder(nn.Module):
                     num_heads=config.num_heads[i_layer],
                     drop_path=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
                     downsample=Swinv2PatchMerging if (i_layer < self.num_layers - 1) else None,
+                    pretrained_window_size=pretrained_window_sizes[i_layer],
                 )
                 for i_layer in range(self.num_layers)
             ]
