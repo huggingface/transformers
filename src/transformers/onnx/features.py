@@ -281,6 +281,13 @@ class FeaturesManager:
             "token-classification",
             onnx_config_cls="models.layoutlm.LayoutLMOnnxConfig",
         ),
+        "longt5": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "seq2seq-lm",
+            "seq2seq-lm-with-past",
+            onnx_config_cls="models.longt5.LongT5OnnxConfig",
+        ),
         "marian": supported_features_mapping(
             "default",
             "default-with-past",

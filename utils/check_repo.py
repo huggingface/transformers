@@ -36,6 +36,7 @@ PATH_TO_DOC = "docs/source/en"
 # Update this list with models that are supposed to be private.
 PRIVATE_MODELS = [
     "DPRSpanPredictor",
+    "LongT5Stack",
     "RealmBertModel",
     "T5Stack",
     "TFDPRSpanPredictor",
