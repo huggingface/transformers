@@ -163,6 +163,8 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
             new_key = key.replace("gamma", "weight")
         if "beta" in key:
             new_key = key.replace("beta", "bias")
+        # This fix was initially proposed in this PR by @amyeroberts:
+        # https://github.com/huggingface/transformers/pull/17571.
         if "running_var" in key:
             new_key = key.replace("running_var", "moving_variance")
         if "running_mean" in key:
