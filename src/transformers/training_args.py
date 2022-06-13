@@ -396,8 +396,8 @@ class TrainingArguments:
             down the training and evaluation speed.
         push_to_hub (`bool`, *optional*, defaults to `False`):
             Whether or not to push the model to the Hub every time the model is saved. If this is activated,
-            `output_dir` will begin a git directory synced with the repo (determined by `hub_model_id`) and the
-            content will be pushed each time a save is triggered (depending on your `save_strategy`). Calling
+            `output_dir` will begin a git directory synced with the repo (determined by `hub_model_id`) and the content
+            will be pushed each time a save is triggered (depending on your `save_strategy`). Calling
             [`~Trainer.save_model`] will also trigger a push.
 
             <Tip warning={true}>
