@@ -474,7 +474,7 @@ class TFResNetMainLayer(tf.keras.layers.Layer):
 class TFResNetModel(TFResNetPreTrainedModel):
     def __init__(self, config: ResNetConfig, **kwargs) -> None:
         super().__init__(config, **kwargs)
-        self.resnet = TFResNetMainLayer(config=config)
+        self.resnet = TFResNetMainLayer(config=config, name="resnet")
 
     @add_start_docstrings_to_model_forward(RESNET_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
