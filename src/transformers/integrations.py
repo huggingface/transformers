@@ -878,13 +878,7 @@ class MLflowCallback(TrainerCallback):
             if self._auto_end_run and self._ml_flow.active_run():
                 self._ml_flow.end_run()
 
-    def on_save(
-        self,
-        args: TrainingArguments,
-        state: TrainerState,
-        control: TrainerControl,
-        **kwargs,
-    ):
+    def on_save(self, args, state, control, **kwargs):
         if self._initialized and state.is_world_process_zero and self._log_artifacts:
             ckpt_dir = f"checkpoint-{state.global_step}"
             artifact_path = os.path.join(args.output_dir, ckpt_dir)
