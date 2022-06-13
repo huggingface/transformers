@@ -658,7 +658,7 @@ class FlaxLongT5TGlobalModelTest(FlaxLongT5ModelTest):
 @require_tokenizers
 @require_flax
 class FlaxLongT5ModelIntegrationTests(unittest.TestCase):
-    model_path = "Stancld/LongT5-Local-Base"
+    model_path = "google/LongT5-Local-Base"
 
     def expected_summary(self):
         return (

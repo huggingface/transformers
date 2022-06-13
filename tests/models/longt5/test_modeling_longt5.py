@@ -68,7 +68,7 @@ class LongT5ModelTester:
         decoder_start_token_id=0,
         scope=None,
         decoder_layers=None,
-        large_model_config_path="Stancld/LongT5-Local-Large",
+        large_model_config_path="google/LongT5-Local-Large",
     ):
 
         self.parent = parent
@@ -791,7 +791,7 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 class LongT5TGlobalModelTest(LongT5ModelTest):
     def setUp(self):
         self.model_tester = LongT5ModelTester(
-            self, encoder_attention_type="transient-global", large_model_config_path="Stancld/LongT5-TGlobal-Large"
+            self, encoder_attention_type="transient-global", large_model_config_path="google/LongT5-TGlobal-Large"
         )
         self.config_tester = ConfigTester(self, config_class=LongT5Config, d_model=37)
 
@@ -948,7 +948,7 @@ class LongT5EncoderOnlyModelTester:
         eos_token_id=1,
         pad_token_id=0,
         scope=None,
-        large_model_config_path="Stancld/LongT5-Local-Large",
+        large_model_config_path="google/LongT5-Local-Large",
     ):
 
         self.parent = parent
@@ -1146,7 +1146,7 @@ class LongT5EncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
 class LongT5EncoderOnlyTGlobalModelTest(LongT5EncoderOnlyModelTest):
     def setUp(self):
         self.model_tester = LongT5EncoderOnlyModelTester(
-            self, encoder_attention_type="transient-global", large_model_config_path="Stancld/LongT5-TGlobal-Large"
+            self, encoder_attention_type="transient-global", large_model_config_path="google/LongT5-TGlobal-Large"
         )
         self.config_tester = ConfigTester(self, config_class=LongT5Config, d_model=37)
 

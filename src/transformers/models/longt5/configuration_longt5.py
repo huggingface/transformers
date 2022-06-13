@@ -23,10 +23,10 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Stancld/LongT5-Local-Base": "https://huggingface.co/Stancld/LongT5-Local-Base/blob/main/config.json",
-    "Stancld/LongT5-Local-Large": "https://huggingface.co/Stancld/LongT5-Local-Large/blob/main/config.json",
-    "Stancld/LongT5-TGlobal-Base": "https://huggingface.co/Stancld/LongT5-TGlobal-Base/blob/main/config.json",
-    "Stancld/LongT5-TGlobal-Large": "https://huggingface.co/Stancld/LongT5-TGlobal-Large/blob/main/config.json",
+    "google/LongT5-Local-Base": "https://huggingface.co/google/LongT5-Local-Base/blob/main/config.json",
+    "google/LongT5-Local-Large": "https://huggingface.co/google/LongT5-Local-Large/blob/main/config.json",
+    "google/LongT5-TGlobal-Base": "https://huggingface.co/google/LongT5-TGlobal-Base/blob/main/config.json",
+    "google/LongT5-TGlobal-Large": "https://huggingface.co/google/LongT5-TGlobal-Large/blob/main/config.json",
 }
 
 
@@ -35,7 +35,7 @@ class LongT5Config(PretrainedConfig):
     This is the configuration class to store the configuration of a [`LongT5Model`] or a [`FlaxLongT5Model`]. It is
     used to instantiate a LongT5 model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the LongT5
-    [Stancld/LongT5-Local-Base](https://huggingface.co/Stancld/LongT5-Local-Base) architecture.
+    [google/LongT5-Local-Base](https://huggingface.co/google/LongT5-Local-Base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

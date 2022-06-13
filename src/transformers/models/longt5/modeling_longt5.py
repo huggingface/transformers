@@ -49,14 +49,14 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LongT5Config"
 _TOKENIZER_FOR_DOC = "T5Tokenizer"
-_CHECKPOINT_FOR_DOC = "Stancld/LongT5-Local-Base"
+_CHECKPOINT_FOR_DOC = "google/LongT5-Local-Base"
 
 # TODO: Update before the merge
 LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Stancld/LongT5-Local-Base",
-    "Stancld/LongT5-Local-Large",
-    "Stancld/LongT5-TGlobal-Base",
-    "Stancld/LongT5-TGlobal-Large",
+    "google/LongT5-Local-Base",
+    "google/LongT5-Local-Large",
+    "google/LongT5-TGlobal-Base",
+    "google/LongT5-TGlobal-Large",
 ]
 
 
@@ -1797,8 +1797,8 @@ class LongT5Model(LongT5PreTrainedModel):
         ```python
         >>> from transformers import T5Tokenizer, LongT5Model
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("Stancld/LongT5-Local-Base")
-        >>> model = LongT5Model.from_pretrained("Stancld/LongT5-Local-Base")
+        >>> tokenizer = T5Tokenizer.from_pretrained("google/LongT5-Local-Base")
+        >>> model = LongT5Model.from_pretrained("google/LongT5-Local-Base")
 
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
@@ -1957,8 +1957,8 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
         ```python
         >>> from transformers import T5Tokenizer, LongT5ForConditionalGeneration
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("Stancld/LongT5-Local-Base")
-        >>> model = LongT5ForConditionalGeneration.from_pretrained("Stancld/LongT5-Local-Base")
+        >>> tokenizer = T5Tokenizer.from_pretrained("google/LongT5-Local-Base")
+        >>> model = LongT5ForConditionalGeneration.from_pretrained("google/LongT5-Local-Base")
 
         >>> # training
         >>> input_ids = tokenizer("The <extra_id_0> walks in <extra_id_1> park", return_tensors="pt").input_ids
@@ -2171,8 +2171,8 @@ class LongT5EncoderModel(LongT5PreTrainedModel):
         ```python
         >>> from transformers import T5Tokenizer, LongT5EncoderModel
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("Stancld/LongT5-Local-Base")
-        >>> model = LongT5EncoderModel.from_pretrained("Stancld/LongT5-Local-Base")
+        >>> tokenizer = T5Tokenizer.from_pretrained("google/LongT5-Local-Base")
+        >>> model = LongT5EncoderModel.from_pretrained("google/LongT5-Local-Base")
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
         ... ).input_ids  # Batch size 1
