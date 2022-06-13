@@ -103,7 +103,7 @@ def make_support(question, source="wiki40b", method="dense", n_results=10):
     support_list = [
         (res["article_title"], res["section_title"].strip(), res["score"], res["passage_text"]) for res in hit_lst
     ]
-    question_doc = "question: {} context: {}".format(question, support_doc)
+    question_doc = f"question: {question} context: {support_doc}"
     return question_doc, support_list
 
 
