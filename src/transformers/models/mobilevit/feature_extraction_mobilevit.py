@@ -151,30 +151,3 @@ class MobileViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
 
         return encoded_inputs
-
-    # Copied from transformers.models.clip.feature_extraction_clip.CLIPFeatureExtractor.center_crop
-    def center_crop(self, image, size):
-        """
-        Crops `image` to the given size using a center crop. Note that if the image is too small to be cropped to the
-        size is given, it will be padded (so the returned result has the size asked).
-
-        Args:
-            image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
-                The image to resize.
-            size (`int` or `Tuple[int, int]`):
-                The size to which crop the image.
-        """
-        self._ensure_format_supported(image)
-        if not isinstance(size, tuple):
-            size = (size, size)
-
-        if not isinstance(image, Image.Image):
-            image = self.to_pil_image(image)
-
-        image_width, image_height = image.size
-        crop_height, crop_width = size
-
-        crop_top = int((image_height - crop_height + 1) * 0.5)
-        crop_left = int((image_width - crop_width + 1) * 0.5)
-
-        return image.crop((crop_left, crop_top, crop_left + crop_width, crop_top + crop_height))
