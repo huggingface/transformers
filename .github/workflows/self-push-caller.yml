@@ -1,3 +1,4 @@
+# Used to trigger self-push CI
 name: Self-hosted runner (push-caller)
 
 on:
@@ -13,17 +14,8 @@ on:
 
 jobs:
   run_push_ci:
-    name: Run Push CI
+    name: Trigger Push CI
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout transformers
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: 2
-          ssh-key: "${{ secrets.COMMIT_KEY }}"
-
-      - name: Checkout to branch push-ci
-        # A more strict way to make sure`push-ci` is exactly the same as `main` at the push event commit.
-        run: |
-          git checkout -b push-ci
-          git push -u origin push-ci --force
+      - name: Trigger push CI via workflow_run
+        run: echo "Trigger push CI via workflow_run"
