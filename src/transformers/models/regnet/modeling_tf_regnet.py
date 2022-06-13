@@ -105,7 +105,7 @@ class TFRegNetEmbeddings(tf.keras.layers.Layer):
         return hidden_state
 
 
-class TFRegNetShortCut(tf.keras.Sequential):
+class TFRegNetShortCut(tf.keras.layers.Layer):
     """
     RegNet shortcut, used to project the residual features to the correct size. If needed, it is also used to
     downsample the input using `stride=2`.
@@ -118,8 +118,8 @@ class TFRegNetShortCut(tf.keras.Sequential):
         )
         self.normalization = tf.keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.1, name="normalization")
 
-    def call(self, inputs):
-        return self.normalization(self.convolution(inputs))
+    def call(self, inputs: tf.Tensor, training: bool = False) -> tf.Tensor:
+        return self.normalization(self.convolution(inputs), training=training)
 
 
 # Copied from:
@@ -451,27 +451,26 @@ class TFRegNetPreTrainedModel(TFPreTrainedModel):
 
 # tbu
 REGNET_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
     Parameters:
+    This model is a Tensorflow
+    [tf.keras.layers.Layer](https://www.tensorflow.org/api_docs/python/tf/keras/layers/Layer) sub-class. Use it as a
+    regular Tensorflow Module and refer to the Tensorflow documentation for all matter related to general usage and
+    behavior.
         config ([`RegNetConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+            configuration. Check out the [`~TFPreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 REGNET_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`tf.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
             [`AutoFeatureExtractor.__call__`] for details.
-
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 

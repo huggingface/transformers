@@ -186,7 +186,6 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
     missing_keys = []
     for symbolic_weight in symbolic_weights:
         sw_name = symbolic_weight.name
-        # print(f"Symbolic weight name: {sw_name}")
         name, transpose = convert_tf_weight_name_to_pt_weight_name(
             sw_name, start_prefix_to_remove=start_prefix_to_remove, tf_weight_shape=symbolic_weight.shape
         )
