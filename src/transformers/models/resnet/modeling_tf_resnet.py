@@ -14,7 +14,7 @@
 # limitations under the License.
 """ Tensorflow ResNet model."""
 
-from typing import Dict, Iterable, Optional, Union
+from typing import Dict, Iterable, Optional, Tuple, Union
 
 import tensorflow as tf
 
@@ -24,7 +24,7 @@ from ...modeling_tf_outputs import (
     TFBaseModelOutputWithPoolingAndNoAttention,
     TFImageClassifierOutputWithNoAttention,
 )
-from ...modeling_tf_utils import TFPreTrainedModel, TFSequenceClassificationLoss, unpack_inputs
+from ...modeling_tf_utils import TFPreTrainedModel, TFSequenceClassificationLoss, keras_serializable, unpack_inputs
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_resnet import ResNetConfig
 
@@ -416,13 +416,12 @@ class AdaptiveAveragePooling2D(tf.keras.layers.Layer):
         return {**base_config, **config}
 
 
-@add_start_docstrings(
-    "The bare ResNet model outputting raw features without any specific head on top.",
-    RESNET_START_DOCSTRING,
-)
-class TFResNetModel(TFResNetPreTrainedModel):
+@keras_serializable
+class TFResNetMainLayer(tf.keras.layers.Layer):
+    config_class = ResNetConfig
+
     def __init__(self, config: ResNetConfig, **kwargs) -> None:
-        super().__init__(config, **kwargs)
+        super().__init__(**kwargs)
         self.config = config
         self.embedder = TFResNetEmbeddings(config, name="embedder")
         self.encoder = TFResNetEncoder(config, name="encoder")
@@ -435,15 +434,6 @@ class TFResNetModel(TFResNetPreTrainedModel):
         hidden_state = tf.transpose(hidden_state, (0, 3, 1, 2))
         return hidden_state
 
-    @add_start_docstrings_to_model_forward(RESNET_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TFBaseModelOutputWithPoolingAndNoAttention,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
     @unpack_inputs
     def call(
         self,
@@ -451,7 +441,7 @@ class TFResNetModel(TFResNetPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> TFBaseModelOutputWithPoolingAndNoAttention:
+    ) -> Union[Tuple[tf.Tensor], TFBaseModelOutputWithPoolingAndNoAttention]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -478,6 +468,46 @@ class TFResNetModel(TFResNetPreTrainedModel):
 
 
 @add_start_docstrings(
+    "The bare ResNet model outputting raw features without any specific head on top.",
+    RESNET_START_DOCSTRING,
+)
+class TFResNetModel(TFResNetPreTrainedModel):
+    def __init__(self, config: ResNetConfig, **kwargs) -> None:
+        super().__init__(config, **kwargs)
+        self.resnet = TFResNetMainLayer(config=config)
+
+    @add_start_docstrings_to_model_forward(RESNET_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=TFBaseModelOutputWithPoolingAndNoAttention,
+        config_class=_CONFIG_FOR_DOC,
+        modality="vision",
+        expected_output=_EXPECTED_OUTPUT_SHAPE,
+    )
+    @unpack_inputs
+    def call(
+        self,
+        pixel_values: tf.Tensor,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: bool = False,
+    ) -> Union[Tuple[tf.Tensor], TFBaseModelOutputWithPoolingAndNoAttention]:
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        resnet_outputs = self.resnet(
+            pixel_values=pixel_values,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+        )
+        return resnet_outputs
+
+
+@add_start_docstrings(
     """
     ResNet Model with an image classification head on top (a linear layer on top of the pooled features), e.g. for
     ImageNet.
@@ -488,7 +518,7 @@ class TFResNetForImageClassification(TFResNetPreTrainedModel, TFSequenceClassifi
     def __init__(self, config: ResNetConfig, **kwargs) -> None:
         super().__init__(config, **kwargs)
         self.num_labels = config.num_labels
-        self.resnet = TFResNetModel(config, name="resnet")
+        self.resnet = TFResNetMainLayer(config, name="resnet")
         # classification head
         self.classifier_layer = (
             tf.keras.layers.Dense(config.num_labels, name="classifier.1")
@@ -517,7 +547,7 @@ class TFResNetForImageClassification(TFResNetPreTrainedModel, TFSequenceClassifi
         output_hidden_states: bool = None,
         return_dict: bool = None,
         training: bool = False,
-    ) -> TFImageClassifierOutputWithNoAttention:
+    ) -> Union[Tuple[tf.Tensor], TFImageClassifierOutputWithNoAttention]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
