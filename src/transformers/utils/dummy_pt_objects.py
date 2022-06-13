@@ -2605,6 +2605,37 @@ class LongformerSelfAttention(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class LongT5EncoderModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LongT5ForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LongT5Model(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LongT5PreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 LUKE_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
