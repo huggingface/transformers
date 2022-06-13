@@ -305,8 +305,8 @@ class TrainingArguments:
 
             <Tip>
 
-            When set to `True`, the parameters `save_strategy` needs to be the same as `eval_strategy`, and in the case
-            it is "steps", `save_steps` must be a round multiple of `eval_steps`.
+            When set to `True`, the parameters `save_strategy` needs to be the same as `evaluation_strategy`, and in
+            the case it is "steps", `save_steps` must be a round multiple of `eval_steps`.
 
             </Tip>
 
