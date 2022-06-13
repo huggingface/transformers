@@ -402,19 +402,6 @@ class LongT5ModelTester:
         output_with_past_cache = model.generate(input_ids[:1], num_beams=2, max_length=5, do_sample=True)
         self.parent.assertTrue(torch.all(output_with_past_cache == output_without_past_cache))
 
-    def create_and_check_model_fp16_forward(
-        self,
-        config,
-        input_ids,
-        decoder_input_ids,
-        attention_mask,
-        decoder_attention_mask,
-        lm_labels,
-    ):
-        model = LongT5Model(config=config).to(torch_device).half().eval()
-        output = model(input_ids, decoder_input_ids=input_ids, attention_mask=attention_mask)["last_hidden_state"]
-        self.parent.assertFalse(torch.isnan(output).any().item())
-
     def create_and_check_encoder_decoder_shared_weights(
         self,
         config,
@@ -490,20 +477,6 @@ class LongT5ModelTester:
                         atol=1e-4,
                     )
                 )
-
-    def check_resize_embeddings_longt5_v1_1(
-        self,
-        config,
-    ):
-        prev_vocab_size = config.vocab_size
-
-        config.tie_word_embeddings = False
-        model = LongT5ForConditionalGeneration(config=config).to(torch_device).eval()
-        model.resize_token_embeddings(prev_vocab_size - 10)
-
-        self.parent.assertEqual(model.get_input_embeddings().weight.shape[0], prev_vocab_size - 10)
-        self.parent.assertEqual(model.get_output_embeddings().weight.shape[0], prev_vocab_size - 10)
-        self.parent.assertEqual(model.config.vocab_size, prev_vocab_size - 10)
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -605,15 +578,6 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
     def test_encoder_decoder_shared_weights(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_encoder_decoder_shared_weights(*config_and_inputs)
-
-    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
-    def test_model_fp16_forward(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
-
-    def test_v1_1_resize_embeddings(self):
-        config = self.model_tester.prepare_config_and_inputs()[0]
-        self.model_tester.check_resize_embeddings_longt5_v1_1(config)
 
     @slow
     def test_model_from_pretrained(self):
@@ -1029,16 +993,6 @@ class LongT5EncoderOnlyModelTester:
 
         self.parent.assertEqual(encoder_output.size(), (self.batch_size, self.encoder_seq_length, self.hidden_size))
 
-    def create_and_check_model_fp16_forward(
-        self,
-        config,
-        input_ids,
-        attention_mask,
-    ):
-        model = LongT5EncoderModel(config=config).to(torch_device).half().eval()
-        output = model(input_ids, attention_mask=attention_mask)["last_hidden_state"]
-        self.parent.assertFalse(torch.isnan(output).any().item())
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -1072,11 +1026,6 @@ class LongT5EncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
-    def test_model_fp16_forward(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
 
     def test_attention_outputs(self):
         if not self.has_attentions:
@@ -1328,9 +1277,6 @@ class LongT5ModelIntegrationTests(unittest.TestCase):
         )
 
         decoded = tok.batch_decode(hypotheses_batch, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-        with open("test_results.txt", "a") as f:
-            f.write(decoded[0])
-            f.write("\n\n\n")
         self.assertListEqual(
             self.expected_summary(),
             decoded,
@@ -1361,13 +1307,9 @@ class LongT5ModelIntegrationTests(unittest.TestCase):
         )
 
         # check if encoder_outputs match
-        expected_output_slice = torch.tensor(
-            [0.00276407, 0.09927233, 0.00156037, -0.17903061, -0.15985875], device=torch_device
-        )
+        expected_output_slice = torch.tensor([0.0629, -0.1294, -0.0089, 0.0772, 0.0663], device=torch_device)
         self.assertTrue(torch.allclose(output.encoder_hidden_states[-1][0, 0, :5], expected_output_slice, atol=1e-4))
 
         # check if logits match
-        expected_output_slice = torch.tensor(
-            [-72.025055, -13.3219185, -12.156551, -7.4609437, -17.41865], device=torch_device
-        )
+        expected_output_slice = torch.tensor([5.5231, 6.1058, 3.1766, 8.2391, -5.9453], device=torch_device)
         self.assertTrue(torch.allclose(output.logits[0, 0, :5], expected_output_slice, atol=1e-4))

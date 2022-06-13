@@ -1799,10 +1799,12 @@ class LongT5Model(LongT5PreTrainedModel):
 
         >>> tokenizer = T5Tokenizer.from_pretrained("google/LongT5-Local-Base")
         >>> model = LongT5Model.from_pretrained("google/LongT5-Local-Base")
+        Let's try a very long encoder input.
 
         >>> input_ids = tokenizer(
-        ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
+        ...     100 * "Studies have been shown that owning a dog is good for you", return_tensors="pt"
         ... ).input_ids  # Batch size 1
+
         >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
 
         >>> # forward pass
@@ -1959,21 +1961,13 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
 
         >>> tokenizer = T5Tokenizer.from_pretrained("google/LongT5-Local-Base")
         >>> model = LongT5ForConditionalGeneration.from_pretrained("google/LongT5-Local-Base")
+        Let's try a very long input.
 
-        >>> # training
-        >>> input_ids = tokenizer("The <extra_id_0> walks in <extra_id_1> park", return_tensors="pt").input_ids
-        >>> labels = tokenizer("<extra_id_0> cute dog <extra_id_1> the <extra_id_2>", return_tensors="pt").input_ids
-        >>> outputs = model(input_ids=input_ids, labels=labels)
-        >>> loss = outputs.loss
-        >>> logits = outputs.logits
-
-        >>> # inference
         >>> input_ids = tokenizer(
-        ...     "summarize: studies have shown that owning a dog is good for you", return_tensors="pt"
+        ...     "summarize: " + 100 * "studies have shown that owning a dog is good for you ", return_tensors="pt"
         ... ).input_ids  # Batch size 1
         >>> outputs = model.generate(input_ids)
         >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-        >>> # studies have shown that owning a dog is good for you.
         ```"""
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -2174,7 +2168,7 @@ class LongT5EncoderModel(LongT5PreTrainedModel):
         >>> tokenizer = T5Tokenizer.from_pretrained("google/LongT5-Local-Base")
         >>> model = LongT5EncoderModel.from_pretrained("google/LongT5-Local-Base")
         >>> input_ids = tokenizer(
-        ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
+        ...     100 * "Studies have been shown that owning a dog is good for you ", return_tensors="pt"
         ... ).input_ids  # Batch size 1
         >>> outputs = model(input_ids=input_ids)
         >>> last_hidden_states = outputs.last_hidden_state
