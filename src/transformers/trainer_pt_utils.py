@@ -1020,15 +1020,10 @@ if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
 
     @smp.step()
-    def smp_forward_backward(model, inputs, gradient_accumulation_steps=1, scaler=None):
-        with torch.cuda.amp.autocast(enabled=(scaler is not None)):
-            outputs = model(**inputs)
-
+    def smp_forward_backward(model, inputs, gradient_accumulation_steps=1):
+        outputs = model(**inputs)
         loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
         loss /= gradient_accumulation_steps
-        if scaler is not None:
-            loss = scaler.scale(loss).squeeze()
-
         model.backward(loss)
         return loss
 
