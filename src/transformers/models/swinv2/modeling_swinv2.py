@@ -358,7 +358,7 @@ class Swinv2PatchMerging(nn.Module):
         self.input_resolution = input_resolution
         self.dim = dim
         self.reduction = nn.Linear(4 * dim, 2 * dim, bias=False)
-        self.norm = norm_layer(4 * dim)
+        self.norm = norm_layer(2 * dim)
 
     def maybe_pad(self, input_feature, height, width):
         should_pad = (height % 2 == 1) or (width % 2 == 1)
@@ -388,8 +388,8 @@ class Swinv2PatchMerging(nn.Module):
         input_feature = torch.cat([input_feature_0, input_feature_1, input_feature_2, input_feature_3], -1)
         input_feature = input_feature.view(batch_size, -1, 4 * num_channels)  # batch_size height/2*width/2 4*C
 
-        input_feature = self.norm(input_feature)
         input_feature = self.reduction(input_feature)
+        input_feature = self.norm(input_feature)
 
         return input_feature
 
