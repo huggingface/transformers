@@ -1238,13 +1238,13 @@ class LongT5ModelIntegrationTests(unittest.TestCase):
 
     def expected_summary(self):
         return [
-            "background : coronary artery disease ( cad ) is the emerging cause of morbidity and mortality in "
-            "developing world . it provides an excellent resolution for visualization of the coronaryarteries for "
-            "catheter - based or operating interventions . although the association of this technique with major "
-            "complications such as mortality is highly uncommon , it is frequently associated with various cardiac and "
-            "noncardiac complications.materials and methods : in aortic stenosis , we aimed to report the diagnostic "
-            "performance of 128-slice computed tomography coronary angiogram in 50 patients undergoing for major "
-            "noncoron ary cardiac surgery referred"
+            "background : coronary artery disease ( cad ) is the emerging cause of morbidity and mortality in"
+            " developing world . it provides an excellent resolution for visualization of the coronaryarteries for"
+            " catheter - based or operating interventions . although the association of this technique with major"
+            " complications such as mortality is highly uncommon , it is frequently associated with various cardiac"
+            " and noncardiac complications.materials and methods : in aortic stenosis , we aimed to report the"
+            " diagnostic performance of 128-slice computed tomography coronary angiogram in 50 patients undergoing for"
+            " major noncoron ary cardiac surgery referred"
         ]
 
     @slow
