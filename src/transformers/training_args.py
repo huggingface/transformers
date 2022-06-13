@@ -305,8 +305,8 @@ class TrainingArguments:
 
             <Tip>
 
-            When set to `True`, the parameters `save_strategy` needs to be the same as `eval_strategy`, and in the case
-            it is "steps", `save_steps` must be a round multiple of `eval_steps`.
+            When set to `True`, the parameters `save_strategy` needs to be the same as `evaluation_strategy`, and in
+            the case it is "steps", `save_steps` must be a round multiple of `eval_steps`.
 
             </Tip>
 
@@ -456,6 +456,12 @@ class TrainingArguments:
         torchdynamo (`str`, *optional*):
             The token that is used to set the backend compiler for TorchDynamo. Possible choices are ["eager",
             "nvfuser]. This is an experimental API and subject to change.
+        ray_scope (`str`, *optional*, defaults to `"last"`):
+            The scope to use when doing hyperparameter search with Ray. By default, `"last"` will be used. Ray will
+            then use the last checkpoint of all trials, compare those, and select the best one. However, other options
+            are also available. See the [Ray documentation](
+            https://docs.ray.io/en/latest/tune/api_docs/analysis.html#ray.tune.ExperimentAnalysis.get_best_trial) for
+            more options.
     """
 
     output_dir: str = field(
@@ -914,6 +920,19 @@ class TrainingArguments:
                 " nvfuser path uses AOT Autograd and nvfuser compiler to optimize the models."
             ),
             "choices": ["eager", "nvfuser"],
+        },
+    )
+    ray_scope: Optional[str] = field(
+        default="last",
+        metadata={
+            "help": (
+                'The scope to use when doing hyperparameter search with Ray. By default, `"last"` will be used. Ray'
+                " will then use the last checkpoint of all trials, compare those, and select the best one. However,"
+                " other options are also available. See the Ray documentation"
+                " (https://docs.ray.io/en/latest/tune/api_docs/analysis.html"
+                "#ray.tune.ExperimentAnalysis.get_best_trial)"
+                " for more options."
+            )
         },
     )
 
