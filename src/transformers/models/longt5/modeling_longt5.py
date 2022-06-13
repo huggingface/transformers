@@ -1799,8 +1799,8 @@ class LongT5Model(LongT5PreTrainedModel):
 
         >>> tokenizer = T5Tokenizer.from_pretrained("google/LongT5-Local-Base")
         >>> model = LongT5Model.from_pretrained("google/LongT5-Local-Base")
-        Let's try a very long encoder input.
 
+        >>> # Let's try a very long encoder input.
         >>> input_ids = tokenizer(
         ...     100 * "Studies have been shown that owning a dog is good for you", return_tensors="pt"
         ... ).input_ids  # Batch size 1
@@ -1957,17 +1957,21 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import T5Tokenizer, LongT5ForConditionalGeneration
+        >>> from transformers import AutoTokenizer, LongT5ForConditionalGeneration
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("google/LongT5-Local-Base")
-        >>> model = LongT5ForConditionalGeneration.from_pretrained("google/LongT5-Local-Base")
-        Let's try a very long input.
+        >>> tokenizer = AutoTokenizer.from_pretrained("Stancld/longt5-tglobal-large-16384-pubmed-3k_steps")
+        >>> model = LongT5ForConditionalGeneration.from_pretrained(
+        ...     "Stancld/longt5-tglobal-large-16384-pubmed-3k_steps"
+        ... )
 
+        >>> # Let's try a very long input.
         >>> input_ids = tokenizer(
         ...     "summarize: " + 100 * "studies have shown that owning a dog is good for you ", return_tensors="pt"
         ... ).input_ids  # Batch size 1
+
         >>> outputs = model.generate(input_ids)
         >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+        abstractthe aim of this article is to summarize the studies have shown that owning a dog
         ```"""
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -2163,9 +2167,9 @@ class LongT5EncoderModel(LongT5PreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import T5Tokenizer, LongT5EncoderModel
+        >>> from transformers import AutoTokenizer, LongT5ForConditionalGeneration
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("google/LongT5-Local-Base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/LongT5-Local-Base")
         >>> model = LongT5EncoderModel.from_pretrained("google/LongT5-Local-Base")
         >>> input_ids = tokenizer(
         ...     100 * "Studies have been shown that owning a dog is good for you ", return_tensors="pt"

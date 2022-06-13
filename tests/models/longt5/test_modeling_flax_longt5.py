@@ -661,11 +661,15 @@ class FlaxLongT5ModelIntegrationTests(unittest.TestCase):
     model_path = "Stancld/longt5-tglobal-large-16384-pubmed-3k_steps"
 
     def expected_summary(self):
-        return (
-            'prosecutor: "so far no videos were used in the crash investigation" two magazines claim to have found a'
-            " cell phone video of the final seconds . \"one can hear cries of 'My God' in several languages,\" one"
-            " magazine says .",
-        )
+        return [
+            "background : coronary artery disease ( cad ) is the emerging cause of morbidity and mortality in"
+            " developing world . it provides an excellent resolution for visualization of the coronary arteries for"
+            " catheter - based or operating interventions . although the association of this technique with major"
+            " complications such as mortality is highly uncommon , it is frequently associated with various cardiac"
+            " and noncardiac complications . computed tomography coronary angiography is a promising technique for the"
+            " evaluation of cad noninvasively . it assesses disease within the coronary artery and provides"
+            " qualitative and quantitative information about nonobstructive atherosclerotic plaque"
+        ]
 
     @slow
     def test_summarization(self):
@@ -730,11 +734,11 @@ class FlaxLongT5ModelIntegrationTests(unittest.TestCase):
 
         dct = tok(
             [ARTICLE],
+            max_length=1024,
             padding="max_length",
             truncation=True,
             return_tensors="np",
         )
-        self.assertEqual(512, dct["input_ids"].shape[1])
 
         hypotheses_batch = model.generate(
             **dct,
