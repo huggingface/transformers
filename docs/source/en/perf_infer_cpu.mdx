@@ -41,6 +41,7 @@ Take an example of the use cases on [Transformers question-answering](https://gi
 --max_seq_length 384 \
 --doc_stride 128 \
 --output_dir /tmp/ \
+--no_cuda \
 <b> --jit_mode_eval </b></pre> 
 
 - Inference with IPEX using jit mode on CPU:
@@ -51,5 +52,6 @@ Take an example of the use cases on [Transformers question-answering](https://gi
 --max_seq_length 384 \
 --doc_stride 128 \
 --output_dir /tmp/ \
+--no_cuda \
 <b> --use_ipex \ </b>
 <b> --jit_mode_eval </b></pre> 
