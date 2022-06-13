@@ -548,6 +548,12 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
+    [
+        ("vilt", "ViltForQuestionAnswering"),
+    ]
+)
+
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Token Classification mapping
@@ -706,6 +712,9 @@ MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING_NAMES
 )
 MODEL_FOR_VISION_2_SEQ_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES)
+MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES
+)
 MODEL_FOR_MASKED_LM_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_MASKED_LM_MAPPING_NAMES)
 MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES
@@ -810,6 +819,17 @@ AutoModelForTableQuestionAnswering = auto_class_update(
     AutoModelForTableQuestionAnswering,
     head_doc="table question answering",
     checkpoint_for_example="google/tapas-base-finetuned-wtq",
+)
+
+
+class AutoModelForVisualQuestionAnswering(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING
+
+
+AutoModelForVisualQuestionAnswering = auto_class_update(
+    AutoModelForVisualQuestionAnswering,
+    head_doc="visual question answering",
+    checkpoint_for_example="dandelin/vilt-b32-finetuned-vqa",
 )
 
 
