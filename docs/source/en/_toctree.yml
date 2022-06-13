@@ -87,6 +87,8 @@
     title: Training on many GPUs
   - local: perf_train_cpu
     title: Training on CPU
+  - local: perf_infer_cpu
+    title: Inference on CPU
   - local: perf_infer_gpu_one
     title: Inference on one GPU
   - local: perf_hardware
