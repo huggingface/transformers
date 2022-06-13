@@ -2224,6 +2224,14 @@ else:
             "TFRagTokenForGeneration",
         ]
     )
+    _import_structure["models.regnet"].extend(
+        [
+            "TF_REGNET_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFRegNetForImageClassification",
+            "TFRegNetModel",
+            "TFRegNetPreTrainedModel",
+        ]
+    )
     _import_structure["models.rembert"].extend(
         [
             "TF_REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -4450,6 +4458,12 @@ if TYPE_CHECKING:
         )
         from .models.pegasus import TFPegasusForConditionalGeneration, TFPegasusModel, TFPegasusPreTrainedModel
         from .models.rag import TFRagModel, TFRagPreTrainedModel, TFRagSequenceForGeneration, TFRagTokenForGeneration
+        from .models.regnet import (
+            TF_REGNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFRegNetForImageClassification,
+            TFRegNetModel,
+            TFRegNetPreTrainedModel,
+        )
         from .models.rembert import (
             TF_REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFRemBertForCausalLM,
