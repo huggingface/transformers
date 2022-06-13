@@ -409,6 +409,9 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = None
 MODEL_FOR_VISION_2_SEQ_MAPPING = None
 
 
+MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING = None
+
+
 MODEL_MAPPING = None
 
 
@@ -570,6 +573,13 @@ class AutoModelForTokenClassification(metaclass=DummyObject):
 
 
 class AutoModelForVision2Seq(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AutoModelForVisualQuestionAnswering(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

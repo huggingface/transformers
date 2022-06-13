@@ -377,6 +377,7 @@ _import_structure = {
         "TextGenerationPipeline",
         "TokenClassificationPipeline",
         "TranslationPipeline",
+        "VisualQuestionAnsweringPipeline",
         "ZeroShotClassificationPipeline",
         "ZeroShotImageClassificationPipeline",
         "pipeline",
@@ -758,6 +759,7 @@ else:
             "MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING",
             "MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
             "MODEL_FOR_VISION_2_SEQ_MAPPING",
+            "MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING",
             "MODEL_MAPPING",
             "MODEL_WITH_LM_HEAD_MAPPING",
             "AutoModel",
@@ -783,6 +785,7 @@ else:
             "AutoModelForTableQuestionAnswering",
             "AutoModelForTokenClassification",
             "AutoModelForVision2Seq",
+            "AutoModelForVisualQuestionAnswering",
             "AutoModelWithLMHead",
         ]
     )
@@ -2961,6 +2964,7 @@ if TYPE_CHECKING:
         TextGenerationPipeline,
         TokenClassificationPipeline,
         TranslationPipeline,
+        VisualQuestionAnsweringPipeline,
         ZeroShotClassificationPipeline,
         ZeroShotImageClassificationPipeline,
         pipeline,
@@ -3291,6 +3295,7 @@ if TYPE_CHECKING:
             MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
             MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             MODEL_FOR_VISION_2_SEQ_MAPPING,
+            MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING,
             MODEL_MAPPING,
             MODEL_WITH_LM_HEAD_MAPPING,
             AutoModel,
@@ -3316,6 +3321,7 @@ if TYPE_CHECKING:
             AutoModelForTableQuestionAnswering,
             AutoModelForTokenClassification,
             AutoModelForVision2Seq,
+            AutoModelForVisualQuestionAnswering,
             AutoModelWithLMHead,
         )
         from .models.bart import (
