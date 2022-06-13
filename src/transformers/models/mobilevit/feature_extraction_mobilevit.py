@@ -50,7 +50,7 @@ class MobileViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
             image is padded with 0's and then center cropped.
         crop_size (`int`, *optional*, defaults to 256):
             Desired output size when applying center-cropping. Only has an effect if `do_center_crop` is set to `True`.
-        do_flip_channels (`bool`, *optional*, defaults to `True`):
+        do_flip_channel_order (`bool`, *optional*, defaults to `True`):
             Whether to flip the color channels from RGB to BGR.
     """
 
@@ -63,7 +63,7 @@ class MobileViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
         resample=Image.BILINEAR,
         do_center_crop=True,
         crop_size=256,
-        do_flip_channels=True,
+        do_flip_channel_order=True,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -72,7 +72,7 @@ class MobileViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
         self.resample = resample
         self.do_center_crop = do_center_crop
         self.crop_size = crop_size
-        self.do_flip_channels = do_flip_channels
+        self.do_flip_channel_order = do_flip_channel_order
 
     def __call__(
         self, images: ImageInput, return_tensors: Optional[Union[str, TensorType]] = None, **kwargs
@@ -143,8 +143,8 @@ class MobileViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
         images = [self.to_numpy_array(image) for image in images]
 
         # the pretrained checkpoints assume images are BGR, not RGB
-        if self.do_flip_channels:
-            images = [image[::-1, :, :] for image in images]
+        if self.do_flip_channel_order:
+            images = [self.flip_channel_order(image) for image in images]
 
         # return as BatchFeature
         data = {"pixel_values": images}

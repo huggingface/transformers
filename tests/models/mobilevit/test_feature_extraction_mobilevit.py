@@ -46,7 +46,7 @@ class MobileViTFeatureExtractionTester(unittest.TestCase):
         size=20,
         do_center_crop=True,
         crop_size=18,
-        do_flip_channels=True,
+        do_flip_channel_order=True,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -58,7 +58,7 @@ class MobileViTFeatureExtractionTester(unittest.TestCase):
         self.size = size
         self.do_center_crop = do_center_crop
         self.crop_size = crop_size
-        self.do_flip_channels = do_flip_channels
+        self.do_flip_channel_order = do_flip_channel_order
 
     def prepare_feat_extract_dict(self):
         return {
@@ -66,7 +66,7 @@ class MobileViTFeatureExtractionTester(unittest.TestCase):
             "size": self.size,
             "do_center_crop": self.do_center_crop,
             "crop_size": self.crop_size,
-            "do_flip_channels": self.do_flip_channels,
+            "do_flip_channel_order": self.do_flip_channel_order,
         }
 
 
@@ -89,7 +89,7 @@ class MobileViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
         self.assertTrue(hasattr(feature_extractor, "size"))
         self.assertTrue(hasattr(feature_extractor, "do_center_crop"))
         self.assertTrue(hasattr(feature_extractor, "center_crop"))
-        self.assertTrue(hasattr(feature_extractor, "do_flip_channels"))
+        self.assertTrue(hasattr(feature_extractor, "do_flip_channel_order"))
 
     def test_batch_feature(self):
         pass
