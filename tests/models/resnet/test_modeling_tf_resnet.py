@@ -90,6 +90,7 @@ class ResNetModelTester:
             depths=self.depths,
             hidden_act=self.hidden_act,
             num_labels=self.num_labels,
+            image_size=self.image_size,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):

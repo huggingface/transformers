@@ -98,7 +98,7 @@ class ResNetConfig(PretrainedConfig):
         self.layer_type = layer_type
         self.hidden_act = hidden_act
         self.downsample_in_first_stage = downsample_in_first_stage
-        self.image_size = 224
+        self.image_size = image_size
 
 
 class ResNetOnnxConfig(OnnxConfig):
