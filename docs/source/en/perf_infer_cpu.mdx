@@ -45,7 +45,7 @@ Take an example of the use cases on [Transformers question-answering](https://gi
 <b>--jit_mode_eval </b></pre> 
 
 - Inference with IPEX using jit mode on CPU:
-<pre> python run_qa.py \
+<pre>python run_qa.py \
 --model_name_or_path csarron/bert-base-uncased-squad-v1 \
 --dataset_name squad \
 --do_eval \
@@ -53,5 +53,5 @@ Take an example of the use cases on [Transformers question-answering](https://gi
 --doc_stride 128 \
 --output_dir /tmp/ \
 --no_cuda \
-<b> --use_ipex \ </b>
-<b> --jit_mode_eval </b></pre> 
+<b>--use_ipex \</b>
+<b>--jit_mode_eval</b></pre> 
