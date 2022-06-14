@@ -1158,8 +1158,11 @@ class Trainer:
 
         return model
 
-    def torch_jit_model_eval(self, model, training=False, dataloader=None):
+    def torch_jit_model_eval(self, model, dataloader, training=False):
         if not training:
+            if dataloader is None:
+                logger.warning("failed to use PyTorch jit mode due to current dataloader is none.")
+                return model
             jit_inputs = []
             example_batch = next(iter(dataloader))
             for key in example_batch:
@@ -1203,7 +1206,7 @@ class Trainer:
             model = self.ipex_optimize_model(model, training, dtype=dtype)
 
         if self.args.jit_mode_eval:
-            model = self.torch_jit_model_eval(model, training, dataloader)
+            model = self.torch_jit_model_eval(model, dataloader, training)
 
         if is_sagemaker_mp_enabled():
             # Wrapping the base model twice in a DistributedModel will raise an error.
