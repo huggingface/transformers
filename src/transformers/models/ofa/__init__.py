@@ -18,7 +18,13 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_available
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_tf_available,
+    is_tokenizers_available,
+    is_torch_available,
+)
 
 
 _import_structure = {
@@ -26,10 +32,22 @@ _import_structure = {
     "tokenization_ofa": ["OFATokenizer"],
 }
 
-if is_tokenizers_available():
+
+try:
+    if not is_tokenizers_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["tokenization_ofa_fast"] = ["OFATokenizerFast"]
 
-if is_torch_available():
+
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_ofa"] = [
         "OFA_PRETRAINED_MODEL_ARCHIVE_LIST",
         "OFAForConditionalGeneration",
@@ -42,10 +60,20 @@ if TYPE_CHECKING:
     from .configuration_ofa import OFA_PRETRAINED_CONFIG_ARCHIVE_MAP, OFAConfig
     from .tokenization_ofa import OFATokenizer
 
-    if is_tokenizers_available():
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .tokenization_ofa_fast import OFATokenizerFast
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_ofa import (
             OFA_PRETRAINED_MODEL_ARCHIVE_LIST,
             OFAForConditionalGeneration,
