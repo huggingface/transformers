@@ -558,6 +558,18 @@ class Trainer:
                     )
                 self.use_apex = True
 
+        # FP16 + model parallelism in SageMaker: gradient clipping does not work for now so we raise a helpful error.
+        if (
+            is_sagemaker_mp_enabled()
+            and self.use_cuda_amp
+            and args.max_grad_norm is not None
+            and args.max_grad_norm > 0
+        ):
+            raise ValueError(
+                "SageMaker Model Parallelism in mixed precision mode does not support gradient clipping yet. Pass "
+                "along 'max_grad_norm': 0 in your hyperparameters."
+            )
+
         # Label smoothing
         if self.args.label_smoothing_factor != 0:
             self.label_smoother = LabelSmoother(epsilon=self.args.label_smoothing_factor)
