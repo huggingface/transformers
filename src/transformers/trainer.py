@@ -1167,6 +1167,29 @@ class Trainer:
 
         return model
 
+    def torch_jit_model_eval(self, model, dataloader, training=False):
+        if not training:
+            if dataloader is None:
+                logger.warning("failed to use PyTorch jit mode due to current dataloader is none.")
+                return model
+            jit_inputs = []
+            example_batch = next(iter(dataloader))
+            for key in example_batch:
+                example_tensor = torch.ones_like(example_batch[key])
+                jit_inputs.append(example_tensor)
+            jit_inputs = tuple(jit_inputs)
+            try:
+                jit_model = model.eval()
+                with ContextManagers([self.autocast_smart_context_manager(), torch.no_grad()]):
+                    jit_model = torch.jit.trace(jit_model, jit_inputs, strict=False)
+                jit_model = torch.jit.freeze(jit_model)
+                jit_model(**example_batch)
+                model = jit_model
+            except (RuntimeError, TypeError) as e:
+                logger.warning(f"failed to use PyTorch jit mode due to: {e}.")
+
+        return model
+
     def ipex_optimize_model(self, model, training=False, dtype=torch.float32):
         if not is_ipex_available():
             raise ImportError(
@@ -1186,10 +1209,13 @@ class Trainer:
 
         return model
 
-    def _wrap_model(self, model, training=True):
+    def _wrap_model(self, model, training=True, dataloader=None):
         if self.args.use_ipex:
             dtype = torch.bfloat16 if self.use_cpu_amp else torch.float32
             model = self.ipex_optimize_model(model, training, dtype=dtype)
+
+        if self.args.jit_mode_eval:
+            model = self.torch_jit_model_eval(model, dataloader, training)
 
         if is_sagemaker_mp_enabled():
             # Wrapping the base model twice in a DistributedModel will raise an error.
@@ -2700,7 +2726,7 @@ class Trainer:
             self.model_wrapped = deepspeed_engine
             self.deepspeed = deepspeed_engine
 
-        model = self._wrap_model(self.model, training=False)
+        model = self._wrap_model(self.model, training=False, dataloader=dataloader)
 
         # if full fp16 or bf16 eval is wanted and this ``evaluation`` or ``predict`` isn't called
         # while ``train`` is running, cast it to the right dtype first and then put on device
@@ -3261,7 +3287,7 @@ class Trainer:
             deepspeed_engine.optimizer.optimizer = None
             deepspeed_engine.lr_scheduler = None
 
-        model = self._wrap_model(self.model, training=False)
+        model = self._wrap_model(self.model, training=False, dataloader=dataloader)
 
         # if full fp16 or bf16 eval is wanted and this ``evaluation`` or ``predict`` isn't called
         # while ``train`` is running, cast it to the right dtype first and then put on device
