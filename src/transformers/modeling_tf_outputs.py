@@ -62,7 +62,7 @@ class TFBaseModelOutputWithNoAttention(ModelOutput):
     """
 
     last_hidden_state: tf.Tensor = None
-    hidden_states: Optional[Tuple[tf.Tensor]] = None
+    hidden_states: Optional[Tuple[tf.Tensor, ...]] = None
 
 
 @dataclass
@@ -118,7 +118,7 @@ class TFBaseModelOutputWithPoolingAndNoAttention(ModelOutput):
 
     last_hidden_state: tf.Tensor = None
     pooler_output: tf.Tensor = None
-    hidden_states: Optional[Tuple[tf.Tensor]] = None
+    hidden_states: Optional[Tuple[tf.Tensor, ...]] = None
 
 
 @dataclass
@@ -886,4 +886,4 @@ class TFImageClassifierOutputWithNoAttention(ModelOutput):
 
     loss: Optional[tf.Tensor] = None
     logits: tf.Tensor = None
-    hidden_states: Optional[Tuple[tf.Tensor]] = None
+    hidden_states: Optional[Tuple[tf.Tensor, ...]] = None
