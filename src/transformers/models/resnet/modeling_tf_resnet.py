@@ -339,21 +339,6 @@ RESNET_INPUTS_DOCSTRING = r"""
 """
 
 
-def normalize_data_format(value: str) -> str:
-    """
-    From tensorflow addons
-    https://github.com/tensorflow/addons/blob/8cec33fcaaf1cf90aec7bdd55a0fcdbb251ce5c2/tensorflow_addons/utils/keras_utils.py#L71
-    """
-    if value is None:
-        value = tf.keras.backend.image_data_format()
-    data_format = value.lower()
-    if data_format not in {"channels_first", "channels_last"}:
-        raise ValueError(
-            'The `data_format` argument must be one of "channels_first", "channels_last". Received: ' + str(value)
-        )
-    return data_format
-
-
 class AdaptiveAveragePooling2D(tf.keras.layers.Layer):
     """
     Average Pooling with adaptive kernel size.
@@ -361,57 +346,37 @@ class AdaptiveAveragePooling2D(tf.keras.layers.Layer):
     Args:
       output_size: Tuple of integers specifying (pooled_rows, pooled_cols).
         The new size of output channels.
-      data_format: A string,
-        one of `channels_last` (default) or `channels_first`. The ordering of the dimensions in the inputs.
-        `channels_last` corresponds to inputs with shape `(batch, height, width, channels)` while `channels_first`
-        corresponds to inputs with shape `(batch, channels, height, width)`.
     Input shape:
-      - If `data_format='channels_last'`: 4D tensor with shape `(batch_size, height, width, channels)`.
-      - If `data_format='channels_first'`: 4D tensor with shape `(batch_size, channels, height, width)`.
+      - 4D tensor with shape `(batch_size, channels, height, width)`.
     Output shape:
-      - If `data_format='channels_last'`: 4D tensor with shape `(batch_size, pooled_rows, pooled_cols, channels)`.
-      - If `data_format='channels_first'`: 4D tensor with shape `(batch_size, channels, pooled_rows, pooled_cols)`.
+      - 4D tensor with shape `(batch_size, channels, pooled_rows, pooled_cols)`.
 
     Adapted from [tensorflow-addon's adaptive_pooling.py][
         https://github.com/tensorflow/addons/blob/8cec33fcaaf1cf90aec7bdd55a0fcdbb251ce5c2/tensorflow_addons/layers/adaptive_pooling.py#L238-L268
     ]
     """
 
-    def __init__(self, output_size: Union[int, Iterable[int]], data_format=None, **kwargs) -> None:
-        self.data_format = normalize_data_format(data_format)
+    def __init__(self, output_size: Union[int, Iterable[int]], **kwargs) -> None:
         self.output_size = (output_size, output_size) if isinstance(output_size, int) else tuple(output_size)
         super().__init__(**kwargs)
 
     def call(self, inputs: tf.Tensor, *args) -> tf.Tensor:
         h_bins = self.output_size[0]
         w_bins = self.output_size[1]
-        if self.data_format == "channels_last":
-            split_cols = tf.split(inputs, h_bins, axis=1)
-            split_cols = tf.stack(split_cols, axis=1)
-            split_rows = tf.split(split_cols, w_bins, axis=3)
-            split_rows = tf.stack(split_rows, axis=3)
-            out_vect = tf.reduce_mean(split_rows, axis=[2, 4])
-        else:
-            split_cols = tf.split(inputs, h_bins, axis=2)
-            split_cols = tf.stack(split_cols, axis=2)
-            split_rows = tf.split(split_cols, w_bins, axis=4)
-            split_rows = tf.stack(split_rows, axis=4)
-            out_vect = tf.reduce_mean(split_rows, axis=[3, 5])
+        split_cols = tf.split(inputs, h_bins, axis=2)
+        split_cols = tf.stack(split_cols, axis=2)
+        split_rows = tf.split(split_cols, w_bins, axis=4)
+        split_rows = tf.stack(split_rows, axis=4)
+        out_vect = tf.reduce_mean(split_rows, axis=[3, 5])
         return out_vect
 
     def compute_output_shape(self, input_shape: Iterable[int]) -> tf.TensorShape:
         input_shape = tf.TensorShape(input_shape).as_list()
-        if self.data_format == "channels_last":
-            shape = tf.TensorShape([input_shape[0], self.output_size[0], self.output_size[1], input_shape[3]])
-        else:
-            shape = tf.TensorShape([input_shape[0], input_shape[1], self.output_size[0], self.output_size[1]])
+        shape = tf.TensorShape([input_shape[0], input_shape[1], self.output_size[0], self.output_size[1]])
         return shape
 
     def get_config(self):
-        config = {
-            "output_size": self.output_size,
-            "data_format": self.data_format,
-        }
+        config = {"output_size": self.output_size}
         base_config = super().get_config()
         return {**base_config, **config}
 
@@ -425,14 +390,7 @@ class TFResNetMainLayer(tf.keras.layers.Layer):
         self.config = config
         self.embedder = TFResNetEmbeddings(config, name="embedder")
         self.encoder = TFResNetEncoder(config, name="encoder")
-
-    def pooler(self, hidden_state: tf.Tensor) -> tf.Tensor:
-        # B, C, H, W -> B, H, W, C
-        hidden_state = tf.transpose(hidden_state, (0, 2, 3, 1))
-        hidden_state = AdaptiveAveragePooling2D((1, 1))(hidden_state)
-        # B, H, W, C -> B, C, H, W
-        hidden_state = tf.transpose(hidden_state, (0, 3, 1, 2))
-        return hidden_state
+        self.pooler = AdaptiveAveragePooling2D((1, 1))
 
     @unpack_inputs
     def call(
