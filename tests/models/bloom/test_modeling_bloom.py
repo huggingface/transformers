@@ -103,9 +103,13 @@ class BloomModelTester:
         if self.use_input_mask:
             input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
+        sequence_labels = None
+        if self.use_labels:
+            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+
         config = self.get_config(gradient_checkpointing=gradient_checkpointing)
 
-        return (config, input_ids, input_mask)
+        return (config, input_ids, input_mask, sequence_labels)
 
     def get_config(self, gradient_checkpointing=False, slow_but_exact=True):
         return BloomConfig(
@@ -123,6 +127,7 @@ class BloomModelTester:
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
+            num_labels=self.num_labels,
             gradient_checkpointing=gradient_checkpointing,
             slow_but_exact=slow_but_exact,
             dtype="float32",
@@ -293,7 +298,7 @@ class BloomModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
 
-        config, input_ids, input_mask = config_and_inputs
+        config, input_ids, input_mask, sequence_labels = config_and_inputs
 
         inputs_dict = {"input_ids": input_ids}
 
