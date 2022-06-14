@@ -471,9 +471,8 @@ REGNET_INPUTS_DOCSTRING = r"""
     REGNET_START_DOCSTRING,
 )
 class TFRegNetModel(TFRegNetPreTrainedModel):
-    def __init__(self, config: RegNetConfig, **kwargs):
-        super().__init__(config, **kwargs)
-        self.config = config
+    def __init__(self, config: RegNetConfig, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
         self.regnet = TFRegNetMainLayer(config, name="regnet")
 
     @unpack_inputs
@@ -525,8 +524,8 @@ class TFRegNetModel(TFRegNetPreTrainedModel):
     REGNET_START_DOCSTRING,
 )
 class TFRegNetForImageClassification(TFRegNetPreTrainedModel, TFSequenceClassificationLoss):
-    def __init__(self, config: RegNetConfig, **kwargs):
-        super().__init__(config, **kwargs)
+    def __init__(self, config: RegNetConfig, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
         self.regnet = TFRegNetMainLayer(config, name="regnet")
         # classification head

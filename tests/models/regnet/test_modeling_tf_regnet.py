@@ -18,6 +18,7 @@ import inspect
 import unittest
 
 from transformers import RegNetConfig
+from transformers.modeling_tf_utils import PretrainedConfig
 from transformers.testing_utils import require_tf, require_vision, slow
 from transformers.utils import cached_property, is_tf_available, is_vision_available
 
@@ -160,8 +161,13 @@ class TFRegNetModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
+    @unittest.skip(reason="Model doesn't have attention layers")
+    def test_attention_outputs(self):
+        pass
+
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        print(f"From `test_forward_signature()`: {isinstance(config, PretrainedConfig)}.")
 
         for model_class in self.all_model_classes:
             model = model_class(config)
