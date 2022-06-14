@@ -208,11 +208,9 @@ class TFResNetBottleNeckLayer(tf.keras.layers.Layer):
 
     def call(self, hidden_state: tf.Tensor, training: bool = False) -> tf.Tensor:
         residual = hidden_state
-
         hidden_state = self.conv0(hidden_state, training=training)
         hidden_state = self.conv1(hidden_state, training=training)
         hidden_state = self.conv2(hidden_state, training=training)
-
         residual = self.shortcut(residual, training=training)
         hidden_state += residual
         hidden_state = self.activation(hidden_state)
