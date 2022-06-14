@@ -1,10 +1,11 @@
-from typing import List
+import os
+from typing import List, Union
 
 import tensorflow as tf
 
 from tensorflow_text import FastBertTokenizer, case_fold_utf8, combine_segments, pad_model_inputs
 
-from ... import PreTrainedTokenizer
+from .tokenization_bert import BertTokenizer
 
 
 class TFBertTokenizer(tf.keras.layers.Layer):
@@ -26,7 +27,7 @@ class TFBertTokenizer(tf.keras.layers.Layer):
         self.pad_token_id = pad_token_id
 
     @classmethod
-    def from_tokenizer(cls, tokenizer: PreTrainedTokenizer):
+    def from_tokenizer(cls, tokenizer: "PreTrainedTokenizerBase"):  # noqa: F821
         vocab = tokenizer.get_vocab()
         vocab = sorted([(wordpiece, idx) for wordpiece, idx in vocab.items()], key=lambda x: x[1])
         vocab_list = [entry[0] for entry in vocab]
@@ -37,6 +38,11 @@ class TFBertTokenizer(tf.keras.layers.Layer):
             sep_token_id=tokenizer.sep_token_id,
             pad_token_id=tokenizer.pad_token_id,
         )
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], *init_inputs, **kwargs):
+        tokenizer = BertTokenizer.from_pretrained(*init_inputs, **kwargs)
+        return cls.from_tokenizer(tokenizer)
 
     def unpaired_tokenize(self, texts):
         if self.do_lower_case:
