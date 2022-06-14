@@ -33,7 +33,9 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_nezha"] = [
         "NEZHA_PRETRAINED_MODEL_ARCHIVE_MAP",
+        "NeZhaForNextSentencePrediction",
         "NeZhaForMaskedLM",
+        "NeZhaForPreTraining",
         "NeZhaForMultipleChoice",
         "NeZhaForQuestionAnswering",
         "NeZhaForSequenceClassification",
@@ -55,7 +57,9 @@ if TYPE_CHECKING:
     else:
         from .modeling_nezha import (
             NEZHA_PRETRAINED_MODEL_ARCHIVE_MAP,
+            NeZhaForNextSentencePrediction,
             NeZhaForMaskedLM,
+            NeZhaForPreTraining,
             NeZhaForMultipleChoice,
             NeZhaForQuestionAnswering,
             NeZhaForSequenceClassification,

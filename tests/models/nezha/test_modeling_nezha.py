@@ -16,7 +16,7 @@ import os
 import tempfile
 import unittest
 
-from transformers import BertConfig, is_torch_available
+from transformers import NeZhaConfig, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
 
@@ -30,17 +30,16 @@ if is_torch_available():
 
     from transformers import (
         MODEL_FOR_PRETRAINING_MAPPING,
-        BertForMaskedLM,
-        BertForMultipleChoice,
-        BertForNextSentencePrediction,
-        BertForPreTraining,
-        BertForQuestionAnswering,
-        BertForSequenceClassification,
-        BertForTokenClassification,
-        BertLMHeadModel,
-        BertModel,
+        NeZhaForMaskedLM,
+        NeZhaForMultipleChoice,
+        NeZhaForNextSentencePrediction,
+        NeZhaForPreTraining,
+        NeZhaForQuestionAnswering,
+        NeZhaForSequenceClassification,
+        NeZhaForTokenClassification,
+        NeZhaModel,
     )
-    from transformers.models.bert.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.nezha.modeling_nezha import NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class NeZhaModelTester:
@@ -119,7 +118,7 @@ class NeZhaModelTester:
         """
         Returns a tiny configuration by default.
         """
-        return BertConfig(
+        return NeZhaConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -164,7 +163,7 @@ class NeZhaModelTester:
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = BertModel(config=config)
+        model = NeZhaModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
@@ -186,7 +185,7 @@ class NeZhaModelTester:
         encoder_attention_mask,
     ):
         config.add_cross_attention = True
-        model = BertModel(config)
+        model = NeZhaModel(config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -206,130 +205,19 @@ class NeZhaModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
-    def create_and_check_for_causal_lm(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        model = BertLMHeadModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
     def create_and_check_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = BertForMaskedLM(config=config)
+        model = NeZhaForMaskedLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
-    def create_and_check_model_for_causal_lm_as_decoder(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        config.add_cross_attention = True
-        model = BertLMHeadModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            token_type_ids=token_type_ids,
-            labels=token_labels,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-        )
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            token_type_ids=token_type_ids,
-            labels=token_labels,
-            encoder_hidden_states=encoder_hidden_states,
-        )
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
-    def create_and_check_decoder_model_past_large_inputs(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        config.is_decoder = True
-        config.add_cross_attention = True
-        model = BertLMHeadModel(config=config).to(torch_device).eval()
-
-        # first forward pass
-        outputs = model(
-            input_ids,
-            attention_mask=input_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            use_cache=True,
-        )
-        past_key_values = outputs.past_key_values
-
-        # create hypothetical multiple next token and extent to next_input_ids
-        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
-        next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
-
-        # append to next input_ids and
-        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-        next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
-
-        output_from_no_past = model(
-            next_input_ids,
-            attention_mask=next_attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            output_hidden_states=True,
-        )["hidden_states"][0]
-        output_from_past = model(
-            next_tokens,
-            attention_mask=next_attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
-            output_hidden_states=True,
-        )["hidden_states"][0]
-
-        # select random slice
-        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
-        output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
-
-        self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
-
-        # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
     def create_and_check_for_next_sequence_prediction(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = BertForNextSentencePrediction(config=config)
+        model = NeZhaForNextSentencePrediction(config=config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -343,7 +231,7 @@ class NeZhaModelTester:
     def create_and_check_for_pretraining(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = BertForPreTraining(config=config)
+        model = NeZhaForPreTraining(config=config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -359,7 +247,7 @@ class NeZhaModelTester:
     def create_and_check_for_question_answering(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = BertForQuestionAnswering(config=config)
+        model = NeZhaForQuestionAnswering(config=config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -376,7 +264,7 @@ class NeZhaModelTester:
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
-        model = BertForSequenceClassification(config)
+        model = NeZhaForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
@@ -386,7 +274,7 @@ class NeZhaModelTester:
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
-        model = BertForTokenClassification(config=config)
+        model = NeZhaForTokenClassification(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
@@ -396,10 +284,11 @@ class NeZhaModelTester:
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_choices = self.num_choices
-        model = BertForMultipleChoice(config=config)
+        model = NeZhaForMultipleChoice(config=config)
         model.to(torch_device)
         model.eval()
         multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        print(multiple_choice_inputs_ids)
         multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
         multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
         result = model(
@@ -426,24 +315,22 @@ class NeZhaModelTester:
 
 
 @require_torch
-class BertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class NeZhaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (
-            BertModel,
-            BertLMHeadModel,
-            BertForMaskedLM,
-            BertForMultipleChoice,
-            BertForNextSentencePrediction,
-            BertForPreTraining,
-            BertForQuestionAnswering,
-            BertForSequenceClassification,
-            BertForTokenClassification,
+            NeZhaModel,
+            NeZhaForMaskedLM,
+            NeZhaForMultipleChoice,
+            NeZhaForNextSentencePrediction,
+            NeZhaForPreTraining,
+            NeZhaForQuestionAnswering,
+            NeZhaForSequenceClassification,
+            NeZhaForTokenClassification,
         )
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (BertLMHeadModel,) if is_torch_available() else ()
     fx_compatible = True
 
     # special case for ForPreTraining model
@@ -461,8 +348,8 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         return inputs_dict
 
     def setUp(self):
-        self.model_tester = BertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BertConfig, hidden_size=37)
+        self.model_tester = NeZhaModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=NeZhaConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -509,21 +396,9 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             encoder_attention_mask,
         )
 
-    def test_for_causal_lm(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
-
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
-
-    def test_for_causal_lm_decoder(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        self.model_tester.create_and_check_model_for_causal_lm_as_decoder(*config_and_inputs)
-
-    def test_decoder_model_past_with_large_inputs(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
     def test_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -552,7 +427,7 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BertModel.from_pretrained(model_name)
+            model = NeZhaModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
     @slow
@@ -561,8 +436,8 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
 
-            # BertForMultipleChoice behaves incorrectly in JIT environments.
-            if model_class == BertForMultipleChoice:
+            # NeZhaForMultipleChoice behaves incorrectly in JIT environments.
+            if model_class == NeZhaForMultipleChoice:
                 return
 
             config.torchscript = True
@@ -580,10 +455,10 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class BertModelIntegrationTest(unittest.TestCase):
+class NeZhaModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
-        model = BertModel.from_pretrained("bert-base-uncased")
+        model = NeZhaModel.from_pretrained("bert-base-uncased")
         input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
         attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
         with torch.no_grad():
@@ -596,7 +471,7 @@ class BertModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_no_head_relative_embedding_key(self):
-        model = BertModel.from_pretrained("zhiheng-huang/bert-base-uncased-embedding-relative-key")
+        model = NeZhaModel.from_pretrained("zhiheng-huang/bert-base-uncased-embedding-relative-key")
         input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
         attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
         with torch.no_grad():
@@ -611,7 +486,7 @@ class BertModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_no_head_relative_embedding_key_query(self):
-        model = BertModel.from_pretrained("zhiheng-huang/bert-base-uncased-embedding-relative-key-query")
+        model = NeZhaModel.from_pretrained("zhiheng-huang/bert-base-uncased-embedding-relative-key-query")
         input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
         attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
         with torch.no_grad():
