@@ -1399,10 +1399,10 @@ class TFBlenderbotForConditionalGeneration(TFBlenderbotPreTrainedModel, TFCausal
 
         if decoder_attention_mask is not None:  # xla
             decoder_position_ids = tf.math.cumsum(decoder_attention_mask, axis=-1, exclusive=True)[:, -1:]
-        elif past is not None:  # non xla + past
-            decoder_position_ids = tf.broadcast_to(past[0][0].shape[2], (decoder_input_ids.shape[0], 1))
-        else:  # non xla + non past
-            decoder_position_ids = tf.broadcast_to(tf.range(decoder_input_ids.shape[1]), decoder_input_ids.shape)
+        elif past is not None:  # no xla + past
+            decoder_position_ids = past[0][0].shape[2]
+        else:  # no xla + no past
+            decoder_position_ids = tf.range(decoder_input_ids.shape[1])
 
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed

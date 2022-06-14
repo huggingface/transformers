@@ -128,7 +128,8 @@ class TFBartModelTester:
         decoder_position_ids = tf.cast(tf.cumsum(next_attention_mask, axis=1, exclusive=True), dtype=tf.int32)
         output_from_no_past = model(
             next_input_ids, attention_mask=next_attention_mask, position_ids=decoder_position_ids
-        )[0]
+        )
+        output_from_no_past = output_from_no_past[0]
 
         decoder_position_ids = (
             tf.cast(tf.cumsum(next_attn_mask, axis=1, exclusive=True), dtype=tf.int32) + past_key_values[0][0].shape[2]
@@ -138,7 +139,8 @@ class TFBartModelTester:
             attention_mask=next_attention_mask,
             past_key_values=past_key_values,
             position_ids=decoder_position_ids,
-        )[0]
+        )
+        output_from_past = output_from_past[0]
 
         self.parent.assertEqual(next_tokens.shape[1], output_from_past.shape[1])
 
@@ -151,7 +153,7 @@ class TFBartModelTester:
         tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
 
     def create_and_check_bart_xla_generate_fast(self, config, input_ids, *args):
-        config.eos_token_id = None
+        config.eos_token_id = None  # Generate until max length
         config.max_length = 10
         config.do_sample = False
         config.num_beams = 1

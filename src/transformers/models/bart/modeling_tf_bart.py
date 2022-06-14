@@ -134,12 +134,10 @@ class TFBartLearnedPositionalEmbedding(TFSharedEmbeddings):
         """Input is expected to be of size [bsz x seqlen]."""
         if position_ids is None:
             seq_len = input_shape[1]
-            positions = tf.range(seq_len, delta=1, name="range")
-            positions += past_key_values_length
-        else:
-            positions = position_ids
+            position_ids = tf.range(seq_len, delta=1, name="range")
+            position_ids += past_key_values_length
 
-        return super().call(positions + self.offset)
+        return super().call(position_ids + self.offset)
 
 
 class TFBartAttention(tf.keras.layers.Layer):
@@ -612,7 +610,8 @@ BART_INPUTS_DOCSTRING = r"""
             will be made by default and ignore pad tokens. It is not recommended to set this for most use cases.
         decoder_position_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the
-            range `[0, config.max_position_embeddings - 1]`.
+            range `[0, config.max_position_embeddings - 1]`. If `past_key_values` is passed, `position_ids` has to be
+            provided.
         head_mask (`tf.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
 
@@ -883,7 +882,8 @@ class TFBartDecoder(tf.keras.layers.Layer):
                 [What are attention masks?](../glossary#attention-mask)
             position_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the
-                range `[0, config.max_position_embeddings - 1]`.
+                range `[0, config.max_position_embeddings - 1]`. If `past_key_values` is passed, `position_ids` has to
+                be provided.
             encoder_hidden_states (`tf.Tensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
                 of the decoder.
@@ -942,12 +942,10 @@ class TFBartDecoder(tf.keras.layers.Layer):
         # embed positions
         if position_ids is None:
             if past_key_values is not None:
-                raise ValueError("Make sure to provide `decoder_position_ids` when passing `past_key_values`.")
+                raise ValueError("Make sure to provide the position ids when passing `past_key_values`.")
             positions = self.embed_positions(input_shape, past_key_values_length)
         else:
             positions = self.embed_positions(input_shape, position_ids=position_ids)
-
-        # breakpoint()
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
@@ -1419,10 +1417,10 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
 
         if decoder_attention_mask is not None:  # xla
             decoder_position_ids = tf.math.cumsum(decoder_attention_mask, axis=-1, exclusive=True)[:, -1:]
-        elif past is not None:  # non xla + past
-            decoder_position_ids = tf.broadcast_to(past[0][0].shape[2], (decoder_input_ids.shape[0], 1))
-        else:  # non xla + non past
-            decoder_position_ids = tf.broadcast_to(tf.range(decoder_input_ids.shape[1]), decoder_input_ids.shape)
+        elif past is not None:  # no xla + past
+            decoder_position_ids = past[0][0].shape[2]
+        else:  # no xla + no past
+            decoder_position_ids = tf.range(decoder_input_ids.shape[1])
 
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
@@ -1447,8 +1445,12 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
         batch_size = past[0][0].shape[0]
 
         if not is_past_initialized:
-            # past[0].shape[2] is seq_length of prompt
+            # past[0][0].shape[2] is seq_length of prompt
+            # The padded version of `past` requires only `max_length - 1` steps along the time dimension.
             num_padding_values = max_length - past[0][0].shape[2] - 1
+            # prepare the padding tensor for `tf.pad`.
+            # `shape=(4, 2)` because each tensor element in `past` has `rank=4`.
+            # `indices=[[2, 1]]` means the time dimension (dim 2) needs **right**-padding (`1` means padding afterward).
             padding_values = tf.scatter_nd(indices=[[2, 1]], updates=[num_padding_values], shape=(4, 2))
 
             new_past = ()
