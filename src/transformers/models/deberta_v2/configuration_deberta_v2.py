@@ -158,8 +158,3 @@ class DebertaV2OnnxConfig(OnnxConfig):
     @property
     def default_onnx_opset(self) -> int:
         return 12
-
-    @property
-    def values_override(self) -> Optional[Mapping[str, Any]]:
-        if hasattr(self._config, "use_cache"):
-            return {"token_vocab_size": 2}
