@@ -1043,7 +1043,7 @@ def symbolic_trace(
         input_names (`List[str]`, *optional*):
             The names of the inputs of the traced model. If unset, model.dummy_inputs.keys() are used instead.
         disable_check (`bool`, *optional*, defaults to `False`):
-            If True, no check is done before trying to trace the model, this is mostly usesul for debugging purposes.
+            If `True`, no check is done before trying to trace the model, this is mostly usesul for debugging purposes.
 
     Returns:
         `torch.fx.GraphModule`: A GraphModule constructed by recording operations seen while tracing the model.
