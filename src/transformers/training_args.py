@@ -245,6 +245,8 @@ class TrainingArguments:
             Random seed to be used with data samplers. If not set, random generators for data sampling will use the
             same seed as `seed`. This can be used to ensure reproducibility of data sampling, independent of the model
             seed.
+        jit_mode_eval (`bool`, *optional*, defaults to `False`):
+            Whether or not to use PyTorch jit trace for inference.
         use_ipex (`bool`, *optional*, defaults to `False`):
             Use Intel extension for PyTorch when it is available. [IPEX
             installation](https://github.com/intel/intel-extension-for-pytorch).
@@ -625,6 +627,9 @@ class TrainingArguments:
     no_cuda: bool = field(default=False, metadata={"help": "Do not use CUDA even when it is available"})
     seed: int = field(default=42, metadata={"help": "Random seed that will be set at the beginning of training."})
     data_seed: Optional[int] = field(default=None, metadata={"help": "Random seed to be used with data samplers."})
+    jit_mode_eval: bool = field(
+        default=False, metadata={"help": "Whether or not to use PyTorch jit trace for inference"}
+    )
     use_ipex: bool = field(
         default=False,
         metadata={
