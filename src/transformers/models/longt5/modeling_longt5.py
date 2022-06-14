@@ -49,14 +49,14 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LongT5Config"
 _TOKENIZER_FOR_DOC = "T5Tokenizer"
-_CHECKPOINT_FOR_DOC = "google/LongT5-Local-Base"
+_CHECKPOINT_FOR_DOC = "google/long-t5-local-base"
 
 # TODO: Update before the merge
 LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/LongT5-Local-Base",
-    "google/LongT5-Local-Large",
-    "google/LongT5-TGlobal-Base",
-    "google/LongT5-TGlobal-Large",
+    "google/long-t5-local-base",
+    "google/long-t5-local-large",
+    "google/long-t5-tglobal-base",
+    "google/long-t5-tglobal-large",
 ]
 
 
@@ -1797,8 +1797,8 @@ class LongT5Model(LongT5PreTrainedModel):
         ```python
         >>> from transformers import T5Tokenizer, LongT5Model
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("google/LongT5-Local-Base")
-        >>> model = LongT5Model.from_pretrained("google/LongT5-Local-Base")
+        >>> tokenizer = T5Tokenizer.from_pretrained("google/long-t5-local-base")
+        >>> model = LongT5Model.from_pretrained("google/long-t5-local-base")
 
         >>> # Let's try a very long encoder input.
         >>> input_ids = tokenizer(
@@ -2169,8 +2169,8 @@ class LongT5EncoderModel(LongT5PreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, LongT5ForConditionalGeneration
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("google/LongT5-Local-Base")
-        >>> model = LongT5EncoderModel.from_pretrained("google/LongT5-Local-Base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/long-t5-local-base")
+        >>> model = LongT5EncoderModel.from_pretrained("google/long-t5-local-base")
         >>> input_ids = tokenizer(
         ...     100 * "Studies have been shown that owning a dog is good for you ", return_tensors="pt"
         ... ).input_ids  # Batch size 1
