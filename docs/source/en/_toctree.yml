@@ -256,6 +256,8 @@
       title: LeViT
     - local: model_doc/longformer
       title: Longformer
+    - local: model_doc/longt5
+      title: LongT5
     - local: model_doc/luke
       title: LUKE
     - local: model_doc/lxmert
