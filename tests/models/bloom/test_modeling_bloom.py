@@ -252,13 +252,13 @@ class BloomModelTester:
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
-    def create_and_check_sequence_classification_model(self, config, input_ids, input_mask, sequence_labels, *args):
+    def create_and_check_sequence_classification_model(self, config, input_ids, input_mask, *args):
         config.num_labels = self.num_labels
         model = BloomForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
 
-        result = model(input_ids, attention_mask=input_mask, labels=sequence_labels)
+        result = model(input_ids, attention_mask=input_mask)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_token_classification_model(self, config, input_ids, input_mask, *args):
