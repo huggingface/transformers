@@ -263,8 +263,6 @@ class OnnxExportTestCaseV2(TestCase):
 
         model_class = FeaturesManager.get_model_class_for_feature(feature)
         config = AutoConfig.from_pretrained(model_name)
-        if model_name == "microsoft/deberta-v2-xlarge":
-            config.type_vocab_size = 2
         model = model_class.from_config(config)
         onnx_config = onnx_config_class_constructor(model.config)
 
