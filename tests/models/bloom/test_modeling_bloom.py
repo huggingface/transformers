@@ -723,7 +723,7 @@ class BloomEmbeddingTest(unittest.TestCase):
         }
 
         if cuda_available:
-            self.assertEqual(MEAN_VALUE_LAST_LM, logits.last_hidden_state.mean().item())
+            self.assertAlmostEqual(MEAN_VALUE_LAST_LM, logits.last_hidden_state.mean().item(), places=4)
         else:
             self.assertAlmostEqual(MEAN_VALUE_LAST_LM, logits.last_hidden_state.mean().item(), places=3)
 
