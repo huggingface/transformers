@@ -102,6 +102,7 @@ class NeZhaConfig(PretrainedConfig):
         pad_token_id=0,
         bos_token_id=2,
         eos_token_id=3,
+        use_cache=True,
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
@@ -124,3 +125,4 @@ class NeZhaConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.use_relative_position=use_relative_position
         self.classifier_dropout = classifier_dropout
+        self.use_cache=use_cache

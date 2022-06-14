@@ -738,7 +738,7 @@ class NeZhaPreTrainedModel(PreTrainedModel):
 
     config_class = NeZhaConfig
     load_tf_weights = load_tf_weights_in_bert
-    base_model_prefix = "bert"
+    base_model_prefix = "nezha"
     supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
@@ -1054,7 +1054,7 @@ class NeZhaForPreTraining(NeZhaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.bert = NeZhaModel(config)
+        self.nezha = NeZhaModel(config)
         self.cls = NeZhaPreTrainingHeads(config)
 
         # Initialize weights and apply final processing
@@ -1116,7 +1116,7 @@ class NeZhaForPreTraining(NeZhaPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.bert(
+        outputs = self.nezha(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1151,143 +1151,6 @@ class NeZhaForPreTraining(NeZhaPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """NeZha Model with a `language modeling` head on top for CLM fine-tuning.""", BERT_START_DOCSTRING
-)
-class NeZhaLMHeadModel(NeZhaPreTrainedModel):
-
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
-
-    def __init__(self, config):
-        super().__init__(config)
-
-        if not config.is_decoder:
-            logger.warning("If you want to use `NeZhaLMHeadModel` as a standalone, add `is_decoder=True.`")
-
-        self.bert = NeZhaModel(config, add_pooling_layer=False)
-        self.cls = NeZhaOnlyMLMHead(config)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_output_embeddings(self):
-        return self.cls.predictions.decoder
-
-    def set_output_embeddings(self, new_embeddings):
-        self.cls.predictions.decoder = new_embeddings
-
-    @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=CausalLMOutputWithCrossAttentions,
-        config_class=_CONFIG_FOR_DOC,
-    )
-    def forward(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[torch.Tensor]] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
-        r"""
-        encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
-            the model is configured as a decoder.
-        encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
-            the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
-            `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
-            ignored (masked), the loss is only computed for the tokens with labels n `[0, ..., config.vocab_size]`
-        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        if labels is not None:
-            use_cache = False
-
-        outputs = self.bert(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        sequence_output = outputs[0]
-        prediction_scores = self.cls(sequence_output)
-
-        lm_loss = None
-        if labels is not None:
-            # we are doing next-token prediction; shift prediction scores and input ids by one
-            shifted_prediction_scores = prediction_scores[:, :-1, :].contiguous()
-            labels = labels[:, 1:].contiguous()
-            loss_fct = CrossEntropyLoss()
-            lm_loss = loss_fct(shifted_prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
-
-        if not return_dict:
-            output = (prediction_scores,) + outputs[2:]
-            return ((lm_loss,) + output) if lm_loss is not None else output
-
-        return CausalLMOutputWithCrossAttentions(
-            loss=lm_loss,
-            logits=prediction_scores,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            cross_attentions=outputs.cross_attentions,
-        )
-
-    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, **model_kwargs):
-        input_shape = input_ids.shape
-        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
-        if attention_mask is None:
-            attention_mask = input_ids.new_ones(input_shape)
-
-        # cut decoder_input_ids if past is used
-        if past is not None:
-            input_ids = input_ids[:, -1:]
-
-        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past}
-
-    def _reorder_cache(self, past, beam_idx):
-        reordered_past = ()
-        for layer_past in past:
-            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
-        return reordered_past
-
-
 @add_start_docstrings("""NeZha Model with a `language modeling` head on top.""", BERT_START_DOCSTRING)
 class NeZhaForMaskedLM(NeZhaPreTrainedModel):
 
@@ -1303,7 +1166,7 @@ class NeZhaForMaskedLM(NeZhaPreTrainedModel):
                 "bi-directional self-attention."
             )
 
-        self.bert = NeZhaModel(config, add_pooling_layer=False)
+        self.nezha = NeZhaModel(config, add_pooling_layer=False)
         self.cls = NeZhaOnlyMLMHead(config)
 
         # Initialize weights and apply final processing
@@ -1348,7 +1211,7 @@ class NeZhaForMaskedLM(NeZhaPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.bert(
+        outputs = self.nezha(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1406,7 +1269,7 @@ class NeZhaForNextSentencePrediction(NeZhaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.bert = NeZhaModel(config)
+        self.nezha = NeZhaModel(config)
         self.cls = NeZhaOnlyNSPHead(config)
 
         # Initialize weights and apply final processing
@@ -1467,7 +1330,7 @@ class NeZhaForNextSentencePrediction(NeZhaPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.bert(
+        outputs = self.nezha(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1513,7 +1376,7 @@ class NeZhaForSequenceClassification(NeZhaPreTrainedModel):
         self.num_labels = config.num_labels
         self.config = config
 
-        self.bert = NeZhaModel(config)
+        self.nezha = NeZhaModel(config)
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
@@ -1553,7 +1416,7 @@ class NeZhaForSequenceClassification(NeZhaPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.bert(
+        outputs = self.nezha(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1615,7 +1478,7 @@ class NeZhaForMultipleChoice(NeZhaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.model = NeZhaModel(config)
+        self.nezha = NeZhaModel(config)
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
@@ -1653,9 +1516,7 @@ class NeZhaForMultipleChoice(NeZhaPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
-        print(input_ids.shape)
         input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
-        print(input_ids.shape)
         attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
         token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
         position_ids = position_ids.view(-1, position_ids.size(-1)) if position_ids is not None else None
@@ -1665,7 +1526,7 @@ class NeZhaForMultipleChoice(NeZhaPreTrainedModel):
             else None
         )
 
-        outputs = self.model(
+        outputs = self.nezha(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1717,7 +1578,7 @@ class NeZhaForTokenClassification(NeZhaPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.bert = NeZhaModel(config, add_pooling_layer=False)
+        self.nezha = NeZhaModel(config, add_pooling_layer=False)
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
@@ -1755,7 +1616,7 @@ class NeZhaForTokenClassification(NeZhaPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.bert(
+        outputs = self.nezha(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1804,7 +1665,7 @@ class NeZhaForQuestionAnswering(NeZhaPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.bert = NeZhaModel(config, add_pooling_layer=False)
+        self.nezha = NeZhaModel(config, add_pooling_layer=False)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
@@ -1847,7 +1708,7 @@ class NeZhaForQuestionAnswering(NeZhaPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.bert(
+        outputs = self.nezha(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
