@@ -44,6 +44,7 @@ from .utils import (
     DUMMY_INPUTS,
     HUGGINGFACE_CO_RESOLVE_ENDPOINT,
     TF2_WEIGHTS_NAME,
+    TF2_WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     EntryNotFoundError,
     ModelOutput,
@@ -546,6 +547,259 @@ def input_processing(func, config, input_ids, **kwargs):
     )
 
     return output
+
+
+
+def convert_file_size_to_int(size: Union[int, str]):
+    """
+    Converts a size expressed as a string with digits an unit (like `"5MB"`) to an integer (in bytes).
+
+    Args:
+        size (`int` or `str`): The size to convert. Will be directly returned if an `int`.
+
+    Example:
+
+    ```py
+    >>> convert_file_size_to_int("1MiB")
+    1048576
+    ```
+    """
+    if isinstance(size, int):
+        return size
+    if size.upper().endswith("GIB"):
+        return int(size[:-3]) * (2**30)
+    if size.upper().endswith("MIB"):
+        return int(size[:-3]) * (2**20)
+    if size.upper().endswith("KIB"):
+        return int(size[:-3]) * (2**10)
+    if size.upper().endswith("GB"):
+        int_size = int(size[:-2]) * (10**9)
+        return int_size // 8 if size.endswith("b") else int_size
+    if size.upper().endswith("MB"):
+        int_size = int(size[:-2]) * (10**6)
+        return int_size // 8 if size.endswith("b") else int_size
+    if size.upper().endswith("KB"):
+        int_size = int(size[:-2]) * (10**3)
+        return int_size // 8 if size.endswith("b") else int_size
+    raise ValueError("`size` is not in a valid format. Use an integer followed by the unit, e.g., '5GB'.")
+
+
+def dtype_byte_size(dtype):
+    """
+    Returns the size (in bytes) occupied by one parameter of type `dtype`.
+
+    Example:
+
+    ```py
+    >>> dtype_byte_size(torch.float32)
+    4
+    ```
+    """
+    if dtype == tf.bool:
+        return 1 / 8
+    bit_search = re.search("[^\d](\d+)$", dtype.name)
+    if bit_search is None:
+        raise ValueError(f"`dtype` is not a valid dtype: {dtype}.")
+    bit_size = int(bit_search.groups()[0])
+    return bit_size // 8
+
+
+def tf_shard_checkpoint(weights: list[tf.Tensor], max_shard_size: Union[int, str] = "10GB"):
+    """
+    Splits a model state dictionary in sub-checkpoints so that the final size of each sub-checkpoint does not exceed a
+    given size.
+
+    The sub-checkpoints are determined by iterating through the `state_dict` in the order of its keys, so there is no
+    optimization made to make each sub-checkpoint as close as possible to the maximum size passed. For example, if the
+    limit is 10GB and we have weights of sizes [6GB, 6GB, 2GB, 6GB, 2GB, 2GB] they will get sharded as [6GB], [6+2GB],
+    [6+2+2GB] and not [6+2+2GB], [6+2GB], [6GB].
+
+    <Tip warning={true}>
+
+    If one of the model's weight is bigger that `max_sahrd_size`, it will end up in its own sub-checkpoint which will
+    have a size greater than `max_shard_size`.
+
+    </Tip>
+
+    Args:
+        state_dict (`Dict[str, torch.Tensor]`): The state dictionary of a model to save.
+        max_shard_size (`int` or `str`, *optional*, defaults to `"10GB"`):
+            The maximum size of each sub-checkpoint. If expressed as a string, needs to be digits followed by a unit
+            (like `"5MB"`).
+    """
+    max_shard_size = convert_file_size_to_int(max_shard_size)
+
+    sharded_state_dicts = []
+    current_block = []
+    current_block_size = 0
+    total_size = 0
+
+    for item in weights:
+        weight_size = item.numpy().size * dtype_byte_size(item.dtype)
+
+        # If this weight is going to tip up over the maximal size, we split.
+        if current_block_size + weight_size > max_shard_size:
+            sharded_state_dicts.append(current_block)
+            current_block = []
+            current_block_size = 0
+
+        current_block.append(item)
+        current_block_size += weight_size
+        total_size += weight_size
+
+    # Add the last block
+    sharded_state_dicts.append(current_block)
+
+    # If we only have one shard, we return it
+    if len(sharded_state_dicts) == 1:
+        return {TF2_WEIGHTS_NAME: sharded_state_dicts[0]}, None
+
+    # Otherwise, let's build the index
+    weight_map = {}
+    shards = {}
+    for idx, shard in enumerate(sharded_state_dicts):
+        shard_file = TF2_WEIGHTS_NAME.replace(".h5", f"-{idx+1:05d}-of-{len(sharded_state_dicts):05d}.h5")
+        shards[shard_file] = shard
+        for weight in shard:
+            weight_map[weight.name] = shard_file
+
+    # Add the metadata
+    metadata = {"total_size": total_size}
+    index = {"metadata": metadata, "weight_map": weight_map}
+    return shards, index
+
+def get_checkpoint_shard_files(
+    pretrained_model_name_or_path,
+    index_filename,
+    cache_dir=None,
+    force_download=False,
+    proxies=None,
+    resume_download=False,
+    local_files_only=False,
+    use_auth_token=None,
+    user_agent=None,
+    revision=None,
+    mirror=None,
+):
+    """
+    For a given model:
+
+    - download and cache all the shards of a sharded checkpoint if `pretrained_model_name_or_path` is a model ID on the
+      Hub
+    - returns the list of paths to all the shards, as well as some metadata.
+
+    For the description of each arg, see [`PreTrainedModel.from_pretrained`]. `index_filename` is the full path to the
+    index (downloaded and cached if `pretrained_model_name_or_path` is a model ID on the Hub).
+    """
+    import json
+    with open(index_filename, "r") as f:
+        index = json.loads(f.read())
+
+    shard_filenames = sorted(list(set(index["weight_map"].values())))
+    sharded_metadata = index["metadata"]
+    sharded_metadata["all_checkpoint_keys"] = list(index["weight_map"].keys())
+
+    # First, let's deal with local folder.
+    if os.path.isdir(pretrained_model_name_or_path):
+        shard_filenames = [os.path.join(pretrained_model_name_or_path, f) for f in shard_filenames]
+        return shard_filenames, sharded_metadata
+
+    # At this stage pretrained_model_name_or_path is a model identifier on the Hub
+    cached_filenames = []
+    for shard_filename in shard_filenames:
+        shard_url = hf_bucket_url(
+            pretrained_model_name_or_path, filename=shard_filename, revision=revision, mirror=mirror
+        )
+
+        try:
+            # Load from URL
+            cached_filename = cached_path(
+                shard_url,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                proxies=proxies,
+                resume_download=resume_download,
+                local_files_only=local_files_only,
+                use_auth_token=use_auth_token,
+                user_agent=user_agent,
+            )
+        # We have already dealt with RepositoryNotFoundError and RevisionNotFoundError when getting the index, so
+        # we don't have to catch them here.
+        except EntryNotFoundError:
+            raise EnvironmentError(
+                f"{pretrained_model_name_or_path} does not appear to have a file named {shard_filename} which is "
+                "required according to the checkpoint index."
+            )
+        except HTTPError:
+            raise EnvironmentError(
+                f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load {shard_filename}. You should try"
+                " again after checking your internet connection."
+            )
+
+        cached_filenames.append(cached_filename)
+
+    return cached_filenames, sharded_metadata
+
+def load_tf_sharded_checkpoint(model, folder, strict=True):
+    """
+    This is the same as
+    [`torch.nn.Module.load_state_dict`](https://pytorch.org/docs/stable/generated/torch.nn.Module.html?highlight=load_state_dict#torch.nn.Module.load_state_dict)
+    but for a sharded checkpoint.
+
+    This load is performed efficiently: each checkpoint shard is loaded one by one in RAM and deleted after being
+    loaded in the model.
+
+    Args:
+        model (`torch.nn.Module`): The model in which to load the checkpoint.
+        folder (`str` or `os.PathLike`): A path to a folder containing the sharded checkpoint.
+        strict (`bool`, *optional`, defaults to `True`):
+            Whether to strictly enforce that the keys in the model state dict match the keys in the sharded checkpoint.
+
+    Returns:
+        `NamedTuple`: A named tuple with `missing_keys` and `unexpected_keys` fields
+            - `missing_keys` is a list of str containing the missing keys
+            - `unexpected_keys` is a list of str containing the unexpected keys
+    """
+    import json
+    import gc
+    # Load the index
+    index_file = os.path.join(folder, TF2_WEIGHTS_INDEX_NAME)
+    if not os.path.isfile(index_file):
+        raise ValueError(f"Can't find a checkpoint index ({TF2_WEIGHTS_INDEX_NAME}) in {folder}.")
+
+    with open(index_file, "r", encoding="utf-8") as f:
+        index = json.load(f)
+
+    shard_files = list(set(index["weight_map"].values()))
+
+    # If strict=True, error before loading any of the state dicts.
+    # loaded_keys = index["weight_map"].keys()
+    # model_keys = model.state_dict().keys()
+    # missing_keys = [key for key in model_keys if key not in loaded_keys]
+    # unexpected_keys = [key for key in loaded_keys if key not in model_keys]
+    # if strict and (len(missing_keys) > 0 or len(unexpected_keys) > 0):
+    #     error_message = f"Error(s) in loading state_dict for {model.__class__.__name__}"
+    #     if len(missing_keys) > 0:
+    #         str_missing_keys = ",".join([f'"{k}"' for k in missing_keys])
+    #         error_message += f"\nMissing key(s): {str_missing_keys}."
+    #     if len(unexpected_keys) > 0:
+    #         str_unexpected_keys = ",".join([f'"{k}"' for k in unexpected_keys])
+    #         error_message += f"\nMissing key(s): {str_unexpected_keys}."
+    #     raise RuntimeError(error_message)
+
+    for shard_file in shard_files:
+        state_dict = tf.io.read_file(os.path.join(folder, shard_file))
+        # model.load_model(os.path.join(folder, shard_file))
+        missing_layers, unexpected_layers, mismatched_layers = load_tf_weights(model,folder+"/"+ shard_file)
+        # or : load_tf_weights(model,shard_file)
+        # tf.load_weights_from_hdf5_group_by_name(state_dict,model, skip_mismatch=True)
+
+        # Make sure memory is fred before we load the next state dict.
+        del state_dict
+        gc.collect()
+    
+    
+
 
 
 def load_tf_weights(model, resolved_archive_file, ignore_mismatched_sizes=False, _prefix=None):
