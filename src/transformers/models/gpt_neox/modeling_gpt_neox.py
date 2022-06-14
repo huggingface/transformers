@@ -53,6 +53,7 @@ class GPTNeoXPreTrainedModel(PreTrainedModel):
     config_class = GPTNeoXConfig
     base_model_prefix = "gpt_neox"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["GPTNeoXLayer"]
 
     def _init_weights(self, module):
         """Initialize the weights"""

@@ -494,6 +494,20 @@ class Trainer:
         self.use_cuda_amp = False
         self.use_cpu_amp = False
 
+        # Mixed precision setup for SageMaker Model Parallel
+        if is_sagemaker_mp_enabled():
+            # BF16 + model parallelism in SageMaker: currently not supported, raise an error
+            if args.bf16:
+                raise ValueError("SageMaker Model Parallelism does not support BF16 yet. Please use FP16 instead ")
+            # When there's mismatch between SMP config and trainer argument, use SMP config as truth
+            if args.fp16 != smp.state.cfg.fp16:
+                logger.warning(
+                    f"FP16 provided in SM_HP_MP_PARAMETERS is {smp.state.cfg.fp16},"
+                    f"but FP16 provided in trainer argument is {args.fp16},"
+                    f"setting to {smp.state.cfg.fp16}"
+                )
+                args.fp16 = smp.state.cfg.fp16
+
         if args.fp16 or args.bf16:
             if self.fsdp is not None:
                 raise ValueError(
@@ -519,14 +533,13 @@ class Trainer:
             logger.info(f"Using {args.half_precision_backend} half precision backend")
 
         self.do_grad_scaling = False
-        if (args.fp16 or args.bf16) and not args.deepspeed:  # deepspeed manages its own half precision
+        if (args.fp16 or args.bf16) and not (args.deepspeed or is_sagemaker_mp_enabled()):
+            # deepspeed and SageMaker Model Parallel manage their own half precision
             if args.half_precision_backend == "cuda_amp":
                 self.use_cuda_amp = True
                 self.amp_dtype = torch.float16 if args.fp16 else torch.bfloat16
                 self.do_grad_scaling = True
-                if is_sagemaker_mp_enabled():
-                    self.scaler = smp.amp.GradScaler()
-                elif self.sharded_ddp is not None:
+                if self.sharded_ddp is not None:
                     self.scaler = ShardedGradScaler()
                 elif is_torch_tpu_available():
                     from torch_xla.amp import GradScaler
@@ -544,13 +557,6 @@ class Trainer:
                         " https://www.github.com/nvidia/apex."
                     )
                 self.use_apex = True
-
-        # FP16 + model parallelism in SageMaker: gradient clipping does not work for now so we raise a helpful error.
-        if is_sagemaker_mp_enabled() and self.use_amp and args.max_grad_norm is not None and args.max_grad_norm > 0:
-            raise ValueError(
-                "SageMaker Model Parallelism in mixed precision mode does not support gradient clipping yet. Pass "
-                "along 'max_grad_norm': 0 in your hyperparameters."
-            )
 
         # Label smoothing
         if self.args.label_smoothing_factor != 0:
@@ -933,7 +939,10 @@ class Trainer:
         `create_scheduler`) in a subclass.
         """
         self.create_optimizer()
-        self.create_scheduler(num_training_steps=num_training_steps, optimizer=self.optimizer)
+        self.create_scheduler(
+            num_training_steps=num_training_steps,
+            optimizer=self.optimizer.optimizer if is_sagemaker_mp_enabled() and smp.state.cfg.fp16 else self.optimizer,
+        )
 
     def create_optimizer(self):
         """
@@ -1158,6 +1167,29 @@ class Trainer:
 
         return model
 
+    def torch_jit_model_eval(self, model, dataloader, training=False):
+        if not training:
+            if dataloader is None:
+                logger.warning("failed to use PyTorch jit mode due to current dataloader is none.")
+                return model
+            jit_inputs = []
+            example_batch = next(iter(dataloader))
+            for key in example_batch:
+                example_tensor = torch.ones_like(example_batch[key])
+                jit_inputs.append(example_tensor)
+            jit_inputs = tuple(jit_inputs)
+            try:
+                jit_model = model.eval()
+                with ContextManagers([self.autocast_smart_context_manager(), torch.no_grad()]):
+                    jit_model = torch.jit.trace(jit_model, jit_inputs, strict=False)
+                jit_model = torch.jit.freeze(jit_model)
+                jit_model(**example_batch)
+                model = jit_model
+            except (RuntimeError, TypeError) as e:
+                logger.warning(f"failed to use PyTorch jit mode due to: {e}.")
+
+        return model
+
     def ipex_optimize_model(self, model, training=False, dtype=torch.float32):
         if not is_ipex_available():
             raise ImportError(
@@ -1177,10 +1209,13 @@ class Trainer:
 
         return model
 
-    def _wrap_model(self, model, training=True):
+    def _wrap_model(self, model, training=True, dataloader=None):
         if self.args.use_ipex:
             dtype = torch.bfloat16 if self.use_cpu_amp else torch.float32
             model = self.ipex_optimize_model(model, training, dtype=dtype)
+
+        if self.args.jit_mode_eval:
+            model = self.torch_jit_model_eval(model, dataloader, training)
 
         if is_sagemaker_mp_enabled():
             # Wrapping the base model twice in a DistributedModel will raise an error.
@@ -1636,7 +1671,9 @@ class Trainer:
                             # AMP: gradients need unscaling
                             self.scaler.unscale_(self.optimizer)
 
-                        if hasattr(self.optimizer, "clip_grad_norm"):
+                        if is_sagemaker_mp_enabled() and args.fp16:
+                            self.optimizer.clip_master_grads(args.max_grad_norm)
+                        elif hasattr(self.optimizer, "clip_grad_norm"):
                             # Some optimizers (like the sharded optimizer) have a specific way to do gradient clipping
                             self.optimizer.clip_grad_norm(args.max_grad_norm)
                         elif hasattr(model, "clip_grad_norm_"):
@@ -2063,7 +2100,9 @@ class Trainer:
                 if is_sagemaker_mp_enabled():
 
                     def opt_load_hook(mod, opt):
-                        opt.load_state_dict(smp.load(os.path.join(checkpoint, OPTIMIZER_NAME), partial=True))
+                        opt.load_state_dict(
+                            smp.load(os.path.join(checkpoint, OPTIMIZER_NAME), partial=True), gather_if_shard=False
+                        )
 
                     self.model_wrapped.register_post_step_hook(opt_load_hook)
                 else:
@@ -2287,8 +2326,7 @@ class Trainer:
         inputs = self._prepare_inputs(inputs)
 
         if is_sagemaker_mp_enabled():
-            scaler = self.scaler if self.do_grad_scaling else None
-            loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps, scaler=scaler)
+            loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps)
             return loss_mb.reduce_mean().detach().to(self.args.device)
 
         with self.compute_loss_context_manager():
@@ -2688,7 +2726,7 @@ class Trainer:
             self.model_wrapped = deepspeed_engine
             self.deepspeed = deepspeed_engine
 
-        model = self._wrap_model(self.model, training=False)
+        model = self._wrap_model(self.model, training=False, dataloader=dataloader)
 
         # if full fp16 or bf16 eval is wanted and this ``evaluation`` or ``predict`` isn't called
         # while ``train`` is running, cast it to the right dtype first and then put on device
@@ -3249,7 +3287,7 @@ class Trainer:
             deepspeed_engine.optimizer.optimizer = None
             deepspeed_engine.lr_scheduler = None
 
-        model = self._wrap_model(self.model, training=False)
+        model = self._wrap_model(self.model, training=False, dataloader=dataloader)
 
         # if full fp16 or bf16 eval is wanted and this ``evaluation`` or ``predict`` isn't called
         # while ``train`` is running, cast it to the right dtype first and then put on device
