@@ -266,6 +266,7 @@ class OFAAttention(nn.Module):
         is_decoder (`bool`): whether or not decoder attention.
         bias (`bool`): whether to add bias.
         scale_heads (`bool`): whether to learn scaling heads, only for Normformer.
+        scale_factor (`float32`): scaling factor for head.
     """
 
     def __init__(
