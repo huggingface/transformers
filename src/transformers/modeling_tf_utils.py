@@ -16,6 +16,7 @@
 """TF general model utils."""
 
 import functools
+import gc
 import inspect
 import json
 import os
@@ -761,7 +762,8 @@ def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, s
     Args:
         model (`torch.nn.Module`): The model in which to load the checkpoint.
         shard_files (`str` or `os.PathLike`): A list containing the sharded checkpoint names.
-        ignore_mismatched_sizes`bool`, *optional`, defaults to `True`):Whether or not to ignore the mismatch between the sizes
+        ignore_mismatched_sizes`bool`, *optional`, defaults to `True`):
+            Whether or not to ignore the mismatch between the sizes
         strict (`bool`, *optional`, defaults to `True`):
             Whether to strictly enforce that the keys in the model state dict match the keys in the sharded checkpoint.
 
@@ -771,8 +773,6 @@ def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, s
             - `unexpected_keys` is a list of str containing the unexpected keys
             - `missmatched_keys` is a list of str containing the missmatched keys
     """
-
-    import gc
 
     # Load the index
     missing_keys = []
@@ -1843,7 +1843,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         raise NotImplementedError
 
     def save_pretrained(
-        self, save_directory, saved_model=False, version=1, push_to_hub=False, max_shard_size="2GB", **kwargs
+        self,
+        save_directory,
+        saved_model=False,
+        version=1,
+        push_to_hub=False,
+        max_shard_size: Union[int, str] = "10GB",
+        **kwargs
     ):
         """
         Save a model and its configuration file to a directory, so that it can be re-loaded using the
@@ -1866,6 +1872,17 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 Using `push_to_hub=True` will synchronize the repository you are pushing to with `save_directory`,
                 which requires `save_directory` to be a local clone of the repo you are pushing to if it's an existing
                 folder. Pass along `temp_dir=True` to use a temporary directory instead.
+
+                </Tip>
+
+            max_shard_size (`int` or `str`, *optional*, defaults to `"10GB"`):
+                The maximum size for a checkpoint before being sharded. Checkpoints shard will then be each of size
+                lower than this size. If expressed as a string, needs to be digits followed by a unit (like `"5MB"`).
+
+                <Tip warning={true}>
+
+                If a single weight of the model is bigger than `max_shard_size`, it will be in its own checkpoint shard
+                which will be bigger than `max_shard_size`.
 
                 </Tip>
 
@@ -1913,7 +1930,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 and filename not in shards.keys()
             ):
                 os.remove(full_filename)
-                
+
         if index is None:
             self.save_weights(output_model_file)
             logger.info(f"Model weights saved in {os.path.join(save_directory, TF2_WEIGHTS_NAME)}")
