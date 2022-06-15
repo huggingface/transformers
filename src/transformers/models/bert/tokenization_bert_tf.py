@@ -5,13 +5,11 @@ import tensorflow as tf
 
 from tensorflow_text import FastBertTokenizer, ShrinkLongestTrimmer, case_fold_utf8, combine_segments, pad_model_inputs
 
+from ...utils import requires_backends
 from .tokenization_bert import BertTokenizer
 
 
 class TFBertTokenizer(tf.keras.layers.Layer):
-    # TODO Input normalization?
-    # TODO Should this be a more complete class rather than reading data from an existing tokenizer?
-    # TODO Add imports and maybe some kind of AutoModel to make this findable by users
     # TODO Do we need to change the name? Most TF users will still want the normal tokenizers
     # TODO Add tests, particularly one with a full model and one with saving to savedmodel, as these are main use cases
 
@@ -30,6 +28,8 @@ class TFBertTokenizer(tf.keras.layers.Layer):
         return_attention_mask=True,
     ):
         super().__init__()
+
+        requires_backends(self, ["tensorflow_text"])
         self.tf_tokenizer = FastBertTokenizer(vocab_list, token_out_type=tf.int64)
         self.vocab_list = vocab_list
         self.do_lower_case = do_lower_case

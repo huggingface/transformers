@@ -35,6 +35,7 @@ from .utils import (
     is_scatter_available,
     is_sentencepiece_available,
     is_speech_available,
+    is_tensorflow_text_available,
     is_tf_available,
     is_timm_available,
     is_tokenizers_available,
@@ -2432,6 +2433,14 @@ else:
     _import_structure["tf_utils"] = []
     _import_structure["trainer_tf"] = ["TFTrainer"]
 
+# tensorflow_text-backed objects
+try:
+    if not is_tensorflow_text_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["models.bert"].append("TFBertTokenizer")
 
 # FLAX-backed objects
 try:
@@ -4670,6 +4679,14 @@ if TYPE_CHECKING:
 
         # Trainer
         from .trainer_tf import TFTrainer
+
+    try:
+        if not is_tensorflow_text_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .models.bert import TFBertTokenizer
 
     try:
         if not is_flax_available():
