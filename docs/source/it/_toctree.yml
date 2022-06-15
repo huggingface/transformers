@@ -15,4 +15,6 @@
 - sections:
   - local: create_a_model
     title: Crea un'architettura personalizzata
+  - local: serialization
+    title: Esporta modelli Transformers
   title: How-to guides
