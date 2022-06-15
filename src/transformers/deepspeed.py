@@ -38,7 +38,6 @@ def is_deepspeed_available():
 
 class HfDeepSpeedConfig(DeepSpeedConfig):
     """
-    Args:
     This object contains a DeepSpeed configuration dictionary and can be quickly queried for things like zero stage. A
     `weakref` of this object is stored in the module's globals to be able to access the config from areas where things
     like the Trainer object is not available (e.g. `from_pretrained` and `_get_resized_embeddings`). Therefore it's
@@ -46,6 +45,8 @@ class HfDeepSpeedConfig(DeepSpeedConfig):
     `HfTrainerDeepSpeedConfig` subclass instead. That subclass has logic to sync the configuration with values of
     [`TrainingArguments`] by replacing special placeholder values: `"auto"`. Without this special logic the DeepSpeed
     configuration is not modified in any way.
+
+     Args:
         config_file_or_dict (`Union[str, Dict]`): path to DeepSpeed config file or dict.
     """
 
