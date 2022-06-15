@@ -236,10 +236,18 @@
       title: FSMT
     - local: model_doc/funnel
       title: Funnel Transformer
+    - local: model_doc/gptj
+      title: GPT-J
     - local: model_doc/glpn
       title: GLPN
+    - local: model_doc/gpt_neo
+      title: GPT Neo
+    - local: model_doc/gpt_neox
+      title: GPT NeoX
     - local: model_doc/herbert
       title: HerBERT
+    - local: model_doc/hubert
+      title: Hubert
     - local: model_doc/ibert
       title: I-BERT
     - local: model_doc/imagegpt
@@ -290,22 +298,14 @@
       title: Nyströmformer
     - local: model_doc/openai-gpt
       title: OpenAI GPT
-    - local: model_doc/opt
-      title: OPT
     - local: model_doc/gpt2
       title: OpenAI GPT2
-    - local: model_doc/gptj
-      title: GPT-J
-    - local: model_doc/gpt_neo
-      title: GPT Neo
-    - local: model_doc/gpt_neox
-      title: GPT NeoX
-    - local: model_doc/hubert
-      title: Hubert
-    - local: model_doc/perceiver
-      title: Perceiver
+    - local: model_doc/opt
+      title: OPT
     - local: model_doc/pegasus
       title: Pegasus
+    - local: model_doc/perceiver
+      title: Perceiver
     - local: model_doc/phobert
       title: PhoBERT
     - local: model_doc/plbart
