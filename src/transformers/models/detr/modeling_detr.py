@@ -1236,9 +1236,6 @@ class DetrModel(DetrPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> feature_extractor = DetrFeatureExtractor.from_pretrained("facebook/detr-resnet-50")
-        >>> # model use pretrained backbone weights by default
-        >>> # to prevent this set use_pretrained_backbone = False
-        >>> # model = DetrModel.from_pretrained("facebook/detr-resnet-50", use_pretrained_backbone = False)
         >>> model = DetrModel.from_pretrained("facebook/detr-resnet-50")
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -1397,9 +1394,6 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> feature_extractor = DetrFeatureExtractor.from_pretrained("facebook/detr-resnet-50")
-        >>> # model use pretrained backbone weights by default
-        >>> # to prevent this set use_pretrained_backbone = False
-        >>> # model = DetrModel.from_pretrained("facebook/detr-resnet-50", use_pretrained_backbone = False)
         >>> model = DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
@@ -1556,9 +1550,6 @@ class DetrForSegmentation(DetrPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> feature_extractor = DetrFeatureExtractor.from_pretrained("facebook/detr-resnet-50-panoptic")
-        >>> # model use pretrained backbone weights by default
-        >>> # to prevent this set use_pretrained_backbone = False
-        >>> # model = DetrModel.from_pretrained("facebook/detr-resnet-50", use_pretrained_backbone = False)
         >>> model = DetrForSegmentation.from_pretrained("facebook/detr-resnet-50-panoptic")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
