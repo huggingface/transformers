@@ -610,7 +610,7 @@ BART_INPUTS_DOCSTRING = r"""
             will be made by default and ignore pad tokens. It is not recommended to set this for most use cases.
         decoder_position_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the
-            range `[0, config.max_position_embeddings - 1]`. If `past_key_values` is passed, `position_ids` has to be
+            range `[0, config.max_position_embeddings - 1]`. If `past_key_values` is passed, `decoder_position_ids` has to be
             provided.
         head_mask (`tf.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
@@ -941,8 +941,6 @@ class TFBartDecoder(tf.keras.layers.Layer):
 
         # embed positions
         if position_ids is None:
-            if past_key_values is not None:
-                raise ValueError("Make sure to provide the position ids when passing `past_key_values`.")
             positions = self.embed_positions(input_shape, past_key_values_length)
         else:
             positions = self.embed_positions(input_shape, position_ids=position_ids)
@@ -1198,6 +1196,7 @@ class TFBartModel(TFBartPretrainedModel):
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         decoder_input_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         decoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        decoder_position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         decoder_head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         cross_attn_head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -1218,6 +1217,7 @@ class TFBartModel(TFBartPretrainedModel):
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
+            decoder_position_ids=decoder_position_ids,
             head_mask=head_mask,
             decoder_head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
