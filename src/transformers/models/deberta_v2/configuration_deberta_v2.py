@@ -14,7 +14,7 @@
 # limitations under the License.
 """ DeBERTa-v2 model configuration"""
 from collections import OrderedDict
-from typing import Mapping, Optional, Any, Union
+from typing import Any, Mapping, Optional, Union
 
 from ... import TensorType
 from ...configuration_utils import PretrainedConfig
@@ -154,11 +154,7 @@ class DebertaV2OnnxConfig(OnnxConfig):
             dynamic_axis = {0: "batch", 1: "sequence"}
         if self._config.type_vocab_size > 0:
             return OrderedDict(
-                [
-                    ("input_ids", dynamic_axis),
-                    ("attention_mask", dynamic_axis),
-                    ("token_type_ids", dynamic_axis)
-                ]
+                [("input_ids", dynamic_axis), ("attention_mask", dynamic_axis), ("token_type_ids", dynamic_axis)]
             )
         else:
             return OrderedDict(
