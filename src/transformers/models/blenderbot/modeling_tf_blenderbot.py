@@ -124,7 +124,9 @@ class TFBlenderbotLearnedPositionalEmbedding(TFSharedEmbeddings):
     def __init__(self, num_embeddings: int, embedding_dim: int, **kwargs):
         super().__init__(num_embeddings, embedding_dim, **kwargs)
 
-    def call(self, input_shape: tf.TensorShape, past_key_values_length: int = 0, position_ids: Optional[tf.Tensor] = None):
+    def call(
+        self, input_shape: tf.TensorShape, past_key_values_length: int = 0, position_ids: Optional[tf.Tensor] = None
+    ):
         """Input is expected to be of size [bsz x seqlen]."""
         if position_ids is None:
             seq_len = input_shape[1]
@@ -585,8 +587,7 @@ BLENDERBOT_INPUTS_DOCSTRING = r"""
             will be made by default and ignore pad tokens. It is not recommended to set this for most use cases.
         decoder_position_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the
-            range `[0, config.max_position_embeddings - 1]`. If `past_key_values` is passed, `decoder_position_ids` has to be
-            provided.
+            range `[0, config.max_position_embeddings - 1]`.
         head_mask (`tf.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
 
@@ -863,8 +864,7 @@ class TFBlenderbotDecoder(tf.keras.layers.Layer):
                 [What are attention masks?](../glossary#attention-mask)
             position_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the
-                range `[0, config.max_position_embeddings - 1]`. If `past_key_values` is passed, `position_ids` has to
-                be provided.
+                range `[0, config.max_position_embeddings - 1]`.
             encoder_hidden_states (`tf.Tensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
                 of the decoder.
