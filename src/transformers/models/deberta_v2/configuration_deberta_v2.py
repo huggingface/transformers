@@ -151,9 +151,21 @@ class DebertaV2OnnxConfig(OnnxConfig):
             dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
         else:
             dynamic_axis = {0: "batch", 1: "sequence"}
-        return OrderedDict(
-            [("input_ids", dynamic_axis), ("attention_mask", dynamic_axis), ("token_type_ids", dynamic_axis)]
-        )
+        if self._config.type_vocab_size > 0:
+            return OrderedDict(
+                [
+                    ("input_ids", dynamic_axis),
+                    ("attention_mask", dynamic_axis),
+                    ("token_type_ids", dynamic_axis)
+                ]
+            )
+        else:
+            return OrderedDict(
+                [
+                    ("input_ids", dynamic_axis),
+                    ("attention_mask", dynamic_axis),
+                ]
+            )
 
     @property
     def default_onnx_opset(self) -> int:
