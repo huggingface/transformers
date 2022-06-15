@@ -80,7 +80,8 @@ class DetrConfig(PretrainedConfig):
             Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
         backbone (`str`, *optional*, defaults to `"resnet50"`):
             Name of convolutional backbone to use. Supports any convolutional backbone from the timm package. For a
-            list of all available models, see [this page](https://rwightman.github.io/pytorch-image-models/#load-a-pretrained-model).
+            list of all available models, see [this
+            page](https://rwightman.github.io/pytorch-image-models/#load-a-pretrained-model).
         use_pretrained_backbone ('bool', *optional*, defaults to `True`):
             Whether to use pretrained weights for the backbone.
         dilation (`bool`, *optional*, defaults to `False`):
