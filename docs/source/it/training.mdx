@@ -14,7 +14,7 @@ specific language governing permissions and limitations under the License.
 
 [[open-in-colab]]
 
-Ci sono benifici significativi nell'usare un modello pre-allenato. Riduce i costi computazionali, la tua impronta di carbonio, e ti consente di usare lo stato dell'arte dei modelli senza doverli addestrare da zero. 🤗 Transformers consente l'accesso a migliaia di modelli pre-addestrati per un'ampia gamma di compiti. Quando usi un modello pre-addestrato, lo alleni su un dataset specifico per il tuo compito. Questo è conosciuto come messa a punto (in inglese *fine-tuning*),una tecnica di addestramento incredibilmente potente. In questa esercitazione, potrai mettere a punto un modello pre-addestrato con un framework di deep learning a tua scelta:
+Ci sono benefici significativi nell'usare un modello pre-allenato. Riduce i costi computazionali, la tua impronta di carbonio, e ti consente di usare lo stato dell'arte dei modelli senza doverli addestrare da zero. 🤗 Transformers consente l'accesso a migliaia di modelli pre-addestrati per un'ampia gamma di compiti. Quando usi un modello pre-addestrato, lo alleni su un dataset specifico per il tuo compito. Questo è conosciuto come messa a punto (in inglese *fine-tuning*),una tecnica di addestramento incredibilmente potente. In questa esercitazione, potrai mettere a punto un modello pre-addestrato con un framework di deep learning a tua scelta:
 
 * Messa a punto di un modello pre-addestrato con 🤗 Transformers [`Trainer`].
 * Messa a punto di un modello pre-addestrato in TensorFlow con Keras.
@@ -39,7 +39,7 @@ Inizia caricando il dataset [Yelp Reviews](https://huggingface.co/datasets/yelp_
  'text': 'My expectations for McDonalds are t rarely high. But for one to still fail so spectacularly...that takes something special!\\nThe cashier took my friends\'s order, then promptly ignored me. I had to force myself in front of a cashier who opened his register to wait on the person BEHIND me. I waited over five minutes for a gigantic order that included precisely one kid\'s meal. After watching two people who ordered after me be handed their food, I asked where mine was. The manager started yelling at the cashiers for \\"serving off their orders\\" when they didn\'t have their food. But neither cashier was anywhere near those controls, and the manager was the one serving food to customers and clearing the boards.\\nThe manager was rude when giving me my order. She didn\'t make sure that I had everything ON MY RECEIPT, and never even had the decency to apologize that I felt I was getting poor service.\\nI\'ve eaten at various McDonalds restaurants for over 30 years. I\'ve worked at more than one location. I expect bad days, bad moods, and the occasional mistake. But I have yet to have a decent experience at this store. It will remain a place I avoid unless someone in my party needs to avoid illness from low blood sugar. Perhaps I should go back to the racially biased service of Steak n Shake instead!'}
 ```
 
-Come già sai, hai bisogno di un tokenizer per processare il testo e includere una stratergia di padding e truncation per gestire sequenze di lunghezza variabile. Per processare il dataset in un unico passo, usa il metodo [`map`](https://huggingface.co/docs/datasets/process.html#map) di 🤗 Datasets che applica la funzione di preprocessamento all'intero dataset:
+Come già sai, hai bisogno di un tokenizer per processare il testo e includere una strategia di padding e truncation per gestire sequenze di lunghezza variabile. Per processare il dataset in un unico passo, usa il metodo [`map`](https://huggingface.co/docs/datasets/process.html#map) di 🤗 Datasets che applica la funzione di preprocessamento all'intero dataset:
 
 ```py
 >>> from transformers import AutoTokenizer
@@ -63,13 +63,13 @@ If you like, you can create a smaller subset of the full dataset to fine-tune on
 
 <a id='trainer'></a>
 
-## Addestranento
+## Addestramento
 
 <frameworkcontent>
 <pt>
 <Youtube id="nvBXf7s7vTI"/>
 
-🤗 Transformers mette a disposizione la classe [`Trainer`] ottimizzata per addestrare modelli 🤗 Transformers, rendendo semplice iniziare l'addestramento senza scrivere manualmente il tuo ciclo di allenamento. Le [`Trainer`] API supporta un'ampia gamma di opzioni e funzionalità di addestramento come logging, gradient accumulation, e mixed precision.
+🤗 Transformers mette a disposizione la classe [`Trainer`] ottimizzata per addestrare modelli 🤗 Transformers, rendendo semplice iniziare l'addestramento senza scrivere manualmente il tuo ciclo di allenamento. L'API [`Trainer`] supporta un'ampia gamma di opzioni e funzionalità di addestramento come logging, gradient accumulation, e mixed precision.
 
 Inizia caricando il tuo modello e specificando il numero di etichette attese. Nel dataset Yelp Review [dataset card](https://huggingface.co/datasets/yelp_review_full#data-fields), sai che ci sono cinque etichette:
 
@@ -87,7 +87,7 @@ Potresti vedere un'allerta dato che alcuni dei pesi pre-addestrati non sono stat
 
 ### Addestrare gli iperparametri
 
-Successivamente, crea una classe [`TrainingArguments`] contenente tutti gli iperparametri che puoi impostare nonchè le variabili per attivare le differenti opzioni di addestramento. Per questa esercitazione puoi iniziare con gli [iperparametri](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments) di allenamento predefiniti, ma sentiti libero di sperimentare per trovare la configurazione ottimale per te.
+Successivamente, crea una classe [`TrainingArguments`] contenente tutti gli iperparametri che si possono calibrare nonché le variabili per attivare le differenti opzioni di addestramento. Per questa esercitazione puoi iniziare con gli [iperparametri](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments) di allenamento predefiniti, ma sentiti libero di sperimentare per trovare la configurazione ottimale per te.
 
 Specifica dove salvare i checkpoints del tuo addestramento:
 
@@ -99,7 +99,7 @@ Specifica dove salvare i checkpoints del tuo addestramento:
 
 ### Metriche
 
-[`Trainer`] non valuta automaticamente le performance del modello durante l'addestramento. Dovrai passare a [`Trainer`] una funzione che calcola e restituisce le metriche. La libreria 🤗 Datasets mette a disposizione una semplice funzione [`accuratezza`](https://huggingface.co/metrics/accuracy) che puoi caricare con la funzione `load_metric` (guarda questa [esercitazione](https://huggingface.co/docs/datasets/metrics.html) per maggiorni informazioni):
+[`Trainer`] non valuta automaticamente le performance del modello durante l'addestramento. Dovrai passare a [`Trainer`] una funzione che calcola e restituisce le metriche. La libreria 🤗 Datasets mette a disposizione una semplice funzione [`accuracy`](https://huggingface.co/metrics/accuracy) che puoi caricare con la funzione `load_metric` (guarda questa [esercitazione](https://huggingface.co/docs/datasets/metrics.html) per maggiori informazioni):
 
 ```py
 >>> import numpy as np
@@ -150,11 +150,11 @@ Poi metti a punto il modello richiamando [`~transformers.Trainer.train`]:
 
 <Youtube id="rnTGBy2ax1c"/>
 
-I modelli 🤗 Transformers supportano anche l'addestramento in TensorFlow usando le Keras API.
+I modelli 🤗 Transformers supportano anche l'addestramento in TensorFlow usando l'API di Keras.
 
 ### Convertire dataset nel formato per TensorFlow
 
-Il [`DefaultDataCollator`] assembla tensori in lotti su cui il modello si addestrerà. Sii sicuro di sepecificare di restituire tensori per TensorFlow in `return_tensors`:
+Il [`DefaultDataCollator`] assembla tensori in lotti su cui il modello si addestrerà. Assicurati di specificare di restituire tensori per TensorFlow in `return_tensors`:
 
 ```py
 >>> from transformers import DefaultDataCollator
@@ -188,7 +188,7 @@ Successivamente, converti i datasets tokenizzati in TensorFlow datasets con il m
 ... )
 ```
 
-### Compila e fit
+### Compilazione e addestramento
 
 Carica un modello TensorFlow col numero atteso di etichette:
 
@@ -221,9 +221,9 @@ Poi compila e metti a punto il tuo modello usando [`fit`](https://keras.io/api/m
 <pt>
 <Youtube id="Dh9CL8fyG80"/>
 
-[`Trainer`] si occupa del ciclo di addestramento e ti consente di mettere a punto un modello con una sola riga di codice. Per gli utenti che preferiscono scrivere il loro personale ciclo di addestramento, puoi anche mettere a punto un modello 🤗 Transformers in PyTorch nativo.
+[`Trainer`] si occupa del ciclo di addestramento e ti consente di mettere a punto un modello con una sola riga di codice. Per chi preferisse scrivere un proprio ciclo di addestramento personale, puoi anche mettere a punto un modello 🤗 Transformers in PyTorch nativo.
 
-A questo punto, potresti avere bisogno di riavviare il tuo notebook o eseguire il seguente codice per liberare un pò di memoria:
+A questo punto, potresti avere bisogno di riavviare il tuo notebook o eseguire il seguente codice per liberare un po' di memoria:
 
 ```py
 del model
@@ -234,13 +234,13 @@ torch.cuda.empty_cache()
 
 Successivamente, postprocessa manualmente il `tokenized_dataset` per prepararlo ad essere allenato.
 
-1. Rimuovi la colonna `text` perchè il modello non accetta testo grezzo come input:
+1. Rimuovi la colonna `text` perché il modello non accetta testo grezzo come input:
 
     ```py
     >>> tokenized_datasets = tokenized_datasets.remove_columns(["text"])
     ```
 
-2. Rinomina la colonna `label` in `labels` perchè il modello si aspetta che questo argomento si chiami `labels`:
+2. Rinomina la colonna `label` in `labels` perché il modello si aspetta che questo argomento si chiami `labels`:
 
     ```py
     >>> tokenized_datasets = tokenized_datasets.rename_column("label", "labels")
@@ -315,7 +315,7 @@ Ottieni l'accesso gratuito a una GPU sul cloud se non ne possiedi una usando un 
 
 </Tip>
 
-Ottimo, adesso sei pronto per addestrare! 🥳 
+Ottimo, adesso possiamo addestrare! 🥳 
 
 ### Training loop
 
