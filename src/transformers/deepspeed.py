@@ -48,8 +48,9 @@ class HfDeepSpeedConfig(DeepSpeedConfig):
     with values of [`TrainingArguments`] by replacing special placeholder values: `"auto"`. Without this special logic
     the DeepSpeed configuration is not modified in any way.
 
-     Args:
+    Args:
         config_file_or_dict (`Union[str, Dict]`): path to DeepSpeed config file or dict.
+
     """
 
     def __init__(self, config_file_or_dict):
