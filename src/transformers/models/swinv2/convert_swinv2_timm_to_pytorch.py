@@ -16,7 +16,7 @@ def get_swinv2_config(swinv2_name):
 
     model_size = name_split[1]
     img_size = int(name_split[4])
-    window_size = int(name_split[3][-1])
+    window_size = int(name_split[3][6:])
 
     if model_size == "tiny":
         embed_dim = 96
@@ -35,7 +35,7 @@ def get_swinv2_config(swinv2_name):
         depths = (2, 2, 18, 2)
         num_heads = (6, 12, 24, 48)
 
-    if "in22k" in swinv2_name:
+    if "22k" in swinv2_name:
         num_classes = 21841
     else:
         num_classes = 1000
