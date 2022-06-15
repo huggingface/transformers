@@ -408,7 +408,7 @@ class Swinv2DropPath(nn.Module):
 
 
 class Swinv2SelfAttention(nn.Module):
-    def __init__(self, config, dim, num_heads, pretrained_window_size=[0, 0]):
+    def __init__(self, config, dim, num_heads, window_size, pretrained_window_size=[0, 0]):
         super().__init__()
         if dim % num_heads != 0:
             raise ValueError(
@@ -418,7 +418,7 @@ class Swinv2SelfAttention(nn.Module):
         self.num_attention_heads = num_heads
         self.attention_head_size = int(dim / num_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
-        self.window_size = to_2tuple(config.window_size)
+        self.window_size = to_2tuple(window_size)
         self.pretrained_window_size = pretrained_window_size
         self.logit_scale = nn.Parameter(torch.log(10 * torch.ones((num_heads, 1, 1))))
         # mlp to generate continuous relative position bias
@@ -484,17 +484,7 @@ class Swinv2SelfAttention(nn.Module):
         value_layer = self.transpose_for_scores(self.value(hidden_states))
         query_layer = self.transpose_for_scores(mixed_query_layer)
 
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        # attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-
-        # attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-
-        # relative_position_bias = self.relative_position_bias_table[self.relative_position_index.view(-1)]
-        # relative_position_bias = relative_position_bias.view(
-        #     self.window_size[0] * self.window_size[1], self.window_size[0] * self.window_size[1], -1
-        # )
-
-        # relative_position_bias = relative_position_bias.permute(2, 0, 1).contiguous()
+        # cosine attention
         attention_scores = F.normalize(query_layer, dim=-1) @ F.normalize(key_layer, dim=-1).transpose(-2, -1)
         logit_scale = torch.clamp(self.logit_scale, max=math.log(1.0 / 0.01)).exp()
         attention_scores = attention_scores * logit_scale
@@ -511,7 +501,7 @@ class Swinv2SelfAttention(nn.Module):
             mask_shape = attention_mask.shape[0]
             attention_scores = attention_scores.view(
                 batch_size // mask_shape, mask_shape, self.num_attention_heads, dim, dim
-            )+attention_mask.unsqueeze(1).unsqueeze(0)
+            ) + attention_mask.unsqueeze(1).unsqueeze(0)
             attention_scores = attention_scores + attention_mask.unsqueeze(1).unsqueeze(0)
             attention_scores = attention_scores.view(-1, self.num_attention_heads, dim, dim)
 
@@ -552,10 +542,10 @@ class Swinv2SelfOutput(nn.Module):
 
 # Copied from transformers.models.swin.modeling_swin.SwinAttention with Swin->Swinv2
 class Swinv2Attention(nn.Module):
-    def __init__(self, config, dim, num_heads, pretrained_window_size=0):
+    def __init__(self, config, dim, num_heads, window_size, pretrained_window_size=0):
         super().__init__()
         self.self = Swinv2SelfAttention(
-            config, dim, num_heads, pretrained_window_size=to_2tuple(pretrained_window_size)
+            config, dim, num_heads, window_size, pretrained_window_size=to_2tuple(pretrained_window_size)
         )
         self.output = Swinv2SelfOutput(config, dim)
         self.pruned_heads = set()
@@ -629,7 +619,11 @@ class Swinv2Layer(nn.Module):
         self.input_resolution = input_resolution
         self.set_shift_and_window_size(input_resolution)
         self.attention = Swinv2Attention(
-            config, dim, num_heads, pretrained_window_size=to_2tuple(pretrained_window_size)
+            config,
+            dim,
+            num_heads,
+            window_size=self.window_size,
+            pretrained_window_size=to_2tuple(pretrained_window_size),
         )
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.drop_path = Swinv2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
@@ -638,10 +632,12 @@ class Swinv2Layer(nn.Module):
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
 
     def set_shift_and_window_size(self, input_resolution):
-        if min(input_resolution) <= self.window_size:
-            # if window size is larger than input resolution, we don't partition windows
-            self.shift_size = 0
-            self.window_size = min(input_resolution)
+        target_window_size = to_2tuple(self.window_size)
+        target_shift_size = to_2tuple(self.shift_size)
+        self.window_size = [r if r <= w else w for r, w in zip(input_resolution, target_window_size)][0]
+        self.shift_size = [
+            0 if r <= w else s for r, w, s in zip(input_resolution, to_2tuple(self.window_size), target_shift_size)
+        ][0]
 
     def get_attn_mask(self, height, width):
         if self.shift_size > 0:
