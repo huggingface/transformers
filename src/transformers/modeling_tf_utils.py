@@ -606,7 +606,7 @@ def dtype_byte_size(dtype):
     return bit_size // 8
 
 
-def tf_shard_checkpoint(weights: list[tf.Tensor], max_shard_size: Union[int, str] = "10GB"):
+def tf_shard_checkpoint(weights, max_shard_size= "10GB"):
     """
     Splits a model state dictionary in sub-checkpoints so that the final size of each sub-checkpoint does not exceed a
     given size.
