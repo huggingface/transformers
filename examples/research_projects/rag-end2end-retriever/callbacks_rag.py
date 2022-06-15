@@ -41,7 +41,7 @@ def get_checkpoint_callback(output_dir, metric):
         monitor=f"val_{metric}",
         mode="max",
         save_top_k=1,
-        every_n_val_epochs=1,  # works only with PL > 1.3
+        every_n_epochs=1,  # works only with PL > 1.3
     )
 
     return checkpoint_callback
