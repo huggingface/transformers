@@ -1226,9 +1226,9 @@ class BlenderbotForConditionalGeneration(BlenderbotPreTrainedModel):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = [
         r"final_logits_bias",
-        r"encoder\.version",
-        r"decoder\.version",
-        r"lm_head\.weight",
+        r"encoder.version",
+        r"decoder.version",
+        r"lm_head.weight",
     ]
 
     def __init__(self, config: BlenderbotConfig):
