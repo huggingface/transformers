@@ -85,6 +85,10 @@
     title: Training on one GPU
   - local: perf_train_gpu_many
     title: Training on many GPUs
+  - local: perf_train_cpu
+    title: Training on CPU
+  - local: perf_infer_cpu
+    title: Inference on CPU
   - local: perf_hardware
     title: Custom hardware for training
   - local: testing
@@ -174,6 +178,8 @@
       title: Blenderbot
     - local: model_doc/blenderbot-small
       title: Blenderbot Small
+    - local: model_doc/bloom
+      title: BLOOM
     - local: model_doc/bort
       title: BORT
     - local: model_doc/byt5
@@ -252,6 +258,8 @@
       title: LeViT
     - local: model_doc/longformer
       title: Longformer
+    - local: model_doc/longt5
+      title: LongT5
     - local: model_doc/luke
       title: LUKE
     - local: model_doc/lxmert
@@ -264,6 +272,8 @@
       title: M2M100
     - local: model_doc/mbart
       title: MBart and MBart-50
+    - local: model_doc/mctct
+      title: MCTCT
     - local: model_doc/megatron-bert
       title: MegatronBERT
     - local: model_doc/megatron_gpt2

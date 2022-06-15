@@ -48,7 +48,7 @@ from transformers import (
     TrainingArguments,
     is_tensorboard_available,
 )
-from transformers.utils import check_min_version, get_full_repo_name
+from transformers.utils import check_min_version, get_full_repo_name, send_example_telemetry
 
 
 logger = logging.getLogger(__name__)
@@ -307,6 +307,10 @@ def main():
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
+    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
+    # information sent is the one passed as arguments along with your Python/PyTorch versions.
+    send_example_telemetry("run_glue", model_args, data_args, framework="flax")
 
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(

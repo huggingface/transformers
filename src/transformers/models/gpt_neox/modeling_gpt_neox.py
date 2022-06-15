@@ -53,6 +53,7 @@ class GPTNeoXPreTrainedModel(PreTrainedModel):
     config_class = GPTNeoXConfig
     base_model_prefix = "gpt_neox"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["GPTNeoXLayer"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -193,8 +194,6 @@ class GPTNeoXAttention(nn.Module):
         query = query.view(batch_size * num_attention_heads, query_length, attn_head_size)
         key = key.view(batch_size * num_attention_heads, key_length, attn_head_size)
         attn_scores = torch.einsum("bik,bjk->bij", query, key) / self.norm_factor
-        if torch.isnan(attn_scores).any():
-            raise RuntimeError()
         attn_scores = attn_scores.view(batch_size, num_attention_heads, query_length, key_length)
 
         attn_scores = torch.where(causal_mask, attn_scores, self.masked_bias.to(attn_scores.dtype))
@@ -204,8 +203,6 @@ class GPTNeoXAttention(nn.Module):
             attn_scores = attn_scores + attention_mask
 
         attn_weights = nn.functional.softmax(attn_scores, dim=-1)
-        if torch.isnan(attn_weights).any():
-            raise RuntimeError()
         attn_weights = attn_weights.to(value.dtype)
 
         # Mask heads if we want to
@@ -213,8 +210,6 @@ class GPTNeoXAttention(nn.Module):
             attn_weights = attn_weights * head_mask
 
         attn_output = torch.matmul(attn_weights, value)
-        if torch.isnan(attn_output).any():
-            raise RuntimeError()
         return attn_output, attn_weights
 
 
