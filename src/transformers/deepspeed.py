@@ -20,7 +20,7 @@ import weakref
 from copy import deepcopy
 from functools import partialmethod
 
-from accelerate.utils import HfDeepSpeedConfig as DeepSpeedConfig
+from accelerate.utils.deepspeed import HfDeepSpeedConfig as DeepSpeedConfig
 
 from .dependency_versions_check import dep_version_check
 from .utils import is_torch_available, logging
