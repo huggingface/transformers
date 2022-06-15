@@ -1328,7 +1328,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
     GPT2_START_DOCSTRING,
 )
 class GPT2ForSequenceClassification(GPT2PreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"lm_head\.weight"]
+    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
