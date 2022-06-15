@@ -1001,7 +1001,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         remove_args_str: str = None,
     ):
         max_len = 32
-        data_dir = self.test_file_dir / "../fixtures/tests_samples/wmt_en_ro"
+        data_dir = self.tests_dir / "fixtures/tests_samples/wmt_en_ro"
         output_dir = self.get_auto_remove_tmp_dir()
         args = f"""
             --model_name_or_path {model_name}
