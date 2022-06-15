@@ -16,7 +16,7 @@
 from collections import OrderedDict
 from typing import Any, Mapping, Optional, Union
 
-from ... import TensorType
+from ... import FeatureExtractionMixin, PreTrainedTokenizerBase, TensorType
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
