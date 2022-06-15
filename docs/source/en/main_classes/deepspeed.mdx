@@ -1853,26 +1853,26 @@ In this case you usually need to raise the value of `initial_scale_power`. Setti
 
 ## Non-Trainer Deepspeed Integration
 
-The `accelerate.state.AcceleratorState` is used to integrate Deepspeed into the 🤗 Transformers core
+The [`~deepspeed.HfDeepSpeedConfig`] is used to integrate Deepspeed into the 🤗 Transformers core
 functionality, when [`Trainer`] is not used. The only thing that it does is handling Deepspeed ZeRO-3 param gathering and automatically splitting the model onto multiple gpus during `from_pretrained` call. Everything else you have to do by yourself.
 
 When using [`Trainer`] everything is automatically taken care of.
 
-When not using [`Trainer`], to efficiently deploy DeepSpeed ZeRO-3, you must call static method
-`AcceleratorState.set_deepspeed_config` before instantiating the model.
+When not using [`Trainer`], to efficiently deploy DeepSpeed ZeRO-3, you must instantiate the
+[`~deepspeed.HfDeepSpeedConfig`] object before instantiating the model and keep that object alive.
 
-If you're using Deepspeed ZeRO-1 or ZeRO-2 you don't need to do anything.
+If you're using Deepspeed ZeRO-1 or ZeRO-2 you don't need to use `HfDeepSpeedConfig` at all.
 
 For example for a pretrained model:
 
 ```python
-from accelerate.state import AcceleratorState
+from transformers.deepspeed import HfDeepSpeedConfig
 from transformers import AutoModel
 import deepspeed
 
 ds_config = {...}  # deepspeed config object or path to the file
 # must run before instantiating the model to detect zero 3
-AcceleratorState.set_deepspeed_config(ds_config)
+dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive
 model = AutoModel.from_pretrained("gpt2")
 engine = deepspeed.initialize(model=model, config_params=ds_config, ...)
 ```
@@ -1880,19 +1880,24 @@ engine = deepspeed.initialize(model=model, config_params=ds_config, ...)
 or for non-pretrained model:
 
 ```python
-from accelerate.state import AcceleratorState
+from transformers.deepspeed import HfDeepSpeedConfig
 from transformers import AutoModel, AutoConfig
 import deepspeed
 
 ds_config = {...}  # deepspeed config object or path to the file
 # must run before instantiating the model to detect zero 3
-AcceleratorState.set_deepspeed_config(ds_config)
+dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive
 config = AutoConfig.from_pretrained("gpt2")
 model = AutoModel.from_config(config)
 engine = deepspeed.initialize(model=model, config_params=ds_config, ...)
 ```
 
 Please note that if you're not using the [`Trainer`] integration, you're completely on your own. Basically follow the documentation on the [Deepspeed](https://www.deepspeed.ai/) website. Also you have to configure explicitly the config file - you can't use `"auto"` values and you will have to put real values instead.
+
+## HfDeepSpeedConfig
+
+[[autodoc]] deepspeed.HfDeepSpeedConfig
+    - all
 
 ### Custom DeepSpeed ZeRO Inference
 

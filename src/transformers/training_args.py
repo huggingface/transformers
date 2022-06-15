@@ -1107,10 +1107,6 @@ class TrainingArguments:
             self.hf_deepspeed_config = HfTrainerDeepSpeedConfig(self.deepspeed)
             self.hf_deepspeed_config.trainer_config_process(self)
 
-            from accelerate.state import AcceleratorState
-
-            AcceleratorState.set_deepspeed_config(self.hf_deepspeed_config)
-
         if self.push_to_hub_token is not None:
             warnings.warn(
                 "`--push_to_hub_token` is deprecated and will be removed in version 5 of 🤗 Transformers. Use "

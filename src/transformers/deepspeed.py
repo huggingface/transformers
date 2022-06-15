@@ -16,11 +16,11 @@ Integration with Deepspeed
 """
 
 import importlib.util
+import weakref
 from copy import deepcopy
 from functools import partialmethod
 
-from accelerate.state import AcceleratorState
-from accelerate.utils import HfDeepSpeedConfig
+from accelerate.utils import HfDeepSpeedConfig as DeepSpeedConfig
 
 from .dependency_versions_check import dep_version_check
 from .utils import is_torch_available, logging
@@ -36,6 +36,25 @@ def is_deepspeed_available():
     return importlib.util.find_spec("deepspeed") is not None
 
 
+class HfDeepSpeedConfig(DeepSpeedConfig):
+    """
+    Args:
+    This object contains a DeepSpeed configuration dictionary and can be quickly queried for things like zero stage. A
+    `weakref` of this object is stored in the module's globals to be able to access the config from areas where things
+    like the Trainer object is not available (e.g. `from_pretrained` and `_get_resized_embeddings`). Therefore it's
+    important that this object remains alive while the program is still running. [`Trainer`] uses the
+    `HfTrainerDeepSpeedConfig` subclass instead. That subclass has logic to sync the configuration with values of
+    [`TrainingArguments`] by replacing special placeholder values: `"auto"`. Without this special logic the DeepSpeed
+    configuration is not modified in any way.
+        config_file_or_dict (`Union[str, Dict]`): path to DeepSpeed config file or dict.
+    """
+
+    def __init__(self, config_file_or_dict):
+        set_hf_deepspeed_config(self)
+        dep_version_check("deepspeed")
+        super().__init__(config_file_or_dict)
+
+
 class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
     """
     The `HfTrainerDeepSpeedConfig` object is meant to be created during `TrainingArguments` object creation and has the
@@ -43,7 +62,6 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
     """
 
     def __init__(self, config_file_or_dict):
-        dep_version_check("deepspeed")
         super().__init__(config_file_or_dict)
         self._dtype = None
         self.mismatches = []
@@ -160,12 +178,36 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
             )
 
 
+# keep the config object global to be able to access it anywhere during TrainingArguments life-cycle
+_hf_deepspeed_config_weak_ref = None
+
+
+def set_hf_deepspeed_config(hf_deepspeed_config_obj):
+    # this is a special weakref global object to allow us to get to Deepspeed config from APIs
+    # that don't have an easy way to get to the Deepspeed config outside of the Trainer domain.
+    global _hf_deepspeed_config_weak_ref
+    # will go away automatically when HfDeepSpeedConfig is destroyed (when TrainingArguments is destroyed)
+    _hf_deepspeed_config_weak_ref = weakref.ref(hf_deepspeed_config_obj)
+
+
+def unset_hf_deepspeed_config():
+    # useful for unit tests to ensure the global state doesn't leak - call from `tearDown` method
+    global _hf_deepspeed_config_weak_ref
+    _hf_deepspeed_config_weak_ref = None
+
+
 def is_deepspeed_zero3_enabled():
-    return AcceleratorState.is_deepspeed_zero3_enabled()
+    if _hf_deepspeed_config_weak_ref is not None and _hf_deepspeed_config_weak_ref() is not None:
+        return _hf_deepspeed_config_weak_ref().is_zero3()
+    else:
+        return False
 
 
 def deepspeed_config():
-    return AcceleratorState.get_deepspeed_config()
+    if _hf_deepspeed_config_weak_ref is not None and _hf_deepspeed_config_weak_ref() is not None:
+        return _hf_deepspeed_config_weak_ref().config
+    else:
+        return None
 
 
 def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps):
