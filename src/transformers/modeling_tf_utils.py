@@ -760,7 +760,8 @@ def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, s
 
     Args:
         model (`torch.nn.Module`): The model in which to load the checkpoint.
-        folder (`str` or `os.PathLike`): A path to a folder containing the sharded checkpoint.
+        shard_files (`str` or `os.PathLike`): A list containing the sharded checkpoint names.
+        ignore_mismatched_sizes`bool`, *optional`, defaults to `True`):Whether or not to ignore the mismatch between the sizes
         strict (`bool`, *optional`, defaults to `True`):
             Whether to strictly enforce that the keys in the model state dict match the keys in the sharded checkpoint.
 
@@ -768,6 +769,7 @@ def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, s
         `NamedTuple`: A named tuple with `missing_keys` and `unexpected_keys` fields
             - `missing_keys` is a list of str containing the missing keys
             - `unexpected_keys` is a list of str containing the unexpected keys
+            - `missmatched_keys` is a list of str containing the missmatched keys
     """
 
     import gc
@@ -1900,6 +1902,18 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         shards, index = tf_shard_checkpoint(self.weights, max_shard_size)
 
+        # Clean the folder from a previous save
+        for filename in os.listdir(save_directory):
+            full_filename = os.path.join(save_directory, filename)
+            # If we have a shard file that is not going to be replaced, we delete it, but only from the main process
+            # in distributed settings to avoid race conditions.
+            if (
+                filename.startswith(TF2_WEIGHTS_NAME[:-4])
+                and os.path.isfile(full_filename)
+                and filename not in shards.keys()
+            ):
+                os.remove(full_filename)
+                
         if index is None:
             self.save_weights(output_model_file)
             logger.info(f"Model weights saved in {os.path.join(save_directory, TF2_WEIGHTS_NAME)}")
