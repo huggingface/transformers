@@ -245,28 +245,27 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             repo.git_commit("Add TF weights")
             repo.git_push(blocking=True)  # this prints a progress bar with the upload
             self._logger.warn(f"TF weights pushed into {self._model_name}")
-        else:
-            if not self._no_pr:
-                # TODO: remove try/except when the upload to PR feature is released
-                # (https://github.com/huggingface/huggingface_hub/pull/884)
-                try:
-                    self._logger.warn("Uploading the weights into a new PR...")
-                    hub_pr_url = upload_file(
-                        path_or_fileobj=tf_weights_path,
-                        path_in_repo=TF_WEIGHTS_NAME,
-                        repo_id=self._model_name,
-                        create_pr=True,
-                        pr_commit_summary="Add TF weights",
-                        pr_commit_description=(
-                            "Model converted by the `transformers`' `pt_to_tf` CLI -- all converted model outputs and"
-                            " hidden layers were validated against its Pytorch counterpart. Maximum crossload output"
-                            f" difference={max_crossload_diff:.3e}; Maximum converted output"
-                            f" difference={max_conversion_diff:.3e}."
-                        ),
-                    )
-                    self._logger.warn(f"PR open in {hub_pr_url}")
-                except TypeError:
-                    self._logger.warn(
-                        f"You can now open a PR in https://huggingface.co/{self._model_name}/discussions, manually"
-                        f" uploading the file in {tf_weights_path}"
-                    )
+        elif not self._no_pr:
+            # TODO: remove try/except when the upload to PR feature is released
+            # (https://github.com/huggingface/huggingface_hub/pull/884)
+            try:
+                self._logger.warn("Uploading the weights into a new PR...")
+                hub_pr_url = upload_file(
+                    path_or_fileobj=tf_weights_path,
+                    path_in_repo=TF_WEIGHTS_NAME,
+                    repo_id=self._model_name,
+                    create_pr=True,
+                    pr_commit_summary="Add TF weights",
+                    pr_commit_description=(
+                        "Model converted by the `transformers`' `pt_to_tf` CLI -- all converted model outputs and"
+                        " hidden layers were validated against its Pytorch counterpart. Maximum crossload output"
+                        f" difference={max_crossload_diff:.3e}; Maximum converted output"
+                        f" difference={max_conversion_diff:.3e}."
+                    ),
+                )
+                self._logger.warn(f"PR open in {hub_pr_url}")
+            except TypeError:
+                self._logger.warn(
+                    f"You can now open a PR in https://huggingface.co/{self._model_name}/discussions, manually"
+                    f" uploading the file in {tf_weights_path}"
+                )
