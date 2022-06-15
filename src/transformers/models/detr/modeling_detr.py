@@ -326,7 +326,7 @@ class DetrTimmConvEncoder(nn.Module):
 
     """
 
-    def __init__(self, name: str, dilation: bool):
+    def __init__(self, name: str, dilation: bool, use_pretrained_backbone: bool):
         super().__init__()
 
         kwargs = {}
@@ -335,7 +335,9 @@ class DetrTimmConvEncoder(nn.Module):
 
         requires_backends(self, ["timm"])
 
-        backbone = create_model(name, pretrained=True, features_only=True, out_indices=(1, 2, 3, 4), **kwargs)
+        backbone = create_model(
+            name, pretrained=use_pretrained_backbone, features_only=True, out_indices=(1, 2, 3, 4), **kwargs
+        )
         # replace batch norm by frozen batch norm
         with torch.no_grad():
             replace_batch_norm(backbone)
@@ -1177,7 +1179,7 @@ class DetrModel(DetrPreTrainedModel):
         super().__init__(config)
 
         # Create backbone + positional encoding
-        backbone = DetrTimmConvEncoder(config.backbone, config.dilation)
+        backbone = DetrTimmConvEncoder(config.backbone, config.dilation, config.use_pretrained_backbone)
         position_embeddings = build_position_encoding(config)
         self.backbone = DetrConvModel(backbone, position_embeddings)
 
@@ -1234,6 +1236,9 @@ class DetrModel(DetrPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> feature_extractor = DetrFeatureExtractor.from_pretrained("facebook/detr-resnet-50")
+        >>> # model use pretrained backbone weights by default
+        >>> # to prevent this set use_pretrained_backbone = False
+        >>> # model = DetrModel.from_pretrained("facebook/detr-resnet-50", use_pretrained_backbone = False)
         >>> model = DetrModel.from_pretrained("facebook/detr-resnet-50")
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -1392,6 +1397,9 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> feature_extractor = DetrFeatureExtractor.from_pretrained("facebook/detr-resnet-50")
+        >>> # model use pretrained backbone weights by default
+        >>> # to prevent this set use_pretrained_backbone = False
+        >>> # model = DetrModel.from_pretrained("facebook/detr-resnet-50", use_pretrained_backbone = False)
         >>> model = DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
@@ -1548,6 +1556,9 @@ class DetrForSegmentation(DetrPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> feature_extractor = DetrFeatureExtractor.from_pretrained("facebook/detr-resnet-50-panoptic")
+        >>> # model use pretrained backbone weights by default
+        >>> # to prevent this set use_pretrained_backbone = False
+        >>> # model = DetrModel.from_pretrained("facebook/detr-resnet-50", use_pretrained_backbone = False)
         >>> model = DetrForSegmentation.from_pretrained("facebook/detr-resnet-50-panoptic")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
