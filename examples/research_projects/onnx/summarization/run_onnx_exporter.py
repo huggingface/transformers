@@ -135,6 +135,7 @@ def export_and_validate_model(model, tokenizer, onnx_file_path, num_beams, max_l
             output_names=["output_ids"],
             dynamic_axes={
                 "input_ids": {0: "batch", 1: "seq"},
+                "attention_mask": {0: "batch", 1: "seq"},
                 "output_ids": {0: "batch", 1: "seq_out"},
             },
             example_outputs=summary_ids,
