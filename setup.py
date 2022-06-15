@@ -102,7 +102,8 @@ _deps = [
     "codecarbon==1.2.0",
     "cookiecutter==1.7.3",
     "dataclasses",
-    "datasets",
+    # TODO: change back once the fix is done on datasets side
+    "datasets<=2.2.2",
     "deepspeed>=0.6.5",
     "dill<0.3.5",
     "fairscale>0.3",
