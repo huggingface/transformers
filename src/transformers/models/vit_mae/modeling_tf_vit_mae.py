@@ -969,50 +969,85 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError
 
-    def patchify(self, imgs):
+    def patchify(self, pixel_values):
         """
-        imgs: (batch_size, height, width, 3) x: (batch_size, num_patches, patch_size**2 *3)
+        Args:
+            pixel_values (`tf.Tensor` of shape `(batch_size, height, width, num_channels)`):
+                Pixel values.
+
+        Returns:
+            `tf.Tensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`:
+                Patchified pixel values.
         """
-        imgs = tf.cond(
-            tf.math.equal(shape_list(imgs)[1], 3), lambda: tf.transpose(imgs, perm=(0, 2, 3, 1)), lambda: imgs
+        patch_size, num_channels = self.config.patch_size, self.config.num_channels
+        pixel_values = tf.cond(
+            tf.math.equal(shape_list(pixel_values)[1], num_channels),
+            lambda: tf.transpose(pixel_values, perm=(0, 2, 3, 1)),
+            lambda: pixel_values,
         )
 
-        p = self.vit.embeddings.patch_embeddings.patch_size[0]
-        tf.debugging.assert_equal(shape_list(imgs)[1], shape_list(imgs)[2])
-        tf.debugging.assert_equal(shape_list(imgs)[1] % p, 0)
+        tf.debugging.assert_equal(shape_list(pixel_values)[1], shape_list(pixel_values)[2])
+        tf.debugging.assert_equal(shape_list(pixel_values)[1] % patch_size, 0)
+        tf.debugging.assert_equal(shape_list(pixel_values)[3], num_channels)
 
-        h = w = shape_list(imgs)[2] // p
-        x = tf.reshape(imgs, (shape_list(imgs)[0], h, p, w, p, 3))
+        batch_size = shape_list(pixel_values)[0]
+        num_patches_one_direction = shape_list(pixel_values)[2] // patch_size
+        x = tf.reshape(
+            pixel_values,
+            (batch_size, num_patches_one_direction, patch_size, num_patches_one_direction, patch_size, num_channels),
+        )
         x = tf.einsum("nhpwqc->nhwpqc", x)
-        x = tf.reshape(x, (shape_list(imgs)[0], h * w, p**2 * 3))
+        x = tf.reshape(
+            x, (batch_size, num_patches_one_direction * num_patches_one_direction, patch_size**2 * num_channels)
+        )
         return x
 
     def unpatchify(self, x):
         """
-        x: (batch_size, num_patches, patch_size**2 *3) imgs: (batch_size, height, width, 3)
-        """
-        p = self.vit.embeddings.patch_embeddings.patch_size[0]
-        h = w = int(shape_list(x)[1] ** 0.5)
-        tf.debugging.assert_equal(h * w, shape_list(x)[1])
+        Args:
+            pixel_values (`tf.Tensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`:
+                Patchified pixel values.
 
-        x = tf.reshape(x, (shape_list(x)[0], h, w, p, p, 3))
+        Returns:
+            `tf.Tensor` of shape `(batch_size, height, width, num_channels)`:
+                Pixel values.
+        """
+        patch_size, num_channels = self.config.patch_size, self.config.num_channels
+        num_patches_one_direction = int(shape_list(x)[1] ** 0.5)
+        tf.debugging.assert_equal(num_patches_one_direction * num_patches_one_direction, shape_list(x)[1])
+
+        batch_size = shape_list(x)[0]
+        x = tf.reshape(
+            x, (batch_size, num_patches_one_direction, num_patches_one_direction, patch_size, patch_size, num_channels)
+        )
         x = tf.einsum("nhwpqc->nhpwqc", x)
-        imgs = tf.reshape(x, (shape_list(x)[0], h * p, h * p, 3))
-        return imgs
+        pixel_values = tf.reshape(
+            x,
+            (batch_size, num_patches_one_direction * patch_size, num_patches_one_direction * patch_size, num_channels),
+        )
+        return pixel_values
 
-    def forward_loss(self, imgs, pred, mask):
+    def forward_loss(self, pixel_values, pred, mask):
         """
-        imgs: [batch_size, height, width, 3] pred: [batch_size, num_patches, patch_size**2*3] mask: [N, L], 0 is keep,
-        1 is remove,
+        Args:
+            pixel_values (`tf.Tensor` of shape `(batch_size, height, width, num_channels)`):
+                Pixel values.
+            pred (`tf.Tensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`:
+                Predicted pixel values.
+            mask (`tf.Tensor` of shape `(batch_size, sequence_length)`):
+                Tensor indicating which patches are masked (1) and which are not (0).
+
+        Returns:
+            `tf.Tensor`: Pixel reconstruction loss.
         """
-        target = self.patchify(imgs)
+        target = self.patchify(pixel_values)
         if self.config.norm_pix_loss:
             mean = tf.reduce_mean(target, axis=-1, keepdims=True)
             var = tf.math.reduce_variance(target, axis=-1, keepdims=True)
             target = (target - mean) / (var + 1.0e-6) ** 0.5
 
         loss = (pred - target) ** 2
-        loss = tf.reduce_mean(loss, axis=-1)  # [N, L], mean loss per patch
+        loss = tf.reduce_mean(loss, axis=-1)  # [batch_size, num_patches], mean loss per patch
 
         loss = tf.reduce_sum(loss * mask) / tf.reduce_sum(mask)  # mean loss on removed patches
         return loss

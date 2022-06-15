@@ -868,37 +868,82 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    def patchify(self, imgs):
+    def patchify(self, pixel_values):
         """
-        imgs: (N, 3, H, W) x: (N, L, patch_size**2 *3)
-        """
-        p = self.vit.embeddings.patch_embeddings.patch_size[0]
-        assert imgs.shape[2] == imgs.shape[3] and imgs.shape[2] % p == 0
+        Args:
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+                Pixel values.
 
-        h = w = imgs.shape[2] // p
-        x = imgs.reshape(shape=(imgs.shape[0], 3, h, p, w, p))
+        Returns:
+            `torch.FloatTensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`:
+                Patchified pixel values.
+        """
+        patch_size, num_channels = self.config.patch_size, self.config.num_channels
+        if (pixel_values.shape[2] != pixel_values.shape[3]) or (pixel_values.shape[2] % patch_size != 0):
+            raise ValueError("Make sure the pixel values have a squared size that is divisible by the patch size")
+        if pixel_values.shape[1] != num_channels:
+            raise ValueError(
+                "Make sure the number of channels of the pixel values is equal to the one set in the configuration"
+            )
+
+        batch_size = pixel_values.shape[0]
+        num_patches_one_direction = pixel_values.shape[2] // patch_size
+        x = pixel_values.reshape(
+            batch_size, num_channels, num_patches_one_direction, patch_size, num_patches_one_direction, patch_size
+        )
         x = torch.einsum("nchpwq->nhwpqc", x)
-        x = x.reshape(shape=(imgs.shape[0], h * w, p**2 * 3))
+        x = x.reshape(
+            batch_size, num_patches_one_direction * num_patches_one_direction, patch_size**2 * num_channels
+        )
         return x
 
     def unpatchify(self, x):
         """
-        x: (N, L, patch_size**2 *3) imgs: (N, 3, H, W)
-        """
-        p = self.vit.embeddings.patch_embeddings.patch_size[0]
-        h = w = int(x.shape[1] ** 0.5)
-        assert h * w == x.shape[1]
+        Args:
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`:
+                Patchified pixel values.
 
-        x = x.reshape(shape=(x.shape[0], h, w, p, p, 3))
+        Returns:
+            `torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`:
+                Pixel values.
+        """
+        patch_size, num_channels = self.config.patch_size, self.config.num_channels
+        num_patches_one_direction = int(x.shape[1] ** 0.5)
+        if num_patches_one_direction**2 != x.shape[1]:
+            raise ValueError("Make sure that the number of patches can be squared")
+
+        batch_size = x.shape[0]
+        x = x.reshape(
+            batch_size,
+            num_patches_one_direction,
+            num_patches_one_direction,
+            patch_size,
+            patch_size,
+            num_channels,
+        )
         x = torch.einsum("nhwpqc->nchpwq", x)
-        imgs = x.reshape(shape=(x.shape[0], 3, h * p, h * p))
-        return imgs
+        pixel_values = x.reshape(
+            batch_size,
+            num_channels,
+            num_patches_one_direction * patch_size,
+            num_patches_one_direction * patch_size,
+        )
+        return pixel_values
 
-    def forward_loss(self, imgs, pred, mask):
+    def forward_loss(self, pixel_values, pred, mask):
         """
-        imgs: [N, 3, H, W] pred: [N, L, p*p*3] mask: [N, L], 0 is keep, 1 is remove,
+        Args:
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+                Pixel values.
+            pred (`torch.FloatTensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`:
+                Predicted pixel values.
+            mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+                Tensor indicating which patches are masked (1) and which are not (0).
+
+        Returns:
+            `torch.FloatTensor`: Pixel reconstruction loss.
         """
-        target = self.patchify(imgs)
+        target = self.patchify(pixel_values)
         if self.config.norm_pix_loss:
             mean = target.mean(dim=-1, keepdim=True)
             var = target.var(dim=-1, keepdim=True)
@@ -958,8 +1003,8 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
         ids_restore = outputs.ids_restore
         mask = outputs.mask
 
-        decoder_outputs = self.decoder(latent, ids_restore)  # [N, L, p*p*3]
-        logits = decoder_outputs.logits
+        decoder_outputs = self.decoder(latent, ids_restore)
+        logits = decoder_outputs.logits  # shape (batch_size, num_patches, patch_size*patch_size*num_channels)
 
         loss = self.forward_loss(pixel_values, logits, mask)
 
