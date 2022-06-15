@@ -244,6 +244,7 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             repo.git_add(auto_lfs_track=True)
             repo.git_commit("Add TF weights")
             repo.git_push(blocking=True)  # this prints a progress bar with the upload
+            self._logger.warn(f"TF weights pushed into {self._model_name}")
         else:
             if not self._no_pr:
                 # TODO: remove try/except when the upload to PR feature is released
