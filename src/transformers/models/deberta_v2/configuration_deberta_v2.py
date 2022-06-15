@@ -14,8 +14,9 @@
 # limitations under the License.
 """ DeBERTa-v2 model configuration"""
 from collections import OrderedDict
-from typing import Mapping
+from typing import Mapping, Optional, Any, Union
 
+from ... import TensorType
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
@@ -170,3 +171,21 @@ class DebertaV2OnnxConfig(OnnxConfig):
     @property
     def default_onnx_opset(self) -> int:
         return 12
+
+    def generate_dummy_inputs(
+        self,
+        preprocessor: Union["PreTrainedTokenizerBase", "FeatureExtractionMixin"],
+        batch_size: int = -1,
+        seq_length: int = -1,
+        num_choices: int = -1,
+        is_pair: bool = False,
+        framework: Optional[TensorType] = None,
+        num_channels: int = 3,
+        image_width: int = 40,
+        image_height: int = 40,
+        tokenizer: "PreTrainedTokenizerBase" = None,
+    ) -> Mapping[str, Any]:
+        initial_dummy_inputs = super().generate_dummy_inputs(preprocessor=preprocessor, framework=framework)
+        if self._config.type_vocab_size == 0 and "token_type_ids" in initial_dummy_inputs:
+            del initial_dummy_inputs["token_type_ids"]
+        return initial_dummy_inputs
