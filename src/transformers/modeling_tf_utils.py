@@ -17,6 +17,7 @@
 
 import functools
 import inspect
+import json
 import os
 import pickle
 import re
@@ -26,14 +27,14 @@ from typing import Dict, List, Optional, Union
 
 import h5py
 import numpy as np
-import json
 import tensorflow as tf
 from tensorflow.python.keras import backend as K
 from tensorflow.python.keras.engine import data_adapter
 from tensorflow.python.keras.engine.keras_tensor import KerasTensor
 from tensorflow.python.keras.saving import hdf5_format
-from keras.saving.hdf5_format import save_attributes_to_hdf5_group
+
 from huggingface_hub import Repository, list_repo_files
+from keras.saving.hdf5_format import save_attributes_to_hdf5_group
 from requests import HTTPError
 
 from .activations_tf import get_tf_activation
@@ -44,8 +45,8 @@ from .tf_utils import shape_list
 from .utils import (
     DUMMY_INPUTS,
     HUGGINGFACE_CO_RESOLVE_ENDPOINT,
-    TF2_WEIGHTS_NAME,
     TF2_WEIGHTS_INDEX_NAME,
+    TF2_WEIGHTS_NAME,
     WEIGHTS_NAME,
     EntryNotFoundError,
     ModelOutput,
@@ -550,7 +551,6 @@ def input_processing(func, config, input_ids, **kwargs):
     return output
 
 
-
 def convert_file_size_to_int(size: Union[int, str]):
     """
     Converts a size expressed as a string with digits an unit (like `"5MB"`) to an integer (in bytes).
@@ -669,6 +669,7 @@ def tf_shard_checkpoint(weights: list[tf.Tensor], max_shard_size: Union[int, str
     index = {"metadata": metadata, "weight_map": weight_map}
     return shards, index
 
+
 def get_checkpoint_shard_files(
     pretrained_model_name_or_path,
     index_filename,
@@ -693,10 +694,12 @@ def get_checkpoint_shard_files(
     index (downloaded and cached if `pretrained_model_name_or_path` is a model ID on the Hub).
     """
     import json
-    
+
     if not os.path.isfile(index_filename):
-        raise ValueError(f"Can't find a checkpoint index ({TF2_WEIGHTS_INDEX_NAME}) in {pretrained_model_name_or_path}.")
-    
+        raise ValueError(
+            f"Can't find a checkpoint index ({TF2_WEIGHTS_INDEX_NAME}) in {pretrained_model_name_or_path}."
+        )
+
     with open(index_filename, "r") as f:
         index = json.loads(f.read())
 
@@ -745,7 +748,8 @@ def get_checkpoint_shard_files(
 
     return cached_filenames, sharded_metadata
 
-def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False,strict=True):
+
+def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, strict=True):
     """
     This is the same as
     [`torch.nn.Module.load_state_dict`](https://pytorch.org/docs/stable/generated/torch.nn.Module.html?highlight=load_state_dict#torch.nn.Module.load_state_dict)
@@ -767,24 +771,27 @@ def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False,st
     """
 
     import gc
+
     # Load the index
     missing_keys = []
-    unexpected_keys = set() 
+    unexpected_keys = set()
     saved_keys = set()
     missmatched_keys = set()
-    model_keys =  set("/".join(k.name.split('/')[1:]) for k in model.weights)
+    model_keys = set("/".join(k.name.split("/")[1:]) for k in model.weights)
     # TODO handle unexpected keys
-    
-    model_layer_map = {"/".join(k.name.split('/')[1:]):i for i,k in enumerate(model.weights)}
+
+    model_layer_map = {"/".join(k.name.split("/")[1:]): i for i, k in enumerate(model.weights)}
     for shard_file in shard_files:
         state_dict = tf.io.read_file(shard_file)
-        saved_weight_names_set,unexpected_keys_set, missmatched_keys_set = load_tf_shard(model,model_layer_map,shard_file,ignore_mismatched_sizes=ignore_mismatched_sizes)
+        saved_weight_names_set, unexpected_keys_set, missmatched_keys_set = load_tf_shard(
+            model, model_layer_map, shard_file, ignore_mismatched_sizes=ignore_mismatched_sizes
+        )
         saved_keys.update(saved_weight_names_set)
         unexpected_keys.update(unexpected_keys_set)
         missmatched_keys.update(missmatched_keys_set)
         del state_dict
         gc.collect()
-        
+
     missing_keys = model_keys - saved_keys
     if strict and (len(missing_keys) > 0 or len(unexpected_keys) > 0):
         error_message = f"Error(s) in loading state_dict for {model.__class__.__name__}"
@@ -795,8 +802,9 @@ def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False,st
             str_unexpected_keys = ",".join([f'"{k}"' for k in unexpected_keys])
             error_message += f"\nMissing key(s): {str_unexpected_keys}."
         raise RuntimeError(error_message)
-    
+
     return missing_keys, unexpected_keys, missmatched_keys
+
 
 def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatched_sizes=False):
     saved_weight_names_set = set()
@@ -808,22 +816,21 @@ def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatch
         # Retrieve the name of each layer from the H5 file
         saved_h5_model_layers_name = set(hdf5_format.load_attributes_from_hdf5_group(f, "layer_names"))
         weight_value_tuples = []
-        
-        
+
         # Compute missing and unexpected sub layers
         # Store the weights in list of tuples that looks like [(weight_object, value_of_weight),...]
         for layer_name in saved_h5_model_layers_name:
             h5_layer_object = f[layer_name]
             saved_weights[layer_name] = np.asarray(h5_layer_object)
-            
+
             saved_weight_names_set.add(layer_name)
-            
+
             if layer_name not in model_layer_map:
                 unexpected_keys.add(layer_name)
-            else: 
+            else:
                 symbolic_weight = model.weights[model_layer_map[layer_name]]
-                
-                saved_weight_value = saved_weights[layer_name] 
+
+                saved_weight_value = saved_weights[layer_name]
                 # If the current weight is found
                 if saved_weight_value is not None:
                     # Check if the shape of the current weight and the one from the H5 file are different
@@ -845,9 +852,9 @@ def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatch
 
                 # We create the tuple that will be loaded and add it to the final list
                 weight_value_tuples.append((symbolic_weight, array))
-           
+
     K.batch_set_value(weight_value_tuples)
-    
+
     return saved_weight_names_set, unexpected_keys, missmatched_keys
 
 
@@ -1833,7 +1840,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         """
         raise NotImplementedError
 
-    def save_pretrained(self, save_directory, saved_model=False, version=1, push_to_hub=False, max_shard_size="2GB", **kwargs):
+    def save_pretrained(
+        self, save_directory, saved_model=False, version=1, push_to_hub=False, max_shard_size="2GB", **kwargs
+    ):
         """
         Save a model and its configuration file to a directory, so that it can be re-loaded using the
         [`~TFPreTrainedModel.from_pretrained`] class method.
@@ -1888,9 +1897,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         # If we save using the predefined names, we can load using `from_pretrained`
         output_model_file = os.path.join(save_directory, TF2_WEIGHTS_NAME)
-        
-        shards,index = tf_shard_checkpoint(self.weights,max_shard_size)
-        
+
+        shards, index = tf_shard_checkpoint(self.weights, max_shard_size)
+
         if index is None:
             self.save_weights(output_model_file)
             logger.info(f"Model weights saved in {os.path.join(save_directory, TF2_WEIGHTS_NAME)}")
@@ -1904,16 +1913,18 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 f"The model is bigger than the maximum size per checkpoint ({max_shard_size}) and is going to be "
                 f"split in {len(shards)} checkpoint shards. You can find where each parameters has been saved in the "
                 f"index located at {save_index_file}."
-                    )    
+            )
             for shard_file, shard in shards.items():
-                f = h5py.File(os.path.join(save_directory, shard_file), mode='w')
+                f = h5py.File(os.path.join(save_directory, shard_file), mode="w")
                 save_attributes_to_hdf5_group(
-                f, 'layer_names', ["/".join(layer.name.split('/')[1:]).encode('utf8') for layer in shard])
-                
-                for layer in sorted(shard, key=lambda x: x.name):
-                    param_dset = f.create_dataset("/".join(layer.name.split('/')[1:]), layer.numpy().shape, dtype=layer.numpy().dtype)
-                    param_dset[:] = layer.numpy()
+                    f, "layer_names", ["/".join(layer.name.split("/")[1:]).encode("utf8") for layer in shard]
+                )
 
+                for layer in sorted(shard, key=lambda x: x.name):
+                    param_dset = f.create_dataset(
+                        "/".join(layer.name.split("/")[1:]), layer.numpy().shape, dtype=layer.numpy().dtype
+                    )
+                    param_dset[:] = layer.numpy()
 
         if push_to_hub:
             url = self._push_to_hub(repo, commit_message=commit_message)
@@ -2196,7 +2207,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         else:
             resolved_archive_file = None
 
-         # We'll need to download and cache each checkpoint shard if the checkpoint is sharded.
+        # We'll need to download and cache each checkpoint shard if the checkpoint is sharded.
         if is_sharded:
             # resolved_archive_file becomes a list of files that point to the different checkpoint shards in this case.
             resolved_archive_file, sharded_metadata = get_checkpoint_shard_files(
@@ -2212,7 +2223,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 revision=revision,
                 mirror=mirror,
             )
-            
+
         config.name_or_path = pretrained_model_name_or_path
 
         # composed models, *e.g.* TFRag, require special treatment when it comes to loading
@@ -2236,14 +2247,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         else:
             model(model.dummy_inputs)  # build the network with dummy inputs
 
-        
         # 'by_name' allow us to do transfer learning by skipping/adding layers
         # see https://github.com/tensorflow/tensorflow/blob/00fad90125b18b80fe054de1055770cfb8fe4ba3/tensorflow/python/keras/engine/network.py#L1339-L1357
         try:
             if is_sharded:
                 for file in resolved_archive_file:
                     assert os.path.isfile(file), f"Error retrieving files {file}"
-                    
+
                 missing_keys, unexpected_keys, mismatched_keys = load_tf_sharded_weights(
                     model,
                     resolved_archive_file,
