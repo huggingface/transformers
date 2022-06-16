@@ -178,6 +178,35 @@ def load_tf_weights_in_bert(model, config, tf_checkpoint_path):
         pointer.data = torch.from_numpy(array)
     return model
 
+class RelativePositionsEncoding(nn.Module):
+    def __init__(self, length, depth, max_relative_position=127):
+        super(RelativePositionsEncoding, self).__init__()
+        vocab_size = max_relative_position * 2 + 1
+        range_vec = torch.arange(length)
+        range_mat = range_vec.repeat(length).view(length, length)
+        distance_mat = range_mat - torch.t(range_mat)
+        distance_mat_clipped = torch.clamp(distance_mat, -max_relative_position, max_relative_position)
+        final_mat = distance_mat_clipped + max_relative_position
+
+        embeddings_table = torch.zeros(vocab_size, depth)
+        position = torch.arange(0, vocab_size, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, depth, 2).float() * (-math.log(10000.0) / depth))
+        embeddings_table[:, 0::2] = torch.sin(position * div_term)
+        embeddings_table[:, 1::2] = torch.cos(position * div_term)
+        embeddings_table = embeddings_table.unsqueeze(0).transpose(0, 1).squeeze(1)
+
+        flat_relative_positions_matrix = final_mat.view(-1)
+        one_hot_relative_positions_matrix = torch.nn.functional.one_hot(flat_relative_positions_matrix,
+                                                                        num_classes=vocab_size).float()
+        positions_encoding = torch.matmul(one_hot_relative_positions_matrix, embeddings_table)
+        my_shape = list(final_mat.size())
+        my_shape.append(depth)
+        positions_encoding = positions_encoding.view(my_shape)
+        self.register_buffer('positions_encoding', positions_encoding)
+
+    def forward(self, length):
+        return self.positions_encoding[:length, :length, :]
+
 
 class NeZhaEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
