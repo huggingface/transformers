@@ -242,6 +242,7 @@ extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "tf2onnx")
 extras["tf-cpu"] = deps_list("tensorflow-cpu", "onnxconverter-common", "tf2onnx")
 
 extras["torch"] = deps_list("torch")
+extras["accelerate"] = deps_list("accelerate")
 
 if os.name == "nt":  # windows
     extras["retrieval"] = deps_list("datasets")  # faiss is not supported on windows
@@ -257,7 +258,7 @@ extras["onnx"] = deps_list("onnxconverter-common", "tf2onnx") + extras["onnxrunt
 extras["modelcreation"] = deps_list("cookiecutter")
 
 extras["sagemaker"] = deps_list("sagemaker")
-extras["deepspeed"] = deps_list("deepspeed", "accelerate")
+extras["deepspeed"] = deps_list("deepspeed") + extras["accelerate"]
 extras["fairscale"] = deps_list("fairscale")
 extras["optuna"] = deps_list("optuna")
 extras["ray"] = deps_list("ray[tune]")
@@ -279,7 +280,6 @@ extras["codecarbon"] = deps_list("codecarbon")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
     deps_list(
-        "accelerate",
         "pytest",
         "pytest-xdist",
         "timeout-decorator",
@@ -300,6 +300,7 @@ extras["testing"] = (
     )
     + extras["retrieval"]
     + extras["modelcreation"]
+    + extras["accelerate"]
 )
 
 extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"]
@@ -317,7 +318,7 @@ extras["all"] = (
     + extras["integrations"]
     + extras["timm"]
     + extras["codecarbon"]
-    + extras["deepspeed"]
+    + extras["accelerate"]
 )
 
 # Might need to add doc-builder and some specific deps in the future
