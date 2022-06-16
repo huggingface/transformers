@@ -25,7 +25,6 @@ import unittest.mock as mock
 from importlib import import_module
 from typing import List, Tuple
 
-import h5py
 from datasets import Dataset
 
 from huggingface_hub import delete_repo, login
@@ -54,6 +53,7 @@ logger = logging.get_logger(__name__)
 
 
 if is_tf_available():
+    import h5py
     import numpy as np
     import tensorflow as tf
 
@@ -73,6 +73,7 @@ if is_tf_available():
         TFAutoModel,
         TFAutoModelForSequenceClassification,
         TFBertModel,
+        TFRobertaModel,
         TFSharedEmbeddings,
         tf_top_k_top_p_filtering,
     )
@@ -1874,9 +1875,9 @@ class UtilsFunctionsTest(unittest.TestCase):
         assert tf.experimental.numpy.allclose(xla_out, out)
 
     def test_checkpoint_sharding_from_hub(self):
-        model = TFAutoModel.from_pretrained("ArthurZ/roberta-large-sharded")
+        model = TFRobertaModel.from_pretrained("ArthurZ/roberta-large-sharded")
         # the model above is the same as the model below, just a sharded version.
-        ref_model = TFAutoModel.from_pretrained("roberta-large")
+        ref_model = TFRobertaModel.from_pretrained("roberta-large")
         for p1, p2 in zip(model.weights, ref_model.weights):
             assert np.allclose(p1.numpy(), p2.numpy())
 
