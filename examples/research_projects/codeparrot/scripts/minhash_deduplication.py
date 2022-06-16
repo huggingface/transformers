@@ -58,7 +58,7 @@ class DuplicationIndex:
         """
         close_duplicates = self._index.query(min_hash)
         if code_key in self._index.keys:
-            print("Duplicate key %s" % code_key)
+            print(f"Duplicate key {code_key}")
             return
 
         self._index.insert(code_key, min_hash)
@@ -263,8 +263,8 @@ def deduplicate_dataset(
 
     print(f"Original dataset size: {len(dataset)}")
     print(f"Number of duplicate clusters: {len(duplicate_clusters)}")
-    print("Files in duplicate cluster: %d" % len(duplicate_indices))
-    print("Unique files in duplicate cluster: %d" % len(extreme_dict))
-    print("Filtered dataset size: %d" % len(ds_filter))
+    print(f"Files in duplicate cluster: {len(duplicate_indices)}")
+    print(f"Unique files in duplicate cluster: {len(extreme_dict)}")
+    print(f"Filtered dataset size: {len(ds_filter)}")
 
     return ds_filter, duplicate_clusters
