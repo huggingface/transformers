@@ -37,6 +37,7 @@ if is_torch_available():
 
 MAX_ERROR = 5e-5  # larger error tolerance than in our internal tests, to avoid flaky user-facing errors
 TF_WEIGHTS_NAME = "tf_model.h5"
+PT_WEIGHTS_NAME = "pytorch_model.bin"
 
 
 def convert_command_factory(args: Namespace):
@@ -74,7 +75,7 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             "--local-dir",
             type=str,
             default="",
-            help="Optional local directory of the model repository. Defaults to /tmp/{model_name}",
+            help="Optional local directory of the model repository. Defaults to /tmp/{model-name}",
         )
         train_parser.add_argument(
             "--new-weights",
@@ -225,8 +226,18 @@ class PTtoTFCommand(BaseTransformersCLICommand):
 
         # Save the weights in a TF format (if needed) and confirms that the results are still good
         tf_weights_path = os.path.join(self._local_dir, TF_WEIGHTS_NAME)
+        pt_weights_path = os.path.join(self._local_dir, PT_WEIGHTS_NAME)
         if not os.path.exists(tf_weights_path) or self._new_weights:
             tf_from_pt_model.save_weights(tf_weights_path)
+            # If the resulting TF weights are much bigger than the PT weights (roughly 2x), then we are in the presence
+            # of float16 weights. We can set the corresponding backend, store the weights in the new format, and reset
+            # the backend to ensure the reloaded weights match their counterpart using 32 bit precision.
+            if float(os.path.getsize(tf_weights_path)) > 1.8 * os.path.getsize(pt_weights_path):
+                logging.warning("float16 PT weights detected! Storing TF weights in float16")
+                tf.keras.backend.set_floatx('float16')
+                tf_from_pt_model = tf_class.from_pretrained(self._local_dir, from_pt=True)
+                tf_from_pt_model.save_weights(tf_weights_path)
+                tf.keras.backend.set_floatx('float32')
         del tf_from_pt_model  # will no longer be used, and may have a large memory footprint
         tf_model = tf_class.from_pretrained(self._local_dir)
         conversion_differences = self.find_pt_tf_differences(pt_model, pt_input, tf_model, tf_input)
@@ -250,12 +261,13 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             # (https://github.com/huggingface/huggingface_hub/pull/884)
             try:
                 self._logger.warn("Uploading the weights into a new PR...")
+                pr_commit_summary = "Update TF weights" if self._new_weights else "Add TF weights"
                 hub_pr_url = upload_file(
                     path_or_fileobj=tf_weights_path,
                     path_in_repo=TF_WEIGHTS_NAME,
                     repo_id=self._model_name,
                     create_pr=True,
-                    pr_commit_summary="Add TF weights",
+                    pr_commit_summary=pr_commit_summary,
                     pr_commit_description=(
                         "Model converted by the `transformers`' `pt_to_tf` CLI -- all converted model outputs and"
                         " hidden layers were validated against its Pytorch counterpart. Maximum crossload output"
