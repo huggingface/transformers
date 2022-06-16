@@ -1252,8 +1252,8 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
 class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = [
-        r"encoder\.version",
-        r"decoder\.version",
+        r"encoder.version",
+        r"decoder.version",
         r"model.encoder.embed_positions.weights",
         r"model.decoder.embed_positions.weights",
     ]

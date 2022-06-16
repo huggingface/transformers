@@ -193,6 +193,11 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls="models.convbert.ConvBertOnnxConfig",
         ),
+        "convnext": supported_features_mapping(
+            "default",
+            "image-classification",
+            onnx_config_cls="models.convnext.ConvNextOnnxConfig",
+        ),
         "data2vec-text": supported_features_mapping(
             "default",
             "masked-lm",
@@ -276,6 +281,13 @@ class FeaturesManager:
             "token-classification",
             onnx_config_cls="models.layoutlm.LayoutLMOnnxConfig",
         ),
+        "longt5": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "seq2seq-lm",
+            "seq2seq-lm-with-past",
+            onnx_config_cls="models.longt5.LongT5OnnxConfig",
+        ),
         "marian": supported_features_mapping(
             "default",
             "default-with-past",
@@ -317,6 +329,11 @@ class FeaturesManager:
             "masked-lm",
             "sequence-classification",
             onnx_config_cls="models.perceiver.PerceiverOnnxConfig",
+        ),
+        "resnet": supported_features_mapping(
+            "default",
+            "image-classification",
+            onnx_config_cls="models.resnet.ResNetOnnxConfig",
         ),
         "roberta": supported_features_mapping(
             "default",
