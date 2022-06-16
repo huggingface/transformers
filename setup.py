@@ -300,7 +300,6 @@ extras["testing"] = (
     )
     + extras["retrieval"]
     + extras["modelcreation"]
-    + extras["accelerate"]
 )
 
 extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"]
@@ -318,7 +317,6 @@ extras["all"] = (
     + extras["integrations"]
     + extras["timm"]
     + extras["codecarbon"]
-    + extras["accelerate"]
 )
 
 # Might need to add doc-builder and some specific deps in the future

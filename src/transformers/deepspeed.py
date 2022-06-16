@@ -20,8 +20,6 @@ import weakref
 from copy import deepcopy
 from functools import partialmethod
 
-from accelerate.utils.deepspeed import HfDeepSpeedConfig as DeepSpeedConfig
-
 from .dependency_versions_check import dep_version_check
 from .utils import is_torch_available, logging
 
@@ -34,6 +32,12 @@ logger = logging.get_logger(__name__)
 
 def is_deepspeed_available():
     return importlib.util.find_spec("deepspeed") is not None
+
+
+if is_deepspeed_available():
+    from accelerate.utils.deepspeed import HfDeepSpeedConfig as DeepSpeedConfig
+else:
+    from builtins import object as DeepSpeedConfig
 
 
 class HfDeepSpeedConfig(DeepSpeedConfig):
