@@ -56,7 +56,7 @@ VAN_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 # Stochastic depth implementation
 # Taken from https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/layers/drop.py
-def drop_path(x, drop_prob: float = 0.0, training: bool = False):
+def drop_path(input, drop_prob: float = 0.0, training: bool = False):
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks). This is the same as the
     DropConnect impl I created for EfficientNet, etc networks, however, the original name is misleading as 'Drop
@@ -78,12 +78,15 @@ def drop_path(x, drop_prob: float = 0.0, training: bool = False):
 class VanDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob=None):
+    def __init__(self, drop_prob: Optional[float] = None) -> None:
         super().__init__()
         self.drop_prob = drop_prob
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return drop_path(x, self.drop_prob, self.training)
+
+    def extra_repr(self) -> str:
+        return "p={}".format(self.drop_prob)
 
 
 class VanOverlappingPatchEmbedder(nn.Module):

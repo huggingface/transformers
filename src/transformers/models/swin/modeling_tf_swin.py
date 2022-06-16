@@ -63,7 +63,7 @@ TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all Swin models at https://huggingface.co/models?filter=swin
 ]
 
-# to_2tuple, drop_path, TFSwinPatchEmbeddings, TFSwinPatchMerging and TFSwinDropPath are tensorflow
+# drop_path, TFSwinPatchEmbeddings, TFSwinPatchMerging and TFSwinDropPath are tensorflow
 # implementations of PyTorch functionalities in the timm library.
 
 
@@ -208,13 +208,6 @@ class TFSwinImageClassifierOutput(ModelOutput):
     reshaped_hidden_states: Optional[Tuple[tf.Tensor]] = None
 
 
-# Copied from transformers.models.vit.modeling_tf_vit.to_2tuple
-def to_2tuple(x) -> Tuple[Any, Any]:
-    if isinstance(x, collections.abc.Iterable):
-        return x
-    return (x, x)
-
-
 def window_partition(input_feature: tf.Tensor, window_size: int) -> tf.Tensor:
     """
     Partitions the given input into windows.
@@ -329,20 +322,29 @@ class TFSwinPatchEmbeddings(tf.keras.layers.Layer):
     Image to Patch Embedding.
     """
 
-    def __init__(
-        self, image_size: int = 224, patch_size: int = 16, num_channels: int = 3, embed_dim: int = 768, **kwargs
-    ) -> None:
+    def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        image_size = to_2tuple(image_size)
-        patch_size = to_2tuple(patch_size)
+        image_size, patch_size, num_channels, hidden_size = (
+            config.image_size,
+            config.patch_size,
+            config.num_channels,
+            config.embed_dim,
+        )
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         self.image_size = image_size
         self.patch_size = patch_size
+        self.num_channels = num_channels
         self.num_patches = num_patches
         self.grid_size = (image_size[0] // patch_size[0], image_size[1] // patch_size[1])
 
         self.projection = tf.keras.layers.Conv2D(
-            filters=embed_dim, kernel_size=self.patch_size, strides=self.patch_size, padding="valid", name="projection"
+            filters=hidden_size,
+            kernel_size=self.patch_size,
+            strides=self.patch_size,
+            padding="valid",
+            name="projection",
         )
 
     def maybe_pad(self, pixel_values: tf.Tensor, height: int, width: int) -> tf.Tensor:
@@ -355,7 +357,11 @@ class TFSwinPatchEmbeddings(tf.keras.layers.Layer):
         return pixel_values
 
     def call(self, pixel_values: tf.Tensor, training: bool = False) -> Tuple[tf.Tensor, Tuple[int, int]]:
-        _, _, height, width = shape_list(pixel_values)
+        _, num_channels, height, width = shape_list(pixel_values)
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
         # pad the input to be divisible by self.patch_size, if needed
         pixel_values = self.maybe_pad(pixel_values, height, width)
 
@@ -460,7 +466,10 @@ class TFSwinSelfAttention(tf.keras.layers.Layer):
         self.num_attention_heads = num_heads
         self.attention_head_size = int(dim / num_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
-        self.window_size = to_2tuple(config.window_size)
+        window_size = config.window_size
+        self.window_size = (
+            window_size if isinstance(window_size, collections.abc.Iterable) else (window_size, window_size)
+        )
 
         # get pair-wise relative position index for each token inside the window
         coords_h = tf.range(self.window_size[0])
