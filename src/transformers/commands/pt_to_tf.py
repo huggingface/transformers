@@ -174,7 +174,7 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         # Fetch remote data
         # TODO: implement a solution to pull a specific PR/commit, so we can use this CLI to validate pushes.
         repo = Repository(local_dir=self._local_dir, clone_from=self._model_name)
-        repo.git_pull()  # in case the repo already exists locally, but with an older commit
+        # repo.git_pull()  # in case the repo already exists locally, but with an older commit
 
         # Load config and get the appropriate architecture -- the latter is needed to convert the head's weights
         config = AutoConfig.from_pretrained(self._local_dir)
@@ -233,7 +233,7 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             # of float16 weights. We can set the corresponding backend, store the weights in the new format, and reset
             # the backend to ensure the reloaded weights match their counterpart using 32 bit precision.
             if float(os.path.getsize(tf_weights_path)) > 1.8 * os.path.getsize(pt_weights_path):
-                logging.warning("float16 PT weights detected! Storing TF weights in float16")
+                self._logger.warn("WEIGHT FORMAT UPDATE:float16 weights detected! Storing TF weights in float16")
                 tf.keras.backend.set_floatx('float16')
                 tf_from_pt_model = tf_class.from_pretrained(self._local_dir, from_pt=True)
                 tf_from_pt_model.save_weights(tf_weights_path)
