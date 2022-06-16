@@ -929,7 +929,7 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
         tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
         model = VisualBertForPreTraining.from_pretrained("uclanlp/visualbert-vqa-coco-pre")
 
-        inputs = tokenizer("The capital of France is {mask}.", return_tensors="pt")
+        inputs = tokenizer("The capital of France is [MASK].", return_tensors="pt")
         visual_embeds = get_visual_embeddings(image).unsqueeze(0)
         visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long)
         visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
