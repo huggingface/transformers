@@ -104,7 +104,8 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             The language, specified by its ISO code, to be used by the Tesseract OCR engine. By default, English is
             used.
         tesseract_config (`Optional[str]`, *optional*):
-            Any additional custom configuration flags that are forwarded to the `config` parameter when calling Tesseract. For example: '--psm 6'.
+            Any additional custom configuration flags that are forwarded to the `config` parameter when calling
+            Tesseract. For example: '--psm 6'.
 
             <Tip>
 
