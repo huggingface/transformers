@@ -84,7 +84,7 @@ class TFViTMAEDecoderOutput(ModelOutput):
     Class for TFViTMAEDecoder's outputs, with potential hidden states and attentions.
 
     Args:
-        logits (`tf.Tensor` of shape `(batch_size, patch_size ** 2 * num_channels)`):
+        logits (`tf.Tensor` of shape `(batch_size, sequence_length, patch_size ** 2 * num_channels)`):
             Pixel reconstruction logits.
         hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of shape
@@ -109,7 +109,7 @@ class TFViTMAEForPreTrainingOutput(ModelOutput):
     Args:
         loss (`tf.Tensor` of shape `(1,)`):
             Pixel reconstruction loss.
-        logits (`tf.Tensor` of shape `(batch_size, patch_size ** 2 * num_channels)`):
+        logits (`tf.Tensor` of shape `(batch_size, sequence_length, patch_size ** 2 * num_channels)`):
             Pixel reconstruction logits.
         mask (`tf.Tensor` of shape `(batch_size, sequence_length)`):
             Tensor indicating which patches are masked (1) and which are not (0).
