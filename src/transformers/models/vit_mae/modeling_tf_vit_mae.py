@@ -980,32 +980,36 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
                 Patchified pixel values.
         """
         patch_size, num_channels = self.config.patch_size, self.config.num_channels
+        # make sure channels are last
         pixel_values = tf.cond(
             tf.math.equal(shape_list(pixel_values)[1], num_channels),
             lambda: tf.transpose(pixel_values, perm=(0, 2, 3, 1)),
             lambda: pixel_values,
         )
 
+        # sanity checks
         tf.debugging.assert_equal(shape_list(pixel_values)[1], shape_list(pixel_values)[2])
         tf.debugging.assert_equal(shape_list(pixel_values)[1] % patch_size, 0)
         tf.debugging.assert_equal(shape_list(pixel_values)[3], num_channels)
 
+        # patchify
         batch_size = shape_list(pixel_values)[0]
         num_patches_one_direction = shape_list(pixel_values)[2] // patch_size
-        x = tf.reshape(
+        patchified_pixel_values = tf.reshape(
             pixel_values,
             (batch_size, num_patches_one_direction, patch_size, num_patches_one_direction, patch_size, num_channels),
         )
-        x = tf.einsum("nhpwqc->nhwpqc", x)
-        x = tf.reshape(
-            x, (batch_size, num_patches_one_direction * num_patches_one_direction, patch_size**2 * num_channels)
+        patchified_pixel_values = tf.einsum("nhpwqc->nhwpqc", patchified_pixel_values)
+        patchified_pixel_values = tf.reshape(
+            patchified_pixel_values,
+            (batch_size, num_patches_one_direction * num_patches_one_direction, patch_size**2 * num_channels),
         )
-        return x
+        return patchified_pixel_values
 
-    def unpatchify(self, x):
+    def unpatchify(self, patchified_pixel_values):
         """
         Args:
-            pixel_values (`tf.Tensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`:
+            patchified_pixel_values (`tf.Tensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`:
                 Patchified pixel values.
 
         Returns:
@@ -1013,16 +1017,21 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
                 Pixel values.
         """
         patch_size, num_channels = self.config.patch_size, self.config.num_channels
-        num_patches_one_direction = int(shape_list(x)[1] ** 0.5)
-        tf.debugging.assert_equal(num_patches_one_direction * num_patches_one_direction, shape_list(x)[1])
-
-        batch_size = shape_list(x)[0]
-        x = tf.reshape(
-            x, (batch_size, num_patches_one_direction, num_patches_one_direction, patch_size, patch_size, num_channels)
+        num_patches_one_direction = int(shape_list(patchified_pixel_values)[1] ** 0.5)
+        # sanity check
+        tf.debugging.assert_equal(
+            num_patches_one_direction * num_patches_one_direction, shape_list(patchified_pixel_values)[1]
         )
-        x = tf.einsum("nhwpqc->nhpwqc", x)
+
+        # unpatchify
+        batch_size = shape_list(patchified_pixel_values)[0]
+        patchified_pixel_values = tf.reshape(
+            patchified_pixel_values,
+            (batch_size, num_patches_one_direction, num_patches_one_direction, patch_size, patch_size, num_channels),
+        )
+        patchified_pixel_values = tf.einsum("nhwpqc->nhpwqc", patchified_pixel_values)
         pixel_values = tf.reshape(
-            x,
+            patchified_pixel_values,
             (batch_size, num_patches_one_direction * patch_size, num_patches_one_direction * patch_size, num_channels),
         )
         return pixel_values
