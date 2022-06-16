@@ -46,7 +46,7 @@ def normalize_box(box, width, height):
     ]
 
 
-def apply_tesseract(image: Image.Image, lang: Optional[str], tess_config: Optional[str]):
+def apply_tesseract(image: Image.Image, lang: Optional[str], tesseract_config: Optional[str]):
     """Applies Tesseract OCR on a document image, and returns recognized words + normalized bounding boxes."""
 
     # apply OCR
