@@ -669,7 +669,11 @@ def tf_shard_checkpoint(weights, max_shard_size="10GB"):
         shard_file = TF2_WEIGHTS_NAME.replace(".h5", f"-{idx+1:05d}-of-{len(sharded_state_dicts):05d}.h5")
         shards[shard_file] = shard
         for weight in shard:
-            weight_map[weight.name] = shard_file
+            # remove the class name from the layer name for smooth loading
+            # this could be removed only if the loading is purely based on indexes
+            # and not layer names
+            weight_name = "/".join(weight.name.split("/")[1:])
+            weight_map[weight_name] = shard_file
 
     # Add the metadata
     metadata = {"total_size": total_size}
@@ -785,10 +789,12 @@ def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, s
     unexpected_keys = set()
     saved_keys = set()
     missmatched_keys = set()
-    model_keys = set("/".join(k.name.split("/")[1:]) for k in model.weights)
-    # TODO handle unexpected keys
 
+    # Since TF adds the name of the class to its weights, and uses the index and not the name of the layer to load
+    # the weight, we have to get rid of the first prefix of the name of the layer.
+    model_keys = set("/".join(k.name.split("/")[1:]) for k in model.weights)
     model_layer_map = {"/".join(k.name.split("/")[1:]): i for i, k in enumerate(model.weights)}
+
     for shard_file in shard_files:
         state_dict = tf.io.read_file(shard_file)
         saved_weight_names_set, unexpected_keys_set, missmatched_keys_set = load_tf_shard(
@@ -815,6 +821,21 @@ def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, s
 
 
 def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatched_sizes=False):
+    """
+    Loads a shard of a sharded checkpoint. Handles the missing keys and unexpected keys.
+
+    Args:
+        model (_type_): _description_
+        model_layer_map (_type_): _description_
+        resolved_archive_file (_type_): _description_
+        ignore_mismatched_sizes (bool, optional): _description_. Defaults to False.
+
+    Raises:
+        e: _description_
+
+    Returns:
+        _type_: _description_
+    """
     saved_weight_names_set = set()
     saved_weights = {}
     missmatched_keys = set()
@@ -1942,7 +1963,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         saved_model=False,
         version=1,
         push_to_hub=False,
-        max_shard_size: Union[int, str] = "10GB",
+        max_shard_size: Union[int, str] = "1GB",
         **kwargs
     ):
         """
