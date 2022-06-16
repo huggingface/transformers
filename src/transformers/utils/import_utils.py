@@ -272,7 +272,7 @@ def is_torch_cuda_available():
         return False
 
 
-def is_torch_bf16_available():
+def is_torch_gpu_bf16_available():
     if not is_torch_available():
         return False
 
@@ -304,14 +304,26 @@ def is_torch_bf16_available():
     else:
         is_torch_gpu_bf16_available = False
 
-    # checking CPU
+    return is_torch_gpu_bf16_available
+
+
+def is_torch_cpu_bf16_available():
+    if not is_torch_available():
+        return False
+
+    import torch
+
     try:
         # multiple levels of AttributeError depending on the pytorch version so do them all in one check
         _ = torch.cpu.amp.autocast
     except AttributeError:
         is_torch_cpu_bf16_available = False
 
-    return is_torch_cpu_bf16_available or is_torch_gpu_bf16_available
+    return is_torch_cpu_bf16_available
+
+
+def is_torch_bf16_available():
+    return is_torch_cpu_bf16_available() or is_torch_gpu_bf16_available()
 
 
 def is_torch_tf32_available():

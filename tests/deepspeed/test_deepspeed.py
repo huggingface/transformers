@@ -42,7 +42,7 @@ from transformers.testing_utils import (
     slow,
 )
 from transformers.trainer_utils import get_last_checkpoint, set_seed
-from transformers.utils import WEIGHTS_NAME, is_torch_bf16_available
+from transformers.utils import WEIGHTS_NAME, is_torch_gpu_bf16_available
 
 
 if is_torch_available():
@@ -129,7 +129,7 @@ FP16 = "fp16"
 BF16 = "bf16"
 
 stages = [ZERO2, ZERO3]
-if is_torch_bf16_available():
+if is_torch_gpu_bf16_available():
     dtypes = [FP16, BF16]
 else:
     dtypes = [FP16]
