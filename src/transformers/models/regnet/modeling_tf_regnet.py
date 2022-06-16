@@ -209,7 +209,7 @@ class TFRegNetSELayer(tf.keras.layers.Layer):
         ]
 
     def call(self, hidden_state):
-        # b c h w -> b c 1 1
+        # [batch_size, h, w, num_channels] -> [batch_size, 1, 1, num_channels]
         pooled = self.pooler(hidden_state)
         for layer_module in self.attention:
             pooled = layer_module(pooled)
