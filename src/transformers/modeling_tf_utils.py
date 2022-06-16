@@ -2305,23 +2305,45 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 )
             except EntryNotFoundError:
                 if filename == TF2_WEIGHTS_NAME:
-                    has_file_kwargs = {
-                        "revision": revision,
-                        "mirror": mirror,
-                        "proxies": proxies,
-                        "use_auth_token": use_auth_token,
-                    }
-                    if has_file(pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs):
-                        raise EnvironmentError(
-                            f"{pretrained_model_name_or_path} does not appear to have a file named {TF2_WEIGHTS_NAME} "
-                            "but there is a file for PyTorch weights. Use `from_pt=True` to load this model from "
-                            "those weights."
+                    try:
+                        # Maybe the checkpoint is sharded, we try to grab the index name in this case.
+                        archive_file = hf_bucket_url(
+                            pretrained_model_name_or_path,
+                            filename=TF2_WEIGHTS_INDEX_NAME,
+                            revision=revision,
+                            mirror=mirror,
                         )
-                    else:
-                        raise EnvironmentError(
-                            f"{pretrained_model_name_or_path} does not appear to have a file named {TF2_WEIGHTS_NAME} "
-                            f"or {WEIGHTS_NAME}."
+                        resolved_archive_file = cached_path(
+                            archive_file,
+                            cache_dir=cache_dir,
+                            force_download=force_download,
+                            proxies=proxies,
+                            resume_download=resume_download,
+                            local_files_only=local_files_only,
+                            use_auth_token=use_auth_token,
+                            user_agent=user_agent,
                         )
+                        is_sharded = True
+                    except EntryNotFoundError:
+                        # Otherwise, maybe there is a TF or Flax model file.  We try those to give a helpful error
+                        # message.
+                        has_file_kwargs = {
+                            "revision": revision,
+                            "mirror": mirror,
+                            "proxies": proxies,
+                            "use_auth_token": use_auth_token,
+                        }
+                        if has_file(pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs):
+                            raise EnvironmentError(
+                                f"{pretrained_model_name_or_path} does not appear to have a file named"
+                                f" {TF2_WEIGHTS_NAME} but there is a file for PyTorch weights. Use `from_pt=True` to"
+                                " load this model from those weights."
+                            )
+                        else:
+                            raise EnvironmentError(
+                                f"{pretrained_model_name_or_path} does not appear to have a file named"
+                                f" {TF2_WEIGHTS_NAME} or {WEIGHTS_NAME}."
+                            )
                 else:
                     raise EnvironmentError(
                         f"{pretrained_model_name_or_path} does not appear to have a file named {filename}."

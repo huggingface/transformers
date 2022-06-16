@@ -1875,10 +1875,10 @@ class UtilsFunctionsTest(unittest.TestCase):
         assert tf.experimental.numpy.allclose(xla_out, out)
 
     def test_checkpoint_sharding_from_hub(self):
-        model = TFRobertaModel.from_pretrained("ArthurZ/roberta-large-sharded")
+        sharded_model = TFRobertaModel.from_pretrained("ArthurZ/roberta-large-sharded")
         # the model above is the same as the model below, just a sharded version.
         ref_model = TFRobertaModel.from_pretrained("roberta-large")
-        for p1, p2 in zip(model.weights, ref_model.weights):
+        for p1, p2 in zip(sharded_model.weights, ref_model.weights):
             assert np.allclose(p1.numpy(), p2.numpy())
 
     def test_shard_checkpoint(self):
@@ -1996,8 +1996,6 @@ class UtilsFunctionsTest(unittest.TestCase):
 
                 for p1, p2 in zip(model.weights, new_model.weights):
                     self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
-
-                f.close()
 
 
 @require_tf
