@@ -972,7 +972,7 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
     def patchify(self, pixel_values):
         """
         Args:
-            pixel_values (`tf.Tensor` of shape `(batch_size, height, width, num_channels)`):
+            pixel_values (`tf.Tensor` of shape `(batch_size, height, width, num_channels)` or `(batch_size, num_channels, height, width)`):
                 Pixel values.
 
         Returns:
@@ -988,9 +988,23 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
         )
 
         # sanity checks
-        tf.debugging.assert_equal(shape_list(pixel_values)[1], shape_list(pixel_values)[2])
-        tf.debugging.assert_equal(shape_list(pixel_values)[1] % patch_size, 0)
-        tf.debugging.assert_equal(shape_list(pixel_values)[3], num_channels)
+        tf.debugging.assert_equal(
+            shape_list(pixel_values)[1],
+            shape_list(pixel_values)[2],
+            message="Make sure the pixel values have a squared size",
+        )
+        tf.debugging.assert_equal(
+            shape_list(pixel_values)[1] % patch_size,
+            0,
+            message="Make sure the pixel values have a size that is divisible by the patch size",
+        )
+        tf.debugging.assert_equal(
+            shape_list(pixel_values)[3],
+            num_channels,
+            message=(
+                "Make sure the number of channels of the pixel values is equal to the one set in the configuration"
+            ),
+        )
 
         # patchify
         batch_size = shape_list(pixel_values)[0]
@@ -1020,7 +1034,9 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
         num_patches_one_direction = int(shape_list(patchified_pixel_values)[1] ** 0.5)
         # sanity check
         tf.debugging.assert_equal(
-            num_patches_one_direction * num_patches_one_direction, shape_list(patchified_pixel_values)[1]
+            num_patches_one_direction * num_patches_one_direction,
+            shape_list(patchified_pixel_values)[1],
+            message="Make sure that the number of patches can be squared",
         )
 
         # unpatchify
