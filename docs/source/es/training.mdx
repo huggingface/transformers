@@ -14,7 +14,7 @@ specific language governing permissions and limitations under the License.
 
 [[open-in-colab]]
 
-El uso de un modelo pre-entrenado tiene importantes ventajas. Reduce los costos de computación, la huella de carbono, y te permite utilizar modelos de última generación sin tener que entrenar uno desde cero. 🤗 Transformers proporciona acceso a miles de modelos pre-entrenados en una amplia gama de tareas. Cuando utilizas un modelo pre-entrenado, lo entrenas con un dataset específico para tu tarea. Esto se conoce como fine-tuning, una técnica de entrenamiento increíblemente poderosa. En este tutorial haremos fine-tuning a un modelo pre-entrenado con un framework de Deep Learning de tu elección:
+El uso de un modelo pre-entrenado tiene importantes ventajas. Reduce los costos de computación, la huella de carbono y te permite utilizar modelos de última generación sin tener que entrenar uno desde cero.
 
 * Fine-tuning a un modelo pre-entrenado con 🤗 Transformers [`Trainer`].
 * Fine-tuning a un modelo pre-entrenado en TensorFlow con Keras.
@@ -39,7 +39,7 @@ Comienza cargando el dataset de [Yelp Reviews](https://huggingface.co/datasets/y
  'text': 'My expectations for McDonalds are t rarely high. But for one to still fail so spectacularly...that takes something special!\\nThe cashier took my friends\'s order, then promptly ignored me. I had to force myself in front of a cashier who opened his register to wait on the person BEHIND me. I waited over five minutes for a gigantic order that included precisely one kid\'s meal. After watching two people who ordered after me be handed their food, I asked where mine was. The manager started yelling at the cashiers for \\"serving off their orders\\" when they didn\'t have their food. But neither cashier was anywhere near those controls, and the manager was the one serving food to customers and clearing the boards.\\nThe manager was rude when giving me my order. She didn\'t make sure that I had everything ON MY RECEIPT, and never even had the decency to apologize that I felt I was getting poor service.\\nI\'ve eaten at various McDonalds restaurants for over 30 years. I\'ve worked at more than one location. I expect bad days, bad moods, and the occasional mistake. But I have yet to have a decent experience at this store. It will remain a place I avoid unless someone in my party needs to avoid illness from low blood sugar. Perhaps I should go back to the racially biased service of Steak n Shake instead!'}
 ```
 
-Como ya sabes, necesitas un tokenizador para procesar el texto e incluir una estrategia para el padding y el truncamiento, para manejar cualquier longitud de secuencia variable. Para procesar tu dataset en un solo paso, utiliza el método de 🤗 Datasets [`map`](https://huggingface.co/docs/datasets/process.html#map) para aplicar una función de preprocesamiento sobre todo el dataset:
+Como ya sabes, necesitas un tokenizador para procesar el texto e incluir una estrategia para el padding y el truncamiento para manejar cualquier longitud de secuencia variable. Para procesar tu dataset en un solo paso, utiliza el método de 🤗 Datasets mappara aplicar una función de preprocesamiento sobre todo el dataset:
 
 ```py
 >>> from transformers import AutoTokenizer
@@ -79,7 +79,7 @@ Comienza cargando tu modelo y especifica el número de labels previstas. A parti
 
 <Tip>
 
-Verás una advertencia acerca de que algunos de los pesos pre-entrenados que no están siendo utilizados y que algunos pesos están siendo inicializados al azar. 
+Verás una advertencia acerca de que algunos de los pesos pre-entrenados no están siendo utilizados y que algunos pesos están siendo inicializados al azar. No te preocupes, esto es completamente normal.
 No te preocupes, esto es completamente normal. El head/cabezal pre-entrenado del modelo BERT se descarta y se sustituye por un head de clasificación inicializado aleatoriamente. Puedes aplicar fine-tuning a este nuevo head del modelo en tu tarea de clasificación de secuencias haciendo transfer learning del modelo pre-entrenado.
 
 </Tip>
@@ -98,7 +98,7 @@ Especifica dónde vas a guardar los checkpoints de tu entrenamiento:
 
 ### Métricas
 
-El [`Trainer`] no evalúa automáticamente el rendimiento del modelo durante el entrenamiento. Tendrás que pasarle a [`Trainer`] una función para calcular y hacer un reporte de las métricas. La librería de 🤗 Datasets proporciona una función de [`accuracy`](https://huggingface.co/metrics/accuracy) simple que puedes cargar con la función `load_metric` (ver este [tutorial](https://huggingface.co/docs/datasets/metrics.html) para más información):
+El [`Trainer`] no evalúa automáticamente el rendimiento del modelo durante el entrenamiento. Tendrás que pasarle a [`Trainer`] una función para calcular y hacer un reporte de las métricas. La biblioteca de 🤗 Datasets proporciona una función de [`accuracy`](https://huggingface.co/metrics/accuracy) simple que puedes cargar con la función `load_metric` (ver este [tutorial](https://huggingface.co/docs/datasets/metrics.html) para más información):
 
 ```py
 >>> import numpy as np
@@ -126,7 +126,7 @@ Si quieres controlar tus métricas de evaluación durante el fine-tuning, especi
 
 ### Trainer
 
-Crea un objeto [`Trainer`] con tu modelo, argumentos de entrenamiento, conjuntos de datos de entrenamiento y de prueba, y tu función de evaluación:
+Crea un objeto [`Trainer`] con tu modelo, argumentos de entrenamiento, datasets de entrenamiento y de prueba, y tu función de evaluación:
 
 ```py
 >>> trainer = Trainer(
@@ -150,7 +150,7 @@ A continuación, aplica fine-tuning a tu modelo llamando [`~transformers.Trainer
 
 <Youtube id="rnTGBy2ax1c"/>
 
-Los modelos de 🤗 Transformers también permiten realizar el entrenamiento en TensorFlow con la API de Keras. Sólo es necesario hacer algunos cambios antes de hacer fine-tuning.
+Los modelos de 🤗 Transformers también permiten realizar el entrenamiento en TensorFlow con la API de Keras. Solo es necesario hacer algunos cambios antes de hacer fine-tuning.
 
 ### Convierte el dataset al formato de TensorFlow
 
@@ -217,7 +217,7 @@ A continuación, compila y aplica fine-tuning a tu modelo con [`fit`](https://ke
 
 <Youtube id="Dh9CL8fyG80"/>
 
-El [`Trainer`] se encarga del ciclo de entrenamiento y permite aplicar fine-tuning a un modelo en una sola línea de código. Para los usuarios que prefieren escribir tu propio ciclo de entrenamiento, también puedes aplicar fine-tuning a un modelo de 🤗 Transformers en PyTorch nativo.
+El [`Trainer`] se encarga del ciclo de entrenamiento y permite aplicar fine-tuning a un modelo en una sola línea de código. Para los que prefieran escribir su propio ciclo de entrenamiento, también pueden aplicar fine-tuning a un modelo de 🤗 Transformers en PyTorch nativo.
 
 En este punto, es posible que necesites reiniciar tu notebook o ejecutar el siguiente código para liberar algo de memoria:
 
@@ -248,7 +248,7 @@ A continuación, haremos un post-procesamiento manual al `tokenized_dataset` y a
     >>> tokenized_datasets.set_format("torch")
     ```
 
-A continuación, crea un subconjunto más pequeño del dataset, como se ha mostrado anteriormente, para acelerar el fine-tuning:
+A continuación, crea un subconjunto más pequeño del dataset como se ha mostrado anteriormente para acelerar el fine-tuning:
 
 ```py
 >>> small_train_dataset = tokenized_datasets["train"].shuffle(seed=42).select(range(1000))
@@ -274,7 +274,7 @@ Carga tu modelo con el número de labels previstas:
 >>> model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", num_labels=5)
 ```
 
-### Optimiza y progrma el learning rate
+### Optimiza y programa el learning rate
 
 Crea un optimizador y el learning rate para aplicar fine-tuning al modelo. Vamos a utilizar el optimizador [`AdamW`](https://pytorch.org/docs/stable/generated/torch.optim.AdamW.html) de PyTorch:
 
@@ -311,11 +311,11 @@ Consigue acceso gratuito a una GPU en la nube si es que no tienes este recurso d
 
 </Tip>
 
-Genial, ¡ahora estamos listos entrenar! 🥳
+Genial, ¡ahora podemos entrenar! 🥳
 
 ### Ciclo de entrenamiento
 
-Para hacer un seguimiento al progreso del entrenamiento, utiliza la librería [tqdm](https://tqdm.github.io/) para añadir una barra de progreso sobre el número de pasos de entrenamiento:
+Para hacer un seguimiento al progreso del entrenamiento, utiliza la biblioteca [tqdm](https://tqdm.github.io/) para añadir una barra de progreso sobre el número de pasos de entrenamiento:
 
 ```py
 >>> from tqdm.auto import tqdm

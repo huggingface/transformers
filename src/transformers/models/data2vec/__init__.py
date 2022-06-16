@@ -22,10 +22,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tf_availabl
 
 
 _import_structure = {
-    "configuration_data2vec_audio": [
-        "DATA2VEC_AUDIO_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "Data2VecAudioConfig",
-    ],
+    "configuration_data2vec_audio": ["DATA2VEC_AUDIO_PRETRAINED_CONFIG_ARCHIVE_MAP", "Data2VecAudioConfig"],
     "configuration_data2vec_text": [
         "DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Data2VecTextConfig",
@@ -76,6 +73,7 @@ else:
 if is_tf_available():
     _import_structure["modeling_tf_data2vec_vision"] = [
         "TFData2VecVisionForImageClassification",
+        "TFData2VecVisionForSemanticSegmentation",
         "TFData2VecVisionModel",
         "TFData2VecVisionPreTrainedModel",
     ]
@@ -130,6 +128,7 @@ if TYPE_CHECKING:
     if is_tf_available():
         from .modeling_tf_data2vec_vision import (
             TFData2VecVisionForImageClassification,
+            TFData2VecVisionForSemanticSegmentation,
             TFData2VecVisionModel,
             TFData2VecVisionPreTrainedModel,
         )

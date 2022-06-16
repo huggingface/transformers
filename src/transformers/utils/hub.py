@@ -38,6 +38,7 @@ import requests
 from filelock import FileLock
 from huggingface_hub import HfFolder, Repository, create_repo, list_repo_files, whoami
 from requests.exceptions import HTTPError
+from requests.models import Response
 from transformers.utils.logging import tqdm
 
 from . import __version__, logging
@@ -109,6 +110,7 @@ if os.environ.get("HUGGINGFACE_CO_RESOLVE_ENDPOINT", None) is not None:
     HUGGINGFACE_CO_RESOLVE_ENDPOINT = os.environ.get("HUGGINGFACE_CO_RESOLVE_ENDPOINT", None)
 HUGGINGFACE_CO_RESOLVE_ENDPOINT = os.environ.get("HF_ENDPOINT", HUGGINGFACE_CO_RESOLVE_ENDPOINT)
 HUGGINGFACE_CO_PREFIX = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/{model_id}/resolve/{revision}/{filename}"
+HUGGINGFACE_CO_EXAMPLES_TELEMETRY = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/api/telemetry/examples"
 
 
 def is_remote_url(url_or_filename):
@@ -397,20 +399,27 @@ class RevisionNotFoundError(HTTPError):
     """Raised when trying to access a hf.co URL with a valid repository but an invalid revision."""
 
 
-def _raise_for_status(request):
+def _raise_for_status(response: Response):
     """
     Internal version of `request.raise_for_status()` that will refine a potential HTTPError.
     """
-    if "X-Error-Code" in request.headers:
-        error_code = request.headers["X-Error-Code"]
+    if "X-Error-Code" in response.headers:
+        error_code = response.headers["X-Error-Code"]
         if error_code == "RepoNotFound":
-            raise RepositoryNotFoundError(f"404 Client Error: Repository Not Found for url: {request.url}")
+            raise RepositoryNotFoundError(f"404 Client Error: Repository Not Found for url: {response.url}")
         elif error_code == "EntryNotFound":
-            raise EntryNotFoundError(f"404 Client Error: Entry Not Found for url: {request.url}")
+            raise EntryNotFoundError(f"404 Client Error: Entry Not Found for url: {response.url}")
         elif error_code == "RevisionNotFound":
-            raise RevisionNotFoundError(f"404 Client Error: Revision Not Found for url: {request.url}")
+            raise RevisionNotFoundError(f"404 Client Error: Revision Not Found for url: {response.url}")
 
-    request.raise_for_status()
+    if response.status_code == 401:
+        # The repo was not found and the user is not Authenticated
+        raise RepositoryNotFoundError(
+            f"401 Client Error: Repository not found for url: {response.url}. "
+            "If the repo is private, make sure you are authenticated."
+        )
+
+    response.raise_for_status()
 
 
 def http_get(url: str, temp_file: BinaryIO, proxies=None, resume_size=0, headers: Optional[Dict[str, str]] = None):
@@ -1028,3 +1037,41 @@ def get_full_repo_name(model_id: str, organization: Optional[str] = None, token:
         return f"{username}/{model_id}"
     else:
         return f"{organization}/{model_id}"
+
+
+def send_example_telemetry(example_name, *example_args, framework="pytorch"):
+    """
+    Sends telemetry that helps tracking the examples use.
+
+    Args:
+        example_name (`str`): The name of the example.
+        *example_args (dataclasses or `argparse.ArgumentParser`): The arguments to the script. This function will only
+            try to extract the model and dataset name from those. Nothing else is tracked.
+        framework (`str`, *optional*, defaults to `"pytorch"`): The framework for the example.
+    """
+    if is_offline_mode():
+        return
+
+    data = {"example": example_name, "framework": framework}
+    for args in example_args:
+        args_as_dict = {k: v for k, v in args.__dict__.items() if not k.startswith("_") and v is not None}
+        if "model_name_or_path" in args_as_dict:
+            model_name = args_as_dict["model_name_or_path"]
+            # Filter out local paths
+            if not os.path.isdir(model_name):
+                data["model_name"] = args_as_dict["model_name_or_path"]
+        if "dataset_name" in args_as_dict:
+            data["dataset_name"] = args_as_dict["dataset_name"]
+        elif "task_name" in args_as_dict:
+            # Extract script name from the example_name
+            script_name = example_name.replace("tf_", "").replace("flax_", "").replace("run_", "")
+            script_name = script_name.replace("_no_trainer", "")
+            data["dataset_name"] = f"{script_name}-{args_as_dict['task_name']}"
+
+    headers = {"user-agent": http_user_agent(data)}
+    try:
+        r = requests.head(HUGGINGFACE_CO_EXAMPLES_TELEMETRY, headers=headers)
+        r.raise_for_status()
+    except Exception:
+        # We don't want to error in case of connection errors of any kind.
+        pass
