@@ -554,7 +554,8 @@ class TFModelTesterMixin:
         tf_loss = getattr(tf_outputs, "loss", None)
         if tf_loss is not None:
             tf_outputs.loss = tf.math.reduce_mean(tf_loss)
-
+        # print("check_pt_tf_outputs: ")
+        # print(tf_outputs[0].shape, tf_outputs[1].shape, tf_outputs[2].shape)
         self.check_pt_tf_outputs(tf_outputs, pt_outputs, type(tf_model))
 
     @is_pt_tf_cross_test
@@ -598,6 +599,7 @@ class TFModelTesterMixin:
             pt_model = transformers.load_tf2_model_in_pytorch_model(pt_model, tf_model)
 
             # Original test: check without `labels`
+            print(f"From cross test: {model_class.__name__}.")
             self.check_pt_tf_models(tf_model, pt_model, tf_inputs_dict)
             # check with `labels`
             if tf_inputs_dict_with_labels:

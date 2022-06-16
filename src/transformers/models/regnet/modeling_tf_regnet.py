@@ -358,6 +358,7 @@ class TFRegNetMainLayer(tf.keras.layers.Layer):
         self.encoder = TFRegNetEncoder(config, name="encoder")
         self.pooler = TFAdaptiveAvgPool2D((1, 1), name="pooler")
 
+    @unpack_inputs
     def call(
         self,
         pixel_values: tf.Tensor,
@@ -383,6 +384,7 @@ class TFRegNetMainLayer(tf.keras.layers.Layer):
 
         last_hidden_state = encoder_outputs[0]
         pooled_output = self.pooler(last_hidden_state)
+        pooled_output = tf.transpose(pooled_output, perm=(0, 3, 1, 2))
 
         # Change to NCHW output format have uniformity in the modules
         last_hidden_state = tf.transpose(last_hidden_state, perm=(0, 3, 1, 2))
