@@ -172,7 +172,7 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
             new_keys.append(new_key)
     for old_key, new_key in zip(old_keys, new_keys):
         pt_state_dict[new_key] = pt_state_dict.pop(old_key)
-    # print(f"From modeling_tf_pytorch_utils.py (changed param names): {list(pt_state_dict.keys())}.")
+    
     # Make sure we are able to load PyTorch base models as well as derived models (with heads)
     # TF models always have a prefix, some of PyTorch models (base ones) don't
     start_prefix_to_remove = ""
