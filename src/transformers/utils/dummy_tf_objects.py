@@ -255,6 +255,9 @@ class TFAlbertPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+TF_REGNET_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
 class TFRegNetForImageClassification(metaclass=DummyObject):
     _backends = ["tf"]
 
@@ -274,9 +277,6 @@ class TFRegNetPreTrainedModel(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
-
-
-TF_REGNET_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
 TF_MODEL_FOR_CAUSAL_LM_MAPPING = None
