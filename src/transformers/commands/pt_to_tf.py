@@ -174,7 +174,7 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         # Fetch remote data
         # TODO: implement a solution to pull a specific PR/commit, so we can use this CLI to validate pushes.
         repo = Repository(local_dir=self._local_dir, clone_from=self._model_name)
-        # repo.git_pull()  # in case the repo already exists locally, but with an older commit
+        repo.git_pull()  # in case the repo already exists locally, but with an older commit
 
         # Load config and get the appropriate architecture -- the latter is needed to convert the head's weights
         config = AutoConfig.from_pretrained(self._local_dir)
