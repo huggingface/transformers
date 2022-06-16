@@ -35,7 +35,7 @@ highly-optimized Faster RCNN baseline on the challenging COCO object detection d
 generalized to produce panoptic segmentation in a unified manner. We show that it significantly outperforms competitive
 baselines.*
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/facebookresearch/detr).
+This model was contributed by [nielsr](https://huggingface.co/nielsr). The Tensorflow version of this model was contributed by [amyeroberts](https://huggingface.co/amyeroberts). The original code can be found [here](https://github.com/facebookresearch/detr).
 
 The quickest way to get started with DETR is by checking the [example notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/DETR) (which showcase both inference and
 fine-tuning on custom data).
@@ -97,6 +97,7 @@ Tips:
 - If you want to train the model in a distributed environment across multiple nodes, then one should update the
   _num_boxes_ variable in the _DetrLoss_ class of _modeling_detr.py_. When training on multiple nodes, this should be
   set to the average number of target boxes across all nodes, as can be seen in the original implementation [here](https://github.com/facebookresearch/detr/blob/a54b77800eb8e64e3ad0d8237789fcbf2f8350c5/models/detr.py#L227-L232).
+  # FIXME 
 - [`~transformers.DetrForObjectDetection`] and [`~transformers.DetrForSegmentation`] can be initialized with
   any convolutional backbone available in the [timm library](https://github.com/rwightman/pytorch-image-models).
   Initializing with a MobileNet backbone for example can be done by setting the `backbone` attribute of
@@ -167,3 +168,18 @@ mean Average Precision (mAP) and Panoptic Quality (PQ). The latter objects are i
 
 [[autodoc]] DetrForSegmentation
     - forward
+
+## TFDetrModel
+
+[[autodoc]] TFDetrModel
+    - call
+
+## TFDetrForObjectDetection
+
+[[autodoc]] TFDetrForObjectDetection
+    - call
+
+## TFDetrForSegmentation
+
+[[autodoc]] TFDetrForSegmentation
+    - call

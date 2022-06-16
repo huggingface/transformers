@@ -88,6 +88,8 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "RealmForOpenQA",  # Not regular model.
     "ReformerForMaskedLM",  # Needs to be setup as decoder.
     "Speech2Text2DecoderWrapper",  # Building part of bigger (tested) model.
+    "TFDetrEncoder",  # Building part of bigger (tested) model.
+    "TFDetrDecoder",  # Building part of bigger (tested) model.
     "TFDPREncoder",  # Building part of bigger (tested) model.
     "TFElectraMainLayer",  # Building part of bigger (tested) model (should it be a TFPreTrainedModel ?)
     "TFRobertaForMultipleChoice",  # TODO: fix
