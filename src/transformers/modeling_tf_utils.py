@@ -1963,7 +1963,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         saved_model=False,
         version=1,
         push_to_hub=False,
-        max_shard_size: Union[int, str] = "1GB",
+        max_shard_size: Union[int, str] = "10GB",
         **kwargs
     ):
         """
