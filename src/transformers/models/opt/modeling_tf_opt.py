@@ -525,7 +525,7 @@ class TFOPTDecoder(tf.keras.layers.Layer):
         self.embed_tokens.weight = new_embeddings
 
     def get_input_embeddings(self):
-        return self.embed_tokens  
+        return self.embed_tokens
 
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, past_key_values_length):
         # create causal mask
