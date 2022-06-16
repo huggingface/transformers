@@ -323,7 +323,7 @@ extras["all"] = (
 extras["docs_specific"] = ["hf-doc-builder"]
 
 # "docs" needs "all" to resolve all the references
-extras["docs"] = extras["all"] + extras["docs_specific"]
+extras["docs"] = extras["all"] + extras["docs_specific"] + extras["accelerate"]
 
 extras["dev-torch"] = (
     extras["testing"]
