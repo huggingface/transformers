@@ -581,17 +581,17 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
                 else:
                     original_index = batch_index
                 labels_example = []
-                cur_word_id = -1
+                current_word_id = -1
                 for id, word_id in zip(
                     sanitized_tokens["input_ids"][batch_index],
                     sanitized_encodings[batch_index].word_ids,
                 ):
                     if word_id is not None:
                         if self.only_label_first_subword:
-                            if word_id != cur_word_id:
+                            if word_id != current_word_id:
                                 # Use the real label id for the first token of the word, and padding ids for the remaining tokens
                                 labels_example.append(word_labels[original_index][word_id])
-                                cur_word_id = word_id
+                                current_word_id = word_id
                             else:
                                 labels_example.append(self.pad_token_label)
                         else:
