@@ -317,6 +317,7 @@ extras["all"] = (
     + extras["integrations"]
     + extras["timm"]
     + extras["codecarbon"]
+    + extras["deepspeed"]
 )
 
 # Might need to add doc-builder and some specific deps in the future
