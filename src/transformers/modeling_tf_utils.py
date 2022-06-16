@@ -672,7 +672,8 @@ def tf_shard_checkpoint(weights, max_shard_size="10GB"):
             # remove the class name from the layer name for smooth loading
             # this could be removed only if the loading is purely based on indexes
             # and not layer names
-            weight_name = "/".join(weight.name.split("/")[1:])
+            # weight_name = "/".join(weight.name.split("/")[1:])
+            weight_name = weight.name
             weight_map[weight_name] = shard_file
 
     # Add the metadata
@@ -2061,16 +2062,17 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 f"index located at {save_index_file}."
             )
             for shard_file, shard in shards.items():
-                f = h5py.File(os.path.join(save_directory, shard_file), mode="w")
-                save_attributes_to_hdf5_group(
-                    f, "layer_names", ["/".join(layer.name.split("/")[1:]).encode("utf8") for layer in shard]
-                )
-
-                for layer in sorted(shard, key=lambda x: x.name):
-                    param_dset = f.create_dataset(
-                        "/".join(layer.name.split("/")[1:]), layer.numpy().shape, dtype=layer.numpy().dtype
+                with h5py.File(os.path.join(save_directory, shard_file), mode="w") as f:
+                    save_attributes_to_hdf5_group(
+                        f, "layer_names", ["/".join(layer.name.split("/")[1:]).encode("utf8") for layer in shard]
                     )
-                    param_dset[:] = layer.numpy()
+
+                    for layer in sorted(shard, key=lambda x: x.name):
+                        param_dset = f.create_dataset(
+                            "/".join(layer.name.split("/")[1:]), layer.numpy().shape, dtype=layer.numpy().dtype
+                        )
+                        param_dset[:] = layer.numpy()
+                
 
         if push_to_hub:
             url = self._push_to_hub(repo, commit_message=commit_message)
