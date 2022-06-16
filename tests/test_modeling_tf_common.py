@@ -1873,7 +1873,7 @@ class UtilsFunctionsTest(unittest.TestCase):
         xla_out = xla_masked_softmax(x, boolean_mask)
         out = masked_softmax(x, boolean_mask)
         assert tf.experimental.numpy.allclose(xla_out, out)
-        
+
     def test_checkpoint_sharding_from_hub(self):
         model = TFRobertaModel.from_pretrained("hf-internal-testing/tiny-random-bert-sharded")
         # the model above is the same as the model below, just a sharded version.
@@ -1996,8 +1996,6 @@ class UtilsFunctionsTest(unittest.TestCase):
 
                 for p1, p2 in zip(model.weights, new_model.weights):
                     self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
-
-    
 
 
 @require_tf
