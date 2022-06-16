@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Testing suite for the PyTorch Swin model. """
 
+import collections
 import inspect
 import os
 import pickle
@@ -33,7 +34,7 @@ if is_torch_available():
     from torch import nn
 
     from transformers import SwinForImageClassification, SwinForMaskedImageModeling, SwinModel
-    from transformers.models.swin.modeling_swin import SWIN_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
+    from transformers.models.swin.modeling_swin import SWIN_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
     from PIL import Image
@@ -42,6 +43,12 @@ if is_vision_available():
 
 if is_torch_fx_available():
     from transformers.utils.fx import symbolic_trace
+
+
+def to_2tuple(x):
+    if isinstance(x, collections.abc.Iterable):
+        return x
+    return (x, x)
 
 
 class SwinModelTester:
@@ -141,6 +148,23 @@ class SwinModelTester:
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, expected_seq_len, expected_dim))
 
+    def create_and_check_for_masked_image_modeling(self, config, pixel_values, labels):
+        model = SwinForMaskedImageModeling(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.num_channels, self.image_size, self.image_size)
+        )
+
+        # test greyscale images
+        config.num_channels = 1
+        model = SwinForMaskedImageModeling(config)
+
+        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
+        result = model(pixel_values)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, 1, self.image_size, self.image_size))
+
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
         model = SwinForImageClassification(config)
@@ -197,6 +221,14 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_for_masked_image_modeling(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_masked_image_modeling(*config_and_inputs)
+
+    def test_for_image_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
 
     def test_inputs_embeds(self):
         # Swin does not use inputs_embeds
@@ -353,10 +385,6 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
             del inputs_dict["output_hidden_states"]
             config.output_hidden_states = True
             self.check_hidden_states_output(inputs_dict, config, model_class, (padded_height, padded_width))
-
-    def test_for_image_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):

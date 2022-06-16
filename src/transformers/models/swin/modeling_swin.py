@@ -59,7 +59,7 @@ SWIN_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all Swin models at https://huggingface.co/models?filter=swin
 ]
 
-# to_2tuple, drop_path, SwinPatchEmbeddings, SwinPatchMerging and SwinDropPath are from the timm library.
+# drop_path, SwinPatchEmbeddings, SwinPatchMerging and SwinDropPath are from the timm library.
 
 
 @dataclass
@@ -203,13 +203,6 @@ class SwinImageClassifierOutput(ModelOutput):
     reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
-# Copied from transformers.models.vit.modeling_vit.to_2tuple
-def to_2tuple(x):
-    if isinstance(x, collections.abc.Iterable):
-        return x
-    return (x, x)
-
-
 def window_partition(input_feature, window_size):
     """
     Partitions the given input into windows.
@@ -254,12 +247,7 @@ class SwinEmbeddings(nn.Module):
     def __init__(self, config, use_mask_token=False):
         super().__init__()
 
-        self.patch_embeddings = SwinPatchEmbeddings(
-            image_size=config.image_size,
-            patch_size=config.patch_size,
-            num_channels=config.num_channels,
-            embed_dim=config.embed_dim,
-        )
+        self.patch_embeddings = SwinPatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
         self.patch_grid = self.patch_embeddings.grid_size
         self.mask_token = nn.Parameter(torch.zeros(1, 1, config.embed_dim)) if use_mask_token else None
@@ -295,20 +283,29 @@ class SwinEmbeddings(nn.Module):
 
 class SwinPatchEmbeddings(nn.Module):
     """
-    Image to Patch Embedding.
+    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
+    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
+    Transformer.
     """
 
-    def __init__(self, image_size=224, patch_size=16, num_channels=3, embed_dim=768):
+    def __init__(self, config):
         super().__init__()
-        image_size = to_2tuple(image_size)
-        patch_size = to_2tuple(patch_size)
+        image_size, patch_size, num_channels, hidden_size = (
+            config.image_size,
+            config.patch_size,
+            config.num_channels,
+            config.embed_dim,
+        )
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         self.image_size = image_size
         self.patch_size = patch_size
+        self.num_channels = num_channels
         self.num_patches = num_patches
         self.grid_size = (image_size[0] // patch_size[0], image_size[1] // patch_size[1])
 
-        self.projection = nn.Conv2d(num_channels, embed_dim, kernel_size=patch_size, stride=patch_size)
+        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
 
     def maybe_pad(self, pixel_values, height, width):
         if width % self.patch_size[1] != 0:
@@ -320,7 +317,11 @@ class SwinPatchEmbeddings(nn.Module):
         return pixel_values
 
     def forward(self, pixel_values: Optional[torch.FloatTensor]) -> Tuple[torch.Tensor, Tuple[int]]:
-        _, _, height, width = pixel_values.shape
+        _, num_channels, height, width = pixel_values.shape
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
         # pad the input to be divisible by self.patch_size, if needed
         pixel_values = self.maybe_pad(pixel_values, height, width)
         embeddings = self.projection(pixel_values)
@@ -408,7 +409,10 @@ class SwinSelfAttention(nn.Module):
         self.num_attention_heads = num_heads
         self.attention_head_size = int(dim / num_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
-        self.window_size = to_2tuple(config.window_size)
+        window_size = config.window_size
+        self.window_size = (
+            window_size if isinstance(window_size, collections.abc.Iterable) else (window_size, window_size)
+        )
 
         self.relative_position_bias_table = nn.Parameter(
             torch.zeros((2 * self.window_size[0] - 1) * (2 * self.window_size[1] - 1), num_heads)
@@ -997,8 +1001,8 @@ class SwinModel(SwinPreTrainedModel):
 
 
 @add_start_docstrings(
-    "Swin Model with a decoder on top for masked image modeling, as proposed in `SimMIM"
-    " <https://arxiv.org/abs/2111.09886>`__.",
+    "Swin Model with a decoder on top for masked image modeling, as proposed in"
+    " [SimMIM](https://arxiv.org/abs/2111.09886).",
     SWIN_START_DOCSTRING,
 )
 class SwinForMaskedImageModeling(SwinPreTrainedModel):
@@ -1009,7 +1013,9 @@ class SwinForMaskedImageModeling(SwinPreTrainedModel):
 
         num_features = int(config.embed_dim * 2 ** (config.num_layers - 1))
         self.decoder = nn.Sequential(
-            nn.Conv2d(in_channels=num_features, out_channels=config.encoder_stride**2 * 3, kernel_size=1),
+            nn.Conv2d(
+                in_channels=num_features, out_channels=config.encoder_stride**2 * config.num_channels, kernel_size=1
+            ),
             nn.PixelShuffle(config.encoder_stride),
         )
 
