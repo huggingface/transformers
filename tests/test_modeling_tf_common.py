@@ -1976,8 +1976,8 @@ class UtilsFunctionsTest(unittest.TestCase):
                     # Note: pickle adds some junk so the weight of the file can end up being slightly bigger than
                     # the size asked for (since we count parameters)
                     if size >= max_size_int + 50000:
-                        state_dict = h5py.File(shard_file, "r")
-                        self.assertEqual(len(state_dict), 1)
+                        with h5py.File(shard_file, "r") as state_file:
+                            self.assertEqual(len(state_file), 1)
 
                 # Check the index and the shard files found match
                 with open(index_file, "r", encoding="utf-8") as f:

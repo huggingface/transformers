@@ -2072,7 +2072,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                             "/".join(layer.name.split("/")[1:]), layer.numpy().shape, dtype=layer.numpy().dtype
                         )
                         param_dset[:] = layer.numpy()
-                
 
         if push_to_hub:
             url = self._push_to_hub(repo, commit_message=commit_message)
