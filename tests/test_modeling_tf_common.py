@@ -27,14 +27,14 @@ from typing import List, Tuple
 
 from datasets import Dataset
 
-from huggingface_hub import delete_repo, login
+from huggingface_hub import HfFolder, delete_repo, set_access_token
 from requests.exceptions import HTTPError
 from transformers import is_tf_available, is_torch_available
 from transformers.configuration_utils import PretrainedConfig
 from transformers.models.auto import get_values
 from transformers.testing_utils import tooslow  # noqa: F401
 from transformers.testing_utils import (
-    PASS,
+    TOKEN,
     USER,
     CaptureLogger,
     _tf_gpu_memory_limit,
@@ -1873,17 +1873,19 @@ class UtilsFunctionsTest(unittest.TestCase):
 class TFModelPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls._token = login(username=USER, password=PASS)
+        cls._token = TOKEN
+        set_access_token(TOKEN)
+        HfFolder.save_token(TOKEN)
 
     @classmethod
     def tearDownClass(cls):
         try:
-            delete_repo(token=cls._token, name="test-model-tf")
+            delete_repo(token=cls._token, repo_id="test-model-tf")
         except HTTPError:
             pass
 
         try:
-            delete_repo(token=cls._token, name="test-model-tf-org", organization="valid_org")
+            delete_repo(token=cls._token, repo_id="valid_org/test-model-tf-org")
         except HTTPError:
             pass
 
@@ -1911,7 +1913,7 @@ class TFModelPushToHubTester(unittest.TestCase):
         model = TFBertModel(config)
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.push_to_hub(os.path.join(tmp_dir, "test-model-tf"))
-            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "test-model-card-tf", "README.md")))
+            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "test-model-tf", "README.md")))
 
     def test_push_to_hub_in_organization(self):
         config = BertConfig(
