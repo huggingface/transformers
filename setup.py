@@ -323,7 +323,7 @@ extras["all"] = (
 extras["docs_specific"] = ["hf-doc-builder"]
 
 # "docs" needs "all" to resolve all the references
-extras["docs"] = extras["all"] + extras["docs_specific"] + extras["accelerate"]
+extras["docs"] = extras["all"] + extras["docs_specific"]
 
 extras["dev-torch"] = (
     extras["testing"]
@@ -363,6 +363,7 @@ extras["dev"] = (
     + extras["docs_specific"]
     + extras["sklearn"]
     + extras["modelcreation"]
+    + extras["accelerate"]
 )
 
 extras["torchhub"] = deps_list(
