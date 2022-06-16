@@ -10,7 +10,6 @@ from .tokenization_bert import BertTokenizer
 
 
 class TFBertTokenizer(tf.keras.layers.Layer):
-    # TODO Do we need to change the name? Most TF users will still want the normal tokenizers
     # TODO Add tests, particularly one with a full model and one with saving to savedmodel, as these are main use cases
 
     def __init__(
@@ -37,6 +36,7 @@ class TFBertTokenizer(tf.keras.layers.Layer):
         self.sep_token_id = sep_token_id
         self.pad_token_id = pad_token_id
         self.paired_trimmer = ShrinkLongestTrimmer(max_length - 3)
+        self.max_length = max_length
         self.padding = padding
         self.truncation = truncation
         self.pad_to_multiple_of = pad_to_multiple_of
@@ -59,7 +59,7 @@ class TFBertTokenizer(tf.keras.layers.Layer):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], *init_inputs, **kwargs):
-        tokenizer = BertTokenizer.from_pretrained(*init_inputs, **kwargs)
+        tokenizer = BertTokenizer.from_pretrained(pretrained_model_name_or_path, *init_inputs, **kwargs)
         return cls.from_tokenizer(tokenizer, **kwargs)
 
     def unpaired_tokenize(self, texts):
@@ -68,12 +68,6 @@ class TFBertTokenizer(tf.keras.layers.Layer):
         else:
             texts = tf.constant(texts)
         return self.tf_tokenizer.tokenize(texts)
-
-    def trim_paired_texts(self, text_a, text_b):
-        texts = tf.ragged.stack([text_a, text_b], axis=1)
-        texts = self.paired_trimer.trim(texts)
-        text_a, text_b = texts[:, 0, :], texts[:, 1, :]
-        return text_a, text_b
 
     def call(
         self,
@@ -103,22 +97,32 @@ class TFBertTokenizer(tf.keras.layers.Layer):
             return_token_type_ids = self.return_token_type_ids
         if return_attention_mask is None:
             return_attention_mask = self.return_attention_mask
-        text = self.unpaired_tokenize(text)
-        if text_pair is None:
-            if truncation and text.bounding_shape(axis=-1) > max_length - 2:
+        if not isinstance(text, tf.Tensor):
+            text = tf.convert_to_tensor(text)
+        if text_pair is not None and not isinstance(text_pair, tf.Tensor):
+            text_pair = tf.convert_to_tensor(text_pair)
+        if text_pair is not None:
+            if len(text.shape) > 1:
+                raise ValueError("text argument should not be multidimensional when a text pair is supplied!")
+            if len(text_pair.shape) > 1:
+                raise ValueError("text_pair should not be multidimensional!")
+            text = tf.ragged.stack([text, text_pair], axis=1)
+        if len(text.shape) == 1:  # Unpaired text
+            text = self.unpaired_tokenize(text)
+            if truncation and text.bounding_shape(axis=1) > max_length - 2:
                 text = text[:, : max_length - 2]  # Allow room for special tokens
             input_ids, token_type_ids = combine_segments(
                 (text,), start_of_sequence_id=self.cls_token_id, end_of_segment_id=self.sep_token_id
             )
-        else:
-            text_pair = self.unpaired_tokenize(text_pair)
+        else:  # Paired text
+            text = self.unpaired_tokenize(text)
             if truncation:
-                text, text_pair = self.trim_paired_texts(text, text_pair)
+                text = tf.ragged.stack(self.paired_trimmer.trim(text), axis=1)
             input_ids, token_type_ids = combine_segments(
-                (text, text_pair), start_of_sequence_id=self.cls_token_id, end_of_segment_id=self.sep_token_id
+                (text[0], text[1]), start_of_sequence_id=self.cls_token_id, end_of_segment_id=self.sep_token_id
             )
         if padding == "longest":
-            pad_length = input_ids.bounding_shape(axis=-1)
+            pad_length = input_ids.bounding_shape(axis=1)
             if pad_to_multiple_of is not None:
                 # No ceiling division in tensorflow, so we negate floordiv instead
                 pad_length = pad_to_multiple_of * (-tf.math.floordiv(-pad_length, pad_to_multiple_of))
