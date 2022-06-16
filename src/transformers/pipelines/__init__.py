@@ -29,6 +29,7 @@ from ..models.auto.configuration_auto import AutoConfig
 from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
+from ..tokenization_utils_fast import PreTrainedTokenizerFast
 from ..utils import http_get, is_tf_available, is_torch_available, logging
 from .audio_classification import AudioClassificationPipeline
 from .automatic_speech_recognition import AutomaticSpeechRecognitionPipeline
@@ -60,6 +61,7 @@ from .token_classification import (
     TokenClassificationArgumentHandler,
     TokenClassificationPipeline,
 )
+from .visual_question_answering import VisualQuestionAnsweringPipeline
 from .zero_shot_classification import ZeroShotClassificationArgumentHandler, ZeroShotClassificationPipeline
 from .zero_shot_image_classification import ZeroShotImageClassificationPipeline
 
@@ -93,6 +95,7 @@ if is_torch_available():
         MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+        MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING,
         AutoModel,
         AutoModelForAudioClassification,
         AutoModelForCausalLM,
@@ -108,6 +111,7 @@ if is_torch_available():
         AutoModelForSpeechSeq2Seq,
         AutoModelForTableQuestionAnswering,
         AutoModelForTokenClassification,
+        AutoModelForVisualQuestionAnswering,
     )
 if TYPE_CHECKING:
     from ..modeling_tf_utils import TFPreTrainedModel
@@ -120,6 +124,7 @@ logger = logging.get_logger(__name__)
 TASK_ALIASES = {
     "sentiment-analysis": "text-classification",
     "ner": "token-classification",
+    "vqa": "visual-question-answering",
 }
 SUPPORTED_TASKS = {
     "audio-classification": {
@@ -188,6 +193,19 @@ SUPPORTED_TASKS = {
             },
         },
         "type": "text",
+    },
+    "visual-question-answering": {
+        "impl": VisualQuestionAnsweringPipeline,
+        "pt": (AutoModelForVisualQuestionAnswering,) if is_torch_available() else (),
+        "tf": (),
+        "default": {
+            "model": {
+                "pt": "dandelin/vilt-b32-finetuned-vqa",
+                "tokenizer": "dandelin/vilt-b32-finetuned-vqa",
+                "feature_extractor": "dandelin/vilt-b32-finetuned-vqa",
+            },
+        },
+        "type": "multimodal",
     },
     "fill-mask": {
         "impl": FillMaskPipeline,
@@ -373,7 +391,7 @@ def pipeline(
     task: str = None,
     model: Optional = None,
     config: Optional[Union[str, PretrainedConfig]] = None,
-    tokenizer: Optional[Union[str, PreTrainedTokenizer]] = None,
+    tokenizer: Optional[Union[str, PreTrainedTokenizer, PreTrainedTokenizerFast]] = None,
     feature_extractor: Optional[Union[str, PreTrainedFeatureExtractor]] = None,
     framework: Optional[str] = None,
     revision: Optional[str] = None,

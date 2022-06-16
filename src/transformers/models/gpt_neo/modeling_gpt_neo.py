@@ -661,7 +661,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
 class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
     _keys_to_ignore_on_load_missing = [
         r"h\.\d+\.attn\.masked_bias",
-        r"lm_head\.weight",
+        r"lm_head.weight",
         r"h\.\d+\.attn\.attention\.bias",
     ]
     _keys_to_ignore_on_save = [r"lm_head.weight"]
@@ -812,7 +812,7 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
     GPT_NEO_START_DOCSTRING,
 )
 class GPTNeoForSequenceClassification(GPTNeoPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"lm_head\.weight"]
+    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
