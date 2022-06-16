@@ -234,10 +234,10 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             # the backend to ensure the reloaded weights match their counterpart using 32 bit precision.
             if float(os.path.getsize(tf_weights_path)) > 1.8 * os.path.getsize(pt_weights_path):
                 self._logger.warn("WEIGHT FORMAT UPDATE:float16 weights detected! Storing TF weights in float16")
-                tf.keras.backend.set_floatx('float16')
+                tf.keras.backend.set_floatx("float16")
                 tf_from_pt_model = tf_class.from_pretrained(self._local_dir, from_pt=True)
                 tf_from_pt_model.save_weights(tf_weights_path)
-                tf.keras.backend.set_floatx('float32')
+                tf.keras.backend.set_floatx("float32")
         del tf_from_pt_model  # will no longer be used, and may have a large memory footprint
         tf_model = tf_class.from_pretrained(self._local_dir)
         conversion_differences = self.find_pt_tf_differences(pt_model, pt_input, tf_model, tf_input)
