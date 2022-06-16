@@ -920,7 +920,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
     @require_torch_multi_gpu
     @parameterized.expand(["bf16", "fp16", "fp32"])
     def test_inference(self, dtype):
-        if dtype == "bf16" and not is_torch_bf16_available():
+        if dtype == "bf16" and not is_torch_gpu_bf16_available():
             self.skipTest("test requires bfloat16 hardware support")
 
         # this is just inference, so no optimizer should be loaded
