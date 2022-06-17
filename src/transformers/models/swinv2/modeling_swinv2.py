@@ -300,7 +300,6 @@ class Swinv2Embeddings(nn.Module):
         return embeddings, output_dimensions
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinPatchEmbeddings with Swin->Swinv2
 class Swinv2PatchEmbeddings(nn.Module):
     """
     Image to Patch Embedding.
@@ -339,7 +338,6 @@ class Swinv2PatchEmbeddings(nn.Module):
         return embeddings, output_dimensions
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinPatchMerging with Swin->Swinv2
 class Swinv2PatchMerging(nn.Module):
     """
     Patch Merging Layer.
@@ -540,7 +538,6 @@ class Swinv2SelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinAttention with Swin->Swinv2
 class Swinv2Attention(nn.Module):
     def __init__(self, config, dim, num_heads, window_size, pretrained_window_size=0):
         super().__init__()
@@ -734,7 +731,6 @@ class Swinv2Layer(nn.Module):
         return layer_outputs
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinStage with Swin->Swinv2
 class Swinv2Stage(nn.Module):
     def __init__(
         self, config, dim, input_resolution, depth, num_heads, drop_path, downsample, pretrained_window_size=0
@@ -794,7 +790,6 @@ class Swinv2Stage(nn.Module):
         return stage_outputs
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinEncoder with Swin->Swinv2
 class Swinv2Encoder(nn.Module):
     def __init__(self, config, grid_size, pretrained_window_sizes=(0, 0, 0, 0)):
         super().__init__()
