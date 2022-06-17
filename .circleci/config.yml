@@ -87,6 +87,7 @@ jobs:
             - run: pip install tensorflow_probability
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - run: pip install git+https://github.com/huggingface/accelerate
+            - run: pip install ninja
             - save_cache:
                 key: v0.5-{{ checksum "setup.py" }}
                 paths:
@@ -128,6 +129,7 @@ jobs:
             - run: pip install tensorflow_probability
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - run: pip install git+https://github.com/huggingface/accelerate
+            - run: pip install ninja
             - save_cache:
                 key: v0.5-{{ checksum "setup.py" }}
                 paths:
@@ -162,6 +164,7 @@ jobs:
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.12.0+cpu.html
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - run: pip install git+https://github.com/huggingface/accelerate
+            - run: pip install ninja
             - save_cache:
                 key: v0.5-{{ checksum "setup.py" }}
                 paths:
@@ -201,6 +204,7 @@ jobs:
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.12.0+cpu.html
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - run: pip install git+https://github.com/huggingface/accelerate
+            - run: pip install ninja
             - save_cache:
                 key: v0.5-{{ checksum "setup.py" }}
                 paths:
@@ -234,6 +238,7 @@ jobs:
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.12.0+cpu.html
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - run: pip install git+https://github.com/huggingface/accelerate
+            - run: pip install ninja
             - save_cache:
                   key: v0.5-torch-{{ checksum "setup.py" }}
                   paths:
@@ -272,6 +277,7 @@ jobs:
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.12.0+cpu.html
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - run: pip install git+https://github.com/huggingface/accelerate
+            - run: pip install ninja
             - save_cache:
                   key: v0.5-torch-{{ checksum "setup.py" }}
                   paths:
@@ -441,6 +447,7 @@ jobs:
             - run: pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.12.0+cpu.html
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
+            - run: pip install ninja
             - save_cache:
                   key: v0.5-torch-{{ checksum "setup.py" }}
                   paths:
@@ -479,6 +486,7 @@ jobs:
             - run: pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.12.0+cpu.html
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
+            - run: pip install ninja
             - save_cache:
                   key: v0.5-torch-{{ checksum "setup.py" }}
                   paths:
