@@ -1410,7 +1410,7 @@ else:
     _import_structure["models.omnivore"].extend(
         [
             "OMNIVORE_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "OmnivoreForImageClassification",
+            "OmnivoreForVisionClassification",
             "OmnivoreModel",
             "OmnivorePreTrainedModel",
         ]
@@ -3856,7 +3856,7 @@ if TYPE_CHECKING:
         )
         from .models.omnivore import (
             OMNIVORE_PRETRAINED_MODEL_ARCHIVE_LIST,
-            OmnivoreForImageClassification,
+            OmnivoreForVisionClassification,
             OmnivoreModel,
             OmnivorePreTrainedModel,
         )

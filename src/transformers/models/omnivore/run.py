@@ -1,4 +1,4 @@
-from transformers import OmnivoreFeatureExtractor, OmnivoreConfig, OmnivoreForImageClassification, LevitForImageClassificationWithTeacher
+from transformers import OmnivoreFeatureExtractor, OmnivoreConfig, OmnivoreForVisionClassification, LevitForImageClassificationWithTeacher
 from PIL import Image
 import requests
 import torch
@@ -7,7 +7,7 @@ url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
 image = Image.open(requests.get(url, stream=True).raw)
 config = OmnivoreConfig()
 feature_extractor = OmnivoreFeatureExtractor()
-model = OmnivoreForImageClassification(config)
+model = OmnivoreForVisionClassification(config)
 dmodel = LevitForImageClassificationWithTeacher.from_pretrained('facebook/levit-128')
 
 weights = torch.load("om/swint.bin", map_location="cpu")

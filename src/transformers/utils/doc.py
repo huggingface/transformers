@@ -1117,6 +1117,8 @@ def add_code_sample_docstrings(
             code_sample = sample_docstrings["BaseModel"]
         elif "ImageClassification" in model_class:
             code_sample = sample_docstrings["ImageClassification"]
+        elif "VisionClassification" in model_class:
+            code_sample = sample_docstrings["ImageClassification"]
         else:
             raise ValueError(f"Docstring can't be built for model {model_class}")
 

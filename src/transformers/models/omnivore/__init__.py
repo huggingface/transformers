@@ -38,7 +38,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_omnivore"] = [
         "OMNIVORE_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "OmnivoreForImageClassification",
+        "OmnivoreForVisionClassification",
         "OmnivoreModel",
         "OmnivorePreTrainedModel",
     ]
@@ -63,7 +63,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_omnivore import (
             OMNIVORE_PRETRAINED_MODEL_ARCHIVE_LIST,
-            OmnivoreForImageClassification,
+            OmnivoreForVisionClassification,
             OmnivoreModel,
             OmnivorePreTrainedModel,
         )

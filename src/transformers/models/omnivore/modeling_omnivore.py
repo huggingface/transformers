@@ -1038,7 +1038,7 @@ class OmnivoreModel(OmnivorePreTrainedModel):
     """,
     OMNIVORE_START_DOCSTRING,
 )
-class OmnivoreForImageClassification(OmnivorePreTrainedModel):
+class OmnivoreForVisionClassification(OmnivorePreTrainedModel):
     # TODO Change Name
     def __init__(self, config):
         super().__init__(config)
