@@ -14,8 +14,10 @@
 # limitations under the License.
 """ Tensorflow ResNet model."""
 
-from typing import Dict, Iterable, Optional, Tuple, Union
+import math
+from typing import Dict, List, Optional, Tuple, Union
 
+import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import ACT2FN
@@ -337,46 +339,76 @@ RESNET_INPUTS_DOCSTRING = r"""
 """
 
 
-class AdaptiveAveragePooling2D(tf.keras.layers.Layer):
-    """
-    Average Pooling with adaptive kernel size.
-
-    Args:
-      output_size: Tuple of integers specifying (pooled_rows, pooled_cols).
-        The new size of output channels.
-    Input shape:
-      - 4D tensor with shape `(batch_size, channels, height, width)`.
-    Output shape:
-      - 4D tensor with shape `(batch_size, channels, pooled_rows, pooled_cols)`.
-
-    Adapted from [tensorflow-addon's adaptive_pooling.py][
-        https://github.com/tensorflow/addons/blob/8cec33fcaaf1cf90aec7bdd55a0fcdbb251ce5c2/tensorflow_addons/layers/adaptive_pooling.py#L238-L268
-    ]
-    """
-
-    def __init__(self, output_size: Union[int, Iterable[int]], **kwargs) -> None:
-        self.output_size = (output_size, output_size) if isinstance(output_size, int) else tuple(output_size)
+# Copied from:
+# https://gist.github.com/Rocketknight1/43abbe6e73f1008e6e459486e01e0ceb
+class TFAdaptiveAvgPool1D(tf.keras.layers.Layer):
+    def __init__(self, output_dim, mode="dense", **kwargs):
         super().__init__(**kwargs)
+        self.output_dim = output_dim
+        self.mode = mode
+        self.map = None
 
-    def call(self, inputs: tf.Tensor, *args) -> tf.Tensor:
-        h_bins = self.output_size[0]
-        w_bins = self.output_size[1]
-        split_cols = tf.split(inputs, h_bins, axis=2)
-        split_cols = tf.stack(split_cols, axis=2)
-        split_rows = tf.split(split_cols, w_bins, axis=4)
-        split_rows = tf.stack(split_rows, axis=4)
-        out_vect = tf.reduce_mean(split_rows, axis=[3, 5])
-        return out_vect
+    def build(self, input_shape):
+        super().build(input_shape)
+        """We pre-compute the sparse matrix for the build() step once. The below code comes
+        from https://stackoverflow.com/questions/53841509/how-does-adaptive-pooling-in-pytorch-work/63603993#63603993."""
 
-    def compute_output_shape(self, input_shape: Iterable[int]) -> tf.TensorShape:
-        input_shape = tf.TensorShape(input_shape).as_list()
-        shape = tf.TensorShape([input_shape[0], input_shape[1], self.output_size[0], self.output_size[1]])
-        return shape
+        def get_kernels(ind, outd) -> List:
+            """Returns a List [(kernel_offset_start,kernel_length)] defining all the pooling kernels for a 1-D adaptive
+            pooling layer that takes an input of dimension `ind` and yields an output of dimension `outd`"""
 
-    def get_config(self):
-        config = {"output_size": self.output_size}
-        base_config = super().get_config()
-        return {**base_config, **config}
+            def start_index(a, b, c):
+                return math.floor((float(a) * float(c)) / b)
+
+            def end_index(a, b, c):
+                return math.ceil((float(a + 1) * float(c)) / b)
+
+            results = []
+            for ow in range(outd):
+                start = start_index(ow, outd, ind)
+                end = end_index(ow, outd, ind)
+                sz = end - start
+                results.append((start, sz))
+            return results
+
+        in_dim = int(input_shape[-1])
+        kernels = get_kernels(in_dim, self.output_dim)
+        sparse_map = np.zeros((in_dim, self.output_dim), dtype=np.float32)
+        for i, kernel in enumerate(kernels):
+            sparse_map[kernel[0] : kernel[0] + kernel[1], i] = 1 / kernel[1]
+        if self.mode == "dense":
+            self.map = tf.constant(sparse_map)
+        else:
+            self.map = tf.sparse.from_dense(sparse_map)
+
+    def call(self, inputs):
+        if self.mode == "dense":
+            return inputs @ self.map
+        else:
+            input_dims = inputs.shape
+            input_matrix = tf.reshape(inputs, (-1, input_dims[-1]))
+            out = tf.sparse.sparse_dense_matmul(input_matrix, self.map)
+            return tf.reshape(out, input_dims[:-1].as_list() + [-1])
+
+
+class TFAdaptiveAvgPool2D(tf.keras.layers.Layer):
+    def __init__(self, output_shape, mode="dense", **kwargs):
+        super().__init__(**kwargs)
+        self.h_pool = TFAdaptiveAvgPool1D(output_shape[0], mode=mode)
+        self.w_pool = TFAdaptiveAvgPool1D(output_shape[1], mode=mode)
+
+    def call(self, inputs):
+        # Rearrange from NHWC -> NCHW
+        inputs = tf.transpose(inputs, perm=[0, 3, 1, 2])
+        # Perform W-pooling
+        inputs = self.w_pool(inputs)
+        # Rearrange NCHW -> NCWH
+        inputs = tf.transpose(inputs, perm=[0, 1, 3, 2])
+        # Perform H-pooling
+        inputs = self.h_pool(inputs)
+        # Rearrange from NCWH -> NHWC
+        inputs = tf.transpose(inputs, perm=[0, 3, 2, 1])
+        return inputs
 
 
 @keras_serializable
@@ -388,7 +420,7 @@ class TFResNetMainLayer(tf.keras.layers.Layer):
         self.config = config
         self.embedder = TFResNetEmbeddings(config, name="embedder")
         self.encoder = TFResNetEncoder(config, name="encoder")
-        self.pooler = AdaptiveAveragePooling2D((1, 1))
+        self.pooler = TFAdaptiveAvgPool2D((1, 1))
 
     @unpack_inputs
     def call(
