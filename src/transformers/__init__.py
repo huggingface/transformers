@@ -2558,6 +2558,13 @@ else:
             "FlaxBlenderbotSmallPreTrainedModel",
         ]
     )
+    _import_structure["models.bloom"].extend(
+        [
+            "FlaxBloomForCausalLM",
+            "FlaxBloomModel",
+            "FlaxBloomPreTrainedModel",
+        ]
+    )
     _import_structure["models.clip"].extend(
         [
             "FlaxCLIPModel",
@@ -4776,6 +4783,11 @@ if TYPE_CHECKING:
             FlaxBlenderbotSmallForConditionalGeneration,
             FlaxBlenderbotSmallModel,
             FlaxBlenderbotSmallPreTrainedModel,
+        )
+        from .models.bloom import (
+            FlaxBloomForCausalLM,
+            FlaxBloomModel,
+            FlaxBloomPreTrainedModel,
         )
         from .models.clip import (
             FlaxCLIPModel,
