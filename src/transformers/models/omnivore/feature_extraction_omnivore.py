@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Feature extractor class for LeViT."""
+"""Feature extractor class for Omnivore."""
 
 from typing import Optional, Union
 
@@ -33,9 +33,9 @@ from ...utils import TensorType, logging
 logger = logging.get_logger(__name__)
 
 
-class LevitFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
+class OmnivoreFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
-    Constructs a LeViT feature extractor.
+    Constructs a Omnivore feature extractor.
 
     This feature extractor inherits from [`FeatureExtractionMixin`] which contains most of the main methods. Users
     should refer to this superclass for more information regarding those methods.

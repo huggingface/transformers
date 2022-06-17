@@ -55,6 +55,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("layoutlmv3", "LayoutLMv3FeatureExtractor"),
         ("levit", "LevitFeatureExtractor"),
         ("maskformer", "MaskFormerFeatureExtractor"),
+        ("omnivore", "OmnivoreFeatureExtractor"),
         ("mctct", "MCTCTFeatureExtractor"),
         ("perceiver", "PerceiverFeatureExtractor"),
         ("poolformer", "PoolFormerFeatureExtractor"),

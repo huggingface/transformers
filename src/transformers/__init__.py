@@ -259,7 +259,7 @@ _import_structure = {
         "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "NystromformerConfig",
     ],
-    "models.omnivore":["OMNIVORE_PRETRAINED_CONFIG_ARCHIVE_MAP", "OmnivoreConfig"],
+    "models.omnivore": ["OMNIVORE_PRETRAINED_CONFIG_ARCHIVE_MAP", "OmnivoreConfig"],
     "models.openai": ["OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OpenAIGPTConfig", "OpenAIGPTTokenizer"],
     "models.opt": ["OPTConfig"],
     "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
@@ -3193,8 +3193,8 @@ if TYPE_CHECKING:
         from .models.layoutlmv2 import LayoutLMv2FeatureExtractor
         from .models.layoutlmv3 import LayoutLMv3FeatureExtractor
         from .models.levit import LevitFeatureExtractor
-        from .models.omnivore import OmnivoreFeatureExtractor
         from .models.maskformer import MaskFormerFeatureExtractor
+        from .models.omnivore import OmnivoreFeatureExtractor
         from .models.perceiver import PerceiverFeatureExtractor
         from .models.poolformer import PoolFormerFeatureExtractor
         from .models.segformer import SegformerFeatureExtractor

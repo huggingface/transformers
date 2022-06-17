@@ -76,6 +76,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("layoutlmv3", "LayoutLMv3Model"),
         ("led", "LEDModel"),
         ("levit", "LevitModel"),
+        ("omnivore", "OmnivoreModel"),
         ("longformer", "LongformerModel"),
         ("longt5", "LongT5Model"),
         ("luke", "LukeModel"),
@@ -315,6 +316,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("data2vec-vision", "Data2VecVisionForImageClassification"),
         ("deit", ("DeiTForImageClassification", "DeiTForImageClassificationWithTeacher")),
         ("imagegpt", "ImageGPTForImageClassification"),
+        ("omnivore", "OmnivoreForImageClassification"),
         ("levit", ("LevitForImageClassification", "LevitForImageClassificationWithTeacher")),
         (
             "perceiver",
