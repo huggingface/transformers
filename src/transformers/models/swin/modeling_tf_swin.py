@@ -263,13 +263,7 @@ class TFSwinEmbeddings(tf.keras.layers.Layer):
 
     def __init__(self, config: SwinConfig, use_mask_token: bool = False, **kwargs) -> None:
         super().__init__(**kwargs)
-        self.patch_embeddings = TFSwinPatchEmbeddings(
-            image_size=config.image_size,
-            patch_size=config.patch_size,
-            num_channels=config.num_channels,
-            embed_dim=config.embed_dim,
-            name="patch_embeddings",
-        )
+        self.patch_embeddings = TFSwinPatchEmbeddings(config, name="patch_embeddings")
         self.num_patches = self.patch_embeddings.num_patches
         self.patch_grid = self.patch_embeddings.grid_size
         self.embed_dim = config.embed_dim

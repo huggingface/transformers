@@ -17,6 +17,7 @@
 
 import inspect
 import unittest
+import collections
 
 import numpy as np
 
@@ -36,8 +37,13 @@ if is_tf_available():
         TFSwinForImageClassification,
         TFSwinForMaskedImageModeling,
         TFSwinModel,
-        to_2tuple,
     )
+
+
+def to_2tuple(x):
+    if isinstance(x, collections.abc.Iterable):
+        return x
+    return (x, x)
 
 
 if is_vision_available():
