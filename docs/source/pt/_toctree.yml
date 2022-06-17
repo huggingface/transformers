@@ -5,7 +5,7 @@
     title: Tour rápido
   - local: installation
     title: Instalação
-  title: Iniciar
+  title: Início
 - sections:
   - local: pipeline_tutorial
     title: Pipelines para inferência
