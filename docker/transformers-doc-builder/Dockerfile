@@ -15,5 +15,6 @@ RUN python3 -m pip install --no-cache-dir torchvision git+https://github.com/fac
 RUN python3 -m pip install --no-cache-dir pytorch-quantization --extra-index-url https://pypi.ngc.nvidia.com
 RUN python3 -m pip install -U "itsdangerous<2.1.0"
 
-RUN doc-builder build transformers transformers/docs/source --build_dir doc-build-dev --notebook_dir notebooks/transformers_doc --clean --version pr_$PR_NUMBER
+# Test if the image could successfully build the doc. before publishing the image
+RUN doc-builder build transformers transformers/docs/source/en --build_dir doc-build-dev --notebook_dir notebooks/transformers_doc --clean
 RUN rm -rf doc-build-dev
