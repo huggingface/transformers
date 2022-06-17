@@ -11,6 +11,7 @@ from .tokenization_bert import BertTokenizer
 
 class TFBertTokenizer(tf.keras.layers.Layer):
     # TODO Add tests, particularly one with a full model and one with saving to savedmodel, as these are main use cases
+    # TODO CI will need tensorflow_text to run these tests
 
     def __init__(
         self,
@@ -35,7 +36,7 @@ class TFBertTokenizer(tf.keras.layers.Layer):
         self.cls_token_id = cls_token_id
         self.sep_token_id = sep_token_id
         self.pad_token_id = pad_token_id
-        self.paired_trimmer = ShrinkLongestTrimmer(max_length - 3)
+        self.paired_trimmer = ShrinkLongestTrimmer(max_length - 3, axis=1)  # Allow room for special tokens
         self.max_length = max_length
         self.padding = padding
         self.truncation = truncation
@@ -65,8 +66,6 @@ class TFBertTokenizer(tf.keras.layers.Layer):
     def unpaired_tokenize(self, texts):
         if self.do_lower_case:
             texts = case_fold_utf8(texts)
-        else:
-            texts = tf.constant(texts)
         return self.tf_tokenizer.tokenize(texts)
 
     def call(
@@ -102,24 +101,25 @@ class TFBertTokenizer(tf.keras.layers.Layer):
         if text_pair is not None and not isinstance(text_pair, tf.Tensor):
             text_pair = tf.convert_to_tensor(text_pair)
         if text_pair is not None:
-            if len(text.shape) > 1:
+            if text.shape.rank > 1:
                 raise ValueError("text argument should not be multidimensional when a text pair is supplied!")
-            if len(text_pair.shape) > 1:
+            if text_pair.shape.rank > 1:
                 raise ValueError("text_pair should not be multidimensional!")
-            text = tf.ragged.stack([text, text_pair], axis=1)
-        if len(text.shape) == 1:  # Unpaired text
-            text = self.unpaired_tokenize(text)
+        if text.shape.rank == 2:
+            text, text_pair = text[:, 0], text[:, 1]
+        text = self.unpaired_tokenize(text)
+        if text_pair is None:  # Unpaired text
             if truncation and text.bounding_shape(axis=1) > max_length - 2:
                 text = text[:, : max_length - 2]  # Allow room for special tokens
             input_ids, token_type_ids = combine_segments(
                 (text,), start_of_sequence_id=self.cls_token_id, end_of_segment_id=self.sep_token_id
             )
         else:  # Paired text
-            text = self.unpaired_tokenize(text)
+            text_pair = self.unpaired_tokenize(text_pair)
             if truncation:
-                text = tf.ragged.stack(self.paired_trimmer.trim(text), axis=1)
+                text, text_pair = self.paired_trimmer.trim([text, text_pair])
             input_ids, token_type_ids = combine_segments(
-                (text[0], text[1]), start_of_sequence_id=self.cls_token_id, end_of_segment_id=self.sep_token_id
+                (text, text_pair), start_of_sequence_id=self.cls_token_id, end_of_segment_id=self.sep_token_id
             )
         if padding == "longest":
             pad_length = input_ids.bounding_shape(axis=1)
