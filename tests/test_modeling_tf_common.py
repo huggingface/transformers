@@ -73,7 +73,6 @@ if is_tf_available():
         TFAutoModel,
         TFAutoModelForSequenceClassification,
         TFBertModel,
-        TFRobertaModel,
         TFSharedEmbeddings,
         tf_top_k_top_p_filtering,
     )
@@ -1875,9 +1874,9 @@ class UtilsFunctionsTest(unittest.TestCase):
         assert tf.experimental.numpy.allclose(xla_out, out)
 
     def test_checkpoint_sharding_from_hub(self):
-        model = TFRobertaModel.from_pretrained("hf-internal-testing/tiny-random-bert-sharded")
+        model = TFBertModel.from_pretrained("ArthurZ/tiny-random-bert-sharded")
         # the model above is the same as the model below, just a sharded version.
-        ref_model = TFRobertaModel.from_pretrained("hf-internal-testing/tiny-random-bert-sharded")
+        ref_model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
         for p1, p2 in zip(model.weights, ref_model.weights):
             assert np.allclose(p1.numpy(), p2.numpy())
 

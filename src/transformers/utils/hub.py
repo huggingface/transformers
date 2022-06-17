@@ -861,6 +861,7 @@ class PushToHubMixin:
         organization: Optional[str] = None,
         private: Optional[bool] = None,
         use_auth_token: Optional[Union[bool, str]] = None,
+        max_shard_size: Optional[Union[int, str]] = "10GB",
         **model_card_kwargs
     ) -> str:
         """
@@ -936,8 +937,9 @@ class PushToHubMixin:
             use_auth_token=use_auth_token,
         )
         # Save the files in the cloned repo
-        self.save_pretrained(repo_path_or_name)
+
         if hasattr(self, "history") and hasattr(self, "create_model_card"):
+            self.save_pretrained(repo_path_or_name, max_shard_size=max_shard_size)
             # This is a Keras model and we might be able to fish out its History and make a model card out of it
             base_model_card_args = {
                 "output_dir": repo_path_or_name,
@@ -945,6 +947,9 @@ class PushToHubMixin:
             }
             base_model_card_args.update(model_card_kwargs)
             self.create_model_card(**base_model_card_args)
+        else:
+            # FLAX does not support sharding yet, will come in next PR
+            self.save_pretrained(repo_path_or_name, max_shard_size=max_shard_size)
         # Commit and push!
         url = self._push_to_hub(repo, commit_message=commit_message)
 
