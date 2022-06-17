@@ -842,7 +842,6 @@ class MCTCTForSequenceClassification(MCTCTPreTrainedModel):
         super().__init__(config)
 
         self.mctct = MCTCTModel(config)
-        num_layers = config.num_hidden_layers + 1  # transformer layers + input embeddings
 
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
