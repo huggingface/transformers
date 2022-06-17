@@ -211,7 +211,6 @@ class FeaturesManager:
             "default",
             "masked-lm",
             "sequence-classification",
-            "multiple-choice",
             "token-classification",
             "question-answering",
             onnx_config_cls="models.deberta.DebertaOnnxConfig",
