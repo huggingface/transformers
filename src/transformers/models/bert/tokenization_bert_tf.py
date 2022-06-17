@@ -10,7 +10,6 @@ from .tokenization_bert import BertTokenizer
 
 
 class TFBertTokenizer(tf.keras.layers.Layer):
-    # TODO Add tests, particularly one with a full model and one with saving to savedmodel, as these are main use cases
     # TODO CI will need tensorflow_text to run these tests
 
     def __init__(
@@ -109,7 +108,7 @@ class TFBertTokenizer(tf.keras.layers.Layer):
             text, text_pair = text[:, 0], text[:, 1]
         text = self.unpaired_tokenize(text)
         if text_pair is None:  # Unpaired text
-            if truncation and text.bounding_shape(axis=1) > max_length - 2:
+            if truncation:
                 text = text[:, : max_length - 2]  # Allow room for special tokens
             input_ids, token_type_ids = combine_segments(
                 (text,), start_of_sequence_id=self.cls_token_id, end_of_segment_id=self.sep_token_id
