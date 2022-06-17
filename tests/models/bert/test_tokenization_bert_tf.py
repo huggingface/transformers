@@ -1,11 +1,11 @@
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
-from transformers import is_tensorflow_text_available, is_tf_available, TFAutoModel, AutoConfig
+from transformers import AutoConfig, TFAutoModel, is_tensorflow_text_available, is_tf_available
 from transformers.models.bert.tokenization_bert import BertTokenizer
 from transformers.testing_utils import require_tensorflow_text
 
-from tempfile import TemporaryDirectory
-from pathlib import Path
 
 if is_tensorflow_text_available():
     from transformers.models.bert import TFBertTokenizer
@@ -18,6 +18,7 @@ TOKENIZER_CHECKPOINT = "bert-base-cased"
 TINY_MODEL_CHECKPOINT = "hf-internal-testing/tiny-bert-tf-only"
 
 if is_tf_available():
+
     class ModelToSave(tf.keras.Model):
         def __init__(self, tokenizer):
             super().__init__()
@@ -28,7 +29,8 @@ if is_tf_available():
         def call(self, inputs):
             tokenized = self.tokenizer(inputs)
             out = self.bert(**tokenized)
-            return out['pooler_output']
+            return out["pooler_output"]
+
 
 @require_tensorflow_text
 class BertTokenizationTest(unittest.TestCase):
@@ -60,8 +62,10 @@ class BertTokenizationTest(unittest.TestCase):
 
     def test_different_pairing_styles(self):
         merged_outputs = self.tf_tokenizer(self.paired_sentences)
-        separated_outputs = self.tf_tokenizer(text=[sentence[0] for sentence in self.paired_sentences],
-                                              text_pair=[sentence[1] for sentence in self.paired_sentences])
+        separated_outputs = self.tf_tokenizer(
+            text=[sentence[0] for sentence in self.paired_sentences],
+            text_pair=[sentence[1] for sentence in self.paired_sentences],
+        )
         for key in merged_outputs.keys():
             self.assertTrue(tf.reduce_all(tf.cast(merged_outputs[key], tf.int64) == separated_outputs[key]))
 
@@ -86,6 +90,3 @@ class BertTokenizationTest(unittest.TestCase):
         loaded_output = loaded_model(test_inputs)
         # We may see small differences because the loaded model is compiled, so we need an epsilon for the test
         self.assertLessEqual(tf.reduce_max(tf.abs(out - loaded_output)), 1e-5)
-
-
-
