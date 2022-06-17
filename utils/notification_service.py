@@ -608,7 +608,12 @@ if __name__ == "__main__":
         ci_url = f"https://github.com/{repository_full_name}/commit/{ci_sha}"
 
     if ci_title is not None:
-        assert ci_url is not None
+        if ci_url is None:
+            raise ValueError(
+                "When a title is found (`ci_title`), it means a `push` event or a `workflow_run` even "
+                "(triggered by another `push` event), and the commit SHA has to be provided in order to create the URL "
+                "to the commit page."
+            )
         ci_title = ci_title.strip().split("\n")[0].strip()
 
         # Retrieve the PR title and author login to complete the report
