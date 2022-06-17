@@ -112,22 +112,22 @@ Tips:
   [`~transformers.DetrFeatureExtractor.pad_and_create_pixel_mask`].
 - The size of the images will determine the amount of memory being used, and will thus determine the `batch_size`.
   It is advised to use a batch size of 2 per GPU. See [this Github thread](https://github.com/facebookresearch/detr/issues/150) for more info.
-- There are 3 ways to instantiate a DETR model (depending on what you prefer):
-  ```python
-  from transformers import DetrConfig
+- There are three ways to instantiate a DETR model (depending on what you prefer):
 
-  # option 1: instantiate DETR with pre-trained weights for entire model
-  model = DetrForObjectDetection.from_pretrained("facebook/resnet-50")
+          from transformers import DetrConfig
 
-  # option 2: instantiate DETR with randomly initialized weights for Transformer, but pre-trained weights for backbone
-  config = DetrConfig()
-  model = DetrForObjectDetection(config)
+      Option 1: instantiate DETR with pre-trained weights for entire model
+          model = DetrForObjectDetection.from_pretrained("facebook/resnet-50")
 
-  # option 3: instantiate DETR with randomly initialized weights for backbone + Transformer
-  config = DetrConfig(use_pretrained_backbone=False)
-  model = DetrForObjectDetection(config)
-  As a summary, consider the following table:
-  ```
+      Option 2: instantiate DETR with randomly initialized weights for Transformer, but pre-trained weights for backbone
+          config = DetrConfig()
+          model = DetrForObjectDetection(config)
+
+      Option 3: instantiate DETR with randomly initialized weights for backbone + Transformer
+          config = DetrConfig(use_pretrained_backbone=False)
+          model = DetrForObjectDetection(config)
+
+As a summary, consider the following table:
 
 | Task | Object detection | Instance segmentation | Panoptic segmentation |
 |------|------------------|-----------------------|-----------------------|
