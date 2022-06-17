@@ -32,7 +32,11 @@ from torch.nn import functional as F
 from transformers.utils.generic import ModelOutput
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutputWithNoAttention, BaseModelOutputWithPoolingAndNoAttention, ImageClassifierOutputWithNoAttention
+from ...modeling_outputs import (
+    BaseModelOutputWithNoAttention,
+    BaseModelOutputWithPoolingAndNoAttention,
+    ImageClassifierOutputWithNoAttention,
+)
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_omnivore import OmnivoreConfig
@@ -1035,7 +1039,7 @@ class OmnivoreModel(OmnivorePreTrainedModel):
     OMNIVORE_START_DOCSTRING,
 )
 class OmnivoreForImageClassification(OmnivorePreTrainedModel):
-    #TODO Change Name
+    # TODO Change Name
     def __init__(self, config):
         super().__init__(config)
 

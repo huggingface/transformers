@@ -81,6 +81,7 @@ from . import (
     lxmert,
     m2m_100,
     marian,
+    omnivore,
     maskformer,
     mbart,
     mbart50,
