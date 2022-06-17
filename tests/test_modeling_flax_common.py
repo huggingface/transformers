@@ -20,7 +20,7 @@ import unittest
 from typing import List, Tuple
 
 import numpy as np
-
+import json
 import transformers
 from huggingface_hub import delete_repo, login
 from requests.exceptions import HTTPError
@@ -43,6 +43,7 @@ if is_flax_available():
 
     import jax
     import jax.numpy as jnp
+    from flax.serialization import from_bytes, to_bytes
     from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
     from flax.traverse_util import flatten_dict, unflatten_dict
     from transformers import (
@@ -57,7 +58,11 @@ if is_flax_available():
         convert_pytorch_state_dict_to_flax,
         load_flax_weights_in_pytorch_model,
     )
-
+    from transformers.modeling_flax_utils import (
+        FLAX_WEIGHTS_INDEX_NAME,
+        FLAX_WEIGHTS_NAME,
+        flax_shard_checkpoint,
+    )
     os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.12"  # assumed parallelism: 8
 
 if is_torch_available():
@@ -990,6 +995,130 @@ class FlaxModelTesterMixin:
                 params = model.init_weights(model.key, model.input_shape, params=params)
                 # Check if all required parmas are loaded
                 _assert_all_params_initialised(model, params)
+                
+    def test_checkpoint_sharding_from_hub(self):
+        model = FlaxBertModel.from_pretrained("ArthurZ/tiny-random-bert-sharded")
+        # the model above is the same as the model below, just a sharded version.
+        ref_model = FlaxBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+        for p1, p2 in zip(flatten_dict(model.params).values(), flatten_dict(ref_model.params).values()):
+            assert np.allclose(p1.numpy(), p2.numpy())
+
+    # def test_shard_checkpoint(self):
+    #     # This is the model we will use, total size 340,000 bytes.
+    #     model = hk.Sequential(
+    #         [
+    #             hk.keras.layers.Dense(200, use_bias=False),  # size 80,000
+    #             hk.keras.layers.Dense(200, use_bias=False),  # size 160,000
+    #             hk.keras.layers.Dense(100, use_bias=False),  # size 80,000
+    #             hk.keras.layers.Dense(50, use_bias=False),  # size 20,000
+    #         ]
+    #     )
+    #     inputs = jnp.zeros((1, 100), dtype=np.float32)
+    #     model(inputs)
+    #     weights = model.weights
+    #     weights_dict = {w.name: w for w in weights}
+    #     with self.subTest("No shard when max size is bigger than model size"):
+    #         shards, index = flax_shard_checkpoint(weights)
+    #         self.assertIsNone(index)
+    #         self.assertDictEqual(shards, {FLAX_WEIGHTS_NAME: weights})
+
+    #     with self.subTest("Test sharding, no weights bigger than max size"):
+    #         shards, index = flax_shard_checkpoint(weights, max_shard_size="300kB")
+    #         # Split is first two layers then last two.
+    #         self.assertDictEqual(
+    #             index,
+    #             {
+    #                 "metadata": {"total_size": 340000},
+    #                 "weight_map": {
+    #                     "dense/kernel:0": "tf_model-00001-of-00002.h5",
+    #                     "dense_1/kernel:0": "tf_model-00001-of-00002.h5",
+    #                     "dense_2/kernel:0": "tf_model-00002-of-00002.h5",
+    #                     "dense_3/kernel:0": "tf_model-00002-of-00002.h5",
+    #                 },
+    #             },
+    #         )
+
+    #         shard1 = [weights_dict["dense/kernel:0"], weights_dict["dense_1/kernel:0"]]
+    #         shard2 = [weights_dict["dense_2/kernel:0"], weights_dict["dense_3/kernel:0"]]
+    #         self.assertDictEqual(shards, {"tf_model-00001-of-00002.h5": shard1, "tf_model-00002-of-00002.h5": shard2})
+
+    #     with self.subTest("Test sharding with weights bigger than max size"):
+    #         shards, index = flax_shard_checkpoint(weights, max_shard_size="100kB")
+    #         # Split is first layer, second layer then last 2.
+    #         self.assertDictEqual(
+    #             index,
+    #             {
+    #                 "metadata": {"total_size": 340000},
+    #                 "weight_map": {
+    #                     "dense/kernel:0": "tf_model-00001-of-00003.h5",
+    #                     "dense_1/kernel:0": "tf_model-00002-of-00003.h5",
+    #                     "dense_2/kernel:0": "tf_model-00003-of-00003.h5",
+    #                     "dense_3/kernel:0": "tf_model-00003-of-00003.h5",
+    #                 },
+    #             },
+    #         )
+
+    #         shard1 = [weights_dict["dense/kernel:0"]]
+    #         shard2 = [weights_dict["dense_1/kernel:0"]]
+    #         shard3 = [weights_dict["dense_2/kernel:0"], weights_dict["dense_3/kernel:0"]]
+    #         self.assertDictEqual(
+    #             shards,
+    #             {
+    #                 "tf_model-00001-of-00003.h5": shard1,
+    #                 "tf_model-00002-of-00003.h5": shard2,
+    #                 "tf_model-00003-of-00003.h5": shard3,
+    #             },
+    #         )
+
+    def test_checkpoint_sharding_local(self):
+        model = FlaxBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # We use the same folder for various sizes to make sure a new save erases the old checkpoint.
+            for max_size in ["150kB", "150kiB", "200kB", "200kiB"]:
+                model.save_pretrained(tmp_dir, max_shard_size=max_size)
+
+                # Get each shard file and its size
+                shard_to_size = {}
+                for shard in os.listdir(tmp_dir):
+                    if shard.endswith(".msgpack"):
+                        shard_file = os.path.join(tmp_dir, shard)
+                        shard_to_size[shard_file] = os.path.getsize(shard_file)
+
+                index_file = os.path.join(tmp_dir, FLAX_WEIGHTS_INDEX_NAME)
+                # Check there is an index but no regular weight file
+                self.assertTrue(os.path.isfile(index_file))
+                self.assertFalse(os.path.isfile(os.path.join(tmp_dir, FLAX_WEIGHTS_NAME)))
+
+                # Check a file is bigger than max_size only when it has a single weight
+                for shard_file, size in shard_to_size.items():
+                    if max_size.endswith("kiB"):
+                        max_size_int = int(max_size[:-3]) * 2**10
+                    else:
+                        max_size_int = int(max_size[:-2]) * 10**3
+                    # Note: pickle adds some junk so the weight of the file can end up being slightly bigger than
+                    # the size asked for (since we count parameters)
+                    if size >= max_size_int + 50000:
+                        with open(shard_file, "rb") as state_f:
+                            state_file = from_bytes(FlaxBertModel, state_f.read())
+                            self.assertEqual(len(state_file), 1)
+
+                # Check the index and the shard files found match
+                with open(index_file, "r", encoding="utf-8") as f:
+                    index = json.loads(f.read())
+
+                all_shards = set(index["weight_map"].values())
+                shards_found = set(f for f in os.listdir(tmp_dir) if f.endswith(".h5"))
+                self.assertSetEqual(all_shards, shards_found)
+
+                # Finally, check the model can be reloaded
+                new_model = FlaxBertModel.from_pretrained(tmp_dir)
+
+                model(model.dummy_inputs)
+                new_model(model.dummy_inputs)
+
+                for p1, p2 in zip(model.weights, new_model.weights):
+                    self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
 
 
 @require_flax
