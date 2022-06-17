@@ -1089,7 +1089,7 @@ class OmnivoreForImageClassification(OmnivorePreTrainedModel):
         >>> image = dataset["test"]["image"][0]
 
         >>> feature_extractor = OmnivoreFeatureExtractor.from_pretrained("anugunj/omnivore-swinT")
-        >>> model =  OmnivoreForImageClassification.from_pretrained("anugunj/omnivore-swinT")
+        >>> model = OmnivoreForImageClassification.from_pretrained("anugunj/omnivore-swinT")
 
         >>> inputs = feature_extractor(image, return_tensors="pt")
 
