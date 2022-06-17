@@ -15,15 +15,20 @@
 """PyTorch BLOOM model."""
 
 import math
-from typing import Tuple
+from typing import Tuple, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss, LayerNorm
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
-from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
+from ...modeling_outputs import (
+    BaseModelOutputWithPastAndCrossAttentions,
+    CausalLMOutputWithCrossAttentions,
+    SequenceClassifierOutputWithPast,
+    TokenClassifierOutput,
+)
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_bloom import BloomConfig
@@ -42,7 +47,7 @@ BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "bigscience/bloom-1b3",
     "bigscience/bloom-2b5",
     "bigscience/bloom-6b3",
-    "bigscience/bloom-176b",
+    "bigscience/bloom",
 ]
 
 
@@ -91,7 +96,9 @@ def attention_mask_func(attention_scores, attention_mask, causal_mask):
     )
 
 
-def build_alibi_tensor(max_seq_len, n_head, dtype=torch.bfloat16):
+def build_alibi_tensor(
+    max_seq_len: int, n_head: int, dtype: torch.dtype = torch.bfloat16, device: torch.device = torch.device("cpu")
+) -> torch.Tensor:
     """
     Link to paper: https://arxiv.org/abs/2108.12409 Alibi tensor is not causal as the original paper mentions, it
     relies on a translation invariance of softmax for quick implementation: with l being a tensor, and a fixed value
@@ -106,66 +113,41 @@ def build_alibi_tensor(max_seq_len, n_head, dtype=torch.bfloat16):
             number of heads
         dtype: (`torch.dtype`, *optional*, default=`torch.bfloat16`):
             dtype of the output tensor
+        device: (`torch.device`, *optional*, default=`torch.device('cpu')`):
+            device of the output alibi tensor
     """
+    closest_power_of_2 = 2 ** math.floor(math.log2(n_head))
+    base = torch.tensor(2 ** (-(2 ** -(math.log2(closest_power_of_2) - 3))), device=device, dtype=torch.float32)
+    powers = torch.arange(1, 1 + closest_power_of_2, device=device, dtype=torch.int32)
+    slopes = torch.pow(base, powers)
 
-    def get_slopes(n):
-        def get_slopes_power_of_2(n):
-            start = 2 ** (-(2 ** -(math.log2(n) - 3)))
-            ratio = start
-            return [start * ratio**i for i in range(n)]
+    if closest_power_of_2 != n_head:
+        extra_base = torch.tensor(
+            2 ** (-(2 ** -(math.log2(2 * closest_power_of_2) - 3))), device=device, dtype=torch.float32
+        )
+        num_remaining_heads = min(closest_power_of_2, n_head - closest_power_of_2)
+        extra_powers = torch.arange(1, 1 + 2 * num_remaining_heads, 2, device=device, dtype=torch.int32)
+        slopes = torch.cat([slopes, torch.pow(extra_base, extra_powers)], dim=0)
 
-        if math.log2(n).is_integer():
-            return get_slopes_power_of_2(n)
-        else:
-            closest_power_of_2 = 2 ** math.floor(math.log2(n))
-            return (
-                get_slopes_power_of_2(closest_power_of_2)
-                + get_slopes(2 * closest_power_of_2)[0::2][: n - closest_power_of_2]
-            )
-
-    slopes = torch.Tensor(get_slopes(n_head)).unsqueeze(1).unsqueeze(1)
-    arange_tensor = torch.arange(max_seq_len).unsqueeze(0).unsqueeze(0)
-    alibi = slopes * arange_tensor.expand(n_head, -1, -1)
-
-    alibi = alibi.to(dtype)
-
-    return alibi
+    lengths = torch.arange(max_seq_len, device=device, dtype=torch.int32)
+    return (slopes.view(-1, 1, 1) * lengths.view(1, 1, -1)).to(dtype)
 
 
-def pre_process_alibi_for_pad(alibi, attention_mask, num_heads):
+def pre_process_alibi_for_pad(alibi: torch.Tensor, attention_mask: torch.Tensor):
     """
     Args:
     Pre-process the alibi tensor for padding.
         alibi: ([`torch.tensor`], *required*):
             alibi tensor to pre-process
         attention_mask: ([`torch.tensor`], *required*):
-            attention mask to pre-process"""
+            attention mask to pre-process
+    """
 
-    # Sanity check if we are not inferring less tokens than the total sequence length
-    # This usually happens when the inference is done with past_key_values
-    # In this case we re-create the alibi tensor with the correct sequence length
-    if attention_mask.shape[-1] != alibi.shape[-1]:
-        alibi = build_alibi_tensor(attention_mask.shape[-1], num_heads, alibi.dtype).repeat(
-            attention_mask.shape[0], 1, 1
-        )
-    # Get the indexes of the padding tokens
-    index_x0, index_y0 = torch.where(attention_mask == 0.0)
-    index_x1, index_y1 = torch.where(attention_mask == 1.0)
-
-    # Clone the embeddings  - we can detach because the embeddings are not learned
-    # Get a refence tensor
-    slice_reference_alibi = build_alibi_tensor(alibi.shape[-1], num_heads, alibi.dtype)
-
-    # Loop over the batch where the padding is and replace the alibi tensor by the reference tensor
-    # Only where you do not have padding. Replace padding tokens by zeros
-    # This operation can be seen as a shifting operation.
-    for i, index in enumerate(torch.unique(index_x0)):
-        slice_to_modify = torch.zeros_like(slice_reference_alibi)
-        index_shift = index_y1[index_x1 == index]
-        shift_value = len(index_shift)
-        slice_to_modify[:, :, index_shift] = slice_reference_alibi[:, :, :shift_value]
-        alibi[index * num_heads : (index + 1) * num_heads] = slice_to_modify
-    return alibi
+    unpadded_indices = torch.relu(attention_mask.cumsum(dim=1) - 1)
+    # ^-- [batch, max_len], values correspond to element indices after removing padding
+    # We shift the alibi tensor + replace all the values where attention_mask==0.0 by 0
+    alibi = alibi.take_along_dim(unpadded_indices.unsqueeze(0), -1) * attention_mask.unsqueeze(0)
+    return alibi.reshape(alibi.shape[0] * alibi.shape[1], 1, -1)
 
 
 def dropout_add(x, residual, prob, training):
@@ -354,12 +336,12 @@ class BloomAttention(nn.Module):
         output_attentions=False,
     ):
         # hidden_states: [batch_size, seq_length, hidden_size]
-        # repeat alibi tensor with the batch size
-        alibi = alibi.repeat(hidden_states.shape[0], 1, 1).to(hidden_states.device)
-
         # apply preprocessing if the input is padded
         if attention_mask is not None and 0 in attention_mask:
-            alibi = pre_process_alibi_for_pad(alibi, attention_mask, self.num_heads)
+            alibi = pre_process_alibi_for_pad(alibi, attention_mask)
+        # otherwise repeat alibi tensor with the batch size
+        else:
+            alibi = alibi.repeat(hidden_states.shape[0], 1, 1)
 
         mixed_x_layer = self.query_key_value(hidden_states)
 
@@ -726,7 +708,7 @@ class BloomModel(BloomPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-    ):
+    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -768,7 +750,7 @@ class BloomModel(BloomPreTrainedModel):
         current_sequence_length = hidden_states.shape[1]
         if past_key_values[0] is not None:
             current_sequence_length += past_key_values[0][0].shape[1]
-        alibi = build_alibi_tensor(current_sequence_length, self.n_head, hidden_states.dtype)
+        alibi = build_alibi_tensor(current_sequence_length, self.n_head, hidden_states.dtype, hidden_states.device)
 
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
 
@@ -902,7 +884,7 @@ class BloomForCausalLM(BloomPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-    ):
+    ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
@@ -958,4 +940,224 @@ class BloomForCausalLM(BloomPreTrainedModel):
         return tuple(
             tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
             for layer_past in past
+        )
+
+
+@add_start_docstrings(
+    """
+    The Bloom Model transformer with a sequence classification head on top (linear layer).
+
+    [`BloomForSequenceClassification`] uses the last token in order to do the classification, as other causal models
+    (e.g. GPT-1) do.
+
+    Since it does classification on the last token, it requires to know the position of the last token. If a
+    `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If
+    no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot guess the
+    padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
+    each row of the batch).
+    """,
+    BLOOM_START_DOCSTRING,
+)
+class BloomForSequenceClassification(BloomPreTrainedModel):
+    _keys_to_ignore_on_load_missing = [r"h.*.self_attention.scale_mask_softmax.causal_mask", r"lm_head.weight"]
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+        self.transformer = BloomModel(config)
+        self.score = nn.Linear(config.hidden_size, config.num_labels, bias=False)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(BLOOM_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        processor_class=_TOKENIZER_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=SequenceClassifierOutputWithPast,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def forward(
+        self,
+        input_ids=None,
+        past_key_values=None,
+        attention_mask=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutputWithPast]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        transformer_outputs = self.transformer(
+            input_ids,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        hidden_states = transformer_outputs[0]
+        logits = self.score(hidden_states)
+
+        if input_ids is not None:
+            batch_size = input_ids.shape[0]
+        else:
+            batch_size = inputs_embeds.shape[0]
+
+        if self.config.pad_token_id is None and batch_size != 1:
+            raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
+        if self.config.pad_token_id is None:
+            sequence_lengths = -1
+        else:
+            if input_ids is not None:
+                sequence_lengths = torch.ne(input_ids, self.config.pad_token_id).sum(-1) - 1
+            else:
+                sequence_lengths = -1
+                logger.warning(
+                    f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
+                    "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
+                )
+
+        pooled_logits = logits[torch.arange(batch_size, device=logits.device), sequence_lengths]
+
+        loss = None
+        if labels is not None:
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
+                loss_fct = MSELoss()
+                if self.num_labels == 1:
+                    loss = loss_fct(pooled_logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(pooled_logits, labels)
+            elif self.config.problem_type == "single_label_classification":
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(pooled_logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(pooled_logits, labels)
+        if not return_dict:
+            output = (pooled_logits,) + transformer_outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return SequenceClassifierOutputWithPast(
+            loss=loss,
+            logits=pooled_logits,
+            past_key_values=transformer_outputs.past_key_values,
+            hidden_states=transformer_outputs.hidden_states,
+            attentions=transformer_outputs.attentions,
+        )
+
+
+@add_start_docstrings(
+    """
+    Bloom Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
+    Named-Entity-Recognition (NER) tasks.
+    """,
+    BLOOM_START_DOCSTRING,
+)
+class BloomForTokenClassification(BloomPreTrainedModel):
+    _keys_to_ignore_on_load_missing = [r"h.*.self_attention.scale_mask_softmax.causal_mask", r"lm_head.weight"]
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+
+        self.transformer = BloomModel(config)
+        if hasattr(config, "classifier_dropout") and config.classifier_dropout is not None:
+            classifier_dropout = config.classifier_dropout
+        elif hasattr(config, "hidden_dropout") and config.hidden_dropout is not None:
+            classifier_dropout = config.hidden_dropout
+        else:
+            classifier_dropout = 0.1
+        self.dropout = nn.Dropout(classifier_dropout)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(BLOOM_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        processor_class=_TOKENIZER_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=TokenClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def forward(
+        self,
+        input_ids=None,
+        past_key_values=None,
+        attention_mask=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ) -> Union[Tuple[torch.Tensor], TokenClassifierOutput]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        transformer_outputs = self.transformer(
+            input_ids,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        hidden_states = transformer_outputs[0]
+        hidden_states = self.dropout(hidden_states)
+        logits = self.classifier(hidden_states)
+
+        loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+
+        if not return_dict:
+            output = (logits,) + transformer_outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TokenClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=transformer_outputs.hidden_states,
+            attentions=transformer_outputs.attentions,
         )
