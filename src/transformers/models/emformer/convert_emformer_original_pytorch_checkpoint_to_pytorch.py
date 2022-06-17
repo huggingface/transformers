@@ -48,8 +48,6 @@ def act2name(activation):
         return "relu"
     elif isinstance(activation, torch.nn.GELU):
         return "gelu"
-    elif isinstance(activation, torch.nn.SiLU):
-        return "silu"
     elif isinstance(activation, torch.nn.Tanh):
         return "tanh"
     else:
@@ -185,7 +183,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--model_output_dir",
-        default=None,
+        default="base_librispeech",
         type=str,
         help="Path to the output PyTorch model.",
     )
