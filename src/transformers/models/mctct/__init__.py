@@ -43,6 +43,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_mctct"] = [
         "MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "MCTCTForSequenceClassification",
         "MCTCTForCTC",
         "MCTCTModel",
         "MCTCTPreTrainedModel",
@@ -67,7 +68,13 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_mctct import MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST, MCTCTForCTC, MCTCTModel, MCTCTPreTrainedModel
+        from .modeling_mctct import (
+            MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST, 
+            MCTCTForSequenceClassification,
+            MCTCTForCTC, 
+            MCTCTModel,
+            MCTCTPreTrainedModel
+        )
 
 else:
     import sys

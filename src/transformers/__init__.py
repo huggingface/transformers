@@ -1326,6 +1326,7 @@ else:
     _import_structure["models.mctct"].extend(
         [
             "MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MCTCTForSequenceClassification",
             "MCTCTForCTC",
             "MCTCTModel",
             "MCTCTPreTrainedModel",
@@ -3759,7 +3760,13 @@ if TYPE_CHECKING:
             MBartModel,
             MBartPreTrainedModel,
         )
-        from .models.mctct import MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST, MCTCTForCTC, MCTCTModel, MCTCTPreTrainedModel
+        from .models.mctct import (
+            MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST, 
+            MCTCTForSequenceClassification, 
+            MCTCTForCTC, 
+            MCTCTModel, 
+            MCTCTPreTrainedModel
+        )
         from .models.megatron_bert import (
             MEGATRON_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             MegatronBertForCausalLM,

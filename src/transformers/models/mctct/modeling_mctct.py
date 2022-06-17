@@ -17,7 +17,7 @@
 
 import math
 import random
-from typing import Optional
+from typing import Tuple, Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -56,7 +56,7 @@ _CTC_EXPECTED_LOSS = 1885.65
 # Audio class docstring
 _FEAT_EXTRACTOR_FOR_DOC = "MCTCTFeatureExtractor"
 _SEQ_CLASS_CHECKPOINT = "cwkeam/m-ctc-t-large-lid"
-_SEQ_CLASS_EXPECTED_OUTPUT = "en'"
+_SEQ_CLASS_EXPECTED_OUTPUT = "en"
 _SEQ_CLASS_EXPECTED_LOSS = 6.54
 
 MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -875,7 +875,7 @@ class MCTCTForSequenceClassification(MCTCTPreTrainedModel):
         for param in self.mctct.parameters():
             param.requires_grad = False
 
-    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(MCTCT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_SEQ_CLASS_CHECKPOINT,
@@ -902,7 +902,6 @@ class MCTCTForSequenceClassification(MCTCTPreTrainedModel):
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
 
         outputs = self.mctct(
             input_values,
@@ -912,7 +911,9 @@ class MCTCTForSequenceClassification(MCTCTPreTrainedModel):
             return_dict=return_dict,
         )
 
-        logits = self.classifier(outputs[_HIDDEN_STATES_START_POSITION])
+        hidden_states = outputs[0]
+
+        logits = self.classifier(hidden_states)
 
         loss = None
         if labels is not None:
