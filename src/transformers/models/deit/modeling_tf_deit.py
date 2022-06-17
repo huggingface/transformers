@@ -99,13 +99,13 @@ class TFDeiTEmbeddings(tf.keras.layers.Layer):
         self.cls_token = self.add_weight(
             shape=(1, 1, self.config.hidden_size),
             initializer=tf.keras.initializers.zeros(),
-            trainable=True,  # Should be trainable?
+            trainable=True,
             name="cls_token",
         )
         self.distillation_token = self.add_weight(
             shape=(1, 1, self.config.hidden_size),
             initializer=tf.keras.initializers.zeros(),
-            trainable=False,  # Should be trainable?
+            trainable=True,
             name="distillation_token",
         )
         self.mask_token = None
@@ -113,14 +113,14 @@ class TFDeiTEmbeddings(tf.keras.layers.Layer):
             self.mask_token = self.add_weight(
                 shape=(1, 1, self.config.hidden_size),
                 initializer=tf.keras.initializers.zeros(),
-                trainable=False,  # Should be trainable?
+                trainable=True,
                 name="mask_token",
             )
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = self.add_weight(
             shape=(1, num_patches + 2, self.config.hidden_size),
             initializer=tf.keras.initializers.zeros(),
-            trainable=True,  # Should be trainable?
+            trainable=True,
             name="position_embeddings",
         )
         super().build(input_shape)

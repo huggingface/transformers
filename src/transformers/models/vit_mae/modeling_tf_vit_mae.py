@@ -561,7 +561,9 @@ class TFViTMAELayer(tf.keras.layers.Layer):
         intermediate_output = self.intermediate(hidden_states=layer_output)
 
         # second residual connection is done here
-        layer_output = self.vit_output(hidden_states=intermediate_output, input_tensor=hidden_states, training=training)
+        layer_output = self.vit_output(
+            hidden_states=intermediate_output, input_tensor=hidden_states, training=training
+        )
         outputs = (layer_output,) + attention_outputs[1:]  # add attentions if we output them
 
         return outputs

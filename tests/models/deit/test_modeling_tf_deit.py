@@ -17,12 +17,10 @@
 
 import inspect
 import unittest
-import warnings
 
 import numpy as np
 
 from transformers import DeiTConfig
-from transformers.models.auto import get_values
 from transformers.testing_utils import require_tf, require_vision, slow
 from transformers.utils import cached_property, is_tf_available, is_vision_available
 
@@ -34,8 +32,6 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import (
-        TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
-        TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         TFDeiTForImageClassification,
         TFDeiTForImageClassificationWithTeacher,
         TFDeiTForMaskedImageModeling,
