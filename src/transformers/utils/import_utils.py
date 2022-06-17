@@ -328,7 +328,8 @@ def is_torch_bf16_available():
     # has become ambiguous and therefore deprecated
     warnings.warn(
         "The util is_torch_bf16_available is deprecated, please use is_torch_bf16_gpu_available "
-        "or is_torch_bf16_cpu_available instead according to whether it's used with cpu or gpu"
+        "or is_torch_bf16_cpu_available instead according to whether it's used with cpu or gpu",
+        FutureWarning,
     )
     return is_torch_bf16_gpu_available()
 

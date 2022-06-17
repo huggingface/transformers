@@ -124,8 +124,6 @@ from .utils import (
     is_tokenizers_available,
     is_torch_available,
     is_torch_bf16_available,
-    is_torch_bf16_cpu_available,
-    is_torch_bf16_gpu_available,
     is_torch_cuda_available,
     is_torch_fx_available,
     is_torch_fx_proxy,
