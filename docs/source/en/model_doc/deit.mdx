@@ -69,7 +69,7 @@ Tips:
   *facebook/deit-base-patch16-384*. Note that one should use [`DeiTFeatureExtractor`] in order to
   prepare images for the model.
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr).
+This model was contributed by [nielsr](https://huggingface.co/nielsr). The TensorFlow version of this model was added by [amyeroberts](https://huggingface.co/amyeroberts).
 
 
 ## DeiTConfig
@@ -100,3 +100,23 @@ This model was contributed by [nielsr](https://huggingface.co/nielsr).
 
 [[autodoc]] DeiTForImageClassificationWithTeacher
     - forward
+
+## TFDeiTModel
+
+[[autodoc]] TFDeiTModel
+    - call
+
+## TFDeiTForMaskedImageModeling
+
+[[autodoc]] TFDeiTForMaskedImageModeling
+    - call
+
+## TFDeiTForImageClassification
+
+[[autodoc]] TFDeiTForImageClassification
+    - call
+
+## TFDeiTForImageClassificationWithTeacher
+
+[[autodoc]] TFDeiTForImageClassificationWithTeacher
+    - call
