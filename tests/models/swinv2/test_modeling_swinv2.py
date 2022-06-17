@@ -388,14 +388,14 @@ class Swinv2ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         return (
-            AutoFeatureExtractor.from_pretrained("microsoft/swinv2_tiny_patch4_windows8_256")
+            AutoFeatureExtractor.from_pretrained("nandwalritik/swinv2-tiny-patch4-window8-256")
             if is_vision_available()
             else None
         )
 
     @slow
     def test_inference_image_classification_head(self):
-        model = Swinv2ForImageClassification.from_pretrained("microsoft/swinv2_tiny_patch4_windows8_256").to(
+        model = Swinv2ForImageClassification.from_pretrained("nandwalritik/swinv2-tiny-patch4-window8-256").to(
             torch_device
         )
         feature_extractor = self.default_feature_extractor
