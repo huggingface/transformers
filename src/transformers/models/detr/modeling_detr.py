@@ -1397,8 +1397,15 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> # model predicts bounding boxes and corresponding COCO classes
-        >>> logits = outputs.logits
-        >>> bboxes = outputs.pred_boxes
+        >>> bboxes, logits = outputs.pred_boxes, outputs.logits
+
+        >>> probas_per_class = outputs.logits.softmax(-1)[:, :, :-1]
+        >>> objects_to_keep = probas_per_class.max(-1).values > 0.9
+
+        >>> ids , _ = probas_per_class.max(-1).indices[objects_to_keep].sort()
+        >>> labels = [model.config.id2label[id.item()] for id in ids]
+        >>> labels
+        ['cat', 'cat', 'couch', 'remote', 'remote']
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
