@@ -2088,6 +2088,16 @@ else:
             "TFDebertaV2PreTrainedModel",
         ]
     )
+    _import_structure["models.deit"].extend(
+        [
+            "TF_DEIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFDeiTForImageClassification",
+            "TFDeiTForImageClassificationWithTeacher",
+            "TFDeiTForMaskedImageModeling",
+            "TFDeiTModel",
+            "TFDeiTPreTrainedModel",
+        ]
+    )
     _import_structure["models.distilbert"].extend(
         [
             "TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -4413,6 +4423,14 @@ if TYPE_CHECKING:
             TFDebertaV2ForTokenClassification,
             TFDebertaV2Model,
             TFDebertaV2PreTrainedModel,
+        )
+        from .models.deit import (
+            TF_DEIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFDeiTForImageClassification,
+            TFDeiTForImageClassificationWithTeacher,
+            TFDeiTForMaskedImageModeling,
+            TFDeiTModel,
+            TFDeiTPreTrainedModel,
         )
         from .models.distilbert import (
             TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
