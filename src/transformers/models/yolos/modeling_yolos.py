@@ -423,7 +423,7 @@ class YolosLayer(nn.Module):
         self.seq_len_dim = 1
         self.attention = YolosAttention(config)
         self.intermediate = YolosIntermediate(config)
-        self.vit_output = YolosOutput(config)
+        self.output = YolosOutput(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -449,7 +449,7 @@ class YolosLayer(nn.Module):
         layer_output = self.intermediate(layer_output)
 
         # second residual connection is done here
-        layer_output = self.vit_output(layer_output, hidden_states)
+        layer_output = self.output(layer_output, hidden_states)
 
         outputs = (layer_output,) + outputs
 
