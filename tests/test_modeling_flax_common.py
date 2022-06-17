@@ -1002,7 +1002,7 @@ class FlaxModelTesterMixin:
             assert np.allclose(np.array(p1), np.array(p2))
 
     def test_checkpoint_sharding_local(self):
-        model = FlaxBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+        model = FlaxBertModel.from_pretrained("hf-internal-testing/tiny-bert-flax-only")
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             # We use the same folder for various sizes to make sure a new save erases the old checkpoint.
