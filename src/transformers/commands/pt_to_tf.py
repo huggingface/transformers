@@ -19,7 +19,7 @@ from importlib import import_module
 import numpy as np
 from datasets import load_dataset
 
-from huggingface_hub import Repository, upload_file
+# from huggingface_hub import Repository, create_commit
 
 from .. import AutoConfig, AutoFeatureExtractor, AutoTokenizer, is_tf_available, is_torch_available
 from ..utils import logging
@@ -171,9 +171,7 @@ class PTtoTFCommand(BaseTransformersCLICommand):
 
     def run(self):
         # Fetch remote data
-        # TODO: implement a solution to pull a specific PR/commit, so we can use this CLI to validate pushes.
         repo = Repository(local_dir=self._local_dir, clone_from=self._model_name)
-        repo.git_pull()  # in case the repo already exists locally, but with an older commit
 
         # Load config and get the appropriate architecture -- the latter is needed to convert the head's weights
         config = AutoConfig.from_pretrained(self._local_dir)
@@ -247,21 +245,21 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             self._logger.warn(f"TF weights pushed into {self._model_name}")
         elif not self._no_pr:
             # TODO: remove try/except when the upload to PR feature is released
-            # (https://github.com/huggingface/huggingface_hub/pull/884)
+            # (https://github.com/huggingface/huggingface_hub/pull/888)
             try:
                 self._logger.warn("Uploading the weights into a new PR...")
-                hub_pr_url = upload_file(
-                    path_or_fileobj=tf_weights_path,
-                    path_in_repo=TF_WEIGHTS_NAME,
+                hub_pr_url = create_commit(
                     repo_id=self._model_name,
-                    create_pr=True,
-                    pr_commit_summary="Add TF weights",
-                    pr_commit_description=(
+                    operations=[CommitOperationAdd(path_in_repo=TF_WEIGHTS_NAME, path_or_fileobj=tf_weights_path)],
+                    commit_message="Add TF weights",
+                    commit_description=(
                         "Model converted by the `transformers`' `pt_to_tf` CLI -- all converted model outputs and"
                         " hidden layers were validated against its Pytorch counterpart. Maximum crossload output"
                         f" difference={max_crossload_diff:.3e}; Maximum converted output"
                         f" difference={max_conversion_diff:.3e}."
                     ),
+                    repo_type="model",
+                    create_pr=True,
                 )
                 self._logger.warn(f"PR open in {hub_pr_url}")
             except TypeError:
