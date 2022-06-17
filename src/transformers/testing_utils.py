@@ -47,6 +47,7 @@ from .utils import (
     is_faiss_available,
     is_flax_available,
     is_ftfy_available,
+    is_ipex_available,
     is_librosa_available,
     is_onnx_available,
     is_pandas_available,
@@ -282,6 +283,16 @@ def require_torch(test_case):
     return unittest.skipUnless(is_torch_available(), "test requires PyTorch")(test_case)
 
 
+def require_intel_extension_for_pytorch(test_case):
+    """
+    Decorator marking a test that requires Intel Extension for PyTorch.
+
+    These tests are skipped when Intel Extension for PyTorch isn't installed.
+
+    """
+    return unittest.skipUnless(is_ipex_available(), "test requires Intel Extension for PyTorch")(test_case)
+
+
 def require_torch_scatter(test_case):
     """
     Decorator marking a test that requires PyTorch scatter.
@@ -476,9 +487,10 @@ def require_torch_gpu(test_case):
 
 
 def require_torch_bf16(test_case):
-    """Decorator marking a test that requires Ampere or a newer GPU arch, cuda>=11 and torch>=1.10."""
+    """Decorator marking a test that requires torch>=1.10, using Ampere GPU or newer arch with cuda>=11.0 or using CPU."""
     return unittest.skipUnless(
-        is_torch_bf16_available(), "test requires Ampere or a newer GPU arch, cuda>=11 and torch>=1.10"
+        is_torch_bf16_available(),
+        "test requires torch>=1.10, using Ampere GPU or newer arch with cuda>=11.0 or using CPU",
     )(test_case)
 
 

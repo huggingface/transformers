@@ -838,13 +838,6 @@ class TFRagModelIntegrationTests(unittest.TestCase):
         input_ids = input_dict.input_ids
         attention_mask = input_dict.attention_mask
 
-        output_ids = rag_token.generate(
-            input_ids,
-            attention_mask=attention_mask,
-        )
-
-        outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
-
         EXPECTED_OUTPUTS = [
             " albert einstein",
             " september 22, 2017",
@@ -855,7 +848,21 @@ class TFRagModelIntegrationTests(unittest.TestCase):
             " 7.1. 2",
             " 13",
         ]
-        self.assertListEqual(outputs, EXPECTED_OUTPUTS)
+
+        # Split into 2 batches of 4 examples to avoid GPU OOM.
+        output_ids = rag_token.generate(
+            input_ids[:4],
+            attention_mask=attention_mask[:4],
+        )
+        outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        self.assertListEqual(outputs, EXPECTED_OUTPUTS[:4])
+
+        output_ids = rag_token.generate(
+            input_ids[4:],
+            attention_mask=attention_mask[4:],
+        )
+        outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        self.assertListEqual(outputs, EXPECTED_OUTPUTS[4:])
 
     @slow
     def test_rag_sequence_generate_batch(self):
