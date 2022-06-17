@@ -14,13 +14,14 @@
 # limitations under the License.
 
 import gc
-import re
-import numpy as np
 import json
 import os
+import re
 from functools import partial
 from pickle import UnpicklingError
 from typing import Any, Dict, Set, Tuple, Union
+
+import numpy as np
 
 import flax.linen as nn
 import jax
@@ -533,12 +534,14 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         """
         Args:
         This is the same as
-        [`torch.nn.Module.load_state_dict`](https://pytorch.org/docs/stable/generated/torch.nn.Module.html?highlight=load_state_dict#torch.nn.Module.load_state_dict)
-        but for a sharded checkpoint. This load is performed efficiently: each checkpoint shard is loaded one by one in
+        [`torch.nn.Module.load_state_dict`](https:
+            //pytorch.org/docs/stable/generated/torch.nn.Module.html?highlight=load_state_dict#torch.nn.Module.load_state_dict)
+        but for a sharded checkpoint. This load is performed efficiently:
+            each checkpoint shard is loaded one by one in
         RAM and deleted after being loaded in the model.
-            model (`torch.nn.Module`): The model in which to load the checkpoint.
-            shard_files (`str` or `os.PathLike`): A list containing the sharded checkpoint names.
-            ignore_mismatched_sizes`bool`, *optional`, defaults to `True`):
+            model (`torch.nn.Module`): The model in which to load the checkpoint. shard_files (`str` or `os.PathLike`):
+            A list containing the sharded checkpoint names. ignore_mismatched_sizes`bool`, *optional`, defaults to
+            `True`):
                 Whether or not to ignore the mismatch between the sizes
             strict (`bool`, *optional`, defaults to `True`):
                 Whether to strictly enforce that the keys in the model state dict match the keys in the sharded
@@ -557,10 +560,10 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             # load using msgpack utils
             with open(shard_file, "rb") as state_f:
                 state = from_bytes(cls, state_f.read())
-            state = flatten_dict(state,sep='/')
+            state = flatten_dict(state, sep="/")
             state_sharded_dict.update(state)
-        
-        return unflatten_dict(state_sharded_dict,sep='/')
+
+        return unflatten_dict(state_sharded_dict, sep="/")
 
     @classmethod
     def from_pretrained(
@@ -722,7 +725,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         # index of the files.
         is_sharded = False
         sharded_metadata = None
-        
+
         # Load model
         if pretrained_model_name_or_path is not None:
             if os.path.isdir(pretrained_model_name_or_path):
@@ -755,12 +758,12 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 archive_file = hf_bucket_url(
                     pretrained_model_name_or_path,
                     filename=filename,
-                    revision=revision, 
+                    revision=revision,
                     # TODO raise an issue here as flaw does not use a mirror
                 )
 
             # redirect to the cache, if necessary
-            
+
             try:
                 resolved_archive_file = cached_path(
                     archive_file,
@@ -788,7 +791,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 )
             except EntryNotFoundError:
                 if filename == FLAX_WEIGHTS_NAME:
-                    try: 
+                    try:
                         # Maybe the checkpoint is sharded, we try to grab the index name in this case.
                         archive_file = hf_bucket_url(
                             pretrained_model_name_or_path,
@@ -811,8 +814,8 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                         if has_file(pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs):
                             raise EnvironmentError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named"
-                                f" {FLAX_WEIGHTS_NAME} but there is a file for PyTorch weights. Use `from_pt=True` to load"
-                                " this model from those weights."
+                                f" {FLAX_WEIGHTS_NAME} but there is a file for PyTorch weights. Use `from_pt=True` to"
+                                " load this model from those weights."
                             )
                         else:
                             raise EnvironmentError(
@@ -851,7 +854,6 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         else:
             resolved_archive_file = None
 
-        
         # We'll need to download and cache each checkpoint shard if the checkpoint is sharded.
         if is_sharded:
             # resolved_archive_file becomes a list of files that point to the different checkpoint shards in this case.
@@ -868,7 +870,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 revision=revision,
                 # TODO support for the mirror option mirror=mirror,
             )
-            
+
         # init random models
         model = cls(config, *model_args, _do_init=_do_init, **model_kwargs)
 
@@ -879,14 +881,14 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 if is_sharded:
                     for file in resolved_archive_file:
                         assert os.path.isfile(file), f"Error retrieving files {file}"
-                    
+
                     state = cls.load_flax_sharded_weights(
                         model,
                         resolved_archive_file,
                         ignore_mismatched_sizes=ignore_mismatched_sizes,
-                        _do_init = _do_init
+                        _do_init=_do_init,
                     )
-           
+
                 else:
                     with open(resolved_archive_file, "rb") as state_f:
                         state = from_bytes(cls, state_f.read())
@@ -1124,7 +1126,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             for shard_file, shard in shards.items():
                 # the shard item are unflattened, to save them we need to flatten them again
                 with open(os.path.join(save_directory, shard_file), mode="wb") as f:
-                    params = unflatten_dict(shard,sep='/')
+                    params = unflatten_dict(shard, sep="/")
                     shard_bytes = to_bytes(params)
                     f.write(shard_bytes)
 

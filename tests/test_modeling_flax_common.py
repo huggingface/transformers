@@ -14,13 +14,14 @@
 
 import copy
 import inspect
+import json
 import random
 import tempfile
 import unittest
 from typing import List, Tuple
 
 import numpy as np
-import json
+
 import transformers
 from huggingface_hub import delete_repo, login
 from requests.exceptions import HTTPError
@@ -43,8 +44,8 @@ if is_flax_available():
 
     import jax
     import jax.numpy as jnp
-    from flax.serialization import from_bytes, to_bytes
     from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
+    from flax.serialization import from_bytes, to_bytes
     from flax.traverse_util import flatten_dict, unflatten_dict
     from transformers import (
         FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
@@ -58,11 +59,8 @@ if is_flax_available():
         convert_pytorch_state_dict_to_flax,
         load_flax_weights_in_pytorch_model,
     )
-    from transformers.modeling_flax_utils import (
-        FLAX_WEIGHTS_INDEX_NAME,
-        FLAX_WEIGHTS_NAME,
-        flax_shard_checkpoint,
-    )
+    from transformers.modeling_flax_utils import FLAX_WEIGHTS_INDEX_NAME, FLAX_WEIGHTS_NAME, flax_shard_checkpoint
+
     os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.12"  # assumed parallelism: 8
 
 if is_torch_available():
@@ -995,7 +993,7 @@ class FlaxModelTesterMixin:
                 params = model.init_weights(model.key, model.input_shape, params=params)
                 # Check if all required parmas are loaded
                 _assert_all_params_initialised(model, params)
-                
+
     def test_checkpoint_sharding_from_hub(self):
         model = FlaxBertModel.from_pretrained("ArthurZ/tiny-random-bert-sharded")
         # the model above is the same as the model below, just a sharded version.
