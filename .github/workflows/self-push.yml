@@ -61,7 +61,7 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: Update clone use environment variables
+      - name: Update clone using environment variables
         run: |
           echo "original branch = $(git branch --show-current)"
           git fetch && git checkout ${{ env.CI_BRANCH }}
@@ -142,7 +142,7 @@ jobs:
           echo "env.CI_BRANCH = ${{ env.CI_BRANCH }}"
           echo "env.CI_SHA = ${{ env.CI_SHA }}"         
 
-      - name: Update clone use environment variables
+      - name: Update clone using environment variables
         working-directory: /transformers
         run: |
           echo "original branch = $(git branch --show-current)"
@@ -226,7 +226,7 @@ jobs:
           echo "env.CI_BRANCH = ${{ env.CI_BRANCH }}"
           echo "env.CI_SHA = ${{ env.CI_SHA }}"
 
-      - name: Update clone use environment variables
+      - name: Update clone using environment variables
         working-directory: /transformers
         run: |
           echo "original branch = $(git branch --show-current)"
@@ -310,7 +310,7 @@ jobs:
           echo "env.CI_BRANCH = ${{ env.CI_BRANCH }}"
           echo "env.CI_SHA = ${{ env.CI_SHA }}"
 
-      - name: Update clone use environment variables
+      - name: Update clone using environment variables
         working-directory: /workspace/transformers
         run: |
           echo "original branch = $(git branch --show-current)"
@@ -388,7 +388,7 @@ jobs:
           echo "env.CI_BRANCH = ${{ env.CI_BRANCH }}"
           echo "env.CI_SHA = ${{ env.CI_SHA }}"
 
-      - name: Update clone use environment variables
+      - name: Update clone using environment variables
         working-directory: /workspace/transformers
         run: |
           echo "original branch = $(git branch --show-current)"
@@ -467,7 +467,7 @@ jobs:
 
       - uses: actions/checkout@v2
 
-      - name: Update clone use environment variables
+      - name: Update clone using environment variables
         run: |
           echo "original branch = $(git branch --show-current)"
           git fetch && git checkout ${{ env.CI_BRANCH }}
