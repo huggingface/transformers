@@ -47,16 +47,16 @@ _CONFIG_FOR_DOC = "Swinv2Config"
 _FEAT_EXTRACTOR_FOR_DOC = "AutoFeatureExtractor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "microsoft/swinv2_tiny_patch4_windows8_256"
+_CHECKPOINT_FOR_DOC = "nandwalritik/swinv2-tiny-patch4-window8-256"
 _EXPECTED_OUTPUT_SHAPE = [1, 49, 768]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "microsoft/swinv2_tiny_patch4_windows8_256"
+_IMAGE_CLASS_CHECKPOINT = "nandwalritik/swinv2-tiny-patch4-window8-256"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
 SWINV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/swinv2_tiny_patch4_windows8_256",
+    "nandwalritik/swinv2-tiny-patch4-window8-256",
     # See all Swinv2 models at https://huggingface.co/models?filter=swinv2
 ]
 
