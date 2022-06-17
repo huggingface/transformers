@@ -337,7 +337,7 @@ class BloomAttention(nn.Module):
     ):
         # hidden_states: [batch_size, seq_length, hidden_size]
         # apply preprocessing if the input is padded
-        if attention_mask is not None and 0 in attention_mask:
+        if attention_mask is not None:
             alibi = pre_process_alibi_for_pad(alibi, attention_mask)
         # otherwise repeat alibi tensor with the batch size
         else:
