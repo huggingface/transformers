@@ -949,7 +949,7 @@ class PushToHubMixin:
             self.create_model_card(**base_model_card_args)
         else:
             # FLAX does not support sharding yet, will come in next PR
-            self.save_pretrained(repo_path_or_name, max_shard_size=max_shard_size)
+            self.save_pretrained(repo_path_or_name)
         # Commit and push!
         url = self._push_to_hub(repo, commit_message=commit_message)
 
