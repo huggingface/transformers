@@ -259,6 +259,7 @@ _import_structure = {
         "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "NystromformerConfig",
     ],
+    "models.omnivore":["OMNIVORE_PRETRAINED_CONFIG_ARCHIVE_MAP", "OmnivoreConfig"],
     "models.openai": ["OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OpenAIGPTConfig", "OpenAIGPTTokenizer"],
     "models.opt": ["OPTConfig"],
     "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
@@ -609,6 +610,7 @@ else:
     _import_structure["models.layoutlmv2"].append("LayoutLMv2FeatureExtractor")
     _import_structure["models.layoutlmv3"].append("LayoutLMv3FeatureExtractor")
     _import_structure["models.levit"].append("LevitFeatureExtractor")
+    _import_structure["models.omnivore"].append("OmnivoreFeatureExtractor")
     _import_structure["models.maskformer"].append("MaskFormerFeatureExtractor")
     _import_structure["models.perceiver"].append("PerceiverFeatureExtractor")
     _import_structure["models.poolformer"].append("PoolFormerFeatureExtractor")
@@ -1403,6 +1405,14 @@ else:
             "NystromformerLayer",
             "NystromformerModel",
             "NystromformerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.omnivore"].extend(
+        [
+            "OMNIVORE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "OmnivoreForImageClassification",
+            "OmnivoreModel",
+            "OmnivorePreTrainedModel",
         ]
     )
     _import_structure["models.openai"].extend(
@@ -2879,6 +2889,7 @@ if TYPE_CHECKING:
     from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
     from .models.mt5 import MT5Config
     from .models.nystromformer import NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, NystromformerConfig
+    from .models.omnivore import OMNIVORE_PRETRAINED_CONFIG_ARCHIVE_MAP, OmnivoreConfig
     from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
     from .models.opt import OPTConfig
     from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
@@ -3182,6 +3193,7 @@ if TYPE_CHECKING:
         from .models.layoutlmv2 import LayoutLMv2FeatureExtractor
         from .models.layoutlmv3 import LayoutLMv3FeatureExtractor
         from .models.levit import LevitFeatureExtractor
+        from .models.omnivore import OmnivoreFeatureExtractor
         from .models.maskformer import MaskFormerFeatureExtractor
         from .models.perceiver import PerceiverFeatureExtractor
         from .models.poolformer import PoolFormerFeatureExtractor
@@ -3841,6 +3853,12 @@ if TYPE_CHECKING:
             NystromformerLayer,
             NystromformerModel,
             NystromformerPreTrainedModel,
+        )
+        from .models.omnivore import (
+            OMNIVORE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            OmnivoreForImageClassification,
+            OmnivoreModel,
+            OmnivorePreTrainedModel,
         )
         from .models.openai import (
             OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,

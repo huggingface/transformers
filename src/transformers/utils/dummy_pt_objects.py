@@ -3189,6 +3189,30 @@ class NystromformerPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+OMNIVORE_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class OmnivoreForImageClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class OmnivoreModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class OmnivorePreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
