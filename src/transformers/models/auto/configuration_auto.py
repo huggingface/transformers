@@ -376,7 +376,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("splinter", "Splinter"),
         ("squeezebert", "SqueezeBERT"),
         ("swin", "Swin Transformer"),
-        ("swinv2", "Swinv2v2"),
+        ("swinv2", "Swin Transformer V2"),
         ("t5", "T5"),
         ("t5v1.1", "T5v1.1"),
         ("tapas", "TAPAS"),
