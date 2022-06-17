@@ -24,7 +24,13 @@ This document serves as an overview and entry point for the methods that could b
 
 ## Training
 
-Training transformer models efficiently requires an accelerator such as a GPU or TPU. The most common case is where you only have a single GPU.
+Training transformer models efficiently requires an accelerator such as a GPU or TPU. The most common case is where you only have a single GPU, but there is also a section about mutli-GPU and CPU training (with more coming soon).
+
+<Tip>
+
+ Note: Most of the strategies introduced in the single GPU sections (such as mixed precision training or gradient accumulation) are generic and apply to training models in general so make sure to have a look at it before diving into the following sections such as multi-GPU or CPU training.
+
+</Tip>
 
 ### Single GPU
 
