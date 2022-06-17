@@ -47,13 +47,11 @@ jobs:
           echo $CI_SHA_WORKFLOW_RUN       
           [[ ! -z "$CI_BRANCH_PUSH" ]] && echo "CI_BRANCH=$CI_BRANCH_PUSH" >> $GITHUB_ENV || echo "CI_BRANCH=$CI_BRANCH_WORKFLOW_RUN" >> $GITHUB_ENV
           [[ ! -z "$CI_SHA_PUSH" ]] && echo "CI_SHA=$CI_SHA_PUSH" >> $GITHUB_ENV || echo "CI_SHA=$CI_SHA_WORKFLOW_RUN" >> $GITHUB_ENV
-          [[ ! -z "$CI_SHA_PUSH" ]] && echo "CI_COMMIT_URL=$CI_COMMIT_URL_PUSH" >> $GITHUB_ENV || echo "CI_COMMIT_URL=$CI_COMMIT_URL_WORKFLOW_RUN" >> $GITHUB_ENV
 
       - name: print environment variables
         run: |
           echo "env.CI_BRANCH = ${{ env.CI_BRANCH }}"
           echo "env.CI_SHA = ${{ env.CI_SHA }}"
-          echo "env.CI_COMMIT_URL = ${{ env.CI_COMMIT_URL }}"
 
       - name: Checkout transformers
         uses: actions/checkout@v2
@@ -135,13 +133,11 @@ jobs:
           echo $CI_SHA_WORKFLOW_RUN       
           [[ ! -z "$CI_BRANCH_PUSH" ]] && echo "CI_BRANCH=$CI_BRANCH_PUSH" >> $GITHUB_ENV || echo "CI_BRANCH=$CI_BRANCH_WORKFLOW_RUN" >> $GITHUB_ENV
           [[ ! -z "$CI_SHA_PUSH" ]] && echo "CI_SHA=$CI_SHA_PUSH" >> $GITHUB_ENV || echo "CI_SHA=$CI_SHA_WORKFLOW_RUN" >> $GITHUB_ENV
-          [[ ! -z "$CI_SHA_PUSH" ]] && echo "CI_COMMIT_URL=$CI_COMMIT_URL_PUSH" >> $GITHUB_ENV || echo "CI_COMMIT_URL=$CI_COMMIT_URL_WORKFLOW_RUN" >> $GITHUB_ENV
 
       - name: print environment variables
         run: |
           echo "env.CI_BRANCH = ${{ env.CI_BRANCH }}"
-          echo "env.CI_SHA = ${{ env.CI_SHA }}"
-          echo "env.CI_COMMIT_URL = ${{ env.CI_COMMIT_URL }}"            
+          echo "env.CI_SHA = ${{ env.CI_SHA }}"         
 
       - name: Update clone use environment variables
         working-directory: /transformers
@@ -221,13 +217,11 @@ jobs:
           echo $CI_SHA_WORKFLOW_RUN       
           [[ ! -z "$CI_BRANCH_PUSH" ]] && echo "CI_BRANCH=$CI_BRANCH_PUSH" >> $GITHUB_ENV || echo "CI_BRANCH=$CI_BRANCH_WORKFLOW_RUN" >> $GITHUB_ENV
           [[ ! -z "$CI_SHA_PUSH" ]] && echo "CI_SHA=$CI_SHA_PUSH" >> $GITHUB_ENV || echo "CI_SHA=$CI_SHA_WORKFLOW_RUN" >> $GITHUB_ENV
-          [[ ! -z "$CI_SHA_PUSH" ]] && echo "CI_COMMIT_URL=$CI_COMMIT_URL_PUSH" >> $GITHUB_ENV || echo "CI_COMMIT_URL=$CI_COMMIT_URL_WORKFLOW_RUN" >> $GITHUB_ENV
 
       - name: print environment variables
         run: |
           echo "env.CI_BRANCH = ${{ env.CI_BRANCH }}"
           echo "env.CI_SHA = ${{ env.CI_SHA }}"
-          echo "env.CI_COMMIT_URL = ${{ env.CI_COMMIT_URL }}"
 
       - name: Update clone use environment variables
         working-directory: /transformers
@@ -307,13 +301,11 @@ jobs:
           echo $CI_SHA_WORKFLOW_RUN       
           [[ ! -z "$CI_BRANCH_PUSH" ]] && echo "CI_BRANCH=$CI_BRANCH_PUSH" >> $GITHUB_ENV || echo "CI_BRANCH=$CI_BRANCH_WORKFLOW_RUN" >> $GITHUB_ENV
           [[ ! -z "$CI_SHA_PUSH" ]] && echo "CI_SHA=$CI_SHA_PUSH" >> $GITHUB_ENV || echo "CI_SHA=$CI_SHA_WORKFLOW_RUN" >> $GITHUB_ENV
-          [[ ! -z "$CI_SHA_PUSH" ]] && echo "CI_COMMIT_URL=$CI_COMMIT_URL_PUSH" >> $GITHUB_ENV || echo "CI_COMMIT_URL=$CI_COMMIT_URL_WORKFLOW_RUN" >> $GITHUB_ENV
 
       - name: print environment variables
         run: |
           echo "env.CI_BRANCH = ${{ env.CI_BRANCH }}"
           echo "env.CI_SHA = ${{ env.CI_SHA }}"
-          echo "env.CI_COMMIT_URL = ${{ env.CI_COMMIT_URL }}"
 
       - name: Update clone use environment variables
         working-directory: /workspace/transformers
@@ -387,13 +379,11 @@ jobs:
           echo $CI_SHA_WORKFLOW_RUN       
           [[ ! -z "$CI_BRANCH_PUSH" ]] && echo "CI_BRANCH=$CI_BRANCH_PUSH" >> $GITHUB_ENV || echo "CI_BRANCH=$CI_BRANCH_WORKFLOW_RUN" >> $GITHUB_ENV
           [[ ! -z "$CI_SHA_PUSH" ]] && echo "CI_SHA=$CI_SHA_PUSH" >> $GITHUB_ENV || echo "CI_SHA=$CI_SHA_WORKFLOW_RUN" >> $GITHUB_ENV
-          [[ ! -z "$CI_SHA_PUSH" ]] && echo "CI_COMMIT_URL=$CI_COMMIT_URL_PUSH" >> $GITHUB_ENV || echo "CI_COMMIT_URL=$CI_COMMIT_URL_WORKFLOW_RUN" >> $GITHUB_ENV
 
       - name: print environment variables
         run: |
           echo "env.CI_BRANCH = ${{ env.CI_BRANCH }}"
           echo "env.CI_SHA = ${{ env.CI_SHA }}"
-          echo "env.CI_COMMIT_URL = ${{ env.CI_COMMIT_URL }}"
 
       - name: Update clone use environment variables
         working-directory: /workspace/transformers
@@ -466,13 +456,11 @@ jobs:
           echo $CI_SHA_WORKFLOW_RUN       
           [[ ! -z "$CI_BRANCH_PUSH" ]] && echo "CI_BRANCH=$CI_BRANCH_PUSH" >> $GITHUB_ENV || echo "CI_BRANCH=$CI_BRANCH_WORKFLOW_RUN" >> $GITHUB_ENV
           [[ ! -z "$CI_SHA_PUSH" ]] && echo "CI_SHA=$CI_SHA_PUSH" >> $GITHUB_ENV || echo "CI_SHA=$CI_SHA_WORKFLOW_RUN" >> $GITHUB_ENV
-          [[ ! -z "$CI_SHA_PUSH" ]] && echo "CI_COMMIT_URL=$CI_COMMIT_URL_PUSH" >> $GITHUB_ENV || echo "CI_COMMIT_URL=$CI_COMMIT_URL_WORKFLOW_RUN" >> $GITHUB_ENV
 
       - name: print environment variables
         run: |
           echo "env.CI_BRANCH = ${{ env.CI_BRANCH }}"
           echo "env.CI_SHA = ${{ env.CI_SHA }}"
-          echo "env.CI_COMMIT_URL = ${{ env.CI_COMMIT_URL }}"
 
       - uses: actions/checkout@v2
 
