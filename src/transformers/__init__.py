@@ -2579,6 +2579,14 @@ else:
             "FlaxDistilBertPreTrainedModel",
         ]
     )
+    _import_structure["models.dpt"].extend(
+        [
+            "FlaxDPTModel",
+            "FlaxDPTPreTrainedModel",
+            "FlaxDPTForSemanticSegmentation",
+            "FlaxDPTForDepthEstimation",
+        ]
+    )
     _import_structure["models.electra"].extend(
         [
             "FlaxElectraForCausalLM",
@@ -4793,6 +4801,12 @@ if TYPE_CHECKING:
             FlaxDistilBertForTokenClassification,
             FlaxDistilBertModel,
             FlaxDistilBertPreTrainedModel,
+        )
+        from .models.dpt import (
+            FlaxDPTForDepthEstimation,
+            FlaxDPTForSemanticSegmentation,
+            FlaxDPTModel,
+            FlaxDPTPreTrainedModel,
         )
         from .models.electra import (
             FlaxElectraForCausalLM,

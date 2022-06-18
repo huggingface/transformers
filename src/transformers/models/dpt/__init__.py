@@ -17,7 +17,13 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_available, is_vision_available
+from ...file_utils import (
+    _LazyModule,
+    is_flax_available,
+    is_tokenizers_available,
+    is_torch_available,
+    is_vision_available,
+)
 from ...utils import OptionalDependencyNotAvailable
 
 
@@ -43,6 +49,19 @@ else:
         "DPTForSemanticSegmentation",
         "DPTModel",
         "DPTPreTrainedModel",
+    ]
+
+try:
+    if not is_flax_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["modeling_flax_dpt"] = [
+        "FlaxDPTForSemanticSegmentation",
+        "FlaxDPTForDepthEstimation",
+        "FlaxDPTModel",
+        "FlaxDPTPreTrainedModel",
     ]
 
 
@@ -71,6 +90,18 @@ if TYPE_CHECKING:
             DPTPreTrainedModel,
         )
 
+    try:
+        if not is_flax_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .modeling_flax_dpt import (
+            FlaxDPTForDepthEstimation,
+            FlaxDPTForSemanticSegmentation,
+            FlaxDPTModel,
+            FlaxDPTPreTrainedModel,
+        )
 
 else:
     import sys

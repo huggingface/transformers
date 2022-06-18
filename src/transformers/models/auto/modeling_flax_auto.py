@@ -37,6 +37,7 @@ FLAX_MODEL_MAPPING_NAMES = OrderedDict(
         ("blenderbot-small", "FlaxBlenderbotSmallModel"),
         ("clip", "FlaxCLIPModel"),
         ("distilbert", "FlaxDistilBertModel"),
+        ("dpt", "FlaxDPTModel"),
         ("electra", "FlaxElectraModel"),
         ("gpt2", "FlaxGPT2Model"),
         ("gpt_neo", "FlaxGPTNeoModel"),
@@ -211,6 +212,17 @@ FLAX_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+FLAX_MODEL_FOR_DEPTH_ESTIMATION_MAPPING = OrderedDict(
+    [
+        ("dpt", "FlaxDPTForDepthEstimation"),
+    ]
+)
+
+FLAX_MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING = OrderedDict(
+    [
+        ("dpt", "FlaxDPTForSemanticSegmentation"),
+    ]
+)
 
 FLAX_MODEL_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, FLAX_MODEL_MAPPING_NAMES)
 FLAX_MODEL_FOR_PRETRAINING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, FLAX_MODEL_FOR_PRETRAINING_MAPPING_NAMES)
@@ -240,6 +252,12 @@ FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = _LazyAutoMapping(
 )
 FLAX_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, FLAX_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES
+)
+FLAX_MODEL_FOR_DEPTH_ESTIMATION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, FLAX_MODEL_FOR_DEPTH_ESTIMATION_MAPPING
+)
+FLAX_MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, FLAX_MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING
 )
 
 
@@ -343,4 +361,22 @@ class FlaxAutoModelForSpeechSeq2Seq(_BaseAutoModelClass):
 
 FlaxAutoModelForSpeechSeq2Seq = auto_class_update(
     FlaxAutoModelForSpeechSeq2Seq, head_doc="sequence-to-sequence speech-to-text modeling"
+)
+
+
+class FlaxAutoModelForDepthEstimation(_BaseAutoModelClass):
+    _model_mapping = FLAX_MODEL_FOR_DEPTH_ESTIMATION_MAPPING
+
+
+FlaxAutoModelForDepthEstimation = auto_class_update(
+    FlaxAutoModelForDepthEstimation, head_doc="depth estimation modeling"
+)
+
+
+class FlaxAutoModelForSemanticSegmentation(_BaseAutoModelClass):
+    _model_mapping = FLAX_MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING
+
+
+FlaxAutoModelForSemanticSegmentation = auto_class_update(
+    FlaxAutoModelForSemanticSegmentation, head_doc="semantic segmentation modeling"
 )
