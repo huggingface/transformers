@@ -1748,6 +1748,21 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         metrics = trainer.evaluate()
         self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss)
 
+        # 4. TorchDynamo fx2trt
+        trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, torchdynamo="fx2trt")
+        metrics = trainer.evaluate()
+        t1 = metrics["eval_loss"]
+        t2 = original_eval_loss
+        self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss)
+
+        # 5. TorchDynamo fx2trt-fp16
+        trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, torchdynamo="fx2trt-fp16")
+        metrics = trainer.evaluate()
+        t1 = metrics["eval_loss"]
+        t2 = original_eval_loss
+        # fp16 has accuracy accuracy degradation
+        self.assertLess(np.max(np.abs(t1 - t2)), 1e-3)
+
     @require_torch_non_multi_gpu
     @require_torchdynamo
     def test_torchdynamo_memory(self):
