@@ -327,7 +327,11 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(len(hidden_states), expected_num_layers)
 
         # Swin has a different seq_length
-        patch_size = config.patch_size if isinstance(config.patch_size, collections.abc.Iterable) else (config.patch_size, config.patch_size)
+        patch_size = (
+            config.patch_size
+            if isinstance(config.patch_size, collections.abc.Iterable)
+            else (config.patch_size, config.patch_size)
+        )
 
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
 
@@ -351,7 +355,11 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
     def test_hidden_states_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        image_size = self.model_tester.image_size if isinstance(self.model_tester.image_size, collections.abc.Iterable) else (self.model_tester.image_size, self.model_tester.image_size)
+        image_size = (
+            self.model_tester.image_size
+            if isinstance(self.model_tester.image_size, collections.abc.Iterable)
+            else (self.model_tester.image_size, self.model_tester.image_size)
+        )
 
         for model_class in self.all_model_classes:
             inputs_dict["output_hidden_states"] = True
@@ -367,8 +375,16 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.patch_size = 3
 
-        image_size = self.model_tester.image_size if isinstance(self.model_tester.image_size, collections.abc.Iterable) else (self.model_tester.image_size, self.model_tester.image_size)
-        patch_size = config.patch_size if isinstance(config.patch_size, collections.abc.Iterable) else (config.patch_size, config.patch_size)
+        image_size = (
+            self.model_tester.image_size
+            if isinstance(self.model_tester.image_size, collections.abc.Iterable)
+            else (self.model_tester.image_size, self.model_tester.image_size)
+        )
+        patch_size = (
+            config.patch_size
+            if isinstance(config.patch_size, collections.abc.Iterable)
+            else (config.patch_size, config.patch_size)
+        )
 
         padded_height = image_size[0] + patch_size[0] - (image_size[0] % patch_size[0])
         padded_width = image_size[1] + patch_size[1] - (image_size[1] % patch_size[1])

@@ -88,7 +88,7 @@ class ViTMAEModelTester:
 
         # in ViTMAE, the expected sequence length = (num_patches + 1) * (1 - config.mask_ratio), rounded above
         # (we add 1 for the [CLS] token)
-        num_patches = (image_size // patch_size)**2
+        num_patches = (image_size // patch_size) ** 2
         self.seq_length = int(math.ceil((1 - mask_ratio) * (num_patches + 1)))
 
     def prepare_config_and_inputs(self):
@@ -131,7 +131,7 @@ class ViTMAEModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        num_patches = (self.image_size // self.patch_size)**2
+        num_patches = (self.image_size // self.patch_size) ** 2
         expected_num_channels = self.patch_size**2 * self.num_channels
         self.parent.assertEqual(result.logits.shape, (self.batch_size, num_patches, expected_num_channels))
 

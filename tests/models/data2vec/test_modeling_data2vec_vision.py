@@ -37,9 +37,7 @@ if is_torch_available():
         Data2VecVisionForSemanticSegmentation,
         Data2VecVisionModel,
     )
-    from transformers.models.data2vec.modeling_data2vec_vision import (
-        DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
+    from transformers.models.data2vec.modeling_data2vec_vision import DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -134,7 +132,7 @@ class Data2VecVisionModelTester:
         model.eval()
         result = model(pixel_values)
         # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
-        num_patches = (self.image_size // self.patch_size)**2
+        num_patches = (self.image_size // self.patch_size) ** 2
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels, pixel_labels):

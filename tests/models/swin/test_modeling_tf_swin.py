@@ -17,12 +17,11 @@
 
 import inspect
 import unittest
-import collections
 
 import numpy as np
 
 from transformers import SwinConfig
-from transformers.testing_utils import require_tf, require_vision, slow
+from transformers.testing_utils import require_tf, require_vision, slow, to_2tuple
 from transformers.utils import cached_property, is_tf_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -38,12 +37,6 @@ if is_tf_available():
         TFSwinForMaskedImageModeling,
         TFSwinModel,
     )
-
-
-def to_2tuple(x):
-    if isinstance(x, collections.abc.Iterable):
-        return x
-    return (x, x)
 
 
 if is_vision_available():

@@ -143,6 +143,8 @@ class DeiTModelTester:
         # test greyscale images
         config.num_channels = 1
         model = DeiTForMaskedImageModeling(config)
+        model.to(torch_device)
+        model.eval()
 
         pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
         result = model(pixel_values)
