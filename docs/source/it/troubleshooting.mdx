@@ -1,0 +1,175 @@
+<!---
+Copyright 2022 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
+# Risoluzione dei problemi
+
+A volte si verificano errori, ma siamo qui per aiutarti! Questa guida tratta alcuni dei problemi più comuni che abbiamo riscontrato e come risolverli. Tuttavia, questa guida non vuole essere una raccolta completa di tutti i problemi di 🤗 Transformers. Per ulteriore assistenza con la risoluzione del problema, prova:
+
+<Youtube id="S2EEG3JIt2A"/>
+
+1. Chiedere aiuto sul [forums](https://discuss.huggingface.co/). Ci sono categorie specifiche in cui puoi postare le tue domande, come [Beginners](https://discuss.huggingface.co/c/beginners/5) o [🤗 Transformers](https://discuss.huggingface.co/c/transformers/9). Assicurati di scrivere un buon post descrittivo sul forum  con del codice riproducibile per massimizzare le probabilità che il tuo problema venga risolto!
+
+<Youtube id="_PAli-V4wj0"/>
+
+2. Crea un [Issue](https://github.com/huggingface/transformers/issues/new/choose) sul repository di 🤗 Transformers se è un bug correlato alla libreria. Cerca di includere quante più informazioni possibili che descrivono il bug per aiutarci a capire meglio cosa c'è che non va e come possiamo risolverlo.
+
+3. Controlla la guida alla [Migrazione](migration) se utilizzi una versione precedente di 🤗 Transformers poiché sono state introdotte alcune importanti modifiche tra le versioni.
+
+Per maggiori dettagli sulla risoluzione dei problemi e su come ottenere assistenza, dai un'occhiata al [Capitolo 8](https://huggingface.co/course/chapter8/1?fw=pt) del corso Hugging Face.
+
+
+## Ambienti con firewall
+
+Alcune istanze GPU su configurazioni cloud e intranet sono protette da firewall su connessioni esterne, causando un errore di connessione. Quando lo script tenta di scaricare i pesi del modello o i set di dati, il download si interrompe e verrà applicato il timeout con il seguente messaggio:
+
+```
+ValueError: Connection error, and we cannot find the requested files in the cached path.
+Please try again or make sure your Internet connection is on.
+```
+
+In questo caso, dovresti provare a eseguire 🤗 Transformers in [modalità offline](installation#offline-mode) per evitare l'errore di connessione.
+
+## CUDA esaurimento di memoria
+
+L'addestramento di modelli di grandi dimensioni con milioni di parametri può essere difficile senza l'hardware appropriato. Un errore comune che potresti riscontrare quando la GPU esaurisce la memoria è:
+
+```
+CUDA out of memory. Tried to allocate 256.00 MiB (GPU 0; 11.17 GiB total capacity; 9.70 GiB already allocated; 179.81 MiB free; 9.85 GiB reserved in total by PyTorch)
+```
+
+Ecco alcune potenziali soluzioni che puoi provare per ridurre l'utilizzo della memoria:
+
+- Riduci il valore [`per_device_train_batch_size`](main_classes/trainer#transformers.TrainingArguments.per_device_train_batch_size) in [`TrainingArguments`].
+- Prova usare [`gradient_accumulation_steps`](main_classes/trainer#transformers.TrainingArguments.gradient_accumulation_steps) in [`TrainingArguments`] per aumentare efficacemente la dimensione complessiva del lotto.
+<Tip>
+
+Fai riferimento alla [guida](performance) sulle performance per maggiori dettagli sulle tecniche di salvataggio della memoria.
+
+</Tip>
+
+## Impossibile caricare un modello TensorFlow salvato
+
+Il metodo [model.save](https://www.tensorflow.org/tutorials/keras/save_and_load#save_the_entire_model) di TensorFlow salverà l'intero modello - architettura, pesi, configurazione di allenamento - in un unico file. Tuttavia, quando carichi nuovamente il file del modello, potresti riscontrare un errore perché 🤗 Transformers potrebbe non caricare tutti gli oggetti relativi a TensorFlow nel file del modello. Per evitare problemi con il salvataggio e il caricamento dei modelli TensorFlow, si consiglia di:
+
+- Salva i pesi del modello come estensione di file `h5` con [`model.save_weights`](https://www.tensorflow.org/tutorials/keras/save_and_load#save_the_entire_model) e quindi ricarica il modello con [`~TFPreTrainedModel.from_pretrained`]:
+
+```py
+>>> from transformers import TFPreTrainedModel
+>>> from tensorflow import keras
+
+>>> model.save_weights("some_folder/tf_model.h5")
+>>> model = TFPreTrainedModel.from_pretrained("some_folder")
+```
+
+- Salva il modello con [`~TFPretrainedModel.save_pretrained`] e caricalo di nuovo con[`~TFPreTrainedModel.from_pretrained`]:
+
+```py
+>>> from transformers import TFPreTrainedModel
+
+>>> model.save_pretrained("path_to/model")
+>>> model = TFPreTrainedModel.from_pretrained("path_to/model")
+```
+
+## ImportError
+
+Un altro errore comune che potresti riscontrare, specialmente se si tratta di un modello appena rilasciato, è `ImportError`:
+
+```
+ImportError: cannot import name 'ImageGPTFeatureExtractor' from 'transformers' (unknown location)
+```
+
+Per questi tipi di errore, assicurati di avere l'ultima versione di 🤗 Transformers installata per accedere ai modelli più recenti:
+
+```bash
+pip install transformers --upgrade
+```
+
+## CUDA error: device-side assert triggered
+
+A volte potresti riscontrare un errore CUDA generico su un errore nel codice del dispositivo.
+
+```
+RuntimeError: CUDA error: device-side assert triggered
+```
+
+Dovresti provare a eseguire prima il codice su una CPU per ottenere un messaggio di errore più descrittivo. Aggiungi la seguente variabile di ambiente all'inizio del codice per passare a una CPU:
+
+```py
+>>> import os
+
+>>> os.environ["CUDA_VISIBLE_DEVICES"] = ""
+```
+
+Un'altra opzione è ottenere un traceback migliore dalla GPU. Aggiungi la seguente variabile di ambiente all'inizio del codice per fare in modo che il traceback punti all'origine dell'errore:
+
+```py
+>>> import os
+
+>>> os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+```
+
+## Output errato quando i padding toke non sono mascherati
+
+In alcuni casi, l'output `hidden_state` potrebbe non essere corretto se gli `input_ids` includono i padding token. Per dimostrare, carica un modello e un tokenizer. Puoi accedere a `pad_token_id` di un modello per vederne il valore. Il `pad_token_id` potrebbe essere `None` per alcuni modelli, ma puoi sempre impostarlo manualmente.
+
+```py
+>>> from transformers import AutoModelForSequenceClassification
+>>> import torch
+
+>>> model = AutoModelForSequenceClassification.from_pretrained("bert-base-uncased")
+>>> model.config.pad_token_id
+0
+```
+
+L'esempio seguente mostra l'output senza mascherare i padding token:
+
+```py
+>>> input_ids = torch.tensor([[7592, 2057, 2097, 2393, 9611, 2115], [7592, 0, 0, 0, 0, 0]])
+>>> output = model(input_ids)
+>>> print(output.logits)
+tensor([[ 0.0082, -0.2307],
+        [ 0.1317, -0.1683]], grad_fn=<AddmmBackward0>)
+```
+
+Ecco l'output attuale della seconda sequenza:
+
+```py
+>>> input_ids = torch.tensor([[7592]])
+>>> output = model(input_ids)
+>>> print(output.logits)
+tensor([[-0.1008, -0.4061]], grad_fn=<AddmmBackward0>)
+```
+
+La maggior parte delle volte, dovresti fornire una `attention_mask` al tuo modello per ignorare i padding token per evitare questo errore silenzioso. Ora l'output della seconda sequenza corrisponde al suo output effettivo:
+
+<Tip>
+
+Per impostazione predefinita, il tokenizer crea una `attention_mask` per te in base alle impostazioni predefinite del tuo tokenizer specifico.
+
+</Tip>
+
+```py
+>>> attention_mask = torch.tensor([[1, 1, 1, 1, 1, 1], [1, 0, 0, 0, 0, 0]])
+>>> output = model(input_ids, attention_mask=attention_mask)
+>>> print(output.logits)
+tensor([[ 0.0082, -0.2307],
+        [-0.1008, -0.4061]], grad_fn=<AddmmBackward0>)
+```
+
+🤗 Transformers non crea automaticamente una `attention_mask` per mascherare un padding token se viene fornito perché:
+
+- Alcuni modelli non hanno un padding token.
+- Per alcuni casi d'uso, gli utenti desiderano che un modello si occupi di un padding token.
