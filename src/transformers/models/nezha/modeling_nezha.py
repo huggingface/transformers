@@ -57,7 +57,7 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "bert-base-uncased"
 _CONFIG_FOR_DOC = "NeZhaConfig"
-_TOKENIZER_FOR_DOC = "NeZhaTokenizer"
+_TOKENIZER_FOR_DOC = "BertTokenizer"
 
 # TokenClassification docstring
 _CHECKPOINT_FOR_TOKEN_CLASSIFICATION = "dbmdz/bert-large-cased-finetuned-conll03-english"
@@ -80,29 +80,8 @@ _SEQ_CLASS_EXPECTED_LOSS = 0.01
 
 
 NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "bert-base-uncased",
-    "bert-large-uncased",
-    "bert-base-cased",
-    "bert-large-cased",
-    "bert-base-multilingual-uncased",
-    "bert-base-multilingual-cased",
-    "bert-base-chinese",
-    "bert-base-german-cased",
-    "bert-large-uncased-whole-word-masking",
-    "bert-large-cased-whole-word-masking",
-    "bert-large-uncased-whole-word-masking-finetuned-squad",
-    "bert-large-cased-whole-word-masking-finetuned-squad",
-    "bert-base-cased-finetuned-mrpc",
-    "bert-base-german-dbmdz-cased",
-    "bert-base-german-dbmdz-uncased",
-    "cl-tohoku/bert-base-japanese",
-    "cl-tohoku/bert-base-japanese-whole-word-masking",
-    "cl-tohoku/bert-base-japanese-char",
-    "cl-tohoku/bert-base-japanese-char-whole-word-masking",
-    "TurkuNLP/bert-base-finnish-cased-v1",
-    "TurkuNLP/bert-base-finnish-uncased-v1",
-    "wietsedv/bert-base-dutch-cased",
-    # See all BERT models at https://huggingface.co/models?filter=bert
+    "sijunhe/nezha-cn-base",
+    # See all Nezha models at https://huggingface.co/models?filter=nezha
 ]
 
 
@@ -193,7 +172,7 @@ class RelativePositionsEncoding(nn.Module):
         div_term = torch.exp(torch.arange(0, depth, 2).float() * (-math.log(10000.0) / depth))
         embeddings_table[:, 0::2] = torch.sin(position * div_term)
         embeddings_table[:, 1::2] = torch.cos(position * div_term)
-        embeddings_table = embeddings_table.unsqueeze(0).transpose(0, 1).squeeze(1)
+        # embeddings_table = embeddings_table.unsqueeze(0).transpose(0, 1).squeeze(1)
 
         flat_relative_positions_matrix = final_mat.view(-1)
         one_hot_relative_positions_matrix = torch.nn.functional.one_hot(flat_relative_positions_matrix,
@@ -222,7 +201,6 @@ class NeZhaEmbeddings(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
         if version.parse(torch.__version__) > version.parse("1.6.0"):
             self.register_buffer(
@@ -265,16 +243,13 @@ class NeZhaEmbeddings(nn.Module):
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
         embeddings = inputs_embeds + token_type_embeddings
-        if self.position_embedding_type == "absolute":
-            position_embeddings = self.position_embeddings(position_ids)
-            embeddings += position_embeddings
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
 
 
 class NeZhaSelfAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
+    def __init__(self, config):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -291,13 +266,9 @@ class NeZhaSelfAttention(nn.Module):
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.position_embedding_type = position_embedding_type or getattr(
-            config, "position_embedding_type", "absolute"
-        )
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            self.max_position_embeddings = config.max_position_embeddings
-            self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
-
+        self.relative_positions_encoding = RelativePositionsEncoding(length=config.max_position_embeddings,
+                                                                     depth=self.attention_head_size,
+                                                                     max_relative_position=config.max_relative_position)
         self.is_decoder = config.is_decoder
 
     def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
@@ -355,23 +326,20 @@ class NeZhaSelfAttention(nn.Module):
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            seq_length = hidden_states.size()[1]
-            position_ids_l = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
-            position_ids_r = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
-            distance = position_ids_l - position_ids_r
-            positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
-            positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
+        batch_size, num_attention_heads, from_seq_length, to_seq_length = attention_scores.size()
+        relations_keys = self.relative_positions_encoding(to_seq_length)
+        query_layer_t = query_layer.permute(2, 0, 1, 3)
 
-            if self.position_embedding_type == "relative_key":
-                relative_position_scores = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-                attention_scores = attention_scores + relative_position_scores
-            elif self.position_embedding_type == "relative_key_query":
-                relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-                relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
-                attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
+        query_layer_r = query_layer_t.contiguous().view(from_seq_length, batch_size * num_attention_heads,
+                                                        self.attention_head_size)
+        key_position_scores = torch.matmul(query_layer_r, relations_keys.permute(0, 2, 1))
+        key_position_scores_r = key_position_scores.view(from_seq_length, batch_size,
+                                                         num_attention_heads, from_seq_length)
+        key_position_scores_r_t = key_position_scores_r.permute(1, 2, 0, 3)
+        attention_scores = attention_scores + key_position_scores_r_t
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in NeZhaModel forward() function)
             attention_scores = attention_scores + attention_mask
@@ -388,6 +356,15 @@ class NeZhaSelfAttention(nn.Module):
             attention_probs = attention_probs * head_mask
 
         context_layer = torch.matmul(attention_probs, value_layer)
+        relations_values = self.relative_positions_encoding(to_seq_length)
+        attention_probs_t = attention_probs.permute(2, 0, 1, 3)
+        attentions_probs_r = attention_probs_t.contiguous().view(from_seq_length, batch_size * num_attention_heads,
+                                                                 to_seq_length)
+        value_position_scores = torch.matmul(attentions_probs_r, relations_values)
+        value_position_scores_r = value_position_scores.view(from_seq_length, batch_size,
+                                                             num_attention_heads, self.attention_head_size)
+        value_position_scores_r_t = value_position_scores_r.permute(1, 2, 0, 3)
+        context_layer = context_layer + value_position_scores_r_t
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
@@ -415,9 +392,9 @@ class NeZhaSelfOutput(nn.Module):
 
 
 class NeZhaAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
+    def __init__(self, config):
         super().__init__()
-        self.self = NeZhaSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = NeZhaSelfAttention(config)
         self.output = NeZhaSelfOutput(config)
         self.pruned_heads = set()
 
@@ -503,7 +480,7 @@ class NeZhaLayer(nn.Module):
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = NeZhaAttention(config, position_embedding_type="absolute")
+            self.crossattention = NeZhaAttention(config)
         self.intermediate = NeZhaIntermediate(config)
         self.output = NeZhaOutput(config)
 
