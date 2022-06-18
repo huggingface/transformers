@@ -433,23 +433,6 @@ class FlaxDPTPreActResidualLayer(nn.Module):
 
         return hidden_state + residual
 
-    def __call__(self, hidden_state):
-        residual = hidden_state
-        hidden_state = self.activation1(hidden_state)
-
-        hidden_state = self.convolution1(hidden_state)
-
-        if self.use_batch_norm:
-            hidden_state = self.batch_norm1(hidden_state)
-
-        hidden_state = self.activation2(hidden_state)
-        hidden_state = self.convolution2(hidden_state)
-
-        if self.use_batch_norm:
-            hidden_state = self.batch_norm2(hidden_state)
-
-        return hidden_state + residual
-
 
 class FlaxDPTFeatureFusionLayer(nn.Module):
     config: DPTConfig

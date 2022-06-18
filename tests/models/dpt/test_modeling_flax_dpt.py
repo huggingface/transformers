@@ -127,7 +127,7 @@ class FlaxDPTModelTester(unittest.TestCase):
 
 
 @require_flax
-class FlaxViTModelTest(FlaxModelTesterMixin, unittest.TestCase):
+class FlaxDPTModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (FlaxDPTModel, FlaxDPTForSemanticSegmentation, FlaxDPTForDepthEstimation) if is_flax_available() else ()
