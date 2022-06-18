@@ -12,3 +12,6 @@
   - local: autoclass_tutorial
     title: Carica istanze pre-allenate con AutoClass
   title: Esercitazione
+- sections:
+  - local: multilingual
+  - title: Modelli multilingua per l'inferenza
