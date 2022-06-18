@@ -861,6 +861,7 @@ class PushToHubMixin:
         organization: Optional[str] = None,
         private: Optional[bool] = None,
         use_auth_token: Optional[Union[bool, str]] = None,
+        max_shard_size="10GB",
         **model_card_kwargs
     ) -> str:
         """
@@ -936,7 +937,6 @@ class PushToHubMixin:
             use_auth_token=use_auth_token,
         )
         # Save the files in the cloned repo
-        self.save_pretrained(repo_path_or_name)
         if hasattr(self, "history") and hasattr(self, "create_model_card"):
             # This is a Keras model and we might be able to fish out its History and make a model card out of it
             base_model_card_args = {
@@ -945,6 +945,9 @@ class PushToHubMixin:
             }
             base_model_card_args.update(model_card_kwargs)
             self.create_model_card(**base_model_card_args)
+        else:
+            self.save_pretrained(repo_path_or_name,max_shard_size=max_shard_size)
+            
         # Commit and push!
         url = self._push_to_hub(repo, commit_message=commit_message)
 
@@ -1133,7 +1136,7 @@ def get_checkpoint_shard_files(
 
     if not os.path.isfile(index_filename):
         raise ValueError(
-            f"Can't find a checkpoint index ({FLAX_WEIGHTS_INDEX_NAME}) in {pretrained_model_name_or_path}."
+            f"Can't find a checkpoint index ({index_filename}) in {pretrained_model_name_or_path}."
         )
 
     with open(index_filename, "r") as f:
