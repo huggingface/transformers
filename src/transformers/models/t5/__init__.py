@@ -83,6 +83,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_flax_t5"] = [
+        "FlaxT5EncoderModel,"
         "FlaxT5ForConditionalGeneration",
         "FlaxT5Model",
         "FlaxT5PreTrainedModel",
