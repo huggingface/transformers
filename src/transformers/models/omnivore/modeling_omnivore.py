@@ -114,25 +114,19 @@ def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
     return _no_grad_trunc_normal_(tensor, mean, std, a, b)
 
 
-# Stochastic depth implementation
-# Taken from https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/layers/drop.py
-def drop_path(x, drop_prob: float = 0.0, training: bool = False):
+def drop_path(input, drop_prob=0.0, training=False, scale_by_keep=True):
     """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks). This is the same as the
-    DropConnect impl I created for EfficientNet, etc networks, however, the original name is misleading as 'Drop
-    Connect' is a different form of dropout in a separate paper... See discussion:
-    https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the layer and
-    argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the argument.
+    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
     """
     if drop_prob == 0.0 or not training:
-        return x
+        return input
     keep_prob = 1 - drop_prob
-    shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=x.dtype, device=x.device)
-    random_tensor.floor_()  # binarize
-    output = x.div(keep_prob) * random_tensor
-    return output
-
+    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = input.new_empty(shape).bernoulli_(keep_prob)
+    if keep_prob > 0.0 and scale_by_keep:
+        random_tensor.div_(keep_prob)
+    return input * random_tensor
+    
 
 class OmnivoreDropPath(nn.Module):
     def __init__(self, drop_prob=None):
@@ -141,29 +135,6 @@ class OmnivoreDropPath(nn.Module):
 
     def forward(self, x: torch.Tensor):
         return drop_path(x, self.drop_prob, self.training)
-
-
-class OmnivoreLayerNorm(nn.Module):
-    def __init__(self, normalized_shape, eps=1e-6, data_format="channels_last"):
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(normalized_shape))
-        self.bias = nn.Parameter(torch.zeros(normalized_shape))
-        self.eps = eps
-        self.data_format = data_format
-        if self.data_format not in ["channels_last", "channels_first"]:
-            raise NotImplementedError(f"Unsupported data format: {self.data_format}")
-        self.normalized_shape = (normalized_shape,)
-
-    def forward(self, x: torch.Tensor):
-        if self.data_format == "channels_last":
-            x = torch.nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
-        elif self.data_format == "channels_first":
-            u = x.mean(1, keepdim=True)
-            s = (x - u).pow(2).mean(1, keepdim=True)
-            x = (x - u) / torch.sqrt(s + self.eps)
-            x = self.weight[:, None, None] * x + self.bias[:, None, None]
-        return x
-
 
 class OmnivoreIm2Video(nn.Module):
     """Convert Image into a trivial video"""
@@ -176,8 +147,7 @@ class OmnivoreIm2Video(nn.Module):
         else:
             raise ValueError(f"Dimension incorrect {pixel_values.shape}")
 
-
-class OmnivoreMLP(nn.Module):
+class OmnivoreSwinMLPLayer(nn.Module):
     def __init__(self, in_features, hidden_features=None, out_features=None, dropout_rate=0.0, act_layer=nn.GELU):
         super().__init__()
         out_features = out_features or in_features
@@ -252,7 +222,7 @@ def get_window_size(input_size, window_size, shift_size=None):
         return tuple(use_window_size), tuple(use_shift_size)
 
 
-class OmnivoreWindowAttention3D(nn.Module):
+class OmnivoreSwinAttention(nn.Module):
     def __init__(
         self,
         dim,
@@ -340,7 +310,7 @@ class OmnivoreWindowAttention3D(nn.Module):
         return hidden_state
 
 
-class OmnivoreSwinTransformer3DLayer(nn.Module):
+class OmnivoreSwinLayer(nn.Module):
     def __init__(
         self,
         dim,
@@ -368,7 +338,7 @@ class OmnivoreSwinTransformer3DLayer(nn.Module):
         assert 0 <= self.shift_size[2] < self.window_size[2], "shift_size must in 0-window_size"
 
         self.norm1 = norm_layer(dim)
-        self.attention = OmnivoreWindowAttention3D(
+        self.attention = OmnivoreSwinAttention(
             dim,
             window_size=self.window_size,
             num_heads=num_heads,
@@ -381,7 +351,7 @@ class OmnivoreSwinTransformer3DLayer(nn.Module):
         self.drop_path = OmnivoreDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.norm2 = norm_layer(dim)
         mlp_hidden_dim = int(dim * mlp_ratio)
-        self.mlp = OmnivoreMLP(
+        self.mlp = OmnivoreSwinMLPLayer(
             in_features=dim, hidden_features=mlp_hidden_dim, dropout_rate=dropout_rate, act_layer=act_layer
         )
 
@@ -447,7 +417,7 @@ class OmnivoreSwinTransformer3DLayer(nn.Module):
         return hidden_state
 
 
-class OmnivorePatchMerging(nn.Module):
+class OmnivoreSwinPatchMerging(nn.Module):
     """
     Args:
     Patch Merging Layer
@@ -512,7 +482,7 @@ def compute_mask(D, height, width, window_size, shift_size, device):
     return attention_mask
 
 
-class OmnivoreSwinTransformerStage(nn.Module):
+class OmnivoreSwinStage(nn.Module):
     def __init__(
         self,
         dim,
@@ -536,7 +506,7 @@ class OmnivoreSwinTransformerStage(nn.Module):
         # build layers
         self.layers = nn.ModuleList(
             [
-                OmnivoreSwinTransformer3DLayer(
+                OmnivoreSwinLayer(
                     dim=dim,
                     num_heads=num_heads,
                     window_size=window_size,
@@ -627,7 +597,7 @@ class OmnivoreSwinTransformerStage(nn.Module):
             return hidden_state, height, width, hidden_state, height, width
 
 
-class OmnivorePatchEmbeddings3D(nn.Module):
+class OmnivoreSwinPatchEmbeddings(nn.Module):
     """Video to Patch Embedding"""
 
     def __init__(
@@ -703,7 +673,7 @@ class OmnivorePatchEmbeddings3D(nn.Module):
         return hidden_state
 
 
-class OmnivoreSwinTransformer3DModel(nn.Module):
+class OmnivoreSwinTrunk(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -730,7 +700,7 @@ class OmnivoreSwinTransformer3DModel(nn.Module):
         assert self.input_channels == 3, "Only 3 channels supported"
 
         # split image into non-overlapping patches
-        self.patch_embed = OmnivorePatchEmbeddings3D(
+        self.patch_embed = OmnivoreSwinPatchEmbeddings(
             patch_size=self.patch_size,
             input_channels=self.input_channels,
             embed_dim=self.embed_dim,
@@ -753,7 +723,7 @@ class OmnivoreSwinTransformer3DModel(nn.Module):
             self.depth_patch_embed_separate_params = self.depth_patch_embed_separate_params
 
             if self.depth_patch_embed_separate_params:
-                self.depth_patch_embed = OmnivorePatchEmbeddings3D(
+                self.depth_patch_embed = OmnivoreSwinPatchEmbeddings(
                     patch_size=self.patch_size,
                     input_channels=depth_chans,
                     embed_dim=self.embed_dim,
@@ -764,7 +734,7 @@ class OmnivoreSwinTransformer3DModel(nn.Module):
                 assert depth_chans == 4
                 logger.info("Certain channels of patch projection may not be used in forward pass")
                 logger.info("Make sure config.DISTRIBUTED.FIND_UNUSED_PARAMETERS is set to True")
-                self.patch_embed = OmnivorePatchEmbeddings3D(
+                self.patch_embed = OmnivoreSwinPatchEmbeddings(
                     patch_size=self.patch_size,
                     input_channels=3,
                     embed_dim=self.embed_dim,
@@ -782,7 +752,7 @@ class OmnivoreSwinTransformer3DModel(nn.Module):
         # build stages
         self.stages = nn.ModuleList()
         for stage in range(self.num_stages):
-            stage_module = OmnivoreSwinTransformerStage(
+            stage_module = OmnivoreSwinStage(
                 dim=int(self.embed_dim * 2**stage),
                 depth=self.depths[stage],
                 num_heads=self.num_heads[stage],
@@ -794,7 +764,7 @@ class OmnivoreSwinTransformer3DModel(nn.Module):
                 attention_dropout_rate=self.attention_dropout_rate,
                 drop_path_rate=dpr[sum(self.depths[:stage]) : sum(self.depths[: stage + 1])],
                 norm_layer=self.norm_layer,
-                downsample=OmnivorePatchMerging if stage < self.num_stages - 1 else None,
+                downsample=OmnivoreSwinPatchMerging if stage < self.num_stages - 1 else None,
             )
             self.stages.append(stage_module)
 
@@ -893,11 +863,11 @@ class OmnivoreSwinTransformer3DModel(nn.Module):
 
     def train(self, mode=True):
         """Convert the model into training mode while keep layers freezed."""
-        super(OmnivoreSwinTransformer3DModel, self).train(mode)
+        super(OmnivoreSwinTrunk, self).train(mode)
         self._freeze_stages()
 
 
-class OmnivoreImageClassificationHead(nn.Module):
+class OmnivoreImageHead(nn.Module):
     def __init__(self, in_features=1024, out_features=1000, bias=True):
         super().__init__()
         self.image_head = nn.Linear(in_features, out_features, bias)
@@ -907,7 +877,7 @@ class OmnivoreImageClassificationHead(nn.Module):
         return logits
 
 
-class OmnivoreVideoClassificationHead(nn.Module):
+class OmnivoreVideoHead(nn.Module):
     def __init__(self, in_features=1024, out_features=400, bias=True):
         super().__init__()
         self.video_head = nn.Linear(in_features, out_features, bias)
@@ -919,7 +889,7 @@ class OmnivoreVideoClassificationHead(nn.Module):
         return logits
 
 
-class OmnivoreRGBDClassificationHead(nn.Module):
+class OmnivoreRGBDHead(nn.Module):
     def __init__(self, in_features=1024, out_features=19, bias=True):
         super().__init__()
         self.rgbd_head = nn.Linear(in_features, out_features, bias)
@@ -990,7 +960,7 @@ class OmnivoreModel(OmnivorePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
-        self.model = OmnivoreSwinTransformer3DModel(config)
+        self.trunk = OmnivoreSwinTrunk(config)
         self.post_init()
 
     @add_start_docstrings_to_model_forward(OMNIVORE_INPUTS_DOCSTRING)
@@ -1016,7 +986,7 @@ class OmnivoreModel(OmnivorePreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        outputs = self.model(pixel_values)
+        outputs = self.trunk(pixel_values)
         last_hidden_state = outputs[0]
         # global average pooling, (N, C, D, H, W) -> (N, C)
         pooled_output = last_hidden_state.mean([-1])
@@ -1047,9 +1017,9 @@ class OmnivoreForVisionClassification(OmnivorePreTrainedModel):
         self.num_video_labels = config.num_video_labels or config.num_labels
         self.num_rgbd_labels = config.num_rgbd_labels or config.num_labels
         self.omnivore = OmnivoreModel(config)
-        self.image_classifier = OmnivoreImageClassificationHead(config.head_dim_in, self.num_image_labels)
-        self.rgbd_classifier = OmnivoreRGBDClassificationHead(config.head_dim_in, self.num_rgbd_labels)
-        self.video_classifier = OmnivoreVideoClassificationHead(config.head_dim_in, self.num_video_labels)
+        self.image_classifier = OmnivoreImageHead(config.head_dim_in, self.num_image_labels)
+        self.rgbd_classifier = OmnivoreRGBDHead(config.head_dim_in, self.num_rgbd_labels)
+        self.video_classifier = OmnivoreVideoHead(config.head_dim_in, self.num_video_labels)
         # Initialize weights and apply final processing
         self.post_init()
 

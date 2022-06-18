@@ -3192,7 +3192,7 @@ class NystromformerPreTrainedModel(metaclass=DummyObject):
 OMNIVORE_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class OmnivoreForImageClassification(metaclass=DummyObject):
+class OmnivoreForVisionClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

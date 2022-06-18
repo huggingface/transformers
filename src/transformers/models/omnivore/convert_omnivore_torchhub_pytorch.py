@@ -20,9 +20,8 @@ import json
 from collections import OrderedDict
 from functools import partial
 from pathlib import Path
-
+from huggingface_hub import hf_hub_download
 import torch
-
 from transformers import OmnivoreConfig, OmnivoreFeatureExtractor, OmnivoreForVisionClassification
 from transformers.utils import logging
 
@@ -77,10 +76,12 @@ def convert_weight_and_push(config: OmnivoreConfig, name: str, save_directory: P
 
 
 def convert_weights_and_push(save_directory: Path, model_name: str = None, push_to_hub: bool = True):
-    filename = "imagenet_class_index.json"
+    filename = "imagenet-1k-id2label.json"
     image_num_labels = 1000
     expected_shape = (1, image_num_labels)
-    image_id2label = json.load(open(filename, "r"))
+
+    repo_id = "datasets/huggingface/label-files"
+    image_id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
     image_id2label = {int(k): v for k, v in image_id2label.items()}
 
     image_id2label = image_id2label
@@ -90,7 +91,7 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
     video_num_labels = 400
     expected_shape = (1, video_num_labels)
     video_id2label = json.load(open(filename, "r"))
-    video_id2label = {int(k): v for k, v in video_id2label.items()}
+    video_id2label = {int(v): str(k).replace('"', "") for k, v in video_id2label.items()} 
 
     video_id2label = video_id2label
     video_label2id = {v: k for k, v in video_id2label.items()}
