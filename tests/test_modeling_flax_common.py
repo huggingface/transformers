@@ -1039,7 +1039,7 @@ class FlaxModelTesterMixin:
                     index = json.loads(f.read())
 
                 all_shards = set(index["weight_map"].values())
-                shards_found = set(f for f in os.listdir(tmp_dir) if f.endswith(".h5"))
+                shards_found = set(f for f in os.listdir(tmp_dir) if f.endswith(".msgpack"))
                 self.assertSetEqual(all_shards, shards_found)
 
                 # Finally, check the model can be reloaded
