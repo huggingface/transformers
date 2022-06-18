@@ -76,6 +76,7 @@ else:
             ("bigbird_pegasus", ("PegasusTokenizer", "PegasusTokenizerFast" if is_tokenizers_available() else None)),
             ("blenderbot", ("BlenderbotTokenizer", "BlenderbotTokenizerFast")),
             ("blenderbot-small", ("BlenderbotSmallTokenizer", None)),
+            ("bloom", (None, "BloomTokenizerFast" if is_tokenizers_available() else None)),
             ("byt5", ("ByT5Tokenizer", None)),
             (
                 "camembert",
@@ -125,15 +126,24 @@ else:
             ("funnel", ("FunnelTokenizer", "FunnelTokenizerFast" if is_tokenizers_available() else None)),
             ("gpt2", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("gpt_neo", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
+            ("gpt_neox", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
             ("gptj", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("herbert", ("HerbertTokenizer", "HerbertTokenizerFast" if is_tokenizers_available() else None)),
             ("hubert", ("Wav2Vec2CTCTokenizer", None)),
             ("ibert", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
             ("layoutlm", ("LayoutLMTokenizer", "LayoutLMTokenizerFast" if is_tokenizers_available() else None)),
             ("layoutlmv2", ("LayoutLMv2Tokenizer", "LayoutLMv2TokenizerFast" if is_tokenizers_available() else None)),
+            ("layoutlmv3", ("LayoutLMv3Tokenizer", "LayoutLMv3TokenizerFast" if is_tokenizers_available() else None)),
             ("layoutxlm", ("LayoutXLMTokenizer", "LayoutXLMTokenizerFast" if is_tokenizers_available() else None)),
             ("led", ("LEDTokenizer", "LEDTokenizerFast" if is_tokenizers_available() else None)),
             ("longformer", ("LongformerTokenizer", "LongformerTokenizerFast" if is_tokenizers_available() else None)),
+            (
+                "longt5",
+                (
+                    "T5Tokenizer" if is_sentencepiece_available() else None,
+                    "T5TokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("luke", ("LukeTokenizer", None)),
             ("lxmert", ("LxmertTokenizer", "LxmertTokenizerFast" if is_tokenizers_available() else None)),
             ("m2m_100", ("M2M100Tokenizer" if is_sentencepiece_available() else None, None)),
@@ -226,6 +236,7 @@ else:
             ("tapas", ("TapasTokenizer", None)),
             ("tapex", ("TapexTokenizer", None)),
             ("transfo-xl", ("TransfoXLTokenizer", None)),
+            ("vilt", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("visual_bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("wav2vec2", ("Wav2Vec2CTCTokenizer", None)),
             ("wav2vec2-conformer", ("Wav2Vec2CTCTokenizer", None)),
@@ -472,6 +483,9 @@ class AutoTokenizer:
 
         >>> # If vocabulary files are in a directory (e.g. tokenizer was saved using *save_pretrained('./test/saved_model/')*)
         >>> tokenizer = AutoTokenizer.from_pretrained("./test/bert_saved_model/")
+
+        >>> # Download vocabulary from huggingface.co and define model-specific arguments
+        >>> tokenizer = AutoTokenizer.from_pretrained("roberta-base", add_prefix_space=True)
         ```"""
         config = kwargs.pop("config", None)
         kwargs["_from_auto"] = True

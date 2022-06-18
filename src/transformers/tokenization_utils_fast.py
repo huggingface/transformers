@@ -21,6 +21,7 @@ import os
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+import tokenizers.pre_tokenizers as pre_tokenizers_fast
 from tokenizers import Encoding as EncodingFast
 from tokenizers import Tokenizer as TokenizerFast
 from tokenizers.decoders import Decoder as DecoderFast
@@ -585,7 +586,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             added_vocab = self.get_added_vocab()
             if added_vocab:
                 with open(added_tokens_file, "w", encoding="utf-8") as f:
-                    out_str = json.dumps(added_vocab, ensure_ascii=False)
+                    out_str = json.dumps(added_vocab, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
                     f.write(out_str)
 
             vocab_files = self.save_vocabulary(save_directory, filename_prefix=filename_prefix)
@@ -699,6 +700,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             kwargs["end_of_word_suffix"] = tokenizer_json["model"]["end_of_word_suffix"]
         if tokenizer_json["model"]["type"] == "Unigram" and unk_token is not None:
             kwargs["unk_token"] = unk_token
+        if tokenizer_json["pre_tokenizer"]["type"] == "ByteLevel":
+            kwargs["initial_alphabet"] = pre_tokenizers_fast.ByteLevel.alphabet()
 
         trainer_class = MODEL_TO_TRAINER_MAPPING[tokenizer_json["model"]["type"]]
         trainer = trainer_class(vocab_size=vocab_size, special_tokens=special_tokens, **kwargs)

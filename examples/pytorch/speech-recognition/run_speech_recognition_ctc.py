@@ -44,12 +44,12 @@ from transformers import (
     set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
-from transformers.utils import check_min_version
+from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.20.0.dev0")
+check_min_version("4.21.0.dev0")
 
 require_version("datasets>=1.18.0", "To fix: pip install -r examples/pytorch/speech-recognition/requirements.txt")
 
@@ -376,6 +376,10 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
+    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
+    # information sent is the one passed as arguments along with your Python/PyTorch versions.
+    send_example_telemetry("run_speech_recognition_ctc", model_args, data_args)
+
     # Detecting last checkpoint.
     last_checkpoint = None
     if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
@@ -501,7 +505,12 @@ def main():
 
         with training_args.main_process_first():
             if training_args.overwrite_output_dir and os.path.isfile(vocab_file):
-                os.remove(vocab_file)
+                try:
+                    os.remove(vocab_file)
+                except OSError:
+                    # in shared file-systems it might be the case that
+                    # two processes try to delete the vocab file at the some time
+                    pass
 
         with training_args.main_process_first(desc="dataset map vocabulary creation"):
             if not os.path.isfile(vocab_file):

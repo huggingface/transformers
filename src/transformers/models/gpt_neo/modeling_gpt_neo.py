@@ -147,8 +147,8 @@ class GPTNeoSelfAttention(nn.Module):
         self.register_buffer("bias", bias)
         self.register_buffer("masked_bias", torch.tensor(-1e9))
 
-        self.attn_dropout = nn.Dropout(config.attention_dropout)
-        self.resid_dropout = nn.Dropout(config.resid_dropout)
+        self.attn_dropout = nn.Dropout(float(config.attention_dropout))
+        self.resid_dropout = nn.Dropout(float(config.resid_dropout))
 
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_heads
@@ -188,7 +188,7 @@ class GPTNeoSelfAttention(nn.Module):
         attn_weights = torch.matmul(query, key.transpose(-1, -2))
 
         query_length, key_length = query.size(-2), key.size(-2)
-        causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].bool()
+        causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].to(torch.bool)
         attn_weights = torch.where(causal_mask, attn_weights, self.masked_bias.to(attn_weights.dtype))
 
         if attention_mask is not None:
@@ -290,7 +290,7 @@ class GPTNeoMLP(nn.Module):
         self.c_fc = nn.Linear(embed_dim, intermediate_size)
         self.c_proj = nn.Linear(intermediate_size, embed_dim)
         self.act = ACT2FN[config.activation_function]
-        self.dropout = nn.Dropout(config.resid_dropout)
+        self.dropout = nn.Dropout(float(config.resid_dropout))
 
     def forward(self, hidden_states):
         hidden_states = self.c_fc(hidden_states)
@@ -358,6 +358,7 @@ class GPTNeoPreTrainedModel(PreTrainedModel):
     load_tf_weights = load_tf_weights_in_gpt_neo
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["GPTNeoBlock"]
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
@@ -475,7 +476,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         self.embed_dim = config.hidden_size
         self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
         self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
-        self.drop = nn.Dropout(config.embed_dropout)
+        self.drop = nn.Dropout(float(config.embed_dropout))
         self.h = nn.ModuleList([GPTNeoBlock(config, layer_id=i) for i in range(config.num_layers)])
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
@@ -660,7 +661,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
 class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
     _keys_to_ignore_on_load_missing = [
         r"h\.\d+\.attn\.masked_bias",
-        r"lm_head\.weight",
+        r"lm_head.weight",
         r"h\.\d+\.attn\.attention\.bias",
     ]
     _keys_to_ignore_on_save = [r"lm_head.weight"]
@@ -811,7 +812,7 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
     GPT_NEO_START_DOCSTRING,
 )
 class GPTNeoForSequenceClassification(GPTNeoPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"lm_head\.weight"]
+    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -887,7 +888,7 @@ class GPTNeoForSequenceClassification(GPTNeoPreTrainedModel):
                     "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )
 
-        pooled_logits = logits[torch.arange(batch_size, device=self.device), sequence_lengths]
+        pooled_logits = logits[torch.arange(batch_size, device=logits.device), sequence_lengths]
 
         loss = None
         if labels is not None:
