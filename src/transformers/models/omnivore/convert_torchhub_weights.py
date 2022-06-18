@@ -20,8 +20,10 @@ import json
 from collections import OrderedDict
 from functools import partial
 from pathlib import Path
-from huggingface_hub import hf_hub_download
+
 import torch
+
+from huggingface_hub import hf_hub_download
 from transformers import OmnivoreConfig, OmnivoreFeatureExtractor, OmnivoreForVisionClassification
 from transformers.utils import logging
 
@@ -30,52 +32,51 @@ logging.set_verbosity_info()
 logger = logging.get_logger()
 
 
-def convert_weight_and_push(config: OmnivoreConfig, name: str, save_directory: Path, push_to_hub: bool = True):
+def convert_weight_and_push(config: OmnivoreConfig, name: str, save_directory: Path):
     print(f"Converting {name}...")
-    device="cpu"
-    src_model = torch.hub.load("facebookresearch/omnivore:main", model=name)
+    device = "cpu"
+    src_model = torch.hub.load("facebookresearch/omnivore:main", model=name).eval()
     src_model = src_model.to(device)
     src_keys = list(src_model.state_dict().keys())
     src_weights = src_model.state_dict()
 
     dest_model = OmnivoreForVisionClassification(config).to(device)
     dest_keys = list(dest_model.state_dict().keys())
-    
+
     assert len(src_keys) == len(dest_keys), "The models are not exactly same"
     number_of_keys = len(src_keys)
-
+    print("Number of Keys: ", number_of_keys)
     new_weights = OrderedDict()
     for i in range(number_of_keys):
         new_weights[dest_keys[i]] = src_weights[src_keys[i]]
 
     dest_model.load_state_dict(new_weights)
-
+    dest_model.eval()
     x = torch.randn(2, 3, 6, 224, 224)
     out1 = src_model(x, "video")
-    out2 = dest_model(x, "video")
+    out2 = dest_model(x, "video").logits
     assert torch.allclose(out1, out2), "The model logits don't match the original one for videos"
 
-    x = torch.randn(2, 3, 224, 224)
+    x = torch.randn(2, 3, 1, 224, 224)
     out1 = src_model(x, "image")
-    out2 = dest_model(x, "image")
+    out2 = dest_model(x, "image").logits
     assert torch.allclose(out1, out2), "The model logits don't match the original one for images"
 
-    x = torch.randn(2, 3, 2, 224, 224)
+    x = torch.randn(2, 4, 1, 224, 224)
     out1 = src_model(x, "rgbd")
-    out2 = dest_model(x, "rbd")
+    out2 = dest_model(x, "rgbd").logits
     assert torch.allclose(out1, out2), "The model logits don't match the original one for rgbd"
 
     checkpoint_name = name
     print(checkpoint_name)
 
-    if push_to_hub:
-        dest_model.save_pretrained(save_directory / checkpoint_name)
-        feature_extractor = OmnivoreFeatureExtractor()
-        feature_extractor.save_pretrained(save_directory / checkpoint_name)
-        print(f"Pushed {checkpoint_name}")
+    dest_model.save_pretrained(save_directory / checkpoint_name)
+    feature_extractor = OmnivoreFeatureExtractor()
+    feature_extractor.save_pretrained(save_directory / checkpoint_name)
+    print(f"Pushed {checkpoint_name}")
 
 
-def convert_weights_and_push(save_directory: Path, model_name: str = None, push_to_hub: bool = True):
+def convert_weights_and_push(save_directory: Path, model_name: str = None):
     filename = "imagenet-1k-id2label.json"
     image_num_labels = 1000
     expected_shape = (1, image_num_labels)
@@ -91,7 +92,7 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
     video_num_labels = 400
     expected_shape = (1, video_num_labels)
     video_id2label = json.load(open(filename, "r"))
-    video_id2label = {int(v): str(k).replace('"', "") for k, v in video_id2label.items()} 
+    video_id2label = {int(v): str(k).replace('"', "") for k, v in video_id2label.items()}
 
     video_id2label = video_id2label
     video_label2id = {v: k for k, v in video_id2label.items()}
@@ -106,30 +107,33 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
     rgbd_label2id = {v: k for k, v in rgbd_id2label.items()}
 
     OmnivorePreTrainedConfig = partial(
-        OmnivoreConfig, image_num_labels=image_num_labels, 
-        image_id2label=image_id2label, image_label2id=image_label2id,
-        video_id2label=video_id2label, video_label2id=video_label2id,
-        rgbd_id2label=rgbd_id2label, rgbd_label2id=rgbd_label2id,
+        OmnivoreConfig,
+        image_num_labels=image_num_labels,
+        image_id2label=image_id2label,
+        image_label2id=image_label2id,
+        video_id2label=video_id2label,
+        video_label2id=video_label2id,
+        rgbd_id2label=rgbd_id2label,
+        rgbd_label2id=rgbd_label2id,
     )
 
     names_to_config = {
-
         "omnivore_swinB": OmnivorePreTrainedConfig(
             patch_size=[2, 4, 4],
             embed_dim=128,
-            depths = [2, 2, 18, 2],
+            depths=[2, 2, 18, 2],
             num_heads=[4, 8, 16, 32],
-            window_size = [16, 7, 7],
+            window_size=[16, 7, 7],
             drop_path_rate=0.3,
             patch_norm=True,
             depth_mode="summed_rgb_d_tokens",
         ),
-        "omnivore_swinB_in21k": OmnivorePreTrainedConfig(
+        "omnivore_swinB_imagenet21k": OmnivorePreTrainedConfig(
             patch_size=[2, 4, 4],
             embed_dim=128,
-            depths = [2, 2, 18, 2],
+            depths=[2, 2, 18, 2],
             num_heads=[4, 8, 16, 32],
-            window_size = [16, 7, 7],
+            window_size=[16, 7, 7],
             drop_path_rate=0.3,
             patch_norm=True,
             depth_mode="summed_rgb_d_tokens",
@@ -137,9 +141,9 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
         "omnivore_swinS": OmnivorePreTrainedConfig(
             patch_size=[2, 4, 4],
             embed_dim=96,
-            depths = [2, 2, 18, 2],
+            depths=[2, 2, 18, 2],
             num_heads=[3, 6, 12, 24],
-            window_size = [8, 7, 7],
+            window_size=[8, 7, 7],
             drop_path_rate=0.3,
             patch_norm=True,
             depth_mode="summed_rgb_d_tokens",
@@ -147,19 +151,19 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
         "omnivore_swinT": OmnivorePreTrainedConfig(
             patch_size=[2, 4, 4],
             embed_dim=96,
-            depths = [2, 2, 6, 2],
+            depths=[2, 2, 6, 2],
             num_heads=[3, 6, 12, 24],
-            window_size = [8, 7, 7],
+            window_size=[8, 7, 7],
             drop_path_rate=0.2,
             patch_norm=True,
             depth_mode="summed_rgb_d_tokens",
         ),
-        "omnivore_swinL_in21k": OmnivorePreTrainedConfig(
+        "omnivore_swinL_imagenet21k": OmnivorePreTrainedConfig(
             patch_size=[2, 4, 4],
             embed_dim=192,
-            depths = [2, 2, 18, 2],
+            depths=[2, 2, 18, 2],
             num_heads=[6, 12, 24, 48],
-            window_size = [8, 7, 7],
+            window_size=[8, 7, 7],
             drop_path_rate=0.3,
             patch_norm=True,
             depth_mode="summed_rgb_d_tokens",
@@ -167,10 +171,10 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
     }
 
     if model_name:
-        convert_weight_and_push(names_to_config[model_name], model_name, save_directory, push_to_hub)
+        convert_weight_and_push(names_to_config[model_name], model_name, save_directory)
     else:
         for model_name, config in names_to_config.items():
-            convert_weight_and_push(names_to_config[model_name], model_name, config, save_directory, push_to_hub)
+            convert_weight_and_push(names_to_config[model_name], model_name, save_directory)
     return config, expected_shape
 
 
@@ -185,20 +189,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",
-        default="dump/",
+        default="omnivore_dump/",
         type=Path,
         required=False,
         help="Path to the output PyTorch model directory.",
     )
-    parser.add_argument(
-        "--push_to_hub",
-        default=True,
-        type=bool,
-        required=False,
-        help="If True, push model and feature extractor to the hub.",
-    )
-
     args = parser.parse_args()
     pytorch_dump_folder_path: Path = args.pytorch_dump_folder_path
     pytorch_dump_folder_path.mkdir(exist_ok=True, parents=True)
-    convert_weights_and_push(pytorch_dump_folder_path, args.model_name, args.push_to_hub)
+    convert_weights_and_push(pytorch_dump_folder_path, args.model_name)

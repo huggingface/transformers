@@ -23,7 +23,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 OMNIVORE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "anugunj/omnivore": "https://huggingface.co/anugunj/omnivore/resolve/main/config.json",
+    "anugunj/omnivore_swinB": "https://huggingface.co/anugunj/omnivore_swinB/resolve/main/config.json",
 }
 
 
@@ -38,6 +38,12 @@ class OmnivoreConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
+        num_image_labels (`int`, *optional*, defaults to 1000):
+            The number of labels for image head.
+        num_video_labels (`int`, *optional*, defaults to 400):
+            The number of labels for video head.
+        num_rgbd_labels (`int`, *optional*, defaults to 19):
+            The number of labels for rgbd head.
         input_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         patch_size (`int` | `List[int]`, *optional*, defaults to [4, 4, 4]):
@@ -87,6 +93,9 @@ class OmnivoreConfig(PretrainedConfig):
 
     def __init__(
         self,
+        num_image_labels=1000,
+        num_video_labels=400,
+        num_rgbd_labels=19,
         input_channels=3,
         patch_size=[2, 4, 4],
         embed_dim=96,
@@ -106,6 +115,9 @@ class OmnivoreConfig(PretrainedConfig):
         **kwargs
     ):
         super().__init__(**kwargs)
+        self.num_image_labels = num_image_labels
+        self.num_video_labels = num_video_labels
+        self.num_rgbd_labels = num_rgbd_labels
         self.input_channels = input_channels
         self.patch_size = patch_size
         self.embed_dim = embed_dim
@@ -120,9 +132,5 @@ class OmnivoreConfig(PretrainedConfig):
         self.drop_path_rate = drop_path_rate
         self.patch_norm = patch_norm
         self.frozen_stages = frozen_stages
-        self.initializer_range = initializer_range
-        self.head_dim_in = embed_dim * 8
         self.depth_mode = depth_mode
-        self.num_image_labels = 1000
-        self.num_video_labels = 400
-        self.num_rgbd_labels = 19
+        self.initializer_range = initializer_range
