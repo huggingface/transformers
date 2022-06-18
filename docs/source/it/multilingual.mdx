@@ -137,7 +137,7 @@ M2M100 forza l'id del target language come primo token generato per tradurre nel
 
 ## MBart
 
-The following MBart models can be used for multilingual translation:
+Il seguente modello MBart può essere usato per compiti multilingua:
 
 - `facebook/mbart-large-50-one-to-many-mmt` (One-to-many multilingual machine translation, 50 languages)
 - `facebook/mbart-large-50-many-to-many-mmt` (Many-to-many multilingual machine translation, 50 languages)
@@ -145,7 +145,7 @@ The following MBart models can be used for multilingual translation:
 - `facebook/mbart-large-50` (Multilingual translation, 50 languages)
 - `facebook/mbart-large-cc25`
 
-In this example, load the `facebook/mbart-large-50-many-to-many-mmt` checkpoint to translate Finnish to English. You can set the source language in the tokenizer:
+In questo esempio, carica il checkpoint `facebook/mbart-large-50-many-to-many-mmt` per tradurre dal finlandese all'inglese. Puoi impostare la lingua di partenza nel tokenizer:
 
 ```py
 >>> from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
@@ -157,13 +157,13 @@ In this example, load the `facebook/mbart-large-50-many-to-many-mmt` checkpoint 
 >>> model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
 ```
 
-Tokenize the text:
+Applica il tokenizer sul testo:
 
 ```py
 >>> encoded_en = tokenizer(en_text, return_tensors="pt")
 ```
 
-MBart forces the target language id as the first generated token to translate to the target language. Set the `forced_bos_token_id` to `en` in the `generate` method to translate to English:
+MBart fforza l'id del target language come primo token generato per tradurre nel target language. Imposta il parametro `forced_bos_token_id` a `en` nel metodo `generate` per tradurre in inglese:
 
 ```py
 >>> generated_tokens = model.generate(**encoded_en, forced_bos_token_id=tokenizer.lang_code_to_id("en_XX"))
@@ -171,4 +171,4 @@ MBart forces the target language id as the first generated token to translate to
 "Don't interfere with the wizard's affairs, because they are subtle, will soon get angry."
 ```
 
-If you are using the `facebook/mbart-large-50-many-to-one-mmt` checkpoint, you don't need to force the target language id as the first generated token otherwise the usage is the same.
+Se stai usando il checkpoint `facebook/mbart-large-50-many-to-one-mmt`, non hai bisogno di forzare l'id del target language come primo token generato altrimenti l'uso è lo stesso.
