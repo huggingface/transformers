@@ -251,7 +251,7 @@ class ConvBertPreTrainedModel(PreTrainedModel):
     base_model_prefix = "convbert"
     supports_gradient_checkpointing = True
     authorized_missing_keys = [r"position_ids"]
-    authorized_unexpected_keys = [r"convbert\.embeddings_project\.weight", r"convbert\.embeddings_project\.bias"]
+    authorized_unexpected_keys = [r"convbert.embeddings_project.weight", r"convbert.embeddings_project.bias"]
 
     def _init_weights(self, module):
         """Initialize the weights"""

@@ -699,8 +699,8 @@ class RoFormerPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = []
     _keys_to_ignore_on_load_unexpected = [
-        r"roformer\.embeddings_project\.weight",
-        r"roformer\.embeddings_project\.bias",
+        r"roformer.embeddings_project.weight",
+        r"roformer.embeddings_project.bias",
     ]
 
     def _init_weights(self, module):
