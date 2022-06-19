@@ -16,6 +16,6 @@
   - local: create_a_model
     title: Crea un'architettura personalizzata
   - sections:
-  - local: serialization
-    title: Esporta modelli Transformers
+    - local: serialization
+      title: Esporta modelli Transformers
 
