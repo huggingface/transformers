@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 OMNIVORE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "anugunj/omnivore_swinB": "https://huggingface.co/anugunj/omnivore_swinB/resolve/main/config.json",
+    "anugunj/omnivore_swinT": "https://huggingface.co/anugunj/omnivore_swinT/resolve/main/config.json",
 }
 
 
@@ -97,7 +97,7 @@ class OmnivoreConfig(PretrainedConfig):
         input_channels=3,
         patch_size=[2, 4, 4],
         embed_dim=96,
-        depths=[2, 2, 18, 2],
+        depths=[2, 2, 6, 2],
         num_heads=[3, 6, 12, 24],
         window_size=[8, 7, 7],
         mlp_ratio=4.0,
@@ -105,7 +105,7 @@ class OmnivoreConfig(PretrainedConfig):
         qk_scale=None,
         dropout_rate=0.0,
         attention_dropout_rate=0.0,
-        drop_path_rate=0.3,
+        drop_path_rate=0.2,
         patch_norm=True,
         frozen_stages=-1,
         depth_mode="summed_rgb_d_tokens",

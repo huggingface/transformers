@@ -20,6 +20,7 @@ import json
 from collections import OrderedDict
 from functools import partial
 from pathlib import Path
+from typing import Dict
 
 import torch
 
@@ -37,7 +38,7 @@ logging.set_verbosity_info()
 logger = logging.get_logger()
 
 
-def convert_weight_and_push(config: OmnivoreConfig, name: str, save_directory: Path):
+def convert_weight_and_push(config: OmnivoreConfig, name: str, save_directory: Path, names_to_save_names: Dict):
     print(f"Converting {name}...")
     device = "cpu"
     src_model = torch.hub.load("facebookresearch/omnivore:main", model=name).eval()
@@ -74,7 +75,7 @@ def convert_weight_and_push(config: OmnivoreConfig, name: str, save_directory: P
     out2 = dest_model(x, "rgbd").logits
     assert torch.allclose(out1, out2), "The model logits don't match the original one for rgbd"
 
-    checkpoint_name = name
+    checkpoint_name = names_to_save_names[name]
     print(checkpoint_name)
 
     dest_model.save_pretrained(save_directory / checkpoint_name)
@@ -169,12 +170,20 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None):
             depth_mode="summed_rgb_d_tokens",
         ),
     }
-    print(names_to_config['omnivore_swinT'].image_id2label)
+    
+    names_to_save_names = {
+        "omnivore_swinT": "omnivore-swinT",
+        "omnivore_swinS": "omnivore-swinS",
+        "omnivore_swinB": "omnivore-swinB",
+        "omnivore_swinB_imagenet21k": "omnivore-swinB-in21k",
+        "omnivore_swinL_imagenet21k": "omnivore-swinL-in21k",
+    }
+
     if model_name:
-        convert_weight_and_push(names_to_config[model_name], model_name, save_directory)
+        convert_weight_and_push(names_to_config[model_name], model_name, save_directory, names_to_save_names)
     else:
         for model_name, config in names_to_config.items():
-            convert_weight_and_push(names_to_config[model_name], model_name, save_directory)
+            convert_weight_and_push(names_to_config[model_name], model_name, save_directory, names_to_save_names)
     return config, expected_shape
 
 

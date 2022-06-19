@@ -41,18 +41,18 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "OmnivoreConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "OmniverseFeatureExtractor"
+_FEAT_EXTRACTOR_FOR_DOC = "OmnivoreFeatureExtractor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "anugunj/omnivore"
-_EXPECTED_OUTPUT_SHAPE = [1, 768, 16, 7, 7]
+_CHECKPOINT_FOR_DOC = "anugunj/omnivore-swinT"
+_EXPECTED_OUTPUT_SHAPE = [1, 768, 1, 7, 7]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "anugunj/omnivore"
+_IMAGE_CLASS_CHECKPOINT = "anugunj/omnivore-swinT"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 OMNIVORE_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "anugunj/omnivore",
+    "anugunj/omnivore-swinT",
     # See all Omnivore models at https://huggingface.co/models?filter=omnivore
 ]
 
@@ -883,7 +883,7 @@ class OmnivoreForVisionClassification(OmnivorePreTrainedModel):
         self.num_image_labels = config.num_image_labels or config.num_labels
         self.num_video_labels = config.num_video_labels or config.num_labels
         self.num_rgbd_labels = config.num_rgbd_labels or config.num_labels
-        self.backbone = OmnivoreModel(config)
+        self.backbone = OmnivoreSwinBackbone(config)
         self.image_classifier = OmnivoreImageHead(config.embed_dim * 8, self.num_image_labels)
         self.rgbd_classifier = OmnivoreRGBDHead(config.embed_dim * 8, self.num_rgbd_labels)
         self.video_classifier = OmnivoreVideoHead(config.embed_dim * 8, self.num_video_labels)
@@ -915,8 +915,9 @@ class OmnivoreForVisionClassification(OmnivorePreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
-        Example:
+        Returns:
 
+        Examples:
         ```python
         >>> from transformers import OmnivoreFeatureExtractor, OmnivoreForVisionClassification
         >>> import torch
@@ -929,7 +930,7 @@ class OmnivoreForVisionClassification(OmnivorePreTrainedModel):
         >>> model = OmnivoreForVisionClassification.from_pretrained("anugunj/omnivore-swinT")
 
         >>> inputs = feature_extractor(image, return_tensors="pt")
-
+        >>> inputs["input_type"] = "image" # set the type of modality
         >>> logits = model(**inputs).logits
 
         >>> # model predicts one of the 1000 ImageNet classes
