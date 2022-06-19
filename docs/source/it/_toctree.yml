@@ -17,4 +17,7 @@
     title: Crea un'architettura personalizzata
   - local: serialization
     title: Esporta modelli Transformers
+  - local: troubleshooting
+    title: Risoluzione dei problemi
   title: How-to guides
+  
