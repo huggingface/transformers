@@ -20,7 +20,7 @@ import unittest
 import numpy as np
 
 from transformers import DPTConfig, is_flax_available
-from transformers.testing_utils import require_flax, slow, is_pt_flax_cross_test
+from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, ids_tensor
@@ -141,15 +141,17 @@ class FlaxDPTModelTest(FlaxModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-
     @is_pt_flax_cross_test
     def test_equivalence_pt_to_flax(self):
-        import torch
-        import transformers
         import tempfile
-        import jax.numpy as jnp 
-        from transformers.testing_utils import torch_device
+
+        import torch
+
+        import jax.numpy as jnp
+        import transformers
         from transformers.modeling_flax_pytorch_utils import convert_pytorch_state_dict_to_flax
+        from transformers.testing_utils import torch_device
+
         # It might be better to put this inside the for loop below (because we modify the config there).
         # But logically, it is fine.
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -163,7 +165,7 @@ class FlaxDPTModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
                 # prepare inputs
                 prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-                prepared_inputs_dict.pop('labels')
+                prepared_inputs_dict.pop("labels")
                 pt_inputs = {k: torch.tensor(v.tolist(), device=torch_device) for k, v in prepared_inputs_dict.items()}
 
                 # load corresponding PyTorch class
@@ -204,18 +206,17 @@ class FlaxDPTModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 self.assertEqual(fx_keys, pt_keys)
                 self.check_outputs(fx_outputs_loaded.to_tuple(), pt_outputs.to_tuple(), model_class, names=fx_keys)
 
-
     @is_pt_flax_cross_test
     def test_equivalence_flax_to_pt(self):
-        import torch
-        import transformers
         import tempfile
-        import jax.numpy as jnp 
-        
+
+        import torch
+
+        import jax.numpy as jnp
+        import transformers
+        from transformers.modeling_flax_pytorch_utils import load_flax_weights_in_pytorch_model
         from transformers.testing_utils import torch_device
 
-        from transformers.modeling_flax_pytorch_utils import load_flax_weights_in_pytorch_model
-        
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -227,9 +228,9 @@ class FlaxDPTModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
                 # prepare inputs
                 prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-                prepared_inputs_dict.pop('labels')
+                prepared_inputs_dict.pop("labels")
                 pt_inputs = {k: torch.tensor(v.tolist(), device=torch_device) for k, v in prepared_inputs_dict.items()}
-            
+
                 # load corresponding PyTorch class
                 pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
                 pt_model_class = getattr(transformers, pt_model_class_name)
@@ -274,7 +275,6 @@ class FlaxDPTModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
                 self.assertEqual(fx_keys, pt_keys)
                 self.check_outputs(fx_outputs.to_tuple(), pt_outputs_loaded.to_tuple(), model_class, names=fx_keys)
-
 
     # We neeed to override this test because ViT's forward signature is different than text models.
     def test_forward_signature(self):

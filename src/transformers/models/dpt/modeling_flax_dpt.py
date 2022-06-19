@@ -282,7 +282,7 @@ class FlaxDPTReassembleLayer(nn.Module):
     def setup(self):
         # projection
         self.projection = nn.Conv(
-            self.config.hidden_size,
+            self.channels,
             kernel_size=(1, 1),
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
@@ -310,22 +310,48 @@ class FlaxDPTReassembleLayer(nn.Module):
         return hidden_state
 
 
+class FlaxDPTReassembleLayerCollection(nn.Module):
+    config: DPTConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.layers = [
+            FlaxDPTReassembleLayer(self.config, factor=factor, channels=self.config.neck_hidden_sizes[i], name=str(i))
+            for i, factor in zip(range(len(self.config.neck_hidden_sizes)), self.config.reassemble_factors)
+        ]
+
+    def __call__(self, x, i):
+        return self.layers[i](x)
+
+
+class FlaxDPTReadoutProjectCollectionLayer(nn.Module):
+    config: DPTConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.layers = [
+            nn.Sequential([nn.Dense(self.config.hidden_size, name=str(i)), ACT2FN[self.config.hidden_act]])
+            for i in range(len(self.config.neck_hidden_sizes))
+        ]
+
+    def __call__(self, hidden_states, i):
+        return self.layers[i](hidden_states)
+
+
 class FlaxDPTReassembleStage(nn.Module):
     config: DPTConfig
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
 
-        self.layers = [
-            FlaxDPTReassembleLayer(self.config, factor=factor, channels=self.config.neck_hidden_sizes[i])
-            for i, factor in zip(range(len(self.config.neck_hidden_sizes)), self.config.reassemble_factors)
-        ]
+        self.layers = FlaxDPTReassembleLayerCollection(self.config, self.dtype)
 
         if self.config.readout_type == "project":
-            self.readout_projects = [
-                nn.Sequential([nn.Dense(self.config.hidden_size), ACT2FN[self.config.hidden_act]])
-                for _ in range(len(self.config.neck_hidden_sizes))
-            ]
+            # self.readout_projects = [
+            #     nn.Sequential([nn.Dense(self.config.hidden_size), ACT2FN[self.config.hidden_act]])
+            #     for i in range(len(self.config.neck_hidden_sizes))
+            # ]
+            self.readout_projects = FlaxDPTReadoutProjectCollectionLayer(self.config, self.dtype)
 
     def __call__(self, hidden_states):
         """
@@ -349,7 +375,8 @@ class FlaxDPTReassembleStage(nn.Module):
                 readout = jnp.expand_dims(cls_token, axis=1)
                 readout = jnp.repeat(readout, size * size, axis=1)
                 # concatenate the readout token to the hidden states and project
-                hidden_state = self.readout_projects[i](jnp.concatenate((hidden_state, readout), axis=-1))
+                # hidden_state = self.readout_projects[i](:
+                hidden_state = self.readout_projects(jnp.concatenate((hidden_state, readout), axis=-1), i)
                 # reshape back to (B, C, H, W)
                 hidden_state = jnp.reshape(hidden_state, feature_shape)
             elif self.config.readout_type == "add":
@@ -357,7 +384,8 @@ class FlaxDPTReassembleStage(nn.Module):
                     cls_token, axis=-1
                 )
                 hidden_state = jnp.reshape(hidden_state, feature_shape)
-            hidden_state = self.layers[i](hidden_state)
+            # hidden_state = self.layers[i](hidden_state)
+            hidden_state = self.layers(hidden_state, i)
             out.append(hidden_state)
 
         return out
@@ -369,7 +397,8 @@ class FlaxDPTFeatureFusionStage(nn.Module):
 
     def setup(self):
         super().__init__()
-        self.layers = [FlaxDPTFeatureFusionLayer(self.config) for _ in range(len(self.config.neck_hidden_sizes))]
+        # self.layers = [FlaxDPTFeatureFusionLayer(self.config) for i in range(len(self.config.neck_hidden_sizes))]
+        self.layers = FlaxDPTFeatureFusionLayerCollection(self.config, self.dtype)
 
     def __call__(self, hidden_states):
         # reversing the hidden_states, we start from the last
@@ -377,11 +406,15 @@ class FlaxDPTFeatureFusionStage(nn.Module):
 
         fused_hidden_states = []
         # first layer only uses the last hidden_state
-        fused_hidden_state = self.layers[0](hidden_states[0])
+        fused_hidden_state = self.layers(hidden_states[0], residual=None, i=0)
         fused_hidden_states.append(fused_hidden_state)
         # looping from the last layer to the second
-        for hidden_state, layer in zip(hidden_states[1:], self.layers[1:]):
-            fused_hidden_state = layer(fused_hidden_state, hidden_state)
+        # for hidden_state, layer in zip(hidden_states[1:], self.layers.layers[1:]):
+        #     fused_hidden_state = layer(fused_hidden_state, hidden_state)
+        #     fused_hidden_states.append(fused_hidden_state)
+
+        for i, hidden_state in enumerate(hidden_states[1:]):
+            fused_hidden_state = self.layers(fused_hidden_state, residual=hidden_state, i=i + 1)
             fused_hidden_states.append(fused_hidden_state)
 
         return fused_hidden_states
@@ -413,8 +446,8 @@ class FlaxDPTPreActResidualLayer(nn.Module):
         )
 
         if self.use_batch_norm:
-            self.batch_norm1 = nn.BatchNorm(use_running_average=False)
-            self.batch_norm2 = nn.BatchNorm(use_running_average=False)
+            self.batch_norm1 = nn.BatchNorm(use_running_average=True)
+            self.batch_norm2 = nn.BatchNorm(use_running_average=True)
 
     def __call__(self, hidden_state):
         residual = hidden_state
@@ -432,6 +465,19 @@ class FlaxDPTPreActResidualLayer(nn.Module):
             hidden_state = self.batch_norm2(hidden_state)
 
         return hidden_state + residual
+
+
+class FlaxDPTFeatureFusionLayerCollection(nn.Module):
+    config: DPTConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.layers = [
+            FlaxDPTFeatureFusionLayer(self.config, name=str(i)) for i in range(len(self.config.neck_hidden_sizes))
+        ]
+
+    def __call__(self, hidden_states, residual=None, i=0):
+        return self.layers[i](hidden_states, residual)
 
 
 class FlaxDPTFeatureFusionLayer(nn.Module):
@@ -685,7 +731,8 @@ class FlaxDPTPreTrainedModel(FlaxPreTrainedModel):
             return_dict,
             labels,
             rngs=rngs,
-        )
+            mutable=["batch_stats"],
+        )[0]
 
 
 class FlaxDPTModule(nn.Module):
@@ -746,17 +793,28 @@ class FlaxDPTModel(FlaxDPTPreTrainedModel):
     module_class = FlaxDPTModule
 
 
+class FlaxDPTConvCollection(nn.Module):
+    config: DPTConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.convs = [
+            nn.Conv(self.config.fusion_hidden_size, kernel_size=(3, 3), padding=1, use_bias=False, name=str(i))
+            for i in range(len(self.config.neck_hidden_sizes))
+        ]
+
+    def __call__(self, features):
+        return [self.convs[i](feature) for i, feature in enumerate(features)]
+
+
 class FlaxDPTNeck(nn.Module):
     config: DPTConfig
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
         # postprocessing
-        self.reassemble_stage = FlaxDPTReassembleStage(self.config)
-        self.conv_list = [
-            nn.Conv(self.config.fusion_hidden_size, kernel_size=(3, 3), padding=1, use_bias=False)
-            for i in range(len(self.config.neck_hidden_sizes))
-        ]
+        self.reassemble_stage = FlaxDPTReassembleStage(self.config, self.dtype)
+        self.convs = FlaxDPTConvCollection(self.config, self.dtype)
         # fusion
         self.fusion_stage = FlaxDPTFeatureFusionStage(self.config)
 
@@ -770,7 +828,8 @@ class FlaxDPTNeck(nn.Module):
         # postprocess hidden states
         features = self.reassemble_stage(hidden_states)
 
-        features = [self.conv_list[i](feature) for i, feature in enumerate(features)]
+        # features = [self.convs[i](feature) for i, feature in enumerate(features)]
+        features = self.convs(features)
 
         # fusion blocks
         output = self.fusion_stage(features)
@@ -792,23 +851,38 @@ class FlaxDPTUpsample(nn.Module):
         return jax.image.resize(x, output_size, method="bilinear")
 
 
+class FlaxDPTDepthEstimationHeadCollectionLayer(nn.Module):
+    config: DPTConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.conv1 = nn.Conv(
+            self.config.fusion_hidden_size // 2, kernel_size=(3, 3), strides=(1, 1), padding=1, name="0"
+        )
+
+        self.upsample = FlaxDPTUpsample(scale=2, method="bilinear")
+
+        self.conv2 = nn.Conv(32, kernel_size=(3, 3), strides=(1, 1), padding=1, name="2")
+
+        self.act = ACT2FN["relu"]
+
+        self.conv3 = nn.Conv(1, kernel_size=(1, 1), strides=(1, 1), padding=0, name="4")
+
+    def __call__(self, hidden_state):
+        x = self.conv1(hidden_state)
+        x = self.upsample(x)
+        x = self.conv2(x)
+        x = self.act(x)
+        x = self.conv3(x)
+        return self.act(x)
+
+
 class FlaxDPTDepthEstimationHead(nn.Module):
     config: DPTConfig
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-
-        features = self.config.fusion_hidden_size
-        self.head = nn.Sequential(
-            [
-                nn.Conv(features // 2, kernel_size=(3, 3), strides=(1, 1), padding=1),
-                FlaxDPTUpsample(scale=2, method="bilinear"),
-                nn.Conv(32, kernel_size=(3, 3), strides=(1, 1), padding=1),
-                ACT2FN["relu"],
-                nn.Conv(1, kernel_size=(1, 1), strides=(1, 1), padding=0),
-                ACT2FN["relu"],
-            ]
-        )
+        self.head = FlaxDPTDepthEstimationHeadCollectionLayer(self.config, self.dtype)
 
     def __call__(self, hidden_states):
         # use last features
@@ -943,54 +1017,76 @@ class FlaxDPTForDepthEstimation(FlaxDPTPreTrainedModel):
     module_class = FlaxDPTForDepthEstimationModule
 
 
+class FlaxDPTSemanticSegmentationHeadCollectionLayer(nn.Module):
+    config: DPTConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.conv1 = nn.Conv(self.config.fusion_hidden_size, kernel_size=(3, 3), padding=1, name="0", use_bias=False)
+        self.bn = nn.BatchNorm(use_running_average=True, name="1")
+        self.dropout = nn.Dropout(0.1, deterministic=True)
+        self.act = ACT2FN["relu"]
+        self.conv2 = nn.Conv(self.config.num_labels, kernel_size=(1, 1), name="4")
+        self.upsample = FlaxDPTUpsample(scale=2, method="bilinear")
+
+    def __call__(self, hidden_states):
+        x = self.conv1(hidden_states)
+        x = self.bn(x)
+        x = self.act(x)
+        x = self.dropout(x)
+        x = self.conv2(x)
+        x = self.upsample(x)
+        return x
+
+
 class FlaxDPTSemanticSegmentationHead(nn.Module):
     config: DPTConfig
     dtype: jnp.dtype = jnp.float32
 
     # TODO: Change this to make sure BatchNorm + Dropout work / Put them outside a Sequential Module
     def setup(self):
-        features = self.config.fusion_hidden_size
-        self.head = nn.Sequential(
-            [
-                nn.Conv(features, kernel_size=(3, 3), padding=1),
-                # nn.BatchNorm(use_running_average=False),
-                ACT2FN["relu"],
-                # nn.Dropout(self.config.semantic_classifier_dropout, deterministic=False),
-                nn.Conv(self.config.num_labels, kernel_size=(1, 1)),
-                FlaxDPTUpsample(scale=2, method="bilinear"),
-            ]
-        )
+        self.head = FlaxDPTSemanticSegmentationHeadCollectionLayer(self.config, self.dtype)
 
+    # @nn.compact
     def __call__(self, hidden_states):
         # use last features
         hidden_states = hidden_states[self.config.head_in_index]
 
         logits = self.head(hidden_states)
+        return jnp.transpose(logits, (0, 3, 1, 2))
 
-        return logits
+
+class FlaxDPTAuxiliaryHeadCollectionLayer(nn.Module):
+    config: DPTConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.conv1 = nn.Conv(self.config.fusion_hidden_size, kernel_size=(3, 3), padding=1, name="0", use_bias=False)
+        self.bn = nn.BatchNorm(use_running_average=True, name="1")
+        self.act = ACT2FN["relu"]
+        self.dropout = nn.Dropout(0.1, deterministic=True)
+        self.conv2 = nn.Conv(self.config.num_labels, kernel_size=(1, 1), name="4")
+
+    def __call__(self, hidden_states):
+        x = self.conv1(hidden_states)
+        x = self.bn(x)
+        x = self.act(x)
+        x = self.dropout(x)
+        x = self.conv2(x)
+        return x
 
 
 class FlaxDPTAuxiliaryHead(nn.Module):
     config: DPTConfig
     dtype: jnp.dtype = jnp.float32
 
-    # TODO: Change this to make sure BatchNorm + Dropout work / Put them outside a Sequential Module
     def setup(self):
-        features = self.config.fusion_hidden_size
-        self.head = nn.Sequential(
-            [
-                nn.Conv(features, kernel_size=(3, 3), padding=1, use_bias=False),  # bias=False
-                # nn.BatchNorm(use_running_average=False),
-                ACT2FN["relu"],
-                # nn.Dropout(0.1, deterministic=False),
-                nn.Conv(self.config.num_labels, kernel_size=(1, 1)),
-            ]
-        )
+        self.head = FlaxDPTAuxiliaryHeadCollectionLayer(self.config, self.dtype)
 
     def __call__(self, hidden_states):
         logits = self.head(hidden_states)
 
-        return logits
+        return jnp.transpose(logits, (0, 3, 1, 2))
 
 
 class FlaxDPTForSemanticSegmentationModule(nn.Module):
