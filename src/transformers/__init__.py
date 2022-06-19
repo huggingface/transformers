@@ -3808,9 +3808,9 @@ if TYPE_CHECKING:
         from .models.nezha import (
             NEZHA_PRETRAINED_MODEL_ARCHIVE_MAP,
             NeZhaForMaskedLM,
-            NeZhaForPreTraining,
-            NeZhaForNextSentencePrediction,
             NeZhaForMultipleChoice,
+            NeZhaForNextSentencePrediction,
+            NeZhaForPreTraining,
             NeZhaForQuestionAnswering,
             NeZhaForSequenceClassification,
             NeZhaForTokenClassification,

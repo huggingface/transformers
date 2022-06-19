@@ -423,55 +423,56 @@ class NeZhaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
             model = NeZhaModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
-    # @slow
-    # @require_torch_gpu
-    # def test_torchscript_device_change(self):
-    #     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-    #     for model_class in self.all_model_classes:
+    @slow
+    @require_torch_gpu
+    def test_torchscript_device_change(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
 
-    #         # NeZhaForMultipleChoice behaves incorrectly in JIT environments.
-    #         if model_class == NeZhaForMultipleChoice:
-    #             return
+            # NeZhaForMultipleChoice behaves incorrectly in JIT environments.
+            if model_class == NeZhaForMultipleChoice:
+                return
 
-    #         config.torchscript = True
-    #         model = model_class(config=config)
+            config.torchscript = True
+            model = model_class(config=config)
 
-    #         inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-    #         traced_model = torch.jit.trace(
-    #             model, (inputs_dict["input_ids"].to("cpu"), inputs_dict["attention_mask"].to("cpu"))
-    #         )
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            traced_model = torch.jit.trace(
+                model, (inputs_dict["input_ids"].to("cpu"), inputs_dict["attention_mask"].to("cpu"))
+            )
 
-    #         with tempfile.TemporaryDirectory() as tmp:
-    #             torch.jit.save(traced_model, os.path.join(tmp, "bert.pt"))
-    #             loaded = torch.jit.load(os.path.join(tmp, "bert.pt"), map_location=torch_device)
-    #             loaded(inputs_dict["input_ids"].to(torch_device), inputs_dict["attention_mask"].to(torch_device))
+            with tempfile.TemporaryDirectory() as tmp:
+                torch.jit.save(traced_model, os.path.join(tmp, "bert.pt"))
+                loaded = torch.jit.load(os.path.join(tmp, "bert.pt"), map_location=torch_device)
+                loaded(inputs_dict["input_ids"].to(torch_device), inputs_dict["attention_mask"].to(torch_device))
+
 
 @require_torch
 class NeZhaModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_nezha_model(self):
         model = NeZhaModel.from_pretrained("sijunhe/nezha-cn-base")
-        input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
-        attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
+        input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
+        attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1]])
         with torch.no_grad():
             output = model(input_ids, attention_mask=attention_mask)[0]
-        expected_shape = torch.Size((1, 11, 768))
+        expected_shape = torch.Size((1, 6, 768))
         self.assertEqual(output.shape, expected_shape)
-        expected_slice = torch.tensor([[[0.0180, -0.0550, -0.0349], [0.0052, -0.0392, -0.2540], [-0.1217, -0.0855, -0.2468]]])
-        print(output[:, 1:4, 1:4])
+        expected_slice = torch.tensor([[[0.0685, 0.2441, 0.1102], [0.0600, 0.1906, 0.1349], [0.0221, 0.0819, 0.0586]]])
 
         self.assertTrue(torch.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4))
-    
+
     @slow
     def test_inference_nezha_masked_lm(self):
         model = NeZhaForMaskedLM.from_pretrained("sijunhe/nezha-cn-base")
-        input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
-        attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
+        input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
+        attention_mask = torch.tensor([[1, 1, 1, 1, 1, 1]])
         with torch.no_grad():
             output = model(input_ids, attention_mask=attention_mask)[0]
-        expected_shape = torch.Size((1, 11, 768))
+        expected_shape = torch.Size((1, 6, 21128))
         self.assertEqual(output.shape, expected_shape)
-        expected_slice = torch.tensor([[[0.0180, -0.0550, -0.0349], [0.0052, -0.0392, -0.2540], [-0.1217, -0.0855, -0.2468]]])
-        print(output[:, 1:4, 1:4])
+        expected_slice = torch.tensor(
+            [[-2.7939, -1.7902, -2.2189], [-2.8585, -1.8908, -2.3723], [-2.6499, -1.7750, -2.2558]]
+        )
 
         self.assertTrue(torch.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4))

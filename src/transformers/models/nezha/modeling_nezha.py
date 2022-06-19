@@ -1,6 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
-# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch BERT model."""
+"""PyTorch NeZha model."""
 
 
 import math
@@ -32,7 +31,6 @@ from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
     NextSentencePredictorOutput,
@@ -55,32 +53,15 @@ from .configuration_nezha import NeZhaConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "bert-base-uncased"
+_CHECKPOINT_FOR_DOC = "sijunhe/nezha-cn-base"
 _CONFIG_FOR_DOC = "NeZhaConfig"
 _TOKENIZER_FOR_DOC = "BertTokenizer"
 
-# TokenClassification docstring
-_CHECKPOINT_FOR_TOKEN_CLASSIFICATION = "dbmdz/bert-large-cased-finetuned-conll03-english"
-_TOKEN_CLASS_EXPECTED_OUTPUT = (
-    "['O', 'I-ORG', 'I-ORG', 'I-ORG', 'O', 'O', 'O', 'O', 'O', 'I-LOC', 'O', 'I-LOC', 'I-LOC'] "
-)
-_TOKEN_CLASS_EXPECTED_LOSS = 0.01
-
-# QuestionAnswering docstring
-_CHECKPOINT_FOR_QA = "deepset/bert-base-cased-squad2"
-_QA_EXPECTED_OUTPUT = "'a nice puppet'"
-_QA_EXPECTED_LOSS = 7.41
-_QA_TARGET_START_INDEX = 14
-_QA_TARGET_END_INDEX = 15
-
-# SequenceClassification docstring
-_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "textattack/bert-base-uncased-yelp-polarity"
-_SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_1'"
-_SEQ_CLASS_EXPECTED_LOSS = 0.01
-
-
 NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "sijunhe/nezha-cn-base",
+    "sijunhe/nezha-base-wwm",
+    # [to be uploaded] "sijunhe/nezha-base-wwm",
+    # [to be uploaded] "sijunhe/nezha-large-zh",
     # See all Nezha models at https://huggingface.co/models?filter=nezha
 ]
 
@@ -157,7 +138,10 @@ def load_tf_weights_in_bert(model, config, tf_checkpoint_path):
         pointer.data = torch.from_numpy(array)
     return model
 
+
 class RelativePositionsEncoding(nn.Module):
+    """Implement the Functional Relative Position Encoding"""
+
     def __init__(self, length, depth, max_relative_position=127):
         super(RelativePositionsEncoding, self).__init__()
         vocab_size = max_relative_position * 2 + 1
@@ -172,40 +156,37 @@ class RelativePositionsEncoding(nn.Module):
         div_term = torch.exp(torch.arange(0, depth, 2).float() * (-math.log(10000.0) / depth))
         embeddings_table[:, 0::2] = torch.sin(position * div_term)
         embeddings_table[:, 1::2] = torch.cos(position * div_term)
-        # embeddings_table = embeddings_table.unsqueeze(0).transpose(0, 1).squeeze(1)
 
         flat_relative_positions_matrix = final_mat.view(-1)
-        one_hot_relative_positions_matrix = torch.nn.functional.one_hot(flat_relative_positions_matrix,
-                                                                        num_classes=vocab_size).float()
+        one_hot_relative_positions_matrix = torch.nn.functional.one_hot(
+            flat_relative_positions_matrix, num_classes=vocab_size
+        ).float()
         positions_encoding = torch.matmul(one_hot_relative_positions_matrix, embeddings_table)
         my_shape = list(final_mat.size())
         my_shape.append(depth)
         positions_encoding = positions_encoding.view(my_shape)
-        self.register_buffer('positions_encoding', positions_encoding)
+        self.register_buffer("positions_encoding", positions_encoding)
 
     def forward(self, length):
         return self.positions_encoding[:length, :length, :]
 
 
 class NeZhaEmbeddings(nn.Module):
-    """Construct the embeddings from word, position and token_type embeddings."""
+    """Construct the embeddings from word and token_type embeddings."""
 
     def __init__(self, config):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
         if version.parse(torch.__version__) > version.parse("1.6.0"):
             self.register_buffer(
                 "token_type_ids",
-                torch.zeros(self.position_ids.size(), dtype=torch.long),
+                torch.zeros((1, config.max_position_embeddings), dtype=torch.long),
                 persistent=False,
             )
 
@@ -213,7 +194,6 @@ class NeZhaEmbeddings(nn.Module):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         past_key_values_length: int = 0,
     ) -> torch.Tensor:
@@ -224,8 +204,8 @@ class NeZhaEmbeddings(nn.Module):
 
         seq_length = input_shape[1]
 
-        if position_ids is None:
-            position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
+        if inputs_embeds is None:
+            inputs_embeds = self.word_embeddings(input_ids)
 
         # Setting the token_type_ids to the registered buffer in constructor where it is all zeros, which usually occurs
         # when its auto-generated, registered buffer helps users when tracing the model without passing token_type_ids, solves
@@ -236,10 +216,8 @@ class NeZhaEmbeddings(nn.Module):
                 buffered_token_type_ids_expanded = buffered_token_type_ids.expand(input_shape[0], seq_length)
                 token_type_ids = buffered_token_type_ids_expanded
             else:
-                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
+                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=inputs_embeds.device)
 
-        if inputs_embeds is None:
-            inputs_embeds = self.word_embeddings(input_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
         embeddings = inputs_embeds + token_type_embeddings
@@ -266,9 +244,11 @@ class NeZhaSelfAttention(nn.Module):
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.relative_positions_encoding = RelativePositionsEncoding(length=config.max_position_embeddings,
-                                                                     depth=self.attention_head_size,
-                                                                     max_relative_position=config.max_relative_position)
+        self.relative_positions_encoding = RelativePositionsEncoding(
+            length=config.max_position_embeddings,
+            depth=self.attention_head_size,
+            max_relative_position=config.max_relative_position,
+        )
         self.is_decoder = config.is_decoder
 
     def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
@@ -330,11 +310,13 @@ class NeZhaSelfAttention(nn.Module):
         relations_keys = self.relative_positions_encoding(to_seq_length)
         query_layer_t = query_layer.permute(2, 0, 1, 3)
 
-        query_layer_r = query_layer_t.contiguous().view(from_seq_length, batch_size * num_attention_heads,
-                                                        self.attention_head_size)
+        query_layer_r = query_layer_t.contiguous().view(
+            from_seq_length, batch_size * num_attention_heads, self.attention_head_size
+        )
         key_position_scores = torch.matmul(query_layer_r, relations_keys.permute(0, 2, 1))
-        key_position_scores_r = key_position_scores.view(from_seq_length, batch_size,
-                                                         num_attention_heads, from_seq_length)
+        key_position_scores_r = key_position_scores.view(
+            from_seq_length, batch_size, num_attention_heads, from_seq_length
+        )
         key_position_scores_r_t = key_position_scores_r.permute(1, 2, 0, 3)
         attention_scores = attention_scores + key_position_scores_r_t
 
@@ -358,11 +340,13 @@ class NeZhaSelfAttention(nn.Module):
         context_layer = torch.matmul(attention_probs, value_layer)
         relations_values = self.relative_positions_encoding(to_seq_length)
         attention_probs_t = attention_probs.permute(2, 0, 1, 3)
-        attentions_probs_r = attention_probs_t.contiguous().view(from_seq_length, batch_size * num_attention_heads,
-                                                                 to_seq_length)
+        attentions_probs_r = attention_probs_t.contiguous().view(
+            from_seq_length, batch_size * num_attention_heads, to_seq_length
+        )
         value_position_scores = torch.matmul(attentions_probs_r, relations_values)
-        value_position_scores_r = value_position_scores.view(from_seq_length, batch_size,
-                                                             num_attention_heads, self.attention_head_size)
+        value_position_scores_r = value_position_scores.view(
+            from_seq_length, batch_size, num_attention_heads, self.attention_head_size
+        )
         value_position_scores_r_t = value_position_scores_r.permute(1, 2, 0, 3)
         context_layer = context_layer + value_position_scores_r_t
 
@@ -746,7 +730,7 @@ class NeZhaPreTrainedModel(PreTrainedModel):
     load_tf_weights = load_tf_weights_in_bert
     base_model_prefix = "nezha"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
+    _keys_to_ignore_on_load_missing = [r"positions_encoding"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -803,7 +787,7 @@ class NeZhaForPreTrainingOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-BERT_START_DOCSTRING = r"""
+NEZHA_START_DOCSTRING = r"""
 
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -819,12 +803,12 @@ BERT_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-BERT_INPUTS_DOCSTRING = r"""
+NEZHA_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`NeZhaTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -843,11 +827,6 @@ BERT_INPUTS_DOCSTRING = r"""
             - 1 corresponds to a *sentence B* token.
 
             [What are token type IDs?](../glossary#token-type-ids)
-        position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
@@ -871,7 +850,7 @@ BERT_INPUTS_DOCSTRING = r"""
 
 @add_start_docstrings(
     "The bare NeZha Model transformer outputting raw hidden-states without any specific head on top.",
-    BERT_START_DOCSTRING,
+    NEZHA_START_DOCSTRING,
 )
 class NeZhaModel(NeZhaPreTrainedModel):
     """
@@ -912,7 +891,7 @@ class NeZhaModel(NeZhaPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(NEZHA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -924,7 +903,6 @@ class NeZhaModel(NeZhaPreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
@@ -1016,7 +994,6 @@ class NeZhaModel(NeZhaPreTrainedModel):
 
         embedding_output = self.embeddings(
             input_ids=input_ids,
-            position_ids=position_ids,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
             past_key_values_length=past_key_values_length,
@@ -1054,7 +1031,7 @@ class NeZhaModel(NeZhaPreTrainedModel):
     NeZha Model with two heads on top as done during the pretraining: a `masked language modeling` head and a `next
     sentence prediction (classification)` head.
     """,
-    BERT_START_DOCSTRING,
+    NEZHA_START_DOCSTRING,
 )
 class NeZhaForPreTraining(NeZhaPreTrainedModel):
     def __init__(self, config):
@@ -1072,14 +1049,13 @@ class NeZhaForPreTraining(NeZhaPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
 
-    @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(NEZHA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=NeZhaForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
@@ -1107,11 +1083,11 @@ class NeZhaForPreTraining(NeZhaPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import NeZhaTokenizer, NeZhaForPreTraining
+        >>> from transformers import BertTokenizer, NeZhaForPreTraining
         >>> import torch
 
-        >>> tokenizer = NeZhaTokenizer.from_pretrained("bert-base-uncased")
-        >>> model = NeZhaForPreTraining.from_pretrained("bert-base-uncased")
+        >>> tokenizer = BertTokenizer.from_pretrained("sijunhe/nezha-cn-base")
+        >>> model = NeZhaForPreTraining.from_pretrained("sijunhe/nezha-cn-base")
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -1126,7 +1102,6 @@ class NeZhaForPreTraining(NeZhaPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
-            position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
@@ -1157,11 +1132,11 @@ class NeZhaForPreTraining(NeZhaPreTrainedModel):
         )
 
 
-@add_start_docstrings("""NeZha Model with a `language modeling` head on top.""", BERT_START_DOCSTRING)
+@add_start_docstrings("""NeZha Model with a `language modeling` head on top.""", NEZHA_START_DOCSTRING)
 class NeZhaForMaskedLM(NeZhaPreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
+    _keys_to_ignore_on_load_missing = [r"predictions.decoder.bias", r"positions_encoding"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1184,21 +1159,18 @@ class NeZhaForMaskedLM(NeZhaPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
 
-    @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(NEZHA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output="'paris'",
-        expected_loss=0.88,
     )
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
@@ -1221,7 +1193,6 @@ class NeZhaForMaskedLM(NeZhaPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
-            position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             encoder_hidden_states=encoder_hidden_states,
@@ -1269,7 +1240,7 @@ class NeZhaForMaskedLM(NeZhaPreTrainedModel):
 
 @add_start_docstrings(
     """NeZha Model with a `next sentence prediction (classification)` head on top.""",
-    BERT_START_DOCSTRING,
+    NEZHA_START_DOCSTRING,
 )
 class NeZhaForNextSentencePrediction(NeZhaPreTrainedModel):
     def __init__(self, config):
@@ -1281,14 +1252,13 @@ class NeZhaForNextSentencePrediction(NeZhaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(NEZHA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=NextSentencePredictorOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
@@ -1310,11 +1280,11 @@ class NeZhaForNextSentencePrediction(NeZhaPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import NeZhaTokenizer, NeZhaForNextSentencePrediction
+        >>> from transformers import BertTokenizer, NeZhaForNextSentencePrediction
         >>> import torch
 
-        >>> tokenizer = NeZhaTokenizer.from_pretrained("bert-base-uncased")
-        >>> model = NeZhaForNextSentencePrediction.from_pretrained("bert-base-uncased")
+        >>> tokenizer = BertTokenizer.from_pretrained("sijunhe/nezha-cn-base")
+        >>> model = NeZhaForNextSentencePrediction.from_pretrained("sijunhe/nezha-cn-base")
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
@@ -1340,7 +1310,6 @@ class NeZhaForNextSentencePrediction(NeZhaPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
-            position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
@@ -1374,7 +1343,7 @@ class NeZhaForNextSentencePrediction(NeZhaPreTrainedModel):
     NeZha Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
     output) e.g. for GLUE tasks.
     """,
-    BERT_START_DOCSTRING,
+    NEZHA_START_DOCSTRING,
 )
 class NeZhaForSequenceClassification(NeZhaPreTrainedModel):
     def __init__(self, config):
@@ -1392,21 +1361,18 @@ class NeZhaForSequenceClassification(NeZhaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(NEZHA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
-        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
@@ -1426,7 +1392,6 @@ class NeZhaForSequenceClassification(NeZhaPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
-            position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
@@ -1478,7 +1443,7 @@ class NeZhaForSequenceClassification(NeZhaPreTrainedModel):
     NeZha Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
     softmax) e.g. for RocStories/SWAG tasks.
     """,
-    BERT_START_DOCSTRING,
+    NEZHA_START_DOCSTRING,
 )
 class NeZhaForMultipleChoice(NeZhaPreTrainedModel):
     def __init__(self, config):
@@ -1494,7 +1459,7 @@ class NeZhaForMultipleChoice(NeZhaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(NEZHA_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1506,7 +1471,6 @@ class NeZhaForMultipleChoice(NeZhaPreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
@@ -1525,7 +1489,6 @@ class NeZhaForMultipleChoice(NeZhaPreTrainedModel):
         input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
         attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
         token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
-        position_ids = position_ids.view(-1, position_ids.size(-1)) if position_ids is not None else None
         inputs_embeds = (
             inputs_embeds.view(-1, inputs_embeds.size(-2), inputs_embeds.size(-1))
             if inputs_embeds is not None
@@ -1536,7 +1499,6 @@ class NeZhaForMultipleChoice(NeZhaPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
-            position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
@@ -1574,7 +1536,7 @@ class NeZhaForMultipleChoice(NeZhaPreTrainedModel):
     NeZha Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
     Named-Entity-Recognition (NER) tasks.
     """,
-    BERT_START_DOCSTRING,
+    NEZHA_START_DOCSTRING,
 )
 class NeZhaForTokenClassification(NeZhaPreTrainedModel):
 
@@ -1594,21 +1556,18 @@ class NeZhaForTokenClassification(NeZhaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(NEZHA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_TOKEN_CLASSIFICATION,
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output=_TOKEN_CLASS_EXPECTED_OUTPUT,
-        expected_loss=_TOKEN_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
@@ -1626,7 +1585,6 @@ class NeZhaForTokenClassification(NeZhaPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
-            position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
@@ -1661,7 +1619,7 @@ class NeZhaForTokenClassification(NeZhaPreTrainedModel):
     NeZha Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
     layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
-    BERT_START_DOCSTRING,
+    NEZHA_START_DOCSTRING,
 )
 class NeZhaForQuestionAnswering(NeZhaPreTrainedModel):
 
@@ -1677,23 +1635,18 @@ class NeZhaForQuestionAnswering(NeZhaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(NEZHA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_QA,
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
-        qa_target_start_index=_QA_TARGET_START_INDEX,
-        qa_target_end_index=_QA_TARGET_END_INDEX,
-        expected_output=_QA_EXPECTED_OUTPUT,
-        expected_loss=_QA_EXPECTED_LOSS,
     )
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         start_positions: Optional[torch.Tensor] = None,
@@ -1718,7 +1671,6 @@ class NeZhaForQuestionAnswering(NeZhaPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
-            position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,

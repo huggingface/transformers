@@ -57,10 +57,10 @@ if TYPE_CHECKING:
     else:
         from .modeling_nezha import (
             NEZHA_PRETRAINED_MODEL_ARCHIVE_MAP,
-            NeZhaForNextSentencePrediction,
             NeZhaForMaskedLM,
-            NeZhaForPreTraining,
             NeZhaForMultipleChoice,
+            NeZhaForNextSentencePrediction,
+            NeZhaForPreTraining,
             NeZhaForQuestionAnswering,
             NeZhaForSequenceClassification,
             NeZhaForTokenClassification,
