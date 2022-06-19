@@ -324,6 +324,15 @@ class FeaturesManager:
             "seq2seq-lm-with-past",
             onnx_config_cls="models.m2m_100.M2M100OnnxConfig",
         ),
+        "opt": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "causal-lm",
+            "causal-lm-with-past",
+            "sequence-classification",
+            "token-classification",
+            onnx_config_cls="models.opt.OPTOnnxConfig",
+        ),
         "perceiver": supported_features_mapping(
             "image-classification",
             "masked-lm",

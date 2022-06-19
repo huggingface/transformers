@@ -27,7 +27,7 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_opt": ["OPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OPTConfig"]}
+_import_structure = {"configuration_opt": ["OPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OPTConfig", "OPTOnnxConfig"]}
 
 try:
     if not is_torch_available():
@@ -64,7 +64,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_opt import OPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OPTConfig
+    from .configuration_opt import OPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OPTConfig, OPTOnnxConfig
 
     try:
         if not is_torch_available():
