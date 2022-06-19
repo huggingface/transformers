@@ -17,7 +17,6 @@
 
 import math
 import os
-from lib2to3.pgen2.token import OP
 from typing import Optional, Tuple, Union
 
 import torch
