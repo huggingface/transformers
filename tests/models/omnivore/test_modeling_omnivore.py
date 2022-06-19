@@ -156,9 +156,10 @@ class OmnivoreModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
+        patch_size = self.patch_size
 
         def get_size(x, i):
-            return math.ceil(((x - (self.model_tester.patch_size[i] - 1) - 1) / self.model_tester.patch_size[i]) + 1)
+            return math.ceil(((x - (patch_size[i] - 1) - 1) / patch_size[i]) + 1)
 
         ater_patch_embed_dim = (get_size(self.frames, 0), get_size(self.image_size, 1), get_size(self.image_size, 2))
         expected_seq_len = math.ceil(ater_patch_embed_dim[1] // (2 ** (len(config.depths) - 1)))
@@ -258,10 +259,6 @@ class OmnivoreModelTest(ModelTesterMixin, unittest.TestCase):
 
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
@@ -441,6 +438,10 @@ class OmnivoreModelTest(ModelTesterMixin, unittest.TestCase):
                                     )
 
                             loss.backward()
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs("image")

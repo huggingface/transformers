@@ -198,7 +198,7 @@ class OmnivoreSwinAttention(nn.Module):
         coords_d = torch.arange(self.window_size[0])
         coords_h = torch.arange(self.window_size[1])
         coords_w = torch.arange(self.window_size[2])
-        coords = torch.stack(torch.meshgrid(coords_d, coords_h, coords_w))
+        coords = torch.stack(torch.meshgrid(coords_d, coords_h, coords_w, indexing="ij"))
         coords_flatten = torch.flatten(coords, 1)
         relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]
         relative_coords = relative_coords.permute(1, 2, 0).contiguous()
@@ -790,7 +790,7 @@ class OmnivorePreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, OmnivoreModel):
+        if isinstance(module, OmnivoreSwinBackbone):
             module.gradient_checkpointing = value
 
 
@@ -896,7 +896,6 @@ class OmnivoreForVisionClassification(OmnivorePreTrainedModel):
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=ImageClassifierOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,
-        modality="vision",
         expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
     )
     def forward(
@@ -915,11 +914,10 @@ class OmnivoreForVisionClassification(OmnivorePreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
-        Returns:
+        Example:
 
-        Examples:
         ```python
-        >>> from transformers import OmnivoreFeatureExtractor, OmnivoreForVisionClassification
+        >>> from transformers import OmnivoreFeatureExtractor, OmnivoreForImageClassification
         >>> import torch
         >>> from datasets import load_dataset
 
@@ -927,10 +925,10 @@ class OmnivoreForVisionClassification(OmnivorePreTrainedModel):
         >>> image = dataset["test"]["image"][0]
 
         >>> feature_extractor = OmnivoreFeatureExtractor.from_pretrained("anugunj/omnivore-swinT")
-        >>> model = OmnivoreForVisionClassification.from_pretrained("anugunj/omnivore-swinT")
+        >>> model = OmnivoreForImageClassification.from_pretrained("anugunj/omnivore-swinT")
 
         >>> inputs = feature_extractor(image, return_tensors="pt")
-        >>> inputs["input_type"] = "image" # set the type of modality
+        >>> inputs["input_type"] = "image"
         >>> logits = model(**inputs).logits
 
         >>> # model predicts one of the 1000 ImageNet classes
@@ -938,6 +936,10 @@ class OmnivoreForVisionClassification(OmnivorePreTrainedModel):
         >>> print(model.config.image_id2label[str(predicted_label)])
         tabby, tabby cat
         ```"""
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.backbone(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
@@ -979,7 +981,7 @@ class OmnivoreForVisionClassification(OmnivorePreTrainedModel):
                 loss = loss_fct(logits, labels)
 
         if not return_dict:
-            output = (logits,) + outputs[2:]
+            output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)

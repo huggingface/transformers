@@ -23,15 +23,15 @@ from pathlib import Path
 from typing import Dict
 
 import torch
+from PIL import Image
 
+import requests
 from huggingface_hub import hf_hub_download
 from transformers import OmnivoreConfig, OmnivoreFeatureExtractor, OmnivoreForVisionClassification
 from transformers.utils import logging
 
-from PIL import Image
-import requests
 
-url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 
 logging.set_verbosity_info()
@@ -58,7 +58,7 @@ def convert_weight_and_push(config: OmnivoreConfig, name: str, save_directory: P
 
     dest_model.load_state_dict(new_weights)
     dest_model.eval()
-    
+
     x = torch.randn(2, 3, 6, 224, 224)
     out1 = src_model(x, "video")
     out2 = dest_model(x, "video").logits
@@ -69,7 +69,7 @@ def convert_weight_and_push(config: OmnivoreConfig, name: str, save_directory: P
     out1 = src_model(inputs["pixel_values"].unsqueeze(2), "image")
     out2 = dest_model(inputs["pixel_values"], "image").logits
     assert torch.allclose(out1, out2), "The model logits don't match the original one for images"
-    
+
     x = torch.randn(2, 4, 1, 224, 224)
     out1 = src_model(x, "rgbd")
     out2 = dest_model(x, "rgbd").logits
@@ -170,7 +170,7 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None):
             depth_mode="summed_rgb_d_tokens",
         ),
     }
-    
+
     names_to_save_names = {
         "omnivore_swinT": "omnivore-swinT",
         "omnivore_swinS": "omnivore-swinS",
