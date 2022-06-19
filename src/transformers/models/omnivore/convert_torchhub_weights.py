@@ -27,6 +27,11 @@ from huggingface_hub import hf_hub_download
 from transformers import OmnivoreConfig, OmnivoreFeatureExtractor, OmnivoreForVisionClassification
 from transformers.utils import logging
 
+from PIL import Image
+import requests
+
+url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+image = Image.open(requests.get(url, stream=True).raw)
 
 logging.set_verbosity_info()
 logger = logging.get_logger()
@@ -52,16 +57,18 @@ def convert_weight_and_push(config: OmnivoreConfig, name: str, save_directory: P
 
     dest_model.load_state_dict(new_weights)
     dest_model.eval()
+    
     x = torch.randn(2, 3, 6, 224, 224)
     out1 = src_model(x, "video")
     out2 = dest_model(x, "video").logits
     assert torch.allclose(out1, out2), "The model logits don't match the original one for videos"
 
-    x = torch.randn(2, 3, 1, 224, 224)
-    out1 = src_model(x, "image")
-    out2 = dest_model(x, "image").logits
+    feature_extractor = OmnivoreFeatureExtractor()
+    inputs = feature_extractor(images=image, return_tensors="pt")
+    out1 = src_model(inputs["pixel_values"].unsqueeze(2), "image")
+    out2 = dest_model(inputs["pixel_values"], "image").logits
     assert torch.allclose(out1, out2), "The model logits don't match the original one for images"
-
+    
     x = torch.randn(2, 4, 1, 224, 224)
     out1 = src_model(x, "rgbd")
     out2 = dest_model(x, "rgbd").logits
@@ -84,8 +91,6 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None):
     repo_id = "datasets/huggingface/label-files"
     image_id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
     image_id2label = {int(k): v for k, v in image_id2label.items()}
-
-    image_id2label = image_id2label
     image_label2id = {v: k for k, v in image_id2label.items()}
 
     filename = "kinetics_classnames.json"
@@ -93,8 +98,6 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None):
     expected_shape = (1, video_num_labels)
     video_id2label = json.load(open(filename, "r"))
     video_id2label = {int(v): str(k).replace('"', "") for k, v in video_id2label.items()}
-
-    video_id2label = video_id2label
     video_label2id = {v: k for k, v in video_id2label.items()}
 
     filename = "sunrgbd_classnames.json"
@@ -102,8 +105,6 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None):
     expected_shape = (1, rgbd_num_labels)
     rgbd_id2label = json.load(open(filename, "r"))
     rgbd_id2label = {int(k): v for k, v in rgbd_id2label.items()}
-
-    rgbd_id2label = rgbd_id2label
     rgbd_label2id = {v: k for k, v in rgbd_id2label.items()}
 
     OmnivorePreTrainedConfig = partial(
@@ -116,8 +117,17 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None):
         rgbd_id2label=rgbd_id2label,
         rgbd_label2id=rgbd_label2id,
     )
-
     names_to_config = {
+        "omnivore_swinT": OmnivorePreTrainedConfig(
+            patch_size=[2, 4, 4],
+            embed_dim=96,
+            depths=[2, 2, 6, 2],
+            num_heads=[3, 6, 12, 24],
+            window_size=[8, 7, 7],
+            drop_path_rate=0.2,
+            patch_norm=True,
+            depth_mode="summed_rgb_d_tokens",
+        ),
         "omnivore_swinB": OmnivorePreTrainedConfig(
             patch_size=[2, 4, 4],
             embed_dim=128,
@@ -148,16 +158,6 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None):
             patch_norm=True,
             depth_mode="summed_rgb_d_tokens",
         ),
-        "omnivore_swinT": OmnivorePreTrainedConfig(
-            patch_size=[2, 4, 4],
-            embed_dim=96,
-            depths=[2, 2, 6, 2],
-            num_heads=[3, 6, 12, 24],
-            window_size=[8, 7, 7],
-            drop_path_rate=0.2,
-            patch_norm=True,
-            depth_mode="summed_rgb_d_tokens",
-        ),
         "omnivore_swinL_imagenet21k": OmnivorePreTrainedConfig(
             patch_size=[2, 4, 4],
             embed_dim=192,
@@ -169,7 +169,7 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None):
             depth_mode="summed_rgb_d_tokens",
         ),
     }
-
+    print(names_to_config['omnivore_swinT'].image_id2label)
     if model_name:
         convert_weight_and_push(names_to_config[model_name], model_name, save_directory)
     else:

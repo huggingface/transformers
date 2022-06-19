@@ -198,7 +198,7 @@ class OmnivoreSwinAttention(nn.Module):
         coords_d = torch.arange(self.window_size[0])
         coords_h = torch.arange(self.window_size[1])
         coords_w = torch.arange(self.window_size[2])
-        coords = torch.stack(torch.meshgrid(coords_d, coords_h, coords_w, indexing="ij"))
+        coords = torch.stack(torch.meshgrid(coords_d, coords_h, coords_w))
         coords_flatten = torch.flatten(coords, 1)
         relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]
         relative_coords = relative_coords.permute(1, 2, 0).contiguous()
@@ -918,7 +918,7 @@ class OmnivoreForVisionClassification(OmnivorePreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import OmnivoreFeatureExtractor, OmnivoreForImageClassification
+        >>> from transformers import OmnivoreFeatureExtractor, OmnivoreForVisionClassification
         >>> import torch
         >>> from datasets import load_dataset
 
@@ -926,7 +926,7 @@ class OmnivoreForVisionClassification(OmnivorePreTrainedModel):
         >>> image = dataset["test"]["image"][0]
 
         >>> feature_extractor = OmnivoreFeatureExtractor.from_pretrained("anugunj/omnivore-swinT")
-        >>> model = OmnivoreForImageClassification.from_pretrained("anugunj/omnivore-swinT")
+        >>> model = OmnivoreForVisionClassification.from_pretrained("anugunj/omnivore-swinT")
 
         >>> inputs = feature_extractor(image, return_tensors="pt")
 
@@ -934,7 +934,7 @@ class OmnivoreForVisionClassification(OmnivorePreTrainedModel):
 
         >>> # model predicts one of the 1000 ImageNet classes
         >>> predicted_label = logits.argmax(-1).item()
-        >>> print(model.config.id2label[predicted_label])
+        >>> print(model.config.image_id2label[str(predicted_label)])
         tabby, tabby cat
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
