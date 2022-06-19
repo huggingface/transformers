@@ -202,6 +202,7 @@ PYTORCH_EXPORT_MODELS = {
 PYTORCH_EXPORT_WITH_PAST_MODELS = {
     ("gpt2", "gpt2"),
     ("gpt-neo", "EleutherAI/gpt-neo-125M"),
+    ("opt", "facebook/opt-350m"),
 }
 
 PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {

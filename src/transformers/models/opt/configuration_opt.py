@@ -13,12 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ OPT model configuration"""
-from ...configuration_utils import PretrainedConfig
-from ...utils import logging
-from ...onnx import OnnxConfigWithPast, PatchingSpec
-from typing import Any, List, Mapping, Optional
-from transformers import PreTrainedTokenizer, TensorType, is_torch_available
 from collections import OrderedDict
+from typing import Any, List, Mapping, Optional
+
+from transformers import PreTrainedTokenizer, TensorType, is_torch_available
+
+from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfigWithPast, PatchingSpec
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
