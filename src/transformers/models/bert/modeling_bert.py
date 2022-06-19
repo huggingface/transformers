@@ -1653,9 +1653,8 @@ class BertForMultipleChoice(BertPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
-        print(input_ids.shape)
+
         input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
-        print(input_ids.shape)
         attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
         token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
         position_ids = position_ids.view(-1, position_ids.size(-1)) if position_ids is not None else None
@@ -1678,10 +1677,11 @@ class BertForMultipleChoice(BertPreTrainedModel):
         )
 
         pooled_output = outputs[1]
-        print(pooled_output.shape)
+
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
         reshaped_logits = logits.view(-1, num_choices)
+
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
