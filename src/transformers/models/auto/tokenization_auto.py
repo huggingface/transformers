@@ -76,6 +76,7 @@ else:
             ("bigbird_pegasus", ("PegasusTokenizer", "PegasusTokenizerFast" if is_tokenizers_available() else None)),
             ("blenderbot", ("BlenderbotTokenizer", "BlenderbotTokenizerFast")),
             ("blenderbot-small", ("BlenderbotSmallTokenizer", None)),
+            ("bloom", (None, "BloomTokenizerFast" if is_tokenizers_available() else None)),
             ("byt5", ("ByT5Tokenizer", None)),
             (
                 "camembert",
@@ -136,6 +137,13 @@ else:
             ("layoutxlm", ("LayoutXLMTokenizer", "LayoutXLMTokenizerFast" if is_tokenizers_available() else None)),
             ("led", ("LEDTokenizer", "LEDTokenizerFast" if is_tokenizers_available() else None)),
             ("longformer", ("LongformerTokenizer", "LongformerTokenizerFast" if is_tokenizers_available() else None)),
+            (
+                "longt5",
+                (
+                    "T5Tokenizer" if is_sentencepiece_available() else None,
+                    "T5TokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("luke", ("LukeTokenizer", None)),
             ("lxmert", ("LxmertTokenizer", "LxmertTokenizerFast" if is_tokenizers_available() else None)),
             ("m2m_100", ("M2M100Tokenizer" if is_sentencepiece_available() else None, None)),
