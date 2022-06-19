@@ -27,7 +27,6 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
 
-from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutputWithNoAttention,
     BaseModelOutputWithPoolingAndNoAttention,
@@ -46,7 +45,7 @@ _FEAT_EXTRACTOR_FOR_DOC = "OmniverseFeatureExtractor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "anugunj/omnivore"
-_EXPECTED_OUTPUT_SHAPE = [1, 768, 7, 7]
+_EXPECTED_OUTPUT_SHAPE = [1, 768, 16, 7, 7]
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "anugunj/omnivore"
@@ -378,7 +377,6 @@ class OmnivoreSwinPatchMerging(nn.Module):
     def forward(self, hidden_state, height=None, width=None):
         if height is None:
             batch_size, D, height, width, channels = hidden_state.shape
-
         # padding
         pad_input = (height % 2 == 1) or (width % 2 == 1)
         if pad_input:
@@ -471,9 +469,7 @@ class OmnivoreSwinStage(nn.Module):
         if self.downsample is not None:
             self.downsample = downsample(dim=dim, norm_layer=norm_layer)
 
-    def forward(self, hidden_state, use_checkpoint=False, height=None, width=None, use_seg=False):
-        if use_seg:
-            return self.forward_seg(hidden_state, height, width)
+    def forward(self, hidden_state, use_checkpoint=False):
         batch_size, channels, D, height, width = hidden_state.shape
         window_size, shift_size = get_window_size((D, height, width), self.window_size, self.shift_size)
         hidden_state = hidden_state.permute(0, 2, 3, 4, 1)
@@ -490,55 +486,8 @@ class OmnivoreSwinStage(nn.Module):
 
         if self.downsample is not None:
             hidden_state = self.downsample(hidden_state)
-
         hidden_state = hidden_state.permute(0, 4, 1, 2, 3)
-
         return hidden_state
-
-    def forward_seg(self, hidden_state, height, width):
-
-        Hp = int(np.ceil(height / self.window_size[1])) * self.window_size[1]
-        Wp = int(np.ceil(width / self.window_size[2])) * self.window_size[2]
-        img_mask = torch.zeros((1, Hp, Wp, 1), device=hidden_state.device)  # 1 Hp Wp 1
-        h_slices = (
-            slice(0, -self.window_size[1]),
-            slice(-self.window_size[1], -self.shift_size[1]),
-            slice(-self.shift_size[1], None),
-        )
-        w_slices = (
-            slice(0, -self.window_size[2]),
-            slice(-self.window_size[2], -self.shift_size[2]),
-            slice(-self.shift_size[2], None),
-        )
-        cnt = 0
-        for h in h_slices:
-            for w in w_slices:
-                img_mask[:, h, w, :] = cnt
-                cnt += 1
-
-        mask_windows = window_partition_image(img_mask, self.window_size)  # nW, window_size, window_size, 1
-        mask_windows = mask_windows.view(-1, self.window_size[1] * self.window_size[2])
-        attention_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
-        attention_mask = attention_mask.masked_fill(attention_mask != 0, float(-100.0)).masked_fill(
-            attention_mask == 0, float(0.0)
-        )
-
-        for layer in self.layers:
-            layer.height, layer.width = height, width
-            if hidden_state.ndim == 4:
-                batch_size, D, channels, seq_len = hidden_state.shape
-                assert seq_len == height * width, "input feature has wrong size"
-                hidden_state = hidden_state.reshape(batch_size, D, channels, height, width)
-                hidden_state = hidden_state.permute(0, 1, 3, 4, 2)
-            assert hidden_state.shape[2] == height
-            assert hidden_state.shape[3] == width
-            hidden_state = layer(hidden_state, attention_mask)
-        if self.downsample is not None:
-            x_down = self.downsample(hidden_state, height, width)
-            Wh, Ww = (height + 1) // 2, (width + 1) // 2
-            return hidden_state, height, width, x_down, Wh, Ww
-        else:
-            return hidden_state, height, width, hidden_state, height, width
 
 
 class OmnivoreSwinPatchEmbeddings(nn.Module):
@@ -617,7 +566,7 @@ class OmnivoreSwinPatchEmbeddings(nn.Module):
         return hidden_state
 
 
-class OmnivoreSwinTrunk(nn.Module):
+class OmnivoreSwinBackbone(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -730,27 +679,16 @@ class OmnivoreSwinTrunk(nn.Module):
                 for param in m.parameters():
                     param.requires_grad = False
 
+    def train(self, mode=True):
+        """Convert the model into training mode while keep layers freezed."""
+        super(OmnivoreSwinBackbone, self).train(mode)
+        self._freeze_stages()
+
     def _apply_norm(self, x):
         x = x.permute(0, 2, 3, 4, 1)
         x = self.norm(x)
         x = x.permute(0, 4, 1, 2, 3)
         return x
-
-    def forward_intermediate_features(self, stage_outputs, out_feat_keys):
-        out_features = []
-        for key in out_feat_keys:
-            if key.startswith("stage"):
-                rep = "stage"
-            elif key.startswith("interim"):
-                rep = "interim"
-            else:
-                raise ValueError(f"Invalid key {key}")
-            idx = int(key.replace(rep, ""))
-            feat = stage_outputs[idx]
-            if rep == "stage":
-                feat = self._apply_norm(feat)
-            out_features.append(feat)
-        return out_features
 
     def get_patch_embedding(self, hidden_state):
         assert hidden_state.ndim == 5
@@ -776,39 +714,24 @@ class OmnivoreSwinTrunk(nn.Module):
             hidden_state = self.patch_embed(hidden_state)
         return hidden_state
 
-    def forward(
-        self, hidden_state, out_feat_keys=None, use_checkpoint=False, output_hidden_states=False, return_dict=True
-    ):
+    def forward(self, hidden_state, use_checkpoint=False, output_hidden_states=False, return_dict=True):
         all_hidden_states = () if output_hidden_states else None
         hidden_state = self.im2vid(hidden_state)
         hidden_state = self.get_patch_embedding(hidden_state)
         hidden_state = self.pos_drop(hidden_state)
 
         stage_outputs = []
-
         for stage in self.stages:
             hidden_state = stage(hidden_state.contiguous(), use_checkpoint=use_checkpoint)
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_state,)
             stage_outputs.append(hidden_state)
 
-        if out_feat_keys is not None and len(out_feat_keys) > 0:
-            final_hidden_state = self.forward_intermediate_features(stage_outputs, out_feat_keys)
-        else:
-            hidden_state = self._apply_norm(hidden_state)
-            # Mean over the spatiotemporal dimensions
-            hidden_state = torch.mean(hidden_state, [-3, -2, -1])
-
-            final_hidden_state = hidden_state
+        hidden_state = self._apply_norm(hidden_state)
 
         if not return_dict:
-            return tuple(v for v in [final_hidden_state, all_hidden_states] if v is not None)
-        return BaseModelOutputWithNoAttention(last_hidden_state=final_hidden_state, hidden_states=all_hidden_states)
-
-    def train(self, mode=True):
-        """Convert the model into training mode while keep layers freezed."""
-        super(OmnivoreSwinTrunk, self).train(mode)
-        self._freeze_stages()
+            return tuple(v for v in [hidden_state, all_hidden_states] if v is not None)
+        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_state, hidden_states=all_hidden_states)
 
 
 class OmnivoreImageHead(nn.Module):
@@ -856,7 +779,7 @@ class OmnivorePreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
+        if isinstance(module, (nn.Linear, nn.Conv3d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -904,7 +827,7 @@ class OmnivoreModel(OmnivorePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
-        self.trunk = OmnivoreSwinTrunk(config)
+        self.backbone = OmnivoreSwinBackbone(config)
         self.post_init()
 
     @add_start_docstrings_to_model_forward(OMNIVORE_INPUTS_DOCSTRING)
@@ -930,10 +853,10 @@ class OmnivoreModel(OmnivorePreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        outputs = self.trunk(pixel_values)
+        outputs = self.backbone(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
         last_hidden_state = outputs[0]
         # global average pooling, (N, C, D, H, W) -> (N, C)
-        pooled_output = last_hidden_state.mean([-1])
+        pooled_output = last_hidden_state.mean([-4, -2, -1])
 
         if not return_dict:
             return (last_hidden_state, pooled_output) + outputs[1:]
@@ -956,11 +879,11 @@ class OmnivoreForVisionClassification(OmnivorePreTrainedModel):
     # TODO Change Name
     def __init__(self, config):
         super().__init__(config)
-
+        self.num_labels = config.num_labels
         self.num_image_labels = config.num_image_labels or config.num_labels
         self.num_video_labels = config.num_video_labels or config.num_labels
         self.num_rgbd_labels = config.num_rgbd_labels or config.num_labels
-        self.omnivore = OmnivoreModel(config)
+        self.backbone = OmnivoreModel(config)
         self.image_classifier = OmnivoreImageHead(config.embed_dim * 8, self.num_image_labels)
         self.rgbd_classifier = OmnivoreRGBDHead(config.embed_dim * 8, self.num_rgbd_labels)
         self.video_classifier = OmnivoreVideoHead(config.embed_dim * 8, self.num_video_labels)
@@ -979,13 +902,13 @@ class OmnivoreForVisionClassification(OmnivorePreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor = None,
-        pixel_input_type: str = None,
+        input_type: str = None,
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
         r"""
-        pixel_input_type (`str`):
+        input_type (`str`):
             Which classification head to use for the classification of given pixel_values
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -1016,18 +939,20 @@ class OmnivoreForVisionClassification(OmnivorePreTrainedModel):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.omnivore(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
+        outputs = self.backbone(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
         sequence_output = outputs[0]
+        sequence_output = torch.mean(sequence_output, [-3, -2, -1])
 
-        logits = None
-        if pixel_input_type == "image":
+        logits = self.video_classifier(sequence_output)
+        self.num_labels = self.num_video_labels
+
+        if input_type == "image":
             logits = self.image_classifier(sequence_output)
+            self.num_labels = self.num_image_labels
 
-        if pixel_input_type == "video":
-            logits = self.video_classifier(sequence_output)
-
-        if pixel_input_type == "rgbd":
+        if input_type == "rgbd":
             logits = self.rgbd_classifier(sequence_output)
+            self.num_labels = self.num_rgbd_labels
 
         loss = None
         if labels is not None:
@@ -1051,12 +976,9 @@ class OmnivoreForVisionClassification(OmnivorePreTrainedModel):
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)
+
         if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return ImageClassifierOutputWithNoAttention(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-        )
+        return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)

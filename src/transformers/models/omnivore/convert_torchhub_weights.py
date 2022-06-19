@@ -73,7 +73,7 @@ def convert_weight_and_push(config: OmnivoreConfig, name: str, save_directory: P
     dest_model.save_pretrained(save_directory / checkpoint_name)
     feature_extractor = OmnivoreFeatureExtractor()
     feature_extractor.save_pretrained(save_directory / checkpoint_name)
-    print(f"Pushed {checkpoint_name}")
+    print(f"Pushed {checkpoint_name}\n\n")
 
 
 def convert_weights_and_push(save_directory: Path, model_name: str = None):

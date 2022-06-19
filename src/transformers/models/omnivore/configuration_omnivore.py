@@ -14,8 +14,6 @@
 # limitations under the License.
 """ Omnivore model configuration"""
 
-from torch import nn
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 

@@ -15,119 +15,140 @@
 """ Testing suite for the PyTorch Omnivore model. """
 
 import inspect
-import os
-import pickle
-import tempfile
+import math
 import unittest
+import warnings
 
-from transformers import OmnivoreConfig
+from transformers import MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING, OmnivoreConfig
+from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_torch_fx_available, is_vision_available
+from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_torch_available():
     import torch
-    from torch import nn
 
-    from transformers import OmnivoreForImageClassification, OmnivoreForMaskedImageModeling, OmnivoreModel
-    from transformers.models.omnivore.modeling_omnivore import OMNIVORE_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
+    from transformers import OmnivoreForVisionClassification, OmnivoreModel
+    from transformers.models.omnivore.modeling_omnivore import OMNIVORE_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
     from PIL import Image
 
     from transformers import AutoFeatureExtractor
 
-if is_torch_fx_available():
-    from transformers.utils.fx import symbolic_trace
+
+class OmnivoreConfigTester(ConfigTester):
+    def create_and_test_config_common_properties(self):
+        config = self.config_class(**self.inputs_dict)
+        self.parent.assertTrue(hasattr(config, "window_size"))
+        self.parent.assertTrue(hasattr(config, "num_heads"))
+        self.parent.assertTrue(hasattr(config, "patch_size"))
+        self.parent.assertTrue(hasattr(config, "depth_mode"))
 
 
 class OmnivoreModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=5,
         image_size=32,
-        patch_size=2,
-        num_channels=3,
-        embed_dim=16,
-        depths=[1, 2, 1],
-        num_heads=[2, 2, 4],
-        window_size=2,
-        mlp_ratio=2.0,
+        frames=4,
+        num_image_labels=2,
+        num_video_labels=4,
+        num_rgbd_labels=3,
+        input_channels=3,
+        patch_size=[2, 4, 4],
+        embed_dim=96,
+        depths=[2, 2, 2, 2],
+        num_heads=[3, 3, 4, 4],
+        window_size=[8, 7, 7],
+        mlp_ratio=4.0,
         qkv_bias=True,
-        hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
-        drop_path_rate=0.1,
-        hidden_act="gelu",
-        use_absolute_embeddings=False,
+        qk_scale=None,
+        dropout_rate=0.0,
+        attention_dropout_rate=0.0,
+        drop_path_rate=0.3,
         patch_norm=True,
+        frozen_stages=-1,
+        depth_mode="summed_rgb_d_tokens",
         initializer_range=0.02,
-        layer_norm_eps=1e-5,
         is_training=True,
-        scope=None,
         use_labels=True,
-        type_sequence_label_size=10,
-        encoder_stride=8,
     ):
         self.parent = parent
         self.batch_size = batch_size
         self.image_size = image_size
+        self.frames = frames
+        self.num_image_labels = num_image_labels
+        self.num_video_labels = num_video_labels
+        self.num_rgbd_labels = num_rgbd_labels
+        self.input_channels = input_channels
         self.patch_size = patch_size
-        self.num_channels = num_channels
         self.embed_dim = embed_dim
         self.depths = depths
         self.num_heads = num_heads
         self.window_size = window_size
         self.mlp_ratio = mlp_ratio
         self.qkv_bias = qkv_bias
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.qk_scale = qk_scale
+        self.dropout_rate = dropout_rate
+        self.attention_dropout_rate = attention_dropout_rate
         self.drop_path_rate = drop_path_rate
-        self.hidden_act = hidden_act
-        self.use_absolute_embeddings = use_absolute_embeddings
         self.patch_norm = patch_norm
-        self.layer_norm_eps = layer_norm_eps
+        self.frozen_stages = frozen_stages
+        self.depth_mode = depth_mode
         self.initializer_range = initializer_range
         self.is_training = is_training
-        self.scope = scope
         self.use_labels = use_labels
-        self.type_sequence_label_size = type_sequence_label_size
-        self.encoder_stride = encoder_stride
 
-    def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+    def prepare_config_and_inputs(self, input_type=None):
+        pixel_values_images = floats_tensor(
+            [self.batch_size, self.input_channels, 1, self.image_size, self.image_size]
+        )
+        pixel_values_videos = floats_tensor(
+            [self.batch_size, self.input_channels, self.frames, self.image_size, self.image_size]
+        )
+        pixel_values_rgbds = floats_tensor(
+            [self.batch_size, self.input_channels + 1, 1, self.image_size, self.image_size]
+        )
 
-        labels = None
         if self.use_labels:
-            labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-
+            image_labels = ids_tensor([self.batch_size], self.num_image_labels)
+            video_labels = ids_tensor([self.batch_size], self.num_video_labels)
+            rgbd_labels = ids_tensor([self.batch_size], self.num_rgbd_labels)
         config = self.get_config()
 
-        return config, pixel_values, labels
+        if input_type == "image":
+            return config, pixel_values_images, image_labels
+        elif input_type == "rgbd":
+            return config, pixel_values_rgbds, rgbd_labels
+        else:
+            return config, pixel_values_videos, video_labels
 
     def get_config(self):
         return OmnivoreConfig(
-            image_size=self.image_size,
+            num_image_labels=self.num_image_labels,
+            num_video_labels=self.num_video_labels,
+            num_rgbd_labels=self.num_rgbd_labels,
+            input_channels=self.input_channels,
             patch_size=self.patch_size,
-            num_channels=self.num_channels,
             embed_dim=self.embed_dim,
             depths=self.depths,
             num_heads=self.num_heads,
             window_size=self.window_size,
             mlp_ratio=self.mlp_ratio,
             qkv_bias=self.qkv_bias,
-            hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
+            qk_scale=self.qk_scale,
+            dropout_rate=self.dropout_rate,
+            attention_dropout_rate=self.attention_dropout_rate,
             drop_path_rate=self.drop_path_rate,
-            hidden_act=self.hidden_act,
-            use_absolute_embeddings=self.use_absolute_embeddings,
-            path_norm=self.patch_norm,
-            layer_norm_eps=self.layer_norm_eps,
+            patch_norm=self.patch_norm,
+            frozen_stages=self.frozen_stages,
+            depth_mode=self.depth_mode,
             initializer_range=self.initializer_range,
-            encoder_stride=self.encoder_stride,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -136,21 +157,43 @@ class OmnivoreModelTester:
         model.eval()
         result = model(pixel_values)
 
-        expected_seq_len = ((config.image_size // config.patch_size) ** 2) // (4 ** (len(config.depths) - 1))
-        expected_dim = int(config.embed_dim * 2 ** (len(config.depths) - 1))
+        def get_size(x, i):
+            return math.ceil(((x - (self.model_tester.patch_size[i] - 1) - 1) / self.model_tester.patch_size[i]) + 1)
 
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, expected_seq_len, expected_dim))
+        ater_patch_embed_dim = (get_size(self.frames, 0), get_size(self.image_size, 1), get_size(self.image_size, 2))
+        expected_seq_len = math.ceil(ater_patch_embed_dim[1] // (2 ** (len(config.depths) - 1)))
+        expected_dim = int(config.embed_dim * 2 ** (len(config.depths) - 1))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, expected_dim, ater_patch_embed_dim[0], expected_seq_len, expected_seq_len),
+        )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
-        config.num_labels = self.type_sequence_label_size
-        model = OmnivoreForImageClassification(config)
+        config.num_image_labels = self.num_image_labels
+        model = OmnivoreForVisionClassification(config)
         model.to(torch_device)
         model.eval()
-        result = model(pixel_values, labels=labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+        result = model(pixel_values, "image", labels=labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_image_labels))
 
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
+    def create_and_check_for_video_classification(self, config, pixel_values, labels):
+        config.num_video_labels = self.num_video_labels
+        model = OmnivoreForVisionClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values, "video", labels=labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_video_labels))
+
+    def create_and_check_for_rgbd_classification(self, config, pixel_values, labels):
+        config.num_rgbd_labels = self.num_rgbd_labels
+        model = OmnivoreForVisionClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values, "rgbd", labels=labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_rgbd_labels))
+
+    def prepare_config_and_inputs_for_common(self, input_type=None):
+        config_and_inputs = self.prepare_config_and_inputs(input_type=input_type)
         (
             config,
             pixel_values,
@@ -166,24 +209,25 @@ class OmnivoreModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             OmnivoreModel,
-            OmnivoreForImageClassification,
-            OmnivoreForMaskedImageModeling,
+            OmnivoreForVisionClassification,
         )
         if is_torch_available()
         else ()
     )
-    fx_compatible = False
-
     test_pruning = False
+    test_torchscript = False
     test_resize_embeddings = False
     test_head_masking = False
+    has_attentions = False
 
     def setUp(self):
         self.model_tester = OmnivoreModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=OmnivoreConfig, embed_dim=37)
+        self.config_tester = OmnivoreConfigTester(
+            self, config_class=OmnivoreConfig, has_text_modality=False, embed_dim=37
+        )
 
     def test_config(self):
-        self.create_and_test_config_common_properties()
+        self.config_tester.create_and_test_config_common_properties()
         self.config_tester.create_and_test_config_to_json_string()
         self.config_tester.create_and_test_config_to_json_file()
         self.config_tester.create_and_test_config_from_and_save_pretrained()
@@ -191,25 +235,17 @@ class OmnivoreModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester.check_config_can_be_init_without_params()
         self.config_tester.check_config_arguments_init()
 
-    def create_and_test_config_common_properties(self):
-        return
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
+    @unittest.skip(reason="ViT does not use inputs_embeds")
     def test_inputs_embeds(self):
-        # Omnivore does not use inputs_embeds
         pass
 
+    @unittest.skip(reason="Levit does not support input and output embeddings")
     def test_model_common_attributes(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        pass
 
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
-            x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, nn.Linear))
+    @unittest.skip(reason="Levit does not output attentions")
+    def test_attention_outputs(self):
+        pass
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -223,140 +259,200 @@ class OmnivoreModelTest(ModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    def test_attention_outputs(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.return_dict = True
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
 
-        for model_class in self.all_model_classes:
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = False
-            config.return_dict = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.attentions
-            expected_num_attentions = len(self.model_tester.depths)
-            self.assertEqual(len(attentions), expected_num_attentions)
-
-            # check that output_attentions also work using config
-            del inputs_dict["output_attentions"]
-            config.output_attentions = True
-            window_size_squared = config.window_size**2
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.attentions
-            self.assertEqual(len(attentions), expected_num_attentions)
-
-            self.assertListEqual(
-                list(attentions[0].shape[-3:]),
-                [self.model_tester.num_heads[0], window_size_squared, window_size_squared],
-            )
-            out_len = len(outputs)
-
-            # Check attention is always last and order is fine
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            if hasattr(self.model_tester, "num_hidden_states_types"):
-                added_hidden_states = self.model_tester.num_hidden_states_types
-            else:
-                # also another +1 for reshaped_hidden_states
-                added_hidden_states = 2
-            self.assertEqual(out_len + added_hidden_states, len(outputs))
-
-            self_attentions = outputs.attentions
-
-            self.assertEqual(len(self_attentions), expected_num_attentions)
-
-            self.assertListEqual(
-                list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_heads[0], window_size_squared, window_size_squared],
-            )
-
-    def check_hidden_states_output(self, inputs_dict, config, model_class, image_size):
-        model = model_class(config)
-        model.to(torch_device)
-        model.eval()
-
-        with torch.no_grad():
-            outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-        hidden_states = outputs.hidden_states
-
-        expected_num_layers = getattr(
-            self.model_tester, "expected_num_hidden_layers", len(self.model_tester.depths) + 1
-        )
-        self.assertEqual(len(hidden_states), expected_num_layers)
-
-        # Omnivore has a different seq_length
-        patch_size = to_2tuple(config.patch_size)
-
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-
-        self.assertListEqual(
-            list(hidden_states[0].shape[-2:]),
-            [num_patches, self.model_tester.embed_dim],
-        )
-
-        reshaped_hidden_states = outputs.reshaped_hidden_states
-        self.assertEqual(len(reshaped_hidden_states), expected_num_layers)
-
-        batch_size, num_channels, height, width = reshaped_hidden_states[0].shape
-        reshaped_hidden_states = (
-            reshaped_hidden_states[0].view(batch_size, num_channels, height * width).permute(0, 2, 1)
-        )
-        self.assertListEqual(
-            list(reshaped_hidden_states.shape[-2:]),
-            [num_patches, self.model_tester.embed_dim],
-        )
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+        return inputs_dict
 
     def test_hidden_states_output(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
 
-        image_size = to_2tuple(self.model_tester.image_size)
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            hidden_states = outputs.hidden_states
+
+            expected_num_layers = len(self.model_tester.depths)
+            self.assertEqual(len(hidden_states), expected_num_layers)
+
+            def get_size(x, i):
+                return math.ceil(
+                    ((x - (self.model_tester.patch_size[i] - 1) - 1) / self.model_tester.patch_size[i]) + 1
+                )
+
+            # verify the first hidden states (first block)
+            self.assertListEqual(
+                list(hidden_states[0].shape[-4:]),
+                [
+                    int(self.model_tester.embed_dim * 2),
+                    math.ceil(get_size(self.model_tester.frames, 0)),
+                    math.ceil(get_size(self.model_tester.image_size, 1) // 2),
+                    math.ceil(get_size(self.model_tester.image_size, 2) // 2),
+                ],
+            )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             inputs_dict["output_hidden_states"] = True
-            self.check_hidden_states_output(inputs_dict, config, model_class, image_size)
-
+            check_hidden_states_output(inputs_dict, config, model_class)
             # check that output_hidden_states also work using config
             del inputs_dict["output_hidden_states"]
             config.output_hidden_states = True
+            check_hidden_states_output(inputs_dict, config, model_class)
 
-            self.check_hidden_states_output(inputs_dict, config, model_class, image_size)
+    def test_problem_types(self):
+        for input_type in ["rgbd", "image", "video"]:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common(input_type=input_type)
+            if input_type == "images":
+                problem_types = [
+                    {"title": "multi_label_classification", "num_labels": 2, "dtype": torch.float},
+                    {"title": "single_label_classification", "num_labels": 1, "dtype": torch.long},
+                    {"title": "regression", "num_labels": 1, "dtype": torch.float},
+                ]
 
-    def test_hidden_states_output_with_padding(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.patch_size = 3
+                for model_class in self.all_model_classes:
+                    if model_class not in [
+                        *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
+                    ]:
+                        continue
 
-        image_size = to_2tuple(self.model_tester.image_size)
-        patch_size = to_2tuple(config.patch_size)
+                    for problem_type in problem_types:
+                        with self.subTest(msg=f"Testing {model_class} with {problem_type['title']}"):
 
-        padded_height = image_size[0] + patch_size[0] - (image_size[0] % patch_size[0])
-        padded_width = image_size[1] + patch_size[1] - (image_size[1] % patch_size[1])
+                            config.problem_type = problem_type["title"]
+                            config.num_image_labels = problem_type["num_labels"]
 
-        for model_class in self.all_model_classes:
-            inputs_dict["output_hidden_states"] = True
-            self.check_hidden_states_output(inputs_dict, config, model_class, (padded_height, padded_width))
+                            model = model_class(config)
+                            model.to(torch_device)
+                            model.train()
 
-            # check that output_hidden_states also work using config
-            del inputs_dict["output_hidden_states"]
-            config.output_hidden_states = True
-            self.check_hidden_states_output(inputs_dict, config, model_class, (padded_height, padded_width))
+                            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+
+                            if problem_type["num_labels"] > 1:
+                                inputs["labels"] = inputs["labels"].unsqueeze(1).repeat(1, problem_type["num_labels"])
+                            inputs["input_type"] = "image"
+                            inputs["labels"] = inputs["labels"].to(problem_type["dtype"])
+
+                            # This tests that we do not trigger the warning form PyTorch "Using a target size that is different
+                            # to the input size. This will likely lead to incorrect results due to broadcasting. Please ensure
+                            # they have the same size." which is a symptom something in wrong for the regression problem.
+                            # See https://github.com/huggingface/transformers/issues/11780
+                            with warnings.catch_warnings(record=True) as warning_list:
+                                loss = model(**inputs).loss
+                            for w in warning_list:
+                                if "Using a target size that is different to the input size" in str(w.message):
+                                    raise ValueError(
+                                        f"Something is going wrong in the regression problem: intercepted {w.message}"
+                                    )
+
+                            loss.backward()
+
+            elif input_type == "rgbd":
+                problem_types = [
+                    {"title": "multi_label_classification", "num_labels": 2, "dtype": torch.float},
+                    {"title": "single_label_classification", "num_labels": 1, "dtype": torch.long},
+                    {"title": "regression", "num_labels": 1, "dtype": torch.float},
+                ]
+
+                for model_class in self.all_model_classes:
+                    if model_class not in [
+                        *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
+                    ]:
+                        continue
+
+                    for problem_type in problem_types:
+                        with self.subTest(msg=f"Testing {model_class} with {problem_type['title']}"):
+
+                            config.problem_type = problem_type["title"]
+                            config.num_rgbd_labels = problem_type["num_labels"]
+
+                            model = model_class(config)
+                            model.to(torch_device)
+                            model.train()
+
+                            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                            inputs["input_type"] = "rgbd"
+                            if problem_type["num_labels"] > 1:
+                                inputs["labels"] = inputs["labels"].unsqueeze(1).repeat(1, problem_type["num_labels"])
+
+                            inputs["labels"] = inputs["labels"].to(problem_type["dtype"])
+
+                            # This tests that we do not trigger the warning form PyTorch "Using a target size that is different
+                            # to the input size. This will likely lead to incorrect results due to broadcasting. Please ensure
+                            # they have the same size." which is a symptom something in wrong for the regression problem.
+                            # See https://github.com/huggingface/transformers/issues/11780
+                            with warnings.catch_warnings(record=True) as warning_list:
+                                loss = model(**inputs).loss
+                            for w in warning_list:
+                                if "Using a target size that is different to the input size" in str(w.message):
+                                    raise ValueError(
+                                        f"Something is going wrong in the regression problem: intercepted {w.message}"
+                                    )
+
+                            loss.backward()
+
+            else:
+                problem_types = [
+                    {"title": "multi_label_classification", "num_labels": 2, "dtype": torch.float},
+                    {"title": "single_label_classification", "num_labels": 1, "dtype": torch.long},
+                    {"title": "regression", "num_labels": 1, "dtype": torch.float},
+                ]
+
+                for model_class in self.all_model_classes:
+                    if model_class not in [
+                        *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
+                    ]:
+                        continue
+
+                    for problem_type in problem_types:
+                        with self.subTest(msg=f"Testing {model_class} with {problem_type['title']}"):
+
+                            config.problem_type = problem_type["title"]
+                            config.num_video_labels = problem_type["num_labels"]
+
+                            model = model_class(config)
+                            model.to(torch_device)
+                            model.train()
+                            inputs["input_type"] = "video"
+                            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+
+                            if problem_type["num_labels"] > 1:
+                                inputs["labels"] = inputs["labels"].unsqueeze(1).repeat(1, problem_type["num_labels"])
+
+                            inputs["labels"] = inputs["labels"].to(problem_type["dtype"])
+
+                            # This tests that we do not trigger the warning form PyTorch "Using a target size that is different
+                            # to the input size. This will likely lead to incorrect results due to broadcasting. Please ensure
+                            # they have the same size." which is a symptom something in wrong for the regression problem.
+                            # See https://github.com/huggingface/transformers/issues/11780
+                            with warnings.catch_warnings(record=True) as warning_list:
+                                loss = model(**inputs).loss
+                            for w in warning_list:
+                                if "Using a target size that is different to the input size" in str(w.message):
+                                    raise ValueError(
+                                        f"Something is going wrong in the regression problem: intercepted {w.message}"
+                                    )
+
+                            loss.backward()
 
     def test_for_image_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config_and_inputs = self.model_tester.prepare_config_and_inputs("image")
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
+
+    def test_for_video_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs("video")
+        self.model_tester.create_and_check_for_video_classification(*config_and_inputs)
+
+    def test_for_rgbd_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs("rgbd")
+        self.model_tester.create_and_check_for_rgbd_classification(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):
@@ -364,112 +460,11 @@ class OmnivoreModelTest(ModelTesterMixin, unittest.TestCase):
             model = OmnivoreModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if "embeddings" not in name and param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
-
-    def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
-        if not is_torch_fx_available() or not self.fx_compatible:
-            return
-
-        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
-        configs_no_init.return_dict = False
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            model.to(torch_device)
-            model.eval()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=output_loss)
-
-            try:
-                if model.config.is_encoder_decoder:
-                    model.config.use_cache = False  # FSTM still requires this hack -> FSTM should probably be refactored similar to BART afterward
-                    labels = inputs.get("labels", None)
-                    input_names = ["input_ids", "attention_mask", "decoder_input_ids", "decoder_attention_mask"]
-                    if labels is not None:
-                        input_names.append("labels")
-
-                    filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
-                    input_names = list(filtered_inputs.keys())
-
-                    model_output = model(**filtered_inputs)
-
-                    traced_model = symbolic_trace(model, input_names)
-                    traced_output = traced_model(**filtered_inputs)
-                else:
-                    input_names = ["input_ids", "attention_mask", "token_type_ids", "pixel_values"]
-
-                    labels = inputs.get("labels", None)
-                    start_positions = inputs.get("start_positions", None)
-                    end_positions = inputs.get("end_positions", None)
-                    if labels is not None:
-                        input_names.append("labels")
-                    if start_positions is not None:
-                        input_names.append("start_positions")
-                    if end_positions is not None:
-                        input_names.append("end_positions")
-
-                    filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
-                    input_names = list(filtered_inputs.keys())
-
-                    model_output = model(**filtered_inputs)
-
-                    traced_model = symbolic_trace(model, input_names)
-                    traced_output = traced_model(**filtered_inputs)
-
-            except RuntimeError as e:
-                self.fail(f"Couldn't trace module: {e}")
-
-            def flatten_output(output):
-                flatten = []
-                for x in output:
-                    if isinstance(x, (tuple, list)):
-                        flatten += flatten_output(x)
-                    elif not isinstance(x, torch.Tensor):
-                        continue
-                    else:
-                        flatten.append(x)
-                return flatten
-
-            model_output = flatten_output(model_output)
-            traced_output = flatten_output(traced_output)
-            num_outputs = len(model_output)
-
-            for i in range(num_outputs):
-                self.assertTrue(
-                    torch.allclose(model_output[i], traced_output[i]),
-                    f"traced {i}th output doesn't match model {i}th output for {model_class}",
-                )
-
-            # Test that the model can be serialized and restored properly
-            with tempfile.TemporaryDirectory() as tmp_dir_name:
-                pkl_file_name = os.path.join(tmp_dir_name, "model.pkl")
-                try:
-                    with open(pkl_file_name, "wb") as f:
-                        pickle.dump(traced_model, f)
-                    with open(pkl_file_name, "rb") as f:
-                        loaded = pickle.load(f)
-                except Exception as e:
-                    self.fail(f"Couldn't serialize / deserialize the traced model: {e}")
-
-                loaded_output = loaded(**filtered_inputs)
-                loaded_output = flatten_output(loaded_output)
-
-                for i in range(num_outputs):
-                    self.assertTrue(
-                        torch.allclose(model_output[i], loaded_output[i]),
-                        f"serialized model {i}th output doesn't match model {i}th output for {model_class}",
-                    )
+# We will verify our results on an image of cute cats
+def prepare_img():
+    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+    return image
 
 
 @require_vision
@@ -477,20 +472,16 @@ class OmnivoreModelTest(ModelTesterMixin, unittest.TestCase):
 class OmnivoreModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return (
-            AutoFeatureExtractor.from_pretrained("anugunj/swinT")
-            if is_vision_available()
-            else None
-        )
+        return AutoFeatureExtractor.from_pretrained("anugunj/omnivore-swinT") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
-        model = OmnivoreForImageClassification.from_pretrained("anugunj/swinT").to(torch_device)
+        model = OmnivoreForVisionClassification.from_pretrained("anugunj/omnivore-swinT").to(torch_device)
         feature_extractor = self.default_feature_extractor
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
-
+        inputs["input_type"] = "image"
         # forward pass
         with torch.no_grad():
             outputs = model(**inputs)
