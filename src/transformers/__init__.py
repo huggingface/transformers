@@ -1395,7 +1395,7 @@ else:
     _import_structure["models.mt5"].extend(["MT5EncoderModel", "MT5ForConditionalGeneration", "MT5Model"])
     _import_structure["models.nezha"].extend(
         [
-            "NEZHA_PRETRAINED_MODEL_ARCHIVE_MAP",
+            "NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST",
             "NeZhaForMaskedLM",
             "NeZhaForPreTraining",
             "NeZhaForNextSentencePrediction",
@@ -3849,7 +3849,7 @@ if TYPE_CHECKING:
         )
         from .models.mt5 import MT5EncoderModel, MT5ForConditionalGeneration, MT5Model
         from .models.nezha import (
-            NEZHA_PRETRAINED_MODEL_ARCHIVE_MAP,
+            NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST,
             NeZhaForMaskedLM,
             NeZhaForMultipleChoice,
             NeZhaForNextSentencePrediction,

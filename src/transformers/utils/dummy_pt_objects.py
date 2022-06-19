@@ -3130,7 +3130,7 @@ class MT5Model(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-NEZHA_PRETRAINED_MODEL_ARCHIVE_MAP = None
+NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
 class NeZhaForMaskedLM(metaclass=DummyObject):

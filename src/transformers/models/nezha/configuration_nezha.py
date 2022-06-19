@@ -1,17 +1,19 @@
 from transformers import PretrainedConfig
 
 
-NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
+NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "sijunhe/nezha-cn-base": "https://huggingface.co/sijunhe/nezha-cn-base/blob/main/config.json",
+}
 
 
 class NeZhaConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of an [`NeZhaModel`]. It is used to
-    instantiate an NeZha model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the NeZha base architecture.
+    This is the configuration class to store the configuration of an [`NeZhaModel`]. It is used to instantiate an NeZha
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the NeZha base architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
-    outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
 
     Args:

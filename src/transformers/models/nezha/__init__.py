@@ -32,7 +32,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_nezha"] = [
-        "NEZHA_PRETRAINED_MODEL_ARCHIVE_MAP",
+        "NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST",
         "NeZhaForNextSentencePrediction",
         "NeZhaForMaskedLM",
         "NeZhaForPreTraining",
@@ -56,7 +56,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_nezha import (
-            NEZHA_PRETRAINED_MODEL_ARCHIVE_MAP,
+            NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST,
             NeZhaForMaskedLM,
             NeZhaForMultipleChoice,
             NeZhaForNextSentencePrediction,

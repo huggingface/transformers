@@ -936,7 +936,6 @@ class ModelTesterMixin:
             inputs_dict["output_attentions"] = True
             config.output_hidden_states = False
             model = model_class(config=config)
-            print(model_class)
             model.to(torch_device)
             model.eval()
             heads_to_prune = {
