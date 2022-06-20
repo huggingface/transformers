@@ -19,7 +19,7 @@
 import math
 import os
 import warnings
-from typing import Optional, Tuple, List, Dict
+from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
@@ -28,6 +28,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...configuration_utils import PretrainedConfig
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -51,7 +52,6 @@ from ...utils import (
     requires_backends,
 )
 from .configuration_qdqbert import QDQBertConfig
-from ...configuration_utils import PretrainedConfig
 
 
 logger = logging.get_logger(__name__)
@@ -851,7 +851,7 @@ class QDQBertModel(QDQBertPreTrainedModel):
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
-    def __init__(self, config: PretrainedConfig, add_pooling_layer: bool=True):
+    def __init__(self, config: PretrainedConfig, add_pooling_layer: bool = True):
         requires_backends(self, "pytorch_quantization")
         super().__init__(config)
         self.config = config
@@ -887,19 +887,19 @@ class QDQBertModel(QDQBertPreTrainedModel):
     )
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor]=None,
-        attention_mask: Optional[torch.FloatTensor]=None,
-        token_type_ids: Optional[torch.LongTensor]=None,
-        position_ids: Optional[torch.LongTensor]=None,
-        head_mask: Optional[torch.FloatTensor]=None,
-        inputs_embeds: Optional[torch.FloatTensor]=None,
-        encoder_hidden_states: Optional[torch.FloatTensor]=None,
-        encoder_attention_mask: Optional[torch.FloatTensor]=None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]]=None,
-        use_cache: Optional[bool]=None,
-        output_attentions: Optional[bool]=None,
-        output_hidden_states: Optional[bool]=None,
-        return_dict: Optional[bool]=None,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ):
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
