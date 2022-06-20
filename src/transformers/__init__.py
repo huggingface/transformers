@@ -312,7 +312,6 @@ _import_structure = {
         "TrOCRConfig",
         "TrOCRProcessor",
     ],
-    "models.ul2": [],
     "models.unispeech": [
         "UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "UniSpeechConfig",

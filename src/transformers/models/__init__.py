@@ -126,7 +126,6 @@ from . import (
     trajectory_transformer,
     transfo_xl,
     trocr,
-    ul2,
     unispeech,
     unispeech_sat,
     van,
