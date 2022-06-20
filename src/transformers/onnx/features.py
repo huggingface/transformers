@@ -408,6 +408,11 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls="models.mobilebert.MobileBertOnnxConfig",
         ),
+        "mobilenet_v1": supported_features_mapping(
+            "default",
+            "image-classification",
+            onnx_config_cls="models.mobilenet_v1.MobileNetV1OnnxConfig",
+        ),
         "mobilenet_v2": supported_features_mapping(
             "default",
             "image-classification",
