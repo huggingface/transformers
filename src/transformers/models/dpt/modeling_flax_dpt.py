@@ -324,13 +324,27 @@ class FlaxDPTReassembleLayerCollection(nn.Module):
         return self.layers[i](x)
 
 
+class FlaxDPTReadoutProjectSequentialCollectionLayer(nn.Module):
+    config: DPTConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.dense = nn.Dense(self.config.hidden_size, name="0")
+        self.act = ACT2FN[self.config.hidden_act]
+
+    def __call__(self, x):
+        x = self.dense(x)
+        x = self.act(x)
+        return x
+
+
 class FlaxDPTReadoutProjectCollectionLayer(nn.Module):
     config: DPTConfig
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
         self.layers = [
-            nn.Sequential([nn.Dense(self.config.hidden_size, name=str(i)), ACT2FN[self.config.hidden_act]])
+            FlaxDPTReadoutProjectSequentialCollectionLayer(self.config, self.dtype, name=str(i))
             for i in range(len(self.config.neck_hidden_sizes))
         ]
 
