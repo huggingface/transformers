@@ -647,15 +647,15 @@ def tf_shard_checkpoint(weights, max_shard_size="10GB"):
 
 def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, strict=True):
     """
-    This is the same as
-    [`torch.nn.Module.load_state_dict`](https://pytorch.org/docs/stable/generated/torch.nn.Module.html?highlight=load_state_dict#torch.nn.Module.load_state_dict)
-    but for a sharded checkpoint.
+    This is the same as `load_tf_weights`  but for a sharded checkpoint. 
+    Detect missing and unexpected layers and load the TF weights from the shard file accordingly to their names and
+    shapes.
 
     This load is performed efficiently: each checkpoint shard is loaded one by one in RAM and deleted after being
     loaded in the model.
 
     Args:
-        model (`torch.nn.Module`): The model in which to load the checkpoint.
+        model (`tf.keras.models.Model`): The model in which to load the checkpoint.
         shard_files (`str` or `os.PathLike`): A list containing the sharded checkpoint names.
         ignore_mismatched_sizes`bool`, *optional`, defaults to `True`):
             Whether or not to ignore the mismatch between the sizes
@@ -663,10 +663,8 @@ def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, s
             Whether to strictly enforce that the keys in the model state dict match the keys in the sharded checkpoint.
 
     Returns:
-        `NamedTuple`: A named tuple with `missing_keys` and `unexpected_keys` fields
-            - `missing_keys` is a list of str containing the missing keys
-            - `unexpected_keys` is a list of str containing the unexpected keys
-            - `missmatched_keys` is a list of str containing the missmatched keys
+        Three lists, one for the missing layers, another one for the unexpected layers, and a last one for the
+        mismatched layers.
     """
 
     # Load the index
@@ -715,7 +713,7 @@ def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatch
         resolved_archive_file (`str`): Path to the checkpoint file from which the weights will be loaded
         ignore_mismatched_sizes (`bool`, *optional*, defaults to `False`): Whether to ignore the mismatched keys
 
-    Returns:
+    Returns:tf.keras.models.Model
         Three lists, one for the layers that were found and succesfully restored (from the shard file), one for the
         missmatched layers, and another one for the unexpected layers.
     """
