@@ -19,7 +19,7 @@
 import math
 import os
 import warnings
-from typing import Optional
+from typing import Optional, Tuple, List, Dict
 
 import torch
 import torch.utils.checkpoint
@@ -51,6 +51,7 @@ from ...utils import (
     requires_backends,
 )
 from .configuration_qdqbert import QDQBertConfig
+from ...configuration_utils import PretrainedConfig
 
 
 logger = logging.get_logger(__name__)
@@ -850,7 +851,7 @@ class QDQBertModel(QDQBertPreTrainedModel):
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: PretrainedConfig, add_pooling_layer: bool=True):
         requires_backends(self, "pytorch_quantization")
         super().__init__(config)
         self.config = config
@@ -869,7 +870,7 @@ class QDQBertModel(QDQBertPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    def _prune_heads(self, heads_to_prune):
+    def _prune_heads(self, heads_to_prune: Dict[int, List[int]]):
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
         class PreTrainedModel
@@ -886,19 +887,19 @@ class QDQBertModel(QDQBertPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        past_key_values=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        input_ids: Optional[torch.LongTensor]=None,
+        attention_mask: Optional[torch.FloatTensor]=None,
+        token_type_ids: Optional[torch.LongTensor]=None,
+        position_ids: Optional[torch.LongTensor]=None,
+        head_mask: Optional[torch.FloatTensor]=None,
+        inputs_embeds: Optional[torch.FloatTensor]=None,
+        encoder_hidden_states: Optional[torch.FloatTensor]=None,
+        encoder_attention_mask: Optional[torch.FloatTensor]=None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]]=None,
+        use_cache: Optional[bool]=None,
+        output_attentions: Optional[bool]=None,
+        output_hidden_states: Optional[bool]=None,
+        return_dict: Optional[bool]=None,
     ):
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
