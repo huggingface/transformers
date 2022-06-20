@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 # Original license: https://github.com/apple/ml-cvnets/blob/main/LICENSE
-""" PyTorch MobileNetV2 model."""
+""" PyTorch MobileNetV1 model."""
 
 
 import math
@@ -41,33 +41,33 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_mobilenetv2 import MobileNetV2Config
+from .configuration_mobilenet_v1 import MobileNetV1Config
 
 
 logger = logging.get_logger(__name__)
 
 
 # General docstring
-_CONFIG_FOR_DOC = "MobileNetV2Config"
-_FEAT_EXTRACTOR_FOR_DOC = "MobileNetV2FeatureExtractor"
+_CONFIG_FOR_DOC = "MobileNetV1Config"
+_FEAT_EXTRACTOR_FOR_DOC = "MobileNetV1FeatureExtractor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "Matthijs/mobilenetv2-small"
+_CHECKPOINT_FOR_DOC = "Matthijs/mobilenet_v1-small"
 _EXPECTED_OUTPUT_SHAPE = [1, 640, 8, 8]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "Matthijs/mobilenetv2-small"
+_IMAGE_CLASS_CHECKPOINT = "Matthijs/mobilenet_v1-small"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-MOBILENETV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Matthijs/mobilenetv2-small",
-    "Matthijs/mobilenetv2-x-small",
-    "Matthijs/mobilenetv2-xx-small",
-    "Matthijs/deeplabv3-mobilenetv2-small",
-    "Matthijs/deeplabv3-mobilenetv2-x-small",
-    "Matthijs/deeplabv3-mobilenetv2-xx-small",
-    # See all MobileNetV2 models at https://huggingface.co/models?filter=mobilenetv2
+MOBILENET_V1_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "Matthijs/mobilenet_v1-small",
+    "Matthijs/mobilenet_v1-x-small",
+    "Matthijs/mobilenet_v1-xx-small",
+    "Matthijs/deeplabv3-mobilenet_v1-small",
+    "Matthijs/deeplabv3-mobilenet_v1-x-small",
+    "Matthijs/deeplabv3-mobilenet_v1-xx-small",
+    # See all MobileNetV1 models at https://huggingface.co/models?filter=mobilenet_v1
 ]
 
 
@@ -88,10 +88,10 @@ def make_divisible(
     return new_value
 
 
-class MobileNetV2ConvLayer(nn.Module):
+class MobileNetV1ConvLayer(nn.Module):
     def __init__(
         self,
-        config: MobileNetV2Config,
+        config: MobileNetV1Config,
         in_channels: int,
         out_channels: int,
         kernel_size: int,
@@ -152,13 +152,13 @@ class MobileNetV2ConvLayer(nn.Module):
         return features
 
 
-class MobileNetV2InvertedResidual(nn.Module):
+class MobileNetV1InvertedResidual(nn.Module):
     """
     Inverted residual block (MobileNetv2): https://arxiv.org/abs/1801.04381
     """
 
     def __init__(
-        self, config: MobileNetV2Config, in_channels: int, out_channels: int, stride: int, dilation: int = 1
+        self, config: MobileNetV1Config, in_channels: int, out_channels: int, stride: int, dilation: int = 1
     ) -> None:
         super().__init__()
         expanded_channels = make_divisible(int(round(in_channels * config.expand_ratio)), 8)
@@ -168,11 +168,11 @@ class MobileNetV2InvertedResidual(nn.Module):
 
         self.use_residual = (stride == 1) and (in_channels == out_channels)
 
-        self.expand_1x1 = MobileNetV2ConvLayer(
+        self.expand_1x1 = MobileNetV1ConvLayer(
             config, in_channels=in_channels, out_channels=expanded_channels, kernel_size=1
         )
 
-        self.conv_3x3 = MobileNetV2ConvLayer(
+        self.conv_3x3 = MobileNetV1ConvLayer(
             config,
             in_channels=expanded_channels,
             out_channels=expanded_channels,
@@ -182,7 +182,7 @@ class MobileNetV2InvertedResidual(nn.Module):
             dilation=dilation,
         )
 
-        self.reduce_1x1 = MobileNetV2ConvLayer(
+        self.reduce_1x1 = MobileNetV1ConvLayer(
             config,
             in_channels=expanded_channels,
             out_channels=out_channels,
@@ -200,15 +200,15 @@ class MobileNetV2InvertedResidual(nn.Module):
         return residual + features if self.use_residual else features
 
 
-class MobileNetV2MobileNetLayer(nn.Module):
+class MobileNetV1MobileNetLayer(nn.Module):
     def __init__(
-        self, config: MobileNetV2Config, in_channels: int, out_channels: int, stride: int = 1, num_stages: int = 1
+        self, config: MobileNetV1Config, in_channels: int, out_channels: int, stride: int = 1, num_stages: int = 1
     ) -> None:
         super().__init__()
 
         self.layer = nn.ModuleList()
         for i in range(num_stages):
-            layer = MobileNetV2InvertedResidual(
+            layer = MobileNetV1InvertedResidual(
                 config,
                 in_channels=in_channels,
                 out_channels=out_channels,
@@ -223,8 +223,8 @@ class MobileNetV2MobileNetLayer(nn.Module):
         return features
 
 
-class MobileNetV2SelfAttention(nn.Module):
-    def __init__(self, config: MobileNetV2Config, hidden_size: int) -> None:
+class MobileNetV1SelfAttention(nn.Module):
+    def __init__(self, config: MobileNetV1Config, hidden_size: int) -> None:
         super().__init__()
 
         if hidden_size % config.num_attention_heads != 0:
@@ -274,8 +274,8 @@ class MobileNetV2SelfAttention(nn.Module):
         return context_layer
 
 
-class MobileNetV2SelfOutput(nn.Module):
-    def __init__(self, config: MobileNetV2Config, hidden_size: int) -> None:
+class MobileNetV1SelfOutput(nn.Module):
+    def __init__(self, config: MobileNetV1Config, hidden_size: int) -> None:
         super().__init__()
         self.dense = nn.Linear(hidden_size, hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -286,11 +286,11 @@ class MobileNetV2SelfOutput(nn.Module):
         return hidden_states
 
 
-class MobileNetV2Attention(nn.Module):
-    def __init__(self, config: MobileNetV2Config, hidden_size: int) -> None:
+class MobileNetV1Attention(nn.Module):
+    def __init__(self, config: MobileNetV1Config, hidden_size: int) -> None:
         super().__init__()
-        self.attention = MobileNetV2SelfAttention(config, hidden_size)
-        self.output = MobileNetV2SelfOutput(config, hidden_size)
+        self.attention = MobileNetV1SelfAttention(config, hidden_size)
+        self.output = MobileNetV1SelfOutput(config, hidden_size)
         self.pruned_heads = set()
 
     def prune_heads(self, heads: Set[int]) -> None:
@@ -317,8 +317,8 @@ class MobileNetV2Attention(nn.Module):
         return attention_output
 
 
-class MobileNetV2Intermediate(nn.Module):
-    def __init__(self, config: MobileNetV2Config, hidden_size: int, intermediate_size: int) -> None:
+class MobileNetV1Intermediate(nn.Module):
+    def __init__(self, config: MobileNetV1Config, hidden_size: int, intermediate_size: int) -> None:
         super().__init__()
         self.dense = nn.Linear(hidden_size, intermediate_size)
         if isinstance(config.hidden_act, str):
@@ -332,8 +332,8 @@ class MobileNetV2Intermediate(nn.Module):
         return hidden_states
 
 
-class MobileNetV2Output(nn.Module):
-    def __init__(self, config: MobileNetV2Config, hidden_size: int, intermediate_size: int) -> None:
+class MobileNetV1Output(nn.Module):
+    def __init__(self, config: MobileNetV1Config, hidden_size: int, intermediate_size: int) -> None:
         super().__init__()
         self.dense = nn.Linear(intermediate_size, hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -345,12 +345,12 @@ class MobileNetV2Output(nn.Module):
         return hidden_states
 
 
-class MobileNetV2TransformerLayer(nn.Module):
-    def __init__(self, config: MobileNetV2Config, hidden_size: int, intermediate_size: int) -> None:
+class MobileNetV1TransformerLayer(nn.Module):
+    def __init__(self, config: MobileNetV1Config, hidden_size: int, intermediate_size: int) -> None:
         super().__init__()
-        self.attention = MobileNetV2Attention(config, hidden_size)
-        self.intermediate = MobileNetV2Intermediate(config, hidden_size, intermediate_size)
-        self.output = MobileNetV2Output(config, hidden_size, intermediate_size)
+        self.attention = MobileNetV1Attention(config, hidden_size)
+        self.intermediate = MobileNetV1Intermediate(config, hidden_size, intermediate_size)
+        self.output = MobileNetV1Output(config, hidden_size, intermediate_size)
         self.layernorm_before = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
 
@@ -364,13 +364,13 @@ class MobileNetV2TransformerLayer(nn.Module):
         return layer_output
 
 
-class MobileNetV2Transformer(nn.Module):
-    def __init__(self, config: MobileNetV2Config, hidden_size: int, num_stages: int) -> None:
+class MobileNetV1Transformer(nn.Module):
+    def __init__(self, config: MobileNetV1Config, hidden_size: int, num_stages: int) -> None:
         super().__init__()
 
         self.layer = nn.ModuleList()
         for _ in range(num_stages):
-            transformer_layer = MobileNetV2TransformerLayer(
+            transformer_layer = MobileNetV1TransformerLayer(
                 config,
                 hidden_size=hidden_size,
                 intermediate_size=int(hidden_size * config.mlp_ratio),
@@ -383,14 +383,14 @@ class MobileNetV2Transformer(nn.Module):
         return hidden_states
 
 
-class MobileNetV2Layer(nn.Module):
+class MobileNetV1Layer(nn.Module):
     """
-    MobileNetV2 block: https://arxiv.org/abs/2110.02178
+    MobileNetV1 block: https://arxiv.org/abs/2110.02178
     """
 
     def __init__(
         self,
-        config: MobileNetV2Config,
+        config: MobileNetV1Config,
         in_channels: int,
         out_channels: int,
         stride: int,
@@ -403,7 +403,7 @@ class MobileNetV2Layer(nn.Module):
         self.patch_height = config.patch_size
 
         if stride == 2:
-            self.downsampling_layer = MobileNetV2InvertedResidual(
+            self.downsampling_layer = MobileNetV1InvertedResidual(
                 config,
                 in_channels=in_channels,
                 out_channels=out_channels,
@@ -414,14 +414,14 @@ class MobileNetV2Layer(nn.Module):
         else:
             self.downsampling_layer = None
 
-        self.conv_kxk = MobileNetV2ConvLayer(
+        self.conv_kxk = MobileNetV1ConvLayer(
             config,
             in_channels=in_channels,
             out_channels=in_channels,
             kernel_size=config.conv_kernel_size,
         )
 
-        self.conv_1x1 = MobileNetV2ConvLayer(
+        self.conv_1x1 = MobileNetV1ConvLayer(
             config,
             in_channels=in_channels,
             out_channels=hidden_size,
@@ -430,7 +430,7 @@ class MobileNetV2Layer(nn.Module):
             use_activation=False,
         )
 
-        self.transformer = MobileNetV2Transformer(
+        self.transformer = MobileNetV1Transformer(
             config,
             hidden_size=hidden_size,
             num_stages=num_stages,
@@ -438,11 +438,11 @@ class MobileNetV2Layer(nn.Module):
 
         self.layernorm = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
 
-        self.conv_projection = MobileNetV2ConvLayer(
+        self.conv_projection = MobileNetV1ConvLayer(
             config, in_channels=hidden_size, out_channels=in_channels, kernel_size=1
         )
 
-        self.fusion = MobileNetV2ConvLayer(
+        self.fusion = MobileNetV1ConvLayer(
             config, in_channels=2 * in_channels, out_channels=in_channels, kernel_size=config.conv_kernel_size
         )
 
@@ -544,8 +544,8 @@ class MobileNetV2Layer(nn.Module):
         return features
 
 
-class MobileNetV2Encoder(nn.Module):
-    def __init__(self, config: MobileNetV2Config) -> None:
+class MobileNetV1Encoder(nn.Module):
+    def __init__(self, config: MobileNetV1Config) -> None:
         super().__init__()
         self.config = config
 
@@ -563,7 +563,7 @@ class MobileNetV2Encoder(nn.Module):
 
         dilation = 1
 
-        layer_1 = MobileNetV2MobileNetLayer(
+        layer_1 = MobileNetV1MobileNetLayer(
             config,
             in_channels=config.neck_hidden_sizes[0],
             out_channels=config.neck_hidden_sizes[1],
@@ -572,7 +572,7 @@ class MobileNetV2Encoder(nn.Module):
         )
         self.layer.append(layer_1)
 
-        layer_2 = MobileNetV2MobileNetLayer(
+        layer_2 = MobileNetV1MobileNetLayer(
             config,
             in_channels=config.neck_hidden_sizes[1],
             out_channels=config.neck_hidden_sizes[2],
@@ -581,7 +581,7 @@ class MobileNetV2Encoder(nn.Module):
         )
         self.layer.append(layer_2)
 
-        layer_3 = MobileNetV2Layer(
+        layer_3 = MobileNetV1Layer(
             config,
             in_channels=config.neck_hidden_sizes[2],
             out_channels=config.neck_hidden_sizes[3],
@@ -594,7 +594,7 @@ class MobileNetV2Encoder(nn.Module):
         if dilate_layer_4:
             dilation *= 2
 
-        layer_4 = MobileNetV2Layer(
+        layer_4 = MobileNetV1Layer(
             config,
             in_channels=config.neck_hidden_sizes[3],
             out_channels=config.neck_hidden_sizes[4],
@@ -608,7 +608,7 @@ class MobileNetV2Encoder(nn.Module):
         if dilate_layer_5:
             dilation *= 2
 
-        layer_5 = MobileNetV2Layer(
+        layer_5 = MobileNetV1Layer(
             config,
             in_channels=config.neck_hidden_sizes[4],
             out_channels=config.neck_hidden_sizes[5],
@@ -652,14 +652,14 @@ class MobileNetV2Encoder(nn.Module):
         return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
 
 
-class MobileNetV2PreTrainedModel(PreTrainedModel):
+class MobileNetV1PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = MobileNetV2Config
-    base_model_prefix = "mobilenetv2"
+    config_class = MobileNetV1Config
+    base_model_prefix = "mobilenet_v1"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
@@ -676,26 +676,26 @@ class MobileNetV2PreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, MobileNetV2Encoder):
+        if isinstance(module, MobileNetV1Encoder):
             module.gradient_checkpointing = value
 
 
-MOBILENETV2_START_DOCSTRING = r"""
+MOBILENET_V1_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
     as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
 
     Parameters:
-        config ([`MobileNetV2Config`]): Model configuration class with all the parameters of the model.
+        config ([`MobileNetV1Config`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-MOBILENETV2_INPUTS_DOCSTRING = r"""
+MOBILENET_V1_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`MobileNetV2FeatureExtractor`]. See
-            [`MobileNetV2FeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`MobileNetV1FeatureExtractor`]. See
+            [`MobileNetV1FeatureExtractor.__call__`] for details.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
@@ -705,16 +705,16 @@ MOBILENETV2_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare MobileNetV2 model outputting raw hidden-states without any specific head on top.",
-    MOBILENETV2_START_DOCSTRING,
+    "The bare MobileNetV1 model outputting raw hidden-states without any specific head on top.",
+    MOBILENET_V1_START_DOCSTRING,
 )
-class MobileNetV2Model(MobileNetV2PreTrainedModel):
-    def __init__(self, config: MobileNetV2Config, expand_output: bool = True):
+class MobileNetV1Model(MobileNetV1PreTrainedModel):
+    def __init__(self, config: MobileNetV1Config, expand_output: bool = True):
         super().__init__(config)
         self.config = config
         self.expand_output = expand_output
 
-        self.conv_stem = MobileNetV2ConvLayer(
+        self.conv_stem = MobileNetV1ConvLayer(
             config,
             in_channels=config.num_channels,
             out_channels=config.neck_hidden_sizes[0],
@@ -722,10 +722,10 @@ class MobileNetV2Model(MobileNetV2PreTrainedModel):
             stride=2,
         )
 
-        self.encoder = MobileNetV2Encoder(config)
+        self.encoder = MobileNetV1Encoder(config)
 
         if self.expand_output:
-            self.conv_1x1_exp = MobileNetV2ConvLayer(
+            self.conv_1x1_exp = MobileNetV1ConvLayer(
                 config,
                 in_channels=config.neck_hidden_sizes[5],
                 out_channels=config.neck_hidden_sizes[6],
@@ -740,12 +740,12 @@ class MobileNetV2Model(MobileNetV2PreTrainedModel):
         heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base class PreTrainedModel
         """
         for layer_index, heads in heads_to_prune.items():
-            mobilenetv2_layer = self.encoder.layer[layer_index]
-            if isinstance(mobilenetv2_layer, MobileNetV2Layer):
-                for transformer_layer in mobilenetv2_layer.transformer.layer:
+            mobilenet_v1_layer = self.encoder.layer[layer_index]
+            if isinstance(mobilenet_v1_layer, MobileNetV1Layer):
+                for transformer_layer in mobilenet_v1_layer.transformer.layer:
                     transformer_layer.attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(MOBILENETV2_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(MOBILENET_V1_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -798,17 +798,17 @@ class MobileNetV2Model(MobileNetV2PreTrainedModel):
 
 @add_start_docstrings(
     """
-    MobileNetV2 model with an image classification head on top (a linear layer on top of the pooled features), e.g. for
+    MobileNetV1 model with an image classification head on top (a linear layer on top of the pooled features), e.g. for
     ImageNet.
     """,
-    MOBILENETV2_START_DOCSTRING,
+    MOBILENET_V1_START_DOCSTRING,
 )
-class MobileNetV2ForImageClassification(MobileNetV2PreTrainedModel):
-    def __init__(self, config: MobileNetV2Config) -> None:
+class MobileNetV1ForImageClassification(MobileNetV1PreTrainedModel):
+    def __init__(self, config: MobileNetV1Config) -> None:
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.mobilenetv2 = MobileNetV2Model(config)
+        self.mobilenet_v1 = MobileNetV1Model(config)
 
         # Classifier head
         self.dropout = nn.Dropout(config.classifier_dropout_prob, inplace=True)
@@ -819,7 +819,7 @@ class MobileNetV2ForImageClassification(MobileNetV2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(MOBILENETV2_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(MOBILENET_V1_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
@@ -842,7 +842,7 @@ class MobileNetV2ForImageClassification(MobileNetV2PreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.mobilenetv2(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
+        outputs = self.mobilenet_v1(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
 
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
 
@@ -882,13 +882,13 @@ class MobileNetV2ForImageClassification(MobileNetV2PreTrainedModel):
         )
 
 
-class MobileNetV2ASPPPooling(nn.Module):
-    def __init__(self, config: MobileNetV2Config, in_channels: int, out_channels: int) -> None:
+class MobileNetV1ASPPPooling(nn.Module):
+    def __init__(self, config: MobileNetV1Config, in_channels: int, out_channels: int) -> None:
         super().__init__()
 
         self.global_pool = nn.AdaptiveAvgPool2d(output_size=1)
 
-        self.conv_1x1 = MobileNetV2ConvLayer(
+        self.conv_1x1 = MobileNetV1ConvLayer(
             config,
             in_channels=in_channels,
             out_channels=out_channels,
@@ -906,12 +906,12 @@ class MobileNetV2ASPPPooling(nn.Module):
         return features
 
 
-class MobileNetV2ASPP(nn.Module):
+class MobileNetV1ASPP(nn.Module):
     """
     ASPP module defined in DeepLab papers: https://arxiv.org/abs/1606.00915, https://arxiv.org/abs/1706.05587
     """
 
-    def __init__(self, config: MobileNetV2Config) -> None:
+    def __init__(self, config: MobileNetV1Config) -> None:
         super().__init__()
 
         in_channels = config.neck_hidden_sizes[-2]
@@ -922,7 +922,7 @@ class MobileNetV2ASPP(nn.Module):
 
         self.convs = nn.ModuleList()
 
-        in_projection = MobileNetV2ConvLayer(
+        in_projection = MobileNetV1ConvLayer(
             config,
             in_channels=in_channels,
             out_channels=out_channels,
@@ -933,7 +933,7 @@ class MobileNetV2ASPP(nn.Module):
 
         self.convs.extend(
             [
-                MobileNetV2ConvLayer(
+                MobileNetV1ConvLayer(
                     config,
                     in_channels=in_channels,
                     out_channels=out_channels,
@@ -945,10 +945,10 @@ class MobileNetV2ASPP(nn.Module):
             ]
         )
 
-        pool_layer = MobileNetV2ASPPPooling(config, in_channels, out_channels)
+        pool_layer = MobileNetV1ASPPPooling(config, in_channels, out_channels)
         self.convs.append(pool_layer)
 
-        self.project = MobileNetV2ConvLayer(
+        self.project = MobileNetV1ConvLayer(
             config, in_channels=5 * out_channels, out_channels=out_channels, kernel_size=1, use_activation="relu"
         )
 
@@ -965,18 +965,18 @@ class MobileNetV2ASPP(nn.Module):
         return pooled_features
 
 
-class MobileNetV2DeeplabV3(nn.Module):
+class MobileNetV1DeeplabV3(nn.Module):
     """
     DeepLabv3 architecture: https://arxiv.org/abs/1706.05587
     """
 
-    def __init__(self, config: MobileNetV2Config) -> None:
+    def __init__(self, config: MobileNetV1Config) -> None:
         super().__init__()
-        self.aspp = MobileNetV2ASPP(config)
+        self.aspp = MobileNetV1ASPP(config)
 
         self.dropout = nn.Dropout2d(config.classifier_dropout_prob)
 
-        self.classifier = MobileNetV2ConvLayer(
+        self.classifier = MobileNetV1ConvLayer(
             config,
             in_channels=config.aspp_out_channels,
             out_channels=config.num_labels,
@@ -995,22 +995,22 @@ class MobileNetV2DeeplabV3(nn.Module):
 
 @add_start_docstrings(
     """
-    MobileNetV2 model with a semantic segmentation head on top, e.g. for Pascal VOC.
+    MobileNetV1 model with a semantic segmentation head on top, e.g. for Pascal VOC.
     """,
-    MOBILENETV2_START_DOCSTRING,
+    MOBILENET_V1_START_DOCSTRING,
 )
-class MobileNetV2ForSemanticSegmentation(MobileNetV2PreTrainedModel):
-    def __init__(self, config: MobileNetV2Config) -> None:
+class MobileNetV1ForSemanticSegmentation(MobileNetV1PreTrainedModel):
+    def __init__(self, config: MobileNetV1Config) -> None:
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.mobilenetv2 = MobileNetV2Model(config, expand_output=False)
-        self.segmentation_head = MobileNetV2DeeplabV3(config)
+        self.mobilenet_v1 = MobileNetV1Model(config, expand_output=False)
+        self.segmentation_head = MobileNetV1DeeplabV3(config)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(MOBILENETV2_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(MOBILENET_V1_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=SemanticSegmenterOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1029,15 +1029,15 @@ class MobileNetV2ForSemanticSegmentation(MobileNetV2PreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import MobileNetV2FeatureExtractor, MobileNetV2ForSemanticSegmentation
+        >>> from transformers import MobileNetV1FeatureExtractor, MobileNetV1ForSemanticSegmentation
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = MobileNetV2FeatureExtractor.from_pretrained("Matthijs/deeplabv3-mobilenetv2-small")
-        >>> model = MobileNetV2ForSemanticSegmentation.from_pretrained("Matthijs/deeplabv3-mobilenetv2-small")
+        >>> feature_extractor = MobileNetV1FeatureExtractor.from_pretrained("Matthijs/deeplabv3-mobilenet_v1-small")
+        >>> model = MobileNetV1ForSemanticSegmentation.from_pretrained("Matthijs/deeplabv3-mobilenet_v1-small")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
 
@@ -1052,7 +1052,7 @@ class MobileNetV2ForSemanticSegmentation(MobileNetV2PreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.mobilenetv2(
+        outputs = self.mobilenet_v1(
             pixel_values,
             output_hidden_states=True,  # we need the intermediate hidden states
             return_dict=return_dict,

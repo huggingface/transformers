@@ -102,7 +102,7 @@ from . import (
     mmbt,
     mobilebert,
     mobilevit,
-    mobilenetv2,
+    mobilenet_v1,
     mpnet,
     mt5,
     mvp,

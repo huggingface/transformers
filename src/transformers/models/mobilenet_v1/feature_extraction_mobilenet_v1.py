@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Feature extractor class for MobileNetV2."""
+"""Feature extractor class for MobileNetV1."""
 
 from typing import Optional, Union
 
@@ -27,9 +27,9 @@ from ...utils import TensorType, logging
 logger = logging.get_logger(__name__)
 
 
-class MobileNetV2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
+class MobileNetV1FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
-    Constructs a MobileNetV2 feature extractor.
+    Constructs a MobileNetV1 feature extractor.
 
     This feature extractor inherits from [`FeatureExtractionMixin`] which contains most of the main methods. Users
     should refer to this superclass for more information regarding those methods.

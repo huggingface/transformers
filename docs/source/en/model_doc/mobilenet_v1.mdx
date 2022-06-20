@@ -10,13 +10,13 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# MobileNetV2
+# MobileNetV1
 
 ## Overview
 
 MIH
 
-The MobileNetV2 model was proposed in [TODO](https://arxiv.org/abs/2110.02178) by TODO. MobileNetV2 introduces a new layer that replaces local processing in convolutions with global processing using transformers.
+The MobileNetV1 model was proposed in [TODO](https://arxiv.org/abs/2110.02178) by TODO. MobileNetV1 introduces a new layer that replaces local processing in convolutions with global processing using transformers.
 
 The abstract from the paper is the following:
 
@@ -25,33 +25,33 @@ The abstract from the paper is the following:
 Tips:
 
 - MobileViT is more like a CNN than a Transformer model. It does not work on sequence data but on batches of images. Unlike ViT, there are no embeddings. The backbone model outputs a feature map.
-- One can use [`MobileNetV2FeatureExtractor`] to prepare images for the model. Note that if you do your own preprocessing, the pretrained checkpoints expect images to be in BGR pixel order (not RGB).
+- One can use [`MobileNetV1FeatureExtractor`] to prepare images for the model. Note that if you do your own preprocessing, the pretrained checkpoints expect images to be in BGR pixel order (not RGB).
 - The available image classification checkpoints are pre-trained on [ImageNet-1k](https://huggingface.co/datasets/imagenet-1k) (also referred to as ILSVRC 2012, a collection of 1.3 million images and 1,000 classes).
 - The segmentation model uses a [DeepLabV3](https://arxiv.org/abs/1706.05587) head. The available semantic segmentation checkpoints are pre-trained on [PASCAL VOC](http://host.robots.ox.ac.uk/pascal/VOC/).
 
 This model was contributed by [matthijs](https://huggingface.co/Matthijs). The original code and weights can be found [here](https://github.com/apple/ml-cvnets).
 
 
-## MobileNetV2Config
+## MobileNetV1Config
 
-[[autodoc]] MobileNetV2Config
+[[autodoc]] MobileNetV1Config
 
-## MobileNetV2FeatureExtractor
+## MobileNetV1FeatureExtractor
 
-[[autodoc]] MobileNetV2FeatureExtractor
+[[autodoc]] MobileNetV1FeatureExtractor
     - __call__
 
-## MobileNetV2Model
+## MobileNetV1Model
 
-[[autodoc]] MobileNetV2Model
+[[autodoc]] MobileNetV1Model
     - forward
 
-## MobileNetV2ForImageClassification
+## MobileNetV1ForImageClassification
 
-[[autodoc]] MobileNetV2ForImageClassification
+[[autodoc]] MobileNetV1ForImageClassification
     - forward
 
-## MobileNetV2ForSemanticSegmentation
+## MobileNetV1ForSemanticSegmentation
 
-[[autodoc]] MobileNetV2ForSemanticSegmentation
+[[autodoc]] MobileNetV1ForSemanticSegmentation
     - forward

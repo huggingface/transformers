@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" MobileNetV2 model configuration"""
+""" MobileNetV1 model configuration"""
 
 from collections import OrderedDict
 from typing import Mapping
@@ -26,27 +26,27 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-MOBILENETV2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Matthijs/mobilenetv2-small": "https://huggingface.co/Matthijs/mobilenetv2-small/resolve/main/config.json",
-    "Matthijs/mobilenetv2-x-small": "https://huggingface.co/Matthijs/mobilenetv2-x-small/resolve/main/config.json",
-    "Matthijs/mobilenetv2-xx-small": "https://huggingface.co/Matthijs/mobilenetv2-xx-small/resolve/main/config.json",
-    "Matthijs/deeplabv3-mobilenetv2-small": (
-        "https://huggingface.co/Matthijs/deeplabv3-mobilenetv2-small/resolve/main/config.json"
+MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "Matthijs/mobilenet_v1-small": "https://huggingface.co/Matthijs/mobilenet_v1-small/resolve/main/config.json",
+    "Matthijs/mobilenet_v1-x-small": "https://huggingface.co/Matthijs/mobilenet_v1-x-small/resolve/main/config.json",
+    "Matthijs/mobilenet_v1-xx-small": "https://huggingface.co/Matthijs/mobilenet_v1-xx-small/resolve/main/config.json",
+    "Matthijs/deeplabv3-mobilenet_v1-small": (
+        "https://huggingface.co/Matthijs/deeplabv3-mobilenet_v1-small/resolve/main/config.json"
     ),
-    "Matthijs/deeplabv3-mobilenetv2-x-small": (
-        "https://huggingface.co/Matthijs/deeplabv3-mobilenetv2-x-small/resolve/main/config.json"
+    "Matthijs/deeplabv3-mobilenet_v1-x-small": (
+        "https://huggingface.co/Matthijs/deeplabv3-mobilenet_v1-x-small/resolve/main/config.json"
     ),
-    "Matthijs/deeplabv3-mobilenetv2-xx-small": (
-        "https://huggingface.co/Matthijs/deeplabv3-mobilenetv2-xx-small/resolve/main/config.json"
+    "Matthijs/deeplabv3-mobilenet_v1-xx-small": (
+        "https://huggingface.co/Matthijs/deeplabv3-mobilenet_v1-xx-small/resolve/main/config.json"
     ),
-    # See all MobileNetV2 models at https://huggingface.co/models?filter=mobilenetv2
+    # See all MobileNetV1 models at https://huggingface.co/models?filter=mobilenet_v1
 }
 
 
-class MobileNetV2Config(PretrainedConfig):
+class MobileNetV1Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MobileNetV2Model`]. It is used to instantiate a
-    MobileNetV2 model according to the specified arguments, defining the model architecture. Instantiating a
+    This is the configuration class to store the configuration of a [`MobileNetV1Model`]. It is used to instantiate a
+    MobileNetV1 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the MobileVNetV2
     [Matthijs/MIHTODO](https://huggingface.co/Matthijs/MIHTODO) architecture.
 
@@ -73,7 +73,7 @@ class MobileNetV2Config(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the Transformer encoder and convolution layers.
         conv_kernel_size (`int`, *optional*, defaults to 3):
-            The size of the convolutional kernel in the MobileNetV2 layer.
+            The size of the convolutional kernel in the MobileNetV1 layer.
         output_stride (`int`, `optional`, defaults to 32):
             The ratio of the spatial resolution of the output to the resolution of the input image.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
@@ -100,18 +100,18 @@ class MobileNetV2Config(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import MobileNetV2Config, MobileNetV2Model
+    >>> from transformers import MobileNetV1Config, MobileNetV1Model
 
-    >>> # Initializing a mobilenetv2-smallMIHTODO style configuration
-    >>> configuration = MobileNetV2Config()
+    >>> # Initializing a mobilenet_v1-smallMIHTODO style configuration
+    >>> configuration = MobileNetV1Config()
 
-    >>> # Initializing a model from the mobilenetv2-smallMIHTODO style configuration
-    >>> model = MobileNetV2Model(configuration)
+    >>> # Initializing a model from the mobilenet_v1-smallMIHTODO style configuration
+    >>> model = MobileNetV1Model(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    model_type = "mobilenetv2"
+    model_type = "mobilenet_v1"
 
     def __init__(
         self,
@@ -165,7 +165,7 @@ class MobileNetV2Config(PretrainedConfig):
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
 
 
-class MobileNetV2OnnxConfig(OnnxConfig):
+class MobileNetV1OnnxConfig(OnnxConfig):
 
     torch_onnx_minimum_version = version.parse("1.11")
 

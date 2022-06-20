@@ -21,7 +21,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_mobilenetv2": ["MOBILENETV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileNetV2Config", "MobileNetV2OnnxConfig"],
+    "configuration_mobilenet_v1": ["MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileNetV1Config", "MobileNetV1OnnxConfig"],
 }
 
 try:
@@ -30,7 +30,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_mobilenetv2"] = ["MobileNetV2FeatureExtractor"]
+    _import_structure["feature_extraction_mobilenet_v1"] = ["MobileNetV1FeatureExtractor"]
 
 try:
     if not is_torch_available():
@@ -38,17 +38,17 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_mobilenetv2"] = [
-        "MOBILENETV2_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "MobileNetV2ForImageClassification",
-        "MobileNetV2ForSemanticSegmentation",
-        "MobileNetV2Model",
-        "MobileNetV2PreTrainedModel",
+    _import_structure["modeling_mobilenet_v1"] = [
+        "MOBILENET_V1_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "MobileNetV1ForImageClassification",
+        "MobileNetV1ForSemanticSegmentation",
+        "MobileNetV1Model",
+        "MobileNetV1PreTrainedModel",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_mobilenetv2 import MOBILENETV2_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileNetV2Config, MobileNetV2OnnxConfig
+    from .configuration_mobilenet_v1 import MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileNetV1Config, MobileNetV1OnnxConfig
 
     try:
         if not is_vision_available():
@@ -56,7 +56,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_mobilenetv2 import MobileNetV2FeatureExtractor
+        from .feature_extraction_mobilenet_v1 import MobileNetV1FeatureExtractor
 
     try:
         if not is_torch_available():
@@ -64,12 +64,12 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_mobilenetv2 import (
-            MOBILENETV2_PRETRAINED_MODEL_ARCHIVE_LIST,
-            MobileNetV2ForImageClassification,
-            MobileNetV2ForSemanticSegmentation,
-            MobileNetV2Model,
-            MobileNetV2PreTrainedModel,
+        from .modeling_mobilenet_v1 import (
+            MOBILENET_V1_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MobileNetV1ForImageClassification,
+            MobileNetV1ForSemanticSegmentation,
+            MobileNetV1Model,
+            MobileNetV1PreTrainedModel,
         )
 
 

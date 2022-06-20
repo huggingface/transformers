@@ -12,13 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch MobileNetV2 model. """
+""" Testing suite for the PyTorch MobileNetV1 model. """
 
 
 import inspect
 import unittest
 
-from transformers import MobileNetV2Config
+from transformers import MobileNetV1Config
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
@@ -29,17 +29,17 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import MobileNetV2ForImageClassification, MobileNetV2ForSemanticSegmentation, MobileNetV2Model
-    from transformers.models.mobilenetv2.modeling_mobilenetv2 import MOBILENETV2_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers import MobileNetV1ForImageClassification, MobileNetV1ForSemanticSegmentation, MobileNetV1Model
+    from transformers.models.mobilenet_v1.modeling_mobilenet_v1 import MOBILENET_V1_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import MobileNetV2FeatureExtractor
+    from transformers import MobileNetV1FeatureExtractor
 
 
-class MobileNetV2ConfigTester(ConfigTester):
+class MobileNetV1ConfigTester(ConfigTester):
     def create_and_test_config_common_properties(self):
         config = self.config_class(**self.inputs_dict)
         self.parent.assertTrue(hasattr(config, "hidden_sizes"))
@@ -47,7 +47,7 @@ class MobileNetV2ConfigTester(ConfigTester):
         self.parent.assertTrue(hasattr(config, "num_attention_heads"))
 
 
-class MobileNetV2ModelTester:
+class MobileNetV1ModelTester:
     def __init__(
         self,
         parent,
@@ -102,7 +102,7 @@ class MobileNetV2ModelTester:
         return config, pixel_values, labels, pixel_labels
 
     def get_config(self):
-        return MobileNetV2Config(
+        return MobileNetV1Config(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -117,7 +117,7 @@ class MobileNetV2ModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values, labels, pixel_labels):
-        model = MobileNetV2Model(config=config)
+        model = MobileNetV1Model(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -133,7 +133,7 @@ class MobileNetV2ModelTester:
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels, pixel_labels):
         config.num_labels = self.num_labels
-        model = MobileNetV2ForImageClassification(config)
+        model = MobileNetV1ForImageClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, labels=labels)
@@ -141,7 +141,7 @@ class MobileNetV2ModelTester:
 
     def create_and_check_for_semantic_segmentation(self, config, pixel_values, labels, pixel_labels):
         config.num_labels = self.num_labels
-        model = MobileNetV2ForSemanticSegmentation(config)
+        model = MobileNetV1ForSemanticSegmentation(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -173,14 +173,14 @@ class MobileNetV2ModelTester:
 
 
 @require_torch
-class MobileNetV2ModelTest(ModelTesterMixin, unittest.TestCase):
+class MobileNetV1ModelTest(ModelTesterMixin, unittest.TestCase):
     """
-    Here we also overwrite some of the tests of test_modeling_common.py, as MobileNetV2 does not use input_ids, inputs_embeds,
+    Here we also overwrite some of the tests of test_modeling_common.py, as MobileNetV1 does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
     all_model_classes = (
-        (MobileNetV2Model, MobileNetV2ForImageClassification, MobileNetV2ForSemanticSegmentation)
+        (MobileNetV1Model, MobileNetV1ForImageClassification, MobileNetV1ForSemanticSegmentation)
         if is_torch_available()
         else ()
     )
@@ -191,21 +191,21 @@ class MobileNetV2ModelTest(ModelTesterMixin, unittest.TestCase):
     has_attentions = False
 
     def setUp(self):
-        self.model_tester = MobileNetV2ModelTester(self)
-        self.config_tester = MobileNetV2ConfigTester(self, config_class=MobileNetV2Config, has_text_modality=False)
+        self.model_tester = MobileNetV1ModelTester(self)
+        self.config_tester = MobileNetV1ConfigTester(self, config_class=MobileNetV1Config, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="MobileNetV2 does not use inputs_embeds")
+    @unittest.skip(reason="MobileNetV1 does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="MobileNetV2 does not support input and output embeddings")
+    @unittest.skip(reason="MobileNetV1 does not support input and output embeddings")
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(reason="MobileNetV2 does not output attentions")
+    @unittest.skip(reason="MobileNetV1 does not output attentions")
     def test_attention_outputs(self):
         pass
 
@@ -239,7 +239,7 @@ class MobileNetV2ModelTest(ModelTesterMixin, unittest.TestCase):
             expected_num_stages = 5
             self.assertEqual(len(hidden_states), expected_num_stages)
 
-            # MobileNetV2's feature maps are of shape (batch_size, num_channels, height, width)
+            # MobileNetV1's feature maps are of shape (batch_size, num_channels, height, width)
             # with the width and height being successively divided by 2.
             divisor = 2
             for i in range(len(hidden_states)):
@@ -273,8 +273,8 @@ class MobileNetV2ModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in MOBILENETV2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = MobileNetV2Model.from_pretrained(model_name)
+        for model_name in MOBILENET_V1_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = MobileNetV1Model.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
@@ -286,14 +286,14 @@ def prepare_img():
 
 @require_torch
 @require_vision
-class MobileNetV2ModelIntegrationTest(unittest.TestCase):
+class MobileNetV1ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return MobileNetV2FeatureExtractor.from_pretrained("Matthijs/mobilenetv2-xx-small") if is_vision_available() else None
+        return MobileNetV1FeatureExtractor.from_pretrained("Matthijs/mobilenet_v1-xx-small") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
-        model = MobileNetV2ForImageClassification.from_pretrained("Matthijs/mobilenetv2-xx-small").to(torch_device)
+        model = MobileNetV1ForImageClassification.from_pretrained("Matthijs/mobilenet_v1-xx-small").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
@@ -313,10 +313,10 @@ class MobileNetV2ModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_semantic_segmentation(self):
-        model = MobileNetV2ForSemanticSegmentation.from_pretrained("Matthijs/deeplabv3-mobilenetv2-xx-small")
+        model = MobileNetV1ForSemanticSegmentation.from_pretrained("Matthijs/deeplabv3-mobilenet_v1-xx-small")
         model = model.to(torch_device)
 
-        feature_extractor = MobileNetV2FeatureExtractor.from_pretrained("Matthijs/deeplabv3-mobilenetv2-xx-small")
+        feature_extractor = MobileNetV1FeatureExtractor.from_pretrained("Matthijs/deeplabv3-mobilenet_v1-xx-small")
 
         image = prepare_img()
         inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)

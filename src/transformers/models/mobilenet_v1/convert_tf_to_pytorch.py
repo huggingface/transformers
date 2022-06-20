@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert MobileNetV2 checkpoints from the ml-cvnets library."""
+"""Convert MobileNetV1 checkpoints from the ml-cvnets library."""
 
 
 import argparse
@@ -25,10 +25,10 @@ from PIL import Image
 import requests
 from huggingface_hub import hf_hub_download
 from transformers import (
-    MobileNetV2Config,
-    MobileNetV2FeatureExtractor,
-    MobileNetV2ForImageClassification,
-    MobileNetV2ForSemanticSegmentation,
+    MobileNetV1Config,
+    MobileNetV1FeatureExtractor,
+    MobileNetV1ForImageClassification,
+    MobileNetV1ForSemanticSegmentation,
 )
 from transformers.utils import logging
 
@@ -37,23 +37,23 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-def get_mobilenetv2_config(mobilenetv2_name):
-    config = MobileNetV2Config()
+def get_mobilenet_v1_config(mobilenet_v1_name):
+    config = MobileNetV1Config()
 
     # size of the architecture
-    if "mobilenetv2_s" in mobilenetv2_name:
+    if "mobilenet_v1_s" in mobilenet_v1_name:
         config.hidden_sizes = [144, 192, 240]
         config.neck_hidden_sizes = [16, 32, 64, 96, 128, 160, 640]
-    elif "mobilenetv2_xs" in mobilenetv2_name:
+    elif "mobilenet_v1_xs" in mobilenet_v1_name:
         config.hidden_sizes = [96, 120, 144]
         config.neck_hidden_sizes = [16, 32, 48, 64, 80, 96, 384]
-    elif "mobilenetv2_xxs" in mobilenetv2_name:
+    elif "mobilenet_v1_xxs" in mobilenet_v1_name:
         config.hidden_sizes = [64, 80, 96]
         config.neck_hidden_sizes = [16, 16, 24, 48, 64, 80, 320]
         config.hidden_dropout_prob = 0.05
         config.expand_ratio = 2.0
 
-    if mobilenetv2_name.startswith("deeplabv3_"):
+    if mobilenet_v1_name.startswith("deeplabv3_"):
         config.image_size = 512
         config.output_stride = 16
         config.num_labels = 21
@@ -145,7 +145,7 @@ def rename_key(name, base_model=False):
     if "classifier.fc." in name:
         name = name.replace("classifier.fc.", "classifier.")
     elif (not base_model) and ("segmentation_head." not in name):
-        name = "mobilenetv2." + name
+        name = "mobilenet_v1." + name
 
     return name
 
@@ -154,7 +154,7 @@ def convert_state_dict(orig_state_dict, model, base_model=False):
     if base_model:
         model_prefix = ""
     else:
-        model_prefix = "mobilenetv2."
+        model_prefix = "mobilenet_v1."
 
     for key in orig_state_dict.copy().keys():
         val = orig_state_dict.pop(key)
@@ -193,34 +193,34 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_movilevit_checkpoint(mobilenetv2_name, checkpoint_path, pytorch_dump_folder_path, push_to_hub=False):
+def convert_movilevit_checkpoint(mobilenet_v1_name, checkpoint_path, pytorch_dump_folder_path, push_to_hub=False):
     """
-    Copy/paste/tweak model's weights to our MobileNetV2 structure.
+    Copy/paste/tweak model's weights to our MobileNetV1 structure.
     """
-    config = get_mobilenetv2_config(mobilenetv2_name)
+    config = get_mobilenet_v1_config(mobilenet_v1_name)
 
     # load original state_dict
     state_dict = torch.load(checkpoint_path, map_location="cpu")
 
     # load 🤗 model
-    if mobilenetv2_name.startswith("deeplabv3_"):
-        model = MobileNetV2ForSemanticSegmentation(config).eval()
+    if mobilenet_v1_name.startswith("deeplabv3_"):
+        model = MobileNetV1ForSemanticSegmentation(config).eval()
     else:
-        model = MobileNetV2ForImageClassification(config).eval()
+        model = MobileNetV1ForImageClassification(config).eval()
 
     new_state_dict = convert_state_dict(state_dict, model)
     model.load_state_dict(new_state_dict)
 
-    # Check outputs on an image, prepared by MobileNetV2FeatureExtractor
-    feature_extractor = MobileNetV2FeatureExtractor(crop_size=config.image_size, size=config.image_size + 32)
+    # Check outputs on an image, prepared by MobileNetV1FeatureExtractor
+    feature_extractor = MobileNetV1FeatureExtractor(crop_size=config.image_size, size=config.image_size + 32)
     encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
     outputs = model(**encoding)
     logits = outputs.logits
 
-    if mobilenetv2_name.startswith("deeplabv3_"):
+    if mobilenet_v1_name.startswith("deeplabv3_"):
         assert logits.shape == (1, 21, 32, 32)
 
-        if mobilenetv2_name == "deeplabv3_mobilenetv2_s":
+        if mobilenet_v1_name == "deeplabv3_mobilenet_v1_s":
             expected_logits = torch.tensor(
                 [
                     [[6.2065, 6.1292, 6.2070], [6.1079, 6.1254, 6.1747], [6.0042, 6.1071, 6.1034]],
@@ -228,7 +228,7 @@ def convert_movilevit_checkpoint(mobilenetv2_name, checkpoint_path, pytorch_dump
                     [[-4.4723, -4.4348, -4.3769], [-5.3629, -5.4632, -5.4598], [-5.1587, -5.3402, -5.5059]],
                 ]
             )
-        elif mobilenetv2_name == "deeplabv3_mobilenetv2_xs":
+        elif mobilenet_v1_name == "deeplabv3_mobilenet_v1_xs":
             expected_logits = torch.tensor(
                 [
                     [[5.4449, 5.5733, 5.6314], [5.1815, 5.3930, 5.5963], [5.1656, 5.4333, 5.4853]],
@@ -236,7 +236,7 @@ def convert_movilevit_checkpoint(mobilenetv2_name, checkpoint_path, pytorch_dump
                     [[-7.7721, -7.3716, -7.1583], [-8.4599, -8.0624, -7.7944], [-8.4172, -7.8366, -7.5025]],
                 ]
             )
-        elif mobilenetv2_name == "deeplabv3_mobilenetv2_xxs":
+        elif mobilenet_v1_name == "deeplabv3_mobilenet_v1_xxs":
             expected_logits = torch.tensor(
                 [
                     [[6.9811, 6.9743, 7.3123], [7.1777, 7.1931, 7.3938], [7.5633, 7.8050, 7.8901]],
@@ -245,41 +245,41 @@ def convert_movilevit_checkpoint(mobilenetv2_name, checkpoint_path, pytorch_dump
                 ]
             )
         else:
-            raise ValueError(f"Unknown mobilenetv2_name: {mobilenetv2_name}")
+            raise ValueError(f"Unknown mobilenet_v1_name: {mobilenet_v1_name}")
 
         assert torch.allclose(logits[0, :3, :3, :3], expected_logits, atol=1e-4)
     else:
         assert logits.shape == (1, 1000)
 
-        if mobilenetv2_name == "mobilenetv2_s":
+        if mobilenet_v1_name == "mobilenet_v1_s":
             expected_logits = torch.tensor([-0.9866, 0.2392, -1.1241])
-        elif mobilenetv2_name == "mobilenetv2_xs":
+        elif mobilenet_v1_name == "mobilenet_v1_xs":
             expected_logits = torch.tensor([-2.4761, -0.9399, -1.9587])
-        elif mobilenetv2_name == "mobilenetv2_xxs":
+        elif mobilenet_v1_name == "mobilenet_v1_xxs":
             expected_logits = torch.tensor([-1.9364, -1.2327, -0.4653])
         else:
-            raise ValueError(f"Unknown mobilenetv2_name: {mobilenetv2_name}")
+            raise ValueError(f"Unknown mobilenet_v1_name: {mobilenet_v1_name}")
 
         assert torch.allclose(logits[0, :3], expected_logits, atol=1e-4)
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-    print(f"Saving model {mobilenetv2_name} to {pytorch_dump_folder_path}")
+    print(f"Saving model {mobilenet_v1_name} to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
     print(f"Saving feature extractor to {pytorch_dump_folder_path}")
     feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
         model_mapping = {
-            "mobilenetv2_s": "mobilenetv2-small",
-            "mobilenetv2_xs": "mobilenetv2-x-small",
-            "mobilenetv2_xxs": "mobilenetv2-xx-small",
-            "deeplabv3_mobilenetv2_s": "deeplabv3-mobilenetv2-small",
-            "deeplabv3_mobilenetv2_xs": "deeplabv3-mobilenetv2-x-small",
-            "deeplabv3_mobilenetv2_xxs": "deeplabv3-mobilenetv2-xx-small",
+            "mobilenet_v1_s": "mobilenet_v1-small",
+            "mobilenet_v1_xs": "mobilenet_v1-x-small",
+            "mobilenet_v1_xxs": "mobilenet_v1-xx-small",
+            "deeplabv3_mobilenet_v1_s": "deeplabv3-mobilenet_v1-small",
+            "deeplabv3_mobilenet_v1_xs": "deeplabv3-mobilenet_v1-x-small",
+            "deeplabv3_mobilenet_v1_xxs": "deeplabv3-mobilenet_v1-xx-small",
         }
 
         print("Pushing to the hub...")
-        model_name = model_mapping[mobilenetv2_name]
+        model_name = model_mapping[mobilenet_v1_name]
         feature_extractor.push_to_hub(model_name, organization="apple")
         model.push_to_hub(model_name, organization="apple")
 
@@ -288,12 +288,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--mobilenetv2_name",
-        default="mobilenetv2_s",
+        "--mobilenet_v1_name",
+        default="mobilenet_v1_s",
         type=str,
         help=(
-            "Name of the MobileNetV2 model you'd like to convert. Should be one of 'mobilenetv2_s', 'mobilenetv2_xs',"
-            " 'mobilenetv2_xxs', 'deeplabv3_mobilenetv2_s', 'deeplabv3_mobilenetv2_xs', 'deeplabv3_mobilenetv2_xxs'."
+            "Name of the MobileNetV1 model you'd like to convert. Should be one of 'mobilenet_v1_s', 'mobilenet_v1_xs',"
+            " 'mobilenet_v1_xxs', 'deeplabv3_mobilenet_v1_s', 'deeplabv3_mobilenet_v1_xs', 'deeplabv3_mobilenet_v1_xxs'."
         ),
     )
     parser.add_argument(
@@ -308,5 +308,5 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     convert_movilevit_checkpoint(
-        args.mobilenetv2_name, args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub
+        args.mobilenet_v1_name, args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub
     )
