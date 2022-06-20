@@ -717,11 +717,12 @@ def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatch
         model (`tf.keras.models.Model`): Model in which the weights are loaded
         model_layer_map (`Dict`): A dictionnary mapping the layer name to the index of the layer in the model.
         resolved_archive_file (`str`): Path to the checkpoint file from which the weights will be loaded
-        ignore_mismatched_sizes (bool, optional): _description_. Defaults to False. Whether to ignore the mismatch keys
+        ignore_mismatched_sizes (bool, optional):
+            _description_. Defaults to False. Whether to ignore the mismatch keys
 
     Returns:
-        Three lists, one for the layers that were found and succesfully restored (from the shard file),
-        one for the missmatched layers, and another one for the unexpected layers.
+        Three lists, one for the layers that were found and succesfully restored (from the shard file), one for the
+        missmatched layers, and another one for the unexpected layers.
     """
     saved_weight_names_set = set()
     saved_weights = {}
@@ -776,8 +777,8 @@ def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatch
 
 def load_tf_weights(model, resolved_archive_file, ignore_mismatched_sizes=False, _prefix=None):
     """
-    Detect missing and unexpected layers and load the TF weights from the shard file
-    accordingly to their names and shapes.
+    Detect missing and unexpected layers and load the TF weights from the shard file accordingly to their names and
+    shapes.
 
     Args:
         model (`tf.keras.models.Model`):
