@@ -1399,7 +1399,7 @@ class FlaxT5EncoderModule(nn.Module):
         self,
         input_ids=None,
         attention_mask=None,
-        decoder_input_ids=None, # not used
+        decoder_input_ids=None,  # not used
         decoder_attention_mask=None,  # not used
         encoder_outputs=None,
         output_attentions=None,

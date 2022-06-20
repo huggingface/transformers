@@ -144,7 +144,12 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_flax_t5 import FlaxT5EncoderModel, FlaxT5ForConditionalGeneration, FlaxT5Model, FlaxT5PreTrainedModel
+        from .modeling_flax_t5 import (
+            FlaxT5EncoderModel,
+            FlaxT5ForConditionalGeneration,
+            FlaxT5Model,
+            FlaxT5PreTrainedModel,
+        )
 
 
 else:
