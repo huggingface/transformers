@@ -591,7 +591,7 @@ def tf_shard_checkpoint(weights, max_shard_size="10GB"):
 
     <Tip warning={true}>
 
-    If one of the model's weight is bigger that `max_sahrd_size`, it will end up in its own sub-checkpoint which will
+    If one of the model's weight is bigger that `max_shard_size`, it will end up in its own sub-checkpoint which will
     have a size greater than `max_shard_size`.
 
     </Tip>
@@ -659,7 +659,7 @@ def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, s
         shard_files (`str` or `os.PathLike`): A list containing the sharded checkpoint names.
         ignore_mismatched_sizes`bool`, *optional`, defaults to `True`):
             Whether or not to ignore the mismatch between the sizes
-        strict (`bool`, *optional`, defaults to `True`):
+        strict (`bool`, *optional*, defaults to `True`):
             Whether to strictly enforce that the keys in the model state dict match the keys in the sharded checkpoint.
 
     Returns:
@@ -713,7 +713,7 @@ def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatch
         model (`tf.keras.models.Model`): Model in which the weights are loaded
         model_layer_map (`Dict`): A dictionnary mapping the layer name to the index of the layer in the model.
         resolved_archive_file (`str`): Path to the checkpoint file from which the weights will be loaded
-        ignore_mismatched_sizes (`bool`, *optional*, defaults to `False`): Whether to ignore the mismatch keys
+        ignore_mismatched_sizes (`bool`, *optional*, defaults to `False`): Whether to ignore the mismatched keys
 
     Returns:
         Three lists, one for the layers that were found and succesfully restored (from the shard file), one for the
@@ -1956,7 +1956,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         if index is None:
             self.save_weights(output_model_file)
-            logger.info(f"Model weights saved in {os.path.join(save_directory, TF2_WEIGHTS_NAME)}")
+            logger.info(f"Model weights saved in {output_model_file}")
         else:
             save_index_file = os.path.join(save_directory, TF2_WEIGHTS_INDEX_NAME)
             # Save the index as well
