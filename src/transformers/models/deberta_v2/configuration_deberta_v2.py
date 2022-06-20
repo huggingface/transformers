@@ -157,12 +157,7 @@ class DebertaV2OnnxConfig(OnnxConfig):
                 [("input_ids", dynamic_axis), ("attention_mask", dynamic_axis), ("token_type_ids", dynamic_axis)]
             )
         else:
-            return OrderedDict(
-                [
-                    ("input_ids", dynamic_axis),
-                    ("attention_mask", dynamic_axis),
-                ]
-            )
+            return OrderedDict([("input_ids", dynamic_axis), ("attention_mask", dynamic_axis)])
 
     @property
     def default_onnx_opset(self) -> int:
