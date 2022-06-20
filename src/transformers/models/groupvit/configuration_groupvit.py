@@ -208,8 +208,8 @@ class GroupViTVisionConfig(PretrainedConfig):
         num_channels=3,
         hidden_act="gelu",
         layer_norm_eps=1e-5,
-        hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
+        dropout=0.0,
+        attention_dropout=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
         assign_eps=1.0,
@@ -222,27 +222,27 @@ class GroupViTVisionConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.depths = depths
-        self.num_group_tokens = num_group_tokens
-        self.num_output_groups = num_output_groups
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.num_attention_heads = num_attention_heads
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.initializer_range = initializer_range
-        self.initializer_factor = initializer_factor
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.layer_norm_eps = layer_norm_eps
-        self.hidden_act = hidden_act
-        self.assign_eps = assign_eps
-        self.assign_mlp_ratio = assign_mlp_ratio
-        self.qkv_bias = qkv_bias
-        self.num_hidden_layers = num_hidden_layers
         if num_hidden_layers != sum(depths):
             logger.warning(
                 f"Manually setting num_hidden_layers to {num_hidden_layers}, but we expect num_hidden_layers ="
                 f" sum(depth) = {sum(depths)}"
             )
+        self.num_hidden_layers = num_hidden_layers
+        self.num_group_tokens = num_group_tokens
+        self.num_output_groups = num_output_groups
+        self.num_attention_heads = num_attention_heads
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.num_channels = num_channels
+        self.hidden_act = hidden_act
+        self.layer_norm_eps = layer_norm_eps
+        self.dropout = dropout
+        self.attention_dropout = attention_dropout
+        self.initializer_range = initializer_range
+        self.initializer_factor = initializer_factor
+        self.assign_eps = assign_eps
+        self.assign_mlp_ratio = assign_mlp_ratio
+        self.qkv_bias = qkv_bias
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
