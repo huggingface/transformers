@@ -170,7 +170,7 @@ class FlaxModelTesterMixin:
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
 
     # (Copied from tests.test_modeling_common.ModelTesterMixin.check_outputs)
-    def check_outputs(self, fx_outputs, pt_outputs, model_class, names):
+    def check_pt_flax_outputs(self, fx_outputs, pt_outputs, model_class, names):
         """
         Args:
             model_class: The class of the model that is currently testing. For example, ..., etc.
@@ -185,10 +185,10 @@ class FlaxModelTesterMixin:
             self.assertEqual(len(fx_outputs), len(pt_outputs))
             if type(names) == tuple:
                 for fo, po, name in zip(fx_outputs, pt_outputs, names):
-                    self.check_outputs(fo, po, model_class, names=name)
+                    self.check_pt_flax_outputs(fo, po, model_class, names=name)
             elif type(names) == str:
                 for idx, (fo, po) in enumerate(zip(fx_outputs, pt_outputs)):
-                    self.check_outputs(fo, po, model_class, names=f"{names}_{idx}")
+                    self.check_pt_flax_outputs(fo, po, model_class, names=f"{names}_{idx}")
             else:
                 raise ValueError(f"`names` should be a `tuple` or a string. Got {type(names)} instead.")
         elif isinstance(fx_outputs, jnp.ndarray):
@@ -253,7 +253,7 @@ class FlaxModelTesterMixin:
                 pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
 
                 self.assertEqual(fx_keys, pt_keys)
-                self.check_outputs(fx_outputs.to_tuple(), pt_outputs.to_tuple(), model_class, names=fx_keys)
+                self.check_pt_flax_outputs(fx_outputs.to_tuple(), pt_outputs.to_tuple(), model_class, names=fx_keys)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     pt_model.save_pretrained(tmpdirname)
@@ -265,7 +265,9 @@ class FlaxModelTesterMixin:
                 pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
 
                 self.assertEqual(fx_keys, pt_keys)
-                self.check_outputs(fx_outputs_loaded.to_tuple(), pt_outputs.to_tuple(), model_class, names=fx_keys)
+                self.check_pt_flax_outputs(
+                    fx_outputs_loaded.to_tuple(), pt_outputs.to_tuple(), model_class, names=fx_keys
+                )
 
     @is_pt_flax_cross_test
     def test_equivalence_flax_to_pt(self):
@@ -308,7 +310,7 @@ class FlaxModelTesterMixin:
                 pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
 
                 self.assertEqual(fx_keys, pt_keys)
-                self.check_outputs(fx_outputs.to_tuple(), pt_outputs.to_tuple(), model_class, names=fx_keys)
+                self.check_pt_flax_outputs(fx_outputs.to_tuple(), pt_outputs.to_tuple(), model_class, names=fx_keys)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     fx_model.save_pretrained(tmpdirname)
@@ -325,7 +327,9 @@ class FlaxModelTesterMixin:
                 pt_keys = tuple([k for k, v in pt_outputs_loaded.items() if v is not None])
 
                 self.assertEqual(fx_keys, pt_keys)
-                self.check_outputs(fx_outputs.to_tuple(), pt_outputs_loaded.to_tuple(), model_class, names=fx_keys)
+                self.check_pt_flax_outputs(
+                    fx_outputs.to_tuple(), pt_outputs_loaded.to_tuple(), model_class, names=fx_keys
+                )
 
     def test_from_pretrained_save_pretrained(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
