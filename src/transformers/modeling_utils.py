@@ -2458,7 +2458,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             if offload_state_dict:
                 # Load back temporarily offloaded state dict
-                load_offloaded_weights(model, state_dict_index, state_dict_folder)
+                load_offloaded_weights(model_to_load, state_dict_index, state_dict_folder)
                 shutil.rmtree(state_dict_folder)
 
         if len(error_msgs) > 0:
