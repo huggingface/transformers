@@ -82,7 +82,7 @@
       title: Inference on Specialized Hardware
     - local: perf_hardware
       title: Custom hardware for training
-    title: Performance anc scalability
+    title: Performance and scalability
   - local: big_models
     title: Instantiating a big model
   - local: benchmarks
