@@ -2,7 +2,7 @@ from transformers import PretrainedConfig
 
 
 NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "sijunhe/nezha-cn-base": "https://huggingface.co/sijunhe/nezha-cn-base/blob/main/config.json",
+    "sijunhe/nezha-cn-base": "https://huggingface.co/sijunhe/nezha-cn-base/resolve/main/config.json",
 }
 
 
@@ -10,7 +10,8 @@ class NeZhaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`NeZhaModel`]. It is used to instantiate an NeZha
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the NeZha base architecture.
+    defaults will yield a similar configuration to that of the Nezha
+    [sijunhe/nezha-cn-base](https://huggingface.co/sijunhe/nezha-cn-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -18,7 +19,7 @@ class NeZhaConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, optional, defaults to 21128):
-            Vocabulary size of the ALBERT model. Defines the different tokens that can be represented by the
+            Vocabulary size of the NEZHA model. Defines the different tokens that can be represented by the
             *inputs_ids* passed to the forward method of [`NeZhaModel`].
         embedding_size (`int`, optional, defaults to 128):
             Dimensionality of vocabulary embeddings.

@@ -60,8 +60,8 @@ _TOKENIZER_FOR_DOC = "BertTokenizer"
 NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "sijunhe/nezha-cn-base",
     "sijunhe/nezha-base-wwm",
-    # [to be uploaded] "sijunhe/nezha-base-wwm",
-    # [to be uploaded] "sijunhe/nezha-large-zh",
+    # [to be uploaded] "sijunhe/nezha-large-wwm",
+    # [to be uploaded] "sijunhe/nezha-cn-large",
     # See all Nezha models at https://huggingface.co/models?filter=nezha
 ]
 
