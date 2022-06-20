@@ -947,7 +947,6 @@ class PushToHubMixin:
             base_model_card_args.update(model_card_kwargs)
             self.create_model_card(**base_model_card_args)
 
-
         # Commit and push!
         url = self._push_to_hub(repo, commit_message=commit_message)
 

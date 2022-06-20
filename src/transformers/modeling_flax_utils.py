@@ -614,7 +614,6 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         # This variable will flag if we're loading a sharded checkpoint. In this case the archive file is just the
         # index of the files.
         is_sharded = False
-        sharded_metadata = None
 
         # Load model
         if pretrained_model_name_or_path is not None:
@@ -649,7 +648,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                     pretrained_model_name_or_path,
                     filename=filename,
                     revision=revision,
-                    # TODO raise an issue here as flaw does not use a mirror
+                    # TODO raise an issue here as pytroch version uses a mirror argument
                 )
 
             # redirect to the cache, if necessary
@@ -772,12 +771,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                     for file in resolved_archive_file:
                         assert os.path.isfile(file), f"Error retrieving files {file}"
 
-                    state = cls.load_flax_sharded_weights(
-                        model,
-                        resolved_archive_file,
-                        ignore_mismatched_sizes=ignore_mismatched_sizes,
-                        _do_init=_do_init,
-                    )
+                    state = cls.load_flax_sharded_weights(resolved_archive_file)
 
                 else:
                     with open(resolved_archive_file, "rb") as state_f:
@@ -983,7 +977,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         # save model
         output_model_file = os.path.join(save_directory, FLAX_WEIGHTS_NAME)
 
-        shards, index = flax_shard_checkpoint(self.params, max_shard_size)
+        shards, index = flax_shard_checkpoint(params if params is not None else self.params, max_shard_size)
         # Clean the folder from a previous save
         for filename in os.listdir(save_directory):
             full_filename = os.path.join(save_directory, filename)
