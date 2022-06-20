@@ -1874,8 +1874,12 @@ class ModelTesterMixin:
 
         # Allow `list` (e.g. `TransfoXLModelOutput.mems` is a list of tensors.)
         elif type(fx_outputs) in [tuple, list]:
-            self.assertEqual(type(fx_outputs), type(pt_outputs), f"{name}: Output types differ between Flax and PyTorch")
-            self.assertEqual(len(fx_outputs), len(pt_outputs), f"{name}: Output lengths differ between Flax and PyTorch")
+            self.assertEqual(
+                type(fx_outputs), type(pt_outputs), f"{name}: Output types differ between Flax and PyTorch"
+            )
+            self.assertEqual(
+                len(fx_outputs), len(pt_outputs), f"{name}: Output lengths differ between Flax and PyTorch"
+            )
 
             if attributes is not None:
                 # case 1: each output has assigned name (e.g. a tuple form of a `ModelOutput`)
@@ -1918,7 +1922,9 @@ class ModelTesterMixin:
             fx_outputs[pt_nans] = 0
 
             max_diff = np.amax(np.abs(fx_outputs - pt_outputs))
-            self.assertLessEqual(max_diff, tol, f"{name}: Difference between PyTorch and Flax is {max_diff} (>= {tol}).")
+            self.assertLessEqual(
+                max_diff, tol, f"{name}: Difference between PyTorch and Flax is {max_diff} (>= {tol})."
+            )
         else:
             raise ValueError(
                 "`fx_outputs` should be an instance of `ModelOutput`, a `tuple`, or an instance of `jnp.ndarray`. Got"
