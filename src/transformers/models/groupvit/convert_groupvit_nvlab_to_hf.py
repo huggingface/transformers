@@ -24,263 +24,101 @@ import argparse
 import torch
 import torch.nn.functional as F
 
-from GroupViT.models import build_model
-from GroupViT.utils.config import load_config
+from regex import E
 from transformers import GroupViTConfig, GroupViTModel
 
 
-# here we list all keys to be renamed (original name on the left, our name on the right)
-def create_rename_keys_for_vision_model(config, hf_model, pt_model):
-    rename_keys = []
+def rename_key(name):
+    # vision encoder
+    if "img_encoder.pos_embed" in name:
+        name = name.replace("img_encoder.pos_embed", "vision_model.embeddings.position_embeddings")
+    if "img_encoder.patch_embed.proj" in name:
+        name = name.replace("img_encoder.patch_embed.proj", "vision_model.embeddings.patch_embeddings.projection")
+    if "img_encoder.patch_embed.norm" in name:
+        name = name.replace("img_encoder.patch_embed.norm", "vision_model.embeddings.patch_embeddings.layernorm")
+    if "img_encoder.layers" in name:
+        name = name.replace("img_encoder.layers", "vision_model.encoder.stages")
+    if "blocks" in name and "res" not in name:
+        name = name.replace("blocks", "layers")
+    if "attn" in name and "pre_assign" not in name:
+        name = name.replace("attn", "self_attn")
+    if "norm1" in name:
+        name = name.replace("norm1", "layer_norm1")
+    if "norm2" in name:
+        name = name.replace("norm2", "layer_norm2")
+    if "img_encoder.norm" in name:
+        name = name.replace("img_encoder.norm", "vision_model.layernorm")
+    # text encoder
+    if "text_encoder.token_embedding" in name:
+        name = name.replace("text_encoder.token_embedding", "text_model.embeddings.token_embedding")
+    if "text_encoder.positional_embedding" in name:
+        name = name.replace("text_encoder.positional_embedding", "text_model.embeddings.position_embedding.weight")
+    if "text_encoder.transformer.resblocks." in name:
+        name = name.replace("text_encoder.transformer.resblocks.", "text_model.encoder.layers.")
+    if "ln_1" in name:
+        name = name.replace("ln_1", "layer_norm1")
+    if "ln_2" in name:
+        name = name.replace("ln_2", "layer_norm2")
+    if "c_fc" in name:
+        name = name.replace("c_fc", "fc1")
+    if "c_proj" in name:
+        name = name.replace("c_proj", "fc2")
+    if "text_encoder" in name:
+        name = name.replace("text_encoder", "text_model")
+    if "ln_final" in name:
+        name = name.replace("ln_final", "final_layer_norm")
+    # projection layers
+    if "img_projector.linear_hidden." in name:
+        name = name.replace("img_projector.linear_hidden.", "visual_projection.")
+    if "img_projector.linear_out." in name:
+        name = name.replace("img_projector.linear_out.", "visual_projection.3.")
+    if "text_projector.linear_hidden" in name:
+        name = name.replace("text_projector.linear_hidden", "text_projection")
+    if "text_projector.linear_out" in name:
+        name = name.replace("text_projector.linear_out", "text_projection.3")
 
-    # position embeddings
-    rename_keys.extend(
-        [
-            ("img_encoder.pos_embed", "vision_model.embeddings.position_embeddings"),
-        ]
-    )
-
-    for suffix in ["weight", "bias"]:
-        # projection layer + position embeddings
-        rename_keys.extend(
-            [
-                (
-                    f"img_encoder.patch_embed.proj.{suffix}",
-                    f"vision_model.embeddings.patch_embeddings.projection.{suffix}",
-                ),
-                (f"img_encoder.patch_embed.norm.{suffix}", f"vision_model.embeddings.layernorm.{suffix}"),
-                (f"img_encoder.norm.{suffix}", f"vision_model.layernorm.{suffix}"),
-            ]
-        )
-
-    for d, depth in enumerate(config.depths):
-        if config.num_group_tokens[d] > 0:
-            rename_keys.extend(
-                [
-                    (f"img_encoder.layers.{d}.group_token", f"vision_model.encoder.stages.{d}.group_token"),
-                ]
-            )
-            for module_name in ["downsample", "group_projector"]:
-                for name, _ in pt_model.named_parameters():
-                    if name.startswith(f"img_encoder.layers.{d}.{module_name}"):
-                        rename_keys.append((name, name.replace("img_encoder.layers.", "vision_model.encoder.stages.")))
-
-        for i in range(depth):
-            for suffix in ["weight", "bias"]:
-                rename_keys.extend(
-                    [
-                        (
-                            f"img_encoder.layers.{d}.blocks.{i}.norm1.{suffix}",
-                            f"vision_model.encoder.stages.{d}.layers.{i}.layernorm_before.{suffix}",
-                        ),
-                        (
-                            f"img_encoder.layers.{d}.blocks.{i}.attn.proj.{suffix}",
-                            f"vision_model.encoder.stages.{d}.layers.{i}.attention.output.dense.{suffix}",
-                        ),
-                        (
-                            f"img_encoder.layers.{d}.blocks.{i}.norm2.{suffix}",
-                            f"vision_model.encoder.stages.{d}.layers.{i}.layernorm_after.{suffix}",
-                        ),
-                        (
-                            f"img_encoder.layers.{d}.blocks.{i}.mlp.fc1.{suffix}",
-                            f"vision_model.encoder.stages.{d}.layers.{i}.intermediate.dense.{suffix}",
-                        ),
-                        (
-                            f"img_encoder.layers.{d}.blocks.{i}.mlp.fc2.{suffix}",
-                            f"vision_model.encoder.stages.{d}.layers.{i}.output.dense.{suffix}",
-                        ),
-                    ]
-                )
-    for suffix in ["weight", "bias"]:
-        rename_keys.extend(
-            [
-                (f"img_projector.linear_hidden.0.{suffix}", f"visual_projection.0.{suffix}"),
-                (f"img_projector.linear_hidden.1.{suffix}", f"visual_projection.1.{suffix}"),
-                (f"img_projector.linear_out.{suffix}", f"visual_projection.3.{suffix}"),
-            ]
-        )
-    for suffix in ["running_mean", "running_var", "num_batches_tracked"]:
-        rename_keys.extend(
-            [
-                (f"img_projector.linear_hidden.1.{suffix}", f"visual_projection.1.{suffix}"),
-            ]
-        )
-
-    return rename_keys
+    return name
 
 
-def create_rename_keys_for_text_model(config, hf_model, pt_model):
-    rename_keys = []
+def convert_state_dict(orig_state_dict):
+    for key in orig_state_dict.copy().keys():
+        val = orig_state_dict.pop(key)
 
-    rename_keys.extend(
-        [
-            ("text_encoder.positional_embedding", "text_model.embeddings.position_embedding.weight"),
-            ("text_encoder.token_embedding.weight", "text_model.embeddings.token_embedding.weight"),
-        ]
-    )
+        # attention requires special treatment
+        if "qkv" in key:
+            pass
+        else:
+            new_name = rename_key(key)
+            # squeeze if necessary
+            if (
+                "text_projection.0" in new_name
+                or "text_projection.3" in new_name
+                or "visual_projection.0" in new_name
+                or "visual_projection.3" in new_name
+            ):
+                orig_state_dict[new_name] = val.squeeze_()
+            else:
+                orig_state_dict[new_name] = val
 
-    for i in range(config.num_hidden_layers):
-        for suffix in ["weight", "bias"]:
-            rename_keys.extend(
-                [
-                    (
-                        f"text_encoder.transformer.resblocks.{i}.ln_1.{suffix}",
-                        f"text_model.encoder.layers.{i}.layer_norm1.{suffix}",
-                    ),
-                    (
-                        f"text_encoder.transformer.resblocks.{i}.ln_2.{suffix}",
-                        f"text_model.encoder.layers.{i}.layer_norm2.{suffix}",
-                    ),
-                    (
-                        f"text_encoder.transformer.resblocks.{i}.mlp.c_fc.{suffix}",
-                        f"text_model.encoder.layers.{i}.mlp.fc1.{suffix}",
-                    ),
-                    (
-                        f"text_encoder.transformer.resblocks.{i}.mlp.c_proj.{suffix}",
-                        f"text_model.encoder.layers.{i}.mlp.fc2.{suffix}",
-                    ),
-                    (
-                        f"text_encoder.transformer.resblocks.{i}.attn.out_proj.{suffix}",
-                        f"text_model.encoder.layers.{i}.self_attn.out_proj.{suffix}",
-                    ),
-                ]
-            )
-
-    for suffix in ["weight", "bias"]:
-        rename_keys.extend(
-            [
-                (f"text_encoder.ln_final.{suffix}", f"text_model.final_layer_norm.{suffix}"),
-                (f"text_projector.linear_hidden.0.{suffix}", f"text_projection.0.{suffix}"),
-                (f"text_projector.linear_hidden.1.{suffix}", f"text_projection.1.{suffix}"),
-                (f"text_projector.linear_out.{suffix}", f"text_projection.3.{suffix}"),
-            ]
-        )
-    for suffix in ["running_mean", "running_var", "num_batches_tracked"]:
-        rename_keys.extend(
-            [
-                (f"text_projector.linear_hidden.1.{suffix}", f"text_projection.1.{suffix}"),
-            ]
-        )
-
-    return rename_keys
-
-
-# we split up the matrix of each encoder layer into queries, keys and values
-def format_shape_for_vision_model(state_dict, config):
-    for d, depth in enumerate(config.depths):
-        for i in range(depth):
-            # read in weights + bias of input projection layer (in timm, this is a single matrix + bias)
-            in_proj_weight = state_dict.pop(f"img_encoder.layers.{d}.blocks.{i}.attn.qkv.weight")
-            in_proj_bias = state_dict.pop(f"img_encoder.layers.{d}.blocks.{i}.attn.qkv.bias")
-            # next, add query, keys and values (in that order) to the state dict
-            state_dict[
-                f"vision_model.encoder.stages.{d}.layers.{i}.attention.attention.query.weight"
-            ] = in_proj_weight[: config.hidden_size, :]
-            state_dict[f"vision_model.encoder.stages.{d}.layers.{i}.attention.attention.query.bias"] = in_proj_bias[
-                : config.hidden_size
-            ]
-            state_dict[f"vision_model.encoder.stages.{d}.layers.{i}.attention.attention.key.weight"] = in_proj_weight[
-                config.hidden_size : config.hidden_size * 2, :
-            ]
-            state_dict[f"vision_model.encoder.stages.{d}.layers.{i}.attention.attention.key.bias"] = in_proj_bias[
-                config.hidden_size : config.hidden_size * 2
-            ]
-            state_dict[
-                f"vision_model.encoder.stages.{d}.layers.{i}.attention.attention.value.weight"
-            ] = in_proj_weight[-config.hidden_size :, :]
-            state_dict[f"vision_model.encoder.stages.{d}.layers.{i}.attention.attention.value.bias"] = in_proj_bias[
-                -config.hidden_size :
-            ]
-    state_dict["visual_projection.0.weight"] = state_dict["visual_projection.0.weight"].squeeze()
-    state_dict["visual_projection.3.weight"] = state_dict["visual_projection.3.weight"].squeeze()
-
-
-def format_shape_for_text_model(state_dict, config):
-    for i in range(config.num_hidden_layers):
-        # read in weights + bias of input projection layer (in timm, this is a single matrix + bias)
-        in_proj_weight = state_dict.pop(f"text_encoder.transformer.resblocks.{i}.attn.in_proj_weight")
-        in_proj_bias = state_dict.pop(f"text_encoder.transformer.resblocks.{i}.attn.in_proj_bias")
-        # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"text_model.encoder.layers.{i}.self_attn.q_proj.weight"] = in_proj_weight[: config.hidden_size, :]
-        state_dict[f"text_model.encoder.layers.{i}.self_attn.q_proj.bias"] = in_proj_bias[: config.hidden_size]
-        state_dict[f"text_model.encoder.layers.{i}.self_attn.k_proj.weight"] = in_proj_weight[
-            config.hidden_size : config.hidden_size * 2, :
-        ]
-        state_dict[f"text_model.encoder.layers.{i}.self_attn.k_proj.bias"] = in_proj_bias[
-            config.hidden_size : config.hidden_size * 2
-        ]
-        state_dict[f"text_model.encoder.layers.{i}.self_attn.v_proj.weight"] = in_proj_weight[-config.hidden_size :, :]
-        state_dict[f"text_model.encoder.layers.{i}.self_attn.v_proj.bias"] = in_proj_bias[-config.hidden_size :]
-    state_dict["text_projection.0.weight"] = state_dict["text_projection.0.weight"].squeeze()
-    state_dict["text_projection.3.weight"] = state_dict["text_projection.3.weight"].squeeze()
-
-
-def rename_key(dct, old, new):
-    val = dct.pop(old)
-    dct[new] = val
-
-
-@torch.no_grad()
-def pt_model_forward(pt_model, pixel_values, input_ids):
-    image_x = pt_model.encode_image(pixel_values)
-    image_x = F.normalize(image_x, dim=-1)
-
-    text_x = pt_model.encode_text(input_ids)
-    text_x = F.normalize(text_x, dim=-1)
-
-    logits_per_img = image_x @ text_x.t()
-    logits_per_text = text_x @ image_x.t()
-
-    logits_per_img = logits_per_img * pt_model.logit_scale.exp()
-    logits_per_text = logits_per_text * pt_model.logit_scale.exp()
-
-    return logits_per_img, logits_per_text
+    return orig_state_dict
 
 
 @torch.no_grad()
 def convert_groupvit_checkpoint(checkpoint_path, pytorch_dump_folder_path):
     """
-    Copy/paste/tweak model's weights to transformers design.
+    Copy/paste/tweak model's weights to the Transformers design.
     """
     config = GroupViTConfig()
+    model = GroupViTModel(config).eval()
 
-    hf_model = GroupViTModel(config).eval()
+    state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
+    new_state_dict = convert_state_dict(state_dict)
+    del new_state_dict["multi_label_logit_scale"]
+    model.load_state_dict(new_state_dict)
 
-    pt_model = build_model(load_config("GroupViT/configs/group_vit_gcc_yfcc_30e.yml").model)
-    if checkpoint_path.startswith("https:"):
-        pt_model.load_state_dict(
-            torch.hub.load_state_dict_from_url(checkpoint_path, map_location="cpu")["model"], strict=True
-        )
-    else:
-        pt_model.load_state_dict(torch.load(checkpoint_path, map_location="cpu")["model"], strict=True)
-    pt_model = pt_model.eval()
+    expected_logits = torch.tensor([])
 
-    state_dict = pt_model.state_dict().copy()
-    rename_keys = create_rename_keys_for_vision_model(config.vision_config, hf_model, pt_model)
-    for src, dest in rename_keys:
-        rename_key(state_dict, src, dest)
-    format_shape_for_vision_model(state_dict, config.vision_config)
-
-    rename_keys = create_rename_keys_for_text_model(config.text_config, hf_model, pt_model)
-    for src, dest in rename_keys:
-        rename_key(state_dict, src, dest)
-    format_shape_for_text_model(state_dict, config.text_config)
-    missing_keys, unexpected_keys = hf_model.load_state_dict(state_dict, strict=False)
-    assert missing_keys == ["text_model.embeddings.position_ids"]
-    assert unexpected_keys == ["multi_label_logit_scale"]
-
-    input_ids = torch.arange(0, 77).unsqueeze(0)
-    pixel_values = torch.randn(1, 3, 224, 224)
-
-    hf_logits_per_image, hf_logits_per_text = hf_model(
-        input_ids=input_ids, pixel_values=pixel_values, return_dict=True
-    )[:2]
-    pt_logits_per_image, pt_logits_per_text = pt_model_forward(pt_model, pixel_values, input_ids)
-
-    assert torch.allclose(hf_logits_per_image, pt_logits_per_image, atol=1e-3)
-    assert torch.allclose(hf_logits_per_text, pt_logits_per_text, atol=1e-3)
-
-    hf_model.save_pretrained(pytorch_dump_folder_path)
+    model.save_pretrained(pytorch_dump_folder_path)
     print("Saved model to", pytorch_dump_folder_path)
 
 

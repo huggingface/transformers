@@ -16,5 +16,6 @@ for k, v in inputs.items():
     print(k, v.shape)
 
 outputs = model(**inputs)
-logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
-probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
+
+for name, param in model.named_parameters():
+    print(name, param.shape)
