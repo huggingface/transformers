@@ -597,7 +597,7 @@ def tf_shard_checkpoint(weights, max_shard_size="10GB"):
     </Tip>
 
     Args:
-        state_dict (`Dict[str, torch.Tensor]`): The state dictionary of a model to save.
+        weights (`Dict[str, tf.RessourceVariable]`): The list of tf.RessourceVariable of a model to save.
         max_shard_size (`int` or `str`, *optional*, defaults to `"10GB"`):
             The maximum size of each sub-checkpoint. If expressed as a string, needs to be digits followed by a unit
             (like `"5MB"`).
@@ -636,10 +636,6 @@ def tf_shard_checkpoint(weights, max_shard_size="10GB"):
         shard_file = TF2_WEIGHTS_NAME.replace(".h5", f"-{idx+1:05d}-of-{len(sharded_state_dicts):05d}.h5")
         shards[shard_file] = shard
         for weight in shard:
-            # remove the class name from the layer name for smooth loading
-            # this could be removed only if the loading is purely based on indexes
-            # and not layer names
-            # weight_name = "/".join(weight.name.split("/")[1:])
             weight_name = weight.name
             weight_map[weight_name] = shard_file
 
@@ -717,8 +713,7 @@ def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatch
         model (`tf.keras.models.Model`): Model in which the weights are loaded
         model_layer_map (`Dict`): A dictionnary mapping the layer name to the index of the layer in the model.
         resolved_archive_file (`str`): Path to the checkpoint file from which the weights will be loaded
-        ignore_mismatched_sizes (bool, optional):
-            _description_. Defaults to False. Whether to ignore the mismatch keys
+        ignore_mismatched_sizes (`bool`, *optional*, defaults to `False`): Whether to ignore the mismatch keys
 
     Returns:
         Three lists, one for the layers that were found and succesfully restored (from the shard file), one for the
@@ -729,50 +724,74 @@ def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatch
     missmatched_keys = set()
     unexpected_keys = set()
     # Read the H5 file
-    with h5py.File(resolved_archive_file, "r") as f:
-        # Retrieve the name of each layer from the H5 file
-        saved_h5_model_layers_name = set(hdf5_format.load_attributes_from_hdf5_group(f, "layer_names"))
-        weight_value_tuples = []
+    try:
+        with h5py.File(resolved_archive_file, "r") as f:
+            # Retrieve the name of each layer from the H5 file
+            saved_h5_model_layers_name = set(hdf5_format.load_attributes_from_hdf5_group(f, "layer_names"))
+            weight_value_tuples = []
 
-        # Compute missing and unexpected sub layers
-        # Store the weights in list of tuples that looks like [(weight_object, value_of_weight),...]
-        for layer_name in saved_h5_model_layers_name:
-            h5_layer_object = f[layer_name]
-            saved_weights[layer_name] = np.asarray(h5_layer_object)
+            # Compute missing and unexpected sub layers
+            # Store the weights in list of tuples that looks like [(weight_object, value_of_weight),...]
+            for layer_name in saved_h5_model_layers_name:
+                h5_layer_object = f[layer_name]
+                saved_weights[layer_name] = np.asarray(h5_layer_object)
 
-            saved_weight_names_set.add(layer_name)
+                saved_weight_names_set.add(layer_name)
 
-            if layer_name not in model_layer_map:
-                unexpected_keys.add(layer_name)
-            else:
-                symbolic_weight = model.weights[model_layer_map[layer_name]]
+                if layer_name not in model_layer_map:
+                    unexpected_keys.add(layer_name)
+                else:
+                    symbolic_weight = model.weights[model_layer_map[layer_name]]
 
-                saved_weight_value = saved_weights[layer_name]
-                # If the current weight is found
-                if saved_weight_value is not None:
-                    # Check if the shape of the current weight and the one from the H5 file are different
-                    if K.int_shape(symbolic_weight) != saved_weight_value.shape:
-                        # If yes we reshape the weight from the H5 file accordingly to the current weight
-                        # If the two shapes are not compatible we raise an issue
-                        try:
-                            array = np.reshape(saved_weight_value, K.int_shape(symbolic_weight))
-                        except ValueError as e:
-                            if ignore_mismatched_sizes:
-                                missmatched_keys.add(
-                                    (layer_name, saved_weight_value.shape, K.int_shape(symbolic_weight))
-                                )
-                                continue
-                            else:
-                                raise e
-                    else:
-                        array = saved_weight_value
+                    saved_weight_value = saved_weights[layer_name]
+                    # If the current weight is found
+                    if saved_weight_value is not None:
+                        # Check if the shape of the current weight and the one from the H5 file are different
+                        if K.int_shape(symbolic_weight) != saved_weight_value.shape:
+                            # If yes we reshape the weight from the H5 file accordingly to the current weight
+                            # If the two shapes are not compatible we raise an issue
+                            try:
+                                array = np.reshape(saved_weight_value, K.int_shape(symbolic_weight))
+                            except ValueError as e:
+                                if ignore_mismatched_sizes:
+                                    missmatched_keys.add(
+                                        (layer_name, saved_weight_value.shape, K.int_shape(symbolic_weight))
+                                    )
+                                    continue
+                                else:
+                                    raise e
+                        else:
+                            array = saved_weight_value
 
-                # We create the tuple that will be loaded and add it to the final list
-                weight_value_tuples.append((symbolic_weight, array))
+                    # We create the tuple that will be loaded and add it to the final list
+                    weight_value_tuples.append((symbolic_weight, array))
 
-    K.batch_set_value(weight_value_tuples)
+        K.batch_set_value(weight_value_tuples)
 
-    return saved_weight_names_set, unexpected_keys, missmatched_keys
+        return saved_weight_names_set, unexpected_keys, missmatched_keys
+    
+    except Exception as e:
+        try:
+            with open(resolved_archive_file) as f:
+                if f.read().startswith("version"):
+                    raise OSError(
+                        "You seem to have cloned a repository without having git-lfs installed. Please install "
+                        "git-lfs and run `git lfs install` followed by `git lfs pull` in the folder "
+                        "you cloned."
+                    )
+                else:
+                    raise ValueError(
+                        f"Unable to locate the file {resolved_archive_file} which is necessary to load this pretrained "
+                        "model. Make sure you have saved the model properly."
+                    ) from e
+        except (UnicodeDecodeError, ValueError):
+            raise OSError(
+                f"Unable to load weights from TF checkpoint file for '{resolved_archive_file}' "
+                f"at '{resolved_archive_file}'. "
+                "If you tried to load a TF model from a sharded checkpoint, you should try converting the model"
+                "by loading it in pytorch and saving it localy. A convertion script should be realeased soon."
+            )
+
 
 
 def load_tf_weights(model, resolved_archive_file, ignore_mismatched_sizes=False, _prefix=None):
