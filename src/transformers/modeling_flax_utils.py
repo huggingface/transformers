@@ -14,6 +14,7 @@
 # limitations under the License.
 
 
+import gc
 import json
 import os
 import re
@@ -423,27 +424,20 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         return self._cast_floating_to(params, jnp.float16, mask)
 
     @classmethod
-    def load_flax_sharded_weights(cls, model, shard_files, ignore_mismatched_sizes=False, _do_init=True):
+    def load_flax_sharded_weights(cls, shard_files):
         """
         Args:
         This is the same as
-        [`torch.nn.Module.load_state_dict`](https:
-            //pytorch.org/docs/stable/generated/torch.nn.Module.html?highlight=load_state_dict#torch.nn.Module.load_state_dict)
+        [`flax.serialization.from_bytes`](https:
+            //flax.readthedocs.io/en/latest/_modules/flax/serialization.html#from_bytes)
         but for a sharded checkpoint. This load is performed efficiently:
             each checkpoint shard is loaded one by one in
         RAM and deleted after being loaded in the model.
-            model (`torch.nn.Module`): The model in which to load the checkpoint. shard_files (`str` or `os.PathLike`):
-            A list containing the sharded checkpoint names. ignore_mismatched_sizes`bool`, *optional`, defaults to
-            `True`):
-                Whether or not to ignore the mismatch between the sizes
-            strict (`bool`, *optional`, defaults to `True`):
-                Whether to strictly enforce that the keys in the model state dict match the keys in the sharded
-                checkpoint.
+            shard_files (`List[str]`:
+                The list of shard files to load.
         Returns:
-            `NamedTuple`: A named tuple with `missing_keys` and `unexpected_keys` fields
-                - `missing_keys` is a list of str containing the missing keys
-                - `unexpected_keys` is a list of str containing the unexpected keys
-                - `missmatched_keys` is a list of str containing the missmatched keys
+            `Dict`: A nested dictionary of the model parameters, in the expected format for flax models : `{'model':
+            {'params': {'...'}}}`.
         """
 
         # Load the index
@@ -455,7 +449,10 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 state = from_bytes(cls, state_f.read())
             state = flatten_dict(state, sep="/")
             state_sharded_dict.update(state)
+            del state
+            gc.collect()
 
+        # the state dict is unflattened to the match the format of model.params
         return unflatten_dict(state_sharded_dict, sep="/")
 
     @classmethod
@@ -750,7 +747,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         # We'll need to download and cache each checkpoint shard if the checkpoint is sharded.
         if is_sharded:
             # resolved_archive_file becomes a list of files that point to the different checkpoint shards in this case.
-            resolved_archive_file, sharded_metadata = get_checkpoint_shard_files(
+            resolved_archive_file, _ = get_checkpoint_shard_files(
                 pretrained_model_name_or_path,
                 resolved_archive_file,
                 cache_dir=cache_dir,

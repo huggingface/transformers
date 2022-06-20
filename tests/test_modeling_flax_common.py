@@ -1044,10 +1044,6 @@ class FlaxModelTesterMixin:
 
                 # Finally, check the model can be reloaded
                 new_model = FlaxBertModel.from_pretrained(tmp_dir)
-
-                model(model.dummy_inputs)
-                new_model(model.dummy_inputs)
-
                 for p1, p2 in zip(model.weights, new_model.weights):
                     self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
 
