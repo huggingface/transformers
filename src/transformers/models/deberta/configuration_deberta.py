@@ -180,7 +180,7 @@ class DebertaOnnxConfig(OnnxConfig):
         image_height: int = 40,
         tokenizer: "PreTrainedTokenizerBase" = None,
     ) -> Mapping[str, Any]:
-        initial_dummy_inputs = super().generate_dummy_inputs(preprocessor=preprocessor, framework=framework)
-        if self._config.type_vocab_size == 0 and "token_type_ids" in initial_dummy_inputs:
-            del initial_dummy_inputs["token_type_ids"]
-        return initial_dummy_inputs
+        dummy_inputs = super().generate_dummy_inputs(preprocessor=preprocessor, framework=framework)
+        if self._config.type_vocab_size == 0 and "token_type_ids" in dummy_inputs:
+            del dummy_inputs["token_type_ids"]
+        return dummy_inputs
