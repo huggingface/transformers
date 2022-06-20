@@ -39,7 +39,8 @@ from .utils import (
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_torch_available,
-    is_torch_bf16_available,
+    is_torch_bf16_cpu_available,
+    is_torch_bf16_gpu_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
     logging,
@@ -1036,14 +1037,23 @@ class TrainingArguments:
             )
             self.half_precision_backend = self.fp16_backend
 
-        if (self.bf16 or self.bf16_full_eval) and not is_torch_bf16_available() and not self.no_cuda:
-            raise ValueError(
-                "Your setup doesn't support bf16. You need torch>=1.10, using Ampere GPU with cuda>=11.0 or using CPU"
-                " (no_cuda)"
-            )
+        if self.bf16 or self.bf16_full_eval:
+
+            if self.no_cuda and not is_torch_bf16_cpu_available():
+                # cpu
+                raise ValueError("Your setup doesn't support bf16/cpu. You need torch>=1.10")
+            elif not is_torch_bf16_gpu_available():
+                # gpu
+                raise ValueError(
+                    "Your setup doesn't support bf16/gpu. You need torch>=1.10, using Ampere GPU with cuda>=11.0"
+                )
 
         if self.fp16 and self.bf16:
             raise ValueError("At most one of fp16 and bf16 can be True, but not both")
+
+        if self.fp16_full_eval and self.bf16_full_eval:
+            raise ValueError("At most one of fp16 and bf16 can be True for full eval, but not both")
+
         if self.bf16:
             if self.half_precision_backend == "apex":
                 raise ValueError(
