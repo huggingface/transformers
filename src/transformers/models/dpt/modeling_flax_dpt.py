@@ -42,7 +42,7 @@ from .configuration_dpt import DPTConfig
 
 DPT_START_DOCSTRING = r"""
     This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading, saving and converting weights from PyTorch models) This
+    library implements for all its model (such as downloading, saving and converting weights from Flax models) This
     model is also a Flax Linen [flax.linen.Module](https://flax.readthedocs.io/en/latest/flax.linen.html#module)
     subclass. Use it as a regular Flax linen Module and refer to the Flax documentation for all matter related to
     general usage and behavior. Finally, this model supports inherent JAX features such as:
@@ -51,7 +51,7 @@ DPT_START_DOCSTRING = r"""
     - [Vectorization](https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap)
     - [Parallelization](https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap)
     Parameters:
-        config ([`ViTConfig`]): Model configuration class with all the parameters of the model.
+        config ([`DPTConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~FlaxPreTrainedModel.from_pretrained`] method to load the model weights.
         dtype (`jax.numpy.dtype`, *optional*, defaults to `jax.numpy.float32`):
@@ -79,6 +79,7 @@ DPT_INPUTS_DOCSTRING = r"""
 """
 
 
+# Copied from transformers.models.vit.modeling_flax_vit.FlaxPatchEmbeddings with ViT->DPT
 class FlaxPatchEmbeddings(nn.Module):
 
     config: DPTConfig
@@ -104,6 +105,7 @@ class FlaxPatchEmbeddings(nn.Module):
         return jnp.reshape(x, (batch_size, -1, channels))
 
 
+# Copied from transformers.models.vit.modeling_flax_vit.FlaxViTEmbeddings with ViT->DPT
 class FlaxDPTEmbeddings(nn.Module):
     """Construct the CLS token, position and patch embeddings."""
 
@@ -131,7 +133,8 @@ class FlaxDPTEmbeddings(nn.Module):
         return embeddings
 
 
-class FlaxViTSelfAttention(nn.Module):
+# Copied from transformers.models.vit.modeling_flax_vit.FlaxViTSelfAttention with ViT->DPT
+class FlaxDPTSelfAttention(nn.Module):
     config: DPTConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
@@ -215,7 +218,8 @@ class FlaxDPTViTOutput(nn.Module):
         return hidden_states
 
 
-class FlaxDPTViTSelfOutput(nn.Module):
+# Copied from transformers.models.vit.modeling_flax_vit.FlaxViTSelfOutput with ViT->DPT
+class FlaxDPTSelfOutput(nn.Module):
     config: DPTConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
@@ -233,13 +237,14 @@ class FlaxDPTViTSelfOutput(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.vit.modeling_flax_vit.FlaxViTAttention with ViT->DPT
 class FlaxDPTViTAttention(nn.Module):
     config: DPTConfig
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.attention = FlaxViTSelfAttention(self.config, dtype=self.dtype)
-        self.output = FlaxDPTViTSelfOutput(self.config, dtype=self.dtype)
+        self.attention = FlaxDPTSelfAttention(self.config, dtype=self.dtype)
+        self.output = FlaxDPTSelfOutput(self.config, dtype=self.dtype)
 
     def __call__(self, hidden_states, deterministic=True, output_attentions: bool = False):
         attn_outputs = self.attention(hidden_states, deterministic=deterministic, output_attentions=output_attentions)
@@ -254,6 +259,7 @@ class FlaxDPTViTAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.vit.modeling_flax_vit.FlaxViTIntermediate with ViT->DPT
 class FlaxDPTViTIntermediate(nn.Module):
     config: DPTConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
