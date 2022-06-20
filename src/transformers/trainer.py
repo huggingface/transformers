@@ -939,6 +939,7 @@ class Trainer:
             batch_size=self.args.eval_batch_size,
             collate_fn=data_collator,
             drop_last=self.args.dataloader_drop_last,
+            num_workers=self.args.dataloader_num_workers,
             pin_memory=self.args.dataloader_pin_memory,
         )
 

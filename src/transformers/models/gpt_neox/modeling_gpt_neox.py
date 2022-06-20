@@ -143,7 +143,7 @@ class GPTNeoXAttention(nn.Module):
             past_value = layer_past[1]
             key = torch.cat((past_key, key), dim=-2)
             value = torch.cat((past_value, value), dim=-2)
-        present = None if use_cache else (key, value)
+        present = (key, value) if use_cache else None
 
         # Compute attention
         attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
