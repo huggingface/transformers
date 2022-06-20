@@ -37,6 +37,7 @@ from tensorflow.python.keras.saving import hdf5_format
 from huggingface_hub import Repository, list_repo_files
 from keras.saving.hdf5_format import save_attributes_to_hdf5_group
 from requests import HTTPError
+from transformers.utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
 
 from . import DataCollatorWithPadding, DefaultDataCollator
 from .activations_tf import get_tf_activation
@@ -558,40 +559,6 @@ def input_processing(func, config, input_ids, **kwargs):
     return output
 
 
-def convert_file_size_to_int(size: Union[int, str]):
-    """
-    Converts a size expressed as a string with digits an unit (like `"5MB"`) to an integer (in bytes).
-
-    Args:
-        size (`int` or `str`): The size to convert. Will be directly returned if an `int`.
-
-    Example:
-
-    ```py
-    >>> convert_file_size_to_int("1MiB")
-    1048576
-    ```
-    """
-    if isinstance(size, int):
-        return size
-    if size.upper().endswith("GIB"):
-        return int(size[:-3]) * (2**30)
-    if size.upper().endswith("MIB"):
-        return int(size[:-3]) * (2**20)
-    if size.upper().endswith("KIB"):
-        return int(size[:-3]) * (2**10)
-    if size.upper().endswith("GB"):
-        int_size = int(size[:-2]) * (10**9)
-        return int_size // 8 if size.endswith("b") else int_size
-    if size.upper().endswith("MB"):
-        int_size = int(size[:-2]) * (10**6)
-        return int_size // 8 if size.endswith("b") else int_size
-    if size.upper().endswith("KB"):
-        int_size = int(size[:-2]) * (10**3)
-        return int_size // 8 if size.endswith("b") else int_size
-    raise ValueError("`size` is not in a valid format. Use an integer followed by the unit, e.g., '5GB'.")
-
-
 def dtype_byte_size(dtype):
     """
     Returns the size (in bytes) occupied by one parameter of type `dtype`.
@@ -682,85 +649,6 @@ def tf_shard_checkpoint(weights, max_shard_size="10GB"):
     return shards, index
 
 
-def get_checkpoint_shard_files(
-    pretrained_model_name_or_path,
-    index_filename,
-    cache_dir=None,
-    force_download=False,
-    proxies=None,
-    resume_download=False,
-    local_files_only=False,
-    use_auth_token=None,
-    user_agent=None,
-    revision=None,
-    mirror=None,
-):
-    """
-    For a given model:
-
-    - download and cache all the shards of a sharded checkpoint if `pretrained_model_name_or_path` is a model ID on the
-      Hub
-    - returns the list of paths to all the shards, as well as some metadata.
-
-    For the description of each arg, see [`PreTrainedModel.from_pretrained`]. `index_filename` is the full path to the
-    index (downloaded and cached if `pretrained_model_name_or_path` is a model ID on the Hub).
-    """
-    import json
-
-    if not os.path.isfile(index_filename):
-        raise ValueError(
-            f"Can't find a checkpoint index ({TF2_WEIGHTS_INDEX_NAME}) in {pretrained_model_name_or_path}."
-        )
-
-    with open(index_filename, "r") as f:
-        index = json.loads(f.read())
-
-    shard_filenames = sorted(list(set(index["weight_map"].values())))
-    sharded_metadata = index["metadata"]
-    sharded_metadata["all_checkpoint_keys"] = list(index["weight_map"].keys())
-
-    # First, let's deal with local folder.
-    if os.path.isdir(pretrained_model_name_or_path):
-        shard_filenames = [os.path.join(pretrained_model_name_or_path, f) for f in shard_filenames]
-        return shard_filenames, sharded_metadata
-
-    # At this stage pretrained_model_name_or_path is a model identifier on the Hub
-    cached_filenames = []
-    for shard_filename in shard_filenames:
-        shard_url = hf_bucket_url(
-            pretrained_model_name_or_path, filename=shard_filename, revision=revision, mirror=mirror
-        )
-
-        try:
-            # Load from URL
-            cached_filename = cached_path(
-                shard_url,
-                cache_dir=cache_dir,
-                force_download=force_download,
-                proxies=proxies,
-                resume_download=resume_download,
-                local_files_only=local_files_only,
-                use_auth_token=use_auth_token,
-                user_agent=user_agent,
-            )
-        # We have already dealt with RepositoryNotFoundError and RevisionNotFoundError when getting the index, so
-        # we don't have to catch them here.
-        except EntryNotFoundError:
-            raise EnvironmentError(
-                f"{pretrained_model_name_or_path} does not appear to have a file named {shard_filename} which is "
-                "required according to the checkpoint index."
-            )
-        except HTTPError:
-            raise EnvironmentError(
-                f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load {shard_filename}. You should try"
-                " again after checking your internet connection."
-            )
-
-        cached_filenames.append(cached_filename)
-
-    return cached_filenames, sharded_metadata
-
-
 def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, strict=True):
     """
     This is the same as
@@ -823,19 +711,17 @@ def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, s
 
 def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatched_sizes=False):
     """
-    Loads a shard of a sharded checkpoint. Handles the missing keys and unexpected keys.
+    Loads a shard from a sharded checkpoint file. Handles the missing keys and unexpected keys.
 
     Args:
-        model (_type_): _description_
-        model_layer_map (_type_): _description_
-        resolved_archive_file (_type_): _description_
-        ignore_mismatched_sizes (bool, optional): _description_. Defaults to False.
-
-    Raises:
-        e: _description_
+        model (`tf.keras.models.Model`): Model in which the weights are loaded
+        model_layer_map (`Dict`): A dictionnary mapping the layer name to the index of the layer in the model.
+        resolved_archive_file (`str`): Path to the checkpoint file from which the weights will be loaded
+        ignore_mismatched_sizes (bool, optional): _description_. Defaults to False. Whether to ignore the mismatch keys
 
     Returns:
-        _type_: _description_
+        Three lists, one for the layers that were found and succesfully restored (from the shard file),
+        one for the missmatched layers, and another one for the unexpected layers.
     """
     saved_weight_names_set = set()
     saved_weights = {}
@@ -890,7 +776,8 @@ def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatch
 
 def load_tf_weights(model, resolved_archive_file, ignore_mismatched_sizes=False, _prefix=None):
     """
-    Detect missing and unexpected layers and load the TF weights accordingly to their names and shapes.
+    Detect missing and unexpected layers and load the TF weights from the shard file
+    accordingly to their names and shapes.
 
     Args:
         model (`tf.keras.models.Model`):
