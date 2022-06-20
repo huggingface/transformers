@@ -868,7 +868,7 @@ class FlaxDPTUpsample(nn.Module):
         if output_size is None:
             output_size = x.shape
             output_size = (output_size[0], output_size[1] * self.scale, output_size[2] * self.scale, output_size[3])
-        return jax.image.resize(x, output_size, method="bilinear")
+        return jax.image.resize(x, output_size, method=self.method)
 
 
 class FlaxDPTDepthEstimationHeadCollectionLayer(nn.Module):
@@ -1044,16 +1044,16 @@ class FlaxDPTSemanticSegmentationHeadCollectionLayer(nn.Module):
     def setup(self):
         self.conv1 = nn.Conv(self.config.fusion_hidden_size, kernel_size=(3, 3), padding=1, name="0", use_bias=False)
         self.bn = nn.BatchNorm(use_running_average=True, name="1")
-        self.dropout = nn.Dropout(0.1, deterministic=True)
+        self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
         self.act = ACT2FN["relu"]
         self.conv2 = nn.Conv(self.config.num_labels, kernel_size=(1, 1), name="4")
         self.upsample = FlaxDPTUpsample(scale=2, method="bilinear")
 
-    def __call__(self, hidden_states):
+    def __call__(self, hidden_states, deterministic=True):
         x = self.conv1(hidden_states)
         x = self.bn(x)
         x = self.act(x)
-        x = self.dropout(x)
+        x = self.dropout(x, deterministic=deterministic)
         x = self.conv2(x)
         x = self.upsample(x)
         return x
@@ -1068,11 +1068,11 @@ class FlaxDPTSemanticSegmentationHead(nn.Module):
         self.head = FlaxDPTSemanticSegmentationHeadCollectionLayer(self.config, self.dtype)
 
     # @nn.compact
-    def __call__(self, hidden_states):
+    def __call__(self, hidden_states, deterministic=True):
         # use last features
         hidden_states = hidden_states[self.config.head_in_index]
 
-        logits = self.head(hidden_states)
+        logits = self.head(hidden_states, deterministic=deterministic)
         return jnp.transpose(logits, (0, 3, 1, 2))
 
 
@@ -1084,14 +1084,14 @@ class FlaxDPTAuxiliaryHeadCollectionLayer(nn.Module):
         self.conv1 = nn.Conv(self.config.fusion_hidden_size, kernel_size=(3, 3), padding=1, name="0", use_bias=False)
         self.bn = nn.BatchNorm(use_running_average=True, name="1")
         self.act = ACT2FN["relu"]
-        self.dropout = nn.Dropout(0.1, deterministic=True)
+        self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
         self.conv2 = nn.Conv(self.config.num_labels, kernel_size=(1, 1), name="4")
 
-    def __call__(self, hidden_states):
+    def __call__(self, hidden_states, deterministic=True):
         x = self.conv1(hidden_states)
         x = self.bn(x)
         x = self.act(x)
-        x = self.dropout(x)
+        x = self.dropout(x, deterministic=deterministic)
         x = self.conv2(x)
         return x
 
@@ -1103,8 +1103,8 @@ class FlaxDPTAuxiliaryHead(nn.Module):
     def setup(self):
         self.head = FlaxDPTAuxiliaryHeadCollectionLayer(self.config, self.dtype)
 
-    def __call__(self, hidden_states):
-        logits = self.head(hidden_states)
+    def __call__(self, hidden_states, deterministic=True):
+        logits = self.head(hidden_states, deterministic=deterministic)
 
         return jnp.transpose(logits, (0, 3, 1, 2))
 
