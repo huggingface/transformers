@@ -566,7 +566,7 @@ def dtype_byte_size(dtype):
     Example:
 
     ```py
-    >>> dtype_byte_size(torch.float32)
+    >>> dtype_byte_size(tf.float32)
     4
     ```
     """
@@ -647,9 +647,8 @@ def tf_shard_checkpoint(weights, max_shard_size="10GB"):
 
 def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, strict=True):
     """
-    This is the same as `load_tf_weights`  but for a sharded checkpoint. 
-    Detect missing and unexpected layers and load the TF weights from the shard file accordingly to their names and
-    shapes.
+    This is the same as `load_tf_weights` but for a sharded checkpoint. Detect missing and unexpected layers and load
+    the TF weights from the shard file accordingly to their names and shapes.
 
     This load is performed efficiently: each checkpoint shard is loaded one by one in RAM and deleted after being
     loaded in the model.
@@ -767,7 +766,7 @@ def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatch
         K.batch_set_value(weight_value_tuples)
 
         return saved_weight_names_set, unexpected_keys, missmatched_keys
-    
+
     except Exception as e:
         try:
             with open(resolved_archive_file) as f:
@@ -779,8 +778,8 @@ def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatch
                     )
                 else:
                     raise ValueError(
-                        f"Unable to locate the file {resolved_archive_file} which is necessary to load this pretrained "
-                        "model. Make sure you have saved the model properly."
+                        f"Unable to locate the file {resolved_archive_file} which is necessary to load this pretrained"
+                        " model. Make sure you have saved the model properly."
                     ) from e
         except (UnicodeDecodeError, ValueError):
             raise OSError(
@@ -789,7 +788,6 @@ def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatch
                 "If you tried to load a TF model from a sharded checkpoint, you should try converting the model"
                 "by loading it in pytorch and saving it localy. A convertion script should be realeased soon."
             )
-
 
 
 def load_tf_weights(model, resolved_archive_file, ignore_mismatched_sizes=False, _prefix=None):
