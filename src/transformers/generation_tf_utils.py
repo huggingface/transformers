@@ -1979,6 +1979,8 @@ class TFGenerationMixin:
             return_dict_in_generate if return_dict_in_generate is not None else self.config.return_dict_in_generate
         )
         use_xla = not tf.executing_eagerly()
+        # some models, like XLNet, need more than the last token in the presence of past
+        needs_full_input = "use_mems" in set(inspect.signature(self.prepare_inputs_for_generation).parameters.keys())
 
         # 2. init `attentions`, `hidden_states`, and `scores` tuples
         scores = [] if (return_dict_in_generate and output_scores) else None
@@ -2003,7 +2005,11 @@ class TFGenerationMixin:
         # define condition fn
         def greedy_search_body_fn(generated, finished_sequences, cur_len, model_kwargs):
             """state update fn."""
-            model_inputs = self.prepare_inputs_for_generation(generated[:, :cur_len], **model_kwargs)
+            if model_kwargs.get("past") is None or needs_full_input:
+                next_tokens = generated[:, :cur_len]
+            else:
+                next_tokens = tf.expand_dims(generated[:, cur_len - 1], -1)
+            model_inputs = self.prepare_inputs_for_generation(next_tokens, **model_kwargs)
             # forward pass to get next token logits
             outputs = self(
                 **model_inputs,
