@@ -580,7 +580,7 @@ class FlaxT5EncoderOnlyModelTester:
 @require_flax
 class FlaxT5EncoderOnlyModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (FlaxT5EncoderModel, ) if is_flax_available() else ()
+    all_model_classes = (FlaxT5EncoderModel,) if is_flax_available() else ()
     is_encoder_decoder = False
 
     def setUp(self):
