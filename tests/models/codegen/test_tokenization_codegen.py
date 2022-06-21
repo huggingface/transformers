@@ -16,11 +16,12 @@
 
 import json
 import os
+import re
 import unittest
 
 from transformers import CodeGenTokenizer, CodeGenTokenizerFast
 from transformers.models.codegen.tokenization_codegen import VOCAB_FILES_NAMES
-from transformers.testing_utils import require_tokenizers
+from transformers.testing_utils import require_tokenizers, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -246,6 +247,18 @@ class CodeGenTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertEqual(decode_s.split()[0], bos_token)
         self.assertTrue(all(d.split()[0] == bos_token for d in decode_s2))
+
+    @slow
+    def test_truncation(self):
+        tokenizer = CodeGenTokenizer.from_pretrained("Salesforce/codegen-350M-mono")
+
+        text = "\nif len_a > len_b:\n    result = a\nelse:\n    result = b\n\n\n\n#"
+        expected_trucated_text = "\nif len_a > len_b:      result = a\nelse:      result = b"
+
+        input_ids = tokenizer.encode(text)
+        truncation_pattern = ["^#", re.escape("<|endoftext|>"), "^'''", '^"""', "\n\n\n"]
+        decoded_text = tokenizer.decode(input_ids, truncate_before_pattern=truncation_pattern)
+        self.assertEqual(decoded_text, expected_trucated_text)
 
     # tokenizer has no padding token
     def test_padding_different_model_input_name(self):
