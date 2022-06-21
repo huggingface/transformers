@@ -18,7 +18,7 @@
 import collections.abc
 import math
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 import tensorflow as tf
 
@@ -770,7 +770,7 @@ class TFDeiTForMaskedImageModeling(TFDeiTPreTrainedModel):
     def __init__(self, config: DeiTConfig) -> None:
         super().__init__(config)
 
-        self.deit = TFDeiTModel(config, add_pooling_layer=False, use_mask_token=True)
+        self.deit = TFDeiTMainLayer(config, add_pooling_layer=False, use_mask_token=True, name="deit")
         self.decoder = TFDeitDecoder(config, name="decoder")
 
     @unpack_inputs
@@ -868,6 +868,15 @@ class TFDeiTForMaskedImageModeling(TFDeiTPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+class TFIdentityLayer(tf.keras.layers.Layer):
+    """ Helper class that provides a Layer API for identity"""
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+
+    def call(self, inputs: Any) -> Any:
+        return tf.identity(inputs)
 
 
 @add_start_docstrings(
@@ -1021,12 +1030,12 @@ class TFDeiTForImageClassificationWithTeacher(TFDeiTPreTrainedModel):
         self.cls_classifier = (
             tf.keras.layers.Dense(config.num_labels, name="cls_classifier")
             if config.num_labels > 0
-            else tf.identity(name="cls_classifier")
+            else TFIdentityLayer(name="cls_classifier")
         )
         self.distillation_classifier = (
             tf.keras.layers.Dense(config.num_labels, name="distillation_classifier")
             if config.num_labels > 0
-            else tf.identity(name="distillation_classifier")
+            else TFIdentityLayer(name="distillation_classifier")
         )
 
     @unpack_inputs
