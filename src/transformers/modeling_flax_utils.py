@@ -105,13 +105,13 @@ def flax_shard_checkpoint(params, max_shard_size="10GB"):
 
     <Tip warning={true}>
 
-    If one of the model's weight is bigger that `max_sahrd_size`, it will end up in its own sub-checkpoint which will
+    If one of the model's weight is bigger that `max_shard_size`, it will end up in its own sub-checkpoint which will
     have a size greater than `max_shard_size`.
 
     </Tip>
 
     Args:
-        state_dict (`Dict[str, torch.Tensor]`): The state dictionary of a model to save.
+        params (`Union[Dict, FrozenDict]`): A `PyTree` of model parameters.
         max_shard_size (`int` or `str`, *optional*, defaults to `"10GB"`):
             The maximum size of each sub-checkpoint. If expressed as a string, needs to be digits followed by a unit
             (like `"5MB"`).
@@ -641,7 +641,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                     # Load from a Flax checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, FLAX_WEIGHTS_NAME)
                 elif os.path.isfile(os.path.join(pretrained_model_name_or_path, FLAX_WEIGHTS_INDEX_NAME)):
-                    # Load from a sharded PyTorch checkpoint
+                    # Load from a sharded Flax checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, FLAX_WEIGHTS_INDEX_NAME)
                     is_sharded = True
                 # At this stage we don't have a weight file so we will raise an error.
@@ -993,8 +993,6 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         # Clean the folder from a previous save
         for filename in os.listdir(save_directory):
             full_filename = os.path.join(save_directory, filename)
-            # If we have a shard file that is not going to be replaced, we delete it, but only from the main process
-            # in distributed settings to avoid race conditions.
             if (
                 filename.startswith(FLAX_WEIGHTS_NAME[:-4])
                 and os.path.isfile(full_filename)
