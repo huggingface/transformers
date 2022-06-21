@@ -1404,7 +1404,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         >>> probas_per_class = outputs.logits.softmax(-1)[:, :, :-1]
         >>> objects_to_keep = probas_per_class.max(-1).values > 0.9
 
-        >>> ids , _ = probas_per_class.max(-1).indices[objects_to_keep].sort()
+        >>> ids, _ = probas_per_class.max(-1).indices[objects_to_keep].sort()
         >>> labels = [model.config.id2label[id.item()] for id in ids]
         >>> labels
         ['cat', 'cat', 'couch', 'remote', 'remote']
@@ -1565,9 +1565,11 @@ class DetrForSegmentation(DetrPreTrainedModel):
         >>> logits = outputs.logits
         >>> list(logits.shape)
         [1, 100, 251]
+
         >>> bboxes = outputs.pred_boxes
         >>> list(bboxes.shape)
         [1, 100, 4]
+
         >>> masks = outputs.pred_masks
         >>> list(masks.shape)
         [1, 100, 200, 267]
