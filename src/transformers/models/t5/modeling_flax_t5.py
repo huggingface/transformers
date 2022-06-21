@@ -1392,6 +1392,8 @@ class FlaxT5EncoderModule(nn.Module):
         )
 
         encoder_config = copy.deepcopy(self.config)
+        encoder_config.is_decoder = False
+        encoder_config.is_encoder_decoder = False
         encoder_config.causal = False
         self.encoder = FlaxT5Stack(encoder_config, embed_tokens=self.shared, dtype=self.dtype)
 
@@ -1399,9 +1401,6 @@ class FlaxT5EncoderModule(nn.Module):
         self,
         input_ids=None,
         attention_mask=None,
-        decoder_input_ids=None,  # not used
-        decoder_attention_mask=None,  # not used
-        encoder_outputs=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1419,14 +1418,7 @@ class FlaxT5EncoderModule(nn.Module):
             deterministic=deterministic,
         )
 
-        if not return_dict:
-            return encoder_outputs
-
-        return FlaxBaseModelOutput(
-            last_hidden_state=encoder_outputs.last_hidden_state,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
+        return encoder_outputs
 
 
 class FlaxT5EncoderModel(FlaxT5PreTrainedModel):
@@ -1437,8 +1429,6 @@ class FlaxT5EncoderModel(FlaxT5PreTrainedModel):
         self,
         input_ids: jnp.ndarray,
         attention_mask: Optional[jnp.ndarray] = None,
-        decoder_input_ids: jnp.ndarray = None,
-        decoder_attention_mask: Optional[jnp.ndarray] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
