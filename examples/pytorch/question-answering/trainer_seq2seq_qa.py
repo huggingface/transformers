@@ -15,11 +15,12 @@
 """
 A subclass of `Trainer` specific to Question-Answering tasks
 """
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Iterable, Union, Callable, Tuple
 
+import torch
 from torch.utils.data import Dataset
 
-from transformers import Seq2SeqTrainer, is_torch_tpu_available
+from transformers import Seq2SeqTrainer, is_torch_tpu_available, LogitsProcessorList, StoppingCriteriaList
 from transformers.trainer_utils import PredictionOutput
 
 
@@ -42,10 +43,89 @@ class QuestionAnsweringSeq2SeqTrainer(Seq2SeqTrainer):
         ignore_keys: Optional[List[str]] = None,
         metric_key_prefix: str = "eval",
         max_length: Optional[int] = None,
+        min_length: Optional[int] = None,
         num_beams: Optional[int] = None,
+        do_sample: Optional[bool] = None,
+        early_stopping: Optional[bool] = None,
+        temperature: Optional[float] = None,
+        top_k: Optional[int] = None,
+        top_p: Optional[float] = None,
+        typical_p: Optional[float] = None,
+        repetition_penalty: Optional[float] = None,
+        bad_words_ids: Optional[Iterable[int]] = None,
+        force_words_ids: Optional[Union[Iterable[int], Iterable[Iterable[int]]]] = None,
+        bos_token_id: Optional[int] = None,
+        pad_token_id: Optional[int] = None,
+        eos_token_id: Optional[int] = None,
+        length_penalty: Optional[float] = None,
+        no_repeat_ngram_size: Optional[int] = None,
+        encoder_no_repeat_ngram_size: Optional[int] = None,
+        num_return_sequences: Optional[int] = None,
+        max_time: Optional[float] = None,
+        max_new_tokens: Optional[int] = None,
+        decoder_start_token_id: Optional[int] = None,
+        use_cache: Optional[bool] = None,
+        num_beam_groups: Optional[int] = None,
+        diversity_penalty: Optional[float] = None,
+        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
+        logits_processor: Optional[LogitsProcessorList] = LogitsProcessorList(),
+        renormalize_logits: Optional[bool] = None,
+        stopping_criteria: Optional[StoppingCriteriaList] = StoppingCriteriaList(),
+        constraints: Optional[List['Constraint']] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        output_scores: Optional[bool] = None,
+        return_dict_in_generate: Optional[bool] = None,
+        forced_bos_token_id: Optional[int] = None,
+        forced_eos_token_id: Optional[int] = None,
+        remove_invalid_values: Optional[bool] = None,
+        synced_gpus: Optional[bool] = False,
+        exponential_decay_length_penalty: Optional[Tuple[Union[int, float]]] = None,
     ) -> Dict[str, float]:
-        self._max_length = max_length if max_length is not None else self.args.generation_max_length
-        self._num_beams = num_beams if num_beams is not None else self.args.generation_num_beams
+        self._gen_kwargs = {
+            "max_length": max_length if max_length is not None else self.args.generation_max_length,
+            "num_beams": num_beams if num_beams is not None else self.args.generation_num_beams,
+            "min_length": min_length,
+            "do_sample": do_sample,
+            "early_stopping": early_stopping,
+            "temperature": temperature,
+            "top_k": top_k,
+            "top_p": top_p,
+            "typical_p": typical_p,
+            "repetition_penalty": repetition_penalty,
+            "bad_words_ids": bad_words_ids,
+            "force_words_ids": force_words_ids,
+            "bos_token_id": bos_token_id,
+            "pad_token_id": pad_token_id,
+            "eos_token_id": eos_token_id,
+            "length_penalty": length_penalty,
+            "no_repeat_ngram_size": no_repeat_ngram_size,
+            "encoder_no_repeat_ngram_size": encoder_no_repeat_ngram_size,
+            "num_return_sequences": num_return_sequences,
+            "max_time": max_time,
+            "max_new_tokens": max_new_tokens,
+            "decoder_start_token_id": decoder_start_token_id,
+            "use_cache": use_cache,
+            "num_beam_groups": num_beam_groups,
+            "diversity_penalty": diversity_penalty,
+            "prefix_allowed_tokens_fn": prefix_allowed_tokens_fn,
+            "logits_processor": logits_processor,
+            "renormalize_logits": renormalize_logits,
+            "stopping_criteria": stopping_criteria,
+            "constraints": constraints,
+            "output_attentions": output_attentions,
+            "output_hidden_states": output_hidden_states,
+            "output_scores": output_scores,
+            "return_dict_in_generate": return_dict_in_generate,
+            "forced_bos_token_id": forced_bos_token_id,
+            "forced_eos_token_id": forced_eos_token_id,
+            "remove_invalid_values": remove_invalid_values,
+            "synced_gpus": synced_gpus,
+            "exponential_decay_length_penalty": exponential_decay_length_penalty,
+        }
+
+        # For backward compatibility
+        self._num_beams = self._gen_kwargs['num_beams']
 
         eval_dataset = self.eval_dataset if eval_dataset is None else eval_dataset
         eval_dataloader = self.get_eval_dataloader(eval_dataset)
@@ -87,7 +167,89 @@ class QuestionAnsweringSeq2SeqTrainer(Seq2SeqTrainer):
         self.control = self.callback_handler.on_evaluate(self.args, self.state, self.control, metrics)
         return metrics
 
-    def predict(self, predict_dataset, predict_examples, ignore_keys=None, metric_key_prefix: str = "test"):
+    def predict(self, predict_dataset, predict_examples, ignore_keys=None, metric_key_prefix: str = "test",
+                max_length: Optional[int] = None,
+                min_length: Optional[int] = None,
+                num_beams: Optional[int] = None,
+                do_sample: Optional[bool] = None,
+                early_stopping: Optional[bool] = None,
+                temperature: Optional[float] = None,
+                top_k: Optional[int] = None,
+                top_p: Optional[float] = None,
+                typical_p: Optional[float] = None,
+                repetition_penalty: Optional[float] = None,
+                bad_words_ids: Optional[Iterable[int]] = None,
+                force_words_ids: Optional[Union[Iterable[int], Iterable[Iterable[int]]]] = None,
+                bos_token_id: Optional[int] = None,
+                pad_token_id: Optional[int] = None,
+                eos_token_id: Optional[int] = None,
+                length_penalty: Optional[float] = None,
+                no_repeat_ngram_size: Optional[int] = None,
+                encoder_no_repeat_ngram_size: Optional[int] = None,
+                num_return_sequences: Optional[int] = None,
+                max_time: Optional[float] = None,
+                max_new_tokens: Optional[int] = None,
+                decoder_start_token_id: Optional[int] = None,
+                use_cache: Optional[bool] = None,
+                num_beam_groups: Optional[int] = None,
+                diversity_penalty: Optional[float] = None,
+                prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
+                logits_processor: Optional[LogitsProcessorList] = LogitsProcessorList(),
+                renormalize_logits: Optional[bool] = None,
+                stopping_criteria: Optional[StoppingCriteriaList] = StoppingCriteriaList(),
+                constraints: Optional[List['Constraint']] = None,
+                output_attentions: Optional[bool] = None,
+                output_hidden_states: Optional[bool] = None,
+                output_scores: Optional[bool] = None,
+                return_dict_in_generate: Optional[bool] = None,
+                forced_bos_token_id: Optional[int] = None,
+                forced_eos_token_id: Optional[int] = None,
+                remove_invalid_values: Optional[bool] = None,
+                synced_gpus: Optional[bool] = False,
+                exponential_decay_length_penalty: Optional[Tuple[Union[int, float]]] = None,
+        ):
+        self._gen_kwargs = {
+            "max_length": max_length if max_length is not None else self.args.generation_max_length,
+            "num_beams": num_beams if num_beams is not None else self.args.generation_num_beams,
+            "min_length": min_length,
+            "do_sample": do_sample,
+            "early_stopping": early_stopping,
+            "temperature": temperature,
+            "top_k": top_k,
+            "top_p": top_p,
+            "typical_p": typical_p,
+            "repetition_penalty": repetition_penalty,
+            "bad_words_ids": bad_words_ids,
+            "force_words_ids": force_words_ids,
+            "bos_token_id": bos_token_id,
+            "pad_token_id": pad_token_id,
+            "eos_token_id": eos_token_id,
+            "length_penalty": length_penalty,
+            "no_repeat_ngram_size": no_repeat_ngram_size,
+            "encoder_no_repeat_ngram_size": encoder_no_repeat_ngram_size,
+            "num_return_sequences": num_return_sequences,
+            "max_time": max_time,
+            "max_new_tokens": max_new_tokens,
+            "decoder_start_token_id": decoder_start_token_id,
+            "use_cache": use_cache,
+            "num_beam_groups": num_beam_groups,
+            "diversity_penalty": diversity_penalty,
+            "prefix_allowed_tokens_fn": prefix_allowed_tokens_fn,
+            "logits_processor": logits_processor,
+            "renormalize_logits": renormalize_logits,
+            "stopping_criteria": stopping_criteria,
+            "constraints": constraints,
+            "output_attentions": output_attentions,
+            "output_hidden_states": output_hidden_states,
+            "output_scores": output_scores,
+            "return_dict_in_generate": return_dict_in_generate,
+            "forced_bos_token_id": forced_bos_token_id,
+            "forced_eos_token_id": forced_eos_token_id,
+            "remove_invalid_values": remove_invalid_values,
+            "synced_gpus": synced_gpus,
+            "exponential_decay_length_penalty": exponential_decay_length_penalty,
+        }
+
         predict_dataloader = self.get_test_dataloader(predict_dataset)
 
         # Temporarily disable metric computation, we will do it in the loop here.
