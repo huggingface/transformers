@@ -30,15 +30,6 @@ MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "Matthijs/mobilenet_v1-small": "https://huggingface.co/Matthijs/mobilenet_v1-small/resolve/main/config.json",
     "Matthijs/mobilenet_v1-x-small": "https://huggingface.co/Matthijs/mobilenet_v1-x-small/resolve/main/config.json",
     "Matthijs/mobilenet_v1-xx-small": "https://huggingface.co/Matthijs/mobilenet_v1-xx-small/resolve/main/config.json",
-    "Matthijs/deeplabv3-mobilenet_v1-small": (
-        "https://huggingface.co/Matthijs/deeplabv3-mobilenet_v1-small/resolve/main/config.json"
-    ),
-    "Matthijs/deeplabv3-mobilenet_v1-x-small": (
-        "https://huggingface.co/Matthijs/deeplabv3-mobilenet_v1-x-small/resolve/main/config.json"
-    ),
-    "Matthijs/deeplabv3-mobilenet_v1-xx-small": (
-        "https://huggingface.co/Matthijs/deeplabv3-mobilenet_v1-xx-small/resolve/main/config.json"
-    ),
     # See all MobileNetV1 models at https://huggingface.co/models?filter=mobilenet_v1
 }
 

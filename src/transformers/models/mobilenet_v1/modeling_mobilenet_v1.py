@@ -12,8 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#
-# Original license: https://github.com/apple/ml-cvnets/blob/main/LICENSE
 """ PyTorch MobileNetV1 model."""
 
 
@@ -58,9 +56,6 @@ MOBILENET_V1_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "Matthijs/mobilenet_v1-small",
     "Matthijs/mobilenet_v1-x-small",
     "Matthijs/mobilenet_v1-xx-small",
-    "Matthijs/deeplabv3-mobilenet_v1-small",
-    "Matthijs/deeplabv3-mobilenet_v1-x-small",
-    "Matthijs/deeplabv3-mobilenet_v1-xx-small",
     # See all MobileNetV1 models at https://huggingface.co/models?filter=mobilenet_v1
 ]
 
@@ -85,18 +80,19 @@ def _build_tf_to_pytorch_map(model, config, tf_weights=None):
     tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = backbone.conv_stem.normalization.running_var
 
     for i in range(13):
-        j = i + 1
+        tf_index = i + 1
+        pt_index = i * 2
 
-        pointer = backbone.layer[i*2]
-        prefix = f"MobilenetV1/Conv2d_{j}_depthwise/"
+        pointer = backbone.layer[pt_index]
+        prefix = f"MobilenetV1/Conv2d_{tf_index}_depthwise/"
         tf_to_pt_map[prefix + "depthwise_weights"] = pointer.convolution.weight
         tf_to_pt_map[prefix + "BatchNorm/beta"] = pointer.normalization.bias
         tf_to_pt_map[prefix + "BatchNorm/gamma"] = pointer.normalization.weight
         tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = pointer.normalization.running_mean
         tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = pointer.normalization.running_var
 
-        pointer = backbone.layer[i*2 + 1]
-        prefix = f"MobilenetV1/Conv2d_{j}_pointwise/"
+        pointer = backbone.layer[pt_index + 1]
+        prefix = f"MobilenetV1/Conv2d_{tf_index}_pointwise/"
         tf_to_pt_map[prefix + "weights"] = pointer.convolution.weight
         tf_to_pt_map[prefix + "BatchNorm/beta"] = pointer.normalization.bias
         tf_to_pt_map[prefix + "BatchNorm/gamma"] = pointer.normalization.weight
@@ -258,7 +254,6 @@ class MobileNetV1ConvLayer(nn.Module):
     def forward(self, features: torch.Tensor) -> torch.Tensor:
         if self.config.tf_padding:
             features = apply_tf_padding(features, self.convolution)
-
         features = self.convolution(features)
         if self.normalization is not None:
             features = self.normalization(features)
@@ -391,14 +386,10 @@ class MobileNetV1Model(MobileNetV1PreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-#         all_hidden_states = () if output_hidden_states else None
-
         hidden_states = self.conv_stem(pixel_values)
 
-        # hidden_states = self.conv2d_1_depthwise(hidden_states)
-        # hidden_states = self.conv2d_1_pointwise(hidden_states)
-
-        # hidden_states = pixel_values
+# MIH: extracting intermediate tensors
+#         all_hidden_states = () if output_hidden_states else None
 
         for i, layer_module in enumerate(self.layer):
             hidden_states = layer_module(hidden_states)
