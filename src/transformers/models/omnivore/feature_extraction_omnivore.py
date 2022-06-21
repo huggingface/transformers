@@ -35,7 +35,7 @@ logger = logging.get_logger(__name__)
 
 class OmnivoreFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
-    Constructs a Omnivore feature extractor.
+    Constructs an Omnivore feature extractor.
 
     This feature extractor inherits from [`FeatureExtractionMixin`] which contains most of the main methods. Users
     should refer to this superclass for more information regarding those methods.
