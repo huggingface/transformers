@@ -74,6 +74,7 @@ from .hub import (
     is_local_clone,
     is_offline_mode,
     is_remote_url,
+    send_example_telemetry,
     url_to_filename,
 )
 from .import_utils import (
@@ -96,6 +97,7 @@ from .import_utils import (
     is_flax_available,
     is_ftfy_available,
     is_in_notebook,
+    is_ipex_available,
     is_librosa_available,
     is_onnx_available,
     is_pandas_available,
@@ -123,6 +125,8 @@ from .import_utils import (
     is_tokenizers_available,
     is_torch_available,
     is_torch_bf16_available,
+    is_torch_bf16_cpu_available,
+    is_torch_bf16_gpu_available,
     is_torch_cuda_available,
     is_torch_fx_available,
     is_torch_fx_proxy,

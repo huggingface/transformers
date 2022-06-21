@@ -14,13 +14,14 @@
 
 import os
 from argparse import ArgumentParser, Namespace
+from importlib import import_module
 
 import numpy as np
 from datasets import load_dataset
 
 from huggingface_hub import Repository, upload_file
 
-from .. import AutoFeatureExtractor, AutoModel, AutoTokenizer, TFAutoModel, is_tf_available, is_torch_available
+from .. import AutoConfig, AutoFeatureExtractor, AutoTokenizer, is_tf_available, is_torch_available
 from ..utils import logging
 from . import BaseTransformersCLICommand
 
@@ -44,7 +45,7 @@ def convert_command_factory(args: Namespace):
 
     Returns: ServeCommand
     """
-    return PTtoTFCommand(args.model_name, args.local_dir, args.no_pr)
+    return PTtoTFCommand(args.model_name, args.local_dir, args.new_weights, args.no_pr, args.push)
 
 
 class PTtoTFCommand(BaseTransformersCLICommand):
@@ -76,15 +77,70 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             help="Optional local directory of the model repository. Defaults to /tmp/{model_name}",
         )
         train_parser.add_argument(
+            "--new-weights",
+            action="store_true",
+            help="Optional flag to create new TensorFlow weights, even if they already exist.",
+        )
+        train_parser.add_argument(
             "--no-pr", action="store_true", help="Optional flag to NOT open a PR with converted weights."
+        )
+        train_parser.add_argument(
+            "--push",
+            action="store_true",
+            help="Optional flag to push the weights directly to `main` (requires permissions)",
         )
         train_parser.set_defaults(func=convert_command_factory)
 
-    def __init__(self, model_name: str, local_dir: str, no_pr: bool, *args):
+    @staticmethod
+    def find_pt_tf_differences(pt_model, pt_input, tf_model, tf_input):
+        """
+        Compares the TensorFlow and PyTorch models, given their inputs, returning a dictionary with all tensor
+        differences.
+        """
+        pt_outputs = pt_model(**pt_input, output_hidden_states=True)
+        tf_outputs = tf_model(**tf_input, output_hidden_states=True)
+
+        # 1. All output attributes must be the same
+        pt_out_attrs = set(pt_outputs.keys())
+        tf_out_attrs = set(tf_outputs.keys())
+        if pt_out_attrs != tf_out_attrs:
+            raise ValueError(
+                f"The model outputs have different attributes, aborting. (Pytorch: {pt_out_attrs}, TensorFlow:"
+                f" {tf_out_attrs})"
+            )
+
+        # 2. For each output attribute, computes the difference
+        def _find_pt_tf_differences(pt_out, tf_out, differences, attr_name=""):
+
+            # If the current attribute is a tensor, it is a leaf and we make the comparison. Otherwise, we will dig in
+            # recursivelly, keeping the name of the attribute.
+            if isinstance(pt_out, torch.Tensor):
+                tensor_difference = np.max(np.abs(pt_out.detach().numpy() - tf_out.numpy()))
+                differences[attr_name] = tensor_difference
+            else:
+                root_name = attr_name
+                for i, pt_item in enumerate(pt_out):
+                    # If it is a named attribute, we keep the name. Otherwise, just its index.
+                    if isinstance(pt_item, str):
+                        branch_name = root_name + pt_item
+                        tf_item = tf_out[pt_item]
+                        pt_item = pt_out[pt_item]
+                    else:
+                        branch_name = root_name + f"[{i}]"
+                        tf_item = tf_out[i]
+                    differences = _find_pt_tf_differences(pt_item, tf_item, differences, branch_name)
+
+            return differences
+
+        return _find_pt_tf_differences(pt_outputs, tf_outputs, {})
+
+    def __init__(self, model_name: str, local_dir: str, new_weights: bool, no_pr: bool, push: bool, *args):
         self._logger = logging.get_logger("transformers-cli/pt_to_tf")
         self._model_name = model_name
         self._local_dir = local_dir if local_dir else os.path.join("/tmp", model_name)
+        self._new_weights = new_weights
         self._no_pr = no_pr
+        self._push = push
 
     def get_text_inputs(self):
         tokenizer = AutoTokenizer.from_pretrained(self._local_dir)
@@ -119,8 +175,25 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         repo = Repository(local_dir=self._local_dir, clone_from=self._model_name)
         repo.git_pull()  # in case the repo already exists locally, but with an older commit
 
+        # Load config and get the appropriate architecture -- the latter is needed to convert the head's weights
+        config = AutoConfig.from_pretrained(self._local_dir)
+        architectures = config.architectures
+        if architectures is None:  # No architecture defined -- use auto classes
+            pt_class = getattr(import_module("transformers"), "AutoModel")
+            tf_class = getattr(import_module("transformers"), "TFAutoModel")
+            self._logger.warn("No detected architecture, using AutoModel/TFAutoModel")
+        else:  # Architecture defined -- use it
+            if len(architectures) > 1:
+                raise ValueError(f"More than one architecture was found, aborting. (architectures = {architectures})")
+            self._logger.warn(f"Detected architecture: {architectures[0]}")
+            pt_class = getattr(import_module("transformers"), architectures[0])
+            try:
+                tf_class = getattr(import_module("transformers"), "TF" + architectures[0])
+            except AttributeError:
+                raise AttributeError(f"The TensorFlow equivalent of {architectures[0]} doesn't exist in transformers.")
+
         # Load models and acquire a basic input for its modality.
-        pt_model = AutoModel.from_pretrained(self._local_dir)
+        pt_model = pt_class.from_pretrained(self._local_dir)
         main_input_name = pt_model.main_input_name
         if main_input_name == "input_ids":
             pt_input, tf_input = self.get_text_inputs()
@@ -130,39 +203,49 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             pt_input, tf_input = self.get_audio_inputs()
         else:
             raise ValueError(f"Can't detect the model modality (`main_input_name` = {main_input_name})")
-        tf_from_pt_model = TFAutoModel.from_pretrained(self._local_dir, from_pt=True)
+        tf_from_pt_model = tf_class.from_pretrained(self._local_dir, from_pt=True)
 
         # Extra input requirements, in addition to the input modality
-        if hasattr(pt_model, "encoder") and hasattr(pt_model, "decoder"):
+        if config.is_encoder_decoder or (hasattr(pt_model, "encoder") and hasattr(pt_model, "decoder")):
             decoder_input_ids = np.asarray([[1], [1]], dtype=int) * pt_model.config.decoder_start_token_id
             pt_input.update({"decoder_input_ids": torch.tensor(decoder_input_ids)})
             tf_input.update({"decoder_input_ids": tf.convert_to_tensor(decoder_input_ids)})
 
         # Confirms that cross loading PT weights into TF worked.
-        pt_last_hidden_state = pt_model(**pt_input).last_hidden_state.detach().numpy()
-        tf_from_pt_last_hidden_state = tf_from_pt_model(**tf_input).last_hidden_state.numpy()
-        crossload_diff = np.max(np.abs(pt_last_hidden_state - tf_from_pt_last_hidden_state))
-        if crossload_diff >= MAX_ERROR:
+        crossload_differences = self.find_pt_tf_differences(pt_model, pt_input, tf_from_pt_model, tf_input)
+        max_crossload_diff = max(crossload_differences.values())
+        if max_crossload_diff > MAX_ERROR:
             raise ValueError(
-                "The cross-loaded TF model has different last hidden states, something went wrong! (max difference ="
-                f" {crossload_diff})"
+                "The cross-loaded TensorFlow model has different outputs, something went wrong! Exaustive list of"
+                f" maximum tensor differences above the error threshold ({MAX_ERROR}):\n"
+                + "\n".join(
+                    [f"{key}: {value:.3e}" for key, value in crossload_differences.items() if value > MAX_ERROR]
+                )
             )
 
-        # Save the weights in a TF format (if they don't exist) and confirms that the results are still good
+        # Save the weights in a TF format (if needed) and confirms that the results are still good
         tf_weights_path = os.path.join(self._local_dir, TF_WEIGHTS_NAME)
-        if not os.path.exists(tf_weights_path):
+        if not os.path.exists(tf_weights_path) or self._new_weights:
             tf_from_pt_model.save_weights(tf_weights_path)
-        del tf_from_pt_model, pt_model  # will no longer be used, and may have a large memory footprint
-        tf_model = TFAutoModel.from_pretrained(self._local_dir)
-        tf_last_hidden_state = tf_model(**tf_input).last_hidden_state.numpy()
-        converted_diff = np.max(np.abs(pt_last_hidden_state - tf_last_hidden_state))
-        if converted_diff >= MAX_ERROR:
+        del tf_from_pt_model  # will no longer be used, and may have a large memory footprint
+        tf_model = tf_class.from_pretrained(self._local_dir)
+        conversion_differences = self.find_pt_tf_differences(pt_model, pt_input, tf_model, tf_input)
+        max_conversion_diff = max(conversion_differences.values())
+        if max_conversion_diff > MAX_ERROR:
             raise ValueError(
-                "The converted TF model has different last hidden states, something went wrong! (max difference ="
-                f" {converted_diff})"
+                "The converted TensorFlow model has different outputs, something went wrong! Exaustive list of maximum"
+                f" tensor differences above the error threshold ({MAX_ERROR}):\n"
+                + "\n".join(
+                    [f"{key}: {value:.3e}" for key, value in conversion_differences.items() if value > MAX_ERROR]
+                )
             )
 
-        if not self._no_pr:
+        if self._push:
+            repo.git_add(auto_lfs_track=True)
+            repo.git_commit("Add TF weights")
+            repo.git_push(blocking=True)  # this prints a progress bar with the upload
+            self._logger.warn(f"TF weights pushed into {self._model_name}")
+        elif not self._no_pr:
             # TODO: remove try/except when the upload to PR feature is released
             # (https://github.com/huggingface/huggingface_hub/pull/884)
             try:
@@ -174,8 +257,10 @@ class PTtoTFCommand(BaseTransformersCLICommand):
                     create_pr=True,
                     pr_commit_summary="Add TF weights",
                     pr_commit_description=(
-                        f"Validated by the `pt_to_tf` CLI. Max crossload hidden state difference={crossload_diff:.3e};"
-                        f" Max converted hidden state difference={converted_diff:.3e}."
+                        "Model converted by the `transformers`' `pt_to_tf` CLI -- all converted model outputs and"
+                        " hidden layers were validated against its Pytorch counterpart. Maximum crossload output"
+                        f" difference={max_crossload_diff:.3e}; Maximum converted output"
+                        f" difference={max_conversion_diff:.3e}."
                     ),
                 )
                 self._logger.warn(f"PR open in {hub_pr_url}")

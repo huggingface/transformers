@@ -53,14 +53,14 @@ from transformers import (
     PreTrainedTokenizerFast,
     is_tensorboard_available,
 )
-from transformers.utils import check_min_version, get_full_repo_name
+from transformers.utils import check_min_version, get_full_repo_name, send_example_telemetry
 from utils_qa import postprocess_qa_predictions
 
 
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.20.0.dev0")
+check_min_version("4.21.0.dev0")
 
 Array = Any
 Dataset = datasets.arrow_dataset.Dataset
@@ -424,6 +424,10 @@ def main():
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
+    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
+    # information sent is the one passed as arguments along with your Python/PyTorch versions.
+    send_example_telemetry("run_qa", model_args, data_args, framework="flax")
     # endregion
 
     # region Logging

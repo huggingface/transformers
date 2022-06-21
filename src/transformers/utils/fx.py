@@ -21,7 +21,7 @@ import math
 import operator
 import random
 import warnings
-from typing import Any, Callable, Dict, Iterable, List, Optional, Type, Union
+from typing import Any, Callable, Dict, List, Optional, Type, Union
 
 import torch
 from packaging import version
@@ -32,7 +32,9 @@ from torch.fx.proxy import ParameterProxy
 from .. import PretrainedConfig, PreTrainedModel, logging
 from ..models.auto import get_values
 from ..models.auto.modeling_auto import (
+    MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
+    MODEL_FOR_CTC_MAPPING_NAMES,
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES,
     MODEL_FOR_MASKED_LM_MAPPING_NAMES,
@@ -72,6 +74,8 @@ def _generate_supported_model_class_names(
         "token-classification": MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
         "masked-image-modeling": MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES,
         "image-classification": MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+        "ctc": MODEL_FOR_CTC_MAPPING_NAMES,
+        "audio-classification": MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
     }
 
     if supported_tasks is None:
@@ -95,12 +99,16 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "blenderbot",
     "blenderbot-small",
     "clip",
+    "deberta",
+    "deberta-v2",
     "distilbert",
     "electra",
     "gpt2",
     "gpt_neo",
     "gptj",
+    "hubert",
     "layoutlm",
+    "lxmert",
     "m2m_100",
     "marian",
     "mbart",
@@ -118,8 +126,8 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "trocr",
     "vit",
     "xglm",
-    # TODO: add support for them as it should be quite easy to do so (small blocking issues).
     # "xlnet",
+    # TODO: add support for them as it should be quite easy to do so (small blocking issues).
 ]
 
 _REGULAR_SUPPORTED_MODELS = []
@@ -152,6 +160,10 @@ def torch_nn_functional_embedding(
 
 
 def torch_nn_layernorm(self, input):
+    return input
+
+
+def torch_nn_groupnorm(self, input):
     return input
 
 
@@ -372,6 +384,27 @@ def torch_nn_conv2d(self, input):
     return torch.empty(shape, device="meta")
 
 
+def torch_squeeze(input, dim=None):
+    shape = list(input.shape)
+    if dim is not None:
+        if dim < 0:
+            dim = input.dim() + dim
+        if shape[dim] == 1:
+            shape.pop(dim)
+    else:
+        new_shape = []
+        for dim_value in shape:
+            if dim_value == 1:
+                continue
+            new_shape.append(dim_value)
+        shape = new_shape
+    return torch.empty(shape, device="meta")
+
+
+def torch_tensor_squeeze(self, dim=None):
+    return torch_squeeze(self, dim)
+
+
 def torch_unsqueeze(input, dim):
     shape = list(input.shape)
     if dim < 0:
@@ -446,6 +479,7 @@ _MANUAL_META_OVERRIDES: Dict[Callable, Callable] = {
     torch.nn.Embedding: torch_nn_embedding,
     torch.nn.functional.embedding: torch_nn_functional_embedding,
     torch.nn.LayerNorm: torch_nn_layernorm,
+    torch.nn.GroupNorm: torch_nn_groupnorm,
     torch.nn.Linear: torch_nn_linear,
     torch.relu: torch_relu,
     torch.nn.functional.relu: torch_nn_functional_relu,
@@ -469,6 +503,8 @@ _MANUAL_META_OVERRIDES: Dict[Callable, Callable] = {
     torch.Tensor.index_select: torch_tensor_index_select,
     torch.nn.Conv1d: torch_nn_conv1d,
     torch.nn.Conv2d: torch_nn_conv2d,
+    torch.squeeze: torch_squeeze,
+    torch.Tensor.squeeze: torch_tensor_squeeze,
     torch.unsqueeze: torch_unsqueeze,
     torch.Tensor.unsqueeze: torch_tensor_unsqueeze,
     torch.unique_consecutive: torch_unique_consecutive,
@@ -605,7 +641,7 @@ class HFTracer(Tracer):
     # Feature flag for proxying accesses to buffer values
     proxy_buffer_attributes: bool = True
     allow_insert_stateless_mods: bool = True
-    _TORCH_METHODS_TO_PATCH = ["arange", "zeros", "ones", "full", "full_like", "eye", "empty"]
+    _TORCH_METHODS_TO_PATCH = ["arange", "zeros", "ones", "full", "full_like", "eye", "empty", "tensor"]
 
     def __init__(self, autowrap_modules=(math,), autowrap_functions=()):
 
@@ -704,8 +740,31 @@ class HFTracer(Tracer):
             inputs_dict[input_name] = torch.zeros(
                 *shape, model.config.input_feat_per_channel, dtype=torch.float, device=device
             )
+        elif "visual_feats" in input_name:
+            inputs_dict[input_name] = torch.zeros(
+                shape
+                + [
+                    model.config.visual_feat_dim,
+                ],
+                dtype=torch.float,
+                device=device,
+            )
+        elif "visual_pos" in input_name:
+            inputs_dict[input_name] = torch.zeros(
+                shape
+                + [
+                    model.config.visual_pos_dim,
+                ],
+                dtype=torch.float,
+                device=device,
+            )
         elif "inputs" in input_name:
             inputs_dict[input_name] = torch.zeros(*shape, dtype=torch.float, device=device)
+        elif "input_values" in input_name:
+            batch_size, _ = shape
+            # Generating big sequence length for audio inputs.
+            seq_length = _generate_random_int(low=10000, high=20000)
+            inputs_dict[input_name] = torch.zeros(batch_size, seq_length, dtype=torch.float, device=device)
         elif "mask" in input_name or "ids" in input_name:
             inputs_dict[input_name] = torch.zeros(shape, dtype=torch.long, device=device)
         else:
@@ -824,13 +883,7 @@ class HFTracer(Tracer):
     def proxy(self, node):
         return HFProxy(node, self)
 
-    def trace(
-        self,
-        root: PreTrainedModel,
-        concrete_args: Optional[Dict[str, Any]] = None,
-        method_names: Optional[Iterable[str]] = None,
-    ) -> Graph:
-
+    def trace(self, root: PreTrainedModel, concrete_args: Optional[Dict[str, Any]] = None) -> Graph:
         if concrete_args is None:
             concrete_args = {}
 
@@ -953,9 +1006,32 @@ class HFTracer(Tracer):
         )
 
 
+def get_concrete_args(model: nn.Module, input_names: List[str]):
+    sig = inspect.signature(model.forward)
+
+    if not (set(input_names) <= set(sig.parameters.keys())):
+        formatted_input_names = input_names[0] if len(input_names) == 1 else ", ".join(input_names)
+        formatted_allowed_input_names = ", ".join(sig.parameters.keys())
+        raise ValueError(
+            f"The model does not have input(s) named: {formatted_input_names}, expected a subset of the following:"
+            f" {formatted_allowed_input_names}"
+        )
+
+    return {p.name: p.default for p in sig.parameters.values() if p.name not in input_names}
+
+
+def check_if_model_is_supported(model: PreTrainedModel):
+    if model.__class__.__name__ not in _SUPPORTED_MODELS:
+        supported_model_names = ", ".join(_SUPPORTED_MODELS)
+        raise NotImplementedError(
+            f"Model {model.__class__.__name__} is not supported yet, supported models: {supported_model_names}"
+        )
+
+
 def symbolic_trace(
     model: PreTrainedModel,
     input_names: Optional[List[str]] = None,
+    disable_check: bool = False,
 ) -> GraphModule:
 
     """
@@ -966,6 +1042,8 @@ def symbolic_trace(
             The model to trace.
         input_names (`List[str]`, *optional*):
             The names of the inputs of the traced model. If unset, model.dummy_inputs.keys() are used instead.
+        disable_check (`bool`, *optional*, defaults to `False`):
+            If `True`, no check is done before trying to trace the model, this is mostly usesul for debugging purposes.
 
     Returns:
         `torch.fx.GraphModule`: A GraphModule constructed by recording operations seen while tracing the model.
@@ -982,24 +1060,10 @@ def symbolic_trace(
         input_names = model.dummy_inputs.keys()
 
     input_names = list(input_names)
+    concrete_args = get_concrete_args(model, input_names)
 
-    sig = inspect.signature(model.forward)
-
-    if not (set(input_names) <= set(sig.parameters.keys())):
-        formatted_input_names = input_names[0] if len(input_names) == 1 else ", ".join(input_names)
-        formatted_allowed_input_names = ", ".join(sig.parameters.keys())
-        raise ValueError(
-            f"The model does not have input(s) named: {formatted_input_names}, expected a subset of the following:"
-            f" {formatted_allowed_input_names}"
-        )
-
-    concrete_args = {p.name: p.default for p in sig.parameters.values() if p.name not in input_names}
-
-    if model.__class__.__name__ not in _SUPPORTED_MODELS:
-        supported_model_names = ", ".join(_SUPPORTED_MODELS)
-        raise NotImplementedError(
-            f"Model {model.__class__.__name__} is not supported yet, supported models: {supported_model_names}"
-        )
+    if not disable_check:
+        check_if_model_is_supported(model)
 
     # Tracing.
     tracer = HFTracer()

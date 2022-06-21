@@ -16,12 +16,16 @@
 
 
 import math
+import os
+import pickle
+import tempfile
 import unittest
 
 import pytest
 
 from transformers import HubertConfig, is_torch_available
 from transformers.testing_utils import require_soundfile, require_torch, slow, torch_device
+from transformers.utils import is_torch_fx_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -44,6 +48,9 @@ if is_torch_available():
         Wav2Vec2Processor,
     )
     from transformers.models.hubert.modeling_hubert import _compute_mask_indices
+
+if is_torch_fx_available():
+    from transformers.utils.fx import symbolic_trace
 
 
 class HubertModelTester:
@@ -299,6 +306,7 @@ class HubertModelTester:
 @require_torch
 class HubertModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (HubertForCTC, HubertForSequenceClassification, HubertModel) if is_torch_available() else ()
+    fx_compatible = True
     test_pruning = False
     test_headmasking = False
 
@@ -416,6 +424,117 @@ class HubertModelTest(ModelTesterMixin, unittest.TestCase):
                             [0.0, 1.0],
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
+
+    # Hubert cannot be TorchScripted because of torch.nn.utils.weight_norm
+    def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
+        if not is_torch_fx_available() or not self.fx_compatible:
+            return
+
+        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
+        configs_no_init.return_dict = False
+
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            model.to(torch_device)
+            model.eval()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=output_loss)
+
+            try:
+                if model.config.is_encoder_decoder:
+                    model.config.use_cache = False  # FSTM still requires this hack -> FSTM should probably be refactored similar to BART afterward
+                    labels = inputs.get("labels", None)
+                    input_names = [
+                        "attention_mask",
+                        "decoder_attention_mask",
+                        "decoder_input_ids",
+                        "input_features",
+                        "input_ids",
+                        "input_values",
+                    ]
+                    if labels is not None:
+                        input_names.append("labels")
+
+                    filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
+                    input_names = list(filtered_inputs.keys())
+
+                    model_output = model(**filtered_inputs)
+
+                    traced_model = symbolic_trace(model, input_names)
+                    traced_output = traced_model(**filtered_inputs)
+                else:
+                    input_names = [
+                        "attention_mask",
+                        "bbox",
+                        "input_features",
+                        "input_ids",
+                        "input_values",
+                        "pixel_values",
+                        "token_type_ids",
+                        "visual_feats",
+                        "visual_pos",
+                    ]
+
+                    labels = inputs.get("labels", None)
+                    start_positions = inputs.get("start_positions", None)
+                    end_positions = inputs.get("end_positions", None)
+                    if labels is not None:
+                        input_names.append("labels")
+                    if start_positions is not None:
+                        input_names.append("start_positions")
+                    if end_positions is not None:
+                        input_names.append("end_positions")
+
+                    filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
+                    input_names = list(filtered_inputs.keys())
+
+                    model_output = model(**filtered_inputs)
+
+                    traced_model = symbolic_trace(model, input_names)
+                    traced_output = traced_model(**filtered_inputs)
+
+            except Exception as e:
+                self.fail(f"Couldn't trace module: {e}")
+
+            def flatten_output(output):
+                flatten = []
+                for x in output:
+                    if isinstance(x, (tuple, list)):
+                        flatten += flatten_output(x)
+                    elif not isinstance(x, torch.Tensor):
+                        continue
+                    else:
+                        flatten.append(x)
+                return flatten
+
+            model_output = flatten_output(model_output)
+            traced_output = flatten_output(traced_output)
+            num_outputs = len(model_output)
+
+            for i in range(num_outputs):
+                self.assertTrue(
+                    torch.allclose(model_output[i], traced_output[i]),
+                    f"traced {i}th output doesn't match model {i}th output for {model_class}",
+                )
+
+            # Test that the model can be serialized and restored properly
+            with tempfile.TemporaryDirectory() as tmp_dir_name:
+                pkl_file_name = os.path.join(tmp_dir_name, "model.pkl")
+                try:
+                    with open(pkl_file_name, "wb") as f:
+                        pickle.dump(traced_model, f)
+                    with open(pkl_file_name, "rb") as f:
+                        loaded = pickle.load(f)
+                except Exception as e:
+                    self.fail(f"Couldn't serialize / deserialize the traced model: {e}")
+
+                loaded_output = loaded(**filtered_inputs)
+                loaded_output = flatten_output(loaded_output)
+
+                for i in range(num_outputs):
+                    self.assertTrue(
+                        torch.allclose(model_output[i], loaded_output[i]),
+                        f"serialized model {i}th output doesn't match model {i}th output for {model_class}",
+                    )
 
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):

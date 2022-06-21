@@ -132,11 +132,14 @@ def get_parameter_device(parameter: Union[nn.Module, GenerationMixin, "ModuleUti
         return first_tuple[1].device
 
 
-def get_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtilsMixin"]):
+def get_first_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtilsMixin"]):
+    """
+    Returns the first parameter dtype (can be non-floating) or asserts if none were found.
+    """
     try:
         return next(parameter.parameters()).dtype
     except StopIteration:
-        # For nn.DataParallel compatibility in PyTorch 1.5
+        # For nn.DataParallel compatibility in PyTorch > 1.5
 
         def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
             tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
@@ -145,6 +148,61 @@ def get_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtil
         gen = parameter._named_members(get_members_fn=find_tensor_attributes)
         first_tuple = next(gen)
         return first_tuple[1].dtype
+
+
+def get_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtilsMixin"]):
+    """
+    Returns the first found floating dtype in parameters if there is one, otherwise returns the last dtype it found.
+    """
+    last_dtype = None
+    for t in parameter.parameters():
+        last_dtype = t.dtype
+        if t.is_floating_point():
+            return t.dtype
+
+    if last_dtype is not None:
+        # if no floating dtype was found return whatever the first dtype is
+        return last_dtype
+
+    else:
+        # For nn.DataParallel compatibility in PyTorch > 1.5
+        def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
+            tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
+            return tuples
+
+        gen = parameter._named_members(get_members_fn=find_tensor_attributes)
+        last_tuple = None
+        for tuple in gen:
+            last_tuple = tuple
+            if tuple[1].is_floating_point():
+                return tuple[1].dtype
+
+        # fallback to the last dtype
+        return last_tuple[1].dtype
+
+
+def get_state_dict_float_dtype(state_dict):
+    """
+    Returns the first found floating dtype in `state_dict` or asserts if none were found.
+    """
+    for t in state_dict.values():
+        if t.is_floating_point():
+            return t.dtype
+
+    raise ValueError("couldn't find any floating point dtypes in state_dict")
+
+
+def get_state_dict_dtype(state_dict):
+    """
+    Returns the first found floating dtype in `state_dict` if there is one, otherwise returns the first dtype.
+    """
+    for t in state_dict.values():
+        if t.is_floating_point():
+            return t.dtype
+
+    # if no floating dtype was found return whatever the first dtype is
+    else:
+        return next(state_dict.values()).dtype
 
 
 def convert_file_size_to_int(size: Union[int, str]):
@@ -693,15 +751,7 @@ class ModuleUtilsMixin:
         # encoder_extended_attention_mask = (encoder_extended_attention_mask ==
         # encoder_extended_attention_mask.transpose(-1, -2))
         encoder_extended_attention_mask = encoder_extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-
-        if self.dtype == torch.float16:
-            encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e4
-        elif self.dtype in [torch.bfloat16, torch.float32]:
-            encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e9
-        else:
-            raise ValueError(
-                f"{self.dtype} not recognized. `dtype` should be set to either `torch.float32` or `torch.float16`"
-            )
+        encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * torch.finfo(self.dtype).min
 
         return encoder_extended_attention_mask
 
@@ -734,7 +784,7 @@ class ModuleUtilsMixin:
         return extended_attention_mask
 
     def get_extended_attention_mask(
-        self, attention_mask: Tensor, input_shape: Tuple[int], device: device = None
+        self, attention_mask: Tensor, input_shape: Tuple[int], device: device = None, dtype: torch.float = None
     ) -> Tensor:
         """
         Makes broadcastable attention and causal masks so that future and masked tokens are ignored.
@@ -748,6 +798,9 @@ class ModuleUtilsMixin:
         Returns:
             `torch.Tensor` The extended attention mask, with a the same dtype as `attention_mask.dtype`.
         """
+        if dtype is None:
+            dtype = self.dtype
+
         if not (attention_mask.dim() == 2 and self.config.is_decoder):
             # show warning only if it won't be shown in `create_extended_attention_mask_for_decoder`
             if device is not None:
@@ -778,8 +831,8 @@ class ModuleUtilsMixin:
         # positions we want to attend and -10000.0 for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
-        extended_attention_mask = extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-        extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
+        extended_attention_mask = extended_attention_mask.to(dtype=dtype)  # fp16 compatibility
+        extended_attention_mask = (1.0 - extended_attention_mask) * torch.finfo(dtype).min
         return extended_attention_mask
 
     def get_head_mask(
@@ -2076,7 +2129,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # set dtype to instantiate the model under:
             # 1. If torch_dtype is not None, we use that dtype
             # 2. If torch_dtype is "auto", we auto-detect dtype from the loaded state_dict, by checking its first
-            #    weights entry - we assume all weights are of the same dtype
+            #    weights entry that is of a floating type - we assume all floating dtype weights are of the same dtype
             # we also may have config.torch_dtype available, but we won't rely on it till v5
             dtype_orig = None
             if torch_dtype is not None:
@@ -2085,10 +2138,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         if is_sharded and "dtype" in sharded_metadata:
                             torch_dtype = sharded_metadata["dtype"]
                         elif not is_sharded:
-                            torch_dtype = next(iter(state_dict.values())).dtype
+                            torch_dtype = get_state_dict_dtype(state_dict)
                         else:
                             one_state_dict = load_state_dict(resolved_archive_file)
-                            torch_dtype = next(iter(one_state_dict.values())).dtype
+                            torch_dtype = get_state_dict_dtype(one_state_dict)
                             del one_state_dict  # free CPU memory
                     else:
                         raise ValueError(
@@ -2400,7 +2453,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             if offload_state_dict:
                 # Load back temporarily offloaded state dict
-                load_offloaded_weights(model, state_dict_index, state_dict_folder)
+                load_offloaded_weights(model_to_load, state_dict_index, state_dict_folder)
                 shutil.rmtree(state_dict_folder)
 
         if len(error_msgs) > 0:
