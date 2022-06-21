@@ -513,17 +513,14 @@ class FlaxT5EncoderOnlyModelTester:
         self.pad_token_id = pad_token_id
         self.decoder_start_token_id = decoder_start_token_id
         self.scope = None
-        self.decoder_layers = decoder_layers
+        self.decoder_layers = 0
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
-        decoder_input_ids = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
 
         attention_mask = None
-        decoder_attention_mask = None
         if self.use_attention_mask:
             attention_mask = ids_tensor([self.batch_size, self.encoder_seq_length], vocab_size=2)
-            decoder_attention_mask = ids_tensor([self.batch_size, self.decoder_seq_length], vocab_size=2)
 
         config = T5Config(
             vocab_size=self.vocab_size,
@@ -545,93 +542,36 @@ class FlaxT5EncoderOnlyModelTester:
         return (
             config,
             input_ids,
-            decoder_input_ids,
             attention_mask,
-            decoder_attention_mask,
         )
 
     def create_and_check_model(
         self,
         config,
         input_ids,
-        decoder_input_ids,
         attention_mask,
-        decoder_attention_mask,
     ):
         model = FlaxT5EncoderModel(config=config)
         result = model(
             input_ids=input_ids,
-            decoder_input_ids=decoder_input_ids,
             attention_mask=attention_mask,
-            decoder_attention_mask=decoder_attention_mask,
         )
-        result = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
-        decoder_output = result.last_hidden_state
-        encoder_output = result.encoder_last_hidden_state
+        result = model(input_ids=input_ids)
+        encoder_output = result.last_hidden_state
 
         self.parent.assertEqual(encoder_output.shape, (self.batch_size, self.encoder_seq_length, self.hidden_size))
-        self.parent.assertEqual(decoder_output.shape, (self.batch_size, self.decoder_seq_length, self.hidden_size))
-
-    def check_use_cache_forward_with_attn_mask(
-        self,
-        model_class_name,
-        config,
-        input_ids,
-        decoder_input_ids,
-        attention_mask,
-        decoder_attention_mask,
-    ):
-        max_decoder_length = 20
-        model = model_class_name(config)
-
-        encoder_outputs = model.encode(input_ids)
-
-        # prevent fully zero'd out attention mask
-        decoder_attention_mask = jnp.ones_like(decoder_attention_mask)
-
-        decoder_attention_mask_cache = jnp.concatenate(
-            [
-                decoder_attention_mask,
-                jnp.zeros((decoder_attention_mask.shape[0], max_decoder_length - decoder_attention_mask.shape[1])),
-            ],
-            axis=-1,
-        )
-
-        past_key_values = model.init_cache(decoder_input_ids.shape[0], max_decoder_length, encoder_outputs)
-
-        outputs_cache = model.decode(
-            decoder_input_ids[:, :-1],
-            encoder_outputs,
-            decoder_attention_mask=decoder_attention_mask_cache,
-            past_key_values=past_key_values,
-        )
-        outputs_cache_next = model.decode(
-            decoder_input_ids[:, -1:],
-            encoder_outputs,
-            past_key_values=outputs_cache.past_key_values,
-            decoder_attention_mask=decoder_attention_mask_cache,
-        )
-
-        outputs = model.decode(decoder_input_ids, encoder_outputs, decoder_attention_mask=decoder_attention_mask)
-
-        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
-        self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
             config,
             input_ids,
-            decoder_input_ids,
             attention_mask,
-            decoder_attention_mask,
         ) = config_and_inputs
 
         inputs_dict = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
-            "decoder_input_ids": decoder_input_ids,
-            "decoder_attention_mask": decoder_attention_mask,
         }
         return config, inputs_dict
 
@@ -660,11 +600,6 @@ class FlaxT5EncoderOnlyModelTest(FlaxModelTesterMixin, unittest.TestCase):
         config.tie_word_embeddings = False
         config.feed_forward_proj = "gated-gelu"
         self.model_tester.create_and_check_model(config, *config_and_inputs[1:])
-
-    def test_use_cache_forward_with_attn_mask(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for model_class in self.all_model_classes:
-            self.model_tester.check_use_cache_forward_with_attn_mask(model_class, *config_and_inputs)
 
     def test_encode(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
