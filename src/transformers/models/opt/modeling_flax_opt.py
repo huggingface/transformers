@@ -493,7 +493,7 @@ class FlaxOPTDecoder(nn.Module):
         )
 
         if self.final_layer_norm is not None:
-            hidden_state = self.final_layer_norm(hidden_states)
+            hidden_state = self.final_layer_norm(hidden_state)
 
         if self.project_out is not None:
             hidden_state = self.project_out(hidden_state)
