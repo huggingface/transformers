@@ -211,7 +211,7 @@ docker run --gpus all -it --rm nvcr.io/nvidia/pytorch:xx.xx-py3
 git clone https://github.com/NVIDIA/Megatron-LM
 ```
 
-You also need to copy to the container the vocabulary file and merges table of the tokenizer that you trained on code, you can also find these files in [vocab.json](https://huggingface.co/codeparrot/codeparrot/raw/main/vocab.json) and [merges.txt](https://huggingface.co/codeparrot/codeparrot/raw/main/merges.txt).
+You also need to add the vocabulary file and merges table of the tokenizer that you trained on code into the container. You can also find these files in [vocab.json](https://huggingface.co/codeparrot/codeparrot/raw/main/vocab.json) and [merges.txt](https://huggingface.co/codeparrot/codeparrot/raw/main/merges.txt).
 ```bash
 sudo docker cp vocab.json CONTAINER_ID:/workspace/Megatron-LM
 sudo docker cp merges.txt CONTAINER_ID:/workspace/Megatron-LM
