@@ -81,7 +81,7 @@ class OmnivoreDropPath(nn.Module):
 
 
 class OmnivoreIm2Video(nn.Module):
-    """Convert Image into a trivial video"""
+    """Convert an image into a video by adding a dummy time dimension."""
 
     def forward(self, pixel_values):
         if pixel_values.ndim == 4:
