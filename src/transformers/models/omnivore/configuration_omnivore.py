@@ -27,7 +27,7 @@ OMNIVORE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class OmnivoreConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`OmnivoreModel`]. It is used to instantiate an
+    This is the configuration class to store the configuration of an [`OmnivoreModel`]. It is used to instantiate an
     Omnivore model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Omnivore
     [anugunj/omnivore](https://huggingface.co/anugunj/omnivore) architecture.
