@@ -68,7 +68,7 @@ class LongT5ModelTester:
         decoder_start_token_id=0,
         scope=None,
         decoder_layers=None,
-        large_model_config_path="google/LongT5-Local-Large",
+        large_model_config_path="google/long-t5-local-large",
     ):
 
         self.parent = parent
@@ -505,11 +505,10 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
     all_model_classes = (LongT5Model, LongT5ForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (LongT5ForConditionalGeneration,) if is_torch_available() else ()
     fx_compatible = False
-    all_parallelizable_model_classes = (LongT5Model, LongT5ForConditionalGeneration) if is_torch_available() else ()
     test_pruning = False
     test_torchscript = True
     test_resize_embeddings = True
-    test_model_parallel = True
+    test_model_parallel = False
     is_encoder_decoder = True
 
     def setUp(self):
@@ -755,7 +754,7 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 class LongT5TGlobalModelTest(LongT5ModelTest):
     def setUp(self):
         self.model_tester = LongT5ModelTester(
-            self, encoder_attention_type="transient-global", large_model_config_path="google/LongT5-TGlobal-Large"
+            self, encoder_attention_type="transient-global", large_model_config_path="google/long-t5-tglobal-large"
         )
         self.config_tester = ConfigTester(self, config_class=LongT5Config, d_model=37)
 
@@ -912,7 +911,7 @@ class LongT5EncoderOnlyModelTester:
         eos_token_id=1,
         pad_token_id=0,
         scope=None,
-        large_model_config_path="google/LongT5-Local-Large",
+        large_model_config_path="google/long-t5-local-large",
     ):
 
         self.parent = parent
@@ -1013,8 +1012,7 @@ class LongT5EncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_torchscript = True
     test_resize_embeddings = False
-    test_model_parallel = True
-    all_parallelizable_model_classes = (LongT5EncoderModel,) if is_torch_available() else ()
+    test_model_parallel = False
 
     def setUp(self):
         self.model_tester = LongT5EncoderOnlyModelTester(self)
@@ -1095,7 +1093,7 @@ class LongT5EncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
 class LongT5EncoderOnlyTGlobalModelTest(LongT5EncoderOnlyModelTest):
     def setUp(self):
         self.model_tester = LongT5EncoderOnlyModelTester(
-            self, encoder_attention_type="transient-global", large_model_config_path="google/LongT5-TGlobal-Large"
+            self, encoder_attention_type="transient-global", large_model_config_path="google/long-t5-tglobal-large"
         )
         self.config_tester = ConfigTester(self, config_class=LongT5Config, d_model=37)
 

@@ -49,14 +49,14 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LongT5Config"
 _TOKENIZER_FOR_DOC = "T5Tokenizer"
-_CHECKPOINT_FOR_DOC = "google/LongT5-Local-Base"
+_CHECKPOINT_FOR_DOC = "google/long-t5-local-base"
 
 # TODO: Update before the merge
 LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/LongT5-Local-Base",
-    "google/LongT5-Local-Large",
-    "google/LongT5-TGlobal-Base",
-    "google/LongT5-TGlobal-Large",
+    "google/long-t5-local-base",
+    "google/long-t5-local-large",
+    "google/long-t5-tglobal-base",
+    "google/long-t5-tglobal-large",
 ]
 
 
@@ -177,7 +177,7 @@ def _make_global_fixed_block_ids(
     fixed_block_mask = torch.cumsum(fixed_block_mask, axis=1) - fixed_block_mask
     mask = torch.where(attention_mask != 0.0, 1.0, -1000.0).type(attention_mask.dtype)
     global_block_ids = torch.floor(mask + fixed_block_mask - 1.0).type(attention_mask.dtype)
-    _global_block_ids_lower_bound = torch.tensor(-1.0, dtype=global_block_ids.dtype, device=global_block_ids.device)
+    _global_block_ids_lower_bound = torch.tensor(-1, dtype=global_block_ids.dtype, device=global_block_ids.device)
     global_block_ids = torch.where(
         global_block_ids > _global_block_ids_lower_bound, global_block_ids, _global_block_ids_lower_bound
     )
@@ -1721,11 +1721,11 @@ num_heads)`.
 )
 class LongT5Model(LongT5PreTrainedModel):
     _keys_to_ignore_on_load_missing = [
-        r"encoder\.embed_tokens\.weight",
-        r"decoder\.embed_tokens\.weight",
+        r"encoder.embed_tokens.weight",
+        r"decoder.embed_tokens.weight",
     ]
     _keys_to_ignore_on_load_unexpected = [
-        r"decoder\.block\.0\.layer\.1\.EncDecAttention\.relative_attention_bias\.weight",
+        r"decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
     ]
 
     def __init__(self, config: LongT5Config):
@@ -1797,8 +1797,8 @@ class LongT5Model(LongT5PreTrainedModel):
         ```python
         >>> from transformers import T5Tokenizer, LongT5Model
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("google/LongT5-Local-Base")
-        >>> model = LongT5Model.from_pretrained("google/LongT5-Local-Base")
+        >>> tokenizer = T5Tokenizer.from_pretrained("google/long-t5-local-base")
+        >>> model = LongT5Model.from_pretrained("google/long-t5-local-base")
 
         >>> # Let's try a very long encoder input.
         >>> input_ids = tokenizer(
@@ -1874,12 +1874,12 @@ class LongT5Model(LongT5PreTrainedModel):
 @add_start_docstrings("""LONGT5 Model with a `language modeling` head on top.""", LONGT5_START_DOCSTRING)
 class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
     _keys_to_ignore_on_load_missing = [
-        r"encoder\.embed_tokens\.weight",
-        r"decoder\.embed_tokens\.weight",
-        r"lm_head\.weight",
+        r"encoder.embed_tokens.weight",
+        r"decoder.embed_tokens.weight",
+        r"lm_head.weight",
     ]
     _keys_to_ignore_on_load_unexpected = [
-        r"decoder\.block\.0\.layer\.1\.EncDecAttention\.relative_attention_bias\.weight",
+        r"decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
     ]
 
     def __init__(self, config: LongT5Config):
@@ -2116,7 +2116,7 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
 )
 class LongT5EncoderModel(LongT5PreTrainedModel):
     authorized_missing_keys = [
-        r"encoder\.embed_tokens\.weight",
+        r"encoder.embed_tokens.weight",
     ]
 
     def __init__(self, config: LongT5Config):
@@ -2169,8 +2169,8 @@ class LongT5EncoderModel(LongT5PreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, LongT5ForConditionalGeneration
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("google/LongT5-Local-Base")
-        >>> model = LongT5EncoderModel.from_pretrained("google/LongT5-Local-Base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/long-t5-local-base")
+        >>> model = LongT5EncoderModel.from_pretrained("google/long-t5-local-base")
         >>> input_ids = tokenizer(
         ...     100 * "Studies have been shown that owning a dog is good for you ", return_tensors="pt"
         ... ).input_ids  # Batch size 1

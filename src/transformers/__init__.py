@@ -22,7 +22,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.20.0.dev0"
+__version__ = "4.21.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -870,6 +870,8 @@ else:
             "BloomForCausalLM",
             "BloomModel",
             "BloomPreTrainedModel",
+            "BloomForSequenceClassification",
+            "BloomForTokenClassification",
         ]
     )
     _import_structure["models.blenderbot"].extend(
@@ -3425,6 +3427,8 @@ if TYPE_CHECKING:
         from .models.bloom import (
             BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST,
             BloomForCausalLM,
+            BloomForSequenceClassification,
+            BloomForTokenClassification,
             BloomModel,
             BloomPreTrainedModel,
         )

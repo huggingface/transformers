@@ -409,10 +409,11 @@ class FlaxT5Attention(nn.Module):
 
         # replace masked positions with -10_000
         if attention_mask is not None:
+            mask_value = jnp.finfo(self.dtype).min
             attention_mask = jax.lax.select(
                 attention_mask > 0,
                 jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
-                jnp.full(attention_mask.shape, -1e4).astype(self.dtype),
+                jnp.full(attention_mask.shape, mask_value).astype(self.dtype),
             )
 
         if position_bias is None:
