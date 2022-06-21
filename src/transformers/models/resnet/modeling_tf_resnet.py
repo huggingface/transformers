@@ -418,23 +418,30 @@ class TFAdaptiveAvgPool2D(tf.keras.layers.Layer):
         return tf.gather(both_pool, gather_indices, axis=axis)
 
     def call(self, inputs: tf.Tensor):
-        if self.input_ordering == "NHWC":
-            input_shape = inputs.shape[1:3]
-        else:
-            input_shape = inputs.shape[2:]
+        # We can't perform NCHW operations on CPU. And so transpose our inputs if necessary
+        if self.input_ordering == "NCHW":
+            inputs = tf.transpose(inputs, (0, 2, 3, 1))
+        input_shape = inputs.shape[1:3]
 
         if input_shape[0] % self.output_dims[0] == 0 and input_shape[1] % self.output_dims[1] == 0:
             # If we're resizing by an integer factor on both dimensions, we can take
             # a very quick shortcut.
             h_resize = int(input_shape[0] // self.output_dims[0])
             w_resize = int(input_shape[1] // self.output_dims[1])
-            return tf.nn.avg_pool2d(
+
+            outputs = tf.nn.avg_pool2d(
                 inputs,
                 ksize=(h_resize, w_resize),
                 strides=(h_resize, w_resize),
                 padding="VALID",
-                data_format=self.input_ordering,
+                # data_format=self.input_ordering,
             )
+
+            if self.input_ordering == "NCHW":
+                # NHWC -> NCHW
+                outputs = tf.transpose(outputs, (0, 3, 1, 2))
+            return outputs
+
         else:
             # If we can't take the shortcut, we do a 1D pool on each axis
             h_pooled = self.pseudo_1d_pool(inputs, h_pooling=True)
