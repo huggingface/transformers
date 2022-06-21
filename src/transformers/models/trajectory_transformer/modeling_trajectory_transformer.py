@@ -333,7 +333,7 @@ class CausalSelfAttention(nn.Module):
         # [ batch_size x n_heads x sequence_length x sequence_length ]
         attn_weights = (torch.matmul(query, key.transpose(-2, -1))) * (1.0 / math.sqrt(key.size(-1)))
         attn_weights = attn_weights.masked_fill(
-            self.mask[:, :, :sequence_length, :sequence_length] == 0, float("-inf")
+            self.mask[:, :, :sequence_length, :sequence_length] == 0, torch.finfo(attn_weights.dtype).min
         )
         attn_weights = F.softmax(attn_weights, dim=-1)
         self._attn_map = attn_weights.clone()

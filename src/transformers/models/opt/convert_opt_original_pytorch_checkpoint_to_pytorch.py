@@ -37,8 +37,6 @@ def load_checkpoint(checkpoint_path):
     # pop unnecessary weights
     keys_to_delete = [
         "decoder.version",
-        "decoder.layer_norm.weight",
-        "decoder.layer_norm.bias",
         "decoder.output_projection.weight",
     ]
     for key in keys_to_delete:
@@ -48,6 +46,8 @@ def load_checkpoint(checkpoint_path):
     keys_to_rename = {
         "decoder.project_in_dim.weight": "decoder.project_in.weight",
         "decoder.project_out_dim.weight": "decoder.project_out.weight",
+        "decoder.layer_norm.weight": "decoder.final_layer_norm.weight",
+        "decoder.layer_norm.bias": "decoder.final_layer_norm.bias",
     }
     for old_key, new_key in keys_to_rename.items():
         if old_key in sd:
