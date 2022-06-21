@@ -722,9 +722,11 @@ def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatch
     unexpected_keys = set()
     # Read the H5 file
     try:
-        with h5py.File(resolved_archive_file, "r") as f:
+        with h5py.File(resolved_archive_file, "r") as sharded_checkpoint_file:
             # Retrieve the name of each layer from the H5 file
-            saved_h5_model_layers_name = set(hdf5_format.load_attributes_from_hdf5_group(f, "layer_names"))
+            saved_h5_model_layers_name = set(
+                hdf5_format.load_attributes_from_hdf5_group(sharded_checkpoint_file, "layer_names")
+            )
             weight_value_tuples = []
 
             # Compute missing and unexpected sub layers
@@ -812,9 +814,11 @@ def load_tf_weights(model, resolved_archive_file, ignore_mismatched_sizes=False,
     mismatched_layers = []
 
     # Read the H5 file
-    with h5py.File(resolved_archive_file, "r") as f:
+    with h5py.File(resolved_archive_file, "r") as sharded_checkpoint_file:
         # Retrieve the name of each layer from the H5 file
-        saved_h5_model_layers_name = set(hdf5_format.load_attributes_from_hdf5_group(f, "layer_names"))
+        saved_h5_model_layers_name = set(
+            hdf5_format.load_attributes_from_hdf5_group(sharded_checkpoint_file, "layer_names")
+        )
 
         # Find the missing layers from the high level list of layers
         missing_layers = list(set([layer.name for layer in model.layers]) - saved_h5_model_layers_name)
@@ -1956,9 +1960,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         else:
             save_index_file = os.path.join(save_directory, TF2_WEIGHTS_INDEX_NAME)
             # Save the index as well
-            with open(save_index_file, "w", encoding="utf-8") as f:
+            with open(save_index_file, "w", encoding="utf-8") as index_file:
                 content = json.dumps(index, indent=2, sort_keys=True) + "\n"
-                f.write(content)
+                index_file.write(content)
             logger.info(
                 f"The model is bigger than the maximum size per checkpoint ({max_shard_size}) and is going to be "
                 f"split in {len(shards)} checkpoint shards. You can find where each parameters has been saved in the "
@@ -1967,11 +1971,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             for shard_file, shard in shards.items():
                 with h5py.File(os.path.join(save_directory, shard_file), mode="w") as f:
                     save_attributes_to_hdf5_group(
-                        f, "layer_names", ["/".join(layer.name.split("/")[1:]).encode("utf8") for layer in shard]
+                        index_file,
+                        "layer_names",
+                        ["/".join(layer.name.split("/")[1:]).encode("utf8") for layer in shard],
                     )
 
                     for layer in sorted(shard, key=lambda x: x.name):
-                        param_dset = f.create_dataset(
+                        param_dset = index_file.create_dataset(
                             "/".join(layer.name.split("/")[1:]), layer.numpy().shape, dtype=layer.numpy().dtype
                         )
                         param_dset[:] = layer.numpy()
@@ -2324,7 +2330,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         try:
             if is_sharded:
                 for file in resolved_archive_file:
-                    assert os.path.isfile(file), f"Error retrieving files {file}"
+                    os.path.isfile(file), f"Error retrieving files {file}"
 
                 missing_keys, unexpected_keys, mismatched_keys = load_tf_sharded_weights(
                     model,
@@ -2332,7 +2338,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     ignore_mismatched_sizes=ignore_mismatched_sizes,
                 )
             else:
-                assert os.path.isfile(resolved_archive_file), f"Error retrieving file {resolved_archive_file}"
                 missing_keys, unexpected_keys, mismatched_keys = load_tf_weights(
                     model,
                     resolved_archive_file,
