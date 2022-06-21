@@ -198,6 +198,113 @@ Give the model a shot yourself! There are two demos to interact with CodeParrot 
 - [Code generation](https://huggingface.co/spaces/lvwerra/codeparrot-generation)
 - [Code highlighting](https://huggingface.co/spaces/lvwerra/codeparrot-highlighting)
 
+## Training with Megatron
+[Megatron](https://github.com/NVIDIA/Megatron-LM) is a framework developed by NVIDIA for training large transformer models. We found that the training of CodeParrot is faster there. Below we explain how to use it.
+
+### Setup
+You can pull an NVIDIA PyTorch Container that comes with all the required installations, they are available on NGC https://catalog.ngc.nvidia.com/orgs/nvidia/containers/pytorch with their [documentation](https://docs.nvidia.com/deeplearning/frameworks/pytorch-release-notes/index.html):
+
+After installing Docker, you can use the command below to run the container where `xx.xx` denotes your Docker version, and clone [Megatron repository](https://github.com/NVIDIA/Megatron-LM) inside it:
+```bash
+docker run --gpus all -it --rm nvcr.io/nvidia/pytorch:xx.xx-py3
+git clone https://github.com/NVIDIA/Megatron-LM
+```
+
+You also need to copy to the container the vocabulary file and merges table of the tokenizer that you trained on code, you can also find these files in [vocab.json](https://huggingface.co/codeparrot/codeparrot/raw/main/vocab.json) and [merges.txt](https://huggingface.co/codeparrot/codeparrot/raw/main/merges.txt).
+```bash
+sudo docker cp vocab.json CONTAINER_ID:/workspace/Megatron-LM
+sudo docker cp merges.txt CONTAINER_ID:/workspace/Megatron-LM
+```
+
+### Data preprocessing
+The training data requires preprocessing. First, you need to convert it into a loose json format, with one json containing a text sample per line. In python this can be done this way:
+```python
+from datasets import load_dataset
+
+train_data = load_dataset('codeparrot/codeparrot-clean-train', split='train')
+train_data.to_json("codeparrot_data.json", lines=True)  
+```
+
+The data is then tokenized, shuffled and processed into a binary format for training using the following command:
+```bash
+pip install nltk
+cd Megatron-LM
+python tools/preprocess_data.py \
+       --input codeparrot_data.json \
+       --output-prefix codeparrot \
+       --vocab vocab.json \
+       --dataset-impl mmap \
+       --tokenizer-type GPT2BPETokenizer \
+       --merge-file merges.txt \
+       --json-keys content \
+       --workers 32 \
+       --chunk-size 25 \
+       --append-eod
+```
+This outputs two files `codeparrot_content_document.idx` and `codeparrot_content_document.bin` which are used in the training.
+
+### Training
+You can configure the model architecture and training parameters as shown below, or put it in a bash script that you will run. This runs on 8 GPUs the 110M parameter CodeParrot pretraining, with the same settings as before. Note that the data is partitioned by default into a 969:30:1 ratio for training/validation/test sets.
+```bash
+GPUS_PER_NODE=8
+MASTER_ADDR=localhost
+MASTER_PORT=6001
+NNODES=1
+NODE_RANK=0
+WORLD_SIZE=$(($GPUS_PER_NODE*$NNODES))
+DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
+CHECKPOINT_PATH=/workspace/Megatron-LM/experiments/codeparrot-small
+VOCAB_FILE=vocab.json
+MERGE_FILE=merges.txt
+DATA_PATH=codeparrot_content_document
+GPT_ARGS="--num-layers 12
+--hidden-size 768
+--num-attention-heads 12
+--seq-length 1024
+--max-position-embeddings 1024
+--micro-batch-size 12
+--global-batch-size 192
+--lr 0.0005
+--train-iters 150000
+--lr-decay-iters 150000
+--lr-decay-style cosine
+--lr-warmup-iters 2000
+--weight-decay .1
+--adam-beta2 .999
+--fp16
+--log-interval 10
+--save-interval 2000
+--eval-interval 200
+--eval-iters 10
+"
+TENSORBOARD_ARGS="--tensorboard-dir experiments/tensorboard"
+python3 -m torch.distributed.launch $DISTRIBUTED_ARGS \
+        pretrain_gpt.py \
+        --tensor-model-parallel-size 1 \
+        --pipeline-model-parallel-size 1 \
+        $GPT_ARGS \
+        --vocab-file $VOCAB_FILE \
+        --merge-file $MERGE_FILE \
+        --save $CHECKPOINT_PATH \
+        --load $CHECKPOINT_PATH \
+        --data-path $DATA_PATH \
+        $TENSORBOARD_ARGS
+```
+The training takes almost 12 hours in this setting.
+
+### Evaluation
+To evaluate the model on HumanEval, you can convert it to `transformers` following this tutorial: https://huggingface.co/nvidia/megatron-gpt2-345m. For instance, after the training is finished you can copy the weights of the last iteration 150k and convert the `model_optim_rng.pt` file to a `pytorch_model.bin` file that is supported by `transformers`.
+
+```bash
+mkdir -p nvidia/megatron-codeparrot-small
+sudo docker cp CONTAINER_ID:/workspace/Megatron-LM/experiments/codeparrot-small/iter_0150000/mp_rank_00/model_optim_rng.pt nvidia/megatron-codeparrot-small
+git clone https://github.com/huggingface/transformers.git
+git clone https://github.com/NVIDIA/Megatron-LM.git
+export PYTHONPATH=Megatron-LM
+python transformers/src/transformers/models/megatron_gpt2/convert_megatron_gpt2_checkpoint.py nvidia/megatron-gpt2-345m/model_optim_rng.pt
+```
+Be careful, you will need to replace the generated vocabulary file and merges table after the conversion, with the original ones if you plan to load the tokenizer from there.
+
 ## Further Resources
 A detailed description of the project can be found in the chapter "Training Transformers from Scratch" in the upcoming O'Reilly book [Natural Language Processing with Transformers](https://learning.oreilly.com/library/view/natural-language-processing/9781098103231/).
 
