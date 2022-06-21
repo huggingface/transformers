@@ -119,12 +119,14 @@ There are three ways to instantiate a DETR model (depending on what you prefer):
 Option 1: Instantiate DETR with pre-trained weights for entire model
 ```py
 >>> from transformers import DetrForObjectDetection
+
 >>> model = DetrForObjectDetection.from_pretrained("facebook/resnet-50")
 ```
 
 Option 2: Instantiate DETR with randomly initialized weights for Transformer, but pre-trained weights for backbone
 ```py
 >>> from transformers import DetrConfig, DetrForObjectDetection
+
 >>> config = DetrConfig()
 >>> model = DetrForObjectDetection(config)
 ```
