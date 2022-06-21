@@ -452,7 +452,7 @@ class FlaxOPTDecoder(nn.Module):
             self.project_in = None
             self.project_out = None
 
-        if self.config.do_layer_norm_before:
+        if self.config.do_layer_norm_before and not self.config._remove_final_layer_norm:
             self.final_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
         else:
             self.final_layer_norm = None

@@ -492,7 +492,7 @@ class OPTDecoder(OPTPreTrainedModel):
         else:
             self.project_in = None
 
-        if config.do_layer_norm_before:
+        if config.do_layer_norm_before and not config._remove_final_layer_norm:
             self.final_layer_norm = nn.LayerNorm(config.hidden_size)
         else:
             self.final_layer_norm = None

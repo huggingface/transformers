@@ -102,6 +102,7 @@ class OPTConfig(PretrainedConfig):
         ffn_dim=3072,
         max_position_embeddings=2048,
         do_layer_norm_before=True,
+        _remove_final_layer_norm=False,
         word_embed_proj_dim=None,
         dropout=0.1,
         attention_dropout=0.0,
@@ -137,3 +138,4 @@ class OPTConfig(PretrainedConfig):
         self.layerdrop = layerdrop
         self.use_cache = use_cache
         self.do_layer_norm_before = do_layer_norm_before
+        self._remove_final_layer_norm = _remove_final_layer_norm
