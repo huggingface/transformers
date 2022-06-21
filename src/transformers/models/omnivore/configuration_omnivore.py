@@ -63,7 +63,7 @@ class OmnivoreConfig(PretrainedConfig):
             The dropout ratio for the patch embeddings probabilities and projections in attention.
         drop_path_rate (`List[float]`, *optional*, defaults to `[0.0, 0.0, 0.1]`):
             The dropout probability for stochastic depth, used in the blocks of the Transformer encoder.
-        qkv_bias (`bool`, *optional*, defaults to True):
+        qkv_bias (`bool`, *optional*, defaults to `True`):
             The bias bool for query, key and value in attentions
         qk_scale (`bool`, *optional*):
             Override default qk scale of head_dim ** -0.5 if set.
