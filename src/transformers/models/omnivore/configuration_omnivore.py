@@ -67,7 +67,7 @@ class OmnivoreConfig(PretrainedConfig):
             The bias bool for query, key and value in attentions
         qk_scale (`bool`, *optional*):
             Override default qk scale of head_dim ** -0.5 if set.
-        norm_layer (`nn.Module`, *optional*, defaults to nn.LayerNorm):
+        norm_layer (`nn.Module`, *optional*, defaults to `nn.LayerNorm`):
             Normalization layer for the model
         patch_norm (`bool`, *optional*, defaults to False):
             If True, add normalization after patch embedding.
