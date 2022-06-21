@@ -34,45 +34,7 @@ class Seq2SeqTrainer(Trainer):
         eval_dataset: Optional[Dataset] = None,
         ignore_keys: Optional[List[str]] = None,
         metric_key_prefix: str = "eval",
-        max_length: Optional[int] = None,
-        min_length: Optional[int] = None,
-        num_beams: Optional[int] = None,
-        do_sample: Optional[bool] = None,
-        early_stopping: Optional[bool] = None,
-        temperature: Optional[float] = None,
-        top_k: Optional[int] = None,
-        top_p: Optional[float] = None,
-        typical_p: Optional[float] = None,
-        repetition_penalty: Optional[float] = None,
-        bad_words_ids: Optional[Iterable[int]] = None,
-        force_words_ids: Optional[Union[Iterable[int], Iterable[Iterable[int]]]] = None,
-        bos_token_id: Optional[int] = None,
-        pad_token_id: Optional[int] = None,
-        eos_token_id: Optional[int] = None,
-        length_penalty: Optional[float] = None,
-        no_repeat_ngram_size: Optional[int] = None,
-        encoder_no_repeat_ngram_size: Optional[int] = None,
-        num_return_sequences: Optional[int] = None,
-        max_time: Optional[float] = None,
-        max_new_tokens: Optional[int] = None,
-        decoder_start_token_id: Optional[int] = None,
-        use_cache: Optional[bool] = None,
-        num_beam_groups: Optional[int] = None,
-        diversity_penalty: Optional[float] = None,
-        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
-        logits_processor: Optional[LogitsProcessorList] = LogitsProcessorList(),
-        renormalize_logits: Optional[bool] = None,
-        stopping_criteria: Optional[StoppingCriteriaList] = StoppingCriteriaList(),
-        constraints: Optional[list] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_scores: Optional[bool] = None,
-        return_dict_in_generate: Optional[bool] = None,
-        forced_bos_token_id: Optional[int] = None,
-        forced_eos_token_id: Optional[int] = None,
-        remove_invalid_values: Optional[bool] = None,
-        synced_gpus: Optional[bool] = None,
-        exponential_decay_length_penalty: Optional[Tuple[Union[int, float]]] = None,
+        **gen_kwargs
     ) -> Dict[str, float]:
         """
         Run evaluation and returns metrics.
@@ -98,53 +60,21 @@ class Seq2SeqTrainer(Trainer):
             num_beams (`int`, *optional*):
                 Number of beams for beam search that will be used when predicting with the generate method. 1 means no
                 beam search.
+            gen_kwargs:
+                Additional `generate` specific kwargs.
 
         Returns:
             A dictionary containing the evaluation loss and the potential metrics computed from the predictions. The
             dictionary also contains the epoch number which comes from the training state.
         """
 
-        self._gen_kwargs = {
-            "max_length": max_length if max_length is not None else self.args.generation_max_length,
-            "num_beams": num_beams if num_beams is not None else self.args.generation_num_beams,
-            "min_length": min_length,
-            "do_sample": do_sample,
-            "early_stopping": early_stopping,
-            "temperature": temperature,
-            "top_k": top_k,
-            "top_p": top_p,
-            "typical_p": typical_p,
-            "repetition_penalty": repetition_penalty,
-            "bad_words_ids": bad_words_ids,
-            "force_words_ids": force_words_ids,
-            "bos_token_id": bos_token_id,
-            "pad_token_id": pad_token_id,
-            "eos_token_id": eos_token_id,
-            "length_penalty": length_penalty,
-            "no_repeat_ngram_size": no_repeat_ngram_size,
-            "encoder_no_repeat_ngram_size": encoder_no_repeat_ngram_size,
-            "num_return_sequences": num_return_sequences,
-            "max_time": max_time,
-            "max_new_tokens": max_new_tokens,
-            "decoder_start_token_id": decoder_start_token_id,
-            "use_cache": use_cache,
-            "num_beam_groups": num_beam_groups,
-            "diversity_penalty": diversity_penalty,
-            "prefix_allowed_tokens_fn": prefix_allowed_tokens_fn,
-            "logits_processor": logits_processor,
-            "renormalize_logits": renormalize_logits,
-            "stopping_criteria": stopping_criteria,
-            "constraints": constraints,
-            "output_attentions": output_attentions,
-            "output_hidden_states": output_hidden_states,
-            "output_scores": output_scores,
-            "return_dict_in_generate": return_dict_in_generate,
-            "forced_bos_token_id": forced_bos_token_id,
-            "forced_eos_token_id": forced_eos_token_id,
-            "remove_invalid_values": remove_invalid_values,
-            "synced_gpus": synced_gpus,
-            "exponential_decay_length_penalty": exponential_decay_length_penalty,
-        }
+        gen_kwargs["max_length"] = (
+            gen_kwargs["max_length"] if gen_kwargs.get("max_length") is not None else self.args.generation_max_length
+        )
+        gen_kwargs["num_beams"] = (
+            gen_kwargs["num_beams"] if gen_kwargs.get("num_beams") is not None else self.args.generation_num_beams
+        )
+        self._gen_kwargs = gen_kwargs
 
         return super().evaluate(eval_dataset, ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix)
 
@@ -153,45 +83,7 @@ class Seq2SeqTrainer(Trainer):
         test_dataset: Dataset,
         ignore_keys: Optional[List[str]] = None,
         metric_key_prefix: str = "test",
-        max_length: Optional[int] = None,
-        min_length: Optional[int] = None,
-        num_beams: Optional[int] = None,
-        do_sample: Optional[bool] = None,
-        early_stopping: Optional[bool] = None,
-        temperature: Optional[float] = None,
-        top_k: Optional[int] = None,
-        top_p: Optional[float] = None,
-        typical_p: Optional[float] = None,
-        repetition_penalty: Optional[float] = None,
-        bad_words_ids: Optional[Iterable[int]] = None,
-        force_words_ids: Optional[Union[Iterable[int], Iterable[Iterable[int]]]] = None,
-        bos_token_id: Optional[int] = None,
-        pad_token_id: Optional[int] = None,
-        eos_token_id: Optional[int] = None,
-        length_penalty: Optional[float] = None,
-        no_repeat_ngram_size: Optional[int] = None,
-        encoder_no_repeat_ngram_size: Optional[int] = None,
-        num_return_sequences: Optional[int] = None,
-        max_time: Optional[float] = None,
-        max_new_tokens: Optional[int] = None,
-        decoder_start_token_id: Optional[int] = None,
-        use_cache: Optional[bool] = None,
-        num_beam_groups: Optional[int] = None,
-        diversity_penalty: Optional[float] = None,
-        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
-        logits_processor: Optional[LogitsProcessorList] = LogitsProcessorList(),
-        renormalize_logits: Optional[bool] = None,
-        stopping_criteria: Optional[StoppingCriteriaList] = StoppingCriteriaList(),
-        constraints: Optional[list] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_scores: Optional[bool] = None,
-        return_dict_in_generate: Optional[bool] = None,
-        forced_bos_token_id: Optional[int] = None,
-        forced_eos_token_id: Optional[int] = None,
-        remove_invalid_values: Optional[bool] = None,
-        synced_gpus: Optional[bool] = None,
-        exponential_decay_length_penalty: Optional[Tuple[Union[int, float]]] = None,
+        **gen_kwargs
     ) -> PredictionOutput:
         """
         Run prediction and returns predictions and potential metrics.
@@ -214,6 +106,8 @@ class Seq2SeqTrainer(Trainer):
             num_beams (`int`, *optional*):
                 Number of beams for beam search that will be used when predicting with the generate method. 1 means no
                 beam search.
+            gen_kwargs:
+                Additional `generate` specific kwargs.
 
         <Tip>
 
@@ -231,47 +125,13 @@ class Seq2SeqTrainer(Trainer):
               labels).
         """
 
-        self._gen_kwargs = {
-            "max_length": max_length if max_length is not None else self.args.generation_max_length,
-            "num_beams": num_beams if num_beams is not None else self.args.generation_num_beams,
-            "min_length": min_length,
-            "do_sample": do_sample,
-            "early_stopping": early_stopping,
-            "temperature": temperature,
-            "top_k": top_k,
-            "top_p": top_p,
-            "typical_p": typical_p,
-            "repetition_penalty": repetition_penalty,
-            "bad_words_ids": bad_words_ids,
-            "force_words_ids": force_words_ids,
-            "bos_token_id": bos_token_id,
-            "pad_token_id": pad_token_id,
-            "eos_token_id": eos_token_id,
-            "length_penalty": length_penalty,
-            "no_repeat_ngram_size": no_repeat_ngram_size,
-            "encoder_no_repeat_ngram_size": encoder_no_repeat_ngram_size,
-            "num_return_sequences": num_return_sequences,
-            "max_time": max_time,
-            "max_new_tokens": max_new_tokens,
-            "decoder_start_token_id": decoder_start_token_id,
-            "use_cache": use_cache,
-            "num_beam_groups": num_beam_groups,
-            "diversity_penalty": diversity_penalty,
-            "prefix_allowed_tokens_fn": prefix_allowed_tokens_fn,
-            "logits_processor": logits_processor,
-            "renormalize_logits": renormalize_logits,
-            "stopping_criteria": stopping_criteria,
-            "constraints": constraints,
-            "output_attentions": output_attentions,
-            "output_hidden_states": output_hidden_states,
-            "output_scores": output_scores,
-            "return_dict_in_generate": return_dict_in_generate,
-            "forced_bos_token_id": forced_bos_token_id,
-            "forced_eos_token_id": forced_eos_token_id,
-            "remove_invalid_values": remove_invalid_values,
-            "synced_gpus": synced_gpus,
-            "exponential_decay_length_penalty": exponential_decay_length_penalty,
-        }
+        gen_kwargs["max_length"] = (
+            gen_kwargs["max_length"] if gen_kwargs.get("max_length") is not None else self.args.generation_max_length
+        )
+        gen_kwargs["num_beams"] = (
+            gen_kwargs["num_beams"] if gen_kwargs.get("num_beams") is not None else self.args.generation_num_beams
+        )
+        self._gen_kwargs = gen_kwargs
 
         return super().predict(test_dataset, ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix)
 
@@ -314,14 +174,14 @@ class Seq2SeqTrainer(Trainer):
         # XXX: adapt synced_gpus for fairscale as well
         gen_kwargs = self._gen_kwargs.copy()
         gen_kwargs["max_length"] = (
-            gen_kwargs["max_length"] if gen_kwargs["max_length"] is not None else self.model.config.max_length
+            gen_kwargs["max_length"] if gen_kwargs.get("max_length") is not None else self.model.config.max_length
         )
         gen_kwargs["num_beams"] = (
-            gen_kwargs["num_beams"] if gen_kwargs["num_beams"] is not None else self.model.config.num_beams
+            gen_kwargs["num_beams"] if gen_kwargs.get("num_beams") is not None else self.model.config.num_beams
         )
         default_synced_gpus = True if is_deepspeed_zero3_enabled() else False
         gen_kwargs["synced_gpus"] = (
-            gen_kwargs["synced_gpus"] if gen_kwargs["synced_gpus"] is not None else default_synced_gpus
+            gen_kwargs["synced_gpus"] if gen_kwargs.get("synced_gpus") is not None else default_synced_gpus
         )
 
         if "attention_mask" in inputs:
