@@ -124,9 +124,6 @@ class QuestionAnsweringSeq2SeqTrainer(Seq2SeqTrainer):
             "exponential_decay_length_penalty": exponential_decay_length_penalty,
         }
 
-        # For backward compatibility
-        self._num_beams = self._gen_kwargs['num_beams']
-
         eval_dataset = self.eval_dataset if eval_dataset is None else eval_dataset
         eval_dataloader = self.get_eval_dataloader(eval_dataset)
         eval_examples = self.eval_examples if eval_examples is None else eval_examples

@@ -146,9 +146,6 @@ class Seq2SeqTrainer(Trainer):
             "exponential_decay_length_penalty": exponential_decay_length_penalty,
         }
 
-        # For backward compatibility
-        self._num_beams = self._gen_kwargs['num_beams']
-
         return super().evaluate(eval_dataset, ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix)
 
     def predict(
@@ -275,9 +272,6 @@ class Seq2SeqTrainer(Trainer):
             "synced_gpus": synced_gpus,
             "exponential_decay_length_penalty": exponential_decay_length_penalty,
         }
-
-        # For backward compatibility
-        self._num_beams = self._gen_kwargs['num_beams']
 
         return super().predict(test_dataset, ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix)
 
