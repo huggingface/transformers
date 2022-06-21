@@ -23,11 +23,11 @@ import unittest
 import unittest.mock as mock
 from pathlib import Path
 
-from huggingface_hub import Repository, delete_repo, login
+from huggingface_hub import HfFolder, Repository, delete_repo, set_access_token
 from requests.exceptions import HTTPError
 from transformers import AutoConfig, BertConfig, GPT2Config, is_torch_available
 from transformers.configuration_utils import PretrainedConfig
-from transformers.testing_utils import PASS, USER, is_staging_test
+from transformers.testing_utils import TOKEN, USER, is_staging_test
 
 
 sys.path.append(str(Path(__file__).parent.parent / "utils"))
@@ -205,22 +205,24 @@ class ConfigTester(object):
 class ConfigPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls._token = login(username=USER, password=PASS)
+        cls._token = TOKEN
+        set_access_token(TOKEN)
+        HfFolder.save_token(TOKEN)
 
     @classmethod
     def tearDownClass(cls):
         try:
-            delete_repo(token=cls._token, name="test-config")
+            delete_repo(token=cls._token, repo_id="test-config")
         except HTTPError:
             pass
 
         try:
-            delete_repo(token=cls._token, name="test-config-org", organization="valid_org")
+            delete_repo(token=cls._token, repo_id="valid_org/test-config-org")
         except HTTPError:
             pass
 
         try:
-            delete_repo(token=cls._token, name="test-dynamic-config")
+            delete_repo(token=cls._token, repo_id="test-dynamic-config")
         except HTTPError:
             pass
 

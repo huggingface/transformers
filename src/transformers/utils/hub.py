@@ -98,7 +98,7 @@ S3_BUCKET_PREFIX = "https://s3.amazonaws.com/models.huggingface.co/bert"
 CLOUDFRONT_DISTRIB_PREFIX = "https://cdn.huggingface.co"
 
 _staging_mode = os.environ.get("HUGGINGFACE_CO_STAGING", "NO").upper() in ENV_VARS_TRUE_VALUES
-_default_endpoint = "https://moon-staging.huggingface.co" if _staging_mode else "https://huggingface.co"
+_default_endpoint = "https://hub-ci.huggingface.co" if _staging_mode else "https://huggingface.co"
 
 HUGGINGFACE_CO_RESOLVE_ENDPOINT = _default_endpoint
 if os.environ.get("HUGGINGFACE_CO_RESOLVE_ENDPOINT", None) is not None:
