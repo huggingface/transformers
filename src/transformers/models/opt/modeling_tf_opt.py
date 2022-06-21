@@ -507,7 +507,7 @@ class TFOPTDecoder(tf.keras.layers.Layer):
         )
 
         if config.do_layer_norm_before:
-            self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
+            self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
         else:
             self.final_layer_norm = None
 
