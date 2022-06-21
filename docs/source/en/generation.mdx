@@ -1,0 +1,254 @@
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# How to generate text with 🤗 Transformers.
+
+Generating text with transformer models can be done via *auto-regressive* language generation.
+Auto-regressive generation is defined as iteratively forwarding a sequence of tokens through the model and sampling the next token in the sequence from the model's output distribution until a certain stopping criteria is met.
+
+This section will serve as a practical guide on how to use 🤗 Transformers' text-generation method 
+[`~generation_utils.GenerationMixin.generate`] for different generation methods, model architectures and different 
+generation configurations.
+
+Before diving into some practical examples, the reader is strongly advised to go over this more theoretical
+blog post on [text-generation](https://huggingface.co/blog/how-to-train) to understand how the different 
+generation methods function.
+
+The most common **generation methods** are:
+
+- 1. Greedy search: [`~generation_utils.GenerationMixin.greedy_search`],
+- 2. Sample: [`~generation_utils.GenerationMixin.sample`], and
+- 3. Beam Search: [`~generation_utils.GenerationMixin.beam_search`].
+
+and we can divide all model architectures broadly into **decoder-only** and **encoder-decoder** 
+models.
+
+**Decoder-only** models include architectures, such as [GPT-2](), [OPT](), and [BLOOM]() and 
+can be loaded via the [`AutoModelForCausalLM`] class. Decoder-only models are mainly used for 
+open-ended text-generation, but can essentially be used to solve every text-to-text task via 
+prompt-tuning as introduced in the [GPT-3 paper]( ).
+
+**Encoder-Decoder** models include architectures, such as [T5](), [Bart](), and [Marian]() and 
+can be loaded via the [`AutoModelForSeq2SeqLM`] class. Encoder-Decoder models are mainly used for 
+translation and summarization, but can also be used to solve every text-to-text task when the task
+is framed as a text-to-text task as has been shown in the [T5 paper]( ).
+
+## Greedy search
+
+The simplest and default generation method is [`~generation_utils.GenerationMixin.greedy_search`].
+
+For greedy search, the model samples from the predicted logit distribution by simply taking the most probably logit. This logit defines the next token id that is concatenated to the passed token ids and the most probably logit is sampled again. As the *most probably* logit corresponds to simply taking the `argmax`, greedy 
+search is a *deterministic* generation method.
+
+It is very easy to write such a loop yourself for a *decoder-only* model, such as [opt-125m](facebook/opt-125m).
+
+First, we load the model.
+
+```py
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model = AutoModelForCausalLM.from_pretrained("facebook/opt-125m")
+tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")
+```
+
+Next, we define a prompt the model be conditioned on to predict the next tokens.
+
+```py
+prompt = "In the winter, it is cold."
+
+prompt_ids = tokenizer(prompt, return_tensors="pt").input_ids
+```
+
+Now we can write a short iterative greedy serach loop that generates 20 tokens.
+
+<Tip warning={true}>
+
+While the generation parameter [`max_length`]( ) is widely used and always set 
+by default, we strongly recommend users to switch to using `max_new_tokens` instead.
+`max_length` will generate tokens **up to** `max_length` where as `max_new_tokens` 
+will generate exactly `max_new_tokens` independent of the input length.
+Unexpected behavior can occur when using `max_length` with `input_ids` that are 
+longer than `max_length` which is why we recommend using `max_new_tokens` instead.
+
+</Tip>
+
+```py
+max_new_tokens = 10
+
+input_ids = prompt_ids
+for _ in range(max_new_tokens):
+	with torch.no_grad():
+		logits = model(input_ids).logits
+	
+	next_token_id = torch.argmax(logits[:, -1:], dim=-1)
+
+	input_ids = torch.concat([input_ids, next_token_id], dim=-1)
+```
+
+After having generated 10 new tokens, let's take a look at the prediction.
+
+```py
+tokenizer.batch_decode(input_ids)
+```
+
+Instead of writing this greedy_search method everytime yourself, one can instead 
+make use of [`~generation_utils.GenerationMixin.generate`].
+
+Let's see how to replicate the above example with [`~generation_utils.GenerationMixin.generate`].
+
+<Tip>
+
+Greedy search is activated by default or when passing `num_beams=1` and `do_sample=False` to
+[`~generation_utils.GenerationMixin.generate`]
+
+</Tip>
+
+```py
+sequenences = model.generate(prompt_ids, do_sample=False, num_beams=1)
+tokenizer.batch_decode(input_ids)
+```
+
+For **encoder-decoder** models, we first need to encode the prompt with the encoder
+and then iteratively forward the `input_ids` through the decoder just like in the example above.
+Let's load an encoder-decoder model such as [t5-small]( ):
+
+```py
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
+model = AutoModelForSeq2SeqLM.from_pretrained("t5-small")
+tokenizer = AutoTokenizer.from_pretrained("t5-small")
+```
+
+Let's use the same prompt, but now pass it once to the encoder.
+
+```py
+input_ids = prompt_ids
+
+with torch.no_grad():
+	encoder_hidden_states = model.encoder(input_ids).hidden_states
+```
+
+The decoder of encoder-decoder models contains so-called *cross-attention* layers
+which have to be conditioned on encoded hidden states. Therefore, we will 
+pass the `encoder_hidden_states` at every iteration step below.
+
+<Tip>
+
+To better understand how *encoder-decoder* models function from a theoretical
+point of view please take a look at the [Encoder-decoder blog post]( ).
+
+</Tip>
+
+```py
+input_ids = torch.tensor([[model.config.decoder_start_token_id]])
+
+max_new_tokens = 10
+for _ in range(max_new_tokens):
+	with torch.no_grad():
+		logits = model(input_ids, encoder_hidden_states=encoder_hidden_states).logits
+	
+	next_token_id = torch.argmax(logits[:, -1:], dim=-1)
+```
+
+Transformers `generate` method automatically detects if the model is an encoder-decoder
+model and correspondingly correctly prepare the `encoder_hidden_states`.
+
+```py
+sequenences = model.generate(prompt_ids, do_sample=False, num_beams=1)
+tokenizer.batch_decode(input_ids)
+```
+
+When generating longer texts, e.g. `max_new_tokens = 200` 
+you will notice that [`~generation_utils.GenerationMixin.greedy_search`] will automatically 
+finish the generation loop early because the model has predicted a so-called *end-of-sentence* token.
+
+Stopping at the EOS token amongst many other features, such as cached generation, batched generation, etc... 
+is missing in the native loop above. Therefore, we strongly recommend to use 🤗 Transformers generate 
+method instead of writing your own training loop.
+
+Other important generation features that can be set when doing `greedy_search` include:
+
+- 
+
+## Sample
+
+
+
+
+
+it again into the 
+
+simply takes the index of the most probably 
+
+
+## Greedy search generate
+sampling methods
+
+The simplest form of sampling is to t
+
+
+The [`PreTrainedTokenizerFast`] depends on the [🤗 Tokenizers](https://huggingface.co/docs/tokenizers) library. The tokenizers obtained from the 🤗 Tokenizers library can be
+loaded very simply into 🤗 Transformers.
+
+Before getting in the specifics, let's first start by creating a dummy tokenizer in a few lines:
+
+```python
+>>> from tokenizers import Tokenizer
+>>> from tokenizers.models import BPE
+>>> from tokenizers.trainers import BpeTrainer
+>>> from tokenizers.pre_tokenizers import Whitespace
+
+>>> tokenizer = Tokenizer(BPE(unk_token="[UNK]"))
+>>> trainer = BpeTrainer(special_tokens=["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]"])
+
+>>> tokenizer.pre_tokenizer = Whitespace()
+>>> files = [...]
+>>> tokenizer.train(files, trainer)
+```
+
+We now have a tokenizer trained on the files we defined. We can either continue using it in that runtime, or save it to
+a JSON file for future re-use.
+
+## Loading directly from the tokenizer object
+
+Let's see how to leverage this tokenizer object in the 🤗 Transformers library. The
+[`PreTrainedTokenizerFast`] class allows for easy instantiation, by accepting the instantiated
+*tokenizer* object as an argument:
+
+```python
+>>> from transformers import PreTrainedTokenizerFast
+
+>>> fast_tokenizer = PreTrainedTokenizerFast(tokenizer_object=tokenizer)
+```
+
+This object can now be used with all the methods shared by the 🤗 Transformers tokenizers! Head to [the tokenizer
+page](main_classes/tokenizer) for more information.
+
+## Loading from a JSON file
+
+In order to load a tokenizer from a JSON file, let's first start by saving our tokenizer:
+
+```python
+>>> tokenizer.save("tokenizer.json")
+```
+
+The path to which we saved this file can be passed to the [`PreTrainedTokenizerFast`] initialization
+method using the `tokenizer_file` parameter:
+
+```python
+>>> from transformers import PreTrainedTokenizerFast
+
+>>> fast_tokenizer = PreTrainedTokenizerFast(tokenizer_file="tokenizer.json")
+```
+
+This object can now be used with all the methods shared by the 🤗 Transformers tokenizers! Head to [the tokenizer
+page](main_classes/tokenizer) for more information.
