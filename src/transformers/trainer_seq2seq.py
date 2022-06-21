@@ -18,6 +18,7 @@ import torch
 from torch import nn
 from torch.utils.data import Dataset
 
+from . import LogitsProcessorList
 from .deepspeed import is_deepspeed_zero3_enabled
 from .trainer import Trainer
 from .trainer_utils import PredictionOutput
@@ -35,6 +36,7 @@ class Seq2SeqTrainer(Trainer):
         metric_key_prefix: str = "eval",
         max_length: Optional[int] = None,
         num_beams: Optional[int] = None,
+        logits_processor: Optional[LogitsProcessorList] = None,
     ) -> Dict[str, float]:
         """
         Run evaluation and returns metrics.
@@ -60,6 +62,8 @@ class Seq2SeqTrainer(Trainer):
             num_beams (`int`, *optional*):
                 Number of beams for beam search that will be used when predicting with the generate method. 1 means no
                 beam search.
+            logits_processor (`LogitsProcessorList`, *optional*):
+                The [`LogitsProcessor`] instances to add to the logits processing pipeline.
 
         Returns:
             A dictionary containing the evaluation loss and the potential metrics computed from the predictions. The
@@ -67,6 +71,7 @@ class Seq2SeqTrainer(Trainer):
         """
         self._max_length = max_length if max_length is not None else self.args.generation_max_length
         self._num_beams = num_beams if num_beams is not None else self.args.generation_num_beams
+        self._logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         return super().evaluate(eval_dataset, ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix)
 
     def predict(
@@ -76,6 +81,7 @@ class Seq2SeqTrainer(Trainer):
         metric_key_prefix: str = "test",
         max_length: Optional[int] = None,
         num_beams: Optional[int] = None,
+        logits_processor: Optional[LogitsProcessorList] = None,
     ) -> PredictionOutput:
         """
         Run prediction and returns predictions and potential metrics.
@@ -98,6 +104,8 @@ class Seq2SeqTrainer(Trainer):
             num_beams (`int`, *optional*):
                 Number of beams for beam search that will be used when predicting with the generate method. 1 means no
                 beam search.
+            logits_processor (`LogitsProcessorList`, *optional*):
+                The [`LogitsProcessor`] instances to add to the logits processing pipeline.
 
         <Tip>
 
@@ -116,6 +124,7 @@ class Seq2SeqTrainer(Trainer):
         """
         self._max_length = max_length if max_length is not None else self.args.generation_max_length
         self._num_beams = num_beams if num_beams is not None else self.args.generation_num_beams
+        self._logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         return super().predict(test_dataset, ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix)
 
     def prediction_step(
@@ -159,6 +168,9 @@ class Seq2SeqTrainer(Trainer):
             "max_length": self._max_length if self._max_length is not None else self.model.config.max_length,
             "num_beams": self._num_beams if self._num_beams is not None else self.model.config.num_beams,
             "synced_gpus": True if is_deepspeed_zero3_enabled() else False,
+            "logits_processor": self._logits_processor
+            if self._logits_processor is not None
+            else LogitsProcessorList(),
         }
 
         if "attention_mask" in inputs:
