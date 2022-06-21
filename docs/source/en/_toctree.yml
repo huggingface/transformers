@@ -368,6 +368,8 @@
       title: TrOCR
     - local: model_doc/unispeech
       title: UniSpeech
+    - local: model_doc/ul2
+      title: UL2
     - local: model_doc/unispeech-sat
       title: UniSpeech-SAT
     - local: model_doc/van
