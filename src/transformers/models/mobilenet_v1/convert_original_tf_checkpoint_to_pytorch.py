@@ -40,11 +40,9 @@ logger = logging.get_logger(__name__)
 def get_mobilenet_v1_config(model_name):
     config = MobileNetV1Config(layer_norm_eps=0.001)
 
-    # size of the architecture
-    # MIH?
-    # if "mobilenet_v1_s" in model_name:
-    #     config.hidden_sizes = [144, 192, 240]
-    #     config.neck_hidden_sizes = [16, 32, 64, 96, 128, 160, 640]
+    # Size of the architecture
+    if "1.0" in model_name:
+        config.depth_multiplier = 1.0
     # elif "mobilenet_v1_xs" in model_name:
     #     config.hidden_sizes = [96, 120, 144]
     #     config.neck_hidden_sizes = [16, 32, 48, 64, 80, 96, 384]
@@ -53,6 +51,10 @@ def get_mobilenet_v1_config(model_name):
     #     config.neck_hidden_sizes = [16, 16, 24, 48, 64, 80, 320]
     #     config.hidden_dropout_prob = 0.05
     #     config.expand_ratio = 2.0
+    # MIH?
+
+    # TODO: use a regexp?
+    config.image_size = 224
 
     # The TensorFlow version of MobileNetV1 predicts 1001 classes instead of
     # the usual 1000. The first class (index 0) is "background".

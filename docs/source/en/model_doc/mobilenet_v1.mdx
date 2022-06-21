@@ -49,6 +49,7 @@ This model was contributed by [matthijs](https://huggingface.co/Matthijs). The o
       larger outputs. If true, any input size is pooled down to 1x1.
 
 
+> output_stride: An integer that specifies the requested ratio of input to output spatial resolution. If not None, then we invoke atrous convolution if necessary to prevent the network from reducing the spatial resolution of the activation maps. Allowed values are 8 (accurate fully convolutional mode), 16 (fast fully convolutional mode), 32 (classification mode).
 
 
 

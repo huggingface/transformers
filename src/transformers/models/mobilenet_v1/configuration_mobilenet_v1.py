@@ -56,40 +56,23 @@ class MobileNetV1Config(PretrainedConfig):
     Args:
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
-        image_size (`int`, *optional*, defaults to `224`):
+        image_size (`int`, *optional*, defaults to 224):
             The size (resolution) of each image.
-        hidden_sizes (`List[int]`, *optional*, defaults to `[144, 192, 240]`):
-            Dimensionality (hidden size) of the Transformer encoders at each stage.
-        neck_hidden_sizes (`List[int]`, *optional*, defaults to `[16, 32, 64, 96, 128, 160, 640]`):
-            The number of channels for the feature maps of the backbone.
-        expand_ratio (`float`, *optional*, defaults to 4.0):
-            Expansion factor for the MobileNetV2 layers.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+        depth_multiplier (`float`, *optional*, defaults to 1.0):
+            Shrinks or expands the number of channels in each layer. Default is 1.0, which starts the network with 32 channels.
+            This is sometimes also called "alpha" or "width multiplier".
+        min_depth (`int`, *optional*, defaults to 8):
+            All layers will have at least this many channels.
+        hidden_act (`str` or `function`, *optional*, defaults to `"relu6"`):
             The non-linear activation function (function or string) in the Transformer encoder and convolution layers.
-        conv_kernel_size (`int`, *optional*, defaults to 3):
-            The size of the convolutional kernel in the MobileNetV1 layer.
-        output_stride (`int`, `optional`, defaults to 32):
-            The ratio of the spatial resolution of the output to the resolution of the input image.
         tf_padding (`bool`, `optional`, defaults to `True`):
             Whether to use TensorFlow padding rules on the convolution layers.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the Transformer encoder.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        classifier_dropout_prob (`float`, *optional*, defaults to 0.1):
+        classifier_dropout_prob (`float`, *optional*, defaults to 0.999):
             The dropout ratio for attached classifiers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+        layer_norm_eps (`float`, *optional*, defaults to 0.001):
             The epsilon used by the layer normalization layers.
-        aspp_out_channels (`int`, `optional`, defaults to 256):
-            Number of output channels used in the ASPP layer for semantic segmentation.
-        atrous_rates (`List[int]`, *optional*, defaults to `[6, 12, 18]`):
-            Dilation (atrous) factors used in the ASPP layer for semantic segmentation.
-        aspp_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the ASPP layer for semantic segmentation.
-        semantic_loss_ignore_index (`int`, *optional*, defaults to 255):
-            The index that is ignored by the loss function of the semantic segmentation model.
 
     Example:
 
@@ -111,49 +94,29 @@ class MobileNetV1Config(PretrainedConfig):
         self,
         num_channels=3,
         image_size=224,
-        depth_multiplier=1,
-        # hidden_sizes=[144, 192, 240],
-        # neck_hidden_sizes=[16, 32, 64, 96, 128, 160, 640],
-        # expand_ratio=4.0,
+        depth_multiplier=1.0,
+        min_depth=8,
         hidden_act="relu6",
-        conv_kernel_size=3,
-        output_stride=32,
         tf_padding=True,
-        # hidden_dropout_prob=0.1,
-        # attention_probs_dropout_prob=0.0,
-        classifier_dropout_prob=0.1,
+        classifier_dropout_prob=0.999,
         initializer_range=0.02,
-        layer_norm_eps=1e-5,
-        # qkv_bias=True,
-        # aspp_out_channels=256,
-        # atrous_rates=[6, 12, 18],
-        # aspp_dropout_prob=0.1,
-        # semantic_loss_ignore_index=255,
+        layer_norm_eps=0.001,
         **kwargs
     ):
         super().__init__(**kwargs)
 
+        if depth_multiplier <= 0:
+            raise ValueError("depth_multiplier must be greater than zero.")
+
         self.num_channels = num_channels
         self.image_size = image_size
         self.depth_multiplier = depth_multiplier
-        # self.hidden_sizes = hidden_sizes
-        # self.neck_hidden_sizes = neck_hidden_sizes
-        # self.expand_ratio = expand_ratio
+        self.min_depth = min_depth
         self.hidden_act = hidden_act
-        self.conv_kernel_size = conv_kernel_size
-        self.output_stride = output_stride
         self.tf_padding = tf_padding
-        # self.hidden_dropout_prob = hidden_dropout_prob
-        # self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.classifier_dropout_prob = classifier_dropout_prob
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-
-        # decode head attributes for semantic segmentation
-        # self.aspp_out_channels = aspp_out_channels
-        # self.atrous_rates = atrous_rates
-        # self.aspp_dropout_prob = aspp_dropout_prob
-        # self.semantic_loss_ignore_index = semantic_loss_ignore_index
 
 
 class MobileNetV1OnnxConfig(OnnxConfig):

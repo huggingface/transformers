@@ -197,7 +197,6 @@ def apply_tf_padding(features: torch.Tensor, conv_layer: nn.Conv2d) -> torch.Ten
     pad_bottom = pad_along_height - pad_top
 
     padding = (pad_left, pad_right, pad_top, pad_bottom)
-   # print(padding)  #MIH
     return nn.functional.pad(features, padding, "constant", 0.0)
 
 
@@ -222,10 +221,7 @@ class MobileNetV1ConvLayer(nn.Module):
         if out_channels % groups != 0:
             raise ValueError(f"Output channels ({out_channels}) are not divisible by {groups} groups.")
 
-        if config.tf_padding:
-            padding = 0
-        else:
-            padding = int((kernel_size - 1) / 2)
+        padding = 0 if config.tf_padding else int((kernel_size - 1) / 2)
 
         self.convolution = nn.Conv2d(
             in_channels=in_channels,
@@ -283,15 +279,13 @@ class MobileNetV1PreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d]) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
+        elif isinstance(module, nn.BatchNorm2d):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
@@ -329,7 +323,8 @@ class MobileNetV1Model(MobileNetV1PreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        out_channels = int(32 * config.depth_multiplier)
+        depth = 32
+        out_channels = max(int(depth * config.depth_multiplier), config.min_depth)
 
         self.conv_stem = MobileNetV1ConvLayer(
             config,
@@ -346,7 +341,8 @@ class MobileNetV1Model(MobileNetV1PreTrainedModel):
             in_channels = out_channels
 
             if strides[i] == 2 or i == 0:
-                out_channels *= 2
+                depth *= 2
+                out_channels = max(int(depth * config.depth_multiplier), config.min_depth)
 
             self.layer.append(MobileNetV1ConvLayer(
                 config,
@@ -369,15 +365,8 @@ class MobileNetV1Model(MobileNetV1PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    # def _prune_heads(self, heads_to_prune):
-    #     """Prunes heads of the model.
-    #     heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base class PreTrainedModel
-    #     """
-    #     for layer_index, heads in heads_to_prune.items():
-    #         mobilenet_v1_layer = self.encoder.layer[layer_index]
-    #         if isinstance(mobilenet_v1_layer, MobileNetV1Layer):
-    #             for transformer_layer in mobilenet_v1_layer.transformer.layer:
-    #                 transformer_layer.attention.prune_heads(heads)
+    def _prune_heads(self, heads_to_prune):
+        raise NotImplementedError
 
     @add_start_docstrings_to_model_forward(MOBILENET_V1_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
