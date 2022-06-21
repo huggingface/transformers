@@ -88,7 +88,7 @@ class HfArgumentParser(ArgumentParser):
                 raise ValueError(
                     "Only `Union[X, NoneType]` (i.e., `Optional[X]`) is allowed for `Union` because"
                     " the argument parser only supports one type per argument."
-                    f" Problem encountered in field '{field.name}'"
+                    f" Problem encountered in field '{field.name}'."
                 )
             if bool not in field.type.__args__:
                 # filter `NoneType` in Union (except for `Union[bool, NoneType]`)
