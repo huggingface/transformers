@@ -42,6 +42,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("data2vec-vision", "TFData2VecVisionModel"),
         ("deberta", "TFDebertaModel"),
         ("deberta-v2", "TFDebertaV2Model"),
+        ("detr", "TFDetrModel"),
         ("distilbert", "TFDistilBertModel"),
         ("dpr", "TFDPRQuestionEncoder"),
         ("electra", "TFElectraModel"),
@@ -178,6 +179,14 @@ TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+TF_MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES = OrderedDict(
+    [
+        # Do not add new models here, this class will be deprecated in the future.
+        # Model for Image Segmentation mapping
+        ("detr", "TFDetrForSegmentation"),
+    ]
+)
+
 TF_MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Semantic Segmentation mapping
@@ -214,6 +223,13 @@ TF_MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
         ("tapas", "TFTapasForMaskedLM"),
         ("xlm", "TFXLMWithLMHeadModel"),
         ("xlm-roberta", "TFXLMRobertaForMaskedLM"),
+    ]
+)
+
+TF_MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Object Detection mapping
+        ("detr", "TFDetrForObjectDetection"),
     ]
 )
 
@@ -372,11 +388,17 @@ TF_MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING = _LazyAutoMapping(
 TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES
 )
+TF_MODEL_FOR_IMAGE_SEGMENTATION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, TF_MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES
+)
 TF_MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, TF_MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES
 )
 TF_MODEL_FOR_VISION_2_SEQ_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES)
 TF_MODEL_FOR_MASKED_LM_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL_FOR_MASKED_LM_MAPPING_NAMES)
+TF_MODEL_FOR_OBJECT_DETECTION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, TF_MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES
+)
 TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
 )
@@ -450,6 +472,15 @@ TFAutoModelForImageClassification = auto_class_update(
 )
 
 
+class TFAutoModelForImageSemanticSegmentation(_BaseAutoModelClass):
+    _model_mapping = TF_MODEL_FOR_IMAGE_SEGMENTATION_MAPPING
+
+
+TF_AutoModelForImageSemanticSegmentation = auto_class_update(
+    TFAutoModelForImageSemanticSegmentation, head_doc="image segmentation"
+)
+
+
 class TFAutoModelForSemanticSegmentation(_BaseAutoModelClass):
     _model_mapping = TF_MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING
 
@@ -480,6 +511,13 @@ class TFAutoModelForSeq2SeqLM(_BaseAutoModelClass):
 TFAutoModelForSeq2SeqLM = auto_class_update(
     TFAutoModelForSeq2SeqLM, head_doc="sequence-to-sequence language modeling", checkpoint_for_example="t5-base"
 )
+
+
+class TFAutoModelForObjectDetection(_BaseAutoModelClass):
+    _model_mapping = TF_MODEL_FOR_OBJECT_DETECTION_MAPPING
+
+
+TFAutoModelForObjectDetection = auto_class_update(TFAutoModelForObjectDetection, head_doc="object detection")
 
 
 class TFAutoModelForSequenceClassification(_BaseAutoModelClass):

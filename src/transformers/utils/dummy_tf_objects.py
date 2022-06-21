@@ -870,6 +870,37 @@ class TFDebertaV2PreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+TF_DETR_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFDetrForObjectDetection(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFDetrForSegmentation(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFDetrModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFDetrPreTrainedModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
