@@ -506,6 +506,9 @@ class TFOPTDecoder(tf.keras.layers.Layer):
             name="embed_positions",
         )
 
+        # Note that the only purpose of `config._remove_final_layer_norm` is to keep backward compatibility
+        # with checkpoints that have been fine-tuned before transformers v4.20.1
+        # see https://github.com/facebookresearch/metaseq/pull/164
         if config.do_layer_norm_before and not config._remove_final_layer_norm:
             self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
         else:

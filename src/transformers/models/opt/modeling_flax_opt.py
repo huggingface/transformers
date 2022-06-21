@@ -452,6 +452,9 @@ class FlaxOPTDecoder(nn.Module):
             self.project_in = None
             self.project_out = None
 
+        # Note that the only purpose of `config._remove_final_layer_norm` is to keep backward compatibility
+        # with checkpoints that have been fine-tuned before transformers v4.20.1
+        # see https://github.com/facebookresearch/metaseq/pull/164
         if self.config.do_layer_norm_before and not self.config._remove_final_layer_norm:
             self.final_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
         else:
