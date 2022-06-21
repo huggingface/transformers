@@ -205,7 +205,7 @@ Give the model a shot yourself! There are three demos to interact with CodeParro
 ### Setup
 You can pull an NVIDIA PyTorch Container that comes with all the required installations from [NGC](https://catalog.ngc.nvidia.com/orgs/nvidia/containers/pytorch). See [documentation](https://docs.nvidia.com/deeplearning/frameworks/pytorch-release-notes/index.html) for more details:
 
-After installing Docker, you can use the command below to run the container where `xx.xx` denotes your Docker version, and clone [Megatron repository](https://github.com/NVIDIA/Megatron-LM) inside it:
+With the following Docker command you can run the container (`xx.xx` denotes your Docker version), and clone [Megatron repository](https://github.com/NVIDIA/Megatron-LM) into it:
 ```bash
 docker run --gpus all -it --rm nvcr.io/nvidia/pytorch:xx.xx-py3
 git clone https://github.com/NVIDIA/Megatron-LM
