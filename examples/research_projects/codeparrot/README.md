@@ -51,7 +51,7 @@ The raw dataset contains many duplicates. We deduplicated and filtered the datas
 - filtering files that use the assignment operator `=` less than 5 times 
 - filtering files with ratio between number of characters and number of tokens after tokenization < 1.5 (the average ratio is 3.6)
 
-The script to process the full dataset can be found in `scripts/preprocessing.py`. Executing the script on 16 vCPUs takes roughly 3h and removes 70% of the original dataset. The cleaned [train](https://huggingface.co/datasets/loubnabnl/codeparrot-clean-train-v2) and [validation](https://huggingface.co/datasets/loubnabnl/codeparrot-clean-valid-v2) splits are also available on the Hub if you want to skip this step or use the data for another project.
+The script to process the full dataset can be found in `scripts/preprocessing.py`. Executing the script on 16 vCPUs takes roughly 3h and removes 70% of the original dataset. The cleaned [train](https://huggingface.co/datasets/codeparrot/codeparrot-clean-train-v2) and [validation](https://huggingface.co/datasets/codeparrot/codeparrot-clean-valid-v2) splits are also available on the Hub if you want to skip this step or use the data for another project.
 
 To execute the preprocessing run the following command:
 ```bash
@@ -62,12 +62,12 @@ python scripts/preprocessing.py \
 During preprocessing the dataset is downloaded and stored locally as well as caches of the computations. Make sure you have more than 500GB free disk space to execute it.
 
 ### Pretokenization
-The tokenization of the data might be slow during the training especially for small models. We provide code to pretokenize the data beforehand in `scripts/pretokenizing.py`, but this step is optional. The dataset is downloaded and stored locally and the tokenized data is pushed to the hub. The tokenized clean [train](https://huggingface.co/datasets/loubnabnl/tokenized-codeparrot-train) and [validation](https://huggingface.co/datasets/loubnabnl/tokenized-codeparrot-valid) datasets are available if you want to use them directly.
+The tokenization of the data might be slow during the training especially for small models. We provide code to pretokenize the data beforehand in `scripts/pretokenizing.py`, but this step is optional. The dataset is downloaded and stored locally and the tokenized data is pushed to the hub. The tokenized clean [train](https://huggingface.co/datasets/codeparrot/tokenized-codeparrot-train) and [validation](https://huggingface.co/datasets/codeparrot/tokenized-codeparrot-valid) datasets are available if you want to use them directly.
 
 To execute the pretokenization, for the clean train data for instance, run the following command:
 ```bash
 python scripts/pretokenizing.py \
---dataset_name lvwerra/codeparrot-clean-train \
+--dataset_name codeparrot/codeparrot-clean-train \
 --tokenized_data_repo tokenized-codeparrot-train
 ```
 
@@ -76,7 +76,7 @@ Before training a new model for code we create a new tokenizer that is efficient
 ```bash
 python scripts/bpe_training.py \
     --base_tokenizer gpt2 \
-    --dataset_name lvwerra/codeparrot-clean-train
+    --dataset_name codeparrot/codeparrot-clean-train
 ```
 
 _Note:_ We originally trained the tokenizer on the unprocessed train split of the dataset `transformersbook/codeparrot-train`.
@@ -87,14 +87,14 @@ The models are randomly initialized and trained from scratch. To initialize a ne
 ```bash
 python scripts/initialize_model.py \
 --config_name gpt2-large \
---tokenizer_name lvwerra/codeparrot \
+--tokenizer_name codeparrot/codeparrot \
 --model_name codeparrot \
 --push_to_hub True
 ```
 This will initialize a new model with the architecture and configuration of `gpt2-large` and use the tokenizer to appropriately size the input embeddings. Finally, the initilaized model is pushed the the hub.
 
 We can either pass the name of a text dataset or a pretokenized dataset which speeds up training a bit.
-Now that the tokenizer and model are also ready we can start training the model. The main training script is built with `accelerate` to scale across a wide range of platforms and infrastructure scales. We train two models with [110M](https://huggingface.co/lvwerra/codeparrot-small/) and [1.5B](https://huggingface.co/lvwerra/codeparrot/) parameters for 25-30B tokens on a 16xA100 (40GB) machine which takes 1 day and 1 week, respectively.
+Now that the tokenizer and model are also ready we can start training the model. The main training script is built with `accelerate` to scale across a wide range of platforms and infrastructure scales. We train two models with [110M](https://huggingface.co/codeparrot/codeparrot-small/) and [1.5B](https://huggingface.co/codeparrot/codeparrot/) parameters for 25-30B tokens on a 16xA100 (40GB) machine which takes 1 day and 1 week, respectively.
 
 First you need to configure `accelerate` and login to Weights & Biases:
 
@@ -113,7 +113,7 @@ If you want to train the small model you need to make some modifications:
 
 ```bash
 accelerate launch scripts/codeparrot_training.py \
---model_ckpt lvwerra/codeparrot-small \
+--model_ckpt codeparrot/codeparrot-small \
 --train_batch_size 12 \
 --valid_batch_size 12 \
 --learning_rate 5e-4 \
@@ -135,15 +135,15 @@ Instead of streaming the dataset from the hub you can also stream it from disk. 
 ```bash
 git lfs install
 mkdir data
-git -C "./data" clone https://huggingface.co/datasets/lvwerra/codeparrot-clean-train
-git -C "./data" clone https://huggingface.co/datasets/lvwerra/codeparrot-clean-valid
+git -C "./data" clone https://huggingface.co/datasets/codeparrot/codeparrot-clean-train
+git -C "./data" clone https://huggingface.co/datasets/codeparrot/codeparrot-clean-valid
 ```
 
 And then pass the paths to the datasets when we run the training script:
 
 ```bash
 accelerate launch scripts/codeparrot_training.py \
---model_ckpt lvwerra/codeparrot-small \
+--model_ckpt codeparrot/codeparrot-small \
 --dataset_name_train ./data/codeparrot-clean-train \
 --dataset_name_valid ./data/codeparrot-clean-valid \
 --train_batch_size 12 \
@@ -160,13 +160,13 @@ accelerate launch scripts/codeparrot_training.py \
 For evaluating the language modeling loss on the validation set or any other dataset you can use the following command:
 ```bash
 python scripts/validation_loss.py \
---model_ckpt lvwerra/codeparrot \
---dataset_name lvwerra/codeparrot-clean-valid
+--model_ckpt codeparrot/codeparrot \
+--dataset_name codeparrot/codeparrot-clean-valid
 ```
 In addition we evaluate the model on OpenAI's _HumanEval_ benchmark. You can run the evaluation with the following command:
 
 ```bash
-accelerate launch  scripts/human_eval.py --model_ckpt lvwerra/codeparrot \
+accelerate launch  scripts/human_eval.py --model_ckpt codeparrot/codeparrot \
 --do_sample True \
 --temperature 0.2 \
 --top_p 0.95 \
@@ -194,9 +194,10 @@ The results as well as reference values are shown in the following table:
 The numbers were obtained by sampling with `T = [0.2, 0.6, 0.8]` and picking the best value for each metric. Both CodeParrot 🦜 models are still underfitted and longer training would likely improve the performance.
 
 ## Demo
-Give the model a shot yourself! There are two demos to interact with CodeParrot 🦜:
-- [Code generation](https://huggingface.co/spaces/lvwerra/codeparrot-generation)
-- [Code highlighting](https://huggingface.co/spaces/lvwerra/codeparrot-highlighting)
+Give the model a shot yourself! There are three demos to interact with CodeParrot 🦜:
+- [Code generation](https://huggingface.co/spaces/codeparrot/codeparrot-generation)
+- [Code highlighting](https://huggingface.co/spaces/codeparrot/codeparrot-highlighting)
+- [Comparison to other code models](https://huggingface.co/spaces/codeparrot/loubnabnl/code-generation-models)
 
 ## Training with Megatron
 [Megatron](https://github.com/NVIDIA/Megatron-LM) is a framework developed by NVIDIA for training large transformer models. We found that the training of CodeParrot is faster there. Below we explain how to use it.
