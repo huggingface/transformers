@@ -12,9 +12,9 @@ specific language governing permissions and limitations under the License.
 
 # Compartir modelos personalizados
 
-La biblioteca 🤗 Transformers está diseñada para ser fácilmente ampliable. Cada modelo está completamente codificado en una 
-subcarpeta determinada del repositorio sin abstracción, por lo que puedes copiar fácilmente un archivo del modelo y ajustarlo 
-según sus necesidades.
+La biblioteca 🤗 Transformers está diseñada para ser fácilmente ampliable. Cada modelo está completamente codificado 
+sin abstracción en una subcarpeta determinada del repositorio, por lo que puedes copiar fácilmente un archivo del modelo 
+y ajustarlo según tus necesidades.
 
 Si estás escribiendo un modelo completamente nuevo, podría ser más fácil comenzar desde cero. En este tutorial, te mostraremos 
 cómo escribir un modelo personalizado y su configuración para que pueda usarse dentro de Transformers, y cómo puedes compartirlo 
@@ -77,11 +77,11 @@ Las tres cosas importantes que debes recordar al escribir tu propia configuraci�
 - esos `kwargs` deben pasarse a la superclase `__init__`.
 
 La herencia es para asegurarte de obtener toda la funcionalidad de la biblioteca 🤗 Transformers, mientras que las otras dos 
-restricciones provienen del hecho de que una `PretrainedConfig` tiene más campos que los que está configurando. Al recargar una 
-`config` con el método `from_pretrained`, esos campos deben ser aceptados por su `config` y luego enviados a la superclase.
+restricciones provienen del hecho de que una `PretrainedConfig` tiene más campos que los que estás configurando. Al recargar una 
+`config` con el método `from_pretrained`, esos campos deben ser aceptados por tu `config` y luego enviados a la superclase.
 
 Definir un `model_type` para tu configuración (en este caso `model_type="resnet"`) no es obligatorio, a menos que quieras
-registrar tu modelo con las clases automáticas (ver última sección).
+registrar tu modelo con las clases automáticas (ver la última sección).
 
 Una vez hecho esto, puedes crear y guardar fácilmente tu configuración como lo harías con cualquier otra configuración de un 
 modelo de la biblioteca. Así es como podemos crear una configuración resnet50d y guardarla:
@@ -99,7 +99,7 @@ resnet50d_config = ResnetConfig.from_pretrained("custom-resnet")
 ```
 
 También puedes usar cualquier otro método de la clase [`PretrainedConfig`], como [`~PretrainedConfig.push_to_hub`] para cargar 
-directamente tu configuración en Hub.
+directamente tu configuración en el Hub.
 
 ## Escribir un modelo personalizado
 
@@ -181,12 +181,12 @@ Si tu modelo es muy similar a un modelo dentro de la biblioteca, puedes reutiliz
 
 </Tip>
 
-Puedes hacer que ty modelo devuelva lo que quieras, pero devolver un diccionario como lo hicimos para 
-`ResnetModelForImageClassification`, con la pérdida incluida cuando se pasan las etiquetas, hará que tu modelo se pueda 
+Puedes hacer que tu modelo devuelva lo que quieras, pero devolver un diccionario como lo hicimos para 
+`ResnetModelForImageClassification`, con el `loss` incluido cuando se pasan las etiquetas, hará que tu modelo se pueda 
 usar directamente dentro de la clase [`Trainer`]. Usar otro formato de salida está bien, siempre y cuando estés planeando usar 
 tu propio bucle de entrenamiento u otra biblioteca para el entrenamiento.
 
-Ahora que tenemos nuestra clase modelo, vamos a crear una:
+Ahora que tenemos nuestra clase, vamos a crear un modelo:
 
 ```py
 resnet50d = ResnetModelForImageClassification(resnet50d_config)
@@ -197,8 +197,8 @@ Nuevamente, puedes usar cualquiera de los métodos de [`PreTrainedModel`], como 
 con el código de nuestro modelo. Pero primero, carguemos algunos pesos previamente entrenados dentro de nuestro modelo.
 
 En tu caso de uso, probablemente estarás entrenando tu modelo personalizado con tus propios datos. Para ir rápido en este 
-tutorial, usaremos la versión preentrenada de resnet50d. Dado que nuestro modelo es solo un envoltorio a su alrededor, 
-será fácil transferir esos pesos:
+tutorial, usaremos la versión preentrenada de resnet50d. Dado que nuestro modelo es solo un envoltorio alrededor del resnet50d 
+original, será fácil transferir esos pesos:
 
 ```py
 import timm
@@ -207,8 +207,8 @@ pretrained_model = timm.create_model("resnet50d", pretrained=True)
 resnet50d.model.load_state_dict(pretrained_model.state_dict())
 ```
 
-Now let's see how to make sure that when we do [`~PreTrainedModel.save_pretrained`] or [`~PreTrainedModel.push_to_hub`], the
-code of the model is saved.
+Ahora veamos cómo asegurarnos de que cuando hacemos [`~PreTrainedModel.save_pretrained`] o [`~PreTrainedModel.push_to_hub`], 
+se guarda el código del modelo.
 
 ## Enviar el código al _Hub_
 
@@ -218,7 +218,7 @@ Esta _API_ es experimental y puede tener algunos cambios leves en las próximas 
 
 </Tip>
 
-Primero, asegúrate de que tu modelo esté completamente definido en un archivo `.py`. Puedes basarse en importaciones 
+Primero, asegúrate de que tu modelo esté completamente definido en un archivo `.py`. Puedes basarte en importaciones 
 relativas a otros archivos, siempre que todos los archivos estén en el mismo directorio (aún no admitimos submódulos 
 para esta característica). Para nuestro ejemplo, definiremos un archivo `modeling_resnet.py` y un archivo 
 `configuration_resnet.py` en una carpeta del directorio de trabajo actual llamado `resnet_model`. El archivo de configuración 
@@ -238,11 +238,11 @@ El `__init__.py`  puede estar vacío, solo está ahí para que Python detecte qu
 <Tip warning={true}>
 
 Si copias archivos del modelo desde la biblioteca, deberás reemplazar todas las importaciones relativas en la parte superior 
-del archivo para importar desde el paquete `transformers`.
+del archivo para importarlos desde el paquete `transformers`.
 
 </Tip>
 
-Ten en cuenta que puedes reutilizar (o subclasificar) una configuración/modelo existente.
+Ten en cuenta que puedes reutilizar (o subclasificar) una configuración o modelo existente.
 
 Para compartir tu modelo con la comunidad, sigue estos pasos: primero importa el modelo y la configuración de ResNet desde 
 los archivos recién creados:
@@ -289,7 +289,7 @@ from huggingface_hub import notebook_login
 notebook_login()
 ```
 
-Luego puedes ingresar a tu propio espacio (o una organización de la que sea miembro) de esta manera:
+Luego puedes ingresar a tu propio espacio (o una organización de la que seas miembro) de esta manera:
 
 ```py
 resnet50d.push_to_hub("custom-resnet50d")
@@ -299,13 +299,13 @@ Además de los pesos del modelo y la configuración en formato json, esto tambi�
 configuración en la carpeta `custom-resnet50d` y subió el resultado al Hub. Puedes verificar el resultado en este 
 [repositorio de modelos](https://huggingface.co/sgugger/custom-resnet50d).
 
-Consulta el [tutorial sobre cómo compartir modelos](model_sharing) para obtener más información sobre el método para subir modelos al Hub.
+Consulta el tutorial sobre cómo [compartir modelos](model_sharing) para obtener más información sobre el método para subir modelos al Hub.
 
 ## Usar un modelo con código personalizado
 
 Puedes usar cualquier configuración, modelo o _tokenizador_ con archivos de código personalizado en tu repositorio con las 
 clases automáticas y el método `from_pretrained`. Todos los archivos y códigos cargados en el Hub se analizan en busca de 
-malware (consulte la documentación de [seguridad del Hub](https://huggingface.co/docs/hub/security#malware-scanning) para 
+malware (consulta la documentación de [seguridad del Hub](https://huggingface.co/docs/hub/security#malware-scanning) para 
 obtener más información), pero aún debes revisar el código del modelo y el autor para evitar la ejecución de código malicioso 
 en tu computadora. Configura `trust_remote_code=True` para usar un modelo con código personalizado:
 
@@ -315,7 +315,7 @@ from transformers import AutoModelForImageClassification
 model = AutoModelForImageClassification.from_pretrained("sgugger/custom-resnet50d", trust_remote_code=True)
 ```
 
-También se recomienda encarecidamente pasar un _hash_ de confirmación como una "revisión" para asegurarse de que el autor 
+También se recomienda encarecidamente pasar un _hash_ de confirmación como una "revisión" para asegurarte que el autor 
 de los modelos no actualizó el código con algunas líneas nuevas maliciosas (a menos que confíes plenamente en los autores 
 de los modelos).
 
@@ -333,7 +333,7 @@ fácilmente el hash de confirmación de cualquier _commit_.
 
 Si estás escribiendo una biblioteca que amplía 🤗 Transformers, es posible que quieras ampliar las clases automáticas para 
 incluir tu propio modelo. Esto es diferente de enviar el código al Hub en el sentido de que los usuarios necesitarán importar 
-tu biblioteca para obtener los modelos personalizados (al contrario de descargar automáticamente el código del modelo del Hub).
+tu biblioteca para obtener los modelos personalizados (al contrario de descargar automáticamente el código del modelo desde Hub).
 
 Siempre que tu configuración tenga un atributo `model_type` que sea diferente de los tipos de modelos existentes, y que tus 
 clases modelo tengan los atributos `config_class` correctos, puedes agregarlos a las clases automáticas de la siguiente manera:
