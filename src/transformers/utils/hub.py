@@ -861,6 +861,7 @@ class PushToHubMixin:
         organization: Optional[str] = None,
         private: Optional[bool] = None,
         use_auth_token: Optional[Union[bool, str]] = None,
+        max_shard_size: Optional[Union[int, str]] = "10GB",
         **model_card_kwargs
     ) -> str:
         """
@@ -936,8 +937,9 @@ class PushToHubMixin:
             use_auth_token=use_auth_token,
         )
         # Save the files in the cloned repo
-        self.save_pretrained(repo_path_or_name)
+
         if hasattr(self, "history") and hasattr(self, "create_model_card"):
+            self.save_pretrained(repo_path_or_name, max_shard_size=max_shard_size)
             # This is a Keras model and we might be able to fish out its History and make a model card out of it
             base_model_card_args = {
                 "output_dir": repo_path_or_name,
@@ -945,6 +947,9 @@ class PushToHubMixin:
             }
             base_model_card_args.update(model_card_kwargs)
             self.create_model_card(**base_model_card_args)
+        else:
+            # FLAX does not support sharding yet, will come in next PR
+            self.save_pretrained(repo_path_or_name)
         # Commit and push!
         url = self._push_to_hub(repo, commit_message=commit_message)
 
@@ -1075,3 +1080,114 @@ def send_example_telemetry(example_name, *example_args, framework="pytorch"):
     except Exception:
         # We don't want to error in case of connection errors of any kind.
         pass
+
+
+def convert_file_size_to_int(size: Union[int, str]):
+    """
+    Converts a size expressed as a string with digits an unit (like `"5MB"`) to an integer (in bytes).
+
+    Args:
+        size (`int` or `str`): The size to convert. Will be directly returned if an `int`.
+
+    Example:
+
+    ```py
+    >>> convert_file_size_to_int("1MiB")
+    1048576
+    ```
+    """
+    if isinstance(size, int):
+        return size
+    if size.upper().endswith("GIB"):
+        return int(size[:-3]) * (2**30)
+    if size.upper().endswith("MIB"):
+        return int(size[:-3]) * (2**20)
+    if size.upper().endswith("KIB"):
+        return int(size[:-3]) * (2**10)
+    if size.upper().endswith("GB"):
+        int_size = int(size[:-2]) * (10**9)
+        return int_size // 8 if size.endswith("b") else int_size
+    if size.upper().endswith("MB"):
+        int_size = int(size[:-2]) * (10**6)
+        return int_size // 8 if size.endswith("b") else int_size
+    if size.upper().endswith("KB"):
+        int_size = int(size[:-2]) * (10**3)
+        return int_size // 8 if size.endswith("b") else int_size
+    raise ValueError("`size` is not in a valid format. Use an integer followed by the unit, e.g., '5GB'.")
+
+
+def get_checkpoint_shard_files(
+    pretrained_model_name_or_path,
+    index_filename,
+    cache_dir=None,
+    force_download=False,
+    proxies=None,
+    resume_download=False,
+    local_files_only=False,
+    use_auth_token=None,
+    user_agent=None,
+    revision=None,
+    mirror=None,
+):
+    """
+    For a given model:
+
+    - download and cache all the shards of a sharded checkpoint if `pretrained_model_name_or_path` is a model ID on the
+      Hub
+    - returns the list of paths to all the shards, as well as some metadata.
+
+    For the description of each arg, see [`PreTrainedModel.from_pretrained`]. `index_filename` is the full path to the
+    index (downloaded and cached if `pretrained_model_name_or_path` is a model ID on the Hub).
+    """
+    import json
+
+    if not os.path.isfile(index_filename):
+        raise ValueError(f"Can't find a checkpoint index ({index_filename}) in {pretrained_model_name_or_path}.")
+
+    with open(index_filename, "r") as f:
+        index = json.loads(f.read())
+
+    shard_filenames = sorted(list(set(index["weight_map"].values())))
+    sharded_metadata = index["metadata"]
+    sharded_metadata["all_checkpoint_keys"] = list(index["weight_map"].keys())
+
+    # First, let's deal with local folder.
+    if os.path.isdir(pretrained_model_name_or_path):
+        shard_filenames = [os.path.join(pretrained_model_name_or_path, f) for f in shard_filenames]
+        return shard_filenames, sharded_metadata
+
+    # At this stage pretrained_model_name_or_path is a model identifier on the Hub
+    cached_filenames = []
+    for shard_filename in shard_filenames:
+        shard_url = hf_bucket_url(
+            pretrained_model_name_or_path, filename=shard_filename, revision=revision, mirror=mirror
+        )
+
+        try:
+            # Load from URL
+            cached_filename = cached_path(
+                shard_url,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                proxies=proxies,
+                resume_download=resume_download,
+                local_files_only=local_files_only,
+                use_auth_token=use_auth_token,
+                user_agent=user_agent,
+            )
+        # We have already dealt with RepositoryNotFoundError and RevisionNotFoundError when getting the index, so
+        # we don't have to catch them here.
+        except EntryNotFoundError:
+            raise EnvironmentError(
+                f"{pretrained_model_name_or_path} does not appear to have a file named {shard_filename} which is "
+                "required according to the checkpoint index."
+            )
+        except HTTPError:
+            raise EnvironmentError(
+                f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load {shard_filename}. You should try"
+                " again after checking your internet connection."
+            )
+
+        cached_filenames.append(cached_filename)
+
+    return cached_filenames, sharded_metadata
