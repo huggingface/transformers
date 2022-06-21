@@ -293,7 +293,7 @@ python3 -m torch.distributed.launch $DISTRIBUTED_ARGS \
 ```
 The training takes almost 12 hours in this setting.
 
-### Evaluation
+### Convert model to `transformers`
 After training we want to use the model in `transformers` e.g. to evaluate it on HumanEval. You can convert it to `transformers` following [this](https://huggingface.co/nvidia/megatron-gpt2-345m) tutorial. For instance, after the training is finished you can copy the weights of the last iteration 150k and convert the `model_optim_rng.pt` file to a `pytorch_model.bin` file that is supported by `transformers`.
 
 ```bash
