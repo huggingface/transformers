@@ -80,7 +80,7 @@ class OmnivoreConfig(PretrainedConfig):
     ```python
     >>> from transformers import OmnivoreModel, OmnivoreConfig
 
-    >>> # Initializing a Omnivore omnivore-tiny-224 style configuration
+    >>> # Initializing an Omnivore omnivore-tiny-224 style configuration
     >>> configuration = OmnivoreConfig()
     >>> # Initializing a model from the omnivore-tiny-224 style configuration
     >>> model = OmnivoreModel(configuration)
