@@ -44,6 +44,8 @@ def rename_key(name):
         name = name.replace("attn", "self_attn")
     if "proj" in name and "self_attn" in name and "text" not in name:
         name = name.replace("proj", "out_proj")
+    if "pre_assign_attn.attn.proj" in name:
+        name = name.replace("pre_assign_attn.attn.proj", "pre_assign_attn.attn.out_proj")
     if "norm1" in name:
         name = name.replace("norm1", "layer_norm1")
     if "norm2" in name and "pre_assign" not in name:

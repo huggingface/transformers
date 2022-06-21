@@ -170,65 +170,17 @@ def get_grouping_from_attentions(attentions, hw_shape):
 class GroupViTCrossAttentionLayer(nn.Module):
     def __init__(self, config: GroupViTVisionConfig):
         super().__init__()
-        self.attn = GroupViTCrossAttention(config)
+        self.attn = GroupViTAttention(config)
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.mlp = GroupViTMLP(config)
         self.norm_post = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(self, query, key):
         x = query
-        x = x + self.attn(query, key)
+        x = x + self.attn(query, encoder_hidden_states=key)[0]
         x = x + self.mlp(self.norm2(x))
         x = self.norm_post(x)
         return x
-
-
-class GroupViTCrossAttention(nn.Module):
-    def __init__(self, config: GroupViTVisionConfig):
-        super().__init__()
-        self.num_heads = config.num_attention_heads
-        head_dim = config.hidden_size // self.num_heads
-        self.scale = head_dim**-0.5
-
-        self.q_proj = nn.Linear(config.hidden_size, config.hidden_size)
-        self.k_proj = nn.Linear(config.hidden_size, config.hidden_size)
-        self.v_proj = nn.Linear(config.hidden_size, config.hidden_size)
-        self.proj = nn.Linear(config.hidden_size, config.hidden_size)
-
-    def forward(self, query, key=None):
-        batch_size, query_length, channels = query.shape
-        if key is None:
-            key = query
-        value = key
-        key_length = key.size(1)
-
-        # [batch_size, num_heads, query_length, channels//num_heads]
-        query = (
-            self.q_proj(query)
-            .reshape(batch_size, query_length, self.num_heads, channels // self.num_heads)
-            .permute(0, 2, 1, 3)
-        )
-        # [batch_size, num_heads, key_length, channels//num_heads]
-        key = (
-            self.k_proj(key)
-            .reshape(batch_size, key_length, self.num_heads, channels // self.num_heads)
-            .permute(0, 2, 1, 3)
-        )
-        # [batch_size, num_heads, key_length, channels//num_heads]
-        value = (
-            self.v_proj(value)
-            .reshape(batch_size, key_length, self.num_heads, channels // self.num_heads)
-            .permute(0, 2, 1, 3)
-        )
-
-        # [batch_size, num_heads, query_length, key_length]
-        attn = (query @ key.transpose(-2, -1)) * self.scale
-        attn = attn.softmax(dim=-1)
-
-        # [batch_size, num_heads, query_length, channels//num_heads] -> [batch_size, query_length, channels]
-        out = (attn @ value).transpose(1, 2).reshape(batch_size, query_length, channels)
-        out = self.proj(out)
-        return out
 
 
 class GroupViTAssignAttention(nn.Module):
@@ -648,7 +600,6 @@ class GroupViTMixerMLP(GroupViTMLP):
         return super().forward(x.transpose(1, 2)).transpose(1, 2)
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPAttention with CLIP->GroupViT
 class GroupViTAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -679,16 +630,22 @@ class GroupViTAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         causal_attention_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
         bsz, tgt_len, embed_dim = hidden_states.size()
+        is_cross_attention = encoder_hidden_states is not None
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scale
-        key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-        value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+        if is_cross_attention:
+            key_states = self._shape(self.k_proj(encoder_hidden_states), -1, bsz)
+            value_states = self._shape(self.v_proj(encoder_hidden_states), -1, bsz)
+        else:
+            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
         query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
