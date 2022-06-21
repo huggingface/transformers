@@ -174,7 +174,7 @@ class TFXGLMModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_batch_generation(self):
-        model = TFXGLMForCausalLM.from_pretrained("facebook/xglm-564M", from_pt=True)
+        model = TFXGLMForCausalLM.from_pretrained("facebook/xglm-564M")
         tokenizer = XGLMTokenizer.from_pretrained("facebook/xglm-564M")
 
         tokenizer.padding_side = "left"
@@ -213,7 +213,7 @@ class TFXGLMModelTest(TFModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in TF_XGLM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFXGLMModel.from_pretrained(model_name, from_pt=True)
+            model = TFXGLMModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
     @unittest.skip(reason="Currently, model embeddings are going to undergo a major refactor.")
@@ -225,7 +225,7 @@ class TFXGLMModelTest(TFModelTesterMixin, unittest.TestCase):
 class TFXGLMModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_xglm(self, verify_outputs=True):
-        model = TFXGLMForCausalLM.from_pretrained("facebook/xglm-564M", from_pt=True)
+        model = TFXGLMForCausalLM.from_pretrained("facebook/xglm-564M")
         input_ids = tf.convert_to_tensor([2, 268, 9865], dtype=tf.int32)  # The dog
         # </s> The dog is a very friendly dog. He is very affectionate and loves to play with other
         # fmt: off
@@ -238,7 +238,7 @@ class TFXGLMModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_xglm_sample(self):
         tokenizer = XGLMTokenizer.from_pretrained("facebook/xglm-564M")
-        model = TFXGLMForCausalLM.from_pretrained("facebook/xglm-564M", from_pt=True)
+        model = TFXGLMForCausalLM.from_pretrained("facebook/xglm-564M")
 
         tf.random.set_seed(0)
         tokenized = tokenizer("Today is a nice day and", return_tensors="tf")
@@ -253,7 +253,7 @@ class TFXGLMModelLanguageGenerationTest(unittest.TestCase):
     def test_lm_generate_xglm_left_padding(self):
         """Tests that the generated text is the same, regarless of left padding"""
         tokenizer = XGLMTokenizer.from_pretrained("facebook/xglm-564M")
-        model = TFXGLMForCausalLM.from_pretrained("facebook/xglm-564M", from_pt=True)
+        model = TFXGLMForCausalLM.from_pretrained("facebook/xglm-564M")
 
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "left"
