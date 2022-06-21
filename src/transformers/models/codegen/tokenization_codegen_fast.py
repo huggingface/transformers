@@ -186,6 +186,7 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
         token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: bool = True,
+        truncate_before_pattern: Optional[List[str]] = None,
         **kwargs
     ) -> str:
         """
@@ -201,6 +202,10 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
                 Whether or not to remove special tokens in the decoding.
             clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
                 Whether or not to clean up the tokenization spaces.
+            truncate_before_pattern (`List[str]`, *optional*, defaults to `None`):
+                A list of regular expression strings that will be used to truncate the returned string. This can be
+                used to remove extra pieces of code (e.g. truncate if observing a comment symbol "#" at the beginning
+                of a new line). An example pattern could be `["^#", re.escape("<|endoftext|>"), "^'''", "\n\n\n"]`.
             kwargs (additional keyword arguments, *optional*):
                 Will be passed to the underlying model specific decode method.
 
@@ -214,15 +219,17 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
 
-        truncated_text = self.truncate(decoded_text)
-        return truncated_text
+        if truncate_before_pattern is not None and len(truncate_before_pattern) > 0:
+            decoded_text = self.truncate(decoded_text, truncate_before_pattern)
 
-    def truncate(self, completion):
+        return decoded_text
+
+    def truncate(self, completion, truncate_before_pattern):
         def find_re(string, pattern, start_pos):
             m = pattern.search(string, start_pos)
             return m.start() if m else -1
 
-        terminals = [re.compile(r, re.MULTILINE) for r in ["^#", re.escape("<|endoftext|>"), "^'''", '^"""', "\n\n\n"]]
+        terminals = [re.compile(pattern, re.MULTILINE) for pattern in truncate_before_pattern]
 
         prints = list(re.finditer("^print", completion, re.MULTILINE))
 
