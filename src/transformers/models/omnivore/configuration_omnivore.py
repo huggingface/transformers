@@ -65,7 +65,7 @@ class OmnivoreConfig(PretrainedConfig):
             The dropout probability for stochastic depth, used in the blocks of the Transformer encoder.
         qkv_bias (`bool`, *optional*, defaults to True):
             The bias bool for query, key and value in attentions
-        qk_scale (`bool`, *optional*, defaults to None):
+        qk_scale (`bool`, *optional*):
             Override default qk scale of head_dim ** -0.5 if set.
         norm_layer (`nn.Module`, *optional*, defaults to nn.LayerNorm):
             Normalization layer for the model
