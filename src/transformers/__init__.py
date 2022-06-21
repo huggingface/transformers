@@ -1673,9 +1673,9 @@ else:
         [
             "MOBILENET_V1_PRETRAINED_MODEL_ARCHIVE_LIST",
             "MobileNetV1ForImageClassification",
-            "MobileNetV1ForSemanticSegmentation",
             "MobileNetV1Model",
             "MobileNetV1PreTrainedModel",
+            "load_tf_weights_in_mobilenet_v1",
         ]
     )
     _import_structure["models.mpnet"].extend(
@@ -4528,9 +4528,9 @@ if TYPE_CHECKING:
         from .models.mobilenet_v1 import (
             MOBILENET_V1_PRETRAINED_MODEL_ARCHIVE_LIST,
             MobileNetV1ForImageClassification,
-            MobileNetV1ForSemanticSegmentation,
             MobileNetV1Model,
             MobileNetV1PreTrainedModel,
+            load_tf_weights_in_mobilenet_v1,
         )
         from .models.mpnet import (
             MPNET_PRETRAINED_MODEL_ARCHIVE_LIST,

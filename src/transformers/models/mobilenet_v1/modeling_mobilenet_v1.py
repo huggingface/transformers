@@ -17,29 +17,23 @@
 """ PyTorch MobileNetV1 model."""
 
 
-import math
-from typing import Dict, Optional, Set, Tuple, Union
+from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
-    BaseModelOutputWithNoAttention,
     BaseModelOutputWithPoolingAndNoAttention,
     ImageClassifierOutputWithNoAttention,
-    SemanticSegmenterOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
-    replace_return_docstrings,
 )
 from .configuration_mobilenet_v1 import MobileNetV1Config
 
@@ -53,7 +47,7 @@ _FEAT_EXTRACTOR_FOR_DOC = "MobileNetV1FeatureExtractor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "Matthijs/mobilenet_v1-small"
-_EXPECTED_OUTPUT_SHAPE = [1, 640, 8, 8]
+_EXPECTED_OUTPUT_SHAPE = [1, 1024, 7, 7]
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "Matthijs/mobilenet_v1-small"
@@ -69,6 +63,113 @@ MOBILENET_V1_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "Matthijs/deeplabv3-mobilenet_v1-xx-small",
     # See all MobileNetV1 models at https://huggingface.co/models?filter=mobilenet_v1
 ]
+
+
+def _build_tf_to_pytorch_map(model, config, tf_weights=None):
+    """
+    A map of modules from TF to PyTorch.
+    """
+
+    tf_to_pt_map = {}
+
+    if isinstance(model, MobileNetV1ForImageClassification):
+        backbone = model.mobilenet_v1
+    else:
+        backbone = model
+
+    prefix = f"MobilenetV1/Conv2d_0/"
+    tf_to_pt_map[prefix + "weights"] = backbone.conv_stem.convolution.weight
+    tf_to_pt_map[prefix + "BatchNorm/beta"] = backbone.conv_stem.normalization.bias
+    tf_to_pt_map[prefix + "BatchNorm/gamma"] = backbone.conv_stem.normalization.weight
+    tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = backbone.conv_stem.normalization.running_mean
+    tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = backbone.conv_stem.normalization.running_var
+
+    for i in range(13):
+        j = i + 1
+
+        pointer = backbone.layer[i*2]
+        prefix = f"MobilenetV1/Conv2d_{j}_depthwise/"
+        tf_to_pt_map[prefix + "depthwise_weights"] = pointer.convolution.weight
+        tf_to_pt_map[prefix + "BatchNorm/beta"] = pointer.normalization.bias
+        tf_to_pt_map[prefix + "BatchNorm/gamma"] = pointer.normalization.weight
+        tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = pointer.normalization.running_mean
+        tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = pointer.normalization.running_var
+
+        pointer = backbone.layer[i*2 + 1]
+        prefix = f"MobilenetV1/Conv2d_{j}_pointwise/"
+        tf_to_pt_map[prefix + "weights"] = pointer.convolution.weight
+        tf_to_pt_map[prefix + "BatchNorm/beta"] = pointer.normalization.bias
+        tf_to_pt_map[prefix + "BatchNorm/gamma"] = pointer.normalization.weight
+        tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = pointer.normalization.running_mean
+        tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = pointer.normalization.running_var
+
+    if isinstance(model, MobileNetV1ForImageClassification):
+        prefix = f"MobilenetV1/Logits/Conv2d_1c_1x1/"
+        tf_to_pt_map[prefix + "weights"] = model.classifier.weight
+        tf_to_pt_map[prefix + "biases"] = model.classifier.bias
+
+    return tf_to_pt_map
+
+
+def load_tf_weights_in_mobilenet_v1(model, config, tf_checkpoint_path):
+    """Load TensorFlow checkpoints in a PyTorch model."""
+    try:
+        import numpy as np
+        import tensorflow as tf
+    except ImportError:
+        logger.error(
+            "Loading a TensorFlow models in PyTorch, requires TensorFlow to be installed. Please see "
+            "https://www.tensorflow.org/install/ for installation instructions."
+        )
+        raise
+
+    # Load weights from TF model
+    init_vars = tf.train.list_variables(tf_checkpoint_path)
+    tf_weights = {}
+    for name, shape in init_vars:
+        logger.info(f"Loading TF weight {name} with shape {shape}")
+        array = tf.train.load_variable(tf_checkpoint_path, name)
+        tf_weights[name] = array
+
+    # Build TF to PyTorch weights loading map
+    tf_to_pt_map = _build_tf_to_pytorch_map(model, config, tf_weights)
+
+    for name, pointer in tf_to_pt_map.items():
+        logger.info(f"Importing {name}")
+        if name not in tf_weights:
+            logger.info(f"{name} not in tf pre-trained weights, skipping")
+            continue
+
+        array = tf_weights[name]
+
+        if "depthwise_weights" in name:
+            logger.info("Transposing depthwise")
+            array = np.transpose(array, (2, 3, 0, 1))
+        elif "weights" in name:
+            logger.info("Transposing")
+            if len(pointer.shape) == 2:  # copying into linear layer
+                array = array.squeeze().transpose()
+            else:
+                array = np.transpose(array, (3, 2, 0, 1))
+
+        try:
+            assert (
+                pointer.shape == array.shape
+            ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
+        except AssertionError as e:
+            e.args += (pointer.shape, array.shape)
+            raise
+
+        logger.info(f"Initialize PyTorch weight {name} {array.shape}")
+        pointer.data = torch.from_numpy(array)
+
+        tf_weights.pop(name, None)
+        tf_weights.pop(name + "/RMSProp", None)
+        tf_weights.pop(name + "/RMSProp_1", None)
+        tf_weights.pop(name + "/ExponentialMovingAverage", None)
+
+    logger.info(f"Weights not copied to PyTorch model: {', '.join(tf_weights.keys())}")
+    return model
 
 
 def apply_tf_padding(features: torch.Tensor, conv_layer: nn.Conv2d) -> torch.Tensor:
@@ -177,6 +278,7 @@ class MobileNetV1PreTrainedModel(PreTrainedModel):
     """
 
     config_class = MobileNetV1Config
+    load_tf_weights = load_tf_weights_in_mobilenet_v1
     base_model_prefix = "mobilenet_v1"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
@@ -346,9 +448,9 @@ class MobileNetV1ForImageClassification(MobileNetV1PreTrainedModel):
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.mobilenet = MobileNetV1Model(config)
+        self.mobilenet_v1 = MobileNetV1Model(config)
 
-        last_hidden_size = self.mobilenet.layer[-1].convolution.out_channels
+        last_hidden_size = self.mobilenet_v1.layer[-1].convolution.out_channels
 
         # Classifier head
         self.dropout = nn.Dropout(config.classifier_dropout_prob, inplace=True)
@@ -382,7 +484,7 @@ class MobileNetV1ForImageClassification(MobileNetV1PreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.mobilenet(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
+        outputs = self.mobilenet_v1(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
 
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
 

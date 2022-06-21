@@ -29,7 +29,7 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import MobileNetV1ForImageClassification, MobileNetV1ForSemanticSegmentation, MobileNetV1Model
+    from transformers import MobileNetV1ForImageClassification, MobileNetV1Model
     from transformers.models.mobilenet_v1.modeling_mobilenet_v1 import MOBILENET_V1_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -139,32 +139,6 @@ class MobileNetV1ModelTester:
         result = model(pixel_values, labels=labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
-    def create_and_check_for_semantic_segmentation(self, config, pixel_values, labels, pixel_labels):
-        config.num_labels = self.num_labels
-        model = MobileNetV1ForSemanticSegmentation(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values)
-        self.parent.assertEqual(
-            result.logits.shape,
-            (
-                self.batch_size,
-                self.num_labels,
-                self.image_size // self.output_stride,
-                self.image_size // self.output_stride,
-            ),
-        )
-        result = model(pixel_values, labels=pixel_labels)
-        self.parent.assertEqual(
-            result.logits.shape,
-            (
-                self.batch_size,
-                self.num_labels,
-                self.image_size // self.output_stride,
-                self.image_size // self.output_stride,
-            ),
-        )
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values, labels, pixel_labels = config_and_inputs
@@ -180,7 +154,7 @@ class MobileNetV1ModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (
-        (MobileNetV1Model, MobileNetV1ForImageClassification, MobileNetV1ForSemanticSegmentation)
+        (MobileNetV1Model, MobileNetV1ForImageClassification)
         if is_torch_available()
         else ()
     )
@@ -310,33 +284,3 @@ class MobileNetV1ModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor([-1.9364, -1.2327, -0.4653]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
-
-    @slow
-    def test_inference_semantic_segmentation(self):
-        model = MobileNetV1ForSemanticSegmentation.from_pretrained("Matthijs/deeplabv3-mobilenet_v1-xx-small")
-        model = model.to(torch_device)
-
-        feature_extractor = MobileNetV1FeatureExtractor.from_pretrained("Matthijs/deeplabv3-mobilenet_v1-xx-small")
-
-        image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
-
-        # forward pass
-        with torch.no_grad():
-            outputs = model(**inputs)
-        logits = outputs.logits
-
-        # verify the logits
-        expected_shape = torch.Size((1, 21, 32, 32))
-        self.assertEqual(logits.shape, expected_shape)
-
-        expected_slice = torch.tensor(
-            [
-                [[6.9713, 6.9786, 7.2422], [7.2893, 7.2825, 7.4446], [7.6580, 7.8797, 7.9420]],
-                [[-10.6869, -10.3250, -10.3471], [-10.4228, -9.9868, -9.7132], [-11.0405, -11.0221, -10.7318]],
-                [[-3.3089, -2.8539, -2.6740], [-3.2706, -2.5621, -2.5108], [-3.2534, -2.6615, -2.6651]],
-            ],
-            device=torch_device,
-        )
-
-        self.assertTrue(torch.allclose(logits[0, :3, :3, :3], expected_slice, atol=1e-4))

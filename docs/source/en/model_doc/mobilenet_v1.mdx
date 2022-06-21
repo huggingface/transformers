@@ -32,6 +32,14 @@ Tips:
 This model was contributed by [matthijs](https://huggingface.co/Matthijs). The original code and weights can be found [here](https://github.com/apple/ml-cvnets).
 
 
+
+
+-> note: v1 predicts 1001 classes (insert "background" class in front)
+
+
+
+
+
     global_pool: Optional boolean flag to control the avgpooling before the
 
       logits layer. If false or unset, pooling is done with a fixed window
@@ -61,9 +69,4 @@ This model was contributed by [matthijs](https://huggingface.co/Matthijs). The o
 ## MobileNetV1ForImageClassification
 
 [[autodoc]] MobileNetV1ForImageClassification
-    - forward
-
-## MobileNetV1ForSemanticSegmentation
-
-[[autodoc]] MobileNetV1ForSemanticSegmentation
     - forward
