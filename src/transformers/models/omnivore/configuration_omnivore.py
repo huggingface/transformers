@@ -53,7 +53,7 @@ class OmnivoreConfig(PretrainedConfig):
         num_heads (`List[int]`, *optional*, defaults to [3, 6, 12, 24]):
             Number of attention head of each stage.
         window_size (`int`, *optional*, defaults to 7)
-            Size of the window used by swin transformer in the model,
+            Size of the window used by the Swin Transformer model.
         mlp_ratios (`float`, *optional*, defaults to 4.0):
             Ratio of the size of the hidden layer compared to the size of the input layer of the Mix FFNs in the
             encoder blocks.
