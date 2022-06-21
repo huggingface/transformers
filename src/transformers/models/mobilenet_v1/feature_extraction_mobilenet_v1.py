@@ -37,7 +37,7 @@ class MobileNetV1FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtraction
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the input to a certain `size`.
-        size (`int` or `Tuple(int)`, *optional*, defaults to 288):
+        size (`int` or `Tuple(int)`, *optional*, defaults to 256):
             Resize the input to the given size. If a tuple is provided, it should be (width, height). If only an
             integer is provided, then the input will be resized to match the shorter side. Only has an effect if
             `do_resize` is set to `True`.
@@ -48,10 +48,10 @@ class MobileNetV1FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtraction
         do_center_crop (`bool`, *optional*, defaults to `True`):
             Whether to crop the input at the center. If the input size is smaller than `crop_size` along any edge, the
             image is padded with 0's and then center cropped.
-        crop_size (`int`, *optional*, defaults to 256):
+        crop_size (`int`, *optional*, defaults to 224):
             Desired output size when applying center-cropping. Only has an effect if `do_center_crop` is set to `True`.
-        do_flip_channel_order (`bool`, *optional*, defaults to `True`):
-            Whether to flip the color channels from RGB to BGR.
+        do_normalize (`bool`, *optional*, defaults to `True`):
+            Whether or not to normalize the input to the range between -1 and +1.
     """
 
     model_input_names = ["pixel_values"]
@@ -59,11 +59,11 @@ class MobileNetV1FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtraction
     def __init__(
         self,
         do_resize=True,
-        size=288,
+        size=256,
         resample=Image.BILINEAR,
         do_center_crop=True,
-        crop_size=256,
-        do_flip_channel_order=True,
+        crop_size=224,
+        do_normalize=True,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -72,7 +72,7 @@ class MobileNetV1FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtraction
         self.resample = resample
         self.do_center_crop = do_center_crop
         self.crop_size = crop_size
-        self.do_flip_channel_order = do_flip_channel_order
+        self.do_normalize = do_normalize
 
     def __call__(
         self, images: ImageInput, return_tensors: Optional[Union[str, TensorType]] = None, **kwargs
@@ -140,11 +140,10 @@ class MobileNetV1FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtraction
         if self.do_center_crop and self.crop_size is not None:
             images = [self.center_crop(image, self.crop_size) for image in images]
 
-        images = [self.to_numpy_array(image) for image in images]
+        images = [self.to_numpy_array(image, rescale=False) for image in images]
 
-        # the pretrained checkpoints assume images are BGR, not RGB
-        # if self.do_flip_channel_order:
-        #     images = [self.flip_channel_order(image) for image in images]
+        if self.do_normalize:
+            images = [(image.astype(np.float32)/127.5 - 1.0) for image in images]
 
         # return as BatchFeature
         data = {"pixel_values": images}

@@ -32,6 +32,18 @@ Tips:
 This model was contributed by [matthijs](https://huggingface.co/Matthijs). The original code and weights can be found [here](https://github.com/apple/ml-cvnets).
 
 
+    global_pool: Optional boolean flag to control the avgpooling before the
+
+      logits layer. If false or unset, pooling is done with a fixed window
+
+      that reduces default-sized inputs to 1x1, while larger inputs lead to
+
+      larger outputs. If true, any input size is pooled down to 1x1.
+
+
+
+
+
 ## MobileNetV1Config
 
 [[autodoc]] MobileNetV1Config

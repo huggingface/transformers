@@ -37,6 +37,11 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
+
+# layer_norm_eps=1e-3 !!!
+
+
+
 def get_mobilenet_v1_config(mobilenet_v1_name):
     config = MobileNetV1Config()
 
