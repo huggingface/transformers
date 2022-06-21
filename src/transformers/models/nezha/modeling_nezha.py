@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch NeZha model."""
+"""PyTorch Nezha model."""
 
 
 import math
@@ -48,20 +48,20 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_nezha import NeZhaConfig
+from .configuration_nezha import NezhaConfig
 
 
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "sijunhe/nezha-cn-base"
-_CONFIG_FOR_DOC = "NeZhaConfig"
+_CONFIG_FOR_DOC = "NezhaConfig"
 _TOKENIZER_FOR_DOC = "BertTokenizer"
 
 NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "sijunhe/nezha-cn-base",
+    "sijunhe/nezha-cn-large",
     "sijunhe/nezha-base-wwm",
-    # [to be uploaded] "sijunhe/nezha-large-wwm",
-    # [to be uploaded] "sijunhe/nezha-cn-large",
+    "sijunhe/nezha-large-wwm",
     # See all Nezha models at https://huggingface.co/models?filter=nezha
 ]
 
@@ -139,11 +139,11 @@ def load_tf_weights_in_bert(model, config, tf_checkpoint_path):
     return model
 
 
-class RelativePositionsEncoding(nn.Module):
+class NezhaRelativePositionsEncoding(nn.Module):
     """Implement the Functional Relative Position Encoding"""
 
     def __init__(self, length, depth, max_relative_position=127):
-        super(RelativePositionsEncoding, self).__init__()
+        super().__init__()
         vocab_size = max_relative_position * 2 + 1
         range_vec = torch.arange(length)
         range_mat = range_vec.repeat(length).view(length, length)
@@ -171,7 +171,7 @@ class RelativePositionsEncoding(nn.Module):
         return self.positions_encoding[:length, :length, :]
 
 
-class NeZhaEmbeddings(nn.Module):
+class NezhaEmbeddings(nn.Module):
     """Construct the embeddings from word and token_type embeddings."""
 
     def __init__(self, config):
@@ -226,7 +226,7 @@ class NeZhaEmbeddings(nn.Module):
         return embeddings
 
 
-class NeZhaSelfAttention(nn.Module):
+class NezhaSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -244,7 +244,7 @@ class NeZhaSelfAttention(nn.Module):
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.relative_positions_encoding = RelativePositionsEncoding(
+        self.relative_positions_encoding = NezhaRelativePositionsEncoding(
             length=config.max_position_embeddings,
             depth=self.attention_head_size,
             max_relative_position=config.max_relative_position,
@@ -323,7 +323,7 @@ class NeZhaSelfAttention(nn.Module):
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
 
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in NeZhaModel forward() function)
+            # Apply the attention mask is (precomputed for all layers in NezhaModel forward() function)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
@@ -361,7 +361,8 @@ class NeZhaSelfAttention(nn.Module):
         return outputs
 
 
-class NeZhaSelfOutput(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->Nezha
+class NezhaSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -375,11 +376,12 @@ class NeZhaSelfOutput(nn.Module):
         return hidden_states
 
 
-class NeZhaAttention(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Nezha
+class NezhaAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.self = NeZhaSelfAttention(config)
-        self.output = NeZhaSelfOutput(config)
+        self.self = NezhaSelfAttention(config)
+        self.output = NezhaSelfOutput(config)
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
@@ -424,7 +426,8 @@ class NeZhaAttention(nn.Module):
         return outputs
 
 
-class NeZhaIntermediate(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->Nezha
+class NezhaIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
@@ -439,7 +442,8 @@ class NeZhaIntermediate(nn.Module):
         return hidden_states
 
 
-class NeZhaOutput(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->Nezha
+class NezhaOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
@@ -453,20 +457,21 @@ class NeZhaOutput(nn.Module):
         return hidden_states
 
 
-class NeZhaLayer(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->Nezha
+class NezhaLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = NeZhaAttention(config)
+        self.attention = NezhaAttention(config)
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = NeZhaAttention(config)
-        self.intermediate = NeZhaIntermediate(config)
-        self.output = NeZhaOutput(config)
+            self.crossattention = NezhaAttention(config)
+        self.intermediate = NezhaIntermediate(config)
+        self.output = NezhaOutput(config)
 
     def forward(
         self,
@@ -539,11 +544,12 @@ class NeZhaLayer(nn.Module):
         return layer_output
 
 
-class NeZhaEncoder(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->Nezha
+class NezhaEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([NeZhaLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([NezhaLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -636,7 +642,8 @@ class NeZhaEncoder(nn.Module):
         )
 
 
-class NeZhaPooler(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->Nezha
+class NezhaPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -651,7 +658,8 @@ class NeZhaPooler(nn.Module):
         return pooled_output
 
 
-class NeZhaPredictionHeadTransform(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with Bert->Nezha
+class NezhaPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -668,10 +676,11 @@ class NeZhaPredictionHeadTransform(nn.Module):
         return hidden_states
 
 
-class NeZhaLMPredictionHead(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead with Bert->Nezha
+class NezhaLMPredictionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.transform = NeZhaPredictionHeadTransform(config)
+        self.transform = NezhaPredictionHeadTransform(config)
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
@@ -688,17 +697,19 @@ class NeZhaLMPredictionHead(nn.Module):
         return hidden_states
 
 
-class NeZhaOnlyMLMHead(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertOnlyMLMHead with Bert->Nezha
+class NezhaOnlyMLMHead(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.predictions = NeZhaLMPredictionHead(config)
+        self.predictions = NezhaLMPredictionHead(config)
 
     def forward(self, sequence_output: torch.Tensor) -> torch.Tensor:
         prediction_scores = self.predictions(sequence_output)
         return prediction_scores
 
 
-class NeZhaOnlyNSPHead(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertOnlyNSPHead with Bert->Nezha
+class NezhaOnlyNSPHead(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.seq_relationship = nn.Linear(config.hidden_size, 2)
@@ -708,10 +719,11 @@ class NeZhaOnlyNSPHead(nn.Module):
         return seq_relationship_score
 
 
-class NeZhaPreTrainingHeads(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertPreTrainingHeads with Bert->Nezha
+class NezhaPreTrainingHeads(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.predictions = NeZhaLMPredictionHead(config)
+        self.predictions = NezhaLMPredictionHead(config)
         self.seq_relationship = nn.Linear(config.hidden_size, 2)
 
     def forward(self, sequence_output, pooled_output):
@@ -720,13 +732,14 @@ class NeZhaPreTrainingHeads(nn.Module):
         return prediction_scores, seq_relationship_score
 
 
-class NeZhaPreTrainedModel(PreTrainedModel):
+# Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel with Bert->Nezha
+class NezhaPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = NeZhaConfig
+    config_class = NezhaConfig
     load_tf_weights = load_tf_weights_in_bert
     base_model_prefix = "nezha"
     supports_gradient_checkpointing = True
@@ -749,14 +762,14 @@ class NeZhaPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, NeZhaEncoder):
+        if isinstance(module, NezhaEncoder):
             module.gradient_checkpointing = value
 
 
 @dataclass
-class NeZhaForPreTrainingOutput(ModelOutput):
+class NezhaForPreTrainingOutput(ModelOutput):
     """
-    Output type of [`NeZhaForPreTraining`].
+    Output type of [`NezhaForPreTraining`].
 
     Args:
         loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
@@ -798,7 +811,7 @@ NEZHA_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`NeZhaConfig`]): Model configuration class with all the parameters of the model.
+        config ([`NezhaConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -848,11 +861,12 @@ NEZHA_INPUTS_DOCSTRING = r"""
 """
 
 
+# Copied from transformers.models.bert.modeling_bert.BertModel with Bert->Nezha
 @add_start_docstrings(
-    "The bare NeZha Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare Nezha Model transformer outputting raw hidden-states without any specific head on top.",
     NEZHA_START_DOCSTRING,
 )
-class NeZhaModel(NeZhaPreTrainedModel):
+class NezhaModel(NezhaPreTrainedModel):
     """
 
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
@@ -869,10 +883,10 @@ class NeZhaModel(NeZhaPreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = NeZhaEmbeddings(config)
-        self.encoder = NeZhaEncoder(config)
+        self.embeddings = NezhaEmbeddings(config)
+        self.encoder = NezhaEncoder(config)
 
-        self.pooler = NeZhaPooler(config) if add_pooling_layer else None
+        self.pooler = NezhaPooler(config) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1026,19 +1040,20 @@ class NeZhaModel(NeZhaPreTrainedModel):
         )
 
 
+# Copied from transformers.models.bert.modeling_bert.BertForPreTraining with Bert->Nezha
 @add_start_docstrings(
     """
-    NeZha Model with two heads on top as done during the pretraining: a `masked language modeling` head and a `next
+    Nezha Model with two heads on top as done during the pretraining: a `masked language modeling` head and a `next
     sentence prediction (classification)` head.
     """,
     NEZHA_START_DOCSTRING,
 )
-class NeZhaForPreTraining(NeZhaPreTrainedModel):
+class NezhaForPreTraining(NezhaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.nezha = NeZhaModel(config)
-        self.cls = NeZhaPreTrainingHeads(config)
+        self.nezha = NezhaModel(config)
+        self.cls = NezhaPreTrainingHeads(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1050,7 +1065,7 @@ class NeZhaForPreTraining(NeZhaPreTrainedModel):
         self.cls.predictions.decoder = new_embeddings
 
     @add_start_docstrings_to_model_forward(NEZHA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=NeZhaForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=NezhaForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1063,7 +1078,7 @@ class NeZhaForPreTraining(NeZhaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], NeZhaForPreTrainingOutput]:
+    ) -> Union[Tuple[torch.Tensor], NezhaForPreTrainingOutput]:
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1083,11 +1098,11 @@ class NeZhaForPreTraining(NeZhaPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import BertTokenizer, NeZhaForPreTraining
+        >>> from transformers import BertTokenizer, NezhaForPreTraining
         >>> import torch
 
         >>> tokenizer = BertTokenizer.from_pretrained("sijunhe/nezha-cn-base")
-        >>> model = NeZhaForPreTraining.from_pretrained("sijunhe/nezha-cn-base")
+        >>> model = NezhaForPreTraining.from_pretrained("sijunhe/nezha-cn-base")
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -1123,7 +1138,7 @@ class NeZhaForPreTraining(NeZhaPreTrainedModel):
             output = (prediction_scores, seq_relationship_score) + outputs[2:]
             return ((total_loss,) + output) if total_loss is not None else output
 
-        return NeZhaForPreTrainingOutput(
+        return NezhaForPreTrainingOutput(
             loss=total_loss,
             prediction_logits=prediction_scores,
             seq_relationship_logits=seq_relationship_score,
@@ -1132,8 +1147,9 @@ class NeZhaForPreTraining(NeZhaPreTrainedModel):
         )
 
 
-@add_start_docstrings("""NeZha Model with a `language modeling` head on top.""", NEZHA_START_DOCSTRING)
-class NeZhaForMaskedLM(NeZhaPreTrainedModel):
+# Copied from transformers.models.bert.modeling_bert.BertForMaskedLM with Bert->Nezha
+@add_start_docstrings("""Nezha Model with a `language modeling` head on top.""", NEZHA_START_DOCSTRING)
+class NezhaForMaskedLM(NezhaPreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"predictions.decoder.bias", r"positions_encoding"]
@@ -1143,12 +1159,12 @@ class NeZhaForMaskedLM(NeZhaPreTrainedModel):
 
         if config.is_decoder:
             logger.warning(
-                "If you want to use `NeZhaForMaskedLM` make sure `config.is_decoder=False` for "
+                "If you want to use `NezhaForMaskedLM` make sure `config.is_decoder=False` for "
                 "bi-directional self-attention."
             )
 
-        self.nezha = NeZhaModel(config, add_pooling_layer=False)
-        self.cls = NeZhaOnlyMLMHead(config)
+        self.nezha = NezhaModel(config, add_pooling_layer=False)
+        self.cls = NezhaOnlyMLMHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1238,16 +1254,17 @@ class NeZhaForMaskedLM(NeZhaPreTrainedModel):
         return {"input_ids": input_ids, "attention_mask": attention_mask}
 
 
+# Copied from transformers.models.bert.modeling_bert.BertForNextSentencePrediction with Bert->Nezha
 @add_start_docstrings(
-    """NeZha Model with a `next sentence prediction (classification)` head on top.""",
+    """Nezha Model with a `next sentence prediction (classification)` head on top.""",
     NEZHA_START_DOCSTRING,
 )
-class NeZhaForNextSentencePrediction(NeZhaPreTrainedModel):
+class NezhaForNextSentencePrediction(NezhaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.nezha = NeZhaModel(config)
-        self.cls = NeZhaOnlyNSPHead(config)
+        self.nezha = NezhaModel(config)
+        self.cls = NezhaOnlyNSPHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1280,11 +1297,11 @@ class NeZhaForNextSentencePrediction(NeZhaPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import BertTokenizer, NeZhaForNextSentencePrediction
+        >>> from transformers import BertTokenizer, NezhaForNextSentencePrediction
         >>> import torch
 
         >>> tokenizer = BertTokenizer.from_pretrained("sijunhe/nezha-cn-base")
-        >>> model = NeZhaForNextSentencePrediction.from_pretrained("sijunhe/nezha-cn-base")
+        >>> model = NezhaForNextSentencePrediction.from_pretrained("sijunhe/nezha-cn-base")
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
@@ -1338,20 +1355,21 @@ class NeZhaForNextSentencePrediction(NeZhaPreTrainedModel):
         )
 
 
+# Copied from transformers.models.bert.modeling_bert.BertForSequenceClassification with Bert->Nezha
 @add_start_docstrings(
     """
-    NeZha Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
+    Nezha Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
     output) e.g. for GLUE tasks.
     """,
     NEZHA_START_DOCSTRING,
 )
-class NeZhaForSequenceClassification(NeZhaPreTrainedModel):
+class NezhaForSequenceClassification(NezhaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
 
-        self.nezha = NeZhaModel(config)
+        self.nezha = NezhaModel(config)
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
@@ -1438,18 +1456,19 @@ class NeZhaForSequenceClassification(NeZhaPreTrainedModel):
         )
 
 
+# Copied from transformers.models.bert.modeling_bert.BertForMultipleChoice with Bert->Nezha
 @add_start_docstrings(
     """
-    NeZha Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
+    Nezha Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
     softmax) e.g. for RocStories/SWAG tasks.
     """,
     NEZHA_START_DOCSTRING,
 )
-class NeZhaForMultipleChoice(NeZhaPreTrainedModel):
+class NezhaForMultipleChoice(NezhaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.nezha = NeZhaModel(config)
+        self.nezha = NezhaModel(config)
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
@@ -1531,14 +1550,15 @@ class NeZhaForMultipleChoice(NeZhaPreTrainedModel):
         )
 
 
+# Copied from transformers.models.bert.modeling_bert.BertForTokenClassification with Bert->Nezha
 @add_start_docstrings(
     """
-    NeZha Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
+    Nezha Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
     Named-Entity-Recognition (NER) tasks.
     """,
     NEZHA_START_DOCSTRING,
 )
-class NeZhaForTokenClassification(NeZhaPreTrainedModel):
+class NezhaForTokenClassification(NezhaPreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
@@ -1546,7 +1566,7 @@ class NeZhaForTokenClassification(NeZhaPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.nezha = NeZhaModel(config, add_pooling_layer=False)
+        self.nezha = NezhaModel(config, add_pooling_layer=False)
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
@@ -1614,14 +1634,15 @@ class NeZhaForTokenClassification(NeZhaPreTrainedModel):
         )
 
 
+# Copied from transformers.models.bert.modeling_bert.BertForQuestionAnswering with Bert->Nezha
 @add_start_docstrings(
     """
-    NeZha Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    Nezha Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
     layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
     NEZHA_START_DOCSTRING,
 )
-class NeZhaForQuestionAnswering(NeZhaPreTrainedModel):
+class NezhaForQuestionAnswering(NezhaPreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
@@ -1629,7 +1650,7 @@ class NeZhaForQuestionAnswering(NeZhaPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.nezha = NeZhaModel(config, add_pooling_layer=False)
+        self.nezha = NezhaModel(config, add_pooling_layer=False)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing

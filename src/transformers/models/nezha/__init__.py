@@ -22,7 +22,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_
 
 
 _import_structure = {
-    "configuration_nezha": ["NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP", "NeZhaConfig"],
+    "configuration_nezha": ["NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP", "NezhaConfig"],
 }
 
 try:
@@ -33,21 +33,20 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_nezha"] = [
         "NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "NeZhaForNextSentencePrediction",
-        "NeZhaForMaskedLM",
-        "NeZhaForPreTraining",
-        "NeZhaForMultipleChoice",
-        "NeZhaForQuestionAnswering",
-        "NeZhaForSequenceClassification",
-        "NeZhaForTokenClassification",
-        "NeZhaLayer",
-        "NeZhaModel",
-        "NeZhaPreTrainedModel",
+        "NezhaForNextSentencePrediction",
+        "NezhaForMaskedLM",
+        "NezhaForPreTraining",
+        "NezhaForMultipleChoice",
+        "NezhaForQuestionAnswering",
+        "NezhaForSequenceClassification",
+        "NezhaForTokenClassification",
+        "NezhaModel",
+        "NezhaPreTrainedModel",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_nezha import NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP, NeZhaConfig
+    from .configuration_nezha import NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP, NezhaConfig
 
     try:
         if not is_torch_available():
@@ -57,16 +56,15 @@ if TYPE_CHECKING:
     else:
         from .modeling_nezha import (
             NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST,
-            NeZhaForMaskedLM,
-            NeZhaForMultipleChoice,
-            NeZhaForNextSentencePrediction,
-            NeZhaForPreTraining,
-            NeZhaForQuestionAnswering,
-            NeZhaForSequenceClassification,
-            NeZhaForTokenClassification,
-            NeZhaLayer,
-            NeZhaModel,
-            NeZhaPreTrainedModel,
+            NezhaForMaskedLM,
+            NezhaForMultipleChoice,
+            NezhaForNextSentencePrediction,
+            NezhaForPreTraining,
+            NezhaForQuestionAnswering,
+            NezhaForSequenceClassification,
+            NezhaForTokenClassification,
+            NezhaModel,
+            NezhaPreTrainedModel,
         )
 
 

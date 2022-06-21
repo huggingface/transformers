@@ -3133,70 +3133,70 @@ class MT5Model(metaclass=DummyObject):
 NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class NeZhaForMaskedLM(metaclass=DummyObject):
+class NezhaForMaskedLM(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class NeZhaForMultipleChoice(metaclass=DummyObject):
+class NezhaForMultipleChoice(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class NeZhaForNextSentencePrediction(metaclass=DummyObject):
+class NezhaForNextSentencePrediction(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class NeZhaForPreTraining(metaclass=DummyObject):
+class NezhaForPreTraining(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class NeZhaForQuestionAnswering(metaclass=DummyObject):
+class NezhaForQuestionAnswering(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class NeZhaForSequenceClassification(metaclass=DummyObject):
+class NezhaForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class NeZhaForTokenClassification(metaclass=DummyObject):
+class NezhaForTokenClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class NeZhaLayer(metaclass=DummyObject):
+class NezhaLayer(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class NeZhaModel(metaclass=DummyObject):
+class NezhaModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class NeZhaPreTrainedModel(metaclass=DummyObject):
+class NezhaPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

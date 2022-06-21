@@ -6,9 +6,9 @@ NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class NeZhaConfig(PretrainedConfig):
+class NezhaConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of an [`NeZhaModel`]. It is used to instantiate an NeZha
+    This is the configuration class to store the configuration of an [`NezhaModel`]. It is used to instantiate an Nezha
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Nezha
     [sijunhe/nezha-cn-base](https://huggingface.co/sijunhe/nezha-cn-base) architecture.
@@ -20,7 +20,7 @@ class NeZhaConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, optional, defaults to 21128):
             Vocabulary size of the NEZHA model. Defines the different tokens that can be represented by the
-            *inputs_ids* passed to the forward method of [`NeZhaModel`].
+            *inputs_ids* passed to the forward method of [`NezhaModel`].
         embedding_size (`int`, optional, defaults to 128):
             Dimensionality of vocabulary embeddings.
         hidden_size (`int`, optional, defaults to 768):
@@ -41,7 +41,7 @@ class NeZhaConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, optional, defaults to 2):
-            The vocabulary size of the *token_type_ids* passed into [`NeZhaModel`].
+            The vocabulary size of the *token_type_ids* passed into [`NezhaModel`].
         initializer_range (`float`, optional, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, optional, defaults to 1e-12):
@@ -52,13 +52,13 @@ class NeZhaConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import NeZhaConfig, NeZhaModel
+    >>> from transformers import NezhaConfig, NezhaModel
 
-    >>> # Initializing an NeZha configuration
-    >>> configuration = NeZhaConfig()
+    >>> # Initializing an Nezha configuration
+    >>> configuration = NezhaConfig()
 
-    >>> # Initializing a model from the NeZha-base style configuration model
-    >>> model = NeZhaModel(configuration)
+    >>> # Initializing a model from the Nezha-base style configuration model
+    >>> model = NezhaModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config

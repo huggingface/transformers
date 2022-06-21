@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The HuggingFace Team. All rights reserved.
+# Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@ import os
 import tempfile
 import unittest
 
-from transformers import NeZhaConfig, is_torch_available
+from transformers import NezhaConfig, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
 
@@ -30,19 +30,19 @@ if is_torch_available():
 
     from transformers import (
         MODEL_FOR_PRETRAINING_MAPPING,
-        NeZhaForMaskedLM,
-        NeZhaForMultipleChoice,
-        NeZhaForNextSentencePrediction,
-        NeZhaForPreTraining,
-        NeZhaForQuestionAnswering,
-        NeZhaForSequenceClassification,
-        NeZhaForTokenClassification,
-        NeZhaModel,
+        NezhaForMaskedLM,
+        NezhaForMultipleChoice,
+        NezhaForNextSentencePrediction,
+        NezhaForPreTraining,
+        NezhaForQuestionAnswering,
+        NezhaForSequenceClassification,
+        NezhaForTokenClassification,
+        NezhaModel,
     )
     from transformers.models.nezha.modeling_nezha import NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
-class NeZhaModelTester:
+class NezhaModelTester:
     def __init__(
         self,
         parent,
@@ -118,7 +118,7 @@ class NeZhaModelTester:
         """
         Returns a tiny configuration by default.
         """
-        return NeZhaConfig(
+        return NezhaConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -163,7 +163,7 @@ class NeZhaModelTester:
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = NeZhaModel(config=config)
+        model = NezhaModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
@@ -185,7 +185,7 @@ class NeZhaModelTester:
         encoder_attention_mask,
     ):
         config.add_cross_attention = True
-        model = NeZhaModel(config)
+        model = NezhaModel(config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -208,7 +208,7 @@ class NeZhaModelTester:
     def create_and_check_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = NeZhaForMaskedLM(config=config)
+        model = NezhaForMaskedLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
@@ -217,7 +217,7 @@ class NeZhaModelTester:
     def create_and_check_for_next_sequence_prediction(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = NeZhaForNextSentencePrediction(config=config)
+        model = NezhaForNextSentencePrediction(config=config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -231,7 +231,7 @@ class NeZhaModelTester:
     def create_and_check_for_pretraining(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = NeZhaForPreTraining(config=config)
+        model = NezhaForPreTraining(config=config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -247,7 +247,7 @@ class NeZhaModelTester:
     def create_and_check_for_question_answering(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = NeZhaForQuestionAnswering(config=config)
+        model = NezhaForQuestionAnswering(config=config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -264,7 +264,7 @@ class NeZhaModelTester:
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
-        model = NeZhaForSequenceClassification(config)
+        model = NezhaForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
@@ -274,7 +274,7 @@ class NeZhaModelTester:
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
-        model = NeZhaForTokenClassification(config=config)
+        model = NezhaForTokenClassification(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
@@ -284,7 +284,7 @@ class NeZhaModelTester:
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_choices = self.num_choices
-        model = NeZhaForMultipleChoice(config=config)
+        model = NezhaForMultipleChoice(config=config)
         model.to(torch_device)
         model.eval()
         multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
@@ -314,18 +314,18 @@ class NeZhaModelTester:
 
 
 @require_torch
-class NeZhaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class NezhaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (
-            NeZhaModel,
-            NeZhaForMaskedLM,
-            NeZhaForMultipleChoice,
-            NeZhaForNextSentencePrediction,
-            NeZhaForPreTraining,
-            NeZhaForQuestionAnswering,
-            NeZhaForSequenceClassification,
-            NeZhaForTokenClassification,
+            NezhaModel,
+            NezhaForMaskedLM,
+            NezhaForMultipleChoice,
+            NezhaForNextSentencePrediction,
+            NezhaForPreTraining,
+            NezhaForQuestionAnswering,
+            NezhaForSequenceClassification,
+            NezhaForTokenClassification,
         )
         if is_torch_available()
         else ()
@@ -347,8 +347,8 @@ class NeZhaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         return inputs_dict
 
     def setUp(self):
-        self.model_tester = NeZhaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=NeZhaConfig, hidden_size=37)
+        self.model_tester = NezhaModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=NezhaConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -420,7 +420,7 @@ class NeZhaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     @slow
     def test_model_from_pretrained(self):
         for model_name in NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = NeZhaModel.from_pretrained(model_name)
+            model = NezhaModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
     @slow
@@ -429,8 +429,8 @@ class NeZhaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
 
-            # NeZhaForMultipleChoice behaves incorrectly in JIT environments.
-            if model_class == NeZhaForMultipleChoice:
+            # NezhaForMultipleChoice behaves incorrectly in JIT environments.
+            if model_class == NezhaForMultipleChoice:
                 return
 
             config.torchscript = True
@@ -448,10 +448,10 @@ class NeZhaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
 
 
 @require_torch
-class NeZhaModelIntegrationTest(unittest.TestCase):
+class NezhaModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_nezha_model(self):
-        model = NeZhaModel.from_pretrained("sijunhe/nezha-cn-base")
+        model = NezhaModel.from_pretrained("sijunhe/nezha-cn-base")
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
         attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1]])
         with torch.no_grad():
@@ -464,7 +464,7 @@ class NeZhaModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_nezha_masked_lm(self):
-        model = NeZhaForMaskedLM.from_pretrained("sijunhe/nezha-cn-base")
+        model = NezhaForMaskedLM.from_pretrained("sijunhe/nezha-cn-base")
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
         attention_mask = torch.tensor([[1, 1, 1, 1, 1, 1]])
         with torch.no_grad():
