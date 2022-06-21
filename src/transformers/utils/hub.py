@@ -861,7 +861,7 @@ class PushToHubMixin:
         organization: Optional[str] = None,
         private: Optional[bool] = None,
         use_auth_token: Optional[Union[bool, str]] = None,
-        max_shard_size="10GB",
+        max_shard_size: Optional[Union[int, str]] = "10GB",
         **model_card_kwargs
     ) -> str:
         """
@@ -939,6 +939,7 @@ class PushToHubMixin:
         # Save the files in the cloned repo
         self.save_pretrained(repo_path_or_name, max_shard_size=max_shard_size)
         if hasattr(self, "history") and hasattr(self, "create_model_card"):
+            self.save_pretrained(repo_path_or_name, max_shard_size=max_shard_size)
             # This is a Keras model and we might be able to fish out its History and make a model card out of it
             base_model_card_args = {
                 "output_dir": repo_path_or_name,
@@ -1081,9 +1082,11 @@ def send_example_telemetry(example_name, *example_args, framework="pytorch"):
 
 def convert_file_size_to_int(size: Union[int, str]):
     """
-    Args:
     Converts a size expressed as a string with digits an unit (like `"5MB"`) to an integer (in bytes).
+
+    Args:
         size (`int` or `str`): The size to convert. Will be directly returned if an `int`.
+
     Example:
     ```py
     >>> convert_file_size_to_int("1MiB")
@@ -1125,9 +1128,11 @@ def get_checkpoint_shard_files(
 ):
     """
     For a given model:
+
     - download and cache all the shards of a sharded checkpoint if `pretrained_model_name_or_path` is a model ID on the
       Hub
     - returns the list of paths to all the shards, as well as some metadata.
+
     For the description of each arg, see [`PreTrainedModel.from_pretrained`]. `index_filename` is the full path to the
     index (downloaded and cached if `pretrained_model_name_or_path` is a model ID on the Hub).
     """
