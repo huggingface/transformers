@@ -207,13 +207,7 @@ class OmnivoreModelTester:
 @require_torch
 class OmnivoreModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (
-        (
-            OmnivoreModel,
-            OmnivoreForVisionClassification,
-        )
-        if is_torch_available()
-        else ()
+    all_model_classes = (OmnivoreModel, OmnivoreForVisionClassification) if is_torch_available() else ()
     )
     test_pruning = False
     test_torchscript = False
