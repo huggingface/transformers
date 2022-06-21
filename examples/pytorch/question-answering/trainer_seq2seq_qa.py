@@ -44,6 +44,7 @@ class QuestionAnsweringSeq2SeqTrainer(Seq2SeqTrainer):
         metric_key_prefix: str = "eval",
         **gen_kwargs,
     ) -> Dict[str, float]:
+        gen_kwargs = gen_kwargs.copy()
         gen_kwargs["max_length"] = (
             gen_kwargs["max_length"] if gen_kwargs.get("max_length") is not None else self.args.generation_max_length
         )
@@ -95,7 +96,7 @@ class QuestionAnsweringSeq2SeqTrainer(Seq2SeqTrainer):
     def predict(
         self, predict_dataset, predict_examples, ignore_keys=None, metric_key_prefix: str = "test", **gen_kwargs
     ):
-        self._gen_kwargs = gen_kwargs
+        self._gen_kwargs = gen_kwargs.copy()
 
         predict_dataloader = self.get_test_dataloader(predict_dataset)
 

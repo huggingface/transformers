@@ -68,6 +68,7 @@ class Seq2SeqTrainer(Trainer):
             dictionary also contains the epoch number which comes from the training state.
         """
 
+        gen_kwargs = gen_kwargs.copy()
         gen_kwargs["max_length"] = (
             gen_kwargs["max_length"] if gen_kwargs.get("max_length") is not None else self.args.generation_max_length
         )
@@ -125,6 +126,7 @@ class Seq2SeqTrainer(Trainer):
               labels).
         """
 
+        gen_kwargs = gen_kwargs.copy()
         gen_kwargs["max_length"] = (
             gen_kwargs["max_length"] if gen_kwargs.get("max_length") is not None else self.args.generation_max_length
         )
