@@ -427,11 +427,10 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
     def load_flax_sharded_weights(cls, shard_files):
         """
         This is the same as [`flax.serialization.from_bytes`]
-        (https:lax.readthedocs.io/en/latest/_modules/flax/serialization.html#from_bytes)
-        but for a sharded checkpoint.
+        (https:lax.readthedocs.io/en/latest/_modules/flax/serialization.html#from_bytes) but for a sharded checkpoint.
 
-        This load is performed efficiently: each checkpoint shard is loaded one by one in RAM and deleted
-        after being loaded in the model.
+        This load is performed efficiently: each checkpoint shard is loaded one by one in RAM and deleted after being
+        loaded in the model.
 
         Args:
             shard_files (`List[str]`:
