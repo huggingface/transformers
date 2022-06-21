@@ -712,8 +712,8 @@ def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatch
         resolved_archive_file (`str`): Path to the checkpoint file from which the weights will be loaded
         ignore_mismatched_sizes (`bool`, *optional*, defaults to `False`): Whether to ignore the mismatched keys
 
-    Returns:tf.keras.models.Model
-        Three lists, one for the layers that were found and succesfully restored (from the shard file), one for the
+    Returns:
+        `tf.keras.models.Model`: Three lists, one for the layers that were found and succesfully restored (from the shard file), one for the
         missmatched layers, and another one for the unexpected layers.
     """
     saved_weight_names_set = set()
