@@ -15,12 +15,11 @@
 """
 A subclass of `Trainer` specific to Question-Answering tasks
 """
-from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Dict, List, Optional
 
-import torch
 from torch.utils.data import Dataset
 
-from transformers import LogitsProcessorList, Seq2SeqTrainer, StoppingCriteriaList, is_torch_tpu_available
+from transformers import Seq2SeqTrainer, is_torch_tpu_available
 from transformers.trainer_utils import PredictionOutput
 
 

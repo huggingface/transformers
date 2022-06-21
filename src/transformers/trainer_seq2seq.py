@@ -12,13 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 from torch import nn
 from torch.utils.data import Dataset
 
-from . import LogitsProcessorList, StoppingCriteriaList
 from .deepspeed import is_deepspeed_zero3_enabled
 from .trainer import Trainer
 from .trainer_utils import PredictionOutput
