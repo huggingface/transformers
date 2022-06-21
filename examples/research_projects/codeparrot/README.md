@@ -203,7 +203,7 @@ Give the model a shot yourself! There are three demos to interact with CodeParro
 [Megatron](https://github.com/NVIDIA/Megatron-LM) is a framework developed by NVIDIA for training large transformer models. We found that the training of CodeParrot is faster there. Below we explain how to use it.
 
 ### Setup
-You can pull an NVIDIA PyTorch Container that comes with all the required installations, they are available on NGC https://catalog.ngc.nvidia.com/orgs/nvidia/containers/pytorch with their [documentation](https://docs.nvidia.com/deeplearning/frameworks/pytorch-release-notes/index.html):
+You can pull an NVIDIA PyTorch Container that comes with all the required installations from [NGC](https://catalog.ngc.nvidia.com/orgs/nvidia/containers/pytorch). See [documentation](https://docs.nvidia.com/deeplearning/frameworks/pytorch-release-notes/index.html) for more details:
 
 After installing Docker, you can use the command below to run the container where `xx.xx` denotes your Docker version, and clone [Megatron repository](https://github.com/NVIDIA/Megatron-LM) inside it:
 ```bash
