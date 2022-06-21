@@ -34,6 +34,7 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     is_scipy_available,
     is_timm_available,
+    is_torch_cuda_available,
     is_vision_available,
     replace_return_docstrings,
     requires_backends,
@@ -46,7 +47,10 @@ from .load_custom import load_cuda_kernels
 
 
 # Move this to not compile only when importing, this needs to happen later, like in __init__.
-MSDA = load_cuda_kernels()
+if is_torch_cuda_available():
+    MSDA = load_cuda_kernels()
+else:
+    MSDA = None
 
 
 class MultiScaleDeformableAttentionFunction(Function):
