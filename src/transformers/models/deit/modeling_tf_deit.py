@@ -125,7 +125,9 @@ class TFDeiTEmbeddings(tf.keras.layers.Layer):
         )
         super().build(input_shape)
 
-    def call(self, pixel_values: tf.Tensor, bool_masked_pos: Optional[tf.Tensor] = None, training: bool = False) -> tf.Tensor:
+    def call(
+        self, pixel_values: tf.Tensor, bool_masked_pos: Optional[tf.Tensor] = None, training: bool = False
+    ) -> tf.Tensor:
         embeddings = self.patch_embeddings(pixel_values)
         batch_size, seq_len, _ = shape_list(embeddings)
 
@@ -871,7 +873,8 @@ class TFDeiTForMaskedImageModeling(TFDeiTPreTrainedModel):
 
 
 class TFIdentityLayer(tf.keras.layers.Layer):
-    """ Helper class that provides a Layer API for identity"""
+    """Helper class that provides a Layer API for identity"""
+
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
 
