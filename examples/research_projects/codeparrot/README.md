@@ -200,7 +200,7 @@ Give the model a shot yourself! There are three demos to interact with CodeParro
 - [Comparison to other code models](https://huggingface.co/spaces/codeparrot/loubnabnl/code-generation-models)
 
 ## Training with Megatron
-[Megatron](https://github.com/NVIDIA/Megatron-LM) is a framework developed by NVIDIA for training large transformer models. We found that the training of CodeParrot is faster there. Below we explain how to use it.
+[Megatron](https://github.com/NVIDIA/Megatron-LM) is a framework developed by NVIDIA for training large transformer models. While the CodeParrot code is easy to follow and modify to your needs the Megatron framework lets you train models faster. Below we explain how to use it.
 
 ### Setup
 You can pull an NVIDIA PyTorch Container that comes with all the required installations from [NGC](https://catalog.ngc.nvidia.com/orgs/nvidia/containers/pytorch). See [documentation](https://docs.nvidia.com/deeplearning/frameworks/pytorch-release-notes/index.html) for more details:
@@ -302,7 +302,7 @@ sudo docker cp CONTAINER_ID:/workspace/Megatron-LM/experiments/codeparrot-small/
 git clone https://github.com/huggingface/transformers.git
 git clone https://github.com/NVIDIA/Megatron-LM.git
 export PYTHONPATH=Megatron-LM
-python transformers/src/transformers/models/megatron_gpt2/convert_megatron_gpt2_checkpoint.py nvidia/megatron-gpt2-345m/model_optim_rng.pt
+python transformers/src/transformers/models/megatron_gpt2/convert_megatron_gpt2_checkpoint.py nvidia/megatron-codeparrot-small/model_optim_rng.pt
 ```
 Be careful, you will need to replace the generated vocabulary file and merges table after the conversion, with the original ones if you plan to load the tokenizer from there.
 
