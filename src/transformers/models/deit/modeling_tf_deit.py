@@ -92,7 +92,7 @@ class TFDeiTEmbeddings(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.config = config
         self.use_mask_token = use_mask_token
-        self.patch_embeddings = TFPatchEmbeddings(config=config)
+        self.patch_embeddings = TFPatchEmbeddings(config=config, name="patch_embeddings")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob, name="dropout")
 
     def build(self, input_shape: tf.TensorShape):
@@ -125,7 +125,7 @@ class TFDeiTEmbeddings(tf.keras.layers.Layer):
         )
         super().build(input_shape)
 
-    def call(self, pixel_values: tf.Tensor, bool_masked_pos: Optional[tf.Tensor] = None) -> tf.Tensor:
+    def call(self, pixel_values: tf.Tensor, bool_masked_pos: Optional[tf.Tensor] = None, training: bool = False) -> tf.Tensor:
         embeddings = self.patch_embeddings(pixel_values)
         batch_size, seq_len, _ = shape_list(embeddings)
 
@@ -139,7 +139,7 @@ class TFDeiTEmbeddings(tf.keras.layers.Layer):
         distillation_tokens = tf.repeat(self.distillation_token, repeats=batch_size, axis=0)
         embeddings = tf.concat((cls_tokens, distillation_tokens, embeddings), axis=1)
         embeddings = embeddings + self.position_embeddings
-        embeddings = self.dropout(embeddings)
+        embeddings = self.dropout(embeddings, training=training)
         return embeddings
 
 
@@ -395,7 +395,7 @@ class TFDeiTLayer(tf.keras.layers.Layer):
     ) -> Tuple[tf.Tensor]:
         attention_outputs = self.attention(
             # in DeiT, layernorm is applied before self-attention
-            input_tensor=self.layernorm_before(inputs=hidden_states),
+            input_tensor=self.layernorm_before(inputs=hidden_states, training=training),
             head_mask=head_mask,
             output_attentions=output_attentions,
             training=training,
@@ -882,7 +882,7 @@ class TFDeiTForImageClassification(TFDeiTPreTrainedModel, TFSequenceClassificati
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.deit = TFDeiTMainLayer(config, add_pooling_layer=False)
+        self.deit = TFDeiTMainLayer(config, add_pooling_layer=False, name="deit")
 
         # Classifier head
         self.classifier = (
