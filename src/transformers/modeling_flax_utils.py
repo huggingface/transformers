@@ -428,15 +428,15 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         """
         This is the same as [`flax.serialization.from_bytes`]
         (https:lax.readthedocs.io/en/latest/_modules/flax/serialization.html#from_bytes)
-        but for a sharded checkpoint. 
+        but for a sharded checkpoint.
 
-        This load is performed efficiently: each checkpoint shard is loaded one by one in RAM and deleted 
+        This load is performed efficiently: each checkpoint shard is loaded one by one in RAM and deleted
         after being loaded in the model.
-        
+
         Args:
             shard_files (`List[str]`:
                 The list of shard files to load.
-                
+
         Returns:
             `Dict`: A nested dictionary of the model parameters, in the expected format for flax models : `{'model':
             {'params': {'...'}}}`.
@@ -451,18 +451,18 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 with open(shard_file, "rb") as state_f:
                     state = from_bytes(cls, state_f.read())
             except (UnpicklingError, msgpack.exceptions.ExtraData) as e:
-                    with open(shard_file) as f:
-                        if f.read().startswith("version"):
-                            raise OSError(
-                                "You seem to have cloned a repository without having git-lfs installed. Please"
-                                " install git-lfs and run `git lfs install` followed by `git lfs pull` in the"
-                                " folder you cloned."
-                            )
-                        else:
-                            raise ValueError from e
+                with open(shard_file) as f:
+                    if f.read().startswith("version"):
+                        raise OSError(
+                            "You seem to have cloned a repository without having git-lfs installed. Please"
+                            " install git-lfs and run `git lfs install` followed by `git lfs pull` in the"
+                            " folder you cloned."
+                        )
+                    else:
+                        raise ValueError from e
             except (UnicodeDecodeError, ValueError):
                 raise EnvironmentError(f"Unable to convert {shard_file} to Flax deserializable object. ")
-            
+
             state = flatten_dict(state, sep="/")
             state_sharded_dict.update(state)
             del state
@@ -780,10 +780,9 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         if from_pt:
             state = load_pytorch_checkpoint_in_flax_state_dict(model, resolved_archive_file)
         else:
-            
+
             if is_sharded:
-                    state = cls.load_flax_sharded_weights(resolved_archive_file)
- 
+                state = cls.load_flax_sharded_weights(resolved_archive_file)
             else:
                 try:
                     with open(resolved_archive_file, "rb") as state_f:
