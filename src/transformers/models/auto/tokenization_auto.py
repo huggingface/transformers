@@ -173,6 +173,7 @@ else:
                     "MT5TokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            ("mvp", ("MvpTokenizer", "MvpTokenizerFast")),
             (
                 "nystromformer",
                 (

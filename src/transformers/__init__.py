@@ -255,6 +255,7 @@ _import_structure = {
     "models.mobilebert": ["MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileBertConfig", "MobileBertTokenizer"],
     "models.mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetTokenizer"],
     "models.mt5": ["MT5Config"],
+    "models.mvp": ["MvpConfig", "MvpTokenizer"],
     "models.nystromformer": [
         "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "NystromformerConfig",
@@ -529,6 +530,7 @@ else:
     _import_structure["models.mobilebert"].append("MobileBertTokenizerFast")
     _import_structure["models.mpnet"].append("MPNetTokenizerFast")
     _import_structure["models.mt5"].append("MT5TokenizerFast")
+    _import_structure["models.mvp"].append("MvpTokenizerFast")
     _import_structure["models.openai"].append("OpenAIGPTTokenizerFast")
     _import_structure["models.pegasus"].append("PegasusTokenizerFast")
     _import_structure["models.realm"].append("RealmTokenizerFast")
@@ -800,6 +802,17 @@ else:
             "BartModel",
             "BartPretrainedModel",
             "PretrainedBartModel",
+        ]
+    )
+    _import_structure["models.mvp"].extend(
+        [
+            "MVP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MvpForCausalLM",
+            "MvpForConditionalGeneration",
+            "MvpForQuestionAnswering",
+            "MvpForSequenceClassification",
+            "MvpModel",
+            "MvpPretrainedModel",
         ]
     )
     _import_structure["models.beit"].extend(
@@ -2878,6 +2891,7 @@ if TYPE_CHECKING:
     from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer
     from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
     from .models.mt5 import MT5Config
+    from .models.mvp import MvpConfig, MvpTokenizer
     from .models.nystromformer import NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, NystromformerConfig
     from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
     from .models.opt import OPTConfig
@@ -3122,6 +3136,7 @@ if TYPE_CHECKING:
         from .models.mobilebert import MobileBertTokenizerFast
         from .models.mpnet import MPNetTokenizerFast
         from .models.mt5 import MT5TokenizerFast
+        from .models.mvp import MvpTokenizerFast
         from .models.openai import OpenAIGPTTokenizerFast
         from .models.pegasus import PegasusTokenizerFast
         from .models.realm import RealmTokenizerFast
@@ -3831,6 +3846,15 @@ if TYPE_CHECKING:
             MPNetPreTrainedModel,
         )
         from .models.mt5 import MT5EncoderModel, MT5ForConditionalGeneration, MT5Model
+        from .models.mvp import (
+            MVP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MvpForCausalLM,
+            MvpForConditionalGeneration,
+            MvpForQuestionAnswering,
+            MvpForSequenceClassification,
+            MvpModel,
+            MvpPretrainedModel,
+        )
         from .models.nystromformer import (
             NYSTROMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             NystromformerForMaskedLM,

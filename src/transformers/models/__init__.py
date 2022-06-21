@@ -92,6 +92,7 @@ from . import (
     mobilebert,
     mpnet,
     mt5,
+    mvp,
     nystromformer,
     openai,
     opt,
