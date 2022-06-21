@@ -537,6 +537,7 @@ class FlaxT5EncoderOnlyModelTester:
             bos_token_id=self.pad_token_id,
             pad_token_id=self.pad_token_id,
             decoder_start_token_id=self.decoder_start_token_id,
+            is_encoder_decoder=False,
         )
 
         return (
