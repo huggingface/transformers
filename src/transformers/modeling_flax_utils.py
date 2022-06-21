@@ -126,7 +126,7 @@ def flax_shard_checkpoint(params, max_shard_size="10GB"):
     # flatten the weights to chunk
     weights = flatten_dict(params, sep="/")
     for item in weights:
-        weight_size = np.array(weights[item]).size * dtype_byte_size(weights[item].dtype)
+        weight_size = weights[item].size * dtype_byte_size(weights[item].dtype)
 
         # If this weight is going to tip up over the maximal size, we split.
         if current_block_size + weight_size > max_shard_size:
