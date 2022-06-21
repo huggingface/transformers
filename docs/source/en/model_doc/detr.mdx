@@ -112,8 +112,7 @@ Tips:
   [`~transformers.DetrFeatureExtractor.pad_and_create_pixel_mask`].
 - The size of the images will determine the amount of memory being used, and will thus determine the `batch_size`.
   It is advised to use a batch size of 2 per GPU. See [this Github thread](https://github.com/facebookresearch/detr/issues/150) for more info.
-<frameworkcontent>
-<pt>
+
 There are three ways to instantiate a DETR model (depending on what you prefer):
   
 Option 1: Instantiate DETR with pre-trained weights for entire model
@@ -135,8 +134,6 @@ Option 3: Instantiate DETR with randomly initialized weights for backbone + Tran
 >>> config = DetrConfig(use_pretrained_backbone=False)
 >>> model = DetrForObjectDetection(config)
 ```
-</pt>
-</frameworkcontent>
 
 As a summary, consider the following table:
 
