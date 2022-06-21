@@ -732,7 +732,7 @@ def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatch
             # Compute missing and unexpected sub layers
             # Store the weights in list of tuples that looks like [(weight_object, value_of_weight),...]
             for layer_name in saved_h5_model_layers_name:
-                h5_layer_object = f[layer_name]
+                h5_layer_object = sharded_checkpoint_file[layer_name]
                 saved_weights[layer_name] = np.asarray(h5_layer_object)
 
                 saved_weight_names_set.add(layer_name)
@@ -835,7 +835,7 @@ def load_tf_weights(model, resolved_archive_file, ignore_mismatched_sizes=False,
             # if layer_name from the H5 file belongs to the layers from the instantiated model
             if layer.name in saved_h5_model_layers_name:
                 # Get the H5 layer object from its name
-                h5_layer_object = f[layer.name]
+                h5_layer_object = sharded_checkpoint_file[layer.name]
                 # Get all the weights as a list from the layer object
                 symbolic_weights = layer.trainable_weights + layer.non_trainable_weights
                 saved_weights = {}
@@ -1969,15 +1969,15 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 f"index located at {save_index_file}."
             )
             for shard_file, shard in shards.items():
-                with h5py.File(os.path.join(save_directory, shard_file), mode="w") as f:
+                with h5py.File(os.path.join(save_directory, shard_file), mode="w") as shard_file:
                     save_attributes_to_hdf5_group(
-                        index_file,
+                        shard_file,
                         "layer_names",
                         ["/".join(layer.name.split("/")[1:]).encode("utf8") for layer in shard],
                     )
 
                     for layer in sorted(shard, key=lambda x: x.name):
-                        param_dset = index_file.create_dataset(
+                        param_dset = shard_file.create_dataset(
                             "/".join(layer.name.split("/")[1:]), layer.numpy().shape, dtype=layer.numpy().dtype
                         )
                         param_dset[:] = layer.numpy()
