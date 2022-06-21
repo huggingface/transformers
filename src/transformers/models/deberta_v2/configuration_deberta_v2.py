@@ -14,12 +14,15 @@
 # limitations under the License.
 """ DeBERTa-v2 model configuration"""
 from collections import OrderedDict
-from typing import Any, Mapping, Optional, Union
+from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
 
-from ... import FeatureExtractionMixin, PreTrainedTokenizerBase, TensorType
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+
+
+if TYPE_CHECKING:
+    from ... import FeatureExtractionMixin, PreTrainedTokenizerBase, TensorType
 
 
 logger = logging.get_logger(__name__)
@@ -170,7 +173,7 @@ class DebertaV2OnnxConfig(OnnxConfig):
         seq_length: int = -1,
         num_choices: int = -1,
         is_pair: bool = False,
-        framework: Optional[TensorType] = None,
+        framework: Optional["TensorType"] = None,
         num_channels: int = 3,
         image_width: int = 40,
         image_height: int = 40,
