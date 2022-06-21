@@ -154,7 +154,9 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_groupvit_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_to_hub=False):
+def convert_groupvit_checkpoint(
+    checkpoint_path, pytorch_dump_folder_path, model_name="groupvit-gcc-yfcc", push_to_hub=False
+):
     """
     Copy/paste/tweak model's weights to the Transformers design.
     """
@@ -165,7 +167,7 @@ def convert_groupvit_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_
     new_state_dict = convert_state_dict(state_dict, config)
     missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=False)
     assert missing_keys == ["text_model.embeddings.position_ids"]
-    assert unexpected_keys == ["multi_label_logit_scale"]
+    assert (unexpected_keys == ["multi_label_logit_scale"]) or (len(unexpected_keys) == 0)
 
     # verify result
     processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
@@ -175,25 +177,41 @@ def convert_groupvit_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_
     with torch.no_grad():
         outputs = model(**inputs)
 
-    expected_logits = torch.tensor([[13.3523, 6.3629]])
+    if model_name == "groupvit-gcc-yfcc":
+        expected_logits = torch.tensor([[13.3523, 6.3629]])
+    elif model_name == "groupvit-gcc-redcaps":
+        expected_logits = torch.tensor([[16.1873, 8.6230]])
+    else:
+        raise ValueError(f"Model name {model_name} not supported.")
     assert torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3)
 
+    processor.save_pretrained(pytorch_dump_folder_path)
     model.save_pretrained(pytorch_dump_folder_path)
-    print("Successfully saved model to", pytorch_dump_folder_path)
+    print("Successfully saved processor and model to", pytorch_dump_folder_path)
 
     if push_to_hub:
         print("Pushing to the hub...")
-        model_name = "groupvit-gccyfcc"
+        processor.push_to_hub(model_name, organization="nielsr")
         model.push_to_hub(model_name, organization="nielsr")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
+    parser.add_argument(
+        "--pytorch_dump_folder_path", default=None, type=str, help="Path to dump the processor and PyTorch model."
+    )
     parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to GroupViT checkpoint")
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--model_name",
+        default="groupvit-gccy-fcc",
+        type=str,
+        help="Name of the model. Expecting either 'groupvit-gcc-yfcc' or 'groupvit-gcc-redcaps'",
+    )
+    parser.add_argument(
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model and processor to the 🤗 hub using the provided `model_name`.",
     )
     args = parser.parse_args()
 
-    convert_groupvit_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_groupvit_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path, args.model_name, args.push_to_hub)
