@@ -247,7 +247,7 @@ class GPTNeoXModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[[33.8045, 2.3958, 34.2816], [63.7805, 4.8332, 63.5882], [66.9116, 5.2198, 63.1185]]]
+            [[[33.5938, 2.3789, 34.0312], [63.4688, 4.8164, 63.3438], [66.8750, 5.2422, 63.0625]]]
         )
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
