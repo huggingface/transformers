@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Dict, List, Optional, Tuple, Union, Iterable, Callable
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import torch
 from torch import nn
@@ -63,7 +63,7 @@ class Seq2SeqTrainer(Trainer):
         logits_processor: Optional[LogitsProcessorList] = LogitsProcessorList(),
         renormalize_logits: Optional[bool] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = StoppingCriteriaList(),
-        constraints: Optional[List['Constraint']] = None,
+        constraints: Optional[list] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
@@ -71,7 +71,7 @@ class Seq2SeqTrainer(Trainer):
         forced_bos_token_id: Optional[int] = None,
         forced_eos_token_id: Optional[int] = None,
         remove_invalid_values: Optional[bool] = None,
-        synced_gpus: Optional[bool] = False,
+        synced_gpus: Optional[bool] = None,
         exponential_decay_length_penalty: Optional[Tuple[Union[int, float]]] = None,
     ) -> Dict[str, float]:
         """
@@ -182,7 +182,7 @@ class Seq2SeqTrainer(Trainer):
         logits_processor: Optional[LogitsProcessorList] = LogitsProcessorList(),
         renormalize_logits: Optional[bool] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = StoppingCriteriaList(),
-        constraints: Optional[List['Constraint']] = None,
+        constraints: Optional[list] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
@@ -190,7 +190,7 @@ class Seq2SeqTrainer(Trainer):
         forced_bos_token_id: Optional[int] = None,
         forced_eos_token_id: Optional[int] = None,
         remove_invalid_values: Optional[bool] = None,
-        synced_gpus: Optional[bool] = False,
+        synced_gpus: Optional[bool] = None,
         exponential_decay_length_penalty: Optional[Tuple[Union[int, float]]] = None,
     ) -> PredictionOutput:
         """
@@ -313,9 +313,16 @@ class Seq2SeqTrainer(Trainer):
 
         # XXX: adapt synced_gpus for fairscale as well
         gen_kwargs = self._gen_kwargs.copy()
-        gen_kwargs['max_length'] = gen_kwargs['max_length'] if gen_kwargs['max_length'] is not None else self.model.config.max_length
-        gen_kwargs['num_beams'] = gen_kwargs['num_beams'] if gen_kwargs['num_beams'] is not None else self.model.config.num_beams
-        gen_kwargs['synced_gpus'] = True if is_deepspeed_zero3_enabled() else False
+        gen_kwargs["max_length"] = (
+            gen_kwargs["max_length"] if gen_kwargs["max_length"] is not None else self.model.config.max_length
+        )
+        gen_kwargs["num_beams"] = (
+            gen_kwargs["num_beams"] if gen_kwargs["num_beams"] is not None else self.model.config.num_beams
+        )
+        default_synced_gpus = True if is_deepspeed_zero3_enabled() else False
+        gen_kwargs["synced_gpus"] = (
+            gen_kwargs["synced_gpus"] if gen_kwargs["synced_gpus"] is not None else default_synced_gpus
+        )
 
         if "attention_mask" in inputs:
             gen_kwargs["attention_mask"] = inputs.get("attention_mask", None)

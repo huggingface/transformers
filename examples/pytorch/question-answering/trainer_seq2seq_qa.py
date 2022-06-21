@@ -15,12 +15,12 @@
 """
 A subclass of `Trainer` specific to Question-Answering tasks
 """
-from typing import Dict, List, Optional, Iterable, Union, Callable, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import torch
 from torch.utils.data import Dataset
 
-from transformers import Seq2SeqTrainer, is_torch_tpu_available, LogitsProcessorList, StoppingCriteriaList
+from transformers import LogitsProcessorList, Seq2SeqTrainer, StoppingCriteriaList, is_torch_tpu_available
 from transformers.trainer_utils import PredictionOutput
 
 
@@ -71,7 +71,7 @@ class QuestionAnsweringSeq2SeqTrainer(Seq2SeqTrainer):
         logits_processor: Optional[LogitsProcessorList] = LogitsProcessorList(),
         renormalize_logits: Optional[bool] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = StoppingCriteriaList(),
-        constraints: Optional[List['Constraint']] = None,
+        constraints: Optional[list] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
@@ -79,7 +79,7 @@ class QuestionAnsweringSeq2SeqTrainer(Seq2SeqTrainer):
         forced_bos_token_id: Optional[int] = None,
         forced_eos_token_id: Optional[int] = None,
         remove_invalid_values: Optional[bool] = None,
-        synced_gpus: Optional[bool] = False,
+        synced_gpus: Optional[bool] = None,
         exponential_decay_length_penalty: Optional[Tuple[Union[int, float]]] = None,
     ) -> Dict[str, float]:
         self._gen_kwargs = {
@@ -164,47 +164,52 @@ class QuestionAnsweringSeq2SeqTrainer(Seq2SeqTrainer):
         self.control = self.callback_handler.on_evaluate(self.args, self.state, self.control, metrics)
         return metrics
 
-    def predict(self, predict_dataset, predict_examples, ignore_keys=None, metric_key_prefix: str = "test",
-                max_length: Optional[int] = None,
-                min_length: Optional[int] = None,
-                num_beams: Optional[int] = None,
-                do_sample: Optional[bool] = None,
-                early_stopping: Optional[bool] = None,
-                temperature: Optional[float] = None,
-                top_k: Optional[int] = None,
-                top_p: Optional[float] = None,
-                typical_p: Optional[float] = None,
-                repetition_penalty: Optional[float] = None,
-                bad_words_ids: Optional[Iterable[int]] = None,
-                force_words_ids: Optional[Union[Iterable[int], Iterable[Iterable[int]]]] = None,
-                bos_token_id: Optional[int] = None,
-                pad_token_id: Optional[int] = None,
-                eos_token_id: Optional[int] = None,
-                length_penalty: Optional[float] = None,
-                no_repeat_ngram_size: Optional[int] = None,
-                encoder_no_repeat_ngram_size: Optional[int] = None,
-                num_return_sequences: Optional[int] = None,
-                max_time: Optional[float] = None,
-                max_new_tokens: Optional[int] = None,
-                decoder_start_token_id: Optional[int] = None,
-                use_cache: Optional[bool] = None,
-                num_beam_groups: Optional[int] = None,
-                diversity_penalty: Optional[float] = None,
-                prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
-                logits_processor: Optional[LogitsProcessorList] = LogitsProcessorList(),
-                renormalize_logits: Optional[bool] = None,
-                stopping_criteria: Optional[StoppingCriteriaList] = StoppingCriteriaList(),
-                constraints: Optional[List['Constraint']] = None,
-                output_attentions: Optional[bool] = None,
-                output_hidden_states: Optional[bool] = None,
-                output_scores: Optional[bool] = None,
-                return_dict_in_generate: Optional[bool] = None,
-                forced_bos_token_id: Optional[int] = None,
-                forced_eos_token_id: Optional[int] = None,
-                remove_invalid_values: Optional[bool] = None,
-                synced_gpus: Optional[bool] = False,
-                exponential_decay_length_penalty: Optional[Tuple[Union[int, float]]] = None,
-        ):
+    def predict(
+        self,
+        predict_dataset,
+        predict_examples,
+        ignore_keys=None,
+        metric_key_prefix: str = "test",
+        max_length: Optional[int] = None,
+        min_length: Optional[int] = None,
+        num_beams: Optional[int] = None,
+        do_sample: Optional[bool] = None,
+        early_stopping: Optional[bool] = None,
+        temperature: Optional[float] = None,
+        top_k: Optional[int] = None,
+        top_p: Optional[float] = None,
+        typical_p: Optional[float] = None,
+        repetition_penalty: Optional[float] = None,
+        bad_words_ids: Optional[Iterable[int]] = None,
+        force_words_ids: Optional[Union[Iterable[int], Iterable[Iterable[int]]]] = None,
+        bos_token_id: Optional[int] = None,
+        pad_token_id: Optional[int] = None,
+        eos_token_id: Optional[int] = None,
+        length_penalty: Optional[float] = None,
+        no_repeat_ngram_size: Optional[int] = None,
+        encoder_no_repeat_ngram_size: Optional[int] = None,
+        num_return_sequences: Optional[int] = None,
+        max_time: Optional[float] = None,
+        max_new_tokens: Optional[int] = None,
+        decoder_start_token_id: Optional[int] = None,
+        use_cache: Optional[bool] = None,
+        num_beam_groups: Optional[int] = None,
+        diversity_penalty: Optional[float] = None,
+        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
+        logits_processor: Optional[LogitsProcessorList] = LogitsProcessorList(),
+        renormalize_logits: Optional[bool] = None,
+        stopping_criteria: Optional[StoppingCriteriaList] = StoppingCriteriaList(),
+        constraints: Optional[list] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        output_scores: Optional[bool] = None,
+        return_dict_in_generate: Optional[bool] = None,
+        forced_bos_token_id: Optional[int] = None,
+        forced_eos_token_id: Optional[int] = None,
+        remove_invalid_values: Optional[bool] = None,
+        synced_gpus: Optional[bool] = None,
+        exponential_decay_length_penalty: Optional[Tuple[Union[int, float]]] = None,
+    ):
         self._gen_kwargs = {
             "max_length": max_length if max_length is not None else self.args.generation_max_length,
             "num_beams": num_beams if num_beams is not None else self.args.generation_num_beams,
