@@ -326,7 +326,7 @@ class DetrTimmConvEncoder(nn.Module):
 
     """
 
-    def __init__(self, name: str, dilation: bool):
+    def __init__(self, name: str, dilation: bool, use_pretrained_backbone: bool):
         super().__init__()
 
         kwargs = {}
@@ -335,7 +335,9 @@ class DetrTimmConvEncoder(nn.Module):
 
         requires_backends(self, ["timm"])
 
-        backbone = create_model(name, pretrained=True, features_only=True, out_indices=(1, 2, 3, 4), **kwargs)
+        backbone = create_model(
+            name, pretrained=use_pretrained_backbone, features_only=True, out_indices=(1, 2, 3, 4), **kwargs
+        )
         # replace batch norm by frozen batch norm
         with torch.no_grad():
             replace_batch_norm(backbone)
@@ -1177,7 +1179,7 @@ class DetrModel(DetrPreTrainedModel):
         super().__init__(config)
 
         # Create backbone + positional encoding
-        backbone = DetrTimmConvEncoder(config.backbone, config.dilation)
+        backbone = DetrTimmConvEncoder(config.backbone, config.dilation, config.use_pretrained_backbone)
         position_embeddings = build_position_encoding(config)
         self.backbone = DetrConvModel(backbone, position_embeddings)
 
