@@ -305,9 +305,7 @@ class TFResNetPreTrainedModel(TFPreTrainedModel):
         Dummy inputs to build the network. Returns:
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
-        VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(3, self.config.num_channels, 224, 224), dtype=tf.float32
-        )
+        VISION_DUMMY_INPUTS = tf.random.uniform(shape=(3, self.config.num_channels, 224, 224), dtype=tf.float32)
         return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
 
 
