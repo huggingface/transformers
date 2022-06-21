@@ -36,8 +36,9 @@ Tips:
 - The authors of Omnivore released 5 trained Omnivore models, which you can directly plug into [`OmnivoreModel`] or [`OmnivoreForVisionClassification`]. 
   The 5 variants available are (all trained on images of size 224x224, video of 32 frames of size 224x224 and RGBD images of size 224x224):
   *facebook/omnivore-swinT*, *facebook/omnivore-swinS**, *facebook/omnivore-swinB*, *facebook/omnivore-swinB-in21k* and
-  *facebook/omnivore-swinL-in21k*. Note that one should use [`OmnivoreFeatureExtractor`] in order to prepare images, vidoes and RGBD images for the model.
-- The input to the model needs to be provided with type of input, i.e. *"images"*, *"videos"* or *"rgbd"* to use the classification head for that modality.
+  *facebook/omnivore-swinL-in21k*. 
+- Note that one should use [`OmnivoreFeatureExtractor`] in order to prepare images, videos and RGBD images for the model.
+- The input to the model needs to be provided with a corresponding type, i.e. *"images"*, *"videos"* or *"rgbd"* in order to use the classification head for that modality.
 
 This model was contributed by [anugunj](https://huggingface.co/anugunj). The original code can be found [here](https://github.com/facebookresearch/omnivore).
 
