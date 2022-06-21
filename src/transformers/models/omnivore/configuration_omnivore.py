@@ -50,7 +50,7 @@ class OmnivoreConfig(PretrainedConfig):
             Number of linear projection output channels.
         depths (`List[int]`, *optional*, defaults to [2, 2, 6, 2],):
             Depth (number of layers) for each stage.
-        num_heads (`List[int]`, *optional*, defaults to [3, 6, 12, 24]):
+        num_heads (`List[int]`, *optional*, defaults to `[3, 6, 12, 24]`):
             Number of attention head of each stage.
         window_size (`int`, *optional*, defaults to 7)
             Size of the window used by the Swin Transformer model.
