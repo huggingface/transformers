@@ -3799,6 +3799,13 @@ class TokenizerTesterMixin:
                     # Should not raise an error
                     self.rust_tokenizer_class.from_pretrained(tmp_dir_2)
 
+    def test_none_special_token(self):
+        tokenizers = self.get_tokenizers(mask_token=None, verbose=False)
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                mask_token = tokenizer.mask_token
+                self.assertEqual(mask_token, None)
+
 
 class TokenizerUtilTester(unittest.TestCase):
     def test_cached_files_are_used_when_internet_is_down(self):

@@ -48,7 +48,11 @@ class BlenderbotSmallTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             fp.write("\n".join(merges))
 
     def get_tokenizer(self, **kwargs):
-        kwargs.update(self.special_tokens_map)
+        # If ever the kwargs define a new special token we keep it
+        for special_token_key, special_token_value in self.special_tokens_map.items():
+            if special_token_key in kwargs:
+                continue
+            kwargs[special_token_key] = special_token_value
         return BlenderbotSmallTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_input_output_texts(self, tokenizer):

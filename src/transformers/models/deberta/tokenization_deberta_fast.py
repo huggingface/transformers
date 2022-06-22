@@ -141,6 +141,7 @@ class DebertaTokenizerFast(GPT2TokenizerFast):
         """
         if self._mask_token is None and self.verbose:
             logger.error("Using mask_token, but it is not set yet.")
+        if self._mask_token is None:
             return None
         return str(self._mask_token)
 

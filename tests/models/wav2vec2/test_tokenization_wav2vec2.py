@@ -372,7 +372,11 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             fp.write(json.dumps(vocab_tokens) + "\n")
 
     def get_tokenizer(self, **kwargs):
-        kwargs.update(self.special_tokens_map)
+        # If ever the kwargs define a new special token we keep it
+        for special_token_key, special_token_value in self.special_tokens_map.items():
+            if special_token_key in kwargs:
+                continue
+            kwargs[special_token_key] = special_token_value
         return Wav2Vec2CTCTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     def test_tokenizer_add_token_chars(self):

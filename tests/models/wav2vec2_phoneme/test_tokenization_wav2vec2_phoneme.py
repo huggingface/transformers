@@ -83,7 +83,11 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         return output_txt, output_ids
 
     def get_tokenizer(self, **kwargs):
-        kwargs.update(self.special_tokens_map)
+        # If ever the kwargs define a new special token we keep it
+        for special_token_key, special_token_value in self.special_tokens_map.items():
+            if special_token_key in kwargs:
+                continue
+            kwargs[special_token_key] = special_token_value
         return Wav2Vec2PhonemeCTCTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     def test_tokenizer_add_new_tokens(self):
