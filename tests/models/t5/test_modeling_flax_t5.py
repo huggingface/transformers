@@ -473,7 +473,6 @@ class FlaxT5EncoderOnlyModelTester:
         vocab_size=99,
         batch_size=13,
         encoder_seq_length=7,
-        decoder_seq_length=9,
         # For common tests
         is_training=True,
         use_attention_mask=True,
@@ -489,13 +488,11 @@ class FlaxT5EncoderOnlyModelTester:
         pad_token_id=0,
         decoder_start_token_id=0,
         scope=None,
-        decoder_layers=None,
     ):
 
         self.parent = parent
         self.batch_size = batch_size
         self.encoder_seq_length = encoder_seq_length
-        self.decoder_seq_length = decoder_seq_length
         # For common tests
         self.seq_length = self.decoder_seq_length
         self.is_training = is_training
@@ -612,7 +609,7 @@ class FlaxT5EncoderOnlyModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
                 @jax.jit
                 def encode_jitted(input_ids, attention_mask=None, **kwargs):
-                    return model.encode(input_ids=input_ids, attention_mask=attention_mask)
+                    return model(input_ids=input_ids, attention_mask=attention_mask)
 
                 with self.subTest("JIT Enabled"):
                     jitted_outputs = encode_jitted(**prepared_inputs_dict).to_tuple()

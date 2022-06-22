@@ -1390,7 +1390,6 @@ class FlaxT5EncoderModule(nn.Module):
         return_dict=True,
         deterministic: bool = True,
     ):
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # Encode if needed (training, first prediction pass)
         encoder_outputs = self.encoder(
