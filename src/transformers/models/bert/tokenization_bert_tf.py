@@ -12,13 +12,13 @@ from .tokenization_bert import BertTokenizer
 class TFBertTokenizer(tf.keras.layers.Layer):
     """
     This is an in-graph tokenizer for BERT. It should be initialized similarly to other tokenizers, using the
-    `from_pretrained()` method. It can also be initialized with the `from_tokenizer()`, which imports settings from an
-    existing standard tokenizer object.
+    `from_pretrained()` method. It can also be initialized with the `from_tokenizer()` method, which imports
+    settings from an existing standard tokenizer object.
 
     In-graph tokenizers, unlike other Hugging Face tokenizers, are actually Keras layers and are designed to be run
-    when the model is called, rather than during preprocessing. They have somewhat more limited options than standard
-    tokenizer classes. They are most useful when you want to create an end-to-end model that goes straight from
-    tf.string inputs to outputs.
+    when the model is called, rather than during preprocessing. As a result, they have somewhat more limited options
+    than standard tokenizer classes. They are most useful when you want to create an end-to-end model that goes
+    straight from `tf.string` inputs to outputs.
 
     Args:
         vocab_list (`list`):
@@ -45,8 +45,6 @@ class TFBertTokenizer(tf.keras.layers.Layer):
             Whether to return token_type_ids.
         return_attention_mask (`bool`, *optional*, defaults to `True`):
             Whether to return the attention_mask.
-
-
     """
 
     def __init__(
@@ -83,11 +81,20 @@ class TFBertTokenizer(tf.keras.layers.Layer):
     @classmethod
     def from_tokenizer(cls, tokenizer: "PreTrainedTokenizerBase", **kwargs):  # noqa: F821
         """
-        Initialize a `TFBertTokenizer` from an existing Tokenizer.
+        Initialize a `TFBertTokenizer` from an existing `Tokenizer`.
 
         Args:
             tokenizer (`PreTrainedTokenizerBase`):
                 The tokenizer to use to initialize the `TFBertTokenizer`.
+
+        Examples:
+
+        ```python
+        from transformers import AutoTokenizer, TFBertTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+        tf_tokenizer = TFBertTokenizer.from_tokenizer(tokenizer)
+        ```
         """
         vocab = tokenizer.get_vocab()
         vocab = sorted([(wordpiece, idx) for wordpiece, idx in vocab.items()], key=lambda x: x[1])
@@ -109,6 +116,14 @@ class TFBertTokenizer(tf.keras.layers.Layer):
         Args:
             pretrained_model_name_or_path (`str` or `os.PathLike`):
                 The name or path to the pre-trained tokenizer.
+
+        Examples:
+
+        ```python
+        from transformers import TFBertTokenizer
+
+        tf_tokenizer = TFBertTokenizer.from_pretrained("bert-base-uncased")
+        ```
         """
         tokenizer = BertTokenizer.from_pretrained(pretrained_model_name_or_path, *init_inputs, **kwargs)
         return cls.from_tokenizer(tokenizer, **kwargs)
