@@ -12,8 +12,8 @@ from .tokenization_bert import BertTokenizer
 class TFBertTokenizer(tf.keras.layers.Layer):
     """
     This is an in-graph tokenizer for BERT. It should be initialized similarly to other tokenizers, using the
-    `from_pretrained()` method. It can also be initialized with the `from_tokenizer()` method, which imports
-    settings from an existing standard tokenizer object.
+    `from_pretrained()` method. It can also be initialized with the `from_tokenizer()` method, which imports settings
+    from an existing standard tokenizer object.
 
     In-graph tokenizers, unlike other Hugging Face tokenizers, are actually Keras layers and are designed to be run
     when the model is called, rather than during preprocessing. As a result, they have somewhat more limited options
@@ -64,8 +64,9 @@ class TFBertTokenizer(tf.keras.layers.Layer):
         super().__init__()
 
         requires_backends(self, ["tensorflow_text"])
-        self.tf_tokenizer = FastBertTokenizer(vocab_list, token_out_type=tf.int64,
-                                              lower_case_nfd_strip_accents=do_lower_case)
+        self.tf_tokenizer = FastBertTokenizer(
+            vocab_list, token_out_type=tf.int64, lower_case_nfd_strip_accents=do_lower_case
+        )
         self.vocab_list = vocab_list
         self.do_lower_case = do_lower_case
         self.cls_token_id = cls_token_id or vocab_list.index("[CLS]")
