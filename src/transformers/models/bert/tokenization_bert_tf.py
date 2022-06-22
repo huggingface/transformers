@@ -10,21 +10,45 @@ from .tokenization_bert import BertTokenizer
 
 
 class TFBertTokenizer(tf.keras.layers.Layer):
-    # TODO CI will need tensorflow_text to run these tests
+    """
+    This is an in-graph tokenizer for BERT. It should be initialized similarly to other tokenizers, using
+    the `from_pretrained()` method. It can also be initialized with the `from_tokenizer()`, which imports
+    settings from an existing standard tokenizer object.
+
+    In-graph tokenizers, unlike other Hugging Face tokenizers, are actually Keras layers and are designed to be run
+    when the model is called, rather than during preprocessing. They have somewhat more limited options than standard
+    tokenizer classes. They are most useful when you want to create an end-to-end model that goes straight from
+    tf.string inputs to outputs.
+
+    Args:
+        vocab_list (`list`):
+            List containing the vocabulary.
+        do_lower_case (`bool`, *optional*, defaults to `True`):
+            Whether or not to lowercase the input when tokenizing.
+        cls_token_id (`str`, *optional*, defaults to `"[CLS]"`):
+            The classifier token which is used when doing sequence classification (classification of the whole sequence
+            instead of per-token classification). It is the first token of the sequence when built with special tokens.
+        sep_token_id (`str`, *optional*, defaults to `"[SEP]"`):
+            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
+            sequence classification or for a text and a question for question answering. It is also used as the last
+            token of a sequence built with special tokens.
+        pad_token_id (`str`, *optional*, defaults to `"[PAD]"`):
+            The token used for padding, for example when batching sequences of different lengths.
+    """
 
     def __init__(
         self,
         vocab_list: List,
         do_lower_case: bool,
-        cls_token_id: int,
-        sep_token_id: int,
-        pad_token_id: int,
-        padding="longest",
-        truncation=True,
-        max_length=512,
-        pad_to_multiple_of=None,
-        return_token_type_ids=True,
-        return_attention_mask=True,
+        cls_token_id: int = None,
+        sep_token_id: int = None,
+        pad_token_id: int = None,
+        padding: str = "longest",
+        truncation: bool = True,
+        max_length: int = 512,
+        pad_to_multiple_of: int = None,
+        return_token_type_ids: bool = True,
+        return_attention_mask: bool = True,
     ):
         super().__init__()
 
@@ -32,9 +56,9 @@ class TFBertTokenizer(tf.keras.layers.Layer):
         self.tf_tokenizer = FastBertTokenizer(vocab_list, token_out_type=tf.int64)
         self.vocab_list = vocab_list
         self.do_lower_case = do_lower_case
-        self.cls_token_id = cls_token_id
-        self.sep_token_id = sep_token_id
-        self.pad_token_id = pad_token_id
+        self.cls_token_id = cls_token_id or vocab_list.index('[CLS]')
+        self.sep_token_id = sep_token_id or vocab_list.index('[SEP]')
+        self.pad_token_id = pad_token_id or vocab_list.index('[PAD]')
         self.paired_trimmer = ShrinkLongestTrimmer(max_length - 3, axis=1)  # Allow room for special tokens
         self.max_length = max_length
         self.padding = padding
@@ -45,6 +69,13 @@ class TFBertTokenizer(tf.keras.layers.Layer):
 
     @classmethod
     def from_tokenizer(cls, tokenizer: "PreTrainedTokenizerBase", **kwargs):  # noqa: F821
+        """
+        Initialize a `TFBertTokenizer` from an existing Tokenizer.
+
+        Args:
+            tokenizer (`PreTrainedTokenizerBase`):
+                The tokenizer to use to initialize the `TFBertTokenizer`.
+        """
         vocab = tokenizer.get_vocab()
         vocab = sorted([(wordpiece, idx) for wordpiece, idx in vocab.items()], key=lambda x: x[1])
         vocab_list = [entry[0] for entry in vocab]
@@ -59,6 +90,13 @@ class TFBertTokenizer(tf.keras.layers.Layer):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], *init_inputs, **kwargs):
+        """
+        Instantiate a `TFBertTokenizer` from a pre-trained tokenizer.
+
+        Args:
+            pretrained_model_name_or_path (`str` or `os.PathLike`):
+                The name or path to the pre-trained tokenizer.
+        """
         tokenizer = BertTokenizer.from_pretrained(pretrained_model_name_or_path, *init_inputs, **kwargs)
         return cls.from_tokenizer(tokenizer, **kwargs)
 
