@@ -85,6 +85,10 @@
     title: Training on one GPU
   - local: perf_train_gpu_many
     title: Training on many GPUs
+  - local: perf_train_cpu
+    title: Training on CPU
+  - local: perf_infer_cpu
+    title: Inference on CPU
   - local: perf_hardware
     title: Custom hardware for training
   - local: testing
@@ -174,6 +178,8 @@
       title: Blenderbot
     - local: model_doc/blenderbot-small
       title: Blenderbot Small
+    - local: model_doc/bloom
+      title: BLOOM
     - local: model_doc/bort
       title: BORT
     - local: model_doc/byt5
@@ -230,10 +236,18 @@
       title: FSMT
     - local: model_doc/funnel
       title: Funnel Transformer
+    - local: model_doc/gptj
+      title: GPT-J
     - local: model_doc/glpn
       title: GLPN
+    - local: model_doc/gpt_neo
+      title: GPT Neo
+    - local: model_doc/gpt_neox
+      title: GPT NeoX
     - local: model_doc/herbert
       title: HerBERT
+    - local: model_doc/hubert
+      title: Hubert
     - local: model_doc/ibert
       title: I-BERT
     - local: model_doc/imagegpt
@@ -248,8 +262,12 @@
       title: LayoutXLM
     - local: model_doc/led
       title: LED
+    - local: model_doc/levit
+      title: LeViT
     - local: model_doc/longformer
       title: Longformer
+    - local: model_doc/longt5
+      title: LongT5
     - local: model_doc/luke
       title: LUKE
     - local: model_doc/lxmert
@@ -262,6 +280,8 @@
       title: M2M100
     - local: model_doc/mbart
       title: MBart and MBart-50
+    - local: model_doc/mctct
+      title: MCTCT
     - local: model_doc/megatron-bert
       title: MegatronBERT
     - local: model_doc/megatron_gpt2
@@ -278,22 +298,14 @@
       title: Nyströmformer
     - local: model_doc/openai-gpt
       title: OpenAI GPT
-    - local: model_doc/opt
-      title: OPT
     - local: model_doc/gpt2
       title: OpenAI GPT2
-    - local: model_doc/gptj
-      title: GPT-J
-    - local: model_doc/gpt_neo
-      title: GPT Neo
-    - local: model_doc/gpt_neox
-      title: GPT NeoX
-    - local: model_doc/hubert
-      title: Hubert
-    - local: model_doc/perceiver
-      title: Perceiver
+    - local: model_doc/opt
+      title: OPT
     - local: model_doc/pegasus
       title: Pegasus
+    - local: model_doc/perceiver
+      title: Perceiver
     - local: model_doc/phobert
       title: PhoBERT
     - local: model_doc/plbart
@@ -356,6 +368,8 @@
       title: TrOCR
     - local: model_doc/unispeech
       title: UniSpeech
+    - local: model_doc/ul2
+      title: UL2
     - local: model_doc/unispeech-sat
       title: UniSpeech-SAT
     - local: model_doc/van

@@ -61,7 +61,7 @@ def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_
     Make causal mask used for bi-directional self-attention.
     """
     bsz, tgt_len = input_ids_shape
-    mask = torch.full((tgt_len, tgt_len), float("-inf"))
+    mask = torch.full((tgt_len, tgt_len), torch.tensor(torch.finfo(dtype).min))
     mask_cond = torch.arange(mask.size(-1))
     mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
     mask = mask.to(dtype)
@@ -82,7 +82,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 
     inverted_mask = 1.0 - expanded_mask
 
-    return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
+    return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
 class OPTLearnedPositionalEmbedding(nn.Embedding):
@@ -382,7 +382,7 @@ class OPTPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["OPTDecoderLayer"]
-    _keys_to_ignore_on_load_unexpected = [r"decoder\.version"]
+    _keys_to_ignore_on_load_unexpected = [r"decoder.version"]
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -492,7 +492,14 @@ class OPTDecoder(OPTPreTrainedModel):
         else:
             self.project_in = None
 
-        self.layer_norm = None
+        # Note that the only purpose of `config._remove_final_layer_norm` is to keep backward compatibility
+        # with checkpoints that have been fine-tuned before transformers v4.20.1
+        # see https://github.com/facebookresearch/metaseq/pull/164
+        if config.do_layer_norm_before and not config._remove_final_layer_norm:
+            self.final_layer_norm = nn.LayerNorm(config.hidden_size)
+        else:
+            self.final_layer_norm = None
+
         self.layers = nn.ModuleList([OPTDecoderLayer(config) for _ in range(config.num_hidden_layers)])
 
         self.gradient_checkpointing = False
@@ -513,7 +520,7 @@ class OPTDecoder(OPTPreTrainedModel):
         if input_shape[-1] > 1:
             combined_attention_mask = _make_causal_mask(
                 input_shape, inputs_embeds.dtype, past_key_values_length=past_key_values_length
-            ).to(self.device)
+            ).to(inputs_embeds.device)
 
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -688,6 +695,9 @@ class OPTDecoder(OPTPreTrainedModel):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
+        if self.final_layer_norm is not None:
+            hidden_states = self.final_layer_norm(hidden_states)
+
         if self.project_out is not None:
             hidden_states = self.project_out(hidden_states)
 
@@ -780,7 +790,7 @@ class OPTModel(OPTPreTrainedModel):
 
 
 class OPTForCausalLM(OPTPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"lm_head\.weight"]
+    _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)

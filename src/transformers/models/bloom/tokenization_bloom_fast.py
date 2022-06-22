@@ -128,7 +128,6 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
             padding_side=padding_side,
             **kwargs,
         )
-        print("heho")
         pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
         if pre_tok_state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
             pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop("type"))

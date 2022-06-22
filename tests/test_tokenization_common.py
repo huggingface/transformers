@@ -30,7 +30,7 @@ from itertools import takewhile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
 
-from huggingface_hub import Repository, delete_repo, login
+from huggingface_hub import HfFolder, Repository, delete_repo, set_access_token
 from requests.exceptions import HTTPError
 from transformers import (
     AlbertTokenizer,
@@ -49,8 +49,9 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
-    PASS,
+    TOKEN,
     USER,
+    check_json_file_has_correct_format,
     get_tests_dir,
     is_pt_tf_cross_test,
     is_staging_test,
@@ -3325,6 +3326,11 @@ class TokenizerTesterMixin:
                 tokenizer_r_files = tokenizer_r.save_pretrained(tmpdirname2)
                 tokenizer_p_files = tokenizer_p.save_pretrained(tmpdirname2)
 
+                # make sure that all ".json" files are saved in the correct format
+                for file_path in tokenizer_r_files + tokenizer_p_files:
+                    if os.path.exists(file_path) and file_path.endswith(".json"):
+                        check_json_file_has_correct_format(file_path)
+
                 # Checks it save with the same files + the tokenizer.json file for the fast one
                 self.assertTrue(any("tokenizer.json" in f for f in tokenizer_r_files))
                 tokenizer_r_files = tuple(f for f in tokenizer_r_files if "tokenizer.json" not in f)
@@ -3818,22 +3824,24 @@ class TokenizerPushToHubTester(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls._token = login(username=USER, password=PASS)
+        cls._token = TOKEN
+        set_access_token(TOKEN)
+        HfFolder.save_token(TOKEN)
 
     @classmethod
     def tearDownClass(cls):
         try:
-            delete_repo(token=cls._token, name="test-tokenizer")
+            delete_repo(token=cls._token, repo_id="test-tokenizer")
         except HTTPError:
             pass
 
         try:
-            delete_repo(token=cls._token, name="test-tokenizer-org", organization="valid_org")
+            delete_repo(token=cls._token, repo_id="valid_org/test-tokenizer-org")
         except HTTPError:
             pass
 
         try:
-            delete_repo(token=cls._token, name="test-dynamic-tokenizer")
+            delete_repo(token=cls._token, repo_id="test-dynamic-tokenizer")
         except HTTPError:
             pass
 

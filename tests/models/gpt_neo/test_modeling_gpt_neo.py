@@ -151,6 +151,11 @@ class GPTNeoModelTester:
             attention_types=self.attention_types,
         )
 
+    def get_pipeline_config(self):
+        config = self.get_config()
+        config.vocab_size = 300
+        return config
+
     def prepare_config_and_inputs_for_decoder(self):
         (
             config,
