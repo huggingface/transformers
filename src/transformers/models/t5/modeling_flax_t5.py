@@ -1358,7 +1358,7 @@ append_replace_return_docstrings(FlaxT5Model, output_type=FlaxSeq2SeqLMOutput, c
 
 
 @add_start_docstrings(
-    "The bare T5 Model transformer outputting encoder's raw hidden-stateswithout any specific head on top.",
+    "The bare T5 Model transformer outputting encoder's raw hidden-states without any specific head on top.",
     T5_START_DOCSTRING,
 )
 class FlaxT5EncoderModule(nn.Module):
