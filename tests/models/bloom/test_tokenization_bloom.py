@@ -40,7 +40,6 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer.save_pretrained(self.tmpdirname)
 
     def get_rust_tokenizer(self, **kwargs):
-        # kwargs.update(self.special_tokens_map)
         return BloomTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
 
     def test_encodings_from_sample_data(self):
