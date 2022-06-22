@@ -80,7 +80,9 @@ Convertire un checkpoint per un altro framework è semplice. Assicurati di avere
 Specifica `from_tf=True` per convertire un checkpoint da TensorFlow a PyTorch:
 
 ```py
->>> pt_model = DistilBertForSequenceClassification.from_pretrained("path/verso/il-nome-magnifico-che-hai-scelto", from_tf=True)
+>>> pt_model = DistilBertForSequenceClassification.from_pretrained(
+...     "path/verso/il-nome-magnifico-che-hai-scelto", from_tf=True
+... )
 >>> pt_model.save_pretrained("path/verso/il-nome-magnifico-che-hai-scelto")
 ```
 </pt>
@@ -88,7 +90,9 @@ Specifica `from_tf=True` per convertire un checkpoint da TensorFlow a PyTorch:
 Specifica `from_pt=True` per convertire un checkpoint da PyTorch a TensorFlow:
 
 ```py
->>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("path/verso/il-nome-magnifico-che-hai-scelto", from_pt=True)
+>>> tf_model = TFDistilBertForSequenceClassification.from_pretrained(
+...     "path/verso/il-nome-magnifico-che-hai-scelto", from_pt=True
+... )
 ```
 
 Poi puoi salvare il tuo nuovo modello in TensorFlow con il suo nuovo checkpoint:
@@ -149,7 +153,9 @@ Condividi un modello nell'Hub con [`PushToHubCallback`]. Nella funzione [`PushTo
 >>> from transformers.keras.callbacks import PushToHubCallback
 
 >>> push_to_hub_callback = PushToHubCallback(
-...     output_dir="./il_path_dove_salvare_il_tuo_modello", tokenizer=tokenizer, hub_model_id="il-tuo-username/il-mio-bellissimo-modello"
+...     output_dir="./il_path_dove_salvare_il_tuo_modello",
+...     tokenizer=tokenizer,
+...     hub_model_id="il-tuo-username/il-mio-bellissimo-modello",
 ... )
 ```
 
