@@ -2539,9 +2539,8 @@ class LabelConditioner(nn.Module):
 class JukeboxPrior(nn.Module):
     """
     Model the prior on vq codes conditioned on timing, artist, genre, lyrics and codes from levels above. To condition
-    on the timing, genre and artist, we use the LabelConditioner class 
-    To condition on the codes from the level above, we use the MusicTokenConditioner class 
-    To condition on lyrics, we allow two types of priors:
+    on the timing, genre and artist, we use the LabelConditioner class To condition on the codes from the level above,
+    we use the MusicTokenConditioner class To condition on lyrics, we allow two types of priors:
     - Separate Encoder Decoder: This is the usual encoder-decoder style transformer. The encoder transformer
       autoregressively
     models the lyrics, and we use its last layer to produce keys/values that are attened to by the decoder transformer

@@ -93,7 +93,7 @@ class TFT5LayerNorm(tf.keras.layers.Layer):
         return self.weight * hidden_states
 
 
-class TFT5DenseReluDense(tf.keras.layers.Layer):
+class TFT5DenseActDense(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         wi_initializer = tf.keras.initializers.RandomNormal(
@@ -109,7 +109,7 @@ class TFT5DenseReluDense(tf.keras.layers.Layer):
             config.d_model, use_bias=False, name="wo", kernel_initializer=wo_initializer
         )  # Update init weights as in flax
         self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
-        self.act = tf.keras.activations.relu
+        self.act = get_tf_activation(config.dense_act_fn)
 
     def call(self, hidden_states, training=False):
         hidden_states = self.wi(hidden_states)
@@ -119,7 +119,7 @@ class TFT5DenseReluDense(tf.keras.layers.Layer):
         return hidden_states
 
 
-class TFT5GatedGeluDense(tf.keras.layers.Layer):
+class TFT5DenseGatedActDense(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         wi_initializer = tf.keras.initializers.RandomNormal(
@@ -138,7 +138,7 @@ class TFT5GatedGeluDense(tf.keras.layers.Layer):
             config.d_model, use_bias=False, name="wo", kernel_initializer=wo_initializer
         )  # Update init weights as in flax
         self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
-        self.act = get_tf_activation("gelu_new")
+        self.act = get_tf_activation(config.dense_act_fn)
 
     def call(self, hidden_states, training=False):
         hidden_gelu = self.act(self.wi_0(hidden_states))
@@ -152,14 +152,11 @@ class TFT5GatedGeluDense(tf.keras.layers.Layer):
 class TFT5LayerFF(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        if config.feed_forward_proj == "relu":
-            self.DenseReluDense = TFT5DenseReluDense(config, name="DenseReluDense")
-        elif config.feed_forward_proj == "gated-gelu":
-            self.DenseReluDense = TFT5GatedGeluDense(config, name="DenseReluDense")
+        if config.is_gated_act:
+            self.DenseReluDense = TFT5DenseGatedActDense(config, name="DenseReluDense")
         else:
-            raise ValueError(
-                f"{self.config.feed_forward_proj} is not supported. Choose between `relu` and `gated-gelu`"
-            )
+            self.DenseReluDense = TFT5DenseActDense(config, name="DenseReluDense")
+
         self.layer_norm = TFT5LayerNorm(epsilon=config.layer_norm_epsilon, name="layer_norm")
         self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
 
@@ -1507,21 +1504,15 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
     def _update_model_kwargs_for_xla_generation(self, outputs, model_kwargs, current_pos, max_length):
         # TODO(Pvp, Joao, Matt) - this function can be cleaned a bit and refactored
         # quite some duplicated code patterns it seems
-        # also the `attention_mask` is currently used in a somewhat hacky to
-        # correctly influence the `past_key_values` - not sure if this is the way to go
-        # Let's keep that for a future PR.
         past = outputs.past_key_values
         is_past_initialized = model_kwargs.pop("past", None) is not None
         decoder_attention_mask = model_kwargs.pop("decoder_attention_mask", None)
         batch_size = past[0][0].shape[0]
 
         if not is_past_initialized:
-            # past[0].shape[3] is seq_length of prompt
+            # past[0].shape[2] is seq_length of prompt
             num_padding_values = max_length - past[0][0].shape[2] - 1
-
-            padding_values = np.zeros((4, 2), dtype=np.int32)
-            padding_values[2, 1] = num_padding_values
-            padding_values = tf.constant(padding_values)
+            padding_values = tf.scatter_nd(indices=[[2, 1]], updates=[num_padding_values], shape=(4, 2))
 
             new_past = ()
             for past_layer in past:
@@ -1530,7 +1521,8 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
                     new_past_layer[i] = tf.pad(past_layer[i], padding_values)
                 new_past += (tuple(new_past_layer),)
 
-            # 1 one for decoder_start_token_id, Zeros for the currently-unfilled locations in the past tensor, ones for the actual input_ids
+            # 1 one for decoder_start_token_id, Zeros for the currently-unfilled locations in the past tensor,
+            # ones for the actual input_ids
             decoder_attention_mask = tf.concat(
                 [
                     tf.ones((batch_size, 1), dtype=tf.int32),
@@ -1562,7 +1554,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
                 decoder_attention_mask, decoder_attention_mask_update_slice, update_start
             )
 
-        # set `attention_mask` and `past`
+        # set `decoder_attention_mask` and `past`
         model_kwargs["decoder_attention_mask"] = decoder_attention_mask
         model_kwargs["past"] = new_past
 

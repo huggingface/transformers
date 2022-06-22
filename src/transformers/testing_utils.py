@@ -47,6 +47,7 @@ from .utils import (
     is_faiss_available,
     is_flax_available,
     is_ftfy_available,
+    is_ipex_available,
     is_librosa_available,
     is_onnx_available,
     is_pandas_available,
@@ -66,7 +67,8 @@ from .utils import (
     is_timm_available,
     is_tokenizers_available,
     is_torch_available,
-    is_torch_bf16_available,
+    is_torch_bf16_cpu_available,
+    is_torch_bf16_gpu_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
     is_torchaudio_available,
@@ -82,8 +84,10 @@ DUMMY_DIFF_TOKENIZER_IDENTIFIER = "julien-c/dummy-diff-tokenizer"
 
 # Used to test the hub
 USER = "__DUMMY_TRANSFORMERS_USER__"
-PASS = "__DUMMY_TRANSFORMERS_PASS__"
-ENDPOINT_STAGING = "https://moon-staging.huggingface.co"
+ENDPOINT_STAGING = "https://hub-ci.huggingface.co"
+
+# Not critical, only usable on the sandboxed CI instance.
+TOKEN = "hf_94wBhPGp6KrrTH3KDchhKpRxZwd6dmHWLL"
 
 
 def parse_flag_from_env(key, default=False):
@@ -282,6 +286,16 @@ def require_torch(test_case):
     return unittest.skipUnless(is_torch_available(), "test requires PyTorch")(test_case)
 
 
+def require_intel_extension_for_pytorch(test_case):
+    """
+    Decorator marking a test that requires Intel Extension for PyTorch.
+
+    These tests are skipped when Intel Extension for PyTorch isn't installed.
+
+    """
+    return unittest.skipUnless(is_ipex_available(), "test requires Intel Extension for PyTorch")(test_case)
+
+
 def require_torch_scatter(test_case):
     """
     Decorator marking a test that requires PyTorch scatter.
@@ -475,10 +489,19 @@ def require_torch_gpu(test_case):
     return unittest.skipUnless(torch_device == "cuda", "test requires CUDA")(test_case)
 
 
-def require_torch_bf16(test_case):
-    """Decorator marking a test that requires Ampere or a newer GPU arch, cuda>=11 and torch>=1.10."""
+def require_torch_bf16_gpu(test_case):
+    """Decorator marking a test that requires torch>=1.10, using Ampere GPU or newer arch with cuda>=11.0"""
     return unittest.skipUnless(
-        is_torch_bf16_available(), "test requires Ampere or a newer GPU arch, cuda>=11 and torch>=1.10"
+        is_torch_bf16_gpu_available(),
+        "test requires torch>=1.10, using Ampere GPU or newer arch with cuda>=11.0",
+    )(test_case)
+
+
+def require_torch_bf16_cpu(test_case):
+    """Decorator marking a test that requires torch>=1.10, using CPU."""
+    return unittest.skipUnless(
+        is_torch_bf16_cpu_available(),
+        "test requires torch>=1.10, using CPU",
     )(test_case)
 
 
@@ -1494,3 +1517,20 @@ def nested_simplify(obj, decimals=3):
         return nested_simplify(obj.item(), decimals)
     else:
         raise Exception(f"Not supported: {type(obj)}")
+
+
+def check_json_file_has_correct_format(file_path):
+    with open(file_path, "r") as f:
+        lines = f.readlines()
+        if len(lines) == 1:
+            # length can only be 1 if dict is empty
+            assert lines[0] == "{}"
+        else:
+            # otherwise make sure json has correct format (at least 3 lines)
+            assert len(lines) >= 3
+            # each key one line, ident should be 2, min length is 3
+            assert lines[0].strip() == "{"
+            for line in lines[1:-1]:
+                left_indent = len(lines[1]) - len(lines[1].lstrip())
+                assert left_indent == 2
+            assert lines[-1].strip() == "}"

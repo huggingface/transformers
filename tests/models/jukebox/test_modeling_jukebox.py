@@ -544,12 +544,12 @@ class JukeboxModelTest(unittest.TestCase):
         self.assertTrue(torch.allclose(zs[0][0][0:50], top_50_expected_zs.long(), atol=1e-4))
 
     def test_gpu_sampling(self):
-        model = JukeboxModel.from_pretrained("ArthurZ/jukebox-1b-lyrics-local").eval() #.to("cuda")
+        model = JukeboxModel.from_pretrained("ArthurZ/jukebox-1b-lyrics-local").eval()  # .to("cuda")
 
         # model.priors[2].sample(1, y=torch.Tensor([[44100.0, 0, 44100.0] + 386 * [0]]).long().to("cuda"), chunk_size=32)
 
-        tokenizer = JukeboxTokenizer.from_pretrained("ArthurZ/jukebox", max_n_lyric_tokens = 384)
-        
+        tokenizer = JukeboxTokenizer.from_pretrained("ArthurZ/jukebox", max_n_lyric_tokens=384)
+
         sampling_temperature = 0.98
         lower_batch_size = 16
         max_batch_size = 16
@@ -560,20 +560,21 @@ class JukeboxModelTest(unittest.TestCase):
             dict(temp=0.99, fp16=False, max_batch_size=lower_batch_size, chunk_size=lower_level_chunk_size),
             dict(temp=sampling_temperature, fp16=False, max_batch_size=max_batch_size, chunk_size=chunk_size),
         ]
-        
+
         model.config.sr = 44100
         model.config.hop_fraction = [0.125, 0.5, 0.5]
         model.config.n_samples = 1
-        model.config.sample_length = 2*model.config.sr #32768
-        
+        model.config.sample_length = 2 * model.config.sr  # 32768
+
         model.config.sample_length_in_seconds = 2
         model.config.total_sample_length_in_seconds = 180
-        
-        metas = dict(artist = "Zac Brown Band",
-            genres = "Country",
+
+        metas = dict(
+            artist="Zac Brown Band",
+            genres="Country",
             total_length=model.config.total_sample_length_in_seconds * model.config.sr,
-            offset = 0,
-            lyrics = """I met a traveller from an antique land,
+            offset=0,
+            lyrics="""I met a traveller from an antique land,
             Who said—“Two vast and trunkless legs of stone
             Stand in the desert. . . . Near them, on the sand,
             Half sunk a shattered visage lies, whose frown,
@@ -589,10 +590,9 @@ class JukeboxModelTest(unittest.TestCase):
             The lone and level sands stretch far away
             """,
             duration=2,
-            sample_length=2*model.config.sr,
-            
-            )
-        
+            sample_length=2 * model.config.sr,
+        )
+
         # tokens = tokenizer(
         #     "Alan Jackson",
         #     "rock",
@@ -604,10 +604,10 @@ class JukeboxModelTest(unittest.TestCase):
         # )
 
         tokens = tokenizer(**metas)
-        
+
         inputs, _ = tokens["input_ids"], tokens["attention_masks"]
         ys = np.array([[inputs]] * 3, dtype=np.int64)
-        ys = torch.stack([torch.from_numpy(y) for y in ys], dim=0).long() # .to("cuda")
+        ys = torch.stack([torch.from_numpy(y) for y in ys], dim=0).long()  # .to("cuda")
 
         start = timeit.default_timer()
         # import cProfile as profile
@@ -615,10 +615,11 @@ class JukeboxModelTest(unittest.TestCase):
         zs = model.ancestral_sample(ys, sampling_kwargs, model.config)
         print(f"time to sample : {timeit.default_timer() - start}")
 
+
 if __name__ == "__main__":
     tester = JukeboxModelTest()
     tester.test_gpu_sampling()
-    
+
 # class JukeboxModelTester:
 #     def __init__(
 #         self,

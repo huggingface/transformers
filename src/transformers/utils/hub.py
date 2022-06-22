@@ -38,6 +38,7 @@ import requests
 from filelock import FileLock
 from huggingface_hub import HfFolder, Repository, create_repo, list_repo_files, whoami
 from requests.exceptions import HTTPError
+from requests.models import Response
 from transformers.utils.logging import tqdm
 
 from . import __version__, logging
@@ -97,7 +98,7 @@ S3_BUCKET_PREFIX = "https://s3.amazonaws.com/models.huggingface.co/bert"
 CLOUDFRONT_DISTRIB_PREFIX = "https://cdn.huggingface.co"
 
 _staging_mode = os.environ.get("HUGGINGFACE_CO_STAGING", "NO").upper() in ENV_VARS_TRUE_VALUES
-_default_endpoint = "https://moon-staging.huggingface.co" if _staging_mode else "https://huggingface.co"
+_default_endpoint = "https://hub-ci.huggingface.co" if _staging_mode else "https://huggingface.co"
 
 HUGGINGFACE_CO_RESOLVE_ENDPOINT = _default_endpoint
 if os.environ.get("HUGGINGFACE_CO_RESOLVE_ENDPOINT", None) is not None:
@@ -109,6 +110,7 @@ if os.environ.get("HUGGINGFACE_CO_RESOLVE_ENDPOINT", None) is not None:
     HUGGINGFACE_CO_RESOLVE_ENDPOINT = os.environ.get("HUGGINGFACE_CO_RESOLVE_ENDPOINT", None)
 HUGGINGFACE_CO_RESOLVE_ENDPOINT = os.environ.get("HF_ENDPOINT", HUGGINGFACE_CO_RESOLVE_ENDPOINT)
 HUGGINGFACE_CO_PREFIX = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/{model_id}/resolve/{revision}/{filename}"
+HUGGINGFACE_CO_EXAMPLES_TELEMETRY = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/api/telemetry/examples"
 
 
 def is_remote_url(url_or_filename):
@@ -397,20 +399,27 @@ class RevisionNotFoundError(HTTPError):
     """Raised when trying to access a hf.co URL with a valid repository but an invalid revision."""
 
 
-def _raise_for_status(request):
+def _raise_for_status(response: Response):
     """
     Internal version of `request.raise_for_status()` that will refine a potential HTTPError.
     """
-    if "X-Error-Code" in request.headers:
-        error_code = request.headers["X-Error-Code"]
+    if "X-Error-Code" in response.headers:
+        error_code = response.headers["X-Error-Code"]
         if error_code == "RepoNotFound":
-            raise RepositoryNotFoundError(f"404 Client Error: Repository Not Found for url: {request.url}")
+            raise RepositoryNotFoundError(f"404 Client Error: Repository Not Found for url: {response.url}")
         elif error_code == "EntryNotFound":
-            raise EntryNotFoundError(f"404 Client Error: Entry Not Found for url: {request.url}")
+            raise EntryNotFoundError(f"404 Client Error: Entry Not Found for url: {response.url}")
         elif error_code == "RevisionNotFound":
-            raise RevisionNotFoundError(f"404 Client Error: Revision Not Found for url: {request.url}")
+            raise RevisionNotFoundError(f"404 Client Error: Revision Not Found for url: {response.url}")
 
-    request.raise_for_status()
+    if response.status_code == 401:
+        # The repo was not found and the user is not Authenticated
+        raise RepositoryNotFoundError(
+            f"401 Client Error: Repository not found for url: {response.url}. "
+            "If the repo is private, make sure you are authenticated."
+        )
+
+    response.raise_for_status()
 
 
 def http_get(url: str, temp_file: BinaryIO, proxies=None, resume_size=0, headers: Optional[Dict[str, str]] = None):
@@ -852,6 +861,7 @@ class PushToHubMixin:
         organization: Optional[str] = None,
         private: Optional[bool] = None,
         use_auth_token: Optional[Union[bool, str]] = None,
+        max_shard_size: Optional[Union[int, str]] = "10GB",
         **model_card_kwargs
     ) -> str:
         """
@@ -927,8 +937,9 @@ class PushToHubMixin:
             use_auth_token=use_auth_token,
         )
         # Save the files in the cloned repo
-        self.save_pretrained(repo_path_or_name)
+        self.save_pretrained(repo_path_or_name, max_shard_size=max_shard_size)
         if hasattr(self, "history") and hasattr(self, "create_model_card"):
+            self.save_pretrained(repo_path_or_name, max_shard_size=max_shard_size)
             # This is a Keras model and we might be able to fish out its History and make a model card out of it
             base_model_card_args = {
                 "output_dir": repo_path_or_name,
@@ -936,6 +947,7 @@ class PushToHubMixin:
             }
             base_model_card_args.update(model_card_kwargs)
             self.create_model_card(**base_model_card_args)
+
         # Commit and push!
         url = self._push_to_hub(repo, commit_message=commit_message)
 
@@ -1028,3 +1040,151 @@ def get_full_repo_name(model_id: str, organization: Optional[str] = None, token:
         return f"{username}/{model_id}"
     else:
         return f"{organization}/{model_id}"
+
+
+def send_example_telemetry(example_name, *example_args, framework="pytorch"):
+    """
+    Sends telemetry that helps tracking the examples use.
+
+    Args:
+        example_name (`str`): The name of the example.
+        *example_args (dataclasses or `argparse.ArgumentParser`): The arguments to the script. This function will only
+            try to extract the model and dataset name from those. Nothing else is tracked.
+        framework (`str`, *optional*, defaults to `"pytorch"`): The framework for the example.
+    """
+    if is_offline_mode():
+        return
+
+    data = {"example": example_name, "framework": framework}
+    for args in example_args:
+        args_as_dict = {k: v for k, v in args.__dict__.items() if not k.startswith("_") and v is not None}
+        if "model_name_or_path" in args_as_dict:
+            model_name = args_as_dict["model_name_or_path"]
+            # Filter out local paths
+            if not os.path.isdir(model_name):
+                data["model_name"] = args_as_dict["model_name_or_path"]
+        if "dataset_name" in args_as_dict:
+            data["dataset_name"] = args_as_dict["dataset_name"]
+        elif "task_name" in args_as_dict:
+            # Extract script name from the example_name
+            script_name = example_name.replace("tf_", "").replace("flax_", "").replace("run_", "")
+            script_name = script_name.replace("_no_trainer", "")
+            data["dataset_name"] = f"{script_name}-{args_as_dict['task_name']}"
+
+    headers = {"user-agent": http_user_agent(data)}
+    try:
+        r = requests.head(HUGGINGFACE_CO_EXAMPLES_TELEMETRY, headers=headers)
+        r.raise_for_status()
+    except Exception:
+        # We don't want to error in case of connection errors of any kind.
+        pass
+
+
+def convert_file_size_to_int(size: Union[int, str]):
+    """
+    Converts a size expressed as a string with digits an unit (like `"5MB"`) to an integer (in bytes).
+
+    Args:
+        size (`int` or `str`): The size to convert. Will be directly returned if an `int`.
+
+    Example:
+    ```py
+    >>> convert_file_size_to_int("1MiB")
+    1048576
+    ```
+    """
+    if isinstance(size, int):
+        return size
+    if size.upper().endswith("GIB"):
+        return int(size[:-3]) * (2**30)
+    if size.upper().endswith("MIB"):
+        return int(size[:-3]) * (2**20)
+    if size.upper().endswith("KIB"):
+        return int(size[:-3]) * (2**10)
+    if size.upper().endswith("GB"):
+        int_size = int(size[:-2]) * (10**9)
+        return int_size // 8 if size.endswith("b") else int_size
+    if size.upper().endswith("MB"):
+        int_size = int(size[:-2]) * (10**6)
+        return int_size // 8 if size.endswith("b") else int_size
+    if size.upper().endswith("KB"):
+        int_size = int(size[:-2]) * (10**3)
+        return int_size // 8 if size.endswith("b") else int_size
+    raise ValueError("`size` is not in a valid format. Use an integer followed by the unit, e.g., '5GB'.")
+
+
+def get_checkpoint_shard_files(
+    pretrained_model_name_or_path,
+    index_filename,
+    cache_dir=None,
+    force_download=False,
+    proxies=None,
+    resume_download=False,
+    local_files_only=False,
+    use_auth_token=None,
+    user_agent=None,
+    revision=None,
+    mirror=None,
+):
+    """
+    For a given model:
+
+    - download and cache all the shards of a sharded checkpoint if `pretrained_model_name_or_path` is a model ID on the
+      Hub
+    - returns the list of paths to all the shards, as well as some metadata.
+
+    For the description of each arg, see [`PreTrainedModel.from_pretrained`]. `index_filename` is the full path to the
+    index (downloaded and cached if `pretrained_model_name_or_path` is a model ID on the Hub).
+    """
+    import json
+
+    if not os.path.isfile(index_filename):
+        raise ValueError(f"Can't find a checkpoint index ({index_filename}) in {pretrained_model_name_or_path}.")
+
+    with open(index_filename, "r") as f:
+        index = json.loads(f.read())
+
+    shard_filenames = sorted(list(set(index["weight_map"].values())))
+    sharded_metadata = index["metadata"]
+    sharded_metadata["all_checkpoint_keys"] = list(index["weight_map"].keys())
+
+    # First, let's deal with local folder.
+    if os.path.isdir(pretrained_model_name_or_path):
+        shard_filenames = [os.path.join(pretrained_model_name_or_path, f) for f in shard_filenames]
+        return shard_filenames, sharded_metadata
+
+    # At this stage pretrained_model_name_or_path is a model identifier on the Hub
+    cached_filenames = []
+    for shard_filename in shard_filenames:
+        shard_url = hf_bucket_url(
+            pretrained_model_name_or_path, filename=shard_filename, revision=revision, mirror=mirror
+        )
+
+        try:
+            # Load from URL
+            cached_filename = cached_path(
+                shard_url,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                proxies=proxies,
+                resume_download=resume_download,
+                local_files_only=local_files_only,
+                use_auth_token=use_auth_token,
+                user_agent=user_agent,
+            )
+        # We have already dealt with RepositoryNotFoundError and RevisionNotFoundError when getting the index, so
+        # we don't have to catch them here.
+        except EntryNotFoundError:
+            raise EnvironmentError(
+                f"{pretrained_model_name_or_path} does not appear to have a file named {shard_filename} which is "
+                "required according to the checkpoint index."
+            )
+        except HTTPError:
+            raise EnvironmentError(
+                f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load {shard_filename}. You should try"
+                " again after checking your internet connection."
+            )
+
+        cached_filenames.append(cached_filename)
+
+    return cached_filenames, sharded_metadata

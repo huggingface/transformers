@@ -1,0 +1,21 @@
+# Used to trigger self-push CI
+name: Self-hosted runner (push-caller)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "src/**"
+      - "tests/**"
+      - ".github/**"
+      - "templates/**"
+      - "utils/**"
+
+jobs:
+  run_push_ci:
+    name: Trigger Push CI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger push CI via workflow_run
+        run: echo "Trigger push CI via workflow_run"

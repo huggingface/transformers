@@ -37,6 +37,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("bigbird_pegasus", "BigBirdPegasusModel"),
         ("blenderbot", "BlenderbotModel"),
         ("blenderbot-small", "BlenderbotSmallModel"),
+        ("bloom", "BloomModel"),
         ("camembert", "CamembertModel"),
         ("canine", "CanineModel"),
         ("clip", "CLIPModel"),
@@ -49,7 +50,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("data2vec-vision", "Data2VecVisionModel"),
         ("deberta", "DebertaModel"),
         ("deberta-v2", "DebertaV2Model"),
-        ("decision_transformer", "DecisionTransformerModel"),
         ("decision_transformer", "DecisionTransformerModel"),
         ("decision_transformer_gpt2", "DecisionTransformerGPT2Model"),
         ("deit", "DeiTModel"),
@@ -76,13 +76,16 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("layoutlmv2", "LayoutLMv2Model"),
         ("layoutlmv3", "LayoutLMv3Model"),
         ("led", "LEDModel"),
+        ("levit", "LevitModel"),
         ("longformer", "LongformerModel"),
+        ("longt5", "LongT5Model"),
         ("luke", "LukeModel"),
         ("lxmert", "LxmertModel"),
         ("m2m_100", "M2M100Model"),
         ("marian", "MarianModel"),
         ("maskformer", "MaskFormerModel"),
         ("mbart", "MBartModel"),
+        ("mctct", "MCTCTModel"),
         ("megatron-bert", "MegatronBertModel"),
         ("mobilebert", "MobileBertModel"),
         ("mpnet", "MPNetModel"),
@@ -143,6 +146,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("bart", "BartForConditionalGeneration"),
         ("bert", "BertForPreTraining"),
         ("big_bird", "BigBirdForPreTraining"),
+        ("bloom", "BloomForCausalLM"),
         ("camembert", "CamembertForMaskedLM"),
         ("ctrl", "CTRLLMHeadModel"),
         ("data2vec-text", "Data2VecTextForMaskedLM"),
@@ -193,6 +197,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("big_bird", "BigBirdForMaskedLM"),
         ("bigbird_pegasus", "BigBirdPegasusForConditionalGeneration"),
         ("blenderbot-small", "BlenderbotSmallForConditionalGeneration"),
+        ("bloom", "BloomForCausalLM"),
         ("camembert", "CamembertForMaskedLM"),
         ("convbert", "ConvBertForMaskedLM"),
         ("ctrl", "CTRLLMHeadModel"),
@@ -214,6 +219,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("layoutlm", "LayoutLMForMaskedLM"),
         ("led", "LEDForConditionalGeneration"),
         ("longformer", "LongformerForMaskedLM"),
+        ("longt5", "LongT5ForConditionalGeneration"),
         ("m2m_100", "M2M100ForConditionalGeneration"),
         ("marian", "MarianMTModel"),
         ("megatron-bert", "MegatronBertForCausalLM"),
@@ -251,6 +257,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("bigbird_pegasus", "BigBirdPegasusForCausalLM"),
         ("blenderbot", "BlenderbotForCausalLM"),
         ("blenderbot-small", "BlenderbotSmallForCausalLM"),
+        ("bloom", "BloomForCausalLM"),
         ("camembert", "CamembertForCausalLM"),
         ("ctrl", "CTRLLMHeadModel"),
         ("data2vec-text", "Data2VecTextForCausalLM"),
@@ -309,6 +316,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("data2vec-vision", "Data2VecVisionForImageClassification"),
         ("deit", ("DeiTForImageClassification", "DeiTForImageClassificationWithTeacher")),
         ("imagegpt", "ImageGPTForImageClassification"),
+        ("levit", ("LevitForImageClassification", "LevitForImageClassificationWithTeacher")),
         (
             "perceiver",
             (
@@ -378,6 +386,7 @@ MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
         ("ibert", "IBertForMaskedLM"),
         ("layoutlm", "LayoutLMForMaskedLM"),
         ("longformer", "LongformerForMaskedLM"),
+        ("luke", "LukeForMaskedLM"),
         ("mbart", "MBartForConditionalGeneration"),
         ("megatron-bert", "MegatronBertForMaskedLM"),
         ("mobilebert", "MobileBertForMaskedLM"),
@@ -417,6 +426,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("encoder-decoder", "EncoderDecoderModel"),
         ("fsmt", "FSMTForConditionalGeneration"),
         ("led", "LEDForConditionalGeneration"),
+        ("longt5", "LongT5ForConditionalGeneration"),
         ("m2m_100", "M2M100ForConditionalGeneration"),
         ("marian", "MarianMTModel"),
         ("mbart", "MBartForConditionalGeneration"),
@@ -444,6 +454,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("bert", "BertForSequenceClassification"),
         ("big_bird", "BigBirdForSequenceClassification"),
         ("bigbird_pegasus", "BigBirdPegasusForSequenceClassification"),
+        ("bloom", "BloomForSequenceClassification"),
         ("camembert", "CamembertForSequenceClassification"),
         ("canine", "CanineForSequenceClassification"),
         ("convbert", "ConvBertForSequenceClassification"),
@@ -542,12 +553,19 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
+    [
+        ("vilt", "ViltForQuestionAnswering"),
+    ]
+)
+
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Token Classification mapping
         ("albert", "AlbertForTokenClassification"),
         ("bert", "BertForTokenClassification"),
         ("big_bird", "BigBirdForTokenClassification"),
+        ("bloom", "BloomForTokenClassification"),
         ("camembert", "CamembertForTokenClassification"),
         ("canine", "CanineForTokenClassification"),
         ("convbert", "ConvBertForTokenClassification"),
@@ -647,6 +665,7 @@ MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
         # Model for Connectionist temporal classification (CTC) mapping
         ("data2vec-audio", "Data2VecAudioForCTC"),
         ("hubert", "HubertForCTC"),
+        ("mctct", "MCTCTForCTC"),
         ("sew", "SEWForCTC"),
         ("sew-d", "SEWDForCTC"),
         ("unispeech", "UniSpeechForCTC"),
@@ -699,6 +718,9 @@ MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING_NAMES
 )
 MODEL_FOR_VISION_2_SEQ_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES)
+MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES
+)
 MODEL_FOR_MASKED_LM_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_MASKED_LM_MAPPING_NAMES)
 MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES
@@ -803,6 +825,17 @@ AutoModelForTableQuestionAnswering = auto_class_update(
     AutoModelForTableQuestionAnswering,
     head_doc="table question answering",
     checkpoint_for_example="google/tapas-base-finetuned-wtq",
+)
+
+
+class AutoModelForVisualQuestionAnswering(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING
+
+
+AutoModelForVisualQuestionAnswering = auto_class_update(
+    AutoModelForVisualQuestionAnswering,
+    head_doc="visual question answering",
+    checkpoint_for_example="dandelin/vilt-b32-finetuned-vqa",
 )
 
 

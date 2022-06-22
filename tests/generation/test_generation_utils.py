@@ -1626,6 +1626,32 @@ class UtilsFunctionsTest(unittest.TestCase):
         self.assertTrue(torch.allclose(non_inf_expected_output, non_inf_output, atol=1e-12))
         self.assertTrue(torch.all(torch.eq(non_inf_expected_idx, non_inf_idx)))
 
+    # tests whether the function uses filter_value instead of default -inf
+    def test_top_k_top_p_filtering_with_filter_value(self):
+        logits = torch.tensor(
+            [
+                [
+                    1,
+                    1,
+                    1,
+                    0.99,  # get filtered by top-p filtering
+                    0.98,  # get filtered by top-k filtering
+                ]
+            ],
+            dtype=torch.float,
+            device=torch_device,
+        )
+
+        expected_output = torch.tensor(
+            [[1, 1, 1, 0, 0]],
+            dtype=torch.float,
+            device=torch_device,
+        )
+
+        output = top_k_top_p_filtering(logits, top_k=4, top_p=0.5, filter_value=0.0)
+
+        self.assertTrue(torch.allclose(expected_output, output, atol=1e-12))
+
 
 @require_torch
 class GenerationIntegrationTests(unittest.TestCase):
@@ -2633,8 +2659,8 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertListEqual(outputs, ["Wie alter sind Sie?"])
 
     def test_constrained_beam_search_mixin_type_checks(self):
-        tokenizer = AutoTokenizer.from_pretrained("t5-base")
-        model = AutoModelForSeq2SeqLM.from_pretrained("t5-base")
+        tokenizer = AutoTokenizer.from_pretrained("patrickvonplaten/t5-tiny-random")
+        model = AutoModelForSeq2SeqLM.from_pretrained("patrickvonplaten/t5-tiny-random")
 
         encoder_input_str = "translate English to German: How old are you?"
         input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids

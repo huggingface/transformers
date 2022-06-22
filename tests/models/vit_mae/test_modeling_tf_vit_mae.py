@@ -107,6 +107,10 @@ class TFViTMAEModelTester:
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
             intermediate_size=self.intermediate_size,
+            decoder_hidden_size=self.hidden_size,
+            decoder_num_hidden_layers=self.num_hidden_layers,
+            decoder_num_attention_heads=self.num_attention_heads,
+            decoder_intermediate_size=self.intermediate_size,
             hidden_act=self.hidden_act,
             hidden_dropout_prob=self.hidden_dropout_prob,
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
@@ -134,6 +138,15 @@ class TFViTMAEModelTester:
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         expected_seq_len = num_patches
         expected_num_channels = self.patch_size**2 * self.num_channels
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, expected_seq_len, expected_num_channels))
+
+        # test greyscale images
+        config.num_channels = 1
+        model = TFViTMAEForPreTraining(config)
+
+        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
+        result = model(pixel_values, training=False)
+        expected_num_channels = self.patch_size**2
         self.parent.assertEqual(result.logits.shape, (self.batch_size, expected_seq_len, expected_num_channels))
 
     def prepare_config_and_inputs_for_common(self):
