@@ -28,7 +28,6 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...configuration_utils import PretrainedConfig
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -155,7 +154,7 @@ def load_tf_weights_in_qdqbert(model, tf_checkpoint_path):
 class QDQBertEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
@@ -218,7 +217,7 @@ class QDQBertEmbeddings(nn.Module):
 
 
 class QDQBertSelfAttention(nn.Module):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -851,7 +850,7 @@ class QDQBertModel(QDQBertPreTrainedModel):
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
-    def __init__(self, config: PretrainedConfig, add_pooling_layer: bool = True):
+    def __init__(self, config, add_pooling_layer: bool = True):
         requires_backends(self, "pytorch_quantization")
         super().__init__(config)
         self.config = config
