@@ -127,7 +127,7 @@ class VideoMAEEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        self.patch_embeddings = PatchEmbeddings(
+        self.patch_embeddings = VideoMAEPatchEmbeddings(
             image_size=config.image_size,
             patch_size=config.patch_size,
             num_channels=config.num_channels,
@@ -157,7 +157,7 @@ class VideoMAEEmbeddings(nn.Module):
         return embeddings
 
 
-class PatchEmbeddings(nn.Module):
+class VideoMAEPatchEmbeddings(nn.Module):
     """
     Video to Patch Embedding. This module turns a batch of videos of shape (batch_size, num_frames, num_channels,
     height, width) into a tensor of shape (batch_size, seq_len, hidden_size) to be consumed by a Transformer encoder.
