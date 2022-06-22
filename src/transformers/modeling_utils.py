@@ -2166,11 +2166,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         offload_state_dict=False,
         dtype=None,
     ):
-        if device_map is not None and "disk" in device_map.values() and offload_folder is None:
-            raise ValueError(
-                "The current `device_map` had weights offloaded to the disk. Please provide an `offload_folder` for"
-                " them."
-            )
+        if device_map is not None and "disk" in device_map.values():
+            if offload_folder is None:
+                raise ValueError(
+                    "The current `device_map` had weights offloaded to the disk. Please provide an `offload_folder`"
+                    " for them."
+                )
+            os.makedirs(offload_folder, exist_ok=True)
         # Retrieve missing & unexpected_keys
         model_state_dict = model.state_dict()
         expected_keys = list(model_state_dict.keys())
@@ -2344,6 +2346,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 gc.collect()
 
             if offload_index is not None and len(offload_index) > 0:
+                if model != model_to_load:
+                    # We need to add the prefix of the base model
+                    prefix = cls.base_model_prefix
+                    for weight_name in offload_index:
+                        shutil.move(
+                            os.path.join(offload_folder, f"{weight_name}.dat"),
+                            os.path.join(offload_folder, f"{prefix}.{weight_name}.dat"),
+                        )
+                    offload_index = {f"{prefix}.{key}": value for key, value in offload_index.items()}
                 save_offload_index(offload_index, offload_folder)
 
             if offload_state_dict:
