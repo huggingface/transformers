@@ -18,7 +18,7 @@
 import collections.abc
 import math
 from dataclasses import dataclass
-from typing import Any, Optional, Set, Tuple, Union
+from typing import Any, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -27,7 +27,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
-from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -167,54 +167,6 @@ def get_grouping_from_attentions(attentions, hw_shape):
     return final_grouping
 
 
-class GroupViTAttention(nn.Module):
-    def __init__(self, config: GroupViTVisionConfig):
-        super().__init__()
-        self.num_heads = config.num_attention_heads
-        head_dim = config.hidden_size // self.num_heads
-        self.scale = head_dim**-0.5
-
-        self.q_proj = nn.Linear(config.hidden_size, config.hidden_size)
-        self.k_proj = nn.Linear(config.hidden_size, config.hidden_size)
-        self.v_proj = nn.Linear(config.hidden_size, config.hidden_size)
-        self.proj = nn.Linear(config.hidden_size, config.hidden_size)
-
-    def forward(self, query, key=None):
-        batch_size, query_length, channels = query.shape
-        if key is None:
-            key = query
-        value = key
-        key_length = key.size(1)
-
-        # [batch_size, num_heads, query_length, channels//num_heads]
-        query = (
-            self.q_proj(query)
-            .reshape(batch_size, query_length, self.num_heads, channels // self.num_heads)
-            .permute(0, 2, 1, 3)
-        )
-        # [batch_size, num_heads, key_length, channels//num_heads]
-        key = (
-            self.k_proj(key)
-            .reshape(batch_size, key_length, self.num_heads, channels // self.num_heads)
-            .permute(0, 2, 1, 3)
-        )
-        # [batch_size, num_heads, key_length, channels//num_heads]
-        value = (
-            self.v_proj(value)
-            .reshape(batch_size, key_length, self.num_heads, channels // self.num_heads)
-            .permute(0, 2, 1, 3)
-        )
-
-        # [batch_size, num_heads, query_length, key_length]
-        attn = (query @ key.transpose(-2, -1)) * self.scale
-        attn = attn.softmax(dim=-1)
-
-        # [batch_size, num_heads, query_length, channels//num_heads] -> [batch_size, query_length, channels]
-        out = (attn @ value).transpose(1, 2).reshape(batch_size, query_length, channels)
-        out = self.proj(out)
-        return out
-
-
 class GroupViTCrossAttentionLayer(nn.Module):
     def __init__(self, config: GroupViTVisionConfig):
         super().__init__()
@@ -225,7 +177,7 @@ class GroupViTCrossAttentionLayer(nn.Module):
 
     def forward(self, query, key):
         x = query
-        x = x + self.attn(query, key)
+        x = x + self.attn(query, encoder_hidden_states=key)[0]
         x = x + self.mlp(self.norm2(x))
         x = self.norm_post(x)
         return x
@@ -386,7 +338,7 @@ class GroupViTModelOutput(ModelOutput):
         )
 
 
-class PatchEmbeddings(nn.Module):
+class GroupViTPatchEmbeddings(nn.Module):
     """
     Image to Patch Embedding.
     """
@@ -424,7 +376,7 @@ class GroupViTVisionEmbeddings(nn.Module):
     def __init__(self, config: GroupViTVisionConfig):
         super().__init__()
 
-        self.patch_embeddings = PatchEmbeddings(
+        self.patch_embeddings = GroupViTPatchEmbeddings(
             image_size=config.image_size,
             patch_size=config.patch_size,
             num_channels=config.num_channels,
@@ -432,7 +384,7 @@ class GroupViTVisionEmbeddings(nn.Module):
         )
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches, config.hidden_size))
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.dropout = nn.Dropout(config.dropout)
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.config = config
 
@@ -524,8 +476,131 @@ class GroupViTTextEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPAttention with CLIP->GroupViTText
-class GroupViTTextAttention(nn.Module):
+class GroupViTStage(nn.Module):
+    """This corresponds to the `GroupingLayer` class in the GroupViT implementation."""
+
+    def __init__(
+        self,
+        config: GroupViTVisionConfig,
+        depth: int,
+        num_prev_group_token: int,
+        num_group_token: int,
+        num_output_group: int,
+    ):
+        super().__init__()
+        self.depth = depth
+        self.num_group_token = num_group_token
+        if num_group_token > 0:
+            self.group_token = nn.Parameter(torch.zeros(1, num_group_token, config.hidden_size))
+        else:
+            self.group_token = None
+        self.gradient_checkpointing = False
+        self.layers = nn.ModuleList([GroupViTEncoderLayer(config) for _ in range(depth)])
+
+        if num_group_token > 0:
+            self.downsample = GroupViTTokenAssign(
+                config=config,
+                num_group_token=num_group_token,
+                num_output_group=num_output_group,
+            )
+        else:
+            self.downsample = None
+
+        if num_prev_group_token > 0 and num_group_token > 0:
+            self.group_projector = nn.Sequential(
+                nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps),
+                GroupViTMixerMLP(config, num_prev_group_token, config.hidden_size // 2, num_group_token),
+            )
+        else:
+            self.group_projector = None
+
+    @property
+    def with_group_token(self):
+        return self.group_token is not None
+
+    def split_x(self, x):
+        if self.with_group_token:
+            return x[:, : -self.num_group_token], x[:, -self.num_group_token :]
+        else:
+            return x, None
+
+    def concat_x(self, x: torch.Tensor, group_token: Optional[torch.Tensor] = None) -> torch.Tensor:
+        if group_token is None:
+            return x
+        return torch.cat([x, group_token], dim=1)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        prev_group_token: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.FloatTensor]:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`): attention mask of size
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+                `(config.encoder_attention_heads,)`.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the grouping tensors of Grouping block.
+        """
+        if self.with_group_token:
+            group_token = self.group_token.expand(hidden_states.size(0), -1, -1)
+            if self.group_projector is not None:
+                group_token = group_token + self.group_projector(prev_group_token)
+        else:
+            group_token = None
+
+        x = hidden_states
+
+        cat_x = self.concat_x(x, group_token)
+        for layer in self.layers:
+            layer_out = layer(cat_x, attention_mask=None, causal_attention_mask=None)
+            cat_x = layer_out[0]
+
+        x, group_token = self.split_x(cat_x)
+
+        attention = None
+        if self.downsample is not None:
+            x, attention = self.downsample(x, group_token)
+
+        outputs = (x, group_token)
+        if output_attentions:
+            outputs = outputs + (attention,)
+
+        return outputs
+
+
+class GroupViTMLP(nn.Module):
+    def __init__(
+        self,
+        config: GroupViTVisionConfig,
+        hidden_size: Optional[int] = None,
+        intermediate_size: Optional[int] = None,
+        output_size: Optional[int] = None,
+    ):
+        super().__init__()
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        hidden_size = hidden_size if hidden_size is not None else config.hidden_size
+        intermediate_size = intermediate_size if intermediate_size is not None else config.intermediate_size
+        output_size = output_size if output_size is not None else hidden_size
+        self.fc1 = nn.Linear(hidden_size, intermediate_size)
+        self.fc2 = nn.Linear(intermediate_size, output_size)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
+
+
+class GroupViTMixerMLP(GroupViTMLP):
+    def forward(self, x):
+        return super().forward(x.transpose(1, 2)).transpose(1, 2)
+
+
+class GroupViTAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config):
@@ -555,16 +630,22 @@ class GroupViTTextAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         causal_attention_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
         bsz, tgt_len, embed_dim = hidden_states.size()
+        is_cross_attention = encoder_hidden_states is not None
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scale
-        key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-        value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+        if is_cross_attention:
+            key_states = self._shape(self.k_proj(encoder_hidden_states), -1, bsz)
+            value_states = self._shape(self.v_proj(encoder_hidden_states), -1, bsz)
+        else:
+            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
         query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
@@ -629,328 +710,12 @@ class GroupViTTextAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->GroupViT
-class GroupViTSelfAttention(nn.Module):
-    def __init__(self, config: GroupViTConfig) -> None:
-        super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
-            raise ValueError(
-                f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
-                f"heads {config.num_attention_heads}."
-            )
-
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
-
-        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-
-    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
-    def forward(
-        self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        mixed_query_layer = self.query(hidden_states)
-
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(mixed_query_layer)
-
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
-        context_layer = torch.matmul(attention_probs, value_layer)
-
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(new_context_layer_shape)
-
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
-
-        return outputs
-
-
-# Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->GroupViT
-class GroupViTSelfOutput(nn.Module):
-    """
-    The residual connection is defined in GroupViTLayer instead of here (as is the case with other models), due to the
-    layernorm applied before each block.
-    """
-
-    def __init__(self, config: GroupViTConfig) -> None:
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-
-        return hidden_states
-
-
-# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->GroupViT
-class GroupViTVisionAttention(nn.Module):
-    def __init__(self, config: GroupViTConfig) -> None:
-        super().__init__()
-        self.attention = GroupViTSelfAttention(config)
-        self.output = GroupViTSelfOutput(config)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads: Set[int]) -> None:
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.attention.query = prune_linear_layer(self.attention.query, index)
-        self.attention.key = prune_linear_layer(self.attention.key, index)
-        self.attention.value = prune_linear_layer(self.attention.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
-        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        self_outputs = self.attention(hidden_states, head_mask, output_attentions)
-
-        attention_output = self.output(self_outputs[0], hidden_states)
-
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-        return outputs
-
-
-# Copied from transformers.models.vit.modeling_vit.ViTIntermediate with ViT->GroupViT
-class GroupViTIntermediate(nn.Module):
-    def __init__(self, config: GroupViTConfig) -> None:
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
-        if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = ACT2FN[config.hidden_act]
-        else:
-            self.intermediate_act_fn = config.hidden_act
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
-
-        return hidden_states
-
-
-# Copied from transformers.models.vit.modeling_vit.ViTOutput with ViT->GroupViTVision
-class GroupViTVisionOutput(nn.Module):
-    def __init__(self, config: GroupViTVisionConfig) -> None:
-        super().__init__()
-        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-
-        hidden_states = hidden_states + input_tensor
-
-        return hidden_states
-
-
-class GroupViTVisionLayer(nn.Module):
-    def __init__(self, config: GroupViTVisionConfig) -> None:
-        super().__init__()
-        self.attention = GroupViTVisionAttention(config)
-        self.intermediate = GroupViTIntermediate(config)
-        self.output = GroupViTVisionOutput(config)
-        self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        self_attention_outputs = self.attention(
-            self.layernorm_before(hidden_states),  # in GroupViTVision, layernorm is applied before self-attention
-            head_mask,
-            output_attentions=output_attentions,
-        )
-        attention_output = self_attention_outputs[0]
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
-
-        # first residual connection
-        hidden_states = attention_output + hidden_states
-
-        # in GroupViTVision, layernorm is also applied after self-attention
-        layer_output = self.layernorm_after(hidden_states)
-        layer_output = self.intermediate(layer_output)
-
-        # second residual connection is done here
-        layer_output = self.output(layer_output, hidden_states)
-
-        outputs = (layer_output,) + outputs
-
-        return outputs
-
-
-class GroupViTStage(nn.Module):
-    """This corresponds to the `GroupingLayer` class in the GroupViT implementation."""
-
-    def __init__(
-        self,
-        config: GroupViTVisionConfig,
-        depth: int,
-        num_prev_group_token: int,
-        num_group_token: int,
-        num_output_group: int,
-    ):
-        super().__init__()
-        self.depth = depth
-        self.num_group_token = num_group_token
-        if num_group_token > 0:
-            self.group_token = nn.Parameter(torch.zeros(1, num_group_token, config.hidden_size))
-        else:
-            self.group_token = None
-        self.gradient_checkpointing = False
-        self.layers = nn.ModuleList([GroupViTVisionLayer(config) for _ in range(depth)])
-
-        if num_group_token > 0:
-            self.downsample = GroupViTTokenAssign(
-                config=config,
-                num_group_token=num_group_token,
-                num_output_group=num_output_group,
-            )
-        else:
-            self.downsample = None
-
-        if num_prev_group_token > 0 and num_group_token > 0:
-            self.group_projector = nn.Sequential(
-                nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps),
-                GroupViTMixerMLP(config, num_prev_group_token, config.hidden_size // 2, num_group_token),
-            )
-        else:
-            self.group_projector = None
-
-    @property
-    def with_group_token(self):
-        return self.group_token is not None
-
-    def split_x(self, x):
-        if self.with_group_token:
-            return x[:, : -self.num_group_token], x[:, -self.num_group_token :]
-        else:
-            return x, None
-
-    def concat_x(self, x: torch.Tensor, group_token: Optional[torch.Tensor] = None) -> torch.Tensor:
-        if group_token is None:
-            return x
-        return torch.cat([x, group_token], dim=1)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        prev_group_token: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.FloatTensor]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-                `(config.encoder_attention_heads,)`.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the grouping tensors of Grouping block.
-        """
-        if self.with_group_token:
-            group_token = self.group_token.expand(hidden_states.size(0), -1, -1)
-            if self.group_projector is not None:
-                group_token = group_token + self.group_projector(prev_group_token)
-        else:
-            group_token = None
-
-        x = hidden_states
-
-        cat_x = self.concat_x(x, group_token)
-        for blk in self.layers:
-            blk_out = blk(cat_x)
-            cat_x = blk_out[0]
-
-        x, group_token = self.split_x(cat_x)
-
-        attention = None
-        if self.downsample is not None:
-            x, attention = self.downsample(x, group_token)
-
-        outputs = (x, group_token)
-        if output_attentions:
-            outputs = outputs + (attention,)
-
-        return outputs
-
-
-class GroupViTMLP(nn.Module):
-    def __init__(
-        self,
-        config: GroupViTVisionConfig,
-        hidden_size: Optional[int] = None,
-        intermediate_size: Optional[int] = None,
-        output_size: Optional[int] = None,
-    ):
-        super().__init__()
-        self.config = config
-        self.activation_fn = ACT2FN[config.hidden_act]
-        hidden_size = hidden_size if hidden_size is not None else config.hidden_size
-        intermediate_size = intermediate_size if intermediate_size is not None else config.intermediate_size
-        output_size = output_size if output_size is not None else hidden_size
-        self.fc1 = nn.Linear(hidden_size, intermediate_size)
-        self.fc2 = nn.Linear(intermediate_size, output_size)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
-
-
-class GroupViTMixerMLP(GroupViTMLP):
-    def forward(self, x):
-        return super().forward(x.transpose(1, 2)).transpose(1, 2)
-
-
-class GroupViTTextEncoderLayer(nn.Module):
-    def __init__(self, config: GroupViTTextConfig):
+# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->GroupViT
+class GroupViTEncoderLayer(nn.Module):
+    def __init__(self, config: GroupViTConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
-        self.self_attn = GroupViTTextAttention(config)
+        self.self_attn = GroupViTAttention(config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim)
         self.mlp = GroupViTMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim)
@@ -1025,7 +790,7 @@ class GroupViTPreTrainedModel(PreTrainedModel):
         if isinstance(module, GroupViTTextEmbeddings):
             module.token_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
             module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
-        elif isinstance(module, GroupViTTextAttention):
+        elif isinstance(module, GroupViTAttention):
             factor = self.config.initializer_factor
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             out_proj_std = (module.embed_dim**-0.5) * factor
@@ -1205,7 +970,7 @@ class GroupViTVisionEncoder(nn.Module):
 class GroupViTTextEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self-attention layers. Each layer is a
-    [`GroupViTTextEncoderLayer`].
+    [`GroupViTEncoderLayer`].
 
     Args:
         config: GroupViTTextConfig
@@ -1214,7 +979,7 @@ class GroupViTTextEncoder(nn.Module):
     def __init__(self, config: GroupViTTextConfig):
         super().__init__()
         self.config = config
-        self.layers = nn.ModuleList([GroupViTTextEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([GroupViTEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -1510,7 +1275,7 @@ class GroupViTVisionModel(GroupViTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self) -> PatchEmbeddings:
+    def get_input_embeddings(self) -> GroupViTPatchEmbeddings:
         return self.vision_model.embeddings.patch_embeddings
 
     @add_start_docstrings_to_model_forward(GROUPVIT_VISION_INPUTS_DOCSTRING)

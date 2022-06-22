@@ -643,7 +643,6 @@ class GroupViTModelIntegrationTest(unittest.TestCase):
     def test_inference(self):
         model_name = "nvidia/groupvit-gccyfcc"
         model = GroupViTModel.from_pretrained(model_name)
-        model.eval()
         processor = CLIPProcessor.from_pretrained(model_name)
 
         image = prepare_img()
