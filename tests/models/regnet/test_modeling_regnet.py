@@ -83,7 +83,7 @@ class RegNetModelTester:
 
     def get_config(self):
         return RegNetConfig(
-            image_size=self.image_size,
+            # image_size=self.image_size,
             num_channels=self.num_channels,
             embeddings_size=self.embeddings_size,
             hidden_sizes=self.hidden_sizes,
