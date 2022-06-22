@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tensorflow ResNet model."""
+""" TensorFlow ResNet model."""
 
 import math
 from typing import Dict, Optional, Tuple, Union
@@ -150,7 +150,7 @@ class TFResNetShortCut(tf.keras.layers.Layer):
 
 class TFResNetBasicLayer(tf.keras.layers.Layer):
     """
-    A classic ResNet's residual layer composed by a two `3x3` convolutions.
+    A classic ResNet's residual layer composed by two `3x3` convolutions.
     """
 
     def __init__(
@@ -310,9 +310,9 @@ class TFResNetPreTrainedModel(TFPreTrainedModel):
 
 
 RESNET_START_DOCSTRING = r"""
-    This model is a Tensorflow
+    This model is a TensorFlow
     [tf.keras.layers.Layer](https://www.tensorflow.org/api_docs/python/tf/keras/layers/Layer) sub-class. Use it as a
-    regular Tensorflow Module and refer to the Tensorflow documentation for all matter related to general usage and
+    regular TensorFlow Module and refer to the TensorFlow documentation for all matter related to general usage and
     behavior.
 
     Parameters:
