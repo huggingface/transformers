@@ -708,7 +708,7 @@ MVP_CONDITIONAL_GENERATION_EXAMPLE = r"""
     >>> with torch.no_grad():
     ...     generated_ids = model.generate(**inputs)
 
-    >>> tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+    >>> generated_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
     ```
 """
 
@@ -772,7 +772,7 @@ MVP_QUESTION_ANSWERING_SAMPLE = r"""
     >>> answer_end_index = outputs.end_logits.argmax()
 
     >>> predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
-    >>> tokenizer.decode(predict_answer_tokens)
+    >>> predict_answer = tokenizer.decode(predict_answer_tokens)
     ```
 """
 
