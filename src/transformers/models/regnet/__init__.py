@@ -36,7 +36,12 @@ else:
         "RegNetPreTrainedModel",
     ]
 
-if is_tf_available():
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_tf_regnet"] = [
         "TF_REGNET_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFRegNetForImageClassification",
@@ -61,7 +66,12 @@ if TYPE_CHECKING:
             RegNetPreTrainedModel,
         )
 
-    if is_tf_available():
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_tf_regnet import (
             TF_REGNET_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFRegNetForImageClassification,
