@@ -34,6 +34,19 @@ class TFBertTokenizer(tf.keras.layers.Layer):
             token of a sequence built with special tokens.
         pad_token_id (`str`, *optional*, defaults to `"[PAD]"`):
             The token used for padding, for example when batching sequences of different lengths.
+        truncation (`bool`, *optional*, defaults to `True`):
+            Whether to truncate the sequence to the maximum length.
+        max_length (`int`, *optional*, defaults to `512`):
+            The maximum length of the sequence, used for padding (if `padding` is "max_length") and/or
+            truncation (if `truncation` is `True`).
+        pad_to_multiple_of (`int`, *optional*, defaults to `None`):
+            If set, the sequence will be padded to a multiple of this value.
+        return_token_type_ids (`bool`, *optional*, defaults to `True`):
+            Whether to return token_type_ids.
+        return_attention_mask (`bool`, *optional*, defaults to `True`):
+            Whether to return the attention_mask.
+
+
     """
 
     def __init__(
