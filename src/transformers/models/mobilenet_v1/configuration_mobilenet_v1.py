@@ -49,8 +49,8 @@ class MobileNetV1Config(PretrainedConfig):
         image_size (`int`, *optional*, defaults to 224):
             The size (resolution) of each image.
         depth_multiplier (`float`, *optional*, defaults to 1.0):
-            Shrinks or expands the number of channels in each layer. Default is 1.0, which starts the network with 32 channels.
-            This is sometimes also called "alpha" or "width multiplier".
+            Shrinks or expands the number of channels in each layer. Default is 1.0, which starts the network with 32
+            channels. This is sometimes also called "alpha" or "width multiplier".
         min_depth (`int`, *optional*, defaults to 8):
             All layers will have at least this many channels.
         hidden_act (`str` or `function`, *optional*, defaults to `"relu6"`):

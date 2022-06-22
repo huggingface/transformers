@@ -21,7 +21,11 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_mobilenet_v1": ["MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileNetV1Config", "MobileNetV1OnnxConfig"],
+    "configuration_mobilenet_v1": [
+        "MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "MobileNetV1Config",
+        "MobileNetV1OnnxConfig",
+    ],
 }
 
 try:
@@ -48,7 +52,11 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_mobilenet_v1 import MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileNetV1Config, MobileNetV1OnnxConfig
+    from .configuration_mobilenet_v1 import (
+        MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        MobileNetV1Config,
+        MobileNetV1OnnxConfig,
+    )
 
     try:
         if not is_vision_available():

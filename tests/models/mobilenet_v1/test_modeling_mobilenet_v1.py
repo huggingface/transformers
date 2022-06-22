@@ -145,11 +145,7 @@ class MobileNetV1ModelTest(ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (
-        (MobileNetV1Model, MobileNetV1ForImageClassification)
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (MobileNetV1Model, MobileNetV1ForImageClassification) if is_torch_available() else ()
 
     test_pruning = False
     test_resize_embeddings = False
@@ -239,7 +235,11 @@ def prepare_img():
 class MobileNetV1ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return MobileNetV1FeatureExtractor.from_pretrained("Matthijs/mobilenet_v1_1.0_224") if is_vision_available() else None
+        return (
+            MobileNetV1FeatureExtractor.from_pretrained("Matthijs/mobilenet_v1_1.0_224")
+            if is_vision_available()
+            else None
+        )
 
     @slow
     def test_inference_image_classification_head(self):
@@ -257,6 +257,6 @@ class MobileNetV1ModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1001))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-4.1739, -1.1233,  3.1205]).to(torch_device)
+        expected_slice = torch.tensor([-4.1739, -1.1233, 3.1205]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))

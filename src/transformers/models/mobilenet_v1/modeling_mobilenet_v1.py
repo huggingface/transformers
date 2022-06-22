@@ -22,17 +22,9 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import (
-    BaseModelOutputWithPoolingAndNoAttention,
-    ImageClassifierOutputWithNoAttention,
-)
+from ...modeling_outputs import BaseModelOutputWithPoolingAndNoAttention, ImageClassifierOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-)
+from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_mobilenet_v1 import MobileNetV1Config
 
 
@@ -71,7 +63,7 @@ def _build_tf_to_pytorch_map(model, config, tf_weights=None):
     else:
         backbone = model
 
-    prefix = f"MobilenetV1/Conv2d_0/"
+    prefix = "MobilenetV1/Conv2d_0/"
     tf_to_pt_map[prefix + "weights"] = backbone.conv_stem.convolution.weight
     tf_to_pt_map[prefix + "BatchNorm/beta"] = backbone.conv_stem.normalization.bias
     tf_to_pt_map[prefix + "BatchNorm/gamma"] = backbone.conv_stem.normalization.weight
@@ -99,7 +91,7 @@ def _build_tf_to_pytorch_map(model, config, tf_weights=None):
         tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = pointer.normalization.running_var
 
     if isinstance(model, MobileNetV1ForImageClassification):
-        prefix = f"MobilenetV1/Logits/Conv2d_1c_1x1/"
+        prefix = "MobilenetV1/Logits/Conv2d_1c_1x1/"
         tf_to_pt_map[prefix + "weights"] = model.classifier.weight
         tf_to_pt_map[prefix + "biases"] = model.classifier.bias
 
@@ -169,8 +161,8 @@ def load_tf_weights_in_mobilenet_v1(model, config, tf_checkpoint_path):
 
 def apply_tf_padding(features: torch.Tensor, conv_layer: nn.Conv2d) -> torch.Tensor:
     """
-    Apply TensorFlow-style "SAME" padding to a convolution layer.
-    See the notes at: https://www.tensorflow.org/api_docs/python/tf/nn#notes_on_padding_2
+    Apply TensorFlow-style "SAME" padding to a convolution layer. See the notes at:
+    https://www.tensorflow.org/api_docs/python/tf/nn#notes_on_padding_2
     """
     in_height, in_width = features.shape[-2:]
     stride_height, stride_width = conv_layer.stride
@@ -338,21 +330,25 @@ class MobileNetV1Model(MobileNetV1PreTrainedModel):
                 depth *= 2
                 out_channels = max(int(depth * config.depth_multiplier), config.min_depth)
 
-            self.layer.append(MobileNetV1ConvLayer(
-                config,
-                in_channels=in_channels,
-                out_channels=in_channels,
-                kernel_size=3,
-                stride=strides[i],
-                groups=in_channels,
-            ))
+            self.layer.append(
+                MobileNetV1ConvLayer(
+                    config,
+                    in_channels=in_channels,
+                    out_channels=in_channels,
+                    kernel_size=3,
+                    stride=strides[i],
+                    groups=in_channels,
+                )
+            )
 
-            self.layer.append(MobileNetV1ConvLayer(
-                config,
-                in_channels=in_channels,
-                out_channels=out_channels,
-                kernel_size=1,
-            ))
+            self.layer.append(
+                MobileNetV1ConvLayer(
+                    config,
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    kernel_size=1,
+                )
+            )
 
         self.pooler = nn.AdaptiveAvgPool2d((1, 1)) if add_pooling_layer else None
 
@@ -430,9 +426,7 @@ class MobileNetV1ForImageClassification(MobileNetV1PreTrainedModel):
 
         # Classifier head
         self.dropout = nn.Dropout(config.classifier_dropout_prob, inplace=True)
-        self.classifier = (
-            nn.Linear(last_hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
-        )
+        self.classifier = nn.Linear(last_hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
 
         # Initialize weights and apply final processing
         self.post_init()

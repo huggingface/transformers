@@ -92,7 +92,7 @@ def convert_movilevit_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
     assert logits.shape == (1, 1001)
 
     if model_name == "mobilenet_v1_1.0_224":
-        expected_logits = torch.tensor([-4.1739, -1.1233,  3.1205])
+        expected_logits = torch.tensor([-4.1739, -1.1233, 3.1205])
     elif model_name == "mobilenet_v1_0.75_192":
         expected_logits = torch.tensor([-3.9440, -2.3141, -0.3333])
     else:
@@ -121,9 +121,7 @@ if __name__ == "__main__":
         "--model_name",
         default="mobilenet_v1_1.0_224",
         type=str,
-        help=(
-            "Name of the MobileNetV1 model you'd like to convert. Should in the form 'mobilenet_v1_<depth>_<size>'."
-        ),
+        help="Name of the MobileNetV1 model you'd like to convert. Should in the form 'mobilenet_v1_<depth>_<size>'.",
     )
     parser.add_argument(
         "--checkpoint_path", required=True, type=str, help="Path to the original TensorFlow checkpoint (.ckpt file)."

@@ -143,7 +143,7 @@ class MobileNetV1FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtraction
         images = [self.to_numpy_array(image, rescale=False) for image in images]
 
         if self.do_normalize:
-            images = [(image.astype(np.float32)/127.5 - 1.0) for image in images]
+            images = [(image.astype(np.float32) / 127.5 - 1.0) for image in images]
 
         # return as BatchFeature
         data = {"pixel_values": images}
