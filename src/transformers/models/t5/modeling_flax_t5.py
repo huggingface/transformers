@@ -1365,9 +1365,6 @@ class FlaxT5EncoderModule(nn.Module):
     config: T5Config
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
-    def _get_encoder_module(self):
-        return self.encoder
-
     def setup(self):
         self.shared = nn.Embed(
             self.config.vocab_size,
