@@ -929,18 +929,18 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
         input_ids = jnp.zeros(input_shape, dtype="i4")
 
         attention_mask = jnp.ones_like(input_ids)
-        decoder_input_ids = jnp.ones_like(input_ids)
-        decoder_attention_mask = jnp.ones_like(input_ids)
+        args = [input_ids, attention_mask]
+        if self.module_class not in [FlaxT5EncoderModule]:
+            decoder_input_ids = jnp.ones_like(input_ids)
+            decoder_attention_mask = jnp.ones_like(input_ids)
+            args.extend([decoder_input_ids, decoder_attention_mask])
 
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
         random_params = self.module.init(
             rngs,
-            input_ids,
-            attention_mask,
-            decoder_input_ids,
-            decoder_attention_mask,
+            *args,
         )["params"]
 
         if params is not None:
