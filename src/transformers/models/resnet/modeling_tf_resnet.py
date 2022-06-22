@@ -14,7 +14,6 @@
 # limitations under the License.
 """ TensorFlow ResNet model."""
 
-import math
 from typing import Dict, Optional, Tuple, Union
 
 import tensorflow as tf
