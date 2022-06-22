@@ -201,7 +201,6 @@ class MvpTokenizer(PreTrainedTokenizer):
             add_prefix_space=add_prefix_space,
             **kwargs,
         )
-        self.unique_no_split_tokens.extend(["[SEP]", "[X_SEP]"])  # special tokens for MVP
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
         self.decoder = {v: k for k, v in self.encoder.items()}

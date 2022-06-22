@@ -79,11 +79,11 @@ class TestTokenizationMvp(TokenizerTesterMixin, unittest.TestCase):
 
     @cached_property
     def default_tokenizer(self):
-        return MvpTokenizer.from_pretrained("facebook/mvp-large")
+        return MvpTokenizer.from_pretrained("RUCAIBox/mvp")
 
     @cached_property
     def default_tokenizer_fast(self):
-        return MvpTokenizerFast.from_pretrained("facebook/mvp-large")
+        return MvpTokenizerFast.from_pretrained("RUCAIBox/mvp")
 
     @require_torch
     def test_prepare_batch(self):
