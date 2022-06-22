@@ -99,7 +99,6 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = []
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = None
 
@@ -113,7 +112,6 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
         eos_token="</s>",
         pad_token="<pad>",
         add_prefix_space=False,
-        padding_side="left",
         **kwargs
     ):
         super().__init__(
@@ -125,7 +123,6 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
             eos_token=eos_token,
             pad_token=pad_token,
             add_prefix_space=add_prefix_space,
-            padding_side=padding_side,
             **kwargs,
         )
         pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())

@@ -31,6 +31,7 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = BloomTokenizerFast
     test_rust_tokenizer = True
     test_slow_tokenizer = False
+    test_max_input_length = False
     from_pretrained_vocab_key = "tokenizer_file"
     special_tokens_map = {"bos_token": "<s>", "eos_token": "</s>", "unk_token": "<unk>", "pad_token": "<pad>"}
 

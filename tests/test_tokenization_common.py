@@ -139,6 +139,9 @@ class TokenizerTesterMixin:
     # test_sentencepiece must also be set to True
     test_sentencepiece_ignore_case = False
 
+    # test max input seq length
+    test_max_input_length = True
+
     def setUp(self) -> None:
         # Tokenizer.filter makes it possible to filter which Tokenizer to case based on all the
         # information available in Tokenizer (name, rust class, python class, vocab key name)
@@ -880,18 +883,19 @@ class TokenizerTesterMixin:
         # We should specify the max input length as well (used in some part to list the pretrained checkpoints)
         self.assertGreaterEqual(len(self.tokenizer_class.pretrained_vocab_files_map), 1)
         self.assertGreaterEqual(len(list(self.tokenizer_class.pretrained_vocab_files_map.values())[0]), 1)
-        self.assertEqual(
-            len(list(self.tokenizer_class.pretrained_vocab_files_map.values())[0]),
-            len(self.tokenizer_class.max_model_input_sizes),
-        )
+        if self.test_max_input_length:
+            self.assertEqual(
+                len(list(self.tokenizer_class.pretrained_vocab_files_map.values())[0]),
+                len(self.tokenizer_class.max_model_input_sizes),
+            )
 
-        weights_list = list(self.tokenizer_class.max_model_input_sizes.keys())
-        weights_lists_2 = []
-        for file_id, map_list in self.tokenizer_class.pretrained_vocab_files_map.items():
-            weights_lists_2.append(list(map_list.keys()))
+            weights_list = list(self.tokenizer_class.max_model_input_sizes.keys())
+            weights_lists_2 = []
+            for file_id, map_list in self.tokenizer_class.pretrained_vocab_files_map.items():
+                weights_lists_2.append(list(map_list.keys()))
 
-        for weights_list_2 in weights_lists_2:
-            self.assertListEqual(weights_list, weights_list_2)
+            for weights_list_2 in weights_lists_2:
+                self.assertListEqual(weights_list, weights_list_2)
 
     def test_mask_output(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
