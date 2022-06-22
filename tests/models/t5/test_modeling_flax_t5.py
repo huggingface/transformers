@@ -494,7 +494,7 @@ class FlaxT5EncoderOnlyModelTester:
         self.batch_size = batch_size
         self.encoder_seq_length = encoder_seq_length
         # For common tests
-        self.seq_length = self.decoder_seq_length
+        self.seq_length = self.encoder_seq_length
         self.is_training = is_training
         self.use_attention_mask = use_attention_mask
         self.use_labels = use_labels
