@@ -1358,7 +1358,7 @@ append_replace_return_docstrings(FlaxT5Model, output_type=FlaxSeq2SeqLMOutput, c
 
 
 @add_start_docstrings(
-    "The bare T5 Model transformer outputting encoder's raw hidden-stateswithout any specific head on top.",
+    "The bare T5 Model transformer outputting encoder's raw hidden-states without any specific head on top.",
     T5_START_DOCSTRING,
 )
 class FlaxT5EncoderModule(nn.Module):
@@ -1385,12 +1385,11 @@ class FlaxT5EncoderModule(nn.Module):
         self,
         input_ids=None,
         attention_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        output_attentions=False,
+        output_hidden_states=False,
+        return_dict=True,
         deterministic: bool = True,
     ):
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # Encode if needed (training, first prediction pass)
         encoder_outputs = self.encoder(
