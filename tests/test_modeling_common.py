@@ -2811,6 +2811,48 @@ class ModelUtilsTest(TestCasePlus):
         text_output = tokenizer.decode(output[0].tolist())
         self.assertEqual(text_output, "Hello, my name is John. I'm a writer, and I'm a writer. I'm")
 
+    @require_accelerate
+    @require_torch_gpu
+    def test_from_pretrained_disk_offload_task_model(self):
+        model = AutoModel.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        device_map = {
+            "transformer.wte": 0,
+            "transformer.wpe": 0,
+            "transformer.h.0": "cpu",
+            "transformer.h.1": "cpu",
+            "transformer.h.2": "cpu",
+            "transformer.h.3": "disk",
+            "transformer.h.4": "disk",
+            "transformer.ln_f": 0,
+            "lm_head": 0,
+        }
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            inputs = torch.tensor([[1, 2, 3]]).to(0)
+
+            model.save_pretrained(tmp_dir)
+            new_model = AutoModelForCausalLM.from_pretrained(tmp_dir).to(0)
+            outputs1 = new_model.to(0)(inputs)
+
+            offload_folder = os.path.join(tmp_dir, "offload")
+            new_model_with_offload = AutoModelForCausalLM.from_pretrained(
+                tmp_dir, device_map=device_map, offload_folder=offload_folder
+            )
+            outputs2 = new_model_with_offload(inputs)
+
+            self.assertTrue(torch.allclose(outputs1.logits.cpu(), outputs2.logits.cpu()))
+
+            # With state dict temp offload
+            offload_folder = os.path.join(tmp_dir, "offload")
+            new_model_with_offload = AutoModelForCausalLM.from_pretrained(
+                tmp_dir,
+                device_map=device_map,
+                offload_folder=offload_folder,
+                offload_state_dict=True,
+            )
+            outputs2 = new_model_with_offload(inputs)
+
+            self.assertTrue(torch.allclose(outputs1.logits.cpu(), outputs2.logits.cpu()))
+
     def test_cached_files_are_used_when_internet_is_down(self):
         # A mock response for an HTTP head request to emulate server down
         response_mock = mock.Mock()
