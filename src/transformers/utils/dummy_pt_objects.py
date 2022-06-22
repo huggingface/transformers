@@ -2377,6 +2377,27 @@ def load_tf_weights_in_imagegpt(*args, **kwargs):
     requires_backends(load_tf_weights_in_imagegpt, ["torch"])
 
 
+JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class JukeboxModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class JukeboxPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+def load_tf_weights_in_jukebox(*args, **kwargs):
+    requires_backends(load_tf_weights_in_jukebox, ["torch"])
+
+
 LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
