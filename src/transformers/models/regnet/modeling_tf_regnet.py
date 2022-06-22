@@ -121,7 +121,7 @@ class TFRegNetShortCut(tf.keras.layers.Layer):
         return self.normalization(self.convolution(inputs), training=training)
 
 
-# Copied from:
+# Taken from:
 # https://gist.github.com/Rocketknight1/efc47242914788def0144b341b1ad638
 # By https://github.com/Rocketknight1
 class TFAdaptiveAvgPool2D(tf.keras.layers.Layer):
