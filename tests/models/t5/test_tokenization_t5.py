@@ -59,7 +59,7 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(self.get_tokenizer()._convert_id_to_token(token_id), token)
 
     def test_get_vocab(self):
-        vocab_keys = list(self.get_tokenizer(pad_token="<pad>").get_vocab().keys())
+        vocab_keys = list(self.get_tokenizer().get_vocab().keys())
 
         self.assertEqual(vocab_keys[0], "<unk>")
         self.assertEqual(vocab_keys[1], "<s>")
