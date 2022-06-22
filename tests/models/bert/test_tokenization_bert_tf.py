@@ -14,7 +14,7 @@ if is_tf_available():
     import tensorflow as tf
 
 
-TOKENIZER_CHECKPOINT = "bert-base-cased"
+TOKENIZER_CHECKPOINTS = ["bert-base-uncased", "bert-base-cased"]
 TINY_MODEL_CHECKPOINT = "hf-internal-testing/tiny-bert-tf-only"
 
 if is_tf_available():
@@ -40,8 +40,8 @@ class BertTokenizationTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
 
-        self.tokenizer = BertTokenizer.from_pretrained(TOKENIZER_CHECKPOINT)
-        self.tf_tokenizer = TFBertTokenizer.from_pretrained(TOKENIZER_CHECKPOINT)
+        self.tokenizers = [BertTokenizer.from_pretrained(checkpoint) for checkpoint in TOKENIZER_CHECKPOINTS]
+        self.tf_tokenizers = [TFBertTokenizer.from_pretrained(checkpoint) for checkpoint in TOKENIZER_CHECKPOINTS]
         self.test_sentences = [
             "This is a straightforward English test sentence.",
             "This one has some weird characters\rto\nsee\r\nif  those\u00E9break things.",
@@ -53,40 +53,44 @@ class BertTokenizationTest(unittest.TestCase):
         self.paired_sentences = list(zip(self.test_sentences, self.test_sentences[::-1]))
 
     def test_output_equivalence(self):
-        for test_inputs in (self.test_sentences, self.paired_sentences):
-            python_outputs = self.tokenizer(test_inputs, return_tensors="tf", padding="longest")
-            tf_outputs = self.tf_tokenizer(test_inputs)
+        for tokenizer, tf_tokenizer in zip(self.tokenizers, self.tf_tokenizers):
+            for test_inputs in (self.test_sentences, self.paired_sentences):
+                python_outputs = tokenizer(test_inputs, return_tensors="tf", padding="longest")
+                tf_outputs = tf_tokenizer(test_inputs)
 
-            for key in python_outputs.keys():
-                self.assertTrue(tf.reduce_all(tf.cast(python_outputs[key], tf.int64) == tf_outputs[key]))
+                for key in python_outputs.keys():
+                    self.assertTrue(tf.reduce_all(tf.cast(python_outputs[key], tf.int64) == tf_outputs[key]))
 
     def test_different_pairing_styles(self):
-        merged_outputs = self.tf_tokenizer(self.paired_sentences)
-        separated_outputs = self.tf_tokenizer(
-            text=[sentence[0] for sentence in self.paired_sentences],
-            text_pair=[sentence[1] for sentence in self.paired_sentences],
-        )
-        for key in merged_outputs.keys():
-            self.assertTrue(tf.reduce_all(tf.cast(merged_outputs[key], tf.int64) == separated_outputs[key]))
+        for tf_tokenizer in self.tf_tokenizers:
+            merged_outputs = tf_tokenizer(self.paired_sentences)
+            separated_outputs = tf_tokenizer(
+                text=[sentence[0] for sentence in self.paired_sentences],
+                text_pair=[sentence[1] for sentence in self.paired_sentences],
+            )
+            for key in merged_outputs.keys():
+                self.assertTrue(tf.reduce_all(tf.cast(merged_outputs[key], tf.int64) == separated_outputs[key]))
 
     def test_graph_mode(self):
-        compiled_tokenizer = tf.function(self.tf_tokenizer)
-        for test_inputs in (self.test_sentences, self.paired_sentences):
-            test_inputs = tf.constant(test_inputs)
-            compiled_outputs = compiled_tokenizer(test_inputs)
-            eager_outputs = self.tf_tokenizer(test_inputs)
+        for tf_tokenizer in self.tf_tokenizers:
+            compiled_tokenizer = tf.function(tf_tokenizer)
+            for test_inputs in (self.test_sentences, self.paired_sentences):
+                test_inputs = tf.constant(test_inputs)
+                compiled_outputs = compiled_tokenizer(test_inputs)
+                eager_outputs = tf_tokenizer(test_inputs)
 
-            for key in eager_outputs.keys():
-                self.assertTrue(tf.reduce_all(eager_outputs[key] == compiled_outputs[key]))
+                for key in eager_outputs.keys():
+                    self.assertTrue(tf.reduce_all(eager_outputs[key] == compiled_outputs[key]))
 
     def test_saved_model(self):
-        model = ModelToSave(tokenizer=self.tf_tokenizer)
-        test_inputs = tf.convert_to_tensor(self.test_sentences)
-        out = model(test_inputs)  # Build model with some sample inputs
-        with TemporaryDirectory() as tempdir:
-            save_path = Path(tempdir) / "saved.model"
-            model.save(save_path)
-            loaded_model = tf.keras.models.load_model(save_path)
-        loaded_output = loaded_model(test_inputs)
-        # We may see small differences because the loaded model is compiled, so we need an epsilon for the test
-        self.assertLessEqual(tf.reduce_max(tf.abs(out - loaded_output)), 1e-5)
+        for tf_tokenizer in self.tf_tokenizers:
+            model = ModelToSave(tokenizer=tf_tokenizer)
+            test_inputs = tf.convert_to_tensor(self.test_sentences)
+            out = model(test_inputs)  # Build model with some sample inputs
+            with TemporaryDirectory() as tempdir:
+                save_path = Path(tempdir) / "saved.model"
+                model.save(save_path)
+                loaded_model = tf.keras.models.load_model(save_path)
+            loaded_output = loaded_model(test_inputs)
+            # We may see small differences because the loaded model is compiled, so we need an epsilon for the test
+            self.assertLessEqual(tf.reduce_max(tf.abs(out - loaded_output)), 1e-5)
