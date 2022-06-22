@@ -59,6 +59,7 @@ class BertTokenizationTest(unittest.TestCase):
                 tf_outputs = tf_tokenizer(test_inputs)
 
                 for key in python_outputs.keys():
+                    self.assertTrue(tf.reduce_all(python_outputs[key].shape == tf_outputs[key].shape))
                     self.assertTrue(tf.reduce_all(tf.cast(python_outputs[key], tf.int64) == tf_outputs[key]))
 
     def test_different_pairing_styles(self):

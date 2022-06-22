@@ -64,7 +64,8 @@ class TFBertTokenizer(tf.keras.layers.Layer):
         super().__init__()
 
         requires_backends(self, ["tensorflow_text"])
-        self.tf_tokenizer = FastBertTokenizer(vocab_list, token_out_type=tf.int64)
+        self.tf_tokenizer = FastBertTokenizer(vocab_list, token_out_type=tf.int64,
+                                              lower_case_nfd_strip_accents=do_lower_case)
         self.vocab_list = vocab_list
         self.do_lower_case = do_lower_case
         self.cls_token_id = cls_token_id or vocab_list.index("[CLS]")
