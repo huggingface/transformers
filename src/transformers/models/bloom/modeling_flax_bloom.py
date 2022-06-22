@@ -123,20 +123,19 @@ class FlaxBloomAttention(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        config = self.config
         # TODO: make sure these affect behavior correctly
-        self.pretraining_tp = config.pretraining_tp
-        self.slow_but_exact = config.slow_but_exact
+        self.pretraining_tp = self.config.pretraining_tp
+        self.slow_but_exact = self.config.slow_but_exact
 
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.n_head
+        self.hidden_size = self.config.hidden_size
+        self.num_heads = self.config.n_head
         self.head_dim = self.hidden_size // self.num_heads
         self.split_size = self.hidden_size
         # TODO: deal with softmax
-        self.attention_softmax_in_fp32 = config.attention_softmax_in_fp32
-        self.masked_softmax_fusion = config.masked_softmax_fusion
+        self.attention_softmax_in_fp32 = self.config.attention_softmax_in_fp32
+        self.masked_softmax_fusion = self.config.masked_softmax_fusion
         # TODO: deal with hidden dropout
-        self.hidden_dropout = config.hidden_dropout
+        self.hidden_dropout = self.config.hidden_dropout
 
         if self.head_dim * self.num_heads != self.hidden_size:
             raise ValueError(
@@ -148,7 +147,7 @@ class FlaxBloomAttention(nn.Module):
         self.norm_factor = jnp.sqrt(self.head_dim).astype(self.dtype) * self.layer_number
         
 
-        self.attn_dropout = nn.Dropout(config.attention_dropout)
+        self.attn_dropout = nn.Dropout(self.config.attention_dropout)
 
         # Scaled Softmax TODO: change this to something implemented in jax (maybe implement in __call__ for attn module?)
         # self.scale_mask_softmax = BloomScaledSoftmax(
@@ -168,7 +167,7 @@ class FlaxBloomAttention(nn.Module):
         # TODO: make this one dense layer that is split into 3 on forward named self.query_key_value
         self.q_proj, self.k_proj, self.v_proj = dense(), dense(), dense()
         self.dense = dense()
-        self.attention_dropout = nn.Dropout(config.attention_dropout)
+        self.attention_dropout = nn.Dropout(self.config.attention_dropout)
 
         # TODO: check correctness of causal mask (unedited from gptneo causal mask)
         # TODO: how to deal with reliance on max_position_embeddings?
@@ -294,17 +293,16 @@ class FlaxBloomMLP(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        config = self.config
-        hidden_size = config.hidden_size
+        hidden_size = self.config.hidden_size
 
-        self.pretraining_tp = config.pretraining_tp
-        self.slow_but_exact = config.slow_but_exact
+        self.pretraining_tp = self.config.pretraining_tp
+        self.slow_but_exact = self.config.slow_but_exact
 
-        kernel_init = jax.nn.initializers.normal(config.initializer_range)
+        kernel_init = jax.nn.initializers.normal(self.config.initializer_range)
 
         self.dense_h_to_4h = nn.Dense(4 * hidden_size, dtype=self.dtype, kernel_init=kernel_init)
         self.dense_4h_to_h = nn.Dense(hidden_size, dtype=self.dtype, kernel_init=kernel_init)
-        self.hidden_dropout = nn.Dropout(config.hidden_dropout)
+        self.hidden_dropout = nn.Dropout(self.config.hidden_dropout)
         self.act = ACT2FN[self.config.activation_function]
 
     def __call__(self, hidden_states, residual, deterministic: bool = True):
@@ -334,20 +332,19 @@ class FlaxBloomBlock(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        config = self.config
-        hidden_size = config.hidden_size
+        hidden_size = self.config.hidden_size
         
-        self.input_layernorm = nn.LayerNorm(epsilon=config.layer_norm_epsilon, dtype=self.dtype)
+        self.input_layernorm = nn.LayerNorm(epsilon=self.config.layer_norm_epsilon, dtype=self.dtype)
 
         # TODO: should check if this line (n_head) can be removed. if so, can be removed in pytorch impl.
-        self.n_heads = config.n_head
+        self.n_heads = self.config.n_head
         self.self_attention = FlaxBloomAttention(self.config, layer_number=self.layer_number, dtype=self.dtype)
         self.post_attention_layernorm = nn.LayerNorm(epsilon=self.config.layer_norm_epsilon, dtype=self.dtype)
 
         self.mlp = FlaxBloomMLP(self.config, dtype=self.dtype)
 
-        self.apply_residual_connection_post_layernorm = config.apply_residual_connection_post_layernorm
-        self.hidden_dropout = config.hidden_dropout
+        self.apply_residual_connection_post_layernorm = self.config.apply_residual_connection_post_layernorm
+        self.hidden_dropout = self.config.hidden_dropout
 
     def __call__(
         self,
