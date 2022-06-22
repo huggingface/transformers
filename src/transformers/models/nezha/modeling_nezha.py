@@ -376,11 +376,10 @@ class NezhaSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Nezha
 class NezhaAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
+    def __init__(self, config):
         super().__init__()
-        self.self = NezhaSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = NezhaSelfAttention(config)
         self.output = NezhaSelfOutput(config)
         self.pruned_heads = set()
 
@@ -457,7 +456,6 @@ class NezhaOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->Nezha
 class NezhaLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -469,7 +467,7 @@ class NezhaLayer(nn.Module):
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = NezhaAttention(config, position_embedding_type="absolute")
+            self.crossattention = NezhaAttention(config)
         self.intermediate = NezhaIntermediate(config)
         self.output = NezhaOutput(config)
 
@@ -732,7 +730,6 @@ class NezhaPreTrainingHeads(nn.Module):
         return prediction_scores, seq_relationship_score
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel with Bert->Nezha
 class NezhaPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -741,9 +738,9 @@ class NezhaPreTrainedModel(PreTrainedModel):
 
     config_class = NezhaConfig
     load_tf_weights = load_tf_weights_in_bert
-    base_model_prefix = "bert"
+    base_model_prefix = "nezha"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
+    _keys_to_ignore_on_load_missing = [r"positions_encoding"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
