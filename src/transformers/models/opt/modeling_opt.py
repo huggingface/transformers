@@ -492,7 +492,14 @@ class OPTDecoder(OPTPreTrainedModel):
         else:
             self.project_in = None
 
-        self.layer_norm = None
+        # Note that the only purpose of `config._remove_final_layer_norm` is to keep backward compatibility
+        # with checkpoints that have been fine-tuned before transformers v4.20.1
+        # see https://github.com/facebookresearch/metaseq/pull/164
+        if config.do_layer_norm_before and not config._remove_final_layer_norm:
+            self.final_layer_norm = nn.LayerNorm(config.hidden_size)
+        else:
+            self.final_layer_norm = None
+
         self.layers = nn.ModuleList([OPTDecoderLayer(config) for _ in range(config.num_hidden_layers)])
 
         self.gradient_checkpointing = False
@@ -687,6 +694,9 @@ class OPTDecoder(OPTPreTrainedModel):
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
+
+        if self.final_layer_norm is not None:
+            hidden_states = self.final_layer_norm(hidden_states)
 
         if self.project_out is not None:
             hidden_states = self.project_out(hidden_states)

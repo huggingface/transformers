@@ -3347,6 +3347,8 @@ def top_k_top_p_filtering(
         )
 
     if 0 <= top_p <= 1.0:
-        logits = TopPLogitsWarper(top_p=top_p, min_tokens_to_keep=min_tokens_to_keep)(None, logits)
+        logits = TopPLogitsWarper(top_p=top_p, filter_value=filter_value, min_tokens_to_keep=min_tokens_to_keep)(
+            None, logits
+        )
 
     return logits
