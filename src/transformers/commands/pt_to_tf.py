@@ -18,9 +18,9 @@ from importlib import import_module
 
 import numpy as np
 from datasets import load_dataset
+from packaging import version
 
-from huggingface_hub import Repository, create_commit
-from huggingface_hub._commit_api import CommitOperationAdd
+import huggingface_hub
 
 from .. import AutoConfig, AutoFeatureExtractor, AutoTokenizer, is_tf_available, is_torch_available
 from ..utils import logging
@@ -189,6 +189,15 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         return pt_input, tf_input
 
     def run(self):
+        if version.parse(huggingface_hub.__version__) < version.parse("0.8.1"):
+            raise ImportError(
+                "The huggingface_hub version must be >= 0.8.1 to use this command. Please update your huggingface_hub"
+                " installation."
+            )
+        else:
+            from huggingface_hub import Repository, create_commit
+            from huggingface_hub._commit_api import CommitOperationAdd
+
         # Fetch remote data
         repo = Repository(local_dir=self._local_dir, clone_from=self._model_name)
 
