@@ -17,6 +17,7 @@
 
 import argparse
 import json
+import re
 from pathlib import Path
 
 import torch
@@ -40,21 +41,13 @@ logger = logging.get_logger(__name__)
 def get_mobilenet_v1_config(model_name):
     config = MobileNetV1Config(layer_norm_eps=0.001)
 
-    # Size of the architecture
-    if "1.0" in model_name:
-        config.depth_multiplier = 1.0
-    # elif "mobilenet_v1_xs" in model_name:
-    #     config.hidden_sizes = [96, 120, 144]
-    #     config.neck_hidden_sizes = [16, 32, 48, 64, 80, 96, 384]
-    # elif "mobilenet_v1_xxs" in model_name:
-    #     config.hidden_sizes = [64, 80, 96]
-    #     config.neck_hidden_sizes = [16, 16, 24, 48, 64, 80, 320]
-    #     config.hidden_dropout_prob = 0.05
-    #     config.expand_ratio = 2.0
-    # MIH?
+    if "_quant" in model_name:
+        raise ValueError("Quantized models are not supported.")
 
-    # TODO: use a regexp?
-    config.image_size = 224
+    matches = re.match(r"^mobilenet_v1_([^_]*)_([^_]*)$", model_name)
+    if matches:
+        config.depth_multiplier = float(matches[1])
+        config.image_size = int(matches[2])
 
     # The TensorFlow version of MobileNetV1 predicts 1001 classes instead of
     # the usual 1000. The first class (index 0) is "background".
@@ -92,55 +85,21 @@ def convert_movilevit_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
 
     # Check outputs on an image, prepared by MobileNetV1FeatureExtractor
     feature_extractor = MobileNetV1FeatureExtractor(crop_size=config.image_size, size=config.image_size + 32)
-#MIH
-    # encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
-    # outputs = model(**encoding)
-    # logits = outputs.logits
+    encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
+    outputs = model(**encoding)
+    logits = outputs.logits
 
-    # if model_name.startswith("deeplabv3_"):
-    #     assert logits.shape == (1, 21, 32, 32)
+    assert logits.shape == (1, 1001)
 
-    #     if model_name == "deeplabv3_mobilenet_v1_s":
-    #         expected_logits = torch.tensor(
-    #             [
-    #                 [[6.2065, 6.1292, 6.2070], [6.1079, 6.1254, 6.1747], [6.0042, 6.1071, 6.1034]],
-    #                 [[-6.9253, -6.8653, -7.0398], [-7.3218, -7.3983, -7.3670], [-7.1961, -7.2482, -7.1569]],
-    #                 [[-4.4723, -4.4348, -4.3769], [-5.3629, -5.4632, -5.4598], [-5.1587, -5.3402, -5.5059]],
-    #             ]
-    #         )
-    #     elif model_name == "deeplabv3_mobilenet_v1_xs":
-    #         expected_logits = torch.tensor(
-    #             [
-    #                 [[5.4449, 5.5733, 5.6314], [5.1815, 5.3930, 5.5963], [5.1656, 5.4333, 5.4853]],
-    #                 [[-9.4423, -9.7766, -9.6714], [-9.1581, -9.5720, -9.5519], [-9.1006, -9.6458, -9.5703]],
-    #                 [[-7.7721, -7.3716, -7.1583], [-8.4599, -8.0624, -7.7944], [-8.4172, -7.8366, -7.5025]],
-    #             ]
-    #         )
-    #     elif model_name == "deeplabv3_mobilenet_v1_xxs":
-    #         expected_logits = torch.tensor(
-    #             [
-    #                 [[6.9811, 6.9743, 7.3123], [7.1777, 7.1931, 7.3938], [7.5633, 7.8050, 7.8901]],
-    #                 [[-10.5536, -10.2332, -10.2924], [-10.2336, -9.8624, -9.5964], [-10.8840, -10.8158, -10.6659]],
-    #                 [[-3.4938, -3.0631, -2.8620], [-3.4205, -2.8135, -2.6875], [-3.4179, -2.7945, -2.8750]],
-    #             ]
-    #         )
-    #     else:
-    #         raise ValueError(f"Unknown model_name: {model_name}")
+    if model_name == "mobilenet_v1_1.0_224":
+        expected_logits = torch.tensor([-4.1739, -1.1233,  3.1205])
+    elif model_name == "mobilenet_v1_0.75_192":
+        expected_logits = torch.tensor([-3.9440, -2.3141, -0.3333])
+    else:
+        expected_logits = None
 
-    #     assert torch.allclose(logits[0, :3, :3, :3], expected_logits, atol=1e-4)
-    # else:
-    #     assert logits.shape == (1, 1000)
-
-    #     if model_name == "mobilenet_v1_s":
-    #         expected_logits = torch.tensor([-0.9866, 0.2392, -1.1241])
-    #     elif model_name == "mobilenet_v1_xs":
-    #         expected_logits = torch.tensor([-2.4761, -0.9399, -1.9587])
-    #     elif model_name == "mobilenet_v1_xxs":
-    #         expected_logits = torch.tensor([-1.9364, -1.2327, -0.4653])
-    #     else:
-    #         raise ValueError(f"Unknown model_name: {model_name}")
-
-    #     assert torch.allclose(logits[0, :3], expected_logits, atol=1e-4)
+    if expected_logits is not None:
+        assert torch.allclose(logits[0, :3], expected_logits, atol=1e-4)
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
@@ -149,19 +108,10 @@ def convert_movilevit_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
     feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        model_mapping = {
-            "mobilenet_v1_s": "mobilenet_v1-small",
-            "mobilenet_v1_xs": "mobilenet_v1-x-small",
-            "mobilenet_v1_xxs": "mobilenet_v1-xx-small",
-            "deeplabv3_mobilenet_v1_s": "deeplabv3-mobilenet_v1-small",
-            "deeplabv3_mobilenet_v1_xs": "deeplabv3-mobilenet_v1-x-small",
-            "deeplabv3_mobilenet_v1_xxs": "deeplabv3-mobilenet_v1-xx-small",
-        }
-
         print("Pushing to the hub...")
-        model_name = model_mapping[model_name]
-        feature_extractor.push_to_hub(model_name, organization="apple")
-        model.push_to_hub(model_name, organization="apple")
+        organization_name = "Matthijs"
+        feature_extractor.push_to_hub(model_name, organization=organization_name)
+        model.push_to_hub(model_name, organization=organization_name)
 
 
 if __name__ == "__main__":
@@ -172,7 +122,7 @@ if __name__ == "__main__":
         default="mobilenet_v1_1.0_224",
         type=str,
         help=(
-            "Name of the MobileNetV1 model you'd like to convert. Should be one of 'mobilenet_v1_1.0_224'."
+            "Name of the MobileNetV1 model you'd like to convert. Should in the form 'mobilenet_v1_<depth>_<size>'."
         ),
     )
     parser.add_argument(

@@ -27,9 +27,8 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Matthijs/mobilenet_v1-small": "https://huggingface.co/Matthijs/mobilenet_v1-small/resolve/main/config.json",
-    "Matthijs/mobilenet_v1-x-small": "https://huggingface.co/Matthijs/mobilenet_v1-x-small/resolve/main/config.json",
-    "Matthijs/mobilenet_v1-xx-small": "https://huggingface.co/Matthijs/mobilenet_v1-xx-small/resolve/main/config.json",
+    "Matthijs/mobilenet_v1_1.0_224": "https://huggingface.co/Matthijs/mobilenet_v1_1.0_224/resolve/main/config.json",
+    "Matthijs/mobilenet_v1_0.75_192": "https://huggingface.co/Matthijs/mobilenet_v1_0.75_192/resolve/main/config.json",
     # See all MobileNetV1 models at https://huggingface.co/models?filter=mobilenet_v1
 }
 
@@ -39,7 +38,7 @@ class MobileNetV1Config(PretrainedConfig):
     This is the configuration class to store the configuration of a [`MobileNetV1Model`]. It is used to instantiate a
     MobileNetV1 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the MobileNetV1
-    [Matthijs/MIHTODO](https://huggingface.co/Matthijs/MIHTODO) architecture.
+    [Matthijs/mobilenet_v1_1.0_224](https://huggingface.co/Matthijs/mobilenet_v1_1.0_224) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -70,10 +69,10 @@ class MobileNetV1Config(PretrainedConfig):
     ```python
     >>> from transformers import MobileNetV1Config, MobileNetV1Model
 
-    >>> # Initializing a mobilenet_v1-smallMIHTODO style configuration
+    >>> # Initializing a "mobilenet_v1_1.0_224" style configuration
     >>> configuration = MobileNetV1Config()
 
-    >>> # Initializing a model from the mobilenet_v1-smallMIHTODO style configuration
+    >>> # Initializing a model from the "mobilenet_v1_1.0_224" style configuration
     >>> model = MobileNetV1Model(configuration)
 
     >>> # Accessing the model configuration

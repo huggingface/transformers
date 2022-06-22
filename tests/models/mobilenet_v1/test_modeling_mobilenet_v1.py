@@ -263,11 +263,11 @@ def prepare_img():
 class MobileNetV1ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return MobileNetV1FeatureExtractor.from_pretrained("Matthijs/mobilenet_v1-xx-small") if is_vision_available() else None
+        return MobileNetV1FeatureExtractor.from_pretrained("Matthijs/mobilenet_v1_1.0_224") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
-        model = MobileNetV1ForImageClassification.from_pretrained("Matthijs/mobilenet_v1-xx-small").to(torch_device)
+        model = MobileNetV1ForImageClassification.from_pretrained("Matthijs/mobilenet_v1_1.0_224").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()

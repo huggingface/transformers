@@ -44,18 +44,17 @@ _CONFIG_FOR_DOC = "MobileNetV1Config"
 _FEAT_EXTRACTOR_FOR_DOC = "MobileNetV1FeatureExtractor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "Matthijs/mobilenet_v1-small"
+_CHECKPOINT_FOR_DOC = "Matthijs/mobilenet_v1_1.0_224"
 _EXPECTED_OUTPUT_SHAPE = [1, 1024, 7, 7]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "Matthijs/mobilenet_v1-small"
+_IMAGE_CLASS_CHECKPOINT = "Matthijs/mobilenet_v1_1.0_224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
 MOBILENET_V1_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Matthijs/mobilenet_v1-small",
-    "Matthijs/mobilenet_v1-x-small",
-    "Matthijs/mobilenet_v1-xx-small",
+    "Matthijs/mobilenet_v1_1.0_224",
+    "Matthijs/mobilenet_v1_0.75_192",
     # See all MobileNetV1 models at https://huggingface.co/models?filter=mobilenet_v1
 ]
 
@@ -400,8 +399,7 @@ class MobileNetV1Model(MobileNetV1PreTrainedModel):
         last_hidden_state = hidden_states
 
         if self.pooler is not None:
-            pooled_output = self.pooler(last_hidden_state)
-            pooled_output = torch.flatten(pooled_output, start_dim=1)
+            pooled_output = torch.flatten(self.pooler(last_hidden_state), start_dim=1)
         else:
             pooled_output = None
 
