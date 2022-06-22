@@ -10,31 +10,31 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# Modelli multilingua per l'inferenza
+# Modelli multilingue per l'inferenza
 
 [[open-in-colab]]
 
-Ci sono diversi modelli multilingua in 🤗 Transformers, e il loro utilizzo per l'inferenza differisce da quello dei modelli monolingua. Tuttavia non *tutti* gli usi dei modelli multilingua sono diversi. Alcuni modelli, come [bert-base-multilingual-uncased](https://huggingface.co/bert-base-multilingual-uncased), possono essere usati come un modello monolingua. Questa guida ti mostrerà come utilizzare modelli multilingue che utilizzano un modo diverso per fare l'inferenza.
+Ci sono diversi modelli multilingue in 🤗 Transformers, e il loro utilizzo per l'inferenza differisce da quello dei modelli monolingua. Non *tutti* gli utilizzi dei modelli multilingue sono però diversi. Alcuni modelli, come [bert-base-multilingual-uncased](https://huggingface.co/bert-base-multilingual-uncased), possono essere usati come un modello monolingua. Questa guida ti mostrerà come utilizzare modelli multilingue che utilizzano un modo diverso per fare l'inferenza.
 
 ## XLM
 
-XLM ha dieci diversi checkpoint, di cui solo uno è monolingua. I nove checkpoint rimanenti possono essere suddivisi in due categorie: i checkpoint che utilizzano i language embeddings e quelli che non le utilizzano.
+XLM ha dieci diversi checkpoint, di cui solo uno è monolingua. I nove checkpoint rimanenti possono essere suddivisi in due categorie: i checkpoint che utilizzano i language embeddings e quelli che non li utilizzano.
 
 ### XLM con language embeddings
 
 I seguenti modelli XLM utilizzano gli embeddings linguistici per specificare la lingua utilizzata per l'inferenza:
 
-- `xlm-mlm-ende-1024` (Masked language modeling, English-German)
-- `xlm-mlm-enfr-1024` (Masked language modeling, English-French)
-- `xlm-mlm-enro-1024` (Masked language modeling, English-Romanian)
-- `xlm-mlm-xnli15-1024` (Masked language modeling, XNLI languages)
-- `xlm-mlm-tlm-xnli15-1024` (Masked language modeling + translation, XNLI languages)
-- `xlm-clm-enfr-1024` (Causal language modeling, English-French)
-- `xlm-clm-ende-1024` (Causal language modeling, English-German)
+- `xlm-mlm-ende-1024` (Masked language modeling, Inglese-Tedesco)
+- `xlm-mlm-enfr-1024` (Masked language modeling, Inglese-Francese)
+- `xlm-mlm-enro-1024` (Masked language modeling, Inglese-Rumeno)
+- `xlm-mlm-xnli15-1024` (Masked language modeling, lingue XNLI)
+- `xlm-mlm-tlm-xnli15-1024` (Masked language modeling + traduzione, lingue XNLI)
+- `xlm-clm-enfr-1024` (Causal language modeling, Inglese-Francese)
+- `xlm-clm-ende-1024` (Causal language modeling, Inglese-Tedesco)
 
-Gli embeddings linguistici sono rappresentati come un tensore delle stesse dimensioni del `input_ids` passato al modello. I valori in questi tensori dipendono dal linguaggio usato e sono identificati dagli attributi `lang2id` e `id2lang` del tokenizer.
+Gli embeddings linguistici sono rappresentati come un tensore delle stesse dimensioni dell' `input_ids` passato al modello. I valori in questi tensori dipendono dal linguaggio usato e sono identificati dagli attributi `lang2id` e `id2lang` del tokenizer.
 
-In questo esempio, carica il checkpoint `xlm-clm-enfr-1024` (Causal language modeling, English-French):
+In questo esempio, carica il checkpoint `xlm-clm-enfr-1024` (Causal language modeling, Inglese-Francese):
 
 ```py
 >>> import torch
@@ -57,7 +57,7 @@ Poi, crea un esempio di input:
 >>> input_ids = torch.tensor([tokenizer.encode("Wikipedia was used to")])  # batch size of 1
 ```
 
-Imposta l'id del linguaggio a `"en"` e usalo per definire il language embedding. Il language embedding è un tensore riempito con `0` perchè questo è il language id per l'inglese. Questo tensorre dovrebbe avere la stessa dimensione di `input_ids`.
+Imposta l'id del linguaggio a `"en"` e usalo per definire il language embedding. Il language embedding è un tensore riempito con `0` perché questo è il language id per l'inglese. Questo tensore dovrebbe avere la stessa dimensione di `input_ids`.
 
 ```py
 >>> language_id = tokenizer.lang2id["en"]  # 0
@@ -79,35 +79,35 @@ Lo script [run_generation.py](https://github.com/huggingface/transformers/tree/m
 
 I seguenti modelli XLM non richiedono l'utilizzo dei language embeddings per fare inferenza:
 
-- `xlm-mlm-17-1280` (Masked language modeling, 17 languages)
-- `xlm-mlm-100-1280` (Masked language modeling, 100 languages)
+- `xlm-mlm-17-1280` (Masked language modeling, 17 lingue)
+- `xlm-mlm-100-1280` (Masked language modeling, 100 lingue)
 
 Questi modelli sono utilizzati per rappresentazioni generiche di frasi, a differenza dei precedenti checkpoints XML.
 
 ## BERT
 
-Il seguente modello BERT può essere usato per compiti multilingua:
+Il seguente modello BERT può essere usato per compiti multilingue:
 
-- `bert-base-multilingual-uncased` (Masked language modeling + Next sentence prediction, 102 languages)
-- `bert-base-multilingual-cased` (Masked language modeling + Next sentence prediction, 104 languages)
+- `bert-base-multilingual-uncased` (Masked language modeling + Previsione della prossima frase, 102 lingue)
+- `bert-base-multilingual-cased` (Masked language modeling + Previsione della prossima frase, 104 lingue)
 
-Questi modelli non richiedono language embeddings per fare inferenza. Riescono ad identificare ul linguaggio dal contesto e inferire di conseguenza.
+Questi modelli non richiedono language embeddings per fare inferenza. Riescono ad identificare il linguaggio dal contesto e inferire di conseguenza.
 
 ## XLM-RoBERTa
 
-Il seguente modello XLM-RoBERTa può essere usato per compiti multilingua:
+Il seguente modello XLM-RoBERTa può essere usato per compiti multilingue:
 
-- `xlm-roberta-base` (Masked language modeling, 100 languages)
-- `xlm-roberta-large` (Masked language modeling, 100 languages)
+- `xlm-roberta-base` (Masked language modeling, 100 lingue)
+- `xlm-roberta-large` (Masked language modeling, 100 lingue)
 
 XLM-RoBERTa è stato addestrato su 2.5TB di dati CommonCrawl appena creati e puliti in 100 lingue. Offre notevoli vantaggi rispetto ai modelli multilingue rilasciati in precedenza, come mBERT o XLM, in compiti come la classificazione, l'etichettatura delle sequenze e la risposta alle domande.
 
 ## M2M100
 
-Il seguente modello M2M100 può essere usato per compiti multilingua:
+Il seguente modello M2M100 può essere usato per compiti multilingue:
 
-- `facebook/m2m100_418M` (Translation)
-- `facebook/m2m100_1.2B` (Translation)
+- `facebook/m2m100_418M` (Traduzione)
+- `facebook/m2m100_1.2B` (Traduzione)
 
 In questo esempio, carica il checkpoint `facebook/m2m100_418M`  per tradurre dal cinese all'inglese. Puoi impostare la lingua di partenza nel tokenizer:
 
@@ -121,13 +121,13 @@ In questo esempio, carica il checkpoint `facebook/m2m100_418M`  per tradurre dal
 >>> model = M2M100ForConditionalGeneration.from_pretrained("facebook/m2m100_418M")
 ```
 
-Applica il tokenizer sul testo:
+Applica il tokenizer al testo:
 
 ```py
 >>> encoded_zh = tokenizer(chinese_text, return_tensors="pt")
 ```
 
-M2M100 forza l'id del target language come primo token generato per tradurre nel target language. Imposta il parametro `forced_bos_token_id` a `en` nel metodo `generate` per tradurre in inglese:
+M2M100 forza l'id della lingua obiettivo come primo token generato per tradurre nella lingua obiettivo. Imposta il parametro `forced_bos_token_id` a `en` nel metodo `generate` per tradurre in inglese:
 
 ```py
 >>> generated_tokens = model.generate(**encoded_zh, forced_bos_token_id=tokenizer.get_lang_id("en"))
@@ -137,12 +137,12 @@ M2M100 forza l'id del target language come primo token generato per tradurre nel
 
 ## MBart
 
-Il seguente modello MBart può essere usato per compiti multilingua:
+Il seguente modello MBart può essere usato per compiti multilingue:
 
-- `facebook/mbart-large-50-one-to-many-mmt` (One-to-many multilingual machine translation, 50 languages)
-- `facebook/mbart-large-50-many-to-many-mmt` (Many-to-many multilingual machine translation, 50 languages)
-- `facebook/mbart-large-50-many-to-one-mmt` (Many-to-one multilingual machine translation, 50 languages)
-- `facebook/mbart-large-50` (Multilingual translation, 50 languages)
+- `facebook/mbart-large-50-one-to-many-mmt` (Traduzione automatica multilingue uno-a-molti, 50 lingue)
+- `facebook/mbart-large-50-many-to-many-mmt` (Traduzione automatica multilingue molti-a-molti, 50 lingue)
+- `facebook/mbart-large-50-many-to-one-mmt` (Traduzione automatica multilingue molti-a-uno, 50 lingue)
+- `facebook/mbart-large-50` (Traduzione multilingue, 50 lingue)
 - `facebook/mbart-large-cc25`
 
 In questo esempio, carica il checkpoint `facebook/mbart-large-50-many-to-many-mmt` per tradurre dal finlandese all'inglese. Puoi impostare la lingua di partenza nel tokenizer:
@@ -163,7 +163,7 @@ Applica il tokenizer sul testo:
 >>> encoded_en = tokenizer(en_text, return_tensors="pt")
 ```
 
-MBart fforza l'id del target language come primo token generato per tradurre nel target language. Imposta il parametro `forced_bos_token_id` a `en` nel metodo `generate` per tradurre in inglese:
+MBart forza l'id della lingua obiettivo come primo token generato per tradurre nella lingua obiettivo. Imposta il parametro `forced_bos_token_id` a `en` nel metodo `generate` per tradurre in inglese:
 
 ```py
 >>> generated_tokens = model.generate(**encoded_en, forced_bos_token_id=tokenizer.lang_code_to_id("en_XX"))
@@ -171,4 +171,4 @@ MBart fforza l'id del target language come primo token generato per tradurre nel
 "Don't interfere with the wizard's affairs, because they are subtle, will soon get angry."
 ```
 
-Se stai usando il checkpoint `facebook/mbart-large-50-many-to-one-mmt`, non hai bisogno di forzare l'id del target language come primo token generato altrimenti l'uso è lo stesso.
+Se stai usando il checkpoint `facebook/mbart-large-50-many-to-one-mmt`, non hai bisogno di forzare l'id della lingua obiettivo come primo token generato altrimenti l'uso è lo stesso.
