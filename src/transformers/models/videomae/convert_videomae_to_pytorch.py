@@ -17,13 +17,14 @@
 import argparse
 import json
 
+import numpy as np
 import torch
 
 from huggingface_hub import hf_hub_download
-from transformers import VideoMAEConfig, VideoMAEForVideoClassification
+from transformers import VideoMAEConfig, VideoMAEFeatureExtractor, VideoMAEForVideoClassification
 
 
-def get_videomae_config(checkpoint_path):
+def get_videomae_config(checkpoint_path, model_name):
     config = VideoMAEConfig()
 
     if "large" in checkpoint_path:
@@ -32,9 +33,15 @@ def get_videomae_config(checkpoint_path):
         config.num_hidden_layers = 24
         config.num_attention_heads = 16
 
-    config.num_labels = 400
     repo_id = "datasets/huggingface/label-files"
-    filename = "kinetics400-id2label.json"
+    if "kinetics" in model_name:
+        config.num_labels = 400
+        filename = "kinetics400-id2label.json"
+    elif "ssv2" in model_name:
+        config.num_labels = 174
+        filename = "something-something-v2-id2label.json"
+    else:
+        raise ValueError("Model name should either contain 'kinetics' or 'ssv2'.")
     id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
@@ -127,8 +134,16 @@ def convert_state_dict(orig_state_dict, config):
     return orig_state_dict
 
 
-def convert_videomae_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_to_hub):
-    config = get_videomae_config(checkpoint_path)
+# We will verify our results on a video of eating spaghetti
+# Frame indices used: [164 168 172 176 181 185 189 193 198 202 206 210 215 219 223 227]
+def prepare_video():
+    file = hf_hub_download(repo_id="datasets/hf-internal-testing/spaghetti-video", filename="eating_spaghetti.npy")
+    video = np.load(file)
+    return list(video)
+
+
+def convert_videomae_checkpoint(checkpoint_path, pytorch_dump_folder_path, model_name, push_to_hub):
+    config = get_videomae_config(checkpoint_path, model_name)
 
     model = VideoMAEForVideoClassification(config)
 
@@ -139,39 +154,48 @@ def convert_videomae_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_
     model.eval()
 
     # forward pass
-    pixel_values = torch.load("/Users/nielsrogge/Documents/VideoMAE/Original checkpoints/eating_spaghetti_video.pt")
-    pixel_values = pixel_values.permute(0, 2, 1, 3, 4)
-    outputs = model(pixel_values)
+    feature_extractor = VideoMAEFeatureExtractor()
+    video = prepare_video()
+    inputs = feature_extractor(video, return_tensors="pt")
+    outputs = model(**inputs)
     logits = outputs.logits
+
+    print("First values of logits:", logits[0, :3])
 
     predicted_class_idx = logits.argmax(-1).item()
     print("Predicted class:", model.config.id2label[predicted_class_idx])
 
-    # if "large" in checkpoint_url:
-    #     expected_slice = torch.tensor(
-    #         [[-0.7309, -0.7128, -1.0169], [-1.0161, -0.9058, -1.1878], [-1.0478, -0.9411, -1.1911]]
-    #     )
-    # elif "huge" in checkpoint_url:
-    #     expected_slice = torch.tensor(
-    #         [[-1.1599, -0.9199, -1.2221], [-1.1952, -0.9269, -1.2307], [-1.2143, -0.9337, -1.2262]]
-    #     )
-    # else:
-    #     expected_slice = torch.tensor(
-    #         [[-0.9192, -0.8481, -1.1259], [-1.1349, -1.0034, -1.2599], [-1.1757, -1.0429, -1.2726]]
-    #     )
+    model_names = [
+        # Kinetics-400 checkpoints
+        "videomae-base-short",
+        "videomae-base-short-finetuned-kinetics",
+        "videomae-base",
+        "videomae-base-finetuned-kinetics",
+        "videomae-large",
+        "videomae-large-finetuned-kinetics",
+        # Something-Something-v2 checkpoints
+        "videomae-base-short-ssv2",
+        "videomae-base-short-finetuned-ssv2",
+        "videomae-base-ssv2",
+        "videomae-base-finetuned-ssv2",
+    ]
+    if model_name not in model_names:
+        raise ValueError("Model name not supported.")
 
-    # # verify logits
-    # assert torch.allclose(logits[0, :3, :3], expected_slice, atol=1e-4)
+    if model_name == "videomae-base-finetuned-kinetics":
+        expected_slice = torch.tensor([0.7666, -0.2265, -0.5551])
+    elif model_name == "videomae-base-finetuned-ssv2":
+        expected_slice = torch.tensor([-0.1354, -0.4494, -0.4979])
 
-    # print(f"Saving model to {pytorch_dump_folder_path}")
-    # model.save_pretrained(pytorch_dump_folder_path)
+    # verify logits
+    assert torch.allclose(logits[0, :3], expected_slice, atol=1e-4)
 
-    # print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    # feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    print(f"Saving model and feature extractor to {pytorch_dump_folder_path}")
+    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    model.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
         print("Pushing to the hub...")
-        model_name = "videomae-base"
         model.push_to_hub(model_name, organization="nielsr")
 
 
@@ -180,7 +204,7 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--checkpoint_path",
-        default="/Users/nielsrogge/Documents/VideoMAE/Original checkpoints/checkpoint.pth",
+        default="/Users/nielsrogge/Documents/VideoMAE/Original checkpoints/Kinetics-400/checkpoint.pth",
         type=str,
         help="Path of the original PyTorch checkpoint you'd like to convert.",
     )
@@ -188,8 +212,11 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
     parser.add_argument(
+        "--model_name", default="videomae-base-finetuned-kinetics", type=str, help="Name of the model."
+    )
+    parser.add_argument(
         "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
     )
 
     args = parser.parse_args()
-    convert_videomae_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_videomae_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path, args.model_name, args.push_to_hub)
