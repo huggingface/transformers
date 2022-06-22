@@ -958,6 +958,7 @@ class SpecialTokensMixin:
         """
         if self._bos_token is None and self.verbose:
             logger.error("Using bos_token, but it is not set yet.")
+        if self._bos_token is None:
             return None
         return str(self._bos_token)
 
@@ -968,6 +969,7 @@ class SpecialTokensMixin:
         """
         if self._eos_token is None and self.verbose:
             logger.error("Using eos_token, but it is not set yet.")
+        if self._eos_token is None:
             return None
         return str(self._eos_token)
 
@@ -978,6 +980,7 @@ class SpecialTokensMixin:
         """
         if self._unk_token is None and self.verbose:
             logger.error("Using unk_token, but it is not set yet.")
+        if self._unk_token is None:
             return None
         return str(self._unk_token)
 
@@ -989,6 +992,7 @@ class SpecialTokensMixin:
         """
         if self._sep_token is None and self.verbose:
             logger.error("Using sep_token, but it is not set yet.")
+        if self._sep_token is None:
             return None
         return str(self._sep_token)
 
@@ -999,6 +1003,7 @@ class SpecialTokensMixin:
         """
         if self._pad_token is None and self.verbose:
             logger.error("Using pad_token, but it is not set yet.")
+        if self._pad_token is None:
             return None
         return str(self._pad_token)
 
@@ -1010,6 +1015,7 @@ class SpecialTokensMixin:
         """
         if self._cls_token is None and self.verbose:
             logger.error("Using cls_token, but it is not set yet.")
+        if self._cls_token is None:
             return None
         return str(self._cls_token)
 
@@ -1021,6 +1027,7 @@ class SpecialTokensMixin:
         """
         if self._mask_token is None and self.verbose:
             logger.error("Using mask_token, but it is not set yet.")
+        if self._mask_token is None:
             return None
         return str(self._mask_token)
 
@@ -1032,6 +1039,7 @@ class SpecialTokensMixin:
         """
         if self._additional_special_tokens is None and self.verbose:
             logger.error("Using additional_special_tokens, but it is not set yet.")
+        if self._additional_special_tokens is None:
             return None
         return [str(tok) for tok in self._additional_special_tokens]
 
