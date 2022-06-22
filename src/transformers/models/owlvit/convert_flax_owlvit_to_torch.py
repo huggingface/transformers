@@ -12,14 +12,15 @@ import numpy as np
 import torch
 
 import models
-from clip_model import CLIP
+from clip_model import CLIP, OwlViTClassPredictor, OwlViTBoxPredictor
+from PIL import Image
 from configs import clip_b16, clip_b32, clip_l14
 
 PyTree = Any
 CONFIGS = {
     'vit_b32': dict(embed_dim=512,
-    				image_resolution=224,
-   					context_length=77,
+                    image_resolution=224,
+                    context_length=16,
                     vocab_size=49408,
                     vision_layers=12,
                     vision_width=768,
@@ -28,8 +29,8 @@ CONFIGS = {
                     transformer_heads=8,
                     transformer_layers=12),
     'vit_b16': dict(embed_dim=512,
-    				image_resolution=224,
-    				context_length=77,
+                    image_resolution=224,
+                    context_length=16,
                     vocab_size=49408,
                     vision_layers=12,
                     vision_width=768,
@@ -38,8 +39,8 @@ CONFIGS = {
                     transformer_heads=8,
                     transformer_layers=12),
     'vit_l14': dict(embed_dim=768,
-    				image_resolution=224,
-    				context_length=77,
+                    image_resolution=224,
+                    context_length=16,
                     vocab_size=49408,
                     vision_layers=24,
                     vision_width=1024,
@@ -86,7 +87,10 @@ def _convert_attn_layers(params):
     return new_params
 
 
-def convert_owlvit_checkpoint_to_pytorch(flax_params, torch_params, pytorch_dump_folder_path):
+def convert_clip_backbone(flax_params, torch_config):
+    torch_model = CLIP(**torch_config)
+    torch_params = torch_model.state_dict()
+
     flax_params = flatten_nested_dict(flax_params["backbone"]["clip"])
     new_torch_params = {}
 
@@ -111,16 +115,34 @@ def convert_owlvit_checkpoint_to_pytorch(flax_params, torch_params, pytorch_dump
         elif "weight" in torch_key and v.ndim == 2 and "embedding" not in torch_key:
             # Fully connected layers are transposed, embeddings are not
             v = v.T
-        torch_params[torch_key] = v
+        new_torch_params[torch_key] = v
 
     attn_params = _convert_attn_layers(new_torch_params)
     new_torch_params.update(attn_params)
 
+    # Copy flax CLIP backbone params to PyTorch params
     for name, param in new_torch_params.items():
         if name in torch_params.keys():
             new_param = torch.from_numpy(new_torch_params[name])
             torch_params[name].copy_(new_param)
+
     return torch_params
+
+
+def convert_class_box_heads(flax_params, torch_config):
+    # Initialize PyToch class head
+    torch_model = OwlViTClassPredictor(out_dim=torch_config["embed_dim"], query_dim=torch_config["vision_width"])
+    torch_params = torch_model.state_dict()
+
+    for k, v in torch_params.items():
+        print(k, v.shape)
+    print()
+    flax_params = flatten_nested_dict(flax_params["class_head"])
+    for flax_key, v in flax_params.items():
+        torch_key = flax_key.replace("/", ".")
+        torch_key = torch_key.replace(".kernel", ".weight")
+        print(torch_key, v.shape)
+        
 
 
 if __name__ == "__main__":
@@ -145,6 +167,14 @@ if __name__ == "__main__":
     else:
         raise Exception("Model not supported")
 
+    # Initialize PyToch clip model
+    if model_name == "clip_b16":
+        torch_config = CONFIGS["vit_b16"]
+    elif model_name == "clip_b32":
+        torch_config = CONFIGS["vit_b32"]
+    elif model_name == "clip_l14":
+        torch_config = CONFIGS["vit_l14"]
+
     flax_model = models.TextZeroShotDetectionModule(
         body_configs=config.model.body,
         normalize=config.model.normalize,
@@ -156,17 +186,8 @@ if __name__ == "__main__":
     flax_params = jax.tree_map(lambda x: x.astype(jnp.float32) if x.dtype == jnp.bfloat16 else x, variables['params'])
     del variables
  
-    # Initialize PyToch clip model
-    if model_name == "clip_b16":
-        torch_config = CONFIGS["vit_b16"]
-    elif model_name == "clip_b32":
-        torch_config = CONFIGS["vit_b32"]
-    elif model_name == "clip_l14":
-        torch_config = CONFIGS["vit_l14"]
 
-    torch_model = CLIP(**torch_config)
-    torch_params = torch_model.state_dict()
-    torch_params = jax.tree_map(lambda p: p.cpu().numpy(), torch_params)
-
-    new_torch_params = convert_owlvit_checkpoint_to_pytorch(flax_params, torch_params, args.pytorch_dump_folder_path)
-
+    #with torch.no_grad():
+    #    img_feats = torch_model.encode_image(torch.zeros(1,3,768,768))
+    #torch_backbone_params = convert_clip_backbone(flax_params, torch_config)
+    convert_class_box_heads(flax_params, torch_config)

@@ -1087,13 +1087,13 @@ class CLIPModel(CLIPPreTrainedModel):
 
 
 class OwlViTBoxPredictor(nn.Module):
-    def __init__(self, input_dim: int, inner_dim: int, out_dim: int = 4):
+    def __init__(self, width: int, out_dim: int = 4):
         super().__init__()
-        self.dense1 = nn.Linear(input_dim, inner_dim)
-        self.dense2 = nn.Linear(inner_dim, inner_dim)
-        self.dense3 = nn.Linear(inner_dim, inner_dim)
+        self.dense1 = nn.Linear(width, width)
+        self.dense2 = nn.Linear(width, width)
+        self.dense3 = nn.Linear(width, width)
         self.gelu = nn.GELU()
-        self.out_proj = nn.Linear(inner_dim, out_dime)
+        self.out_proj = nn.Linear(width, out_dim)
 
     def forward(self, input: torch.Tensor):
         output = self.dense1(input)
@@ -1107,16 +1107,16 @@ class OwlViTBoxPredictor(nn.Module):
 
 
 class OwlViTClassPredictor(nn.Module):
-    def __init__(self, input_dim: int, query_dim: int, normalize: bool = False):
+    def __init__(self, out_dim: int, query_dim: int, normalize: bool = True):
         super().__init__()
-        self.image_embeddings = nn.Linear(input_dim, query_dim)
-        self.logit_shift = nn.Linear(query_dim, query_dim)
-        self.logit_scale = nn.Linear(query_dim, query_dim)
+        self.image_embeddings = nn.Linear(query_dim, out_dim)
+        self.logit_shift = nn.Linear(query_dim, 1)
+        self.logit_scale = nn.Linear(query_dim, 1)
         self.normalize = normalize
         self.elu = nn.ELU()
 
-    def forward(self, input: torch.Tensor, query_embeddings: torch.Tensor):
-        image_class_emb = self.image_embeds(input)
+    def forward(self, input: torch.Tensor, query_embeddings: torch.Tensor, query_mask: torch.Tensor):
+        image_class_emb = self.image_embeddings(input)
 
         if self.normalize:
             image_class_emb /= torch.linalg.norm(image_class_emb, dim=-1, keepdim=True) + 1e-6
@@ -1129,7 +1129,23 @@ class OwlViTClassPredictor(nn.Module):
         logit_scale = self.logit_scale(input)
         logit_scale = self.elu(logit_scale) + 1
         pred_logits = (pred_logits + logit_shift) * logit_scale
+
+        if query_mask is not None:
+            if query_mask.ndim > 1:
+                query_mask = torch.unsqueeze(query_mask, dim=-2)
+
+            pred_logits = torch.where(query_mask==0, -1e6, pred_logits)
+
         return {'pred_logits': pred_logits, 'class_embeddings': image_class_emb}
+
+
+class OwlViTImageTextEmbedder(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self):
+
+        return 
 
 
 class OwlViTObjectDetectionHead(nn.Module):
