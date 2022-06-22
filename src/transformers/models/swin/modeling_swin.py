@@ -372,7 +372,7 @@ class SwinPatchMerging(nn.Module):
         return input_feature
 
 
-# Copied from transformers.models.convnext.modeling_convnext.drop_path
+# Copied from transformers.models.beit.modeling_beit.drop_path
 def drop_path(input, drop_prob=0.0, training=False, scale_by_keep=True):
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
@@ -393,7 +393,7 @@ def drop_path(input, drop_prob=0.0, training=False, scale_by_keep=True):
     return output
 
 
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextDropPath with ConvNext->Swin
+# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->Swin
 class SwinDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 

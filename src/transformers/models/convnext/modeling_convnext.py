@@ -127,8 +127,14 @@ class ConvNextEmbeddings(nn.Module):
             config.num_channels, config.hidden_sizes[0], kernel_size=config.patch_size, stride=config.patch_size
         )
         self.layernorm = ConvNextLayerNorm(config.hidden_sizes[0], eps=1e-6, data_format="channels_first")
+        self.num_channels = config.num_channels
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
+        num_channels = pixel_values.shape[1]
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
         embeddings = self.patch_embeddings(pixel_values)
         embeddings = self.layernorm(embeddings)
         return embeddings
