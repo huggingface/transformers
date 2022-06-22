@@ -19,6 +19,7 @@ import importlib.util
 import json
 import os
 import sys
+import warnings
 from collections import OrderedDict
 from functools import wraps
 from itertools import chain
@@ -272,7 +273,7 @@ def is_torch_cuda_available():
         return False
 
 
-def is_torch_bf16_available():
+def is_torch_bf16_gpu_available():
     if not is_torch_available():
         return False
 
@@ -288,27 +289,49 @@ def is_torch_bf16_available():
     # 4. torch.autocast exists
     # XXX: one problem here is that it may give invalid results on mixed gpus setup, so it's
     # really only correct for the 0th gpu (or currently set default device if different from 0)
-    is_torch_gpu_bf16_available = True
-    is_torch_cpu_bf16_available = True
     if version.parse(torch.__version__) < version.parse("1.10"):
-        is_torch_gpu_bf16_available = False
-        is_torch_cpu_bf16_available = False
+        return False
 
     if torch.cuda.is_available() and torch.version.cuda is not None:
         if torch.cuda.get_device_properties(torch.cuda.current_device()).major < 8:
-            is_torch_gpu_bf16_available = False
+            return False
         if int(torch.version.cuda.split(".")[0]) < 11:
-            is_torch_gpu_bf16_available = False
+            return False
         if not hasattr(torch.cuda.amp, "autocast"):
-            is_torch_gpu_bf16_available = False
+            return False
     else:
-        is_torch_gpu_bf16_available = False
+        return False
 
-    # checking CPU
-    if not hasattr(torch.cpu.amp, "autocast"):
-        is_torch_cpu_bf16_available = False
+    return True
 
-    return is_torch_cpu_bf16_available or is_torch_gpu_bf16_available
+
+def is_torch_bf16_cpu_available():
+    if not is_torch_available():
+        return False
+
+    import torch
+
+    if version.parse(torch.__version__) < version.parse("1.10"):
+        return False
+
+    try:
+        # multiple levels of AttributeError depending on the pytorch version so do them all in one check
+        _ = torch.cpu.amp.autocast
+    except AttributeError:
+        return False
+
+    return True
+
+
+def is_torch_bf16_available():
+    # the original bf16 check was for gpu only, but later a cpu/bf16 combo has emerged so this util
+    # has become ambiguous and therefore deprecated
+    warnings.warn(
+        "The util is_torch_bf16_available is deprecated, please use is_torch_bf16_gpu_available "
+        "or is_torch_bf16_cpu_available instead according to whether it's used with cpu or gpu",
+        FutureWarning,
+    )
+    return is_torch_bf16_gpu_available()
 
 
 def is_torch_tf32_available():
@@ -376,12 +399,16 @@ def is_ftfy_available():
 def is_torch_tpu_available():
     if not _torch_available:
         return False
-    # This test is probably enough, but just in case, we unpack a bit.
     if importlib.util.find_spec("torch_xla") is None:
         return False
-    if importlib.util.find_spec("torch_xla.core") is None:
+    import torch_xla.core.xla_model as xm
+
+    # We need to check if `xla_device` can be found, will raise a RuntimeError if not
+    try:
+        xm.xla_device()
+        return True
+    except RuntimeError:
         return False
-    return importlib.util.find_spec("torch_xla.core.xla_model") is not None
 
 
 def is_torchdynamo_available():
