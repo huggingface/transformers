@@ -21,7 +21,7 @@
 # TODO: check that code is jit-able
 
 from functools import partial
-from typing import Any, Optional, Tuple
+from typing import Any, Callable, Optional, Tuple
 
 import flax.linen as nn
 import jax
@@ -116,6 +116,47 @@ BLOOM_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+class FlaxBloomScaledSoftmax(nn.Module):
+    config: BloomConfig
+    mask_func: Callable
+    softmax_in_fp32: bool
+    scale: float = None
+    """
+    Scaled Softmax module. Also performs masking.
+    Args:
+        mask_func (`function`, *required*):
+            mask function to be applied.
+        softmax_in_fp32 (`bool`, *required*):
+            if true, softmax in performed at fp32 precision.
+        scale (`float`, *optional*):
+            scaling factor used in input tensor scaling.
+    """
+
+    def setup(self):
+        if not (self.scale is None or self.softmax_in_fp32):
+            raise ValueError("softmax should be in fp32 if scale is not `None`")
+
+    def __call__(self, input, mask, causal_mask):
+        input_dtype = input.dtype
+        softmax_dtype = jnp.float32 if self.softmax_in_fp32 else input_dtype
+
+        if self.scale is not None:
+            input = input * self.scale
+        
+        if mask is not None:
+            mask_output, padded_causal_mask = self.mask_func(input, mask, causal_mask)
+            # TODO: ideally we could pass a dtype argument to nn.softmax like in PyTorch (see discussion on PR #17474 about fp32 softmax)
+            mask_output.astype(softmax_dtype)
+            probs = nn.softmax(mask_output, axis=-1) * (~padded_causal_mask)
+        else:
+            input.astype(softmax_dtype)
+            probs = nn.softmax(input, axis=-1)
+        
+        if input_dtype != softmax_dtype:
+            probs = probs.astype(input_dtype)
+        
+        return probs
+
 
 class FlaxBloomAttention(nn.Module):
     config: BloomConfig
@@ -133,7 +174,6 @@ class FlaxBloomAttention(nn.Module):
         self.split_size = self.hidden_size
         # TODO: deal with softmax
         self.attention_softmax_in_fp32 = self.config.attention_softmax_in_fp32
-        self.masked_softmax_fusion = self.config.masked_softmax_fusion
         # TODO: deal with hidden dropout
         self.hidden_dropout = self.config.hidden_dropout
 
@@ -149,13 +189,12 @@ class FlaxBloomAttention(nn.Module):
 
         self.attn_dropout = nn.Dropout(self.config.attention_dropout)
 
-        # Scaled Softmax TODO: change this to something implemented in jax (maybe implement in __call__ for attn module?)
-        # self.scale_mask_softmax = BloomScaledSoftmax(
-        #     self.masked_softmax_fusion,
-        #     attention_mask_func,
-        #     self.attention_softmax_in_fp32,
-        #     self.layer_number,
-        # )
+        self.scale_mask_softmax = FlaxBloomScaledSoftmax(
+            self.config,
+            attention_mask_func, # TODO: define this (in pytorch impl. it is a helper fn)
+            self.attention_softmax_in_fp32,
+            self.layer_number,
+        )
 
         dense = partial(
             nn.Dense,
@@ -224,6 +263,7 @@ class FlaxBloomAttention(nn.Module):
         init_cache: bool = False,
         output_attentions: bool = False,
     ):
+        # TODO: this is still from the gpt-neo impl. needs to be rewritten
         # TODO: this needs checking for correctness of implementation.
         # TODO: modify so that it uses self.query_key_value?
         query = self.q_proj(hidden_states)
