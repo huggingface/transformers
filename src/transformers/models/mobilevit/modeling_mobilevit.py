@@ -757,7 +757,7 @@ class MobileViTModel(MobileViTPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[torch.Tensor] = None,
+        output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutputWithPoolingAndNoAttention]:
         output_hidden_states = (
@@ -830,7 +830,7 @@ class MobileViTForImageClassification(MobileViTPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[torch.Tensor] = None,
+        output_hidden_states: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, ImageClassifierOutputWithNoAttention]:
