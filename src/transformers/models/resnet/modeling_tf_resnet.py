@@ -344,7 +344,7 @@ class TFResNetMainLayer(tf.keras.layers.Layer):
         self.config = config
         self.embedder = TFResNetEmbeddings(config, name="embedder")
         self.encoder = TFResNetEncoder(config, name="encoder")
-        self.pooler = tf.keras.layers.GlobalAveragePooling2D(data_format="channels_first")
+        self.pooler = tf.keras.layers.GlobalAveragePooling2D(data_format="channels_first", keepdims=True)
 
     @unpack_inputs
     def call(
