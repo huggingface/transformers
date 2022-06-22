@@ -179,10 +179,10 @@ class TFResNetBasicLayer(tf.keras.layers.Layer):
 
 class TFResNetBottleNeckLayer(tf.keras.layers.Layer):
     """
-    A classic ResNet's bottleneck layer composed by a three `3x3` convolutions.
+    A classic ResNet's bottleneck layer composed by three `3x3` convolutions.
 
     The first `1x1` convolution reduces the input by a factor of `reduction` in order to make the second `3x3`
-    convolution faster. The last `1x1` convolution remap the reduced features to `out_channels`.
+    convolution faster. The last `1x1` convolution remaps the reduced features to `out_channels`.
     """
 
     def __init__(
@@ -336,7 +336,7 @@ RESNET_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from:
+# Taken from:
 # https://gist.github.com/Rocketknight1/efc47242914788def0144b341b1ad638
 class TFAdaptiveAvgPool2D(tf.keras.layers.Layer):
     def __init__(self, output_dims: Tuple[int, int], input_ordering: str = "NHWC", **kwargs):
