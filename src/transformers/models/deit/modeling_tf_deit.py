@@ -69,15 +69,6 @@ TF_DEIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Inspired by
-# https://github.com/rwightman/pytorch-image-models/blob/b9bd960a032c75ca6b808ddeed76bee5f3ed4972/timm/models/layers/helpers.py
-# From PyTorch internals
-def to_2tuple(x):
-    if isinstance(x, collections.abc.Iterable):
-        return x
-    return (x, x)
-
-
 # Based on timm implementation, which can be found here:
 # https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
 
@@ -156,8 +147,10 @@ class TFPatchEmbeddings(tf.keras.layers.Layer):
 
     def __init__(self, config: DeiTConfig, **kwargs):
         super().__init__(**kwargs)
-        image_size = to_2tuple(config.image_size)
-        patch_size = to_2tuple(config.patch_size)
+        image_size = config.image_size
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        patch_size = config.patch_size
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         self.image_size = image_size
         self.patch_size = patch_size

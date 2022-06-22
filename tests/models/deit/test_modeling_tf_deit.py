@@ -241,7 +241,9 @@ class DeiTModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head(self):
-        model = TFDeiTForImageClassificationWithTeacher.from_pretrained("facebook/deit-base-distilled-patch16-224", from_pt=True)
+        model = TFDeiTForImageClassificationWithTeacher.from_pretrained(
+            "facebook/deit-base-distilled-patch16-224", from_pt=True
+        )
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()

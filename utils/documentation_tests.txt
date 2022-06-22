@@ -25,6 +25,7 @@ src/transformers/models/cvt/modeling_cvt.py
 src/transformers/models/data2vec/modeling_data2vec_audio.py
 src/transformers/models/data2vec/modeling_data2vec_vision.py
 src/transformers/models/deit/modeling_deit.py
+src/transformers/models/deit/modeling_tf_deit.py
 src/transformers/models/dpt/modeling_dpt.py
 src/transformers/models/electra/modeling_electra.py
 src/transformers/models/electra/modeling_tf_electra.py
@@ -71,5 +72,5 @@ src/transformers/models/wav2vec2/modeling_wav2vec2.py
 src/transformers/models/wav2vec2/tokenization_wav2vec2.py
 src/transformers/models/wav2vec2_conformer/modeling_wav2vec2_conformer.py
 src/transformers/models/wav2vec2_with_lm/processing_wav2vec2_with_lm.py
-src/transformers/models/wavlm/modeling_wavlm.py	
+src/transformers/models/wavlm/modeling_wavlm.py
 src/transformers/models/yolos/modeling_yolos.py
