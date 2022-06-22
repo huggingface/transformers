@@ -378,9 +378,9 @@ class NezhaSelfOutput(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Nezha
 class NezhaAttention(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = NezhaSelfAttention(config)
+        self.self = NezhaSelfAttention(config, position_embedding_type=position_embedding_type)
         self.output = NezhaSelfOutput(config)
         self.pruned_heads = set()
 
@@ -469,7 +469,7 @@ class NezhaLayer(nn.Module):
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = NezhaAttention(config)
+            self.crossattention = NezhaAttention(config, position_embedding_type="absolute")
         self.intermediate = NezhaIntermediate(config)
         self.output = NezhaOutput(config)
 
@@ -741,9 +741,9 @@ class NezhaPreTrainedModel(PreTrainedModel):
 
     config_class = NezhaConfig
     load_tf_weights = load_tf_weights_in_bert
-    base_model_prefix = "nezha"
+    base_model_prefix = "bert"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [r"positions_encoding"]
+    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -861,7 +861,6 @@ NEZHA_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.bert.modeling_bert.BertModel with Bert->Nezha
 @add_start_docstrings(
     "The bare Nezha Model transformer outputting raw hidden-states without any specific head on top.",
     NEZHA_START_DOCSTRING,
@@ -1040,7 +1039,6 @@ class NezhaModel(NezhaPreTrainedModel):
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertForPreTraining with Bert->Nezha
 @add_start_docstrings(
     """
     Nezha Model with two heads on top as done during the pretraining: a `masked language modeling` head and a `next
@@ -1147,7 +1145,6 @@ class NezhaForPreTraining(NezhaPreTrainedModel):
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertForMaskedLM with Bert->Nezha
 @add_start_docstrings("""Nezha Model with a `language modeling` head on top.""", NEZHA_START_DOCSTRING)
 class NezhaForMaskedLM(NezhaPreTrainedModel):
 
@@ -1254,7 +1251,6 @@ class NezhaForMaskedLM(NezhaPreTrainedModel):
         return {"input_ids": input_ids, "attention_mask": attention_mask}
 
 
-# Copied from transformers.models.bert.modeling_bert.BertForNextSentencePrediction with Bert->Nezha
 @add_start_docstrings(
     """Nezha Model with a `next sentence prediction (classification)` head on top.""",
     NEZHA_START_DOCSTRING,
@@ -1355,7 +1351,6 @@ class NezhaForNextSentencePrediction(NezhaPreTrainedModel):
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertForSequenceClassification with Bert->Nezha
 @add_start_docstrings(
     """
     Nezha Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
@@ -1456,7 +1451,6 @@ class NezhaForSequenceClassification(NezhaPreTrainedModel):
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertForMultipleChoice with Bert->Nezha
 @add_start_docstrings(
     """
     Nezha Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
@@ -1550,7 +1544,6 @@ class NezhaForMultipleChoice(NezhaPreTrainedModel):
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertForTokenClassification with Bert->Nezha
 @add_start_docstrings(
     """
     Nezha Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
@@ -1634,7 +1627,6 @@ class NezhaForTokenClassification(NezhaPreTrainedModel):
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertForQuestionAnswering with Bert->Nezha
 @add_start_docstrings(
     """
     Nezha Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
