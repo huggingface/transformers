@@ -467,7 +467,7 @@ class CanineSelfAttention(nn.Module):
                 # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
                 # masked positions, this operation will create a tensor which is 0.0 for
                 # positions we want to attend and -10000.0 for masked positions.
-                attention_mask = (1.0 - attention_mask.float()) * -10000.0
+                attention_mask = (1.0 - attention_mask.float()) * torch.finfo(attention_scores.dtype).min
             # Apply the attention mask (precomputed for all layers in CanineModel forward() function)
             attention_scores = attention_scores + attention_mask
 

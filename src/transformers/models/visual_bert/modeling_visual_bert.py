@@ -1433,7 +1433,7 @@ class VisualBertRegionToPhraseAttention(nn.Module):
     def forward(self, query, key, attention_mask):
         attention_mask = attention_mask.to(query.dtype)
         attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
-        attention_mask = (1.0 - attention_mask) * -10000.0
+        attention_mask = (1.0 - attention_mask) * torch.finfo(query.dtype).min
 
         mixed_query_layer = self.query(query)
         mixed_key_layer = self.key(key)

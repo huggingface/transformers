@@ -327,21 +327,17 @@ class RelPartialLearnableMultiHeadAttn(nn.Module):
         attn_score = AC + BD
         attn_score.mul_(self.scale)
 
+        mask_value = torch.finfo(attn_score.dtype).min
+
         # compute attention probability
         if attn_mask is not None and torch.sum(attn_mask).item():
             attn_mask = attn_mask == 1  # Switch to bool
             if attn_mask.dim() == 2:
-                if next(self.parameters()).dtype == torch.float16:
-                    attn_score = (
-                        attn_score.float().masked_fill(attn_mask[None, :, :, None], -65000).type_as(attn_score)
-                    )
-                else:
-                    attn_score = attn_score.float().masked_fill(attn_mask[None, :, :, None], -1e30).type_as(attn_score)
+                attn_score = (
+                    attn_score.float().masked_fill(attn_mask[None, :, :, None], mask_value).type_as(attn_score)
+                )
             elif attn_mask.dim() == 3:
-                if next(self.parameters()).dtype == torch.float16:
-                    attn_score = attn_score.float().masked_fill(attn_mask[:, :, :, None], -65000).type_as(attn_score)
-                else:
-                    attn_score = attn_score.float().masked_fill(attn_mask[:, :, :, None], -1e30).type_as(attn_score)
+                attn_score = attn_score.float().masked_fill(attn_mask[:, :, :, None], mask_value).type_as(attn_score)
 
         # [qlen x klen x bsz x n_head]
         attn_prob = nn.functional.softmax(attn_score, dim=1)

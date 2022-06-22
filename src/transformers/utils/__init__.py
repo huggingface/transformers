@@ -125,6 +125,8 @@ from .import_utils import (
     is_tokenizers_available,
     is_torch_available,
     is_torch_bf16_available,
+    is_torch_bf16_cpu_available,
+    is_torch_bf16_gpu_available,
     is_torch_cuda_available,
     is_torch_fx_available,
     is_torch_fx_proxy,
@@ -146,6 +148,7 @@ from .import_utils import (
 WEIGHTS_NAME = "pytorch_model.bin"
 WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
 TF2_WEIGHTS_NAME = "tf_model.h5"
+TF2_WEIGHTS_INDEX_NAME = "tf_model.h5.index.json"
 TF_WEIGHTS_NAME = "model.ckpt"
 FLAX_WEIGHTS_NAME = "flax_model.msgpack"
 CONFIG_NAME = "config.json"
