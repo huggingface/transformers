@@ -374,7 +374,7 @@ class MobileNetV1Model(MobileNetV1PreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[torch.Tensor] = None,
+        output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutputWithPoolingAndNoAttention]:
         output_hidden_states = (
@@ -387,14 +387,13 @@ class MobileNetV1Model(MobileNetV1PreTrainedModel):
 
         hidden_states = self.conv_stem(pixel_values)
 
-# MIH: extracting intermediate tensors
-#         all_hidden_states = () if output_hidden_states else None
+        all_hidden_states = () if output_hidden_states else None
 
         for i, layer_module in enumerate(self.layer):
             hidden_states = layer_module(hidden_states)
 
-#             if output_hidden_states:
-#                 all_hidden_states = all_hidden_states + (hidden_states,)
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
 
         last_hidden_state = hidden_states
 
@@ -404,13 +403,12 @@ class MobileNetV1Model(MobileNetV1PreTrainedModel):
             pooled_output = None
 
         if not return_dict:
-            output = (last_hidden_state, pooled_output) if pooled_output is not None else (last_hidden_state,)
-            return output #MIH + encoder_outputs[1:]
+            return tuple(v for v in [last_hidden_state, pooled_output, all_hidden_states] if v is not None)
 
         return BaseModelOutputWithPoolingAndNoAttention(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
-            hidden_states=None  #MIH encoder_outputs.hidden_states,
+            hidden_states=all_hidden_states,
         )
 
 
@@ -450,7 +448,7 @@ class MobileNetV1ForImageClassification(MobileNetV1PreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[torch.Tensor] = None,
+        output_hidden_states: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, ImageClassifierOutputWithNoAttention]:
