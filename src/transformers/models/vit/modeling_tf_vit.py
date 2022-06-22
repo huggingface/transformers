@@ -180,6 +180,10 @@ class TFViTPatchEmbeddings(tf.keras.layers.Layer):
         self, pixel_values: tf.Tensor, interpolate_pos_encoding: bool = False, training: bool = False
     ) -> tf.Tensor:
         batch_size, num_channels, height, width = shape_list(pixel_values)
+        if tf.executing_eagerly() and num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
         if not interpolate_pos_encoding:
             if getattr(height, "numpy", None) and getattr(width, "numpy", None):
                 if height != self.image_size[0] or width != self.image_size[1]:
