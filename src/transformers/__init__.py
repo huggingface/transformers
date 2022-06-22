@@ -1878,7 +1878,6 @@ else:
         [
             "VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST",
             "VideoMAEForPreTraining",
-            "VideoMAELayer",
             "VideoMAEModel",
             "VideoMAEPreTrainedModel",
             "VideoMAEForVideoClassification",
@@ -4358,7 +4357,6 @@ if TYPE_CHECKING:
             VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST,
             VideoMAEForPreTraining,
             VideoMAEForVideoClassification,
-            VideoMAELayer,
             VideoMAEModel,
             VideoMAEPreTrainedModel,
         )
