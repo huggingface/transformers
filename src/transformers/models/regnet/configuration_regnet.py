@@ -36,8 +36,6 @@ class RegNetConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        image_size (`int`, *optional*, defaults to 224):
-            Size (resolution) of the input images.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         embedding_size (`int`, *optional*, defaults to 64):
