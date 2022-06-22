@@ -40,40 +40,40 @@ NCCL_DEBUG=INFO python -m torch.distributed.run --nproc_per_node 2 --nnodes 1 to
 
 In questo modo si scaricano molte informazioni di debug relative a NCCL, che puoi cercare online in caso di problemi. Oppure, se non hai la sicurezza di come interpretare l'output, puoi condividere il file di log in una Issue.
 
-## Underflow and Overflow Detection
+## Rilevamento di Underflow e Overflow
 
 <Tip>
 
-This feature is currently available for PyTorch-only.
+Questa funzionalità al momento è disponibile solo per PyTorch.
 
 </Tip>
 
 <Tip>
 
-For multi-GPU training it requires DDP (`torch.distributed.launch`).
+Per addestramento multi-GPU richiede DDP (`torch.distributed.launch`).
 
 </Tip>
 
 <Tip>
 
-This feature can be used with any `nn.Module`-based model.
+Questa funzionalità può essere usata con modelli basati su `nn.Module`.
 
 </Tip>
 
-If you start getting `loss=NaN` or the model inhibits some other abnormal behavior due to `inf` or `nan` in
-activations or weights one needs to discover where the first underflow or overflow happens and what led to it. Luckily
-you can accomplish that easily by activating a special module that will do the detection automatically.
+Se inizi a ottenere `loss=NaN` o il modello presenta qualche altro comportamento anomalo a causa di valori `inf` o `nan` in
+attivazioni o nei pesi, è necessario scoprire dove si verifica il primo underflow o overflow e cosa lo ha determinato. Fortunatamente
+è possibile farlo facilmente attivando un modulo speciale che effettuerà il rilevamento automaticamente.
 
-If you're using [`Trainer`], you just need to add:
+Se stai usando [`Trainer`], hai bisogno di aggiungere solo:
 
 ```bash
 --debug underflow_overflow
 ```
 
-to the normal command line arguments, or pass `debug="underflow_overflow"` when creating the
-[`TrainingArguments`] object.
+ai normali argomenti della riga di comando, o passa `debug="underflow_overflow"` quando viene creato l'oggetto
+[`TrainingArguments`].
 
-If you're using your own training loop or another Trainer you can accomplish the same with:
+Se stai usando il tuo ciclo di allenamento o un altro trainer, puoi ottenere lo stesso risultato con:
 
 ```python
 from .debug_utils import DebugUnderflowOverflow
@@ -81,10 +81,9 @@ from .debug_utils import DebugUnderflowOverflow
 debug_overflow = DebugUnderflowOverflow(model)
 ```
 
-[`~debug_utils.DebugUnderflowOverflow`] inserts hooks into the model that immediately after each
-forward call will test input and output variables and also the corresponding module's weights. As soon as `inf` or
-`nan` is detected in at least one element of the activations or weights, the program will assert and print a report
-like this (this was caught with `google/mt5-small` under fp16 mixed precision):
+[`~debug_utils.DebugUnderflowOverflow`] inserisce dei ganci nel modello che dopo ogni chiamata
+testeranno le variabili di ingresso e di uscita e anche i pesi del modulo corrispondente. Non appena viene rilevato `inf` o
+o `nan` in almeno un elemento delle attivazioni o dei pesi, il programma lo notifica e stampa un rapporto come il seguente (questo è stato rilevato con `google/mt5-small` sotto fp16 mixed precision):
 
 ```
 Detected inf/nan during batch_number=0
@@ -126,7 +125,7 @@ abs min  abs max  metadata
 0.00e+00      inf output
 ```
 
-The example output has been trimmed in the middle for brevity.
+L'output di esempio è stato tagliato al centro per brevità.
 
 The second column shows the value of the absolute largest element, so if you have a closer look at the last few frames,
 the inputs and outputs were in the range of `1e4`. So when this training was done under fp16 mixed precision the very
