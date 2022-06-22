@@ -151,3 +151,7 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         decoded = tokenizer.decode(target_ids, skip_special_tokens=True)
         self.assertEqual(decoded, target_text)
+    
+    def test_type_bos_token(self):
+        tok = self.get_tokenizer()
+        self.assertEqual(tok.bos_token, None)
