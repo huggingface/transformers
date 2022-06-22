@@ -1140,12 +1140,37 @@ class OwlViTClassPredictor(nn.Module):
 
 
 class OwlViTImageTextEmbedder(nn.Module):
-    def __init__(self):
+    def __init__(self, merge_class_token, vision_width, backbone):
         super().__init__()
 
-    def forward(self):
+        self.clip = backbone
+        self.layer_norm = LayerNorm(vision_width)
 
-        return 
+    def forward(self, images=None, texts=None):
+
+        texts_shape = texts.shape
+        if len(texts_shape) > 2:
+            texts = texts.reshape(-1, texts_shape[-1])
+
+        # Encode images and texts
+        image_emb, text_emb = self.clip(images, texts, normalize=False)
+
+        # Resize class token
+        if img_emb is not None:
+            new_size = tuple(np.array(image_emb.shape) - np.array((0, 1, 0)))
+            class_token_out = torch.broadcast_to(image_emb[:, :1, :], new_size)
+
+            if merge_class_token == 'sum-ln':
+                image_emb = image_emb[:, 1:, :] + class_token_out  
+                image_emb = nn.LayerNorm(image_emb)
+
+            elif merge_class_token == 'mul-ln':
+                img_emb = img_emb[:, 1:, :] * class_token_out  
+                img_emb = nn.LayerNorm(image_emb)
+
+        if text_emb is not None and len(texts_shape) > 2:
+            text_emb = text_emb.reshape(texts_shape[:-1] + (-1,))
+        return image_emb, text_emb
 
 
 class OwlViTObjectDetectionHead(nn.Module):
