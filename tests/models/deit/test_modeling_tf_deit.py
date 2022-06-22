@@ -37,7 +37,7 @@ if is_tf_available():
         TFDeiTForMaskedImageModeling,
         TFDeiTModel,
     )
-    from transformers.models.deit.modeling_tf_deit import DEIT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.deit.modeling_tf_deit import TF_DEIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
