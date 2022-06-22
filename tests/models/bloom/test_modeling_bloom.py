@@ -440,7 +440,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
             tokenizer.decode(greedy_output[-1, 3:], skip_special_tokens=True),
             tokenizer.decode(greedy_output_without_pad[0, :-3], skip_special_tokens=True),
         )
-    
+
     @slow
     def test_right_left_batched_input(self):
         path_1b3 = "bigscience/bloom-1b3"
@@ -450,8 +450,8 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         tokenizer = BloomTokenizerFast.from_pretrained(path_1b3)
         tokenizer.padding_side = "right"
 
-        inputs = ["Hello", "Joe Biden is the president of"]
-        inputs_right = tokenizer(inputs, return_tensors="pt", padding=True)   
+        inputs = ["Hello there", "Joe Biden is the president of the"]
+        inputs_right = tokenizer(inputs, return_tensors="pt", padding=True)
 
         tokenizer.padding_side = "left"
         inputs_left = tokenizer(inputs, return_tensors="pt", padding=True)
@@ -461,10 +461,12 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
 
         # test reconstructions are the same
         outputs_right = model.generate(**inputs_right, max_length=10, do_sample=False)
-        outputs_left = model.generate(**inputs_left,  max_length=10, do_sample=False)
+        outputs_left = model.generate(**inputs_left, max_length=10, do_sample=False)
 
-        self.assertEqual(tokenizer.decode(outputs_right[0], skip_special_tokens=True), tokenizer.decode(outputs_left[0], skip_special_tokens=True))
-
+        self.assertEqual(
+            tokenizer.decode(outputs_right[0], skip_special_tokens=True),
+            tokenizer.decode(outputs_left[0], skip_special_tokens=True),
+        )
 
 
 @require_torch
