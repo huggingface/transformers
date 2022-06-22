@@ -21,7 +21,7 @@ import unittest
 import numpy as np
 
 from transformers import ResNetConfig
-from transformers.testing_utils import require_torch, require_vision, slow
+from transformers.testing_utils import require_tf, require_vision, slow
 from transformers.utils import cached_property, is_tf_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -115,7 +115,7 @@ class ResNetModelTester:
         return config, inputs_dict
 
 
-@require_torch
+@require_tf
 class ResNetModelTest(TFModelTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as ResNet does not use input_ids, inputs_embeds,
@@ -211,7 +211,7 @@ class ResNetModelTest(TFModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in TF_RESNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFResNetModel.from_pretrained(model_name)
+            model = TFResNetModel.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
 
 
@@ -221,7 +221,7 @@ def prepare_img():
     return image
 
 
-@require_torch
+@require_tf
 @require_vision
 class ResNetModelIntegrationTest(unittest.TestCase):
     @cached_property
@@ -234,11 +234,13 @@ class ResNetModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head(self):
-        model = TFResNetForImageClassification.from_pretrained(TF_RESNET_PRETRAINED_MODEL_ARCHIVE_LIST[0])
+        model = TFResNetForImageClassification.from_pretrained(
+            TF_RESNET_PRETRAINED_MODEL_ARCHIVE_LIST[0], from_pt=True
+        )
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt")
+        inputs = feature_extractor(images=image, return_tensors="tf")
 
         # forward pass
         outputs = model(**inputs)
