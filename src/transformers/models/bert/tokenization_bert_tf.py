@@ -35,8 +35,8 @@ class TFBertTokenizer(tf.keras.layers.Layer):
         pad_token_id (`str`, *optional*, defaults to `"[PAD]"`):
             The token used for padding, for example when batching sequences of different lengths.
         padding (`str`, defaults to `"longest"`):
-            The type of padding to use. Can be either `"longest"`, to pad only up to the longest sample in the batch, or
-            `"max_length", to pad all inputs to the maximum length supported by the tokenizer.
+            The type of padding to use. Can be either `"longest"`, to pad only up to the longest sample in the batch,
+            or `"max_length", to pad all inputs to the maximum length supported by the tokenizer.
         truncation (`bool`, *optional*, defaults to `True`):
             Whether to truncate the sequence to the maximum length.
         max_length (`int`, *optional*, defaults to `512`):
