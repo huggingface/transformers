@@ -323,6 +323,7 @@ class SplinterModelTest(ModelTesterMixin, unittest.TestCase):
     @require_torch_multi_gpu
     def test_multi_gpu_data_parallel_forward(self):
         from torch import nn
+
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         # some params shouldn't be scattered by nn.DataParallel
@@ -350,6 +351,7 @@ class SplinterModelTest(ModelTesterMixin, unittest.TestCase):
             model = nn.DataParallel(model)
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
+
 
 @require_torch
 class SplinterModelIntegrationTest(unittest.TestCase):
