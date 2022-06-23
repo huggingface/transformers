@@ -127,6 +127,10 @@ class ModelArguments:
 class DataTrainingArguments:
     """
     Arguments pertaining to what data we are going to input our model for training and eval.
+    
+    Using `HfArgumentParser` we can turn this class
+    into argparse arguments to be able to specify them on
+    the command line.
     """
 
     dataset_name: Optional[str] = field(
@@ -154,7 +158,7 @@ class DataTrainingArguments:
         metadata={
             "help": (
                 "The maximum total input sequence length after tokenization. Sequences longer "
-                "than this will be truncated."
+                "than this will be truncated, sequences shorter will be padded."
             )
         },
     )
@@ -339,8 +343,7 @@ def main():
 
     # Load pretrained model and tokenizer
     #
-    # Distributed training:
-    # The .from_pretrained methods guarantee that only one local process can concurrently
+    # In distributed training, the .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
     config_kwargs = {
         "cache_dir": model_args.cache_dir,
