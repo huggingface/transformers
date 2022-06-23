@@ -14,7 +14,6 @@
 # limitations under the License.
 """ TensorFlow RegNet model."""
 
-import math
 from typing import Dict, Optional, Tuple, Union
 
 import tensorflow as tf
@@ -92,6 +91,7 @@ class TFRegNetEmbeddings(tf.keras.layers.Layer):
 
     def __init__(self, config: RegNetConfig, **kwargs):
         super().__init__(**kwargs)
+        self.num_channels = config.num_channels
         self.embedder = TFRegNetConvLayer(
             out_channels=config.embedding_size,
             kernel_size=3,
@@ -101,6 +101,11 @@ class TFRegNetEmbeddings(tf.keras.layers.Layer):
         )
 
     def call(self, hidden_state):
+        num_channels = shape_list(hidden_state)[-1]
+        if tf.executing_eagerly() and num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
         hidden_state = self.embedder(hidden_state)
         return hidden_state
 
@@ -297,12 +302,6 @@ class TFRegNetMainLayer(tf.keras.layers.Layer):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        batch_size, num_channels, height, width = shape_list(pixel_values)
-        if tf.executing_eagerly() and num_channels != self.config.num_channels:
-            raise ValueError(
-                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
-            )
 
         # When running on CPU, `tf.keras.layers.Conv2D` doesn't support `NCHW` format.
         # So change the input format from `NCHW` to `NHWC`.
