@@ -440,8 +440,8 @@ def main():
     )
 
     # We need to recalculate our total training steps as the size of the training dataloader may have changed
+    num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
     if overrode:
-        num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
 
     # Figure out how many steps we should save the Accelerator states
@@ -505,11 +505,12 @@ def main():
             resume_step -= starting_epoch * len(train_dataloader)
 
     for epoch in range(starting_epoch, args.num_train_epochs):
+        if completed_steps >= args.max_train_steps:
+                break
         model.train()
         if args.with_tracking:
             total_loss = 0
         for step, batch in enumerate(train_dataloader):
-            print(f'Step num: {step}')
             # We need to skip steps until we reach the resumed step
             if args.resume_from_checkpoint and epoch == starting_epoch:
                 if resume_step is not None and step < resume_step:
