@@ -86,7 +86,7 @@ class YolosModelTester:
         self.num_detection_tokens = num_detection_tokens
         # we set the expected sequence length (which is used in several tests)
         # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token) + num_detection_tokens
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        num_patches = (image_size[1] // patch_size) * (image_size[0] // patch_size)
         self.expected_seq_len = num_patches + 1 + self.num_detection_tokens
 
     def prepare_config_and_inputs(self):
