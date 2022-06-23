@@ -444,8 +444,9 @@ def main():
     if overrode:
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
 
-    if args.max_train_steps <= num_update_steps_per_epoch:
-        args.num_train_epochs = 1
+    args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
+    # if args.max_train_steps <= num_update_steps_per_epoch:
+    #     args.num_train_epochs = 1
 
     # Figure out how many steps we should save the Accelerator states
     if hasattr(args.checkpointing_steps, "isdigit"):
