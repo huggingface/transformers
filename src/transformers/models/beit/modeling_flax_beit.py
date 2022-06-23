@@ -171,6 +171,7 @@ class FlaxBeitPatchEmbeddings(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
+        self.num_channels = self.config.num_channels
         image_size = self.config.image_size
         patch_size = self.config.patch_size
         num_patches = (image_size // patch_size) * (image_size // patch_size)
@@ -187,6 +188,11 @@ class FlaxBeitPatchEmbeddings(nn.Module):
         )
 
     def __call__(self, pixel_values):
+        num_channels = pixel_values.shape[-1]
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
         embeddings = self.projection(pixel_values)
         batch_size, _, _, channels = embeddings.shape
         return jnp.reshape(embeddings, (batch_size, -1, channels))
