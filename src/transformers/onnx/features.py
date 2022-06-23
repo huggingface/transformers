@@ -207,6 +207,23 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls="models.data2vec.Data2VecTextOnnxConfig",
         ),
+        "deberta": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "sequence-classification",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls="models.deberta.DebertaOnnxConfig",
+        ),
+        "deberta-v2": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "sequence-classification",
+            "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls="models.deberta_v2.DebertaV2OnnxConfig",
+        ),
         "deit": supported_features_mapping(
             "default", "image-classification", "masked-im", onnx_config_cls="models.deit.DeiTOnnxConfig"
         ),

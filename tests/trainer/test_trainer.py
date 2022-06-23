@@ -30,7 +30,7 @@ from unittest.mock import Mock, patch
 
 import numpy as np
 
-from huggingface_hub import Repository, delete_repo, login
+from huggingface_hub import HfFolder, Repository, delete_repo, set_access_token
 from parameterized import parameterized
 from requests.exceptions import HTTPError
 from transformers import (
@@ -43,7 +43,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     ENDPOINT_STAGING,
-    PASS,
+    TOKEN,
     USER,
     CaptureLogger,
     TestCasePlus,
@@ -1966,18 +1966,20 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 class TrainerIntegrationWithHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls._token = login(username=USER, password=PASS)
+        cls._token = TOKEN
+        set_access_token(TOKEN)
+        HfFolder.save_token(TOKEN)
 
     @classmethod
     def tearDownClass(cls):
         for model in ["test-trainer", "test-trainer-epoch", "test-trainer-step"]:
             try:
-                delete_repo(token=cls._token, name=model)
+                delete_repo(token=cls._token, repo_id=model)
             except HTTPError:
                 pass
 
         try:
-            delete_repo(token=cls._token, name="test-trainer-org", organization="valid_org")
+            delete_repo(token=cls._token, repo_id="valid_org/test-trainer-org")
         except HTTPError:
             pass
 

@@ -84,8 +84,10 @@ DUMMY_DIFF_TOKENIZER_IDENTIFIER = "julien-c/dummy-diff-tokenizer"
 
 # Used to test the hub
 USER = "__DUMMY_TRANSFORMERS_USER__"
-PASS = "__DUMMY_TRANSFORMERS_PASS__"
-ENDPOINT_STAGING = "https://moon-staging.huggingface.co"
+ENDPOINT_STAGING = "https://hub-ci.huggingface.co"
+
+# Not critical, only usable on the sandboxed CI instance.
+TOKEN = "hf_94wBhPGp6KrrTH3KDchhKpRxZwd6dmHWLL"
 
 
 def parse_flag_from_env(key, default=False):
