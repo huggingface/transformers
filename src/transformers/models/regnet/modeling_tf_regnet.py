@@ -86,7 +86,7 @@ class TFRegNetConvLayer(tf.keras.layers.Layer):
 
 class TFRegNetEmbeddings(tf.keras.layers.Layer):
     """
-    RegNet Embedddings (stem) composed of a single aggressive convolution.
+    RegNet Embeddings (stem) composed of a single aggressive convolution.
     """
 
     def __init__(self, config: RegNetConfig, **kwargs):
