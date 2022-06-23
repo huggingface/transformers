@@ -1401,6 +1401,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         >>> # model predicts bounding boxes and corresponding COCO classes
         >>> bboxes, logits = outputs.pred_boxes, outputs.logits
 
+        >>> # get probability per object class and remove the no-object class
         >>> probas_per_class = outputs.logits.softmax(-1)[:, :, :-1]
         >>> objects_to_keep = probas_per_class.max(-1).values > 0.9
 
