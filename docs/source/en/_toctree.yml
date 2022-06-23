@@ -310,8 +310,6 @@
       title: GroupViT
     - local: model_doc/hubert
       title: Hubert
-    - local: model_doc/perceiver
-      title: Perceiver
     - local: model_doc/opt
       title: OPT
     - local: model_doc/pegasus

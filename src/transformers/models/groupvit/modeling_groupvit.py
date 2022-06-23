@@ -262,7 +262,7 @@ class GroupViTTokenAssign(nn.Module):
         Returns:
             projected_group_tokens (torch.Tensor): [batch_size, num_output_groups, channels]
         """
-        # [B, S_2, C] <- [B, S_1, C]
+        # [B, num_output_groups, C] <- [B, num_group_tokens, C]
         projected_group_tokens = self.mlp_inter(group_tokens)
         projected_group_tokens = self.norm_post_tokens(projected_group_tokens)
         return projected_group_tokens
@@ -408,16 +408,17 @@ class GroupViTVisionEmbeddings(nn.Module):
         # we add a small number to avoid floating point error in the interpolation
         # see discussion at https://github.com/facebookresearch/dino/issues/8
         feat_height, feat_width = feat_height + 0.1, feat_width + 0.1
+        original_height = original_width = math.sqrt(num_original_pos_embed)
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed.reshape(
                 1,
-                int(math.sqrt(num_original_pos_embed)),
-                int(math.sqrt(num_original_pos_embed)),
+                int(original_height),
+                int(original_width),
                 dim,
             ).permute(0, 3, 1, 2),
             scale_factor=(
-                feat_height / math.sqrt(num_original_pos_embed),
-                feat_width / math.sqrt(num_original_pos_embed),
+                feat_height / original_height,
+                feat_width / original_width,
             ),
             mode="bicubic",
             align_corners=False,
