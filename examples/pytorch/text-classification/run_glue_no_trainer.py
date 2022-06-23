@@ -444,6 +444,9 @@ def main():
     if overrode:
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
 
+    if args.max_train_steps <= num_update_steps_per_epoch:
+        args.num_train_epochs = 1
+
     # Figure out how many steps we should save the Accelerator states
     if hasattr(args.checkpointing_steps, "isdigit"):
         checkpointing_steps = args.checkpointing_steps
@@ -505,8 +508,6 @@ def main():
             resume_step -= starting_epoch * len(train_dataloader)
 
     for epoch in range(starting_epoch, args.num_train_epochs):
-        if completed_steps > args.max_train_steps - 1:
-            break
         model.train()
         if args.with_tracking:
             total_loss = 0
