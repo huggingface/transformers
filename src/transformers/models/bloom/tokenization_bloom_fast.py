@@ -101,7 +101,7 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = None
-
+# No `max_model_input_sizes` as BLOOM uses ALiBi positional embeddings
     def __init__(
         self,
         vocab_file=None,
