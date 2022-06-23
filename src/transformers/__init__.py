@@ -3705,11 +3705,7 @@ if TYPE_CHECKING:
             ImageGPTPreTrainedModel,
             load_tf_weights_in_imagegpt,
         )
-        from .models.jukebox import (
-            JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST,
-            JukeboxModel,
-            JukeboxPreTrainedModel,
-        )
+        from .models.jukebox import JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST, JukeboxModel, JukeboxPreTrainedModel
         from .models.layoutlm import (
             LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             LayoutLMForMaskedLM,
