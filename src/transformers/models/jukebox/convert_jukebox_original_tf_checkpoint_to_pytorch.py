@@ -19,7 +19,7 @@ import argparse
 
 import torch
 
-from transformers import JukeboxConfig, JukeboxModel, load_tf_weights_in_jukebox
+from transformers import JukeboxConfig, JukeboxModel
 from transformers.utils import CONFIG_NAME, WEIGHTS_NAME, logging
 
 
@@ -35,7 +35,7 @@ def convert_jukebox_checkpoint_to_pytorch(jukebox_checkpoint_path, jukebox_confi
     model = JukeboxModel(config)
 
     # Load weights from numpy
-    load_tf_weights_in_jukebox(model, config, jukebox_checkpoint_path)
+    # load_tf_weights_in_jukebox(model, config, jukebox_checkpoint_path)
 
     # Save pytorch-model
     pytorch_weights_dump_path = pytorch_dump_folder_path + "/" + WEIGHTS_NAME

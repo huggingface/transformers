@@ -2394,9 +2394,6 @@ class JukeboxPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-def load_tf_weights_in_jukebox(*args, **kwargs):
-    requires_backends(load_tf_weights_in_jukebox, ["torch"])
-
 
 LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST = None
 

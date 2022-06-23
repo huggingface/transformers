@@ -36,7 +36,6 @@ else:
         "JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST",
         "JukeboxModel",
         "JukeboxPreTrainedModel",
-        "load_tf_weights_in_jukebox",
     ]
 
 if TYPE_CHECKING:
@@ -53,7 +52,6 @@ if TYPE_CHECKING:
             JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST,
             JukeboxModel,
             JukeboxPreTrainedModel,
-            load_tf_weights_in_jukebox,
         )
 
 else:

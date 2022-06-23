@@ -3036,7 +3036,6 @@ class JukeboxPreTrainedModel(PreTrainedModel):
     """
 
     config_class = JukeboxConfig
-    # load_tf_weights = load_tf_weights_in_jukebox
     base_model_prefix = "transformer"
     is_parallelizable = True
     supports_gradient_checkpointing = True
