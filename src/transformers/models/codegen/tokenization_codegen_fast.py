@@ -212,7 +212,8 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
         Returns:
             `str`: The decoded sentence.
         """
-        decoded_text = super()._decode(
+
+        decoded_text = super().decode(
             token_ids=token_ids,
             skip_special_tokens=skip_special_tokens,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
