@@ -594,7 +594,8 @@ class GroupViTMLP(nn.Module):
 
 class GroupViTMixerMLP(GroupViTMLP):
     def forward(self, x):
-        return super().forward(x.transpose(1, 2)).transpose(1, 2)
+        x = super().forward(x.transpose(1, 2))
+        return x.transpose(1, 2)
 
 
 class GroupViTAttention(nn.Module):
