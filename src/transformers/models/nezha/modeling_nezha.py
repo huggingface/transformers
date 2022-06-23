@@ -1005,7 +1005,6 @@ class NezhaModel(NezhaPreTrainedModel):
             input_ids=input_ids,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
-            past_key_values_length=past_key_values_length,
         )
         encoder_outputs = self.encoder(
             embedding_output,
