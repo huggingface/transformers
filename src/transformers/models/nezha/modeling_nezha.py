@@ -66,7 +66,7 @@ NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-def load_tf_weights_in_bert(model, config, tf_checkpoint_path):
+def load_tf_weights_in_nezha(model, config, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
     try:
         import re
@@ -195,7 +195,6 @@ class NezhaEmbeddings(nn.Module):
         input_ids: Optional[torch.LongTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        past_key_values_length: int = 0,
     ) -> torch.Tensor:
         if input_ids is not None:
             input_shape = input_ids.size()
@@ -737,7 +736,7 @@ class NezhaPreTrainedModel(PreTrainedModel):
     """
 
     config_class = NezhaConfig
-    load_tf_weights = load_tf_weights_in_bert
+    load_tf_weights = load_tf_weights_in_nezha
     base_model_prefix = "nezha"
     supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"positions_encoding"]
