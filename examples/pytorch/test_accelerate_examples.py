@@ -320,5 +320,5 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         result = get_results(tmp_dir)
         # The base model scores a 25%
         self.assertGreaterEqual(result["eval_accuracy"], 0.625)
-        self.assertTrue(os.path.exists(os.path.join(tmp_dir, "step_0")))
+        self.assertTrue(os.path.exists(os.path.join(tmp_dir, "step_1")))
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "image_classification_no_trainer")))
