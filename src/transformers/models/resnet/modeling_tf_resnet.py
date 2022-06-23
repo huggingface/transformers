@@ -25,6 +25,7 @@ from ...modeling_tf_outputs import (
     TFImageClassifierOutputWithNoAttention,
 )
 from ...modeling_tf_utils import TFPreTrainedModel, TFSequenceClassificationLoss, keras_serializable, unpack_inputs
+from ...tf_utils import shape_list
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_resnet import ResNetConfig
 
@@ -107,9 +108,15 @@ class TFResNetEmbeddings(tf.keras.layers.Layer):
             name="embedder",
         )
         self.pooler = tf.keras.layers.MaxPool2D(pool_size=3, strides=2, padding="valid", name="pooler")
+        self.num_channels = config.num_channels
 
-    def call(self, inputs: tf.Tensor, training: bool = False) -> tf.Tensor:
-        hidden_state = inputs
+    def call(self, pixel_values: tf.Tensor, training: bool = False) -> tf.Tensor:
+        _, num_channels, _, _ = shape_list(pixel_values)
+        if tf.executing_eagerly() and num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
+        hidden_state = pixel_values
         hidden_state = self.embedder(hidden_state)
         hidden_state = tf.pad(hidden_state, [[0, 0], [0, 0], [1, 1], [1, 1]])
         # (batch_size, num_channels, height, width) -> (batch_size, height, width, num_channels)
