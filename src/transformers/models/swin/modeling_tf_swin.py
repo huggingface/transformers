@@ -352,7 +352,7 @@ class TFSwinPatchEmbeddings(tf.keras.layers.Layer):
 
     def call(self, pixel_values: tf.Tensor, training: bool = False) -> Tuple[tf.Tensor, Tuple[int, int]]:
         _, num_channels, height, width = shape_list(pixel_values)
-        if num_channels != self.num_channels:
+        if tf.executing_eagerly() and num_channels != self.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )

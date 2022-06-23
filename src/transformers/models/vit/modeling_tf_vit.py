@@ -185,7 +185,7 @@ class TFViTPatchEmbeddings(tf.keras.layers.Layer):
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
         if not interpolate_pos_encoding:
-            if getattr(height, "numpy", None) and getattr(width, "numpy", None):
+            if tf.executing_eagerly():
                 if height != self.image_size[0] or width != self.image_size[1]:
                     raise ValueError(
                         f"Input image size ({height}*{width}) doesn't match model"
