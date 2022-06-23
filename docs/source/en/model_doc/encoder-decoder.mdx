@@ -65,7 +65,7 @@ To load fine-tuned checkpoints of the `EncoderDecoderModel` class, ['EncoderDeco
 >>> model = EncoderDecoderModel.from_pretrained("patrickvonplaten/bert2bert_cnn_daily_mail")
 ```
 
-##Loading a PyTorch checkpoint into `TFEncoderDecoderModel`.
+## Loading a PyTorch checkpoint into `TFEncoderDecoderModel`.
 
 [`TFEncoderDecoderModel.from_pretrained`] currently doesn't support initializing the model from a
 pytorch checkpoint. Passing `from_pt=True` to this method will throw an exception. If there are only pytorch
