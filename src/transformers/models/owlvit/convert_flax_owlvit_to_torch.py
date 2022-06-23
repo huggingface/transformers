@@ -132,17 +132,53 @@ def convert_clip_backbone(flax_params, torch_config):
 def convert_class_box_heads(flax_params, torch_config):
     # Initialize PyToch class head
     torch_model = OwlViTClassPredictor(out_dim=torch_config["embed_dim"], query_dim=torch_config["vision_width"])
-    torch_params = torch_model.state_dict()
+    torch_class_params = torch_model.state_dict()
 
-    for k, v in torch_params.items():
-        print(k, v.shape)
-    print()
-    flax_params = flatten_nested_dict(flax_params["class_head"])
-    for flax_key, v in flax_params.items():
+    # Convert flax params to pytorch
+    new_class_head_params = {}
+    flax_class_params = flatten_nested_dict(flax_params["class_head"])
+
+    for flax_key, v in flax_class_params.items():
         torch_key = flax_key.replace("/", ".")
         torch_key = torch_key.replace(".kernel", ".weight")
-        print(torch_key, v.shape)
-        
+        torch_key = torch_key.replace("Dense_0", "dense0")
+
+        if "weight" in torch_key and v.ndim == 2:
+            v = v.T
+
+        new_class_head_params[torch_key] = v
+
+    # Copy flax class head params to PyTorch params
+    for name, param in new_class_head_params.items():
+        if name in torch_class_params.keys():
+            new_param = torch.from_numpy(new_class_head_params[name])
+            torch_class_params[name].copy_(new_param)
+
+    # Initialize PyToch class head
+    torch_model = OwlViTBoxPredictor(out_dim=4, width=torch_config["vision_width"])
+    torch_box_params = torch_model.state_dict()
+
+    # Convert flax params to pytorch
+    new_box_head_params = {}
+    flax_box_params = flatten_nested_dict(flax_params["obj_box_head"])
+
+    for flax_key, v in flax_box_params.items():
+        torch_key = flax_key.replace("/", ".")
+        torch_key = torch_key.replace(".kernel", ".weight")
+        torch_key = torch_key.replace("_", "").lower()
+
+        if "weight" in torch_key and v.ndim == 2:
+            v = v.T
+
+        new_box_head_params[torch_key] = v
+
+    # Copy flax box head params to PyTorch params
+    for name, param in new_box_head_params.items():
+        if name in torch_box_params.keys():
+            new_param = torch.from_numpy(new_box_head_params[name])
+            torch_box_params[name].copy_(new_param)
+
+    return torch_class_params, torch_box_params
 
 
 if __name__ == "__main__":
@@ -186,8 +222,7 @@ if __name__ == "__main__":
     flax_params = jax.tree_map(lambda x: x.astype(jnp.float32) if x.dtype == jnp.bfloat16 else x, variables['params'])
     del variables
  
-
     #with torch.no_grad():
     #    img_feats = torch_model.encode_image(torch.zeros(1,3,768,768))
-    #torch_backbone_params = convert_clip_backbone(flax_params, torch_config)
-    convert_class_box_heads(flax_params, torch_config)
+    torch_backbone_params = convert_clip_backbone(flax_params, torch_config)
+    torch_class_params, torch_box_params = convert_class_box_heads(flax_params, torch_config)

@@ -1089,34 +1089,31 @@ class CLIPModel(CLIPPreTrainedModel):
 class OwlViTBoxPredictor(nn.Module):
     def __init__(self, width: int, out_dim: int = 4):
         super().__init__()
+        self.dense0 = nn.Linear(width, width)
         self.dense1 = nn.Linear(width, width)
-        self.dense2 = nn.Linear(width, width)
-        self.dense3 = nn.Linear(width, width)
         self.gelu = nn.GELU()
-        self.out_proj = nn.Linear(width, out_dim)
+        self.dense2 = nn.Linear(width, out_dim)
 
     def forward(self, input: torch.Tensor):
-        output = self.dense1(input)
+        output = self.dense0(input)
+        output = self.gelu(output)
+        output = self.dense1(output)
         output = self.gelu(output)
         output = self.dense2(output)
-        output = self.gelu(output)
-        output = self.dense2(output)
-        output = self.gelu(output)
-        output = self.out_proj(output)
         return output
 
 
 class OwlViTClassPredictor(nn.Module):
     def __init__(self, out_dim: int, query_dim: int, normalize: bool = True):
         super().__init__()
-        self.image_embeddings = nn.Linear(query_dim, out_dim)
+        self.dense0 = nn.Linear(query_dim, out_dim)
         self.logit_shift = nn.Linear(query_dim, 1)
         self.logit_scale = nn.Linear(query_dim, 1)
         self.normalize = normalize
         self.elu = nn.ELU()
 
     def forward(self, input: torch.Tensor, query_embeddings: torch.Tensor, query_mask: torch.Tensor):
-        image_class_emb = self.image_embeddings(input)
+        image_class_emb = self.dense0(input)
 
         if self.normalize:
             image_class_emb /= torch.linalg.norm(image_class_emb, dim=-1, keepdim=True) + 1e-6
