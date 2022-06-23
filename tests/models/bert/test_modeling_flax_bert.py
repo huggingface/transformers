@@ -161,21 +161,21 @@ class FlaxBertModelTest(FlaxModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             # prepare inputs
             prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            model1 = model_class(config, gradient_checkpointing=False)
-            model2 = model_class(config, gradient_checkpointing=True)
+            model = model_class(config, gradient_checkpointing=False)
+            remat_model = model_class(config, gradient_checkpointing=True)
 
-            outputs1 = model1(**prepared_inputs_dict)
-            outputs2 = model2(**prepared_inputs_dict)
+            outputs = model(**prepared_inputs_dict)
+            remat_outputs = remat_model(**prepared_inputs_dict)
 
             # ensure that the dicts of outputs contain the same keys
-            self.assertEqual(outputs1.keys(), outputs2.keys())
+            self.assertEqual(outputs.keys(), remat_outputs.keys())
 
-            outputs1 = outputs1.to_tuple()
-            outputs2 = outputs2.to_tuple()
+            outputs = outputs.to_tuple()
+            remat_outputs = remat_outputs.to_tuple()
 
             # ensure that the outputs remain precisely equal
-            for output1, output2 in zip(outputs1, outputs2):
-                self.assertTrue((output1 == output2).all())
+            for output, remat_output in zip(outputs, remat_outputs):
+                self.assertTrue((output == remat_output).all())
 
     @slow
     def test_model_from_pretrained(self):
