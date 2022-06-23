@@ -59,7 +59,29 @@
     title: Converting TensorFlow Checkpoints
   - local: serialization
     title: Export 🤗 Transformers models
-  - local: performance
+  - sections:
+    - local: performance
+      title: Overview
+    - local: perf_train_gpu_one
+      title: Training on one GPU
+    - local: perf_train_gpu_many
+      title: Training on many GPUs
+    - local: perf_train_cpu
+      title: Training on CPU
+    - local: perf_train_tpu
+      title: Training on TPUs
+    - local: perf_train_special
+      title: Training on Specialized Hardware
+    - local: perf_infer_cpu
+      title: Inference on CPU
+    - local: perf_infer_gpu_one
+      title: Inference on one GPU
+    - local: perf_infer_gpu_many
+      title: Inference on many GPUs
+    - local: perf_infer_special
+      title: Inference on Specialized Hardware
+    - local: perf_hardware
+      title: Custom hardware for training
     title: Performance and scalability
   - local: big_models
     title: Instantiating a big model
@@ -81,16 +103,6 @@
     title: "How to add a model to 🤗 Transformers?"
   - local: add_new_pipeline
     title: "How to add a pipeline to 🤗 Transformers?"
-  - local: perf_train_gpu_one
-    title: Training on one GPU
-  - local: perf_train_gpu_many
-    title: Training on many GPUs
-  - local: perf_train_cpu
-    title: Training on CPU
-  - local: perf_infer_cpu
-    title: Inference on CPU
-  - local: perf_hardware
-    title: Custom hardware for training
   - local: testing
     title: Testing
   - local: pr_checks

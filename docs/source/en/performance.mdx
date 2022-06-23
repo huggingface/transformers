@@ -24,7 +24,13 @@ This document serves as an overview and entry point for the methods that could b
 
 ## Training
 
-Training transformer models efficiently requires an accelerator such as a GPU or TPU. The most common case is where you only have a single GPU.
+Training transformer models efficiently requires an accelerator such as a GPU or TPU. The most common case is where you only have a single GPU, but there is also a section about mutli-GPU and CPU training (with more coming soon).
+
+<Tip>
+
+ Note: Most of the strategies introduced in the single GPU sections (such as mixed precision training or gradient accumulation) are generic and apply to training models in general so make sure to have a look at it before diving into the following sections such as multi-GPU or CPU training.
+
+</Tip>
 
 ### Single GPU
 
@@ -46,11 +52,11 @@ In some cases training on a single GPU is still too slow or won't fit the large 
 
 ### TPU
 
-_Coming soon_
+[_Coming soon_](perf_train_tpu)
 
 ### Specialized Hardware
 
-_Coming soon_
+[_Coming soon_](perf_train_special)
 
 ## Inference
 
@@ -58,19 +64,19 @@ Efficient inference with large models in a production environment can be as chal
 
 ### CPU
 
-[Go to CPU inference section](perf_infer_cpu.mdx)
+[Go to CPU inference section](perf_infer_cpu)
 
 ### Single GPU
 
-_Coming soon_
+[Go to single GPU inference section](perf_infer_gpu_one)
 
 ### Multi-GPU
 
-_Coming soon_
+[Go to multi-GPU inference section](perf_infer_gpu_many)
 
 ### Specialized Hardware
 
-_Coming soon_
+[_Coming soon_](perf_infer_special)
 
 ## Hardware
 
