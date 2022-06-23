@@ -95,7 +95,7 @@ As you can see, only 2 inputs are required for the model in order to compute a l
 target sequence).
 
 ```python
->>> from transformers import EncoderDecoderModel, BertTokenizer
+>>> from transformers import BertTokenizer, EncoderDecoderModel
 
 >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
 >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-uncased", "bert-base-uncased")
