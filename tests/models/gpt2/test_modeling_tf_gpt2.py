@@ -627,3 +627,27 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
             output_ids = xla_generate(**input_ids, do_sample=True, seed=[7, 0])
             output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
             self.assertListEqual(output_strings, expected_output_string_xla)
+
+    @slow
+    def test_lm_generate_gpt2_beam_search_xla(self):
+        model = TFGPT2LMHeadModel.from_pretrained("gpt2")
+        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
+
+        sentences = ["The dog", "The flying machine"]
+        expected_output_strings = [
+            "The dog was found in the backyard of a home in the 6500 block of South Main Street",
+            "The flying machine is a very powerful machine, but it's not a very powerful machine. It's",
+        ]
+        input_ids = tokenizer(sentences, return_tensors="tf", padding=True)
+
+        output_ids = model.generate(**input_ids, do_sample=False, num_beams=2)
+        output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        self.assertListEqual(output_strings, expected_output_strings)
+
+        xla_generate = tf.function(model.generate, jit_compile=True)
+        output_ids = xla_generate(**input_ids, do_sample=False, num_beams=2)
+        output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        self.assertListEqual(output_strings, expected_output_strings)
