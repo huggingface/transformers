@@ -31,7 +31,6 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = BloomTokenizerFast
     test_rust_tokenizer = True
     test_slow_tokenizer = False
-    test_max_input_length = False
     from_pretrained_vocab_key = "tokenizer_file"
     special_tokens_map = {"bos_token": "<s>", "eos_token": "</s>", "unk_token": "<unk>", "pad_token": "<pad>"}
 
@@ -128,3 +127,9 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         output_tokens = list(map(tokenizer.encode, input_text))
         predicted_text = list(map(lambda x: tokenizer.decode(x, clean_up_tokenization_spaces=False), output_tokens))
         self.assertListEqual(predicted_text, input_text)
+
+    def test_pretrained_model_lists(self):
+        # We should have at least one default checkpoint for each tokenizer
+        # We should specify the max input length as well (used in some part to list the pretrained checkpoints)
+        self.assertGreaterEqual(len(self.tokenizer_class.pretrained_vocab_files_map), 1)
+        self.assertGreaterEqual(len(list(self.tokenizer_class.pretrained_vocab_files_map.values())[0]), 1)
