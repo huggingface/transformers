@@ -306,6 +306,8 @@
       title: MPNet
     - local: model_doc/mt5
       title: MT5
+    - local: model_doc/nezha
+      title: NEZHA
     - local: model_doc/nystromformer
       title: Nyströmformer
     - local: model_doc/openai-gpt
