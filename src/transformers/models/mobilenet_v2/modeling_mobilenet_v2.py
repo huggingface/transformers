@@ -45,8 +45,9 @@ _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
 MOBILENET_V2_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "Matthijs/mobilenet_v2_1.4_224",
     "Matthijs/mobilenet_v2_1.0_224",
-    "Matthijs/mobilenet_v2_0.75_192",
+    "Matthijs/mobilenet_v2_0.35_96",
     # See all MobileNetV2 models at https://huggingface.co/models?filter=mobilenet_v2
 ]
 
