@@ -1386,7 +1386,8 @@ class TFModelTesterMixin:
                 model(model.dummy_inputs)  # Build the model so we can get some constant weights
                 model_weights = model.get_weights()
 
-                model.compile(optimizer=tf.keras.optimizers.SGD(0.0), metrics=metrics)
+                # Run eagerly to save some expensive compilation times
+                model.compile(optimizer=tf.keras.optimizers.SGD(0.0), run_eagerly=True, metrics=metrics)
                 # Make sure the model fits without crashing regardless of where we pass the labels
                 history1 = model.fit(
                     prepared_for_class,
