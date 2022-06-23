@@ -93,6 +93,7 @@ from . import (
     mobilebert,
     mpnet,
     mt5,
+    nezha,
     nystromformer,
     openai,
     opt,

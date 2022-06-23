@@ -256,6 +256,7 @@ _import_structure = {
     "models.mobilebert": ["MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileBertConfig", "MobileBertTokenizer"],
     "models.mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetTokenizer"],
     "models.mt5": ["MT5Config"],
+    "models.nezha": ["NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP", "NezhaConfig"],
     "models.nystromformer": [
         "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "NystromformerConfig",
@@ -1402,6 +1403,20 @@ else:
         ]
     )
     _import_structure["models.mt5"].extend(["MT5EncoderModel", "MT5ForConditionalGeneration", "MT5Model"])
+    _import_structure["models.nezha"].extend(
+        [
+            "NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "NezhaForMaskedLM",
+            "NezhaForPreTraining",
+            "NezhaForNextSentencePrediction",
+            "NezhaForMultipleChoice",
+            "NezhaForQuestionAnswering",
+            "NezhaForSequenceClassification",
+            "NezhaForTokenClassification",
+            "NezhaModel",
+            "NezhaPreTrainedModel",
+        ]
+    )
     _import_structure["models.nystromformer"].extend(
         [
             "NYSTROMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2889,6 +2904,7 @@ if TYPE_CHECKING:
     from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer
     from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
     from .models.mt5 import MT5Config
+    from .models.nezha import NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP, NezhaConfig
     from .models.nystromformer import NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, NystromformerConfig
     from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
     from .models.opt import OPTConfig
@@ -3849,6 +3865,18 @@ if TYPE_CHECKING:
             MPNetPreTrainedModel,
         )
         from .models.mt5 import MT5EncoderModel, MT5ForConditionalGeneration, MT5Model
+        from .models.nezha import (
+            NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            NezhaForMaskedLM,
+            NezhaForMultipleChoice,
+            NezhaForNextSentencePrediction,
+            NezhaForPreTraining,
+            NezhaForQuestionAnswering,
+            NezhaForSequenceClassification,
+            NezhaForTokenClassification,
+            NezhaModel,
+            NezhaPreTrainedModel,
+        )
         from .models.nystromformer import (
             NYSTROMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             NystromformerForMaskedLM,

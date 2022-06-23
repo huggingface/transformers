@@ -1,6 +1,5 @@
 # coding=utf-8
-# Copyright 2021 NVIDIA Corporation and The HuggingFace Team.
-# Copyright (c) 2018-2021, NVIDIA CORPORATION.  All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,13 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch QDQBERT model."""
+"""PyTorch Nezha model."""
 
 
 import math
 import os
 import warnings
-from typing import Dict, List, Optional, Tuple, Union
+from dataclasses import dataclass
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -31,7 +31,6 @@ from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
     NextSentencePredictorOutput,
@@ -40,44 +39,34 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
+    ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_pytorch_quantization_available,
     logging,
     replace_return_docstrings,
-    requires_backends,
 )
-from .configuration_qdqbert import QDQBertConfig
+from .configuration_nezha import NezhaConfig
 
 
 logger = logging.get_logger(__name__)
 
-# soft dependency
-if is_pytorch_quantization_available():
-    try:
-        from pytorch_quantization import nn as quant_nn
-        from pytorch_quantization.nn.modules.tensor_quantizer import TensorQuantizer
-    except OSError:
-        logger.error(
-            "QDQBERT model are not usable since `pytorch_quantization` can't be loaded. Please try to reinstall it"
-            " following the instructions here:"
-            " https://github.com/NVIDIA/TensorRT/tree/master/tools/pytorch-quantization."
-        )
-
-_CHECKPOINT_FOR_DOC = "bert-base-uncased"
-_CONFIG_FOR_DOC = "QDQBertConfig"
+_CHECKPOINT_FOR_DOC = "sijunhe/nezha-cn-base"
+_CONFIG_FOR_DOC = "NezhaConfig"
 _TOKENIZER_FOR_DOC = "BertTokenizer"
 
-QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "bert-base-uncased",
-    # See all BERT models at https://huggingface.co/models?filter=bert
+NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "sijunhe/nezha-cn-base",
+    "sijunhe/nezha-cn-large",
+    "sijunhe/nezha-base-wwm",
+    "sijunhe/nezha-large-wwm",
+    # See all Nezha models at https://huggingface.co/models?filter=nezha
 ]
 
 
-def load_tf_weights_in_qdqbert(model, tf_checkpoint_path):
+def load_tf_weights_in_nezha(model, config, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
     try:
         import re
@@ -150,27 +139,54 @@ def load_tf_weights_in_qdqbert(model, tf_checkpoint_path):
     return model
 
 
-# Copied from transformers.models.bert.modeling_bert.BertEmbeddings with Bert -> QDQBert
-class QDQBertEmbeddings(nn.Module):
-    """Construct the embeddings from word, position and token_type embeddings."""
+class NezhaRelativePositionsEncoding(nn.Module):
+    """Implement the Functional Relative Position Encoding"""
+
+    def __init__(self, length, depth, max_relative_position=127):
+        super().__init__()
+        vocab_size = max_relative_position * 2 + 1
+        range_vec = torch.arange(length)
+        range_mat = range_vec.repeat(length).view(length, length)
+        distance_mat = range_mat - torch.t(range_mat)
+        distance_mat_clipped = torch.clamp(distance_mat, -max_relative_position, max_relative_position)
+        final_mat = distance_mat_clipped + max_relative_position
+
+        embeddings_table = torch.zeros(vocab_size, depth)
+        position = torch.arange(0, vocab_size, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, depth, 2).float() * (-math.log(10000.0) / depth))
+        embeddings_table[:, 0::2] = torch.sin(position * div_term)
+        embeddings_table[:, 1::2] = torch.cos(position * div_term)
+
+        flat_relative_positions_matrix = final_mat.view(-1)
+        one_hot_relative_positions_matrix = torch.nn.functional.one_hot(
+            flat_relative_positions_matrix, num_classes=vocab_size
+        ).float()
+        positions_encoding = torch.matmul(one_hot_relative_positions_matrix, embeddings_table)
+        my_shape = list(final_mat.size())
+        my_shape.append(depth)
+        positions_encoding = positions_encoding.view(my_shape)
+        self.register_buffer("positions_encoding", positions_encoding)
+
+    def forward(self, length):
+        return self.positions_encoding[:length, :length, :]
+
+
+class NezhaEmbeddings(nn.Module):
+    """Construct the embeddings from word and token_type embeddings."""
 
     def __init__(self, config):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
         if version.parse(torch.__version__) > version.parse("1.6.0"):
             self.register_buffer(
                 "token_type_ids",
-                torch.zeros(self.position_ids.size(), dtype=torch.long),
+                torch.zeros((1, config.max_position_embeddings), dtype=torch.long),
                 persistent=False,
             )
 
@@ -178,9 +194,7 @@ class QDQBertEmbeddings(nn.Module):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        past_key_values_length: int = 0,
     ) -> torch.Tensor:
         if input_ids is not None:
             input_shape = input_ids.size()
@@ -189,8 +203,8 @@ class QDQBertEmbeddings(nn.Module):
 
         seq_length = input_shape[1]
 
-        if position_ids is None:
-            position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
+        if inputs_embeds is None:
+            inputs_embeds = self.word_embeddings(input_ids)
 
         # Setting the token_type_ids to the registered buffer in constructor where it is all zeros, which usually occurs
         # when its auto-generated, registered buffer helps users when tracing the model without passing token_type_ids, solves
@@ -201,22 +215,17 @@ class QDQBertEmbeddings(nn.Module):
                 buffered_token_type_ids_expanded = buffered_token_type_ids.expand(input_shape[0], seq_length)
                 token_type_ids = buffered_token_type_ids_expanded
             else:
-                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
+                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=inputs_embeds.device)
 
-        if inputs_embeds is None:
-            inputs_embeds = self.word_embeddings(input_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
         embeddings = inputs_embeds + token_type_embeddings
-        if self.position_embedding_type == "absolute":
-            position_embeddings = self.position_embeddings(position_ids)
-            embeddings += position_embeddings
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
 
 
-class QDQBertSelfAttention(nn.Module):
+class NezhaSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -229,38 +238,33 @@ class QDQBertSelfAttention(nn.Module):
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = quant_nn.QuantLinear(config.hidden_size, self.all_head_size)
-        self.key = quant_nn.QuantLinear(config.hidden_size, self.all_head_size)
-        self.value = quant_nn.QuantLinear(config.hidden_size, self.all_head_size)
+        self.query = nn.Linear(config.hidden_size, self.all_head_size)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size)
+        self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            self.max_position_embeddings = config.max_position_embeddings
-            self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
-
+        self.relative_positions_encoding = NezhaRelativePositionsEncoding(
+            length=config.max_position_embeddings,
+            depth=self.attention_head_size,
+            max_relative_position=config.max_relative_position,
+        )
         self.is_decoder = config.is_decoder
 
-        self.matmul_q_input_quantizer = TensorQuantizer(quant_nn.QuantLinear.default_quant_desc_input)
-        self.matmul_k_input_quantizer = TensorQuantizer(quant_nn.QuantLinear.default_quant_desc_input)
-        self.matmul_v_input_quantizer = TensorQuantizer(quant_nn.QuantLinear.default_quant_desc_input)
-        self.matmul_a_input_quantizer = TensorQuantizer(quant_nn.QuantLinear.default_quant_desc_input)
-
-    def transpose_for_scores(self, x):
+    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(*new_x_shape)
+        x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
     def forward(
         self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        past_key_value=None,
-        output_attentions=False,
-    ):
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor]:
         mixed_query_layer = self.query(hidden_states)
 
         # If this is instantiated as a cross-attention module, the keys
@@ -299,33 +303,30 @@ class QDQBertSelfAttention(nn.Module):
             past_key_value = (key_layer, value_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(
-            self.matmul_q_input_quantizer(query_layer), self.matmul_k_input_quantizer(key_layer.transpose(-1, -2))
+        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+
+        batch_size, num_attention_heads, from_seq_length, to_seq_length = attention_scores.size()
+        relations_keys = self.relative_positions_encoding(to_seq_length)
+        query_layer_t = query_layer.permute(2, 0, 1, 3)
+
+        query_layer_r = query_layer_t.contiguous().view(
+            from_seq_length, batch_size * num_attention_heads, self.attention_head_size
         )
-
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            seq_length = hidden_states.size()[1]
-            position_ids_l = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
-            position_ids_r = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
-            distance = position_ids_l - position_ids_r
-            positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
-            positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
-
-            if self.position_embedding_type == "relative_key":
-                relative_position_scores = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-                attention_scores = attention_scores + relative_position_scores
-            elif self.position_embedding_type == "relative_key_query":
-                relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-                relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
-                attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
+        key_position_scores = torch.matmul(query_layer_r, relations_keys.permute(0, 2, 1))
+        key_position_scores_r = key_position_scores.view(
+            from_seq_length, batch_size, num_attention_heads, from_seq_length
+        )
+        key_position_scores_r_t = key_position_scores_r.permute(1, 2, 0, 3)
+        attention_scores = attention_scores + key_position_scores_r_t
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in QDQBertModel forward() function)
+            # Apply the attention mask is (precomputed for all layers in NezhaModel forward() function)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
-        attention_probs = nn.Softmax(dim=-1)(attention_scores)
+        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -335,13 +336,22 @@ class QDQBertSelfAttention(nn.Module):
         if head_mask is not None:
             attention_probs = attention_probs * head_mask
 
-        context_layer = torch.matmul(
-            self.matmul_a_input_quantizer(attention_probs), self.matmul_v_input_quantizer(value_layer)
+        context_layer = torch.matmul(attention_probs, value_layer)
+        relations_values = self.relative_positions_encoding(to_seq_length)
+        attention_probs_t = attention_probs.permute(2, 0, 1, 3)
+        attentions_probs_r = attention_probs_t.contiguous().view(
+            from_seq_length, batch_size * num_attention_heads, to_seq_length
         )
+        value_position_scores = torch.matmul(attentions_probs_r, relations_values)
+        value_position_scores_r = value_position_scores.view(
+            from_seq_length, batch_size, num_attention_heads, self.attention_head_size
+        )
+        value_position_scores_r_t = value_position_scores_r.permute(1, 2, 0, 3)
+        context_layer = context_layer + value_position_scores_r_t
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(*new_context_layer_shape)
+        context_layer = context_layer.view(new_context_layer_shape)
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
@@ -350,35 +360,26 @@ class QDQBertSelfAttention(nn.Module):
         return outputs
 
 
-class QDQBertSelfOutput(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->Nezha
+class NezhaSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
-        # Quantize Linear layer
-        self.dense = quant_nn.QuantLinear(config.hidden_size, config.hidden_size)
-
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-        # Quantize the inputs to the residual add
-        self.add_local_input_quantizer = TensorQuantizer(quant_nn.QuantLinear.default_quant_desc_input)
-        self.add_residual_input_quantizer = TensorQuantizer(quant_nn.QuantLinear.default_quant_desc_input)
-
-    def forward(self, hidden_states, input_tensor):
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        # Quantize the inputs to the residual add
-        add_local = self.add_local_input_quantizer(hidden_states)
-        add_residual = self.add_residual_input_quantizer(input_tensor)
-        hidden_states = self.LayerNorm(add_local + add_residual)
+        hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
 
 
-# Based on transformers.models.bert.modeling_bert.BertAttention with Bert -> QDQBert
-class QDQBertAttention(nn.Module):
+class NezhaAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.self = QDQBertSelfAttention(config)
-        self.output = QDQBertSelfOutput(config)
+        self.self = NezhaSelfAttention(config)
+        self.output = NezhaSelfOutput(config)
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
@@ -401,14 +402,14 @@ class QDQBertAttention(nn.Module):
 
     def forward(
         self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        past_key_value=None,
-        output_attentions=False,
-    ):
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor]:
         self_outputs = self.self(
             hidden_states,
             attention_mask,
@@ -423,69 +424,62 @@ class QDQBertAttention(nn.Module):
         return outputs
 
 
-class QDQBertIntermediate(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->Nezha
+class NezhaIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
-        # Quantize Linear layer
-        self.dense = quant_nn.QuantLinear(config.hidden_size, config.intermediate_size)
+        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
 
 
-class QDQBertOutput(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->Nezha
+class NezhaOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
-        # Quantize Linear layer
-        self.dense = quant_nn.QuantLinear(config.intermediate_size, config.hidden_size)
+        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-        # Quantize the inputs to the residual add
-        self.add_local_input_quantizer = TensorQuantizer(quant_nn.QuantLinear.default_quant_desc_input)
-        self.add_residual_input_quantizer = TensorQuantizer(quant_nn.QuantLinear.default_quant_desc_input)
-
-    def forward(self, hidden_states, input_tensor):
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        # Quantize the inputs to the residual add
-        add_local = self.add_local_input_quantizer(hidden_states)
-        add_residual = self.add_residual_input_quantizer(input_tensor)
-        hidden_states = self.LayerNorm(add_local + add_residual)
+        hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
 
 
-# Based on transformers.models.bert.modeling_bert.BertLayer with Bert -> QDQBert
-class QDQBertLayer(nn.Module):
+class NezhaLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = QDQBertAttention(config)
+        self.attention = NezhaAttention(config)
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = QDQBertAttention(config)
-        self.intermediate = QDQBertIntermediate(config)
-        self.output = QDQBertOutput(config)
+            self.crossattention = NezhaAttention(config)
+        self.intermediate = NezhaIntermediate(config)
+        self.output = NezhaOutput(config)
 
     def forward(
         self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        past_key_value=None,
-        output_attentions=False,
-    ):
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor]:
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
         self_attention_outputs = self.attention(
@@ -530,7 +524,9 @@ class QDQBertLayer(nn.Module):
             cross_attn_present_key_value = cross_attention_outputs[-1]
             present_key_value = present_key_value + cross_attn_present_key_value
 
-        layer_output = self.feed_forward_chunk(attention_output)
+        layer_output = apply_chunking_to_forward(
+            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
+        )
         outputs = (layer_output,) + outputs
 
         # if decoder, return the attn key/values as the last output
@@ -545,27 +541,27 @@ class QDQBertLayer(nn.Module):
         return layer_output
 
 
-# Based on transformers.models.bert.modeling_bert.BertEncoder with Bert -> QDQBert
-class QDQBertEncoder(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->Nezha
+class NezhaEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([QDQBertLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([NezhaLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
         self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        past_key_values=None,
-        use_cache=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
-    ):
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = False,
+        output_hidden_states: Optional[bool] = False,
+        return_dict: Optional[bool] = True,
+    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
@@ -643,8 +639,8 @@ class QDQBertEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert -> QDQBert
-class QDQBertPooler(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->Nezha
+class NezhaPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -659,8 +655,8 @@ class QDQBertPooler(nn.Module):
         return pooled_output
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with Bert -> QDQBert
-class QDQBertPredictionHeadTransform(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with Bert->Nezha
+class NezhaPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -677,11 +673,11 @@ class QDQBertPredictionHeadTransform(nn.Module):
         return hidden_states
 
 
-# Based on transformers.models.bert.modeling_bert.BertLMPredictionHead with Bert -> QDQBert
-class QDQBertLMPredictionHead(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead with Bert->Nezha
+class NezhaLMPredictionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.transform = QDQBertPredictionHeadTransform(config)
+        self.transform = NezhaPredictionHeadTransform(config)
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
@@ -698,19 +694,19 @@ class QDQBertLMPredictionHead(nn.Module):
         return hidden_states
 
 
-# Based on transformers.models.bert.modeling_bert.BertOnlyMLMHead with Bert -> QDQBert
-class QDQBertOnlyMLMHead(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertOnlyMLMHead with Bert->Nezha
+class NezhaOnlyMLMHead(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.predictions = QDQBertLMPredictionHead(config)
+        self.predictions = NezhaLMPredictionHead(config)
 
-    def forward(self, sequence_output):
+    def forward(self, sequence_output: torch.Tensor) -> torch.Tensor:
         prediction_scores = self.predictions(sequence_output)
         return prediction_scores
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOnlyNSPHead with Bert -> QDQBert
-class QDQBertOnlyNSPHead(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertOnlyNSPHead with Bert->Nezha
+class NezhaOnlyNSPHead(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.seq_relationship = nn.Linear(config.hidden_size, 2)
@@ -720,11 +716,11 @@ class QDQBertOnlyNSPHead(nn.Module):
         return seq_relationship_score
 
 
-# Based on transformers.models.bert.modeling_bert.BertPreTrainingHeads with Bert -> QDQBert
-class QDQBertPreTrainingHeads(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertPreTrainingHeads with Bert->Nezha
+class NezhaPreTrainingHeads(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.predictions = QDQBertLMPredictionHead(config)
+        self.predictions = NezhaLMPredictionHead(config)
         self.seq_relationship = nn.Linear(config.hidden_size, 2)
 
     def forward(self, sequence_output, pooled_output):
@@ -733,18 +729,17 @@ class QDQBertPreTrainingHeads(nn.Module):
         return prediction_scores, seq_relationship_score
 
 
-# Based on transformers.models.bert.modeling_bert.BertPreTrainedModel with Bert -> QDQBert
-class QDQBertPreTrainedModel(PreTrainedModel):
+class NezhaPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = QDQBertConfig
-    load_tf_weights = load_tf_weights_in_qdqbert
-    base_model_prefix = "bert"
+    config_class = NezhaConfig
+    load_tf_weights = load_tf_weights_in_nezha
+    base_model_prefix = "nezha"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
+    _keys_to_ignore_on_load_missing = [r"positions_encoding"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -763,11 +758,45 @@ class QDQBertPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, QDQBertEncoder):
+        if isinstance(module, NezhaEncoder):
             module.gradient_checkpointing = value
 
 
-QDQBERT_START_DOCSTRING = r"""
+@dataclass
+class NezhaForPreTrainingOutput(ModelOutput):
+    """
+    Output type of [`NezhaForPreTraining`].
+
+    Args:
+        loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
+            Total loss as the sum of the masked language modeling loss and the next sequence prediction
+            (classification) loss.
+        prediction_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        seq_relationship_logits (`torch.FloatTensor` of shape `(batch_size, 2)`):
+            Prediction scores of the next sequence prediction (classification) head (scores of True/False continuation
+            before SoftMax).
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    prediction_logits: torch.FloatTensor = None
+    seq_relationship_logits: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+NEZHA_START_DOCSTRING = r"""
 
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -778,12 +807,12 @@ QDQBERT_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`QDQBertConfig`]): Model configuration class with all the parameters of the model.
+        config ([`NezhaConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-QDQBERT_INPUTS_DOCSTRING = r"""
+NEZHA_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
@@ -807,11 +836,6 @@ QDQBERT_INPUTS_DOCSTRING = r"""
             - 1 corresponds to a *sentence B* token.
 
             [What are token type IDs?](../glossary#token-type-ids)
-        position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
@@ -834,10 +858,10 @@ QDQBERT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare QDQBERT Model transformer outputting raw hidden-states without any specific head on top.",
-    QDQBERT_START_DOCSTRING,
+    "The bare Nezha Model transformer outputting raw hidden-states without any specific head on top.",
+    NEZHA_START_DOCSTRING,
 )
-class QDQBertModel(QDQBertPreTrainedModel):
+class NezhaModel(NezhaPreTrainedModel):
     """
 
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
@@ -850,15 +874,14 @@ class QDQBertModel(QDQBertPreTrainedModel):
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
-    def __init__(self, config, add_pooling_layer: bool = True):
-        requires_backends(self, "pytorch_quantization")
+    def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = QDQBertEmbeddings(config)
-        self.encoder = QDQBertEncoder(config)
+        self.embeddings = NezhaEmbeddings(config)
+        self.encoder = NezhaEncoder(config)
 
-        self.pooler = QDQBertPooler(config) if add_pooling_layer else None
+        self.pooler = NezhaPooler(config) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -869,7 +892,7 @@ class QDQBertModel(QDQBertPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    def _prune_heads(self, heads_to_prune: Dict[int, List[int]]):
+    def _prune_heads(self, heads_to_prune):
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
         class PreTrainedModel
@@ -877,7 +900,7 @@ class QDQBertModel(QDQBertPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(QDQBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(NEZHA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -886,20 +909,19 @@ class QDQBertModel(QDQBertPreTrainedModel):
     )
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPoolingAndCrossAttentions]:
+    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
@@ -935,13 +957,12 @@ class QDQBertModel(QDQBertPreTrainedModel):
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             input_shape = input_ids.size()
-            batch_size, seq_length = input_shape
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
-            batch_size, seq_length = input_shape
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
+        batch_size, seq_length = input_shape
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         # past_key_values_length
@@ -982,10 +1003,8 @@ class QDQBertModel(QDQBertPreTrainedModel):
 
         embedding_output = self.embeddings(
             input_ids=input_ids,
-            position_ids=position_ids,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
-            past_key_values_length=past_key_values_length,
         )
         encoder_outputs = self.encoder(
             embedding_output,
@@ -1016,21 +1035,18 @@ class QDQBertModel(QDQBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """QDQBERT Model with a `language modeling` head on top for CLM fine-tuning.""", QDQBERT_START_DOCSTRING
+    """
+    Nezha Model with two heads on top as done during the pretraining: a `masked language modeling` head and a `next
+    sentence prediction (classification)` head.
+    """,
+    NEZHA_START_DOCSTRING,
 )
-class QDQBertLMHeadModel(QDQBertPreTrainedModel):
-
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
-
+class NezhaForPreTraining(NezhaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        if not config.is_decoder:
-            logger.warning("If you want to use `QDQBertLMHeadModel` as a standalone, add `is_decoder=True.`")
-
-        self.bert = QDQBertModel(config, add_pooling_layer=False)
-        self.cls = QDQBertOnlyMLMHead(config)
+        self.nezha = NezhaModel(config)
+        self.cls = NezhaPreTrainingHeads(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1041,153 +1057,106 @@ class QDQBertLMHeadModel(QDQBertPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
 
-    @add_start_docstrings_to_model_forward(QDQBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(NEZHA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=NezhaForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
+        input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.LongTensor]]] = None,
-        use_cache: Optional[bool] = None,
+        labels: Optional[torch.Tensor] = None,
+        next_sentence_label: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
+    ) -> Union[Tuple[torch.Tensor], NezhaForPreTrainingOutput]:
         r"""
-        encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
-            the model is configured as a decoder.
-        encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
-            the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
+            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+                config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked),
+                the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+            next_sentence_label (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+                Labels for computing the next sequence prediction (classification) loss. Input should be a sequence
+                pair (see `input_ids` docstring) Indices should be in `[0, 1]`:
 
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
-            `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
-            ignored (masked), the loss is only computed for the tokens with labels n `[0, ..., config.vocab_size]`
-        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
+                - 0 indicates sequence B is a continuation of sequence A,
+                - 1 indicates sequence B is a random sequence.
+            kwargs (`Dict[str, any]`, optional, defaults to *{}*):
+                Used to hide legacy arguments that have been deprecated.
 
         Returns:
 
         Example:
 
         ```python
-        >>> from transformers import BertTokenizer, QDQBertLMHeadModel, QDQBertConfig
+        >>> from transformers import BertTokenizer, NezhaForPreTraining
         >>> import torch
 
-        >>> tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
-        >>> config = QDQBertConfig.from_pretrained("bert-base-cased")
-        >>> config.is_decoder = True
-        >>> model = QDQBertLMHeadModel.from_pretrained("bert-base-cased", config=config)
+        >>> tokenizer = BertTokenizer.from_pretrained("sijunhe/nezha-cn-base")
+        >>> model = NezhaForPreTraining.from_pretrained("sijunhe/nezha-cn-base")
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
 
-        >>> prediction_logits = outputs.logits
-        ```"""
+        >>> prediction_logits = outputs.prediction_logits
+        >>> seq_relationship_logits = outputs.seq_relationship_logits
+        ```
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        if labels is not None:
-            use_cache = False
 
-        outputs = self.bert(
+        outputs = self.nezha(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
-            position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
-        sequence_output = outputs[0]
-        prediction_scores = self.cls(sequence_output)
+        sequence_output, pooled_output = outputs[:2]
+        prediction_scores, seq_relationship_score = self.cls(sequence_output, pooled_output)
 
-        lm_loss = None
-        if labels is not None:
-            # we are doing next-token prediction; shift prediction scores and input ids by one
-            shifted_prediction_scores = prediction_scores[:, :-1, :].contiguous()
-            labels = labels[:, 1:].contiguous()
+        total_loss = None
+        if labels is not None and next_sentence_label is not None:
             loss_fct = CrossEntropyLoss()
-            lm_loss = loss_fct(shifted_prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+            next_sentence_loss = loss_fct(seq_relationship_score.view(-1, 2), next_sentence_label.view(-1))
+            total_loss = masked_lm_loss + next_sentence_loss
 
         if not return_dict:
-            output = (prediction_scores,) + outputs[2:]
-            return ((lm_loss,) + output) if lm_loss is not None else output
+            output = (prediction_scores, seq_relationship_score) + outputs[2:]
+            return ((total_loss,) + output) if total_loss is not None else output
 
-        return CausalLMOutputWithCrossAttentions(
-            loss=lm_loss,
-            logits=prediction_scores,
-            past_key_values=outputs.past_key_values,
+        return NezhaForPreTrainingOutput(
+            loss=total_loss,
+            prediction_logits=prediction_scores,
+            seq_relationship_logits=seq_relationship_score,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            cross_attentions=outputs.cross_attentions,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids: Optional[torch.LongTensor],
-        past=None,
-        attention_mask: Optional[torch.Tensor] = None,
-        **model_kwargs
-    ):
-        input_shape = input_ids.shape
-        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
-        if attention_mask is None:
-            attention_mask = input_ids.new_ones(input_shape)
 
-        # cut decoder_input_ids if past is used
-        if past is not None:
-            input_ids = input_ids[:, -1:]
-
-        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past}
-
-    def _reorder_cache(self, past, beam_idx):
-        reordered_past = ()
-        for layer_past in past:
-            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
-        return reordered_past
-
-
-@add_start_docstrings("""QDQBERT Model with a `language modeling` head on top.""", QDQBERT_START_DOCSTRING)
-class QDQBertForMaskedLM(QDQBertPreTrainedModel):
+@add_start_docstrings("""Nezha Model with a `language modeling` head on top.""", NEZHA_START_DOCSTRING)
+class NezhaForMaskedLM(NezhaPreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
+    _keys_to_ignore_on_load_missing = [r"predictions.decoder.bias", r"positions_encoding"]
 
     def __init__(self, config):
         super().__init__(config)
 
         if config.is_decoder:
             logger.warning(
-                "If you want to use `QDQBertForMaskedLM` make sure `config.is_decoder=False` for "
+                "If you want to use `NezhaForMaskedLM` make sure `config.is_decoder=False` for "
                 "bi-directional self-attention."
             )
 
-        self.bert = QDQBertModel(config, add_pooling_layer=False)
-        self.cls = QDQBertOnlyMLMHead(config)
+        self.nezha = NezhaModel(config, add_pooling_layer=False)
+        self.cls = NezhaOnlyMLMHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1198,7 +1167,7 @@ class QDQBertForMaskedLM(QDQBertPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
 
-    @add_start_docstrings_to_model_forward(QDQBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(NEZHA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1207,19 +1176,18 @@ class QDQBertForMaskedLM(QDQBertPreTrainedModel):
     )
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, MaskedLMOutput]:
+    ) -> Union[Tuple[torch.Tensor], MaskedLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1229,11 +1197,10 @@ class QDQBertForMaskedLM(QDQBertPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.bert(
+        outputs = self.nezha(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
-            position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             encoder_hidden_states=encoder_hidden_states,
@@ -1262,9 +1229,7 @@ class QDQBertForMaskedLM(QDQBertPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(
-        self, input_ids: torch.LongTensor, attention_mask: Optional[torch.FloatTensor] = None, **model_kwargs
-    ):
+    def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **model_kwargs):
         input_shape = input_ids.shape
         effective_batch_size = input_shape[0]
 
@@ -1282,35 +1247,34 @@ class QDQBertForMaskedLM(QDQBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """Bert Model with a `next sentence prediction (classification)` head on top.""",
-    QDQBERT_START_DOCSTRING,
+    """Nezha Model with a `next sentence prediction (classification)` head on top.""",
+    NEZHA_START_DOCSTRING,
 )
-class QDQBertForNextSentencePrediction(QDQBertPreTrainedModel):
+class NezhaForNextSentencePrediction(NezhaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.bert = QDQBertModel(config)
-        self.cls = QDQBertOnlyNSPHead(config)
+        self.nezha = NezhaModel(config)
+        self.cls = NezhaOnlyNSPHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(QDQBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(NEZHA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=NextSentencePredictorOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[Tuple, NextSentencePredictorOutput]:
+    ) -> Union[Tuple[torch.Tensor], NextSentencePredictorOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair
@@ -1324,11 +1288,11 @@ class QDQBertForNextSentencePrediction(QDQBertPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import BertTokenizer, QDQBertForNextSentencePrediction
+        >>> from transformers import BertTokenizer, NezhaForNextSentencePrediction
         >>> import torch
 
-        >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-        >>> model = QDQBertForNextSentencePrediction.from_pretrained("bert-base-uncased")
+        >>> tokenizer = BertTokenizer.from_pretrained("sijunhe/nezha-cn-base")
+        >>> model = NezhaForNextSentencePrediction.from_pretrained("sijunhe/nezha-cn-base")
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
@@ -1337,7 +1301,8 @@ class QDQBertForNextSentencePrediction(QDQBertPreTrainedModel):
         >>> outputs = model(**encoding, labels=torch.LongTensor([1]))
         >>> logits = outputs.logits
         >>> assert logits[0, 0] < logits[0, 1]  # next sentence was random
-        ```"""
+        ```
+        """
 
         if "next_sentence_label" in kwargs:
             warnings.warn(
@@ -1349,11 +1314,10 @@ class QDQBertForNextSentencePrediction(QDQBertPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.bert(
+        outputs = self.nezha(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
-            position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
@@ -1384,24 +1348,28 @@ class QDQBertForNextSentencePrediction(QDQBertPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Bert Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
+    Nezha Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
     output) e.g. for GLUE tasks.
     """,
-    QDQBERT_START_DOCSTRING,
+    NEZHA_START_DOCSTRING,
 )
-class QDQBertForSequenceClassification(QDQBertPreTrainedModel):
+class NezhaForSequenceClassification(NezhaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
 
-        self.bert = QDQBertModel(config)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.nezha = NezhaModel(config)
+        classifier_dropout = (
+            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
+        )
+        self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(QDQBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(NEZHA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1410,17 +1378,16 @@ class QDQBertForSequenceClassification(QDQBertPreTrainedModel):
     )
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SequenceClassifierOutput]:
+    ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1429,11 +1396,10 @@ class QDQBertForSequenceClassification(QDQBertPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.bert(
+        outputs = self.nezha(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
-            position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
@@ -1482,23 +1448,26 @@ class QDQBertForSequenceClassification(QDQBertPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Bert Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
+    Nezha Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
     softmax) e.g. for RocStories/SWAG tasks.
     """,
-    QDQBERT_START_DOCSTRING,
+    NEZHA_START_DOCSTRING,
 )
-class QDQBertForMultipleChoice(QDQBertPreTrainedModel):
+class NezhaForMultipleChoice(NezhaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.bert = QDQBertModel(config)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.nezha = NezhaModel(config)
+        classifier_dropout = (
+            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
+        )
+        self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(QDQBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(NEZHA_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1507,17 +1476,16 @@ class QDQBertForMultipleChoice(QDQBertPreTrainedModel):
     )
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, MultipleChoiceModelOutput]:
+    ) -> Union[Tuple[torch.Tensor], MultipleChoiceModelOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
@@ -1526,22 +1494,19 @@ class QDQBertForMultipleChoice(QDQBertPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
-
         input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
         attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
         token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
-        position_ids = position_ids.view(-1, position_ids.size(-1)) if position_ids is not None else None
         inputs_embeds = (
             inputs_embeds.view(-1, inputs_embeds.size(-2), inputs_embeds.size(-1))
             if inputs_embeds is not None
             else None
         )
 
-        outputs = self.bert(
+        outputs = self.nezha(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
-            position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
@@ -1550,9 +1515,11 @@ class QDQBertForMultipleChoice(QDQBertPreTrainedModel):
         )
 
         pooled_output = outputs[1]
-
+        print(pooled_output.shape)
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
+        print(logits.shape)
+        print(num_choices)
         reshaped_logits = logits.view(-1, num_choices)
 
         loss = None
@@ -1574,12 +1541,12 @@ class QDQBertForMultipleChoice(QDQBertPreTrainedModel):
 
 @add_start_docstrings(
     """
-    QDQBERT Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
+    Nezha Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
     Named-Entity-Recognition (NER) tasks.
     """,
-    QDQBERT_START_DOCSTRING,
+    NEZHA_START_DOCSTRING,
 )
-class QDQBertForTokenClassification(QDQBertPreTrainedModel):
+class NezhaForTokenClassification(NezhaPreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
@@ -1587,14 +1554,17 @@ class QDQBertForTokenClassification(QDQBertPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.bert = QDQBertModel(config, add_pooling_layer=False)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.nezha = NezhaModel(config, add_pooling_layer=False)
+        classifier_dropout = (
+            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
+        )
+        self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(QDQBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(NEZHA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1603,28 +1573,26 @@ class QDQBertForTokenClassification(QDQBertPreTrainedModel):
     )
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, TokenClassifierOutput]:
+    ) -> Union[Tuple[torch.Tensor], TokenClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.bert(
+        outputs = self.nezha(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
-            position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
@@ -1656,12 +1624,12 @@ class QDQBertForTokenClassification(QDQBertPreTrainedModel):
 
 @add_start_docstrings(
     """
-    QDQBERT Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    Nezha Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
     layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
-    QDQBERT_START_DOCSTRING,
+    NEZHA_START_DOCSTRING,
 )
-class QDQBertForQuestionAnswering(QDQBertPreTrainedModel):
+class NezhaForQuestionAnswering(NezhaPreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
@@ -1669,13 +1637,13 @@ class QDQBertForQuestionAnswering(QDQBertPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.bert = QDQBertModel(config, add_pooling_layer=False)
+        self.nezha = NezhaModel(config, add_pooling_layer=False)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(QDQBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(NEZHA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1684,18 +1652,17 @@ class QDQBertForQuestionAnswering(QDQBertPreTrainedModel):
     )
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        start_positions: Optional[torch.LongTensor] = None,
-        end_positions: Optional[torch.LongTensor] = None,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        start_positions: Optional[torch.Tensor] = None,
+        end_positions: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, QuestionAnsweringModelOutput]:
+    ) -> Union[Tuple[torch.Tensor], QuestionAnsweringModelOutput]:
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
@@ -1708,11 +1675,10 @@ class QDQBertForQuestionAnswering(QDQBertPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.bert(
+        outputs = self.nezha(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
-            position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
