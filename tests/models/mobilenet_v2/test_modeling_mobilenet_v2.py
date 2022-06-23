@@ -12,13 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch MobileNetV1 model. """
+""" Testing suite for the PyTorch MobileNetV2 model. """
 
 
 import inspect
 import unittest
 
-from transformers import MobileNetV1Config
+from transformers import MobileNetV2Config
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
@@ -29,24 +29,24 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import MobileNetV1ForImageClassification, MobileNetV1Model
-    from transformers.models.mobilenet_v1.modeling_mobilenet_v1 import MOBILENET_V1_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers import MobileNetV2ForImageClassification, MobileNetV2Model
+    from transformers.models.mobilenet_v2.modeling_mobilenet_v2 import MOBILENET_V2_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import MobileNetV1FeatureExtractor
+    from transformers import MobileNetV2FeatureExtractor
 
 
-class MobileNetV1ConfigTester(ConfigTester):
+class MobileNetV2ConfigTester(ConfigTester):
     def create_and_test_config_common_properties(self):
         config = self.config_class(**self.inputs_dict)
         self.parent.assertTrue(hasattr(config, "tf_padding"))
         self.parent.assertTrue(hasattr(config, "depth_multiplier"))
 
 
-class MobileNetV1ModelTester:
+class MobileNetV2ModelTester:
     def __init__(
         self,
         parent,
@@ -97,7 +97,7 @@ class MobileNetV1ModelTester:
         return config, pixel_values, labels, pixel_labels
 
     def get_config(self):
-        return MobileNetV1Config(
+        return MobileNetV2Config(
             num_channels=self.num_channels,
             image_size=self.image_size,
             depth_multiplier=self.depth_multiplier,
@@ -109,7 +109,7 @@ class MobileNetV1ModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values, labels, pixel_labels):
-        model = MobileNetV1Model(config=config)
+        model = MobileNetV2Model(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -125,7 +125,7 @@ class MobileNetV1ModelTester:
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels, pixel_labels):
         config.num_labels = self.num_labels
-        model = MobileNetV1ForImageClassification(config)
+        model = MobileNetV2ForImageClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, labels=labels)
@@ -139,13 +139,13 @@ class MobileNetV1ModelTester:
 
 
 @require_torch
-class MobileNetV1ModelTest(ModelTesterMixin, unittest.TestCase):
+class MobileNetV2ModelTest(ModelTesterMixin, unittest.TestCase):
     """
-    Here we also overwrite some of the tests of test_modeling_common.py, as MobileNetV1 does not use input_ids, inputs_embeds,
+    Here we also overwrite some of the tests of test_modeling_common.py, as MobileNetV2 does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
-    all_model_classes = (MobileNetV1Model, MobileNetV1ForImageClassification) if is_torch_available() else ()
+    all_model_classes = (MobileNetV2Model, MobileNetV2ForImageClassification) if is_torch_available() else ()
 
     test_pruning = False
     test_resize_embeddings = False
@@ -153,21 +153,21 @@ class MobileNetV1ModelTest(ModelTesterMixin, unittest.TestCase):
     has_attentions = False
 
     def setUp(self):
-        self.model_tester = MobileNetV1ModelTester(self)
-        self.config_tester = MobileNetV1ConfigTester(self, config_class=MobileNetV1Config, has_text_modality=False)
+        self.model_tester = MobileNetV2ModelTester(self)
+        self.config_tester = MobileNetV2ConfigTester(self, config_class=MobileNetV2Config, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="MobileNetV1 does not use inputs_embeds")
+    @unittest.skip(reason="MobileNetV2 does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="MobileNetV1 does not support input and output embeddings")
+    @unittest.skip(reason="MobileNetV2 does not support input and output embeddings")
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(reason="MobileNetV1 does not output attentions")
+    @unittest.skip(reason="MobileNetV2 does not output attentions")
     def test_attention_outputs(self):
         pass
 
@@ -219,8 +219,8 @@ class MobileNetV1ModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in MOBILENET_V1_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = MobileNetV1Model.from_pretrained(model_name)
+        for model_name in MOBILENET_V2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = MobileNetV2Model.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
@@ -232,18 +232,18 @@ def prepare_img():
 
 @require_torch
 @require_vision
-class MobileNetV1ModelIntegrationTest(unittest.TestCase):
+class MobileNetV2ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         return (
-            MobileNetV1FeatureExtractor.from_pretrained("Matthijs/mobilenet_v1_1.0_224")
+            MobileNetV2FeatureExtractor.from_pretrained("Matthijs/mobilenet_v2_1.0_224")
             if is_vision_available()
             else None
         )
 
     @slow
     def test_inference_image_classification_head(self):
-        model = MobileNetV1ForImageClassification.from_pretrained("Matthijs/mobilenet_v1_1.0_224").to(torch_device)
+        model = MobileNetV2ForImageClassification.from_pretrained("Matthijs/mobilenet_v2_1.0_224").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()

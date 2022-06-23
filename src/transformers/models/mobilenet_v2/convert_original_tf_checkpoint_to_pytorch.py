@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert MobileNetV1 checkpoints from the tensorflow/models library."""
+"""Convert MobileNetV2 checkpoints from the tensorflow/models library."""
 
 
 import argparse
@@ -26,10 +26,10 @@ from PIL import Image
 import requests
 from huggingface_hub import hf_hub_download
 from transformers import (
-    MobileNetV1Config,
-    MobileNetV1FeatureExtractor,
-    MobileNetV1ForImageClassification,
-    load_tf_weights_in_mobilenet_v1,
+    MobileNetV2Config,
+    MobileNetV2FeatureExtractor,
+    MobileNetV2ForImageClassification,
+    load_tf_weights_in_mobilenet_v2,
 )
 from transformers.utils import logging
 
@@ -38,18 +38,18 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-def get_mobilenet_v1_config(model_name):
-    config = MobileNetV1Config(layer_norm_eps=0.001)
+def get_mobilenet_v2_config(model_name):
+    config = MobileNetV2Config(layer_norm_eps=0.001)
 
     if "_quant" in model_name:
         raise ValueError("Quantized models are not supported.")
 
-    matches = re.match(r"^mobilenet_v1_([^_]*)_([^_]*)$", model_name)
+    matches = re.match(r"^mobilenet_v2_([^_]*)_([^_]*)$", model_name)
     if matches:
         config.depth_multiplier = float(matches[1])
         config.image_size = int(matches[2])
 
-    # The TensorFlow version of MobileNetV1 predicts 1001 classes instead of
+    # The TensorFlow version of MobileNetV2 predicts 1001 classes instead of
     # the usual 1000. The first class (index 0) is "background".
     config.num_labels = 1001
     filename = "imagenet-1k-id2label.json"
@@ -73,27 +73,27 @@ def prepare_img():
 @torch.no_grad()
 def convert_movilevit_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_path, push_to_hub=False):
     """
-    Copy/paste/tweak model's weights to our MobileNetV1 structure.
+    Copy/paste/tweak model's weights to our MobileNetV2 structure.
     """
-    config = get_mobilenet_v1_config(model_name)
+    config = get_mobilenet_v2_config(model_name)
 
     # Load 🤗 model
-    model = MobileNetV1ForImageClassification(config).eval()
+    model = MobileNetV2ForImageClassification(config).eval()
 
     # Load weights from TensorFlow checkpoint
-    load_tf_weights_in_mobilenet_v1(model, config, checkpoint_path)
+    load_tf_weights_in_mobilenet_v2(model, config, checkpoint_path)
 
-    # Check outputs on an image, prepared by MobileNetV1FeatureExtractor
-    feature_extractor = MobileNetV1FeatureExtractor(crop_size=config.image_size, size=config.image_size + 32)
+    # Check outputs on an image, prepared by MobileNetV2FeatureExtractor
+    feature_extractor = MobileNetV2FeatureExtractor(crop_size=config.image_size, size=config.image_size + 32)
     encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
     outputs = model(**encoding)
     logits = outputs.logits
 
     assert logits.shape == (1, 1001)
 
-    if model_name == "mobilenet_v1_1.0_224":
+    if model_name == "mobilenet_v2_1.0_224":
         expected_logits = torch.tensor([-4.1739, -1.1233, 3.1205])
-    elif model_name == "mobilenet_v1_0.75_192":
+    elif model_name == "mobilenet_v2_0.75_192":
         expected_logits = torch.tensor([-3.9440, -2.3141, -0.3333])
     else:
         expected_logits = None
@@ -119,9 +119,9 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="mobilenet_v1_1.0_224",
+        default="mobilenet_v2_1.0_224",
         type=str,
-        help="Name of the MobileNetV1 model you'd like to convert. Should in the form 'mobilenet_v1_<depth>_<size>'.",
+        help="Name of the MobileNetV2 model you'd like to convert. Should in the form 'mobilenet_v2_<depth>_<size>'.",
     )
     parser.add_argument(
         "--checkpoint_path", required=True, type=str, help="Path to the original TensorFlow checkpoint (.ckpt file)."

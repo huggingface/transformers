@@ -3505,10 +3505,10 @@ class MobileViTForImageClassification(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-MOBILENET_V1_PRETRAINED_MODEL_ARCHIVE_LIST = None
+MOBILENET_V2_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class MobileNetV1ForImageClassification(metaclass=DummyObject):
+class MobileNetV2ForImageClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -3522,7 +3522,7 @@ class MobileViTForSemanticSegmentation(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class MobileNetV1Model(metaclass=DummyObject):
+class MobileNetV2Model(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -3536,7 +3536,7 @@ class MobileViTModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class MobileNetV1PreTrainedModel(metaclass=DummyObject):
+class MobileNetV2PreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -3550,8 +3550,8 @@ class MobileViTPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-def load_tf_weights_in_mobilenet_v1(*args, **kwargs):
-    requires_backends(load_tf_weights_in_mobilenet_v1, ["torch"])
+def load_tf_weights_in_mobilenet_v2(*args, **kwargs):
+    requires_backends(load_tf_weights_in_mobilenet_v2, ["torch"])
 
 
 MPNET_PRETRAINED_MODEL_ARCHIVE_LIST = None

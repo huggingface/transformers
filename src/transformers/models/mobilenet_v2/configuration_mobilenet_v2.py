@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" MobileNetV1 model configuration"""
+""" MobileNetV2 model configuration"""
 
 from collections import OrderedDict
 from typing import Mapping
@@ -26,19 +26,19 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Matthijs/mobilenet_v1_1.0_224": "https://huggingface.co/Matthijs/mobilenet_v1_1.0_224/resolve/main/config.json",
-    "Matthijs/mobilenet_v1_0.75_192": "https://huggingface.co/Matthijs/mobilenet_v1_0.75_192/resolve/main/config.json",
-    # See all MobileNetV1 models at https://huggingface.co/models?filter=mobilenet_v1
+MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "Matthijs/mobilenet_v2_1.0_224": "https://huggingface.co/Matthijs/mobilenet_v2_1.0_224/resolve/main/config.json",
+    "Matthijs/mobilenet_v2_0.75_192": "https://huggingface.co/Matthijs/mobilenet_v2_0.75_192/resolve/main/config.json",
+    # See all MobileNetV2 models at https://huggingface.co/models?filter=mobilenet_v2
 }
 
 
-class MobileNetV1Config(PretrainedConfig):
+class MobileNetV2Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MobileNetV1Model`]. It is used to instantiate a
-    MobileNetV1 model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the MobileNetV1
-    [Matthijs/mobilenet_v1_1.0_224](https://huggingface.co/Matthijs/mobilenet_v1_1.0_224) architecture.
+    This is the configuration class to store the configuration of a [`MobileNetV2Model`]. It is used to instantiate a
+    MobileNetV2 model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the MobileNetV2
+    [Matthijs/mobilenet_v2_1.0_224](https://huggingface.co/Matthijs/mobilenet_v2_1.0_224) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -67,18 +67,18 @@ class MobileNetV1Config(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import MobileNetV1Config, MobileNetV1Model
+    >>> from transformers import MobileNetV2Config, MobileNetV2Model
 
-    >>> # Initializing a "mobilenet_v1_1.0_224" style configuration
-    >>> configuration = MobileNetV1Config()
+    >>> # Initializing a "mobilenet_v2_1.0_224" style configuration
+    >>> configuration = MobileNetV2Config()
 
-    >>> # Initializing a model from the "mobilenet_v1_1.0_224" style configuration
-    >>> model = MobileNetV1Model(configuration)
+    >>> # Initializing a model from the "mobilenet_v2_1.0_224" style configuration
+    >>> model = MobileNetV2Model(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    model_type = "mobilenet_v1"
+    model_type = "mobilenet_v2"
 
     def __init__(
         self,
@@ -109,7 +109,7 @@ class MobileNetV1Config(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
 
 
-class MobileNetV1OnnxConfig(OnnxConfig):
+class MobileNetV2OnnxConfig(OnnxConfig):
 
     torch_onnx_minimum_version = version.parse("1.11")
 

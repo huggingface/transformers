@@ -30,10 +30,10 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import MobileNetV1FeatureExtractor
+    from transformers import MobileNetV2FeatureExtractor
 
 
-class MobileNetV1FeatureExtractionTester(unittest.TestCase):
+class MobileNetV2FeatureExtractionTester(unittest.TestCase):
     def __init__(
         self,
         parent,
@@ -72,12 +72,12 @@ class MobileNetV1FeatureExtractionTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class MobileNetV1FeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class MobileNetV2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
-    feature_extraction_class = MobileNetV1FeatureExtractor if is_vision_available() else None
+    feature_extraction_class = MobileNetV2FeatureExtractor if is_vision_available() else None
 
     def setUp(self):
-        self.feature_extract_tester = MobileNetV1FeatureExtractionTester(self)
+        self.feature_extract_tester = MobileNetV2FeatureExtractionTester(self)
 
     @property
     def feat_extract_dict(self):

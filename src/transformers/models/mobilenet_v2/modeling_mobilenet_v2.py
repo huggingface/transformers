@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch MobileNetV1 model."""
+""" PyTorch MobileNetV2 model."""
 
 
 from typing import Optional, Union
@@ -25,29 +25,29 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPoolingAndNoAttention, ImageClassifierOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
-from .configuration_mobilenet_v1 import MobileNetV1Config
+from .configuration_mobilenet_v2 import MobileNetV2Config
 
 
 logger = logging.get_logger(__name__)
 
 
 # General docstring
-_CONFIG_FOR_DOC = "MobileNetV1Config"
-_FEAT_EXTRACTOR_FOR_DOC = "MobileNetV1FeatureExtractor"
+_CONFIG_FOR_DOC = "MobileNetV2Config"
+_FEAT_EXTRACTOR_FOR_DOC = "MobileNetV2FeatureExtractor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "Matthijs/mobilenet_v1_1.0_224"
+_CHECKPOINT_FOR_DOC = "Matthijs/mobilenet_v2_1.0_224"
 _EXPECTED_OUTPUT_SHAPE = [1, 1024, 7, 7]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "Matthijs/mobilenet_v1_1.0_224"
+_IMAGE_CLASS_CHECKPOINT = "Matthijs/mobilenet_v2_1.0_224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-MOBILENET_V1_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Matthijs/mobilenet_v1_1.0_224",
-    "Matthijs/mobilenet_v1_0.75_192",
-    # See all MobileNetV1 models at https://huggingface.co/models?filter=mobilenet_v1
+MOBILENET_V2_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "Matthijs/mobilenet_v2_1.0_224",
+    "Matthijs/mobilenet_v2_0.75_192",
+    # See all MobileNetV2 models at https://huggingface.co/models?filter=mobilenet_v2
 ]
 
 
@@ -58,8 +58,8 @@ def _build_tf_to_pytorch_map(model, config, tf_weights=None):
 
     tf_to_pt_map = {}
 
-    if isinstance(model, MobileNetV1ForImageClassification):
-        backbone = model.mobilenet_v1
+    if isinstance(model, MobileNetV2ForImageClassification):
+        backbone = model.mobilenet_v2
     else:
         backbone = model
 
@@ -90,7 +90,7 @@ def _build_tf_to_pytorch_map(model, config, tf_weights=None):
         tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = pointer.normalization.running_mean
         tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = pointer.normalization.running_var
 
-    if isinstance(model, MobileNetV1ForImageClassification):
+    if isinstance(model, MobileNetV2ForImageClassification):
         prefix = "MobilenetV1/Logits/Conv2d_1c_1x1/"
         tf_to_pt_map[prefix + "weights"] = model.classifier.weight
         tf_to_pt_map[prefix + "biases"] = model.classifier.bias
@@ -98,7 +98,7 @@ def _build_tf_to_pytorch_map(model, config, tf_weights=None):
     return tf_to_pt_map
 
 
-def load_tf_weights_in_mobilenet_v1(model, config, tf_checkpoint_path):
+def load_tf_weights_in_mobilenet_v2(model, config, tf_checkpoint_path):
     """Load TensorFlow checkpoints in a PyTorch model."""
     try:
         import numpy as np
@@ -187,10 +187,10 @@ def apply_tf_padding(features: torch.Tensor, conv_layer: nn.Conv2d) -> torch.Ten
     return nn.functional.pad(features, padding, "constant", 0.0)
 
 
-class MobileNetV1ConvLayer(nn.Module):
+class MobileNetV2ConvLayer(nn.Module):
     def __init__(
         self,
-        config: MobileNetV1Config,
+        config: MobileNetV2Config,
         in_channels: int,
         out_channels: int,
         kernel_size: int,
@@ -253,15 +253,15 @@ class MobileNetV1ConvLayer(nn.Module):
         return features
 
 
-class MobileNetV1PreTrainedModel(PreTrainedModel):
+class MobileNetV2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = MobileNetV1Config
-    load_tf_weights = load_tf_weights_in_mobilenet_v1
-    base_model_prefix = "mobilenet_v1"
+    config_class = MobileNetV2Config
+    load_tf_weights = load_tf_weights_in_mobilenet_v2
+    base_model_prefix = "mobilenet_v2"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
 
@@ -276,22 +276,22 @@ class MobileNetV1PreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-MOBILENET_V1_START_DOCSTRING = r"""
+MOBILENET_V2_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
     as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
 
     Parameters:
-        config ([`MobileNetV1Config`]): Model configuration class with all the parameters of the model.
+        config ([`MobileNetV2Config`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-MOBILENET_V1_INPUTS_DOCSTRING = r"""
+MOBILENET_V2_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`MobileNetV1FeatureExtractor`]. See
-            [`MobileNetV1FeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`MobileNetV2FeatureExtractor`]. See
+            [`MobileNetV2FeatureExtractor.__call__`] for details.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
@@ -301,18 +301,18 @@ MOBILENET_V1_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare MobileNetV1 model outputting raw hidden-states without any specific head on top.",
-    MOBILENET_V1_START_DOCSTRING,
+    "The bare MobileNetV2 model outputting raw hidden-states without any specific head on top.",
+    MOBILENET_V2_START_DOCSTRING,
 )
-class MobileNetV1Model(MobileNetV1PreTrainedModel):
-    def __init__(self, config: MobileNetV1Config, add_pooling_layer: bool = True):
+class MobileNetV2Model(MobileNetV2PreTrainedModel):
+    def __init__(self, config: MobileNetV2Config, add_pooling_layer: bool = True):
         super().__init__(config)
         self.config = config
 
         depth = 32
         out_channels = max(int(depth * config.depth_multiplier), config.min_depth)
 
-        self.conv_stem = MobileNetV1ConvLayer(
+        self.conv_stem = MobileNetV2ConvLayer(
             config,
             in_channels=config.num_channels,
             out_channels=out_channels,
@@ -331,7 +331,7 @@ class MobileNetV1Model(MobileNetV1PreTrainedModel):
                 out_channels = max(int(depth * config.depth_multiplier), config.min_depth)
 
             self.layer.append(
-                MobileNetV1ConvLayer(
+                MobileNetV2ConvLayer(
                     config,
                     in_channels=in_channels,
                     out_channels=in_channels,
@@ -342,7 +342,7 @@ class MobileNetV1Model(MobileNetV1PreTrainedModel):
             )
 
             self.layer.append(
-                MobileNetV1ConvLayer(
+                MobileNetV2ConvLayer(
                     config,
                     in_channels=in_channels,
                     out_channels=out_channels,
@@ -358,7 +358,7 @@ class MobileNetV1Model(MobileNetV1PreTrainedModel):
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError
 
-    @add_start_docstrings_to_model_forward(MOBILENET_V1_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(MOBILENET_V2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -410,19 +410,19 @@ class MobileNetV1Model(MobileNetV1PreTrainedModel):
 
 @add_start_docstrings(
     """
-    MobileNetV1 model with an image classification head on top (a linear layer on top of the pooled features), e.g. for
+    MobileNetV2 model with an image classification head on top (a linear layer on top of the pooled features), e.g. for
     ImageNet.
     """,
-    MOBILENET_V1_START_DOCSTRING,
+    MOBILENET_V2_START_DOCSTRING,
 )
-class MobileNetV1ForImageClassification(MobileNetV1PreTrainedModel):
-    def __init__(self, config: MobileNetV1Config) -> None:
+class MobileNetV2ForImageClassification(MobileNetV2PreTrainedModel):
+    def __init__(self, config: MobileNetV2Config) -> None:
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.mobilenet_v1 = MobileNetV1Model(config)
+        self.mobilenet_v2 = MobileNetV2Model(config)
 
-        last_hidden_size = self.mobilenet_v1.layer[-1].convolution.out_channels
+        last_hidden_size = self.mobilenet_v2.layer[-1].convolution.out_channels
 
         # Classifier head
         self.dropout = nn.Dropout(config.classifier_dropout_prob, inplace=True)
@@ -431,7 +431,7 @@ class MobileNetV1ForImageClassification(MobileNetV1PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(MOBILENET_V1_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(MOBILENET_V2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
@@ -454,7 +454,7 @@ class MobileNetV1ForImageClassification(MobileNetV1PreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.mobilenet_v1(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
+        outputs = self.mobilenet_v2(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
 
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
 

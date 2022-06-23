@@ -293,7 +293,7 @@ _import_structure = {
     "models.mmbt": ["MMBTConfig"],
     "models.mobilebert": ["MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileBertConfig", "MobileBertTokenizer"],
     "models.mobilevit": ["MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileViTConfig"],
-    "models.mobilenet_v1": ["MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileNetV1Config"],
+    "models.mobilenet_v2": ["MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileNetV2Config"],
     "models.mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetTokenizer"],
     "models.mt5": ["MT5Config"],
     "models.mvp": ["MvpConfig", "MvpTokenizer"],
@@ -1669,13 +1669,13 @@ else:
             "MobileViTPreTrainedModel",
         ]
     )
-    _import_structure["models.mobilenet_v1"].extend(
+    _import_structure["models.mobilenet_v2"].extend(
         [
-            "MOBILENET_V1_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "MobileNetV1ForImageClassification",
-            "MobileNetV1Model",
-            "MobileNetV1PreTrainedModel",
-            "load_tf_weights_in_mobilenet_v1",
+            "MOBILENET_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MobileNetV2ForImageClassification",
+            "MobileNetV2Model",
+            "MobileNetV2PreTrainedModel",
+            "load_tf_weights_in_mobilenet_v2",
         ]
     )
     _import_structure["models.mpnet"].extend(
@@ -3405,7 +3405,7 @@ if TYPE_CHECKING:
     from .models.mmbt import MMBTConfig
     from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer
     from .models.mobilevit import MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileViTConfig
-    from .models.mobilenet_v1 import MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileNetV1Config
+    from .models.mobilenet_v2 import MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileNetV2Config
     from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
     from .models.mt5 import MT5Config
     from .models.mvp import MvpConfig, MvpTokenizer
@@ -4525,12 +4525,12 @@ if TYPE_CHECKING:
             MobileViTModel,
             MobileViTPreTrainedModel,
         )
-        from .models.mobilenet_v1 import (
-            MOBILENET_V1_PRETRAINED_MODEL_ARCHIVE_LIST,
-            MobileNetV1ForImageClassification,
-            MobileNetV1Model,
-            MobileNetV1PreTrainedModel,
-            load_tf_weights_in_mobilenet_v1,
+        from .models.mobilenet_v2 import (
+            MOBILENET_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MobileNetV2ForImageClassification,
+            MobileNetV2Model,
+            MobileNetV2PreTrainedModel,
+            load_tf_weights_in_mobilenet_v2,
         )
         from .models.mpnet import (
             MPNET_PRETRAINED_MODEL_ARCHIVE_LIST,

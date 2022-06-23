@@ -21,10 +21,10 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_mobilenet_v1": [
-        "MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "MobileNetV1Config",
-        "MobileNetV1OnnxConfig",
+    "configuration_mobilenet_v2": [
+        "MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "MobileNetV2Config",
+        "MobileNetV2OnnxConfig",
     ],
 }
 
@@ -34,7 +34,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_mobilenet_v1"] = ["MobileNetV1FeatureExtractor"]
+    _import_structure["feature_extraction_mobilenet_v2"] = ["MobileNetV2FeatureExtractor"]
 
 try:
     if not is_torch_available():
@@ -42,20 +42,20 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_mobilenet_v1"] = [
-        "MOBILENET_V1_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "MobileNetV1ForImageClassification",
-        "MobileNetV1Model",
-        "MobileNetV1PreTrainedModel",
-        "load_tf_weights_in_mobilenet_v1",
+    _import_structure["modeling_mobilenet_v2"] = [
+        "MOBILENET_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "MobileNetV2ForImageClassification",
+        "MobileNetV2Model",
+        "MobileNetV2PreTrainedModel",
+        "load_tf_weights_in_mobilenet_v2",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_mobilenet_v1 import (
-        MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        MobileNetV1Config,
-        MobileNetV1OnnxConfig,
+    from .configuration_mobilenet_v2 import (
+        MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        MobileNetV2Config,
+        MobileNetV2OnnxConfig,
     )
 
     try:
@@ -64,7 +64,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_mobilenet_v1 import MobileNetV1FeatureExtractor
+        from .feature_extraction_mobilenet_v2 import MobileNetV2FeatureExtractor
 
     try:
         if not is_torch_available():
@@ -72,12 +72,12 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_mobilenet_v1 import (
-            MOBILENET_V1_PRETRAINED_MODEL_ARCHIVE_LIST,
-            MobileNetV1ForImageClassification,
-            MobileNetV1Model,
-            MobileNetV1PreTrainedModel,
-            load_tf_weights_in_mobilenet_v1,
+        from .modeling_mobilenet_v2 import (
+            MOBILENET_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MobileNetV2ForImageClassification,
+            MobileNetV2Model,
+            MobileNetV2PreTrainedModel,
+            load_tf_weights_in_mobilenet_v2,
         )
 
 
