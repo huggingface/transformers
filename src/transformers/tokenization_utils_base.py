@@ -291,7 +291,10 @@ class BatchEncoding(UserDict):
             `List[str]`: The list of tokens at that index.
         """
         if not self._encodings:
-            raise ValueError("tokens() is not available when using Python-based tokenizers")
+            raise ValueError(
+                "tokens() is not available when using non-fast tokenizers (e.g. instance of a `XxxTokenizerFast`"
+                " class)."
+            )
         return self._encodings[batch_index].tokens
 
     def sequence_ids(self, batch_index: int = 0) -> List[Optional[int]]:
@@ -312,7 +315,10 @@ class BatchEncoding(UserDict):
             sequence.
         """
         if not self._encodings:
-            raise ValueError("sequence_ids() is not available when using Python-based tokenizers")
+            raise ValueError(
+                "sequence_ids() is not available when using non-fast tokenizers (e.g. instance of a `XxxTokenizerFast`"
+                " class)."
+            )
         return self._encodings[batch_index].sequence_ids
 
     def words(self, batch_index: int = 0) -> List[Optional[int]]:
@@ -328,7 +334,10 @@ class BatchEncoding(UserDict):
             (several tokens will be mapped to the same word index if they are parts of that word).
         """
         if not self._encodings:
-            raise ValueError("words() is not available when using Python-based tokenizers")
+            raise ValueError(
+                "words() is not available when using non-fast tokenizers (e.g. instance of a `XxxTokenizerFast`"
+                " class)."
+            )
         warnings.warn(
             "`BatchEncoding.words()` property is deprecated and should be replaced with the identical, "
             "but more self-explanatory `BatchEncoding.word_ids()` property.",
@@ -349,7 +358,10 @@ class BatchEncoding(UserDict):
             (several tokens will be mapped to the same word index if they are parts of that word).
         """
         if not self._encodings:
-            raise ValueError("word_ids() is not available when using Python-based tokenizers")
+            raise ValueError(
+                "word_ids() is not available when using non-fast tokenizers (e.g. instance of a `XxxTokenizerFast`"
+                " class)."
+            )
         return self._encodings[batch_index].word_ids
 
     def token_to_sequence(self, batch_or_token_index: int, token_index: Optional[int] = None) -> int:
