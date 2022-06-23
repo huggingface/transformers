@@ -100,13 +100,18 @@ class TFRegNetEmbeddings(tf.keras.layers.Layer):
             name="embedder",
         )
 
-    def call(self, hidden_state):
-        num_channels = shape_list(hidden_state)[-1]
+    def call(self, pixel_values):
+        num_channels = shape_list(pixel_values)[1]
         if tf.executing_eagerly() and num_channels != self.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
-        hidden_state = self.embedder(hidden_state)
+
+        # When running on CPU, `tf.keras.layers.Conv2D` doesn't support `NCHW` format.
+        # So change the input format from `NCHW` to `NHWC`.
+        # shape = (batch_size, in_height, in_width, in_channels=num_channels)
+        pixel_values = tf.transpose(pixel_values, perm=(0, 2, 3, 1))
+        hidden_state = self.embedder(pixel_values)
         return hidden_state
 
 
@@ -303,11 +308,6 @@ class TFRegNetMainLayer(tf.keras.layers.Layer):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # When running on CPU, `tf.keras.layers.Conv2D` doesn't support `NCHW` format.
-        # So change the input format from `NCHW` to `NHWC`.
-        # shape = (batch_size, in_height, in_width, in_channels=num_channels)
-        pixel_values = tf.transpose(pixel_values, perm=(0, 2, 3, 1))
-
         embedding_output = self.embedder(pixel_values, training=training)
 
         encoder_outputs = self.encoder(
@@ -316,9 +316,9 @@ class TFRegNetMainLayer(tf.keras.layers.Layer):
 
         last_hidden_state = encoder_outputs[0]
         pooled_output = self.pooler(last_hidden_state)
-        pooled_output = tf.transpose(pooled_output, perm=(0, 3, 1, 2))
 
         # Change to NCHW output format have uniformity in the modules
+        pooled_output = tf.transpose(pooled_output, perm=(0, 3, 1, 2))
         last_hidden_state = tf.transpose(last_hidden_state, perm=(0, 3, 1, 2))
 
         # Change the other hidden state outputs to NCHW as well
@@ -428,9 +428,6 @@ class TFRegNetModel(TFRegNetPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
 
         outputs = self.regnet(
             pixel_values=pixel_values,
