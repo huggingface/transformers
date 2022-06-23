@@ -4,7 +4,7 @@ from tempfile import TemporaryDirectory
 
 from transformers import AutoConfig, TFAutoModel, is_tensorflow_text_available, is_tf_available
 from transformers.models.bert.tokenization_bert import BertTokenizer
-from transformers.testing_utils import require_tensorflow_text
+from transformers.testing_utils import require_tensorflow_text, slow
 
 
 if is_tensorflow_text_available():
@@ -62,6 +62,7 @@ class BertTokenizationTest(unittest.TestCase):
                     self.assertTrue(tf.reduce_all(python_outputs[key].shape == tf_outputs[key].shape))
                     self.assertTrue(tf.reduce_all(tf.cast(python_outputs[key], tf.int64) == tf_outputs[key]))
 
+    @slow
     def test_different_pairing_styles(self):
         for tf_tokenizer in self.tf_tokenizers:
             merged_outputs = tf_tokenizer(self.paired_sentences)
@@ -72,6 +73,7 @@ class BertTokenizationTest(unittest.TestCase):
             for key in merged_outputs.keys():
                 self.assertTrue(tf.reduce_all(tf.cast(merged_outputs[key], tf.int64) == separated_outputs[key]))
 
+    @slow
     def test_graph_mode(self):
         for tf_tokenizer in self.tf_tokenizers:
             compiled_tokenizer = tf.function(tf_tokenizer)
@@ -83,6 +85,7 @@ class BertTokenizationTest(unittest.TestCase):
                 for key in eager_outputs.keys():
                     self.assertTrue(tf.reduce_all(eager_outputs[key] == compiled_outputs[key]))
 
+    @slow
     def test_saved_model(self):
         for tf_tokenizer in self.tf_tokenizers:
             model = ModelToSave(tokenizer=tf_tokenizer)
