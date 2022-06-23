@@ -173,7 +173,7 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             raw_samples = [x["array"] for x in speech_samples]
             return raw_samples
 
-        model_forward_signature = set(inspect.signature(self.forward).parameters.keys())
+        model_forward_signature = set(inspect.signature(pt_model.forward).parameters.keys())
         processor_inputs = {}
         model_input_names = []
         if "input_ids" in model_forward_signature:
@@ -191,20 +191,21 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             processor_inputs.update({"images": sample_images})
         if "input_features" in model_forward_signature:
             model_input_names += ["input_features"]
-            processor_inputs.update({"raw_speech": _get_audio_input()})
+            processor_inputs.update({"raw_speech": _get_audio_input(), "padding": True})
         if "input_values" in model_forward_signature:  # Wav2Vec2 audio input
             model_input_names += ["input_values"]
-            processor_inputs.update({"raw_speech": _get_audio_input()})
+            processor_inputs.update({"raw_speech": _get_audio_input(), "padding": True})
 
         if len(model_input_names) > 1:
             processor = AutoProcessor.from_pretrained(self._local_dir)
+            if "input_ids" in model_input_names and processor.tokenizer.pad_token is None:
+                processor.tokenizer.pad_token = processor.tokenizer.eos_token
         elif model_input_names[0] == "input_ids":
             processor = AutoTokenizer.from_pretrained(self._local_dir)
+            if processor.pad_token is None:
+                processor.pad_token = processor.eos_token
         else:
             processor = AutoFeatureExtractor.from_pretrained(self._local_dir)
-
-        if "input_ids" in model_input_names and processor.pad_token is None:
-            processor.pad_token = processor.eos_token
 
         pt_input = processor(**processor_inputs, return_tensors="pt")
         tf_input = processor(**processor_inputs, return_tensors="tf")
