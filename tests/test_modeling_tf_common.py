@@ -1383,7 +1383,7 @@ class TFModelTesterMixin:
                 else:
                     metrics = []
 
-                model.compile(optimizer=tf.keras.optimizers.SGD(0.0), run_eagerly=True, metrics=metrics)
+                model.compile(optimizer=tf.keras.optimizers.SGD(0.0), metrics=metrics)
                 # Make sure the model fits without crashing regardless of where we pass the labels
                 history1 = model.fit(
                     prepared_for_class,
@@ -1394,6 +1394,12 @@ class TFModelTesterMixin:
                 )
                 val_loss1 = history1.history["val_loss"][0]
                 accuracy1 = {key: val[0] for key, val in history1.history.items() if key.endswith("accuracy")}
+
+                # We reinitialize the model here even though our learning rate was zero
+                # because BatchNorm updates weights by means other than gradient descent.
+                model = model_class(config)
+                model.compile(optimizer=tf.keras.optimizers.SGD(0.0), metrics=metrics)
+
                 history2 = model.fit(
                     inputs_minus_labels,
                     labels,
@@ -1416,6 +1422,11 @@ class TFModelTesterMixin:
                 dataset = tf.data.Dataset.from_tensor_slices(prepared_for_class)
                 # Pass in all samples as a batch to match other `fit` calls
                 dataset = dataset.batch(len(dataset))
+
+                # Reinitialize to fix batchnorm again
+                model = model_class(config)
+                model.compile(optimizer=tf.keras.optimizers.SGD(0.0), metrics=metrics)
+
                 history3 = model.fit(
                     dataset,
                     validation_data=dataset,
