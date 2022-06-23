@@ -12,11 +12,9 @@
   - local: autoclass_tutorial
     title: Carica istanze pre-allenate con AutoClass
   title: Esercitazione
-- sections:
-  - sections:
-  - sections:
-  - local: Troubleshoot
+  - local: troubleshooting
     title: Risoluzione dei problemi
+  title: How-to guides
 
 
 
