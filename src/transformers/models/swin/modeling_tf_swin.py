@@ -1255,7 +1255,7 @@ class TFSwinDecoder(tf.keras.layers.Layer):
     def __init__(self, config: SwinConfig, **kwargs):
         super().__init__(**kwargs)
         self.conv2d = tf.keras.layers.Conv2D(
-            filters=config.encoder_stride**2 * 3, kernel_size=1, strides=1, name="0"
+            filters=config.encoder_stride**2 * config.num_channels, kernel_size=1, strides=1, name="0"
         )
         self._block_size = config.encoder_stride
         self.pixel_shuffle = PixelShuffle(self._block_size, name="1")
@@ -1283,8 +1283,8 @@ class TFSwinDecoder(tf.keras.layers.Layer):
 
 
 @add_start_docstrings(
-    "Swin Model with a decoder on top for masked image modeling, as proposed in `SimMIM"
-    " <https://arxiv.org/abs/2111.09886>`__.",
+    "Swin Model with a decoder on top for masked image modeling, as proposed in"
+    " [SimMIM](https://arxiv.org/abs/2111.09886).",
     SWIN_START_DOCSTRING,
 )
 class TFSwinForMaskedImageModeling(TFSwinPreTrainedModel):
