@@ -12,7 +12,7 @@ import numpy as np
 import torch
 
 import models
-from clip_model import CLIP, OwlViTClassPredictor, OwlViTBoxPredictor
+from clip_model import CLIP, OwlViTClassPredictor, OwlViTBoxPredictor, OwlViTImageTextEmbedder
 from PIL import Image
 from configs import clip_b16, clip_b32, clip_l14
 
@@ -89,12 +89,12 @@ def _convert_attn_layers(params):
 
 def convert_clip_backbone(flax_params, torch_config):
     torch_model = CLIP(**torch_config)
-    torch_params = torch_model.state_dict()
+    torch_clip_params = torch_model.state_dict()
 
-    flax_params = flatten_nested_dict(flax_params["backbone"]["clip"])
+    flax_clip_params = flatten_nested_dict(flax_params["backbone"]["clip"])
     new_torch_params = {}
 
-    for flax_key, v in flax_params.items():
+    for flax_key, v in flax_clip_params.items():
         torch_key = flax_key.replace("/", ".")
         torch_key = torch_key.replace("text.token_embedding.embedding", "token_embedding.kernel")
 
@@ -122,12 +122,37 @@ def convert_clip_backbone(flax_params, torch_config):
 
     # Copy flax CLIP backbone params to PyTorch params
     for name, param in new_torch_params.items():
-        if name in torch_params.keys():
+        if name in torch_clip_params.keys():
             new_param = torch.from_numpy(new_torch_params[name])
+            torch_clip_params[name].copy_(new_param)
+
+    return torch_clip_params, torch_model
+
+
+def convert_embedder(clip, flax_params, flax_config, torch_config):
+    torch_model = OwlViTImageTextEmbedder(
+        merge_class_token=flax_config.model.body.merge_class_token, 
+        vision_width=torch_config["vision_width"],
+        backbone=clip
+    )
+    torch_params = torch_model.state_dict()
+
+    new_class_token_params = {}
+    flax_class_token_params = flatten_nested_dict(flax_params["backbone"]["merged_class_token"])
+
+    for flax_key, v in flax_class_token_params.items():
+        torch_key = flax_key.replace("bias", "layer_norm.bias")
+        torch_key = flax_key.replace("scale", "layer_norm.weight")
+        new_class_token_params[torch_key] = v
+
+    # Copy flax params to PyTorch params
+    for name, param in new_class_token_params.items():
+        if name in torch_params.keys():
+            new_param = torch.from_numpy(new_class_token_params[name])
             torch_params[name].copy_(new_param)
 
     return torch_params
-
+ 
 
 def convert_class_box_heads(flax_params, torch_config):
     # Initialize PyToch class head
@@ -218,11 +243,12 @@ if __name__ == "__main__":
 
     # Load from checkpoint and convert params to float-32
     #variables = flax_model.load_variables(config.init_from.checkpoint_path)
-    variables = flax_model.load_variables('clip_vit_b32_b0203fc')
+    variables = flax_model.load_variables("checkpoints/clip_vit_b32")
     flax_params = jax.tree_map(lambda x: x.astype(jnp.float32) if x.dtype == jnp.bfloat16 else x, variables['params'])
     del variables
  
     #with torch.no_grad():
     #    img_feats = torch_model.encode_image(torch.zeros(1,3,768,768))
-    torch_backbone_params = convert_clip_backbone(flax_params, torch_config)
+    torch_backbone_params, clip = convert_clip_backbone(flax_params, torch_config)
+    torch_class_token_params = convert_embedder(clip, flax_params, config, torch_config)
     torch_class_params, torch_box_params = convert_class_box_heads(flax_params, torch_config)
