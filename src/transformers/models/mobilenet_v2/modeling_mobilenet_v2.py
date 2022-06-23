@@ -64,37 +64,29 @@ def _build_tf_to_pytorch_map(model, config, tf_weights=None):
     else:
         backbone = model
 
-    prefix = "MobilenetV1/Conv2d_0/"
-    tf_to_pt_map[prefix + "weights"] = backbone.conv_stem.convolution.weight
-    tf_to_pt_map[prefix + "BatchNorm/beta"] = backbone.conv_stem.normalization.bias
-    tf_to_pt_map[prefix + "BatchNorm/gamma"] = backbone.conv_stem.normalization.weight
-    tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = backbone.conv_stem.normalization.running_mean
-    tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = backbone.conv_stem.normalization.running_var
+    # Use the EMA weights if available
+    ema = lambda x: x + "/ExponentialMovingAverage" if x + "/ExponentialMovingAverage" in tf_weights else x
 
-    for i in range(13):
-        tf_index = i + 1
-        pt_index = i * 2
+    prefix = "MobilenetV2/Conv/"
+    tf_to_pt_map[ema(prefix + "weights")] = backbone.conv_stem.conv.convolution.weight
+    tf_to_pt_map[ema(prefix + "BatchNorm/beta")] = backbone.conv_stem.conv.normalization.bias
+    tf_to_pt_map[ema(prefix + "BatchNorm/gamma")] = backbone.conv_stem.conv.normalization.weight
+    tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = backbone.conv_stem.conv.normalization.running_mean
+    tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = backbone.conv_stem.conv.normalization.running_var
 
-        pointer = backbone.layer[pt_index]
-        prefix = f"MobilenetV1/Conv2d_{tf_index}_depthwise/"
-        tf_to_pt_map[prefix + "depthwise_weights"] = pointer.convolution.weight
-        tf_to_pt_map[prefix + "BatchNorm/beta"] = pointer.normalization.bias
-        tf_to_pt_map[prefix + "BatchNorm/gamma"] = pointer.normalization.weight
-        tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = pointer.normalization.running_mean
-        tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = pointer.normalization.running_var
+    prefix = "MobilenetV2/expanded_conv/depthwise/"
+    tf_to_pt_map[ema(prefix + "depthwise_weights")] = backbone.conv_stem.conv_3x3.convolution.weight
+    tf_to_pt_map[ema(prefix + "BatchNorm/beta")] = backbone.conv_stem.conv_3x3.normalization.bias
+    tf_to_pt_map[ema(prefix + "BatchNorm/gamma")] = backbone.conv_stem.conv_3x3.normalization.weight
+    tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = backbone.conv_stem.conv_3x3.normalization.running_mean
+    tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = backbone.conv_stem.conv_3x3.normalization.running_var
 
-        pointer = backbone.layer[pt_index + 1]
-        prefix = f"MobilenetV1/Conv2d_{tf_index}_pointwise/"
-        tf_to_pt_map[prefix + "weights"] = pointer.convolution.weight
-        tf_to_pt_map[prefix + "BatchNorm/beta"] = pointer.normalization.bias
-        tf_to_pt_map[prefix + "BatchNorm/gamma"] = pointer.normalization.weight
-        tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = pointer.normalization.running_mean
-        tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = pointer.normalization.running_var
-
-    if isinstance(model, MobileNetV2ForImageClassification):
-        prefix = "MobilenetV1/Logits/Conv2d_1c_1x1/"
-        tf_to_pt_map[prefix + "weights"] = model.classifier.weight
-        tf_to_pt_map[prefix + "biases"] = model.classifier.bias
+    prefix = "MobilenetV2/expanded_conv/project/"
+    tf_to_pt_map[ema(prefix + "weights")] = backbone.conv_stem.reduce_1x1.convolution.weight
+    tf_to_pt_map[ema(prefix + "BatchNorm/beta")] = backbone.conv_stem.reduce_1x1.normalization.bias
+    tf_to_pt_map[ema(prefix + "BatchNorm/gamma")] = backbone.conv_stem.reduce_1x1.normalization.weight
+    tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = backbone.conv_stem.reduce_1x1.normalization.running_mean
+    tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = backbone.conv_stem.reduce_1x1.normalization.running_var
 
     return tf_to_pt_map
 
@@ -160,6 +152,21 @@ def load_tf_weights_in_mobilenet_v2(model, config, tf_checkpoint_path):
     return model
 
 
+def make_divisible(value: int, divisor: int = 8, min_value: Optional[int] = None) -> int:
+    """
+    Ensure that all layers have a channel count that is divisible by `divisor`. This function is taken from the original
+    TensorFlow repo. It can be seen here:
+    https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet/mobilenet.py
+    """
+    if min_value is None:
+        min_value = divisor
+    new_value = max(min_value, int(value + divisor / 2) // divisor * divisor)
+    # Make sure that round down does not go down by more than 10%.
+    if new_value < 0.9 * value:
+        new_value += divisor
+    return int(new_value)
+
+
 def apply_tf_padding(features: torch.Tensor, conv_layer: nn.Conv2d) -> torch.Tensor:
     """
     Apply TensorFlow-style "SAME" padding to a convolution layer. See the notes at:
@@ -198,6 +205,7 @@ class MobileNetV2ConvLayer(nn.Module):
         stride: Optional[int] = 1,
         groups: Optional[int] = 1,
         bias: bool = False,
+        dilation: Optional[int or tuple] = 1,
         use_normalization: Optional[bool] = True,
         use_activation: Optional[bool or str] = True,
     ) -> None:
@@ -209,7 +217,7 @@ class MobileNetV2ConvLayer(nn.Module):
         if out_channels % groups != 0:
             raise ValueError(f"Output channels ({out_channels}) are not divisible by {groups} groups.")
 
-        padding = 0 if config.tf_padding else int((kernel_size - 1) / 2)
+        padding = 0 if config.tf_padding else int((kernel_size - 1) / 2) * dilation
 
         self.convolution = nn.Conv2d(
             in_channels=in_channels,
@@ -217,6 +225,7 @@ class MobileNetV2ConvLayer(nn.Module):
             kernel_size=kernel_size,
             stride=stride,
             padding=padding,
+            dilation=dilation,
             groups=groups,
             bias=bias,
             padding_mode="zeros",
@@ -226,7 +235,7 @@ class MobileNetV2ConvLayer(nn.Module):
             self.normalization = nn.BatchNorm2d(
                 num_features=out_channels,
                 eps=config.layer_norm_eps,
-                momentum=0.9997,
+                momentum=0.997,
                 affine=True,
                 track_running_stats=True,
             )
@@ -251,6 +260,102 @@ class MobileNetV2ConvLayer(nn.Module):
             features = self.normalization(features)
         if self.activation is not None:
             features = self.activation(features)
+        return features
+
+
+class MobileNetV2InvertedResidual(nn.Module):
+    def __init__(
+        self, config: MobileNetV2Config, in_channels: int, out_channels: int, stride: int, dilation: int = 1
+    ) -> None:
+        super().__init__()
+
+        expanded_channels = make_divisible(
+            int(round(in_channels * config.expand_ratio)), config.depth_divisible_by, config.min_depth
+        )
+
+        if stride not in [1, 2]:
+            raise ValueError(f"Invalid stride {stride}.")
+
+        self.use_residual = (stride == 1) and (in_channels == out_channels)
+
+        self.expand_1x1 = MobileNetV2ConvLayer(
+            config, in_channels=in_channels, out_channels=expanded_channels, kernel_size=1
+        )
+
+        self.conv_3x3 = MobileNetV2ConvLayer(
+            config,
+            in_channels=expanded_channels,
+            out_channels=expanded_channels,
+            kernel_size=3,
+            stride=stride,
+            groups=expanded_channels,
+            dilation=dilation,
+        )
+
+        self.reduce_1x1 = MobileNetV2ConvLayer(
+            config,
+            in_channels=expanded_channels,
+            out_channels=out_channels,
+            kernel_size=1,
+            use_activation=False,
+        )
+
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        residual = features
+
+        features = self.expand_1x1(features)
+        features = self.conv_3x3(features)
+        features = self.reduce_1x1(features)
+
+        return residual + features if self.use_residual else features
+
+
+class MobileNetV2Stem(nn.Module):
+    def __init__(self, config: MobileNetV2Config, in_channels: int, expanded_channels: int, out_channels: int) -> None:
+        super().__init__()
+
+        expanded_channels = make_divisible(
+            int(round(expanded_channels * config.depth_multiplier)), config.depth_divisible_by, config.min_depth
+        )
+
+        self.conv = MobileNetV2ConvLayer(
+            config,
+            in_channels=in_channels,
+            out_channels=expanded_channels,
+            kernel_size=3,
+            stride=2,
+        )
+
+        if config.first_layer_is_expansion:
+            self.expand_1x1 = None
+        else:
+            self.expand_1x1 = MobileNetV2ConvLayer(
+                config, in_channels=expanded_channels, out_channels=expanded_channels, kernel_size=1
+            )
+
+        self.conv_3x3 = MobileNetV2ConvLayer(
+            config,
+            in_channels=expanded_channels,
+            out_channels=expanded_channels,
+            kernel_size=3,
+            stride=1,
+            groups=expanded_channels,
+        )
+
+        self.reduce_1x1 = MobileNetV2ConvLayer(
+            config,
+            in_channels=expanded_channels,
+            out_channels=out_channels,
+            kernel_size=1,
+            use_activation=False,
+        )
+
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        features = self.conv(features)
+        if self.expand_1x1 is not None:
+            features = self.expand_1x1(features)
+        features = self.conv_3x3(features)
+        features = self.reduce_1x1(features)
         return features
 
 
@@ -310,46 +415,55 @@ class MobileNetV2Model(MobileNetV2PreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        depth = 32
-        out_channels = max(int(depth * config.depth_multiplier), config.min_depth)
+        # Strides for the depthwise layers in the original TensorFlow model
+        # strides = [ 1, 2, 1, 2, 1, 1, 2, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1 ]
 
-        self.conv_stem = MobileNetV2ConvLayer(
+        # Number of output channels for the projection layers
+        # channels = [ 16, 24, 24, 32, 32, 32, 64, 64, 64, 64, 96, 96, 96, 160, 160, 160, 320 ]
+
+        self.conv_stem = MobileNetV2Stem(
             config,
             in_channels=config.num_channels,
-            out_channels=out_channels,
-            kernel_size=3,
-            stride=2,
+            expanded_channels=32,
+            out_channels=16,
         )
 
-        strides = [1, 2, 1, 2, 1, 2, 1, 1, 1, 1, 1, 2, 1]
 
-        self.layer = nn.ModuleList()
-        for i in range(13):
-            in_channels = out_channels
+        # self.layer = MobileNetV2InvertedResidual(
+        #     config,
+        #     in_channels=expanded_channels,
+        #     out_channels=16,
+        #     stride=1,
+        # )
 
-            if strides[i] == 2 or i == 0:
-                depth *= 2
-                out_channels = max(int(depth * config.depth_multiplier), config.min_depth)
 
-            self.layer.append(
-                MobileNetV2ConvLayer(
-                    config,
-                    in_channels=in_channels,
-                    out_channels=in_channels,
-                    kernel_size=3,
-                    stride=strides[i],
-                    groups=in_channels,
-                )
-            )
+        # self.layer = nn.ModuleList()
+        # for i in range(13):
+        #     in_channels = out_channels
 
-            self.layer.append(
-                MobileNetV2ConvLayer(
-                    config,
-                    in_channels=in_channels,
-                    out_channels=out_channels,
-                    kernel_size=1,
-                )
-            )
+        #     if strides[i] == 2 or i == 0:
+        #         depth *= 2
+        #         out_channels = max(int(depth * config.depth_multiplier), config.min_depth)
+
+        #     self.layer.append(
+        #         MobileNetV2ConvLayer(
+        #             config,
+        #             in_channels=in_channels,
+        #             out_channels=in_channels,
+        #             kernel_size=3,
+        #             stride=strides[i],
+        #             groups=in_channels,
+        #         )
+        #     )
+
+        #     self.layer.append(
+        #         MobileNetV2ConvLayer(
+        #             config,
+        #             in_channels=in_channels,
+        #             out_channels=out_channels,
+        #             kernel_size=1,
+        #         )
+        #     )
 
         self.pooler = nn.AdaptiveAvgPool2d((1, 1)) if add_pooling_layer else None
 
@@ -386,11 +500,11 @@ class MobileNetV2Model(MobileNetV2PreTrainedModel):
 
         all_hidden_states = () if output_hidden_states else None
 
-        for i, layer_module in enumerate(self.layer):
-            hidden_states = layer_module(hidden_states)
+        # for i, layer_module in enumerate(self.layer):
+        #     hidden_states = layer_module(hidden_states)
 
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
+        #     if output_hidden_states:
+        #         all_hidden_states = all_hidden_states + (hidden_states,)
 
         last_hidden_state = hidden_states
 
@@ -423,7 +537,8 @@ class MobileNetV2ForImageClassification(MobileNetV2PreTrainedModel):
         self.num_labels = config.num_labels
         self.mobilenet_v2 = MobileNetV2Model(config)
 
-        last_hidden_size = self.mobilenet_v2.layer[-1].convolution.out_channels
+        #last_hidden_size = self.mobilenet_v2.layer[-1].convolution.out_channels
+        last_hidden_size = 16 ##MIH
 
         # Classifier head
         self.dropout = nn.Dropout(config.classifier_dropout_prob, inplace=True)

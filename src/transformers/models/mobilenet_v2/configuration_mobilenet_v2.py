@@ -52,8 +52,14 @@ class MobileNetV2Config(PretrainedConfig):
         depth_multiplier (`float`, *optional*, defaults to 1.0):
             Shrinks or expands the number of channels in each layer. Default is 1.0, which starts the network with 32
             channels. This is sometimes also called "alpha" or "width multiplier".
+        depth_divisible_by (`int`, *optional*, defaults to 8):
+            The number of channels in each layer will always be a multiple of this number.
         min_depth (`int`, *optional*, defaults to 8):
             All layers will have at least this many channels.
+        expand_ratio (`float`, *optional*, defaults to 6.0):
+            The number of output channels of the first layer in each block is input channels times expansion ratio.
+        first_layer_is_expansion (`bool`, `optional`, defaults to `True`):
+            True if the very first convolution layer is also the expansion layer for the first expansion block.
         hidden_act (`str` or `function`, *optional*, defaults to `"relu6"`):
             The non-linear activation function (function or string) in the Transformer encoder and convolution layers.
         tf_padding (`bool`, `optional`, defaults to `True`):
@@ -81,15 +87,32 @@ class MobileNetV2Config(PretrainedConfig):
     ```"""
     model_type = "mobilenet_v2"
 
+
+#MIH
+    #   - finegrainedOutput: If true, the number of output channels in the final
+    #     convolution layer will stay large (1280) even if `depthMultiplier` is
+    #     less than 1.
+    #   - outputStride: The ratio between the spatial resolution of the input and
+    #     output feature maps. By default the model scales down the input image
+    #     by a factor of 32. If outputStride is 8 or 16, the model uses dilated
+    #     convolutions on the depthwise layers instead of regular convolutions,
+    #     so that the feature maps never become more than 8x or 16x smaller than
+    #     the input image. Either -1 (never dilate), 8, 16, or 32.
+    #   - pooling: What kind of pooling to apply to the last feature map.
+
+
     def __init__(
         self,
         num_channels=3,
         image_size=224,
         depth_multiplier=1.0,
+        depth_divisible_by=8,
         min_depth=8,
+        expand_ratio=8,
+        first_layer_is_expansion=True,
         hidden_act="relu6",
         tf_padding=True,
-        classifier_dropout_prob=0.999,
+        classifier_dropout_prob=0.8,
         initializer_range=0.02,
         layer_norm_eps=0.001,
         **kwargs
@@ -102,7 +125,10 @@ class MobileNetV2Config(PretrainedConfig):
         self.num_channels = num_channels
         self.image_size = image_size
         self.depth_multiplier = depth_multiplier
+        self.depth_divisible_by = depth_divisible_by
         self.min_depth = min_depth
+        self.expand_ratio = expand_ratio
+        self.first_layer_is_expansion = first_layer_is_expansion
         self.hidden_act = hidden_act
         self.tf_padding = tf_padding
         self.classifier_dropout_prob = classifier_dropout_prob
