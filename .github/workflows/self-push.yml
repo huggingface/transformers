@@ -9,10 +9,6 @@ on:
     branches:
       - ci_*
       - ci-*
-  workflow_run:
-    workflows: ["Check for dependency modification"]
-    branches: ["main"]
-    types: [completed]
   repository_dispatch:
 
 env:
