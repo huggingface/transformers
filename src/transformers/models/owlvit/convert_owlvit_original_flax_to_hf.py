@@ -1,3 +1,17 @@
+# coding=utf-8
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import os
 import json
 from typing import Any, Mapping, Optional
@@ -12,15 +26,16 @@ import numpy as np
 import torch
 
 import models
-from clip_model import CLIP, OwlViTClassPredictor, OwlViTBoxPredictor, OwlViTImageTextEmbedder
 from PIL import Image
 from configs import clip_b16, clip_b32, clip_l14
+from owlvit import load
+from transformers import OwlViTConfig, OwlViTModel, OwlViTClassPredictor, OwlViTBoxPredictor, OwlViTImageTextEmbedder
 
 PyTree = Any
 CONFIGS = {
     'vit_b32': dict(embed_dim=512,
-                    image_resolution=224,
-                    context_length=16,
+    				image_resolution=224,
+   					context_length=16,
                     vocab_size=49408,
                     vision_layers=12,
                     vision_width=768,
@@ -29,8 +44,8 @@ CONFIGS = {
                     transformer_heads=8,
                     transformer_layers=12),
     'vit_b16': dict(embed_dim=512,
-                    image_resolution=224,
-                    context_length=16,
+    				image_resolution=224,
+    				context_length=16,
                     vocab_size=49408,
                     vision_layers=12,
                     vision_width=768,
@@ -39,8 +54,8 @@ CONFIGS = {
                     transformer_heads=8,
                     transformer_layers=12),
     'vit_l14': dict(embed_dim=768,
-                    image_resolution=224,
-                    context_length=16,
+    				image_resolution=224,
+    				context_length=16,
                     vocab_size=49408,
                     vision_layers=24,
                     vision_width=1024,

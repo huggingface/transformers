@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The OpenAI Team Authors and The HuggingFace Team. All rights reserved.
+# Copyright 2022 The OpenAI Team Authors and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch CLIP model."""
+""" PyTorch OwlViT model."""
 
 
 from dataclasses import dataclass
@@ -32,21 +32,18 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_owlvit import CLIPConfig, CLIPTextConfig, CLIPVisionConfig, OwlViTConfig
+from .configuration_owlvit import OwlViTConfig, OwlViTTextConfig, OwlViTVisionConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "openai/clip-vit-base-patch32"
-
-CLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "openai/clip-vit-base-patch32",
-    # See all CLIP models at https://huggingface.co/models?filter=clip
-]
+_CHECKPOINT_FOR_DOC = "google/owlvit-base"
 
 OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "",
+    "google/owlvit-base",
+    # See all OwlViT models at https://huggingface.co/models?filter=owlvit
 ]
+
 
 
 # Copied from transformers.models.bart.modeling_bart._expand_mask
@@ -65,20 +62,21 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 
 
 # contrastive loss function, adapted from
-# https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/CLIP.html
+# https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/OwlViT.html
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
     return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
 
 
-# Copied from transformers.models.clip.modeling_clip
-def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
+# Copied from transformers.models.clip.modeling_clip.clip_loss with clip->owlvit
+def owlvit_loss(similarity: torch.Tensor) -> torch.Tensor:
     caption_loss = contrastive_loss(similarity)
     image_loss = contrastive_loss(similarity.T)
     return (caption_loss + image_loss) / 2.0
 
-# Copied from transformers.models.clip.modeling_clip
+
 @dataclass
-class CLIPOutput(ModelOutput):
+# Copied from transformers.models.clip.modeling_clip.CLIPOutput with CLIP->OwlViT
+class OwlViTOutput(ModelOutput):
     """
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
@@ -90,13 +88,13 @@ class CLIPOutput(ModelOutput):
             The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
             similarity scores.
         text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The text embeddings obtained by applying the projection layer to the pooled output of [`CLIPTextModel`].
+            The text embeddings obtained by applying the projection layer to the pooled output of [`OwlViTTextModel`].
         image_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The image embeddings obtained by applying the projection layer to the pooled output of [`CLIPVisionModel`].
+            The image embeddings obtained by applying the projection layer to the pooled output of [`OwlViTVisionModel`].
         text_model_output(`BaseModelOutputWithPooling`):
-            The output of the [`CLIPTextModel`].
+            The output of the [`OwlViTTextModel`].
         vision_model_output(`BaseModelOutputWithPooling`):
-            The output of the [`CLIPVisionModel`].
+            The output of the [`OwlViTVisionModel`].
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -114,9 +112,9 @@ class CLIPOutput(ModelOutput):
         )
 
 
-# Copied from transformers.models.clip.modeling_clip
-class CLIPVisionEmbeddings(nn.Module):
-    def __init__(self, config: CLIPVisionConfig):
+# Copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings with CLIP->OwlViT
+class OwlViTVisionEmbeddings(nn.Module):
+    def __init__(self, config: OwlViTVisionConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -145,9 +143,9 @@ class CLIPVisionEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.clip.modeling_clip
-class CLIPTextEmbeddings(nn.Module):
-    def __init__(self, config: CLIPTextConfig):
+# Copied from transformers.models.clip.modeling_clip.CLIPTextEmbeddings with CLIP->OwlViT
+class OwlViTTextEmbeddings(nn.Module):
+    def __init__(self, config: OwlViTTextConfig):
         super().__init__()
         embed_dim = config.hidden_size
 
@@ -177,8 +175,8 @@ class CLIPTextEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.clip.modeling_clip
-class CLIPAttention(nn.Module):
+# Copied from transformers.models.clip.modeling_clip.CLIPAttention with CLIP->OwlViT
+class OwlViTAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config):
@@ -282,8 +280,8 @@ class CLIPAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-# Copied from transformers.models.clip.modeling_clip
-class CLIPMLP(nn.Module):
+# Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->OwlViT
+class OwlViTMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -298,14 +296,14 @@ class CLIPMLP(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.clip.modeling_clip
-class CLIPEncoderLayer(nn.Module):
-    def __init__(self, config: CLIPConfig):
+# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->OwlViT
+class OwlViTEncoderLayer(nn.Module):
+    def __init__(self, config: OwlViTConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
-        self.self_attn = CLIPAttention(config)
+        self.self_attn = OwlViTAttention(config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim)
-        self.mlp = CLIPMLP(config)
+        self.mlp = OwlViTMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim)
 
     def forward(
@@ -349,30 +347,30 @@ class CLIPEncoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.clip.modeling_clip
-class CLIPPreTrainedModel(PreTrainedModel):
+# Copied from transformers.models.clip.modeling_clip.CLIPPreTrainedModel with CLIP->OwlViT,clip->owlvit
+class OwlViTPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = CLIPConfig
-    base_model_prefix = "clip"
+    config_class = OwlViTConfig
+    base_model_prefix = "owlvit"
     supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor
-        if isinstance(module, CLIPTextEmbeddings):
+        if isinstance(module, OwlViTTextEmbeddings):
             module.token_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
             module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
-        elif isinstance(module, CLIPVisionEmbeddings):
+        elif isinstance(module, OwlViTVisionEmbeddings):
             factor = self.config.initializer_factor
             nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
             nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
             nn.init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
-        elif isinstance(module, CLIPAttention):
+        elif isinstance(module, OwlViTAttention):
             factor = self.config.initializer_factor
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             out_proj_std = (module.embed_dim**-0.5) * factor
@@ -380,7 +378,7 @@ class CLIPPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.k_proj.weight, std=in_proj_std)
             nn.init.normal_(module.v_proj.weight, std=in_proj_std)
             nn.init.normal_(module.out_proj.weight, std=out_proj_std)
-        elif isinstance(module, CLIPMLP):
+        elif isinstance(module, OwlViTMLP):
             factor = self.config.initializer_factor
             in_proj_std = (
                 (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
@@ -388,7 +386,7 @@ class CLIPPreTrainedModel(PreTrainedModel):
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
             nn.init.normal_(module.fc1.weight, std=fc_std)
             nn.init.normal_(module.fc2.weight, std=in_proj_std)
-        elif isinstance(module, CLIPModel):
+        elif isinstance(module, OwlViTModel):
             nn.init.normal_(
                 module.text_projection.weight,
                 std=module.text_embed_dim**-0.5 * self.config.initializer_factor,
@@ -405,22 +403,22 @@ class CLIPPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, CLIPEncoder):
+        if isinstance(module, OwlViTEncoder):
             module.gradient_checkpointing = value
 
 
-CLIP_START_DOCSTRING = r"""
+OWLVIT_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
     as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
 
     Parameters:
-        config ([`CLIPConfig`]): Model configuration class with all the parameters of the model.
+        config ([`OwlViTConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-CLIP_TEXT_INPUTS_DOCSTRING = r"""
+OWLVIT_TEXT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
@@ -452,7 +450,7 @@ CLIP_TEXT_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-CLIP_VISION_INPUTS_DOCSTRING = r"""
+OWLVIT_VISION_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
@@ -467,7 +465,7 @@ CLIP_VISION_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-CLIP_INPUTS_DOCSTRING = r"""
+OWLVIT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
@@ -505,20 +503,20 @@ CLIP_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.clip.modeling_clip
-class CLIPEncoder(nn.Module):
+# Copied from transformers.models.clip.modeling_clip.CLIPEncoder with CLIP->OwlViT
+class OwlViTEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
-    [`CLIPEncoderLayer`].
+    [`OwlViTEncoderLayer`].
 
     Args:
-        config: CLIPConfig
+        config: OwlViTConfig
     """
 
-    def __init__(self, config: CLIPConfig):
+    def __init__(self, config: OwlViTConfig):
         super().__init__()
         self.config = config
-        self.layers = nn.ModuleList([CLIPEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([OwlViTEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -609,18 +607,17 @@ class CLIPEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.clip.modeling_clip
-class CLIPTextTransformer(nn.Module):
-    def __init__(self, config: CLIPTextConfig):
+class OwlViTTextTransformer(nn.Module):
+    def __init__(self, config: OwlViTTextConfig):
         super().__init__()
         self.config = config
         embed_dim = config.hidden_size
-        self.embeddings = CLIPTextEmbeddings(config)
-        self.encoder = CLIPEncoder(config)
+        self.embeddings = OwlViTTextEmbeddings(config)
+        self.encoder = OwlViTEncoder(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim)
 
-    @add_start_docstrings_to_model_forward(CLIP_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLIPTextConfig)
+    @add_start_docstrings_to_model_forward(OWLVIT_TEXT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=OwlViTTextConfig)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -649,8 +646,8 @@ class CLIPTextTransformer(nn.Module):
         hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids)
 
         bsz, seq_len = input_shape
-        # CLIP's text model uses causal mask, prepare it here.
-        # https://github.com/openai/CLIP/blob/cfcffb90e69f37bf2ff1e988237a0fbe41f33c04/clip/model.py#L324
+        # OWLVIT's text model uses causal mask, prepare it here.
+        # https://github.com/openai/OWLVIT/blob/cfcffb90e69f37bf2ff1e988237a0fbe41f33c04/owlvit/model.py#L324
         causal_attention_mask = self._build_causal_attention_mask(bsz, seq_len).to(hidden_states.device)
         # expand attention_mask
         if attention_mask is not None:
@@ -693,13 +690,12 @@ class CLIPTextTransformer(nn.Module):
         return mask
 
 
-# Copied from transformers.models.clip.modeling_clip
-class CLIPTextModel(CLIPPreTrainedModel):
-    config_class = CLIPTextConfig
+class OwlViTTextModel(OwlViTPreTrainedModel):
+    config_class = OwlViTTextConfig
 
-    def __init__(self, config: CLIPTextConfig):
+    def __init__(self, config: OwlViTTextConfig):
         super().__init__(config)
-        self.text_model = CLIPTextTransformer(config)
+        self.text_model = OwlViTTextTransformer(config)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -709,8 +705,8 @@ class CLIPTextModel(CLIPPreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.embeddings.token_embedding = value
 
-    @add_start_docstrings_to_model_forward(CLIP_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLIPTextConfig)
+    @add_start_docstrings_to_model_forward(OWLVIT_TEXT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=OwlViTTextConfig)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -726,10 +722,10 @@ class CLIPTextModel(CLIPPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import CLIPTokenizer, CLIPTextModel
+        >>> from transformers import CLIPTokenizer, OwlViTTextModel
 
-        >>> model = CLIPTextModel.from_pretrained("openai/clip-vit-base-patch32")
-        >>> tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
+        >>> model = OwlViTTextModel.from_pretrained("google/owlvit-base")
+        >>> tokenizer = CLIPTokenizer.from_pretrained("google/owlvit-base")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
 
@@ -747,20 +743,19 @@ class CLIPTextModel(CLIPPreTrainedModel):
         )
 
 
-# Copied from transformers.models.clip.modeling_clip
-class CLIPVisionTransformer(nn.Module):
-    def __init__(self, config: CLIPVisionConfig):
+class OwlViTVisionTransformer(nn.Module):
+    def __init__(self, config: OwlViTVisionConfig):
         super().__init__()
         self.config = config
         embed_dim = config.hidden_size
 
-        self.embeddings = CLIPVisionEmbeddings(config)
+        self.embeddings = OwlViTVisionEmbeddings(config)
         self.pre_layrnorm = nn.LayerNorm(embed_dim)
-        self.encoder = CLIPEncoder(config)
+        self.encoder = OwlViTEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim)
 
-    @add_start_docstrings_to_model_forward(CLIP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLIPVisionConfig)
+    @add_start_docstrings_to_model_forward(OWLVIT_VISION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=OwlViTVisionConfig)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -806,22 +801,21 @@ class CLIPVisionTransformer(nn.Module):
         )
 
 
-# Copied from transformers.models.clip.modeling_clip
-class CLIPVisionModel(CLIPPreTrainedModel):
-    config_class = CLIPVisionConfig
+class OwlViTVisionModel(OwlViTPreTrainedModel):
+    config_class = OwlViTVisionConfig
     main_input_name = "pixel_values"
 
-    def __init__(self, config: CLIPVisionConfig):
+    def __init__(self, config: OwlViTVisionConfig):
         super().__init__(config)
-        self.vision_model = CLIPVisionTransformer(config)
+        self.vision_model = OwlViTVisionTransformer(config)
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
 
-    @add_start_docstrings_to_model_forward(CLIP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLIPVisionConfig)
+    @add_start_docstrings_to_model_forward(OWLVIT_VISION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=OwlViTVisionConfig)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -837,10 +831,10 @@ class CLIPVisionModel(CLIPPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPProcessor, CLIPVisionModel
+        >>> from transformers import CLIPProcessor, OwlViTVisionModel
 
-        >>> model = CLIPVisionModel.from_pretrained("openai/clip-vit-base-patch32")
-        >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+        >>> model = OwlViTVisionModel.from_pretrained("google/owlvit-base")
+        >>> processor = CLIPProcessor.from_pretrained("google/owlvit-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -859,35 +853,35 @@ class CLIPVisionModel(CLIPPreTrainedModel):
         )
 
 
-# Copied from transformers.models.clip.modeling_clip
-@add_start_docstrings(CLIP_START_DOCSTRING)
-class CLIPModel(CLIPPreTrainedModel):
-    config_class = CLIPConfig
+@add_start_docstrings(OWLVIT_START_DOCSTRING)
+class OwlViTModel(OwlViTPreTrainedModel):
+    config_class = OwlViTConfig
 
-    def __init__(self, config: CLIPConfig):
+    def __init__(self, config: OwlViTConfig):
         super().__init__(config)
 
-        if not isinstance(config.text_config, CLIPTextConfig):
+        if not isinstance(config.text_config, OwlViTTextConfig):
             raise ValueError(
-                "config.text_config is expected to be of type CLIPTextConfig but is of type"
+                "config.text_config is expected to be of type OwlViTTextConfig but is of type"
                 f" {type(config.text_config)}."
             )
 
-        if not isinstance(config.vision_config, CLIPVisionConfig):
+        if not isinstance(config.vision_config, OwlViTVisionConfig):
             raise ValueError(
-                "config.vision_config is expected to be of type CLIPVisionConfig but is of type"
+                "config.vision_config is expected to be of type OwlViTVisionConfig but is of type"
                 f" {type(config.vision_config)}."
             )
 
         text_config = config.text_config
         vision_config = config.vision_config
+        body_config = config.body_config
 
         self.projection_dim = config.projection_dim
         self.text_embed_dim = text_config.hidden_size
         self.vision_embed_dim = vision_config.hidden_size
 
-        self.text_model = CLIPTextTransformer(text_config)
-        self.vision_model = CLIPVisionTransformer(vision_config)
+        self.text_model = OwlViTTextTransformer(text_config)
+        self.vision_model = OwlViTVisionTransformer(vision_config)
 
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
@@ -896,7 +890,7 @@ class CLIPModel(CLIPPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(CLIP_TEXT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(OWLVIT_TEXT_INPUTS_DOCSTRING)
     def get_text_features(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -909,20 +903,20 @@ class CLIPModel(CLIPPreTrainedModel):
         r"""
         Returns:
             text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of [`CLIPTextModel`].
+            applying the projection layer to the pooled output of [`OwlViTTextModel`].
 
         Examples:
 
         ```python
-        >>> from transformers import CLIPTokenizer, CLIPModel
+        >>> from transformers import CLIPTokenizer, OwlViTModel
 
-        >>> model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-        >>> tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
+        >>> model = OwlViTModel.from_pretrained("google/owlvit-base")
+        >>> tokenizer = CLIPTokenizer.from_pretrained("google/owlvit-base")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
         ```"""
-        # Use CLIP model's config for some fields (if specified) instead of those of vision & text components.
+        # Use OWLVIT model's config for some fields (if specified) instead of those of vision & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -943,7 +937,7 @@ class CLIPModel(CLIPPreTrainedModel):
 
         return text_features
 
-    @add_start_docstrings_to_model_forward(CLIP_VISION_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(OWLVIT_VISION_INPUTS_DOCSTRING)
     def get_image_features(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -954,17 +948,17 @@ class CLIPModel(CLIPPreTrainedModel):
         r"""
         Returns:
             image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
-            applying the projection layer to the pooled output of [`CLIPVisionModel`].
+            applying the projection layer to the pooled output of [`OwlViTVisionModel`].
 
         Examples:
 
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPProcessor, CLIPModel
+        >>> from transformers import CLIPProcessor, OwlViTModel
 
-        >>> model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-        >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+        >>> model = OwlViTModel.from_pretrained("google/owlvit-base")
+        >>> processor = CLIPProcessor.from_pretrained("google/owlvit-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -973,7 +967,7 @@ class CLIPModel(CLIPPreTrainedModel):
 
         >>> image_features = model.get_image_features(**inputs)
         ```"""
-        # Use CLIP model's config for some fields (if specified) instead of those of vision & text components.
+        # Use OWLVIT model's config for some fields (if specified) instead of those of vision & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -992,8 +986,8 @@ class CLIPModel(CLIPPreTrainedModel):
 
         return image_features
 
-    @add_start_docstrings_to_model_forward(CLIP_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=OwlViTOutput, config_class=OwlCLIPConfig)
+    @add_start_docstrings_to_model_forward(OWLVIT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=OwlViTOutput, config_class=OwlViTConfig)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1004,7 +998,7 @@ class CLIPModel(CLIPPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CLIPOutput]:
+    ) -> Union[Tuple, OwlViTOutput]:
         r"""
         Returns:
 
@@ -1013,10 +1007,10 @@ class CLIPModel(CLIPPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPProcessor, CLIPModel
+        >>> from transformers import CLIPProcessor, OwlViTModel
 
-        >>> model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-        >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+        >>> model = OwlViTModel.from_pretrained("google/owlvit-base")
+        >>> processor = CLIPProcessor.from_pretrained("google/owlvit-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1029,7 +1023,7 @@ class CLIPModel(CLIPPreTrainedModel):
         >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
         >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
         ```"""
-        # Use CLIP model's config for some fields (if specified) instead of those of vision & text components.
+        # Use OWLVIT model's config for some fields (if specified) instead of those of vision & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1069,13 +1063,13 @@ class CLIPModel(CLIPPreTrainedModel):
 
         loss = None
         if return_loss:
-            loss = clip_loss(logits_per_text)
+            loss = owlvit_loss(logits_per_text)
 
         if not return_dict:
             output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
             return ((loss,) + output) if loss is not None else output
 
-        return CLIPOutput(
+        return OwlViTOutput(
             loss=loss,
             logits_per_image=logits_per_image,
             logits_per_text=logits_per_text,
@@ -1085,8 +1079,7 @@ class CLIPModel(CLIPPreTrainedModel):
             vision_model_output=vision_outputs,
         )
 
-
-class OwlViTBoxPredictor(nn.Module):
+class OwlViTBoxPredictor(OwlViTPreTrainedModel):
     def __init__(self, width: int, out_dim: int = 4):
         super().__init__()
         self.dense0 = nn.Linear(width, width)
@@ -1094,8 +1087,8 @@ class OwlViTBoxPredictor(nn.Module):
         self.gelu = nn.GELU()
         self.dense2 = nn.Linear(width, out_dim)
 
-    def forward(self, input: torch.Tensor):
-        output = self.dense0(input)
+    def forward(self, image_features: torch.Tensor):
+        output = self.dense0(image_features)
         output = self.gelu(output)
         output = self.dense1(output)
         output = self.gelu(output)
@@ -1103,7 +1096,7 @@ class OwlViTBoxPredictor(nn.Module):
         return output
 
 
-class OwlViTClassPredictor(nn.Module):
+class OwlViTClassPredictor(OwlViTPreTrainedModel):
     def __init__(self, out_dim: int, query_dim: int, normalize: bool = True):
         super().__init__()
         self.dense0 = nn.Linear(query_dim, out_dim)
@@ -1132,12 +1125,15 @@ class OwlViTClassPredictor(nn.Module):
                 query_mask = torch.unsqueeze(query_mask, dim=-2)
 
             pred_logits = torch.where(query_mask==0, -1e6, pred_logits)
-
         return {'pred_logits': pred_logits, 'class_embeddings': image_class_emb}
 
 
-class OwlViTImageTextEmbedder(nn.Module):
-    def __init__(self, merge_class_token, vision_width, backbone):
+class OwlViTImageTextEmbedder(OwlViTPreTrainedModel):
+    def __init__(self,
+                 merge_class_token,
+                 vision_width,
+                 backbone,
+                 ):
         super().__init__()
 
         self.clip = backbone
@@ -1166,35 +1162,145 @@ class OwlViTImageTextEmbedder(nn.Module):
                 img_emb = nn.LayerNorm(image_emb)
 
         if text_emb is not None and len(texts_shape) > 2:
-            text_emb = text_emb.reshape(texts_shape[:-1] + (-1,))
+          text_emb = text_emb.reshape(texts_shape[:-1] + (-1,))
         return image_emb, text_emb
 
 
-class OwlViTObjectDetectionHead(nn.Module):
+class OwlViTObjectDetectionHead(OwlViTPreTrainedModel):
     """Head for object classification tasks."""
 
-    def __init__(self, input_dim: int, inner_dim: int, num_classes: int):
+    def __init__(self, embedder, class_head, box_head, box_bias="both"):
         super().__init__()
 
+        self._embedder = embedder
+        self._class_head = class_head
+        self._box_head = box_head
+        self.box_bias = box_bias
+        self.sigmoid = nn.Sigmoid()
 
-    def forward(self, hidden_states: torch.Tensor):
-        return hidden_states
+    def normalize_grid_corner_coordinates(feature_map, padding_mask=None):
+        """
+        Computes normalized xy corner coords from feature_map or padding_mask.
+        """
+        if padding_mask is None:
+            assert feature_map.ndim == 4  # [B, H, W, C]
+            h, w = feature_map.shape[1:3]
 
+        xy = np.stack(np.meshgrid(np.arange(1, w+1), np.arange(1, h+1)), axis=-1).astype(np.float32)
+        xy /= np.array([w, h], np.float32)
+        # Flatten h, w dimensions
+        xy.reshape(*(xy.shape[:-3] + (-1, 2)))
+        xy = torch.from_numpy(xy)
+      else:
+        assert padding_mask.ndim == 3  # [B, H, W]
+        y = torch.cumsum(padding_mask, axis=1)
+        x = torch.cumsum(padding_mask, axis=2)
+        xy = torch.stack([x/(x[:, :, -1:] + 1e-6), y/(y[:, -1:] + 1e-6)], axis=-1)
+      
+      return xy
 
-class OwlViTPreTrainedModel(PreTrainedModel):
-    return
+    def compute_box_bias(self, feature_map, padding_mask=None):
+        """
+            Computes spatial bias for grid.
+        """
+        # The box center is biased to its position on the feature grid:
+        xy = normalized_grid_corner_coordinates(feature_map, padding_mask)
+        xy = jnp.clip(xy, 0.0, 1.0)
 
+        # Unnormalize xy 
+        xy_bias = torch.log(xy + 1e-4) - torch.log1p(-xy + 1e-4)
 
-class OwlViTModel(OwlViTPreTrainedModel):
-    config_class = OwlViTConfig
+        # The box size is biased to the patch size:
+        wh = torch.full_like(xy_bias, 1.0 / feature_map.shape[-2])
+        wh_bias = torch.log(wh + 1e-4) - torch.log1p(-wh + 1e-4)
 
-    def __init__(self, config: OwlViTConfig):
-        super().__init__(config)
+        # Compute box bias
+        box_bias = torch.cat([xy_bias, wh_bias], dim=-1)
+        return box_bias
 
-        if not isinstance(config.clip_config, CLIPConfig):
-            raise ValueError(
-                "config.clip_config is expected to be of type CLIPConfig but is of type"
-                f" {type(config.clip_config)}."
-            )
+    def box_predictor(self, image_features, feature_map):
+        """
+        Args:
+          image_features: Features extracted from the image, returned by the`embedder` function.
+          feature_map: A spatial re-arrangement of image_features, also returned by
+            the `embedder` function.
 
+        Returns:
+          list of predicted boxes (cxcywh normalized to 0, 1) nested within
+            a dictionary.
+        """
+        # Bounding box detection head [batch_size, num_boxes, 4].
+        pred_boxes = self._box_head(image_features)
+        # Compute the location of each token on the grid and use it to compute a bias for the bbox prediction
+        pred_boxes += self.compute_box_bias(feature_map, kind=self.box_bias)
+        pred_boxes = self.sigmoid(pred_boxes)
+        return {'pred_boxes': pred_boxes}
+
+    def class_predictor(self, image_features, query_embeddings, query_mask):
+        """
+        Args:
+          image_features: Features extracted from the image embedder.
+          query_embeddings: Optional list of (or image) embeddings. If no embeddings
+            are provided, no logits will be computed and only the class embeddings
+            for the image will be returned.
+          query_mask: Must be provided with query_embeddings. A mask indicating
+            which query embeddings are valid.
+
+        """
+        class_embedding_logits = self._class_head(image_features, query_embeddings, query_mask)
+        return class_embedding_logits
+
+    def image_embedder(self, images):
+        """
+        Returns a 2D map of image features.
+        """
+        image_feats, _ = self._embedder(images=images)
+
+        new_size = (
+            image_feats.shape[0], 
+            int(np.sqrt(image_feats.shape[-1])), 
+            int(np.sqrt(image_feats.shape[-1])),  
+            image_feats.shape[-1]
+        )
+        return image_feats.reshape(new_size)
+
+    def text_embedder(self, text_queries):
+        text_feats, _ = self._embedder(texts=text_queries)
+        return text_feats
+
+    def forward(self, inputs, text_queries, ):
+        """
+        Args:
+          inputs: Images [batch_size, 3, height, width].
+          text_queries: Queries to condition the model on. Queries starting with 0
+            stand for padding [batch_size, num_queries, max_query_length].
+
+        Returns:
+          Outputs dict with items:
+            pred_logits: Class logits [b, num_patches, num_queries + 1].
+            pred_boxes: Predicted bounding boxes [b, num_patches, 4].
+            feature_map: Image embeddings 2d feature map [b, sp, sp, img_emb_dim].
+        """
+
+        # Embed images
+        feature_map = self.image_embedder(inputs, train)
+        b, h, w, d = feature_map.shape
+        image_features = torch.reshape(feature_map, (b, h*w, d))
+
+        # Embed text queries
+        query_embeddings = self.text_embedder(text_queries, train)
+        # If first token is 0, then this is a padded query [batch_size, num_queries].
+        query_mask = (text_queries[..., 0] > 0)
+
+        outputs = {
+            'feature_map': feature_map,
+            'query_embeddings': query_embeddings,
+        }
+
+        # Classification [batch_size, num_patches, num_queries+1]
+        outputs.update(self.class_predictor(image_features, query_embeddings, query_mask))
+
+        # Predict boxes
+        outputs.update(self.box_predictor(image_features, feature_map))
+        return outputs
 
