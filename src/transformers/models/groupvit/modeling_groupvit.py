@@ -409,17 +409,13 @@ class GroupViTVisionEmbeddings(nn.Module):
         # see discussion at https://github.com/facebookresearch/dino/issues/8
         feat_height, feat_width = feat_height + 0.1, feat_width + 0.1
         original_height = original_width = math.sqrt(num_original_pos_embed)
+        reshaped_patch_pos_embed = patch_pos_embed.reshape(1, int(original_height), int(original_width), dim).permute(
+            0, 3, 1, 2
+        )
+        scale_factor = (feat_height / original_height, feat_width / original_width)
         patch_pos_embed = nn.functional.interpolate(
-            patch_pos_embed.reshape(
-                1,
-                int(original_height),
-                int(original_width),
-                dim,
-            ).permute(0, 3, 1, 2),
-            scale_factor=(
-                feat_height / original_height,
-                feat_width / original_width,
-            ),
+            reshaped_patch_pos_embed,
+            scale_factor=scale_factor,
             mode="bicubic",
             align_corners=False,
         )
