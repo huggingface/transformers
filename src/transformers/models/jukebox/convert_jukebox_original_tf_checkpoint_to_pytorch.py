@@ -70,6 +70,6 @@ if __name__ == "__main__":
         ),
     )
     args = parser.parse_args()
-    convert_jukebox_checkpoint_to_pytorch(
-        args.jukebox_checkpoint_path, args.jukebox_config_file, args.pytorch_dump_folder_path
-    )
+    # convert_jukebox_checkpoint_to_pytorch(
+    #     args.jukebox_checkpoint_path, args.jukebox_config_file, args.pytorch_dump_folder_path
+    # )

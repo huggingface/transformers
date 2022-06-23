@@ -18,6 +18,7 @@ import unittest
 import numpy as np
 
 from transformers import JukeboxConfig, is_torch_available
+from transformers.testing_utils import require_torch
 from transformers.trainer_utils import set_seed
 
 
@@ -33,6 +34,7 @@ if is_torch_available():
     from transformers import JukeboxModel, JukeboxTokenizer  # ,JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
+@require_torch
 class JukeboxModelTest(unittest.TestCase):
     all_model_classes = (JukeboxModel,) if is_torch_available() else ()
 
@@ -612,7 +614,7 @@ class JukeboxModelTest(unittest.TestCase):
         start = timeit.default_timer()
         # import cProfile as profile
         # profile.runctx('model.ancestral_sample(ys, sampling_kwargs, config)', globals(), locals())
-        zs = model.ancestral_sample(ys, sampling_kwargs, model.config)
+        model.ancestral_sample(ys, sampling_kwargs, model.config)
         print(f"time to sample : {timeit.default_timer() - start}")
 
 

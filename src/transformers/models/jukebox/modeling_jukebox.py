@@ -42,12 +42,13 @@ from .configuration_jukebox import JukeboxConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "ArthurZ/jukebox-dummy"
-_CONFIG_FOR_DOC = "JukeboxConfig"
-_TOKENIZER_FOR_DOC = "JukeboxTokenizer"
+# _CHECKPOINT_FOR_DOC = "ArthurZ/jukebox-dummy"
+# _CONFIG_FOR_DOC = "JukeboxConfig"
+# _TOKENIZER_FOR_DOC = "JukeboxTokenizer"
 
 JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "ArthurZ/jukebox-dummy",
+    "ArthurZ/jukebox-1b-lyrics",
     # See all Jukebox models at https://huggingface.co/models?filter=jukebox
 ]
 
@@ -3086,7 +3087,7 @@ JUKEBOX_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`JukeboxConfig`]): Model configuration class with all the parameters of the model.
+        config (`JukeboxConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """

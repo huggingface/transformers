@@ -28,7 +28,7 @@ logger = logging.get_logger(__name__)
 
 JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "ArthurZ/jukebox-dummy": "https://huggingface.co/ArthurZ/jukebox-dummy/resolve/main/config.json",
-    "ArthurZ/jukebox-1h-lyrics": "https://huggingface.co/ArthurZ/jukebox-1b-lyrics/resolve/main/config.json",
+    "ArthurZ/jukebox-1b-lyrics": "https://huggingface.co/ArthurZ/jukebox-1b-lyrics/resolve/main/config.json",
 }
 
 
@@ -74,37 +74,6 @@ class JukeboxConfig(PretrainedConfig):
             The epsilon to use in the layer normalization layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        summary_type (`string`, *optional*, defaults to `"cls_index"`):
-            Argument used when doing sequence summary, used in the models [`JukeboxDoubleHeadsModel`] and
-            [`TFJukeboxDoubleHeadsModel`].
-
-            Has to be one of the following options:
-
-                - `"last"`: Take the last token hidden state (like XLNet).
-                - `"first"`: Take the first token hidden state (like BERT).
-                - `"mean"`: Take the mean of all tokens hidden states.
-                - `"cls_index"`: Supply a Tensor of classification token position (like GPT/GPT-2).
-                - `"attn"`: Not implemented now, use multi-head attention.
-        summary_use_proj (`bool`, *optional*, defaults to `True`):
-            Argument used when doing sequence summary, used in the models [`JukeboxDoubleHeadsModel`] and
-            [`TFJukeboxDoubleHeadsModel`].
-
-            Whether or not to add a projection after the vector extraction.
-        summary_activation (`str`, *optional*):
-            Argument used when doing sequence summary. Used in for the multiple choice head in
-            [`JukeboxDoubleHeadsModel`].
-
-            Pass `"tanh"` for a tanh activation to the output, any other value will result in no activation.
-        summary_proj_to_labels (`bool`, *optional*, defaults to `True`):
-            Argument used when doing sequence summary, used in the models [`JukeboxDoubleHeadsModel`] and
-            [`TFJukeboxDoubleHeadsModel`].
-
-            Whether the projection outputs should have `config.num_labels` or `config.hidden_size` classes.
-        summary_first_dropout (`float`, *optional*, defaults to 0.1):
-            Argument used when doing sequence summary, used in the models [`JukeboxDoubleHeadsModel`] and
-            [`TFJukeboxDoubleHeadsModel`].
-
-            The dropout ratio to be used after the projection and activation.
         scale_attn_weights (`bool`, *optional*, defaults to `True`):
             Scale attention weights by dividing by sqrt(hidden_size)..
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -141,6 +110,7 @@ class JukeboxConfig(PretrainedConfig):
     }
     # params are given for the `n` priors at the same time which means that you have
     # level2,level1,level0
+
     def __init__(
         self,
         vocab_size=50257,

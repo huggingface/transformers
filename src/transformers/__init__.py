@@ -3074,7 +3074,6 @@ if TYPE_CHECKING:
         from .models.cpm import CpmTokenizer
         from .models.deberta_v2 import DebertaV2Tokenizer
         from .models.fnet import FNetTokenizer
-        from .models.jukebox import JukeboxTokenizer
         from .models.layoutxlm import LayoutXLMTokenizer
         from .models.m2m_100 import M2M100Tokenizer
         from .models.marian import MarianTokenizer

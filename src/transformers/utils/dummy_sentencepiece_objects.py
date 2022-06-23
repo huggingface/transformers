@@ -66,13 +66,6 @@ class FNetTokenizer(metaclass=DummyObject):
         requires_backends(self, ["sentencepiece"])
 
 
-class JukeboxTokenizer(metaclass=DummyObject):
-    _backends = ["sentencepiece"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["sentencepiece"])
-
-
 class LayoutXLMTokenizer(metaclass=DummyObject):
     _backends = ["sentencepiece"]
 

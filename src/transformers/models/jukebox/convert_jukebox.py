@@ -22,7 +22,6 @@ import torch
 
 import requests
 from transformers import JukeboxConfig, JukeboxModel
-from transformers.models import jukebox
 from transformers.utils import logging
 
 
