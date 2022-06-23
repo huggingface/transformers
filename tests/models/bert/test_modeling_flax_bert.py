@@ -155,6 +155,28 @@ class FlaxBertModelTest(FlaxModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = FlaxBertModelTester(self)
 
+    def test_gradient_checkpointing(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            # prepare inputs
+            prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            model1 = model_class(config, gradient_checkpointing=False)
+            model2 = model_class(config, gradient_checkpointing=True)
+
+            outputs1 = model1(**prepared_inputs_dict)
+            outputs2 = model2(**prepared_inputs_dict)
+
+            # ensure that the dicts of outputs contain the same keys
+            self.assertEqual(outputs1.keys(), outputs2.keys())
+
+            outputs1 = outputs1.to_tuple()
+            outputs2 = outputs2.to_tuple()
+
+            # ensure that the outputs remain precisely equal
+            for output1, output2 in zip(outputs1, outputs2):
+                self.assertTrue((output1 == output2).all())
+
     @slow
     def test_model_from_pretrained(self):
         # Only check this for base model, not necessary for all model classes.

@@ -23,6 +23,7 @@ import jax
 import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen import combine_masks, make_causal_mask
+from flax.linen import partitioning as nn_partitioning
 from flax.linen.attention import dot_product_attention_weights
 from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
@@ -55,6 +56,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "bert-base-uncased"
 _CONFIG_FOR_DOC = "BertConfig"
 _TOKENIZER_FOR_DOC = "BertTokenizer"
+
+remat = nn_partitioning.remat
 
 
 @flax.struct.dataclass
@@ -544,10 +547,15 @@ class FlaxBertLayer(nn.Module):
 class FlaxBertLayerCollection(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    gradient_checkpointing: bool = False
 
     def setup(self):
+        FlaxBertRematLayer = (
+            remat(FlaxBertLayer, static_argnums=(5, 6, 7)) if self.gradient_checkpointing else FlaxBertLayer
+        )
         self.layers = [
-            FlaxBertLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.num_hidden_layers)
+            FlaxBertRematLayer(self.config, name=str(i), dtype=self.dtype)
+            for i in range(self.config.num_hidden_layers)
         ]
 
     def __call__(
@@ -582,12 +590,12 @@ class FlaxBertLayerCollection(nn.Module):
             layer_outputs = layer(
                 hidden_states,
                 attention_mask,
-                layer_head_mask=head_mask[i] if head_mask is not None else None,
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=encoder_attention_mask,
-                init_cache=init_cache,
-                deterministic=deterministic,
-                output_attentions=output_attentions,
+                head_mask[i] if head_mask is not None else None,
+                encoder_hidden_states,
+                encoder_attention_mask,
+                init_cache,
+                deterministic,
+                output_attentions,
             )
 
             hidden_states = layer_outputs[0]
@@ -617,9 +625,12 @@ class FlaxBertLayerCollection(nn.Module):
 class FlaxBertEncoder(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    gradient_checkpointing: bool = False
 
     def setup(self):
-        self.layer = FlaxBertLayerCollection(self.config, dtype=self.dtype)
+        self.layer = FlaxBertLayerCollection(
+            self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+        )
 
     def __call__(
         self,
@@ -925,10 +936,13 @@ class FlaxBertModule(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
     add_pooling_layer: bool = True
+    gradient_checkpointing: bool = False
 
     def setup(self):
         self.embeddings = FlaxBertEmbeddings(self.config, dtype=self.dtype)
-        self.encoder = FlaxBertEncoder(self.config, dtype=self.dtype)
+        self.encoder = FlaxBertEncoder(
+            self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+        )
         self.pooler = FlaxBertPooler(self.config, dtype=self.dtype)
 
     def __call__(
@@ -1003,9 +1017,12 @@ append_call_sample_docstring(
 class FlaxBertForPreTrainingModule(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32
+    gradient_checkpointing: bool = False
 
     def setup(self):
-        self.bert = FlaxBertModule(config=self.config, dtype=self.dtype)
+        self.bert = FlaxBertModule(
+            config=self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+        )
         self.cls = FlaxBertPreTrainingHeads(config=self.config, dtype=self.dtype)
 
     def __call__(
@@ -1099,9 +1116,15 @@ append_replace_return_docstrings(
 class FlaxBertForMaskedLMModule(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32
+    gradient_checkpointing: bool = False
 
     def setup(self):
-        self.bert = FlaxBertModule(config=self.config, add_pooling_layer=False, dtype=self.dtype)
+        self.bert = FlaxBertModule(
+            config=self.config,
+            add_pooling_layer=False,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
+        )
         self.cls = FlaxBertOnlyMLMHead(config=self.config, dtype=self.dtype)
 
     def __call__(
@@ -1161,9 +1184,12 @@ append_call_sample_docstring(
 class FlaxBertForNextSentencePredictionModule(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32
+    gradient_checkpointing: bool = False
 
     def setup(self):
-        self.bert = FlaxBertModule(config=self.config, dtype=self.dtype)
+        self.bert = FlaxBertModule(
+            config=self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+        )
         self.cls = FlaxBertOnlyNSPHead(dtype=self.dtype)
 
     def __call__(
@@ -1248,9 +1274,12 @@ append_replace_return_docstrings(
 class FlaxBertForSequenceClassificationModule(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32
+    gradient_checkpointing: bool = False
 
     def setup(self):
-        self.bert = FlaxBertModule(config=self.config, dtype=self.dtype)
+        self.bert = FlaxBertModule(
+            config=self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+        )
         classifier_dropout = (
             self.config.classifier_dropout
             if self.config.classifier_dropout is not None
@@ -1324,9 +1353,12 @@ append_call_sample_docstring(
 class FlaxBertForMultipleChoiceModule(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32
+    gradient_checkpointing: bool = False
 
     def setup(self):
-        self.bert = FlaxBertModule(config=self.config, dtype=self.dtype)
+        self.bert = FlaxBertModule(
+            config=self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+        )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
         self.classifier = nn.Dense(1, dtype=self.dtype)
 
@@ -1399,9 +1431,15 @@ append_call_sample_docstring(
 class FlaxBertForTokenClassificationModule(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32
+    gradient_checkpointing: bool = False
 
     def setup(self):
-        self.bert = FlaxBertModule(config=self.config, dtype=self.dtype, add_pooling_layer=False)
+        self.bert = FlaxBertModule(
+            config=self.config,
+            dtype=self.dtype,
+            add_pooling_layer=False,
+            gradient_checkpointing=self.gradient_checkpointing,
+        )
         classifier_dropout = (
             self.config.classifier_dropout
             if self.config.classifier_dropout is not None
@@ -1468,9 +1506,15 @@ append_call_sample_docstring(
 class FlaxBertForQuestionAnsweringModule(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32
+    gradient_checkpointing: bool = False
 
     def setup(self):
-        self.bert = FlaxBertModule(config=self.config, dtype=self.dtype, add_pooling_layer=False)
+        self.bert = FlaxBertModule(
+            config=self.config,
+            dtype=self.dtype,
+            add_pooling_layer=False,
+            gradient_checkpointing=self.gradient_checkpointing,
+        )
         self.qa_outputs = nn.Dense(self.config.num_labels, dtype=self.dtype)
 
     def __call__(
@@ -1539,9 +1583,15 @@ append_call_sample_docstring(
 class FlaxBertForCausalLMModule(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32
+    gradient_checkpointing: bool = False
 
     def setup(self):
-        self.bert = FlaxBertModule(config=self.config, add_pooling_layer=False, dtype=self.dtype)
+        self.bert = FlaxBertModule(
+            config=self.config,
+            add_pooling_layer=False,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
+        )
         self.cls = FlaxBertOnlyMLMHead(config=self.config, dtype=self.dtype)
 
     def __call__(
