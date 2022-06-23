@@ -1408,8 +1408,7 @@ class T5Model(T5PreTrainedModel):
             )
 
         hidden_states = encoder_outputs[0]
-        if self.model_parallel:
-            torch.cuda.set_device(self.decoder.first_device)
+
         # Set device for model parallelism
         if self.model_parallel:
             torch.cuda.set_device(self.decoder.first_device)
