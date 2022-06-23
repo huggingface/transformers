@@ -505,7 +505,7 @@ def main():
             resume_step -= starting_epoch * len(train_dataloader)
 
     for epoch in range(starting_epoch, args.num_train_epochs):
-        if completed_steps > args.max_train_steps:
+        if completed_steps > args.max_train_steps - 1:
             break
         model.train()
         if args.with_tracking:
