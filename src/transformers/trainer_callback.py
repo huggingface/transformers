@@ -81,6 +81,7 @@ class TrainerState:
     total_flos: float = 0
     log_history: List[Dict[str, float]] = None
     best_metric: Optional[float] = None
+    best_metric_checkpoint: Optional[float] = None
     best_model_checkpoint: Optional[str] = None
     is_local_process_zero: bool = True
     is_world_process_zero: bool = True
@@ -516,10 +517,7 @@ class EarlyStoppingCallback(TrainerCallback):
             `early_stopping_patience` evaluation calls.
        early_stopping_threshold(`float`, *optional*):
             Use with TrainingArguments `metric_for_best_model` and `early_stopping_patience` to denote how much the
-            specified metric must improve to satisfy early stopping conditions. `
-
-    This callback depends on [`TrainingArguments`] argument *load_best_model_at_end* functionality to set best_metric
-    in [`TrainerState`].
+            specified metric must improve to satisfy early stopping conditions.
     """
 
     def __init__(self, early_stopping_patience: int = 1, early_stopping_threshold: Optional[float] = 0.0):

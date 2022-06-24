@@ -1153,6 +1153,16 @@ class Trainer:
                 self._tune_save_checkpoint()
             tune.report(objective=self.objective, **metrics)
 
+    def _update_best_metric(self, metrics):
+        metric_to_check = self.args.metric_for_best_model
+        if not metric_to_check.startswith("eval_"):
+            metric_to_check = f"eval_{metric_to_check}"
+        metric_value = metrics[metric_to_check]
+
+        operator = np.greater if self.args.greater_is_better else np.less
+        if self.state.best_metric is None or operator(metric_value, self.state.best_metric):
+            self.state.best_metric = metric_value
+
     def _tune_save_checkpoint(self):
         from ray import tune
 
@@ -1912,6 +1922,7 @@ class Trainer:
         if self.control.should_evaluate:
             metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
             self._report_to_hp_search(trial, epoch, metrics)
+            self._update_best_metric(metrics)
 
         if self.control.should_save:
             self._save_checkpoint(model, trial, metrics=metrics)
@@ -2036,11 +2047,11 @@ class Trainer:
 
             operator = np.greater if self.args.greater_is_better else np.less
             if (
-                self.state.best_metric is None
+                self.state.best_metric_checkpoint is None
                 or self.state.best_model_checkpoint is None
-                or operator(metric_value, self.state.best_metric)
+                or operator(metric_value, self.state.best_metric_checkpoint)
             ):
-                self.state.best_metric = metric_value
+                self.state.best_metric_checkpoint = metric_value
                 self.state.best_model_checkpoint = output_dir
 
         # Save the Trainer state
