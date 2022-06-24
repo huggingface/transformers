@@ -42,7 +42,7 @@ class CodeGenModelTester:
         use_input_mask=True,
         use_labels=True,
         use_mc_token_ids=True,
-        vocab_size=99,
+        vocab_size=256,
         hidden_size=32,
         rotary_dim=4,
         num_hidden_layers=5,
