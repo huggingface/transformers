@@ -200,6 +200,8 @@
       title: CamemBERT
     - local: model_doc/canine
       title: CANINE
+    - local: model_doc/codegen
+      title: CodeGen
     - local: model_doc/convnext
       title: ConvNeXT
     - local: model_doc/clip
