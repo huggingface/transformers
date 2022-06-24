@@ -1600,6 +1600,30 @@ class TFModelTesterMixin:
                 model.compile(optimizer="sgd", run_eagerly=True)
                 model.train_on_batch(test_batch, test_batch_labels)
 
+    def test_xla_generate_fast(self):
+        """
+        Basic quick test for generate-compatible classes that confirms that XLA-generated tokens are the same as their
+        non XLA counterparts.
+        """
+        for model_class in self.all_generative_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            input_ids = inputs_dict["input_ids"]
+
+            config.eos_token_id = None  # Generate until max length
+            config.max_length = 10
+            config.do_sample = False
+            config.num_beams = 1
+            model = model_class(config)
+
+            # make sure there are no pad tokens in prompt, which may trigger unwanted behavior
+            input_ids = tf.where(input_ids != config.pad_token_id, input_ids, config.pad_token_id - 1)
+
+            generated = model.generate(input_ids)
+            generate_xla = tf.function(model.generate, jit_compile=True)
+            generated_xla = generate_xla(input_ids)
+
+            self.assertListEqual(generated.numpy().tolist(), generated_xla.numpy().tolist())
+
     def _generate_random_bad_tokens(self, num_bad_tokens, model):
         # special tokens cannot be bad tokens
         special_tokens = []

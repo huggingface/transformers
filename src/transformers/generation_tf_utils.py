@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
+from tensorflow.compiler.tf2xla.python.xla import dynamic_update_slice
 
 from .generation_tf_logits_process import (
     TFForcedBOSTokenLogitsProcessor,
@@ -1807,12 +1808,126 @@ class TFGenerationMixin:
         return model_kwargs
 
     def _update_model_kwargs_for_xla_generation(
-        self, outputs: ModelOutput, model_kwargs: Dict[str, Any], current_pos: tf.Tensor, max_length: int
-    ) -> Dict[str, Any]:
-        raise NotImplementedError(
-            f"{self.__class__} is not compileable with XLA at the moment. You should implement a "
-            "`_update_model_kwargs_for_xla_generation` in the respective modeling file for XLA-compatible generation."
-        )
+        self,
+        model_outputs: ModelOutput,
+        model_kwargs: Dict[str, Any],
+        cur_len: int,
+        max_length: int,
+        batch_size: int,
+        is_encoder_decoder: bool = False,
+        batch_axis: int = 0,
+    ):
+        def _initialize_attention(model_kwargs, num_padding_values, is_encoder_decoder):
+            """initializes the appropriate attention mask -- encoder-decoder models use `decoder_attention_mask`"""
+            if is_encoder_decoder:
+                # One 1 for decoder_start_token_id, 0s for the currently-unfilled locations in the past tensor,
+                # 1s for the actual input_ids
+                decoder_attention_mask = tf.concat(
+                    [
+                        tf.ones((batch_size, 1), dtype=tf.int32),
+                        tf.zeros((batch_size, num_padding_values), dtype=tf.int32),
+                        tf.ones((batch_size, 1), dtype=tf.int32),
+                    ],
+                    axis=1,
+                )
+                mask = {"decoder_attention_mask": decoder_attention_mask}
+            else:
+                attention_mask = model_kwargs.pop("attention_mask")
+                # 0s for the currently-unfilled locations in the past tensor, 1s for the actual input_ids
+                attention_mask = tf.concat(
+                    [
+                        attention_mask,
+                        tf.zeros((batch_size, num_padding_values), dtype=attention_mask.dtype),
+                        tf.ones((batch_size, 1), dtype=attention_mask.dtype),
+                    ],
+                    axis=1,
+                )
+                mask = {"attention_mask": attention_mask}
+            return mask
+
+        def _update_attention(model_kwargs, new_past_index, is_encoder_decoder):
+            """updates the appropriate attention mask -- encoder-decoder models use `decoder_attention_mask`"""
+            update_start = tf.constant([0, 1], dtype=tf.int32) * new_past_index
+            if is_encoder_decoder:
+                decoder_attention_mask = model_kwargs.pop("decoder_attention_mask")
+                decoder_attention_mask_update_slice = tf.ones((batch_size, 1), dtype=decoder_attention_mask.dtype)
+                decoder_attention_mask = dynamic_update_slice(
+                    decoder_attention_mask, decoder_attention_mask_update_slice, update_start
+                )
+                mask = {"decoder_attention_mask": decoder_attention_mask}
+            else:
+                attention_mask = model_kwargs.pop("attention_mask")
+                attention_mask_update_slice = tf.ones((batch_size, 1), dtype=attention_mask.dtype)
+                attention_mask = dynamic_update_slice(attention_mask, attention_mask_update_slice, update_start)
+                mask = {"attention_mask": attention_mask}
+            return mask
+
+        def _initialize_past(past, num_padding_values, batch_axis):
+            """initialize past with zeros -- the structure depends on `batch_axis`"""
+            if batch_axis == 0:
+                padding_values = tf.scatter_nd(indices=[[2, 1]], updates=[num_padding_values], shape=(4, 2))
+                new_past = ()
+                for past_layer in past:
+                    new_past_layer = list(past_layer)
+                    for i in range(len(new_past_layer[:2])):
+                        new_past_layer[i] = tf.pad(past_layer[i], padding_values)
+                    new_past += (tuple(new_past_layer),)
+            else:
+                padding_values = tf.scatter_nd(indices=[[3, 1]], updates=[num_padding_values], shape=(5, 2))
+                new_past = list(past)
+                for i in range(len(past)):
+                    new_past[i] = tf.pad(past[i], padding_values)
+            return new_past
+
+        def _update_past(past, new_past_index, batch_axis):
+            if batch_axis == 0:
+                slice_start_base = tf.constant([0, 0, 1, 0])
+                new_past = ()
+                for past_layer in past:
+                    new_past_layer = list(past_layer)
+                    for i in range(len(new_past_layer[:2])):
+                        update_slice = past_layer[i][:, :, -1:]
+                        # Write the last slice to the first open location in the padded past array
+                        # and then truncate the last slice off the array
+                        new_past_layer[i] = dynamic_update_slice(
+                            past_layer[i][:, :, :-1], update_slice, slice_start_base * new_past_index
+                        )
+                    new_past += (tuple(new_past_layer),)
+            else:
+                slice_start_base = tf.constant([0, 0, 0, 1, 0])
+                new_past = [None for _ in range(len(past))]
+                for i in range(len(past)):
+                    update_slice = past[i][:, :, :, -1:]
+                    # Write the last slice to the first open location in the padded past array
+                    # and then truncate the last slice off the array
+                    new_past[i] = dynamic_update_slice(
+                        past[i][:, :, :, :-1], update_slice, slice_start_base * new_past_index
+                    )
+            return new_past
+
+        past = model_outputs.past_key_values
+        is_past_initialized = model_kwargs.pop("past", None) is not None
+
+        if not is_past_initialized:
+            # The padded version of `past` has a length of `max_length - 1`, as `past` holds information relative to
+            # previous autoregressive generation steps (step 0 has no past, step 1 has 1 past value, ..., the last step
+            # has `max_length - 1` past values).
+            num_padding_values = max_length - cur_len - 1
+            mask = _initialize_attention(model_kwargs, num_padding_values, is_encoder_decoder)
+            new_past = _initialize_past(past, num_padding_values, batch_axis)
+        else:
+            # The new index of past to be filled corresponds to the current length of the sequence, with two
+            # subtractions: -1 because past holds information regarding previous generation steps (read comment above)
+            # and -1 again because in an array the index is the length of the array minus 1.
+            new_past_index = cur_len - 2
+            mask = _update_attention(model_kwargs, new_past_index, is_encoder_decoder)
+            new_past = _update_past(past, new_past_index, batch_axis)
+
+        # sets the updated variables (mask and past)
+        model_kwargs.update(mask)
+        model_kwargs["past"] = tuple(new_past)
+
+        return model_kwargs
 
     def _get_logits_warper(
         self,
@@ -1978,6 +2093,10 @@ class TFGenerationMixin:
             return_dict_in_generate if return_dict_in_generate is not None else self.config.return_dict_in_generate
         )
         use_xla = not tf.executing_eagerly()
+        # TODO (Joao): fix cache format or find programatic way to detect cache index
+        # GPT2 and other models has a slightly different cache structure, with a different batch axis
+        model_name = str(self.decoder) if "EncoderDecoder" in str(self) else str(self)
+        cache_batch_axis = 1 if any([model_prefix in model_name for model_prefix in ("TFGPT2", "TFCTRL")]) else 0
         # some models, like XLNet, need more than the last token in the presence of past
         needs_full_input = "use_mems" in set(inspect.signature(self.prepare_inputs_for_generation).parameters.keys())
 
@@ -2010,29 +2129,29 @@ class TFGenerationMixin:
                 input_ids = tf.expand_dims(generated[:, cur_len - 1], -1)
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
             # forward pass to get next token logits
-            outputs = self(
+            model_outputs = self(
                 **model_inputs,
                 return_dict=True,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
-            next_token_logits = outputs.logits[:, -1]
+            next_token_logits = model_outputs.logits[:, -1]
 
             # Store scores, attentions and hidden_states when required
             if not use_xla and return_dict_in_generate:
                 if output_scores:
                     scores.append(next_token_logits)
                 if output_attentions and self.config.is_encoder_decoder:
-                    decoder_attentions.append(outputs.decoder_attentions)
+                    decoder_attentions.append(model_outputs.decoder_attentions)
                 elif output_attentions and not self.config.is_encoder_decoder:
-                    decoder_attentions.append(outputs.attentions)
+                    decoder_attentions.append(model_outputs.attentions)
                     if self.config.is_encoder_decoder:
-                        cross_attentions.append(outputs.cross_attentions)
+                        cross_attentions.append(model_outputs.cross_attentions)
 
                 if output_hidden_states and self.config.is_encoder_decoder:
-                    decoder_hidden_states.append(outputs.decoder_hidden_states)
+                    decoder_hidden_states.append(model_outputs.decoder_hidden_states)
                 elif output_hidden_states and self.config.is_encoder_decoder:
-                    decoder_hidden_states.append(outputs.hidden_states)
+                    decoder_hidden_states.append(model_outputs.hidden_states)
 
             # pre-process distribution
             next_tokens_scores = logits_processor(generated, next_token_logits, cur_len)
@@ -2054,10 +2173,18 @@ class TFGenerationMixin:
 
             # update model_kwargs
             if use_xla:
-                model_kwargs = self._update_model_kwargs_for_xla_generation(outputs, model_kwargs, cur_len, max_length)
+                model_kwargs = self._update_model_kwargs_for_xla_generation(
+                    model_outputs=model_outputs,
+                    model_kwargs=model_kwargs,
+                    cur_len=cur_len,
+                    max_length=max_length,
+                    batch_size=batch_size,
+                    is_encoder_decoder=self.config.is_encoder_decoder,
+                    batch_axis=cache_batch_axis,
+                )
             else:
                 model_kwargs = self._update_model_kwargs_for_generation(
-                    outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                    model_outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
                 )
                 # if we don't cache past key values we need the whole input
                 if model_kwargs.get("past", None) is None:
@@ -2236,6 +2363,10 @@ class TFGenerationMixin:
             return_dict_in_generate if return_dict_in_generate is not None else self.config.return_dict_in_generate
         )
         use_xla = not tf.executing_eagerly()
+        # TODO (Joao): fix cache format or find programatic way to detect cache index
+        # GPT2 and other models has a slightly different cache structure, with a different batch axis
+        model_name = str(self.decoder) if "EncoderDecoder" in str(self) else str(self)
+        cache_batch_axis = 1 if any([model_prefix in model_name for model_prefix in ("TFGPT2", "TFCTRL")]) else 0
         # some models, like XLNet, need more than the last token in the presence of past
         needs_full_input = "use_mems" in set(inspect.signature(self.prepare_inputs_for_generation).parameters.keys())
 
@@ -2264,29 +2395,29 @@ class TFGenerationMixin:
                 input_ids = tf.expand_dims(generated[:, cur_len - 1], -1)
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
             # forward pass to get next token logits
-            outputs = self(
+            model_outputs = self(
                 **model_inputs,
                 return_dict=True,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
-            next_token_logits = outputs.logits[:, -1]
+            next_token_logits = model_outputs.logits[:, -1]
 
             # Store scores, attentions and hidden_states when required
             if not use_xla and return_dict_in_generate:
                 if output_scores:
                     scores.append(next_token_logits)
                 if output_attentions and self.config.is_encoder_decoder:
-                    decoder_attentions.append(outputs.decoder_attentions)
+                    decoder_attentions.append(model_outputs.decoder_attentions)
                 elif output_attentions and not self.config.is_encoder_decoder:
-                    decoder_attentions.append(outputs.attentions)
+                    decoder_attentions.append(model_outputs.attentions)
                     if self.config.is_encoder_decoder:
-                        cross_attentions.append(outputs.cross_attentions)
+                        cross_attentions.append(model_outputs.cross_attentions)
 
                 if output_hidden_states and self.config.is_encoder_decoder:
-                    decoder_hidden_states.append(outputs.decoder_hidden_states)
+                    decoder_hidden_states.append(model_outputs.decoder_hidden_states)
                 elif output_hidden_states and self.config.is_encoder_decoder:
-                    decoder_hidden_states.append(outputs.hidden_states)
+                    decoder_hidden_states.append(model_outputs.hidden_states)
 
             # pre-process distribution
             next_tokens_scores = logits_processor(generated, next_token_logits, cur_len)
@@ -2318,10 +2449,18 @@ class TFGenerationMixin:
 
             # update model_kwargs
             if use_xla:
-                model_kwargs = self._update_model_kwargs_for_xla_generation(outputs, model_kwargs, cur_len, max_length)
+                model_kwargs = self._update_model_kwargs_for_xla_generation(
+                    model_outputs=model_outputs,
+                    model_kwargs=model_kwargs,
+                    cur_len=cur_len,
+                    max_length=max_length,
+                    batch_size=batch_size,
+                    is_encoder_decoder=self.config.is_encoder_decoder,
+                    batch_axis=cache_batch_axis,
+                )
             else:
                 model_kwargs = self._update_model_kwargs_for_generation(
-                    outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                    model_outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
                 )
                 # if we don't cache past key values we need the whole input
                 if model_kwargs.get("past", None) is None:
@@ -2758,7 +2897,13 @@ class TFGenerationMixin:
 
             if use_xla:
                 next_model_kwargs = self._update_model_kwargs_for_xla_generation(
-                    model_outputs, model_kwargs, cur_len, max_length
+                    model_outputs=model_outputs,
+                    model_kwargs=model_kwargs,
+                    cur_len=cur_len,
+                    max_length=max_length,
+                    batch_size=(batch_size * num_beams),
+                    is_encoder_decoder=self.config.is_encoder_decoder,
+                    batch_axis=cache_batch_axis,
                 )
             else:
                 next_model_kwargs = self._update_model_kwargs_for_generation(
