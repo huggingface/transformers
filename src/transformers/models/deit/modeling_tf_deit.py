@@ -152,11 +152,13 @@ class TFDeiTPatchEmbeddings(tf.keras.layers.Layer):
         self.num_channels = num_channels
         self.num_patches = num_patches
 
-        self.projection = tf.keras.layers.Conv2D(hidden_size, kernel_size=patch_size, strides=patch_size)
+        self.projection = tf.keras.layers.Conv2D(
+            hidden_size, kernel_size=patch_size, strides=patch_size, name="projection"
+        )
 
-    def forward(self, pixel_values: tf.Tensor) -> tf.Tensor:
+    def call(self, pixel_values: tf.Tensor) -> tf.Tensor:
         batch_size, num_channels, height, width = shape_list(pixel_values)
-        if num_channels != self.num_channels:
+        if tf.executing_eagerly() and num_channels != self.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
@@ -164,8 +166,12 @@ class TFDeiTPatchEmbeddings(tf.keras.layers.Layer):
             raise ValueError(
                 f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
             )
-        x = self.projection(pixel_values).flatten(2).transpose(1, 2)
-        x = tf.reshape(x, (shape_list(x)[0], shape_list(x)[1], -1))
+        # (batch_size, num_channels, height, width) -> (batch_size, height, width, num_channels)
+        x = tf.transpose(pixel_values, (0, 2, 3, 1))
+        x = self.projection(x)
+        # (batch_size, height, width, num_channels) -> (batch_size, num_channels, height, width)
+        x = tf.transpose(x, (0, 3, 1, 2))
+        x = tf.reshape(x, (*shape_list(x)[:2], -1))
         x = tf.transpose(x, perm=(0, 2, 1))
         return x
 
@@ -334,7 +340,6 @@ class TFDeiTOutput(tf.keras.layers.Layer):
         hidden_states = hidden_states + input_tensor
 
         return hidden_states
-
 
 
 class TFDeiTLayer(tf.keras.layers.Layer):
@@ -702,7 +707,9 @@ class PixelShuffle(tf.keras.layers.Layer):
 class TFDeitDecoder(tf.keras.layers.Layer):
     def __init__(self, config: DeiTConfig, **kwargs) -> None:
         super().__init__(**kwargs)
-        self.conv2d = tf.keras.layers.Conv2D(filters=config.encoder_stride**2 * config.num_channels, kernel_size=1, name="0")
+        self.conv2d = tf.keras.layers.Conv2D(
+            filters=config.encoder_stride**2 * config.num_channels, kernel_size=1, name="0"
+        )
         self._block_size = config.encoder_stride
         self.pixel_shuffle = PixelShuffle(config.encoder_stride, name="1")
 
