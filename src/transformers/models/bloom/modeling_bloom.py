@@ -339,8 +339,8 @@ class BloomAttention(nn.Module):
         # apply preprocessing if the input is padded
         if attention_mask is not None:
             alibi = pre_process_alibi_for_pad(alibi, attention_mask)
-        # otherwise repeat alibi tensor with the batch size
         else:
+            # otherwise repeat alibi tensor with the batch size
             alibi = alibi.repeat(hidden_states.shape[0], 1, 1)
 
         mixed_x_layer = self.query_key_value(hidden_states)
