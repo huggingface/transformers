@@ -228,7 +228,7 @@ class TFT5ModelTester:
         tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
 
     def create_and_check_t5_xla_generate_fast(self, config, input_ids, *args):
-        config.eos_token_id = None
+        config.eos_token_id = None  # Generate until max length
         config.max_length = 10
         config.do_sample = False
         config.num_beams = 1

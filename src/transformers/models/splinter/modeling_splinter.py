@@ -910,8 +910,8 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
             start_logits, end_logits = start_logits.squeeze(1), end_logits.squeeze(1)
 
         if attention_mask is not None:
-            start_logits = start_logits + (1 - attention_mask) * -10000.0
-            end_logits = end_logits + (1 - attention_mask) * -10000.0
+            start_logits = start_logits + (1 - attention_mask) * torch.finfo(start_logits.dtype).min
+            end_logits = end_logits + (1 - attention_mask) * torch.finfo(end_logits.dtype).min
 
         total_loss = None
         if start_positions is not None and end_positions is not None:
@@ -1060,8 +1060,8 @@ class SplinterForPreTraining(SplinterPreTrainedModel):
             attention_mask_for_each_question = attention_mask.unsqueeze(1).expand(
                 batch_size, num_questions, sequence_length
             )
-            start_logits = start_logits + (1 - attention_mask_for_each_question) * -10000.0
-            end_logits = end_logits + (1 - attention_mask_for_each_question) * -10000.0
+            start_logits = start_logits + (1 - attention_mask_for_each_question) * torch.finfo(start_logits.dtype).min
+            end_logits = end_logits + (1 - attention_mask_for_each_question) * torch.finfo(end_logits.dtype).min
 
         total_loss = None
         # [batch_size, num_questions, sequence_length]
