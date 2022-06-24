@@ -42,10 +42,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_convnext_maskrcnn import (
-        CONVNEXTMASKRCNN_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        ConvNextMaskRCNNConfig,
-    )
+    from .configuration_convnext_maskrcnn import CONVNEXTMASKRCNN_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextMaskRCNNConfig
 
     try:
         if not is_torch_available():

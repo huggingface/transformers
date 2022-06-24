@@ -22,7 +22,11 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutputWithNoAttention, BaseModelOutputWithPoolingAndNoAttention, SequenceClassifierOutput
+from ...modeling_outputs import (
+    BaseModelOutputWithNoAttention,
+    BaseModelOutputWithPoolingAndNoAttention,
+    SequenceClassifierOutput,
+)
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_convnext_maskrcnn import ConvNextMaskRCNNConfig
@@ -212,7 +216,6 @@ class ConvNextMaskRCNNStage(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextEncoder with ConvNext->ConvNextMaskRCNN
 class ConvNextMaskRCNNEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -221,6 +224,7 @@ class ConvNextMaskRCNNEncoder(nn.Module):
             x.tolist() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths)).split(config.depths)
         ]
         prev_chs = config.hidden_sizes[0]
+
         for i in range(config.num_stages):
             out_chs = config.hidden_sizes[i]
             stage = ConvNextMaskRCNNStage(
@@ -234,6 +238,8 @@ class ConvNextMaskRCNNEncoder(nn.Module):
             self.stages.append(stage)
             prev_chs = out_chs
 
+        self.layernorms = nn.ModuleList([nn.LayerNorm(config.hidden_sizes[i]) for i in range(config.num_stages)])
+
     def forward(
         self,
         hidden_states: torch.FloatTensor,
@@ -242,11 +248,12 @@ class ConvNextMaskRCNNEncoder(nn.Module):
     ) -> Union[Tuple, BaseModelOutputWithNoAttention]:
         all_hidden_states = () if output_hidden_states else None
 
-        for i, layer_module in enumerate(self.stages):
+        for i, layer_module, norm_module in enumerate(zip(self.stages, self.layernorms)):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             hidden_states = layer_module(hidden_states)
+            hidden_states = norm_module(hidden_states)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
@@ -318,7 +325,6 @@ CONVNEXTMASKRCNN_INPUTS_DOCSTRING = r"""
     "The bare ConvNextMaskRCNN model outputting raw features without any specific head on top.",
     CONVNEXTMASKRCNN_START_DOCSTRING,
 )
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextModel with CONVNEXT->CONVNEXTMASKRCNN,ConvNext->ConvNextMaskRCNN
 class ConvNextMaskRCNNModel(ConvNextMaskRCNNPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -326,9 +332,6 @@ class ConvNextMaskRCNNModel(ConvNextMaskRCNNPreTrainedModel):
 
         self.embeddings = ConvNextMaskRCNNEmbeddings(config)
         self.encoder = ConvNextMaskRCNNEncoder(config)
-
-        # final layernorm layer
-        self.layernorm = nn.LayerNorm(config.hidden_sizes[-1], eps=config.layer_norm_eps)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -396,7 +399,6 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.convnext(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
-        pooled_output = outputs.pooler_output if return_dict else outputs[1]
         logits = None
 
         loss = None

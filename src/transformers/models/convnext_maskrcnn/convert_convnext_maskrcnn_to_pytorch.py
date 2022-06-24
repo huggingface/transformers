@@ -12,21 +12,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert ConvNextMaskRCNN checkpoints from the original repository.
+"""Convert ConvNextMaskRCNN checkpoints from the mmdetection repository.
 
-URL: https://github.com/facebookresearch/ConvNeXt"""
+URL: https://github.com/open-mmlab/mmdetection"""
 
 
 import argparse
 import json
-from pathlib import Path
 
 import torch
 from PIL import Image
 
 import requests
 from huggingface_hub import hf_hub_download
-from transformers import ConvNextFeatureExtractor, ConvNextMaskRCNNConfig, ConvNextMaskRCNNForImageClassification
+from transformers import ConvNextMaskRCNNConfig, ConvNextMaskRCNNForObjectDetection
 from transformers.utils import logging
 
 
@@ -68,16 +67,21 @@ def rename_key(name):
     if "downsample_layers.3.1" in name:
         name = name.replace("downsample_layers.3.1", "stages.3.downsampling_layer.1")
     if "stages" in name and "downsampling_layer" not in name:
-        # stages.0.0. for instance should be renamed to stages.0.layers.0.
-        name = name[: len("stages.0")] + ".layers" + name[len("stages.0") :]
+        # convnext.stages.0.0. for instance should be renamed to convnext.stages.0.layers.0.
+        name = name[: len("convnext.stages.0")] + ".layers" + name[len("convnext.stages.0") :]
+        name = name
     if "stages" in name:
         name = name.replace("stages", "encoder.stages")
+    if "depthwise_conv" in name:
+        name = name.replace("depthwise_conv", "dwconv")
+    if "pointwise_conv" in name:
+        name = name.replace("pointwise_conv", "pwconv")
     if "norm" in name:
         name = name.replace("norm", "layernorm")
     if "gamma" in name:
         name = name.replace("gamma", "layer_scale_parameter")
-    if "head" in name:
-        name = name.replace("head", "classifier")
+    if "convnext.layernorm" in name:
+        name = name.replace("layernorm", "encoder.layernorms.")
 
     return name
 
@@ -102,7 +106,7 @@ def convert_convnext_maskrcnn_checkpoint(checkpoint_path, pytorch_dump_folder_pa
     # rename keys
     for key in state_dict.copy().keys():
         val = state_dict.pop(key)
-        if not "backbone" in key:
+        if "backbone" not in key:
             # TODO: neck, heads
             pass
         else:
@@ -135,10 +139,7 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--checkpoint_path",
-        default=(
-            "/Users/nielsrogge/Documents/ConvNeXT"
-            " MaskRCNN/mask_rcnn_convnext-t_p4_w7_fpn_fp16_ms-crop_3x_coco_20220426_154953-050731f4.pth"
-        ),
+        default="/home/niels/checkpoints/convnext_maskrcnn/mask_rcnn_convnext-t_p4_w7_fpn_fp16_ms-crop_3x_coco_20220426_154953-050731f4.pth",
         type=str,
         help="Path to the original ConvNextMaskRCNN checkpoint you'd like to convert.",
     )
@@ -146,7 +147,6 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path",
         default=None,
         type=str,
-        required=True,
         help="Path to the output PyTorch model directory.",
     )
 
