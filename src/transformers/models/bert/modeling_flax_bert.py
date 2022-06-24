@@ -548,13 +548,16 @@ class FlaxBertLayerCollection(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
     gradient_checkpointing: bool = False
+    remat_policy: Callable[..., bool] = (None,)  # the gradient checkpointing policy
 
     def setup(self):
-        FlaxBertRematLayer = (
-            remat(FlaxBertLayer, static_argnums=(5, 6, 7)) if self.gradient_checkpointing else FlaxBertLayer
-        )
+        if self.gradient_checkpointing:
+            FlaxBertBlockLayer = remat(FlaxBertLayer, static_argnums=(5, 6, 7), policy=self.remat_policy)
+        else:
+            FlaxBertBlockLayer = FlaxBertLayer
+
         self.layers = [
-            FlaxBertRematLayer(self.config, name=str(i), dtype=self.dtype)
+            FlaxBertBlockLayer(self.config, name=str(i), dtype=self.dtype)
             for i in range(self.config.num_hidden_layers)
         ]
 
@@ -626,10 +629,14 @@ class FlaxBertEncoder(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
     gradient_checkpointing: bool = False
+    remat_policy: Callable[..., bool] = (None,)  # the gradient checkpointing policy
 
     def setup(self):
         self.layer = FlaxBertLayerCollection(
-            self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+            self.config,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
+            remat_policy=self.remat_policy,
         )
 
     def __call__(
@@ -767,10 +774,23 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
+        _gradient_checkpointing: bool = False,
+        _remat_policy: Callable[..., bool] = (None,),
         **kwargs
     ):
-        module = self.module_class(config=config, dtype=dtype, **kwargs)
+        module = self.module_class(
+            config=config,
+            dtype=dtype,
+            gradient_checkpointing=_gradient_checkpointing,
+            remat_policy=_remat_policy,
+            **kwargs,
+        )
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
+
+    def enable_gradient_checkpointing(self, remat_policy=None):
+        self._module = self.module_class(
+            config=self.config, dtype=self.dtype, gradient_checkpointing=True, remat_policy=remat_policy
+        )
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
@@ -937,11 +957,15 @@ class FlaxBertModule(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
     add_pooling_layer: bool = True
     gradient_checkpointing: bool = False
+    remat_policy: Callable[..., bool] = (None,)  # the gradient checkpointing policy
 
     def setup(self):
         self.embeddings = FlaxBertEmbeddings(self.config, dtype=self.dtype)
         self.encoder = FlaxBertEncoder(
-            self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+            self.config,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
+            remat_policy=self.remat_policy,
         )
         self.pooler = FlaxBertPooler(self.config, dtype=self.dtype)
 
@@ -1018,10 +1042,14 @@ class FlaxBertForPreTrainingModule(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32
     gradient_checkpointing: bool = False
+    remat_policy: Callable[..., bool] = (None,)  # the gradient checkpointing policy
 
     def setup(self):
         self.bert = FlaxBertModule(
-            config=self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+            config=self.config,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
+            remat_policy=self.remat_policy,
         )
         self.cls = FlaxBertPreTrainingHeads(config=self.config, dtype=self.dtype)
 
@@ -1117,6 +1145,7 @@ class FlaxBertForMaskedLMModule(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32
     gradient_checkpointing: bool = False
+    remat_policy: Callable[..., bool] = (None,)  # the gradient checkpointing policy
 
     def setup(self):
         self.bert = FlaxBertModule(
@@ -1124,6 +1153,7 @@ class FlaxBertForMaskedLMModule(nn.Module):
             add_pooling_layer=False,
             dtype=self.dtype,
             gradient_checkpointing=self.gradient_checkpointing,
+            remat_policy=self.remat_policy,
         )
         self.cls = FlaxBertOnlyMLMHead(config=self.config, dtype=self.dtype)
 
@@ -1185,10 +1215,14 @@ class FlaxBertForNextSentencePredictionModule(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32
     gradient_checkpointing: bool = False
+    remat_policy: Callable[..., bool] = (None,)  # the gradient checkpointing policy
 
     def setup(self):
         self.bert = FlaxBertModule(
-            config=self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+            config=self.config,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
+            remat_policy=self.remat_policy,
         )
         self.cls = FlaxBertOnlyNSPHead(dtype=self.dtype)
 
@@ -1275,10 +1309,14 @@ class FlaxBertForSequenceClassificationModule(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32
     gradient_checkpointing: bool = False
+    remat_policy: Callable[..., bool] = (None,)  # the gradient checkpointing policy
 
     def setup(self):
         self.bert = FlaxBertModule(
-            config=self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+            config=self.config,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
+            remat_policy=self.remat_policy,
         )
         classifier_dropout = (
             self.config.classifier_dropout
@@ -1354,10 +1392,14 @@ class FlaxBertForMultipleChoiceModule(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32
     gradient_checkpointing: bool = False
+    remat_policy: Callable[..., bool] = (None,)  # the gradient checkpointing policy
 
     def setup(self):
         self.bert = FlaxBertModule(
-            config=self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+            config=self.config,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
+            remat_policy=self.remat_policy,
         )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
         self.classifier = nn.Dense(1, dtype=self.dtype)
@@ -1432,6 +1474,7 @@ class FlaxBertForTokenClassificationModule(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32
     gradient_checkpointing: bool = False
+    remat_policy: Callable[..., bool] = (None,)  # the gradient checkpointing policy
 
     def setup(self):
         self.bert = FlaxBertModule(
@@ -1439,6 +1482,7 @@ class FlaxBertForTokenClassificationModule(nn.Module):
             dtype=self.dtype,
             add_pooling_layer=False,
             gradient_checkpointing=self.gradient_checkpointing,
+            remat_policy=self.remat_policy,
         )
         classifier_dropout = (
             self.config.classifier_dropout
@@ -1507,6 +1551,7 @@ class FlaxBertForQuestionAnsweringModule(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32
     gradient_checkpointing: bool = False
+    remat_policy: Callable[..., bool] = (None,)  # the gradient checkpointing policy
 
     def setup(self):
         self.bert = FlaxBertModule(
@@ -1514,6 +1559,7 @@ class FlaxBertForQuestionAnsweringModule(nn.Module):
             dtype=self.dtype,
             add_pooling_layer=False,
             gradient_checkpointing=self.gradient_checkpointing,
+            remat_policy=self.remat_policy,
         )
         self.qa_outputs = nn.Dense(self.config.num_labels, dtype=self.dtype)
 
@@ -1584,6 +1630,7 @@ class FlaxBertForCausalLMModule(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32
     gradient_checkpointing: bool = False
+    remat_policy: Callable[..., bool] = (None,)  # the gradient checkpointing policy
 
     def setup(self):
         self.bert = FlaxBertModule(
@@ -1591,6 +1638,7 @@ class FlaxBertForCausalLMModule(nn.Module):
             add_pooling_layer=False,
             dtype=self.dtype,
             gradient_checkpointing=self.gradient_checkpointing,
+            remat_policy=self.remat_policy,
         )
         self.cls = FlaxBertOnlyMLMHead(config=self.config, dtype=self.dtype)
 
