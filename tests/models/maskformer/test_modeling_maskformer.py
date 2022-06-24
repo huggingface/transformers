@@ -21,7 +21,7 @@ import numpy as np
 
 from tests.test_modeling_common import floats_tensor
 from transformers import DetrConfig, MaskFormerConfig, SwinConfig, is_torch_available, is_vision_available
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
@@ -210,6 +210,13 @@ class MaskFormerModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="MaskFormer does not use token embeddings")
     def test_resize_tokens_embeddings(self):
+        pass
+
+    @require_torch_multi_gpu
+    @unittest.skip(
+        reason="MaskFormer has some layers using `add_module` which doesn't work well with `nn.DataParallel`"
+    )
+    def test_multi_gpu_data_parallel_forward(self):
         pass
 
     def test_forward_signature(self):
