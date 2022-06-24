@@ -1915,7 +1915,6 @@ class TFGenerationMixin:
             raise ValueError(
                 f"No known past variable found in model outputs (model outputs keys: {list(model_outputs.keys())})"
             )
-        past = model_outputs.past_key_values
         is_past_initialized = model_kwargs.pop("past", None) is not None
 
         if not is_past_initialized:

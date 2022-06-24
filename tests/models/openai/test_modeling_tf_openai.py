@@ -251,6 +251,9 @@ class TFOpenAIGPTModelTest(TFModelTesterMixin, unittest.TestCase):
             model = TFOpenAIGPTModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    @unittest.skip(reason="OpenAIGPT does not have the facilities to use a past cache")
+    def test_xla_generate_fast(self):
+        pass
 
 @require_tf
 class TFOPENAIGPTModelLanguageGenerationTest(unittest.TestCase):

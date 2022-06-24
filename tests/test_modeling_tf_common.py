@@ -1607,20 +1607,31 @@ class TFModelTesterMixin:
         """
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            input_ids = inputs_dict["input_ids"]
-
             config.eos_token_id = None  # Generate until max length
             config.max_length = 10
             config.do_sample = False
             config.num_beams = 1
             model = model_class(config)
 
-            # make sure there are no pad tokens in prompt, which may trigger unwanted behavior
-            input_ids = tf.where(input_ids != config.pad_token_id, input_ids, config.pad_token_id - 1)
+            if "input_ids" in inputs_dict:
+                inputs = inputs_dict["input_ids"]
+                # make sure there are no pad tokens in prompt, which may trigger unwanted behavior
+                if config.pad_token_id is not None:
+                    if config.pad_token_id == 0:
+                        new_pad_token = config.pad_token_id + 1
+                    else:
+                        new_pad_token = config.pad_token_id - 1
+                else:
+                    new_pad_token = None
+                inputs = tf.where(inputs != config.pad_token_id, inputs, new_pad_token)
+            elif "input_features" in inputs_dict:
+                inputs = inputs_dict["input_features"]
+            else:
+                raise ValueError("No valid generate input found in inputs_dict")
 
-            generated = model.generate(input_ids)
+            generated = model.generate(inputs)
             generate_xla = tf.function(model.generate, jit_compile=True)
-            generated_xla = generate_xla(input_ids)
+            generated_xla = generate_xla(inputs)
 
             self.assertListEqual(generated.numpy().tolist(), generated_xla.numpy().tolist())
 

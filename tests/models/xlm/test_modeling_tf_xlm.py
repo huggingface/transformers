@@ -333,6 +333,10 @@ class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
             model = TFXLMModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    @unittest.skip(reason="XLM does not have the facilities to use a past cache")
+    def test_xla_generate_fast(self):
+        pass
+
 
 @require_tf
 class TFXLMModelLanguageGenerationTest(unittest.TestCase):

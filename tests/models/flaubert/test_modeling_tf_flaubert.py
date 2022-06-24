@@ -331,6 +331,10 @@ class TFFlaubertModelTest(TFModelTesterMixin, unittest.TestCase):
             model = TFFlaubertModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    @unittest.skip(reason="Flaubert does not have the facilities to use a past cache")
+    def test_xla_generate_fast(self):
+        pass
+
 
 @require_tf
 @require_sentencepiece
