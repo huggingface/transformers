@@ -134,14 +134,14 @@ SUPPORTED_TASKS = {
         "impl": AutomaticSpeechRecognitionPipeline,
         "tf": (),
         "pt": (AutoModelForCTC, AutoModelForSpeechSeq2Seq) if is_torch_available() else (),
-        "default": {"model": {"pt": "facebook/wav2vec2-base-960h"}},
+        "default": {"model": {"pt": ("facebook/wav2vec2-base-960h", "55bb623")}},
         "type": "multimodal",
     },
     "feature-extraction": {
         "impl": FeatureExtractionPipeline,
         "tf": (TFAutoModel,) if is_tf_available() else (),
         "pt": (AutoModel,) if is_torch_available() else (),
-        "default": {"model": {"pt": "distilbert-base-cased", "tf": "distilbert-base-cased"}},
+        "default": {"model": {"pt": ("distilbert-base-cased", "935ac13"), "tf": ("distilbert-base-cased", "935ac13")}},
         "type": "multimodal",
     },
     "text-classification": {
@@ -150,8 +150,8 @@ SUPPORTED_TASKS = {
         "pt": (AutoModelForSequenceClassification,) if is_torch_available() else (),
         "default": {
             "model": {
-                "pt": "distilbert-base-uncased-finetuned-sst-2-english",
-                "tf": "distilbert-base-uncased-finetuned-sst-2-english",
+                "pt": ("distilbert-base-uncased-finetuned-sst-2-english", "af0f99b"),
+                "tf": ("distilbert-base-uncased-finetuned-sst-2-english", "af0f99b"),
             },
         },
         "type": "text",
@@ -162,8 +162,8 @@ SUPPORTED_TASKS = {
         "pt": (AutoModelForTokenClassification,) if is_torch_available() else (),
         "default": {
             "model": {
-                "pt": "dbmdz/bert-large-cased-finetuned-conll03-english",
-                "tf": "dbmdz/bert-large-cased-finetuned-conll03-english",
+                "pt": ("dbmdz/bert-large-cased-finetuned-conll03-english", "f2482bf"),
+                "tf": ("dbmdz/bert-large-cased-finetuned-conll03-english", "f2482bf"),
             },
         },
         "type": "text",
@@ -173,7 +173,7 @@ SUPPORTED_TASKS = {
         "tf": (TFAutoModelForQuestionAnswering,) if is_tf_available() else (),
         "pt": (AutoModelForQuestionAnswering,) if is_torch_available() else (),
         "default": {
-            "model": {"pt": "distilbert-base-cased-distilled-squad", "tf": "distilbert-base-cased-distilled-squad"},
+            "model": {"pt": ("distilbert-base-cased-distilled-squad", "626af31"), "tf": ("distilbert-base-cased-distilled-squad", "626af31")},
         },
         "type": "text",
     },
@@ -183,9 +183,9 @@ SUPPORTED_TASKS = {
         "tf": (TFAutoModelForTableQuestionAnswering,) if is_tf_available() else (),
         "default": {
             "model": {
-                "pt": "google/tapas-base-finetuned-wtq",
-                "tokenizer": "google/tapas-base-finetuned-wtq",
-                "tf": "google/tapas-base-finetuned-wtq",
+                "pt": ("google/tapas-base-finetuned-wtq", "69ceee2"),
+                "tokenizer": ("google/tapas-base-finetuned-wtq", "69ceee2"),
+                "tf": ("google/tapas-base-finetuned-wtq", "69ceee2"),
             },
         },
         "type": "text",
