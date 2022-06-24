@@ -93,6 +93,7 @@ from . import (
     mpnet,
     mt5,
     mvp,
+    nezha,
     nystromformer,
     openai,
     opt,

@@ -174,6 +174,7 @@ else:
                 ),
             ),
             ("mvp", ("MvpTokenizer", "MvpTokenizerFast")),
+            ("nezha", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "nystromformer",
                 (

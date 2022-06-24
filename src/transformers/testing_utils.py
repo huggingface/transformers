@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import collections
 import contextlib
 import inspect
 import logging
@@ -1534,3 +1535,9 @@ def check_json_file_has_correct_format(file_path):
                 left_indent = len(lines[1]) - len(lines[1].lstrip())
                 assert left_indent == 2
             assert lines[-1].strip() == "}"
+
+
+def to_2tuple(x):
+    if isinstance(x, collections.abc.Iterable):
+        return x
+    return (x, x)
