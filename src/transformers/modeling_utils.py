@@ -22,6 +22,7 @@ import shutil
 import tempfile
 import warnings
 from contextlib import contextmanager
+from copy import deepcopy
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
@@ -116,6 +117,16 @@ except ImportError:
 
         def forward(self, input):
             return input
+
+def replace_8bit_linear(model): 
+    quantized_model = deepcopy(model)
+    for name, module in model.named_modules():
+        if isinstance(module, nn.Linear):
+            quantized_model[name] = Linear8bit(module.in_shape, module.out_shape, device=module.device)
+        else:
+            quantized_model[name] = module
+    return quantized_model
+
 
 
 def get_parameter_device(parameter: Union[nn.Module, GenerationMixin, "ModuleUtilsMixin"]):
@@ -1776,6 +1787,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         max_memory = kwargs.pop("max_memory", None)
         offload_folder = kwargs.pop("offload_folder", None)
         offload_state_dict = kwargs.pop("offload_state_dict", False)
+        load_in_8bit = kwargs.pop("load_in_8bit", False)
 
         if device_map is not None:
             if low_cpu_mem_usage is None:
@@ -2061,11 +2073,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
             init_contexts = [deepspeed.zero.Init(config_dict_or_path=deepspeed_config())] + init_contexts
+        elif load_in_8bit:
+            from bitsandbytes.nn import Linear8bitLt as Linear8bit
+
+            init_contexts = [init_empty_weights()] # Force enable init empty weights
+
+            logger.info("Detected 8-bit loading: activating 8-bit loading for this model")
+            # init_contexts.append()
         elif low_cpu_mem_usage:
             init_contexts.append(init_empty_weights())
 
         with ContextManagers(init_contexts):
             model = cls(config, *model_args, **model_kwargs)
+
+        if load_in_8bit:
+            model = replace_8bit_linear(model)
 
         if device_map == "auto":
             if model._no_split_modules is None:
