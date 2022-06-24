@@ -120,6 +120,13 @@ class FlaxBeitModelTester(unittest.TestCase):
         result = model(pixel_values)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
+        # test greyscale images
+        config.num_channels = 1
+        model = FlaxBeitForImageClassification(config)
+
+        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
+        result = model(pixel_values)
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (

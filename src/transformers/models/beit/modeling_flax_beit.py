@@ -609,7 +609,7 @@ class FlaxBeitPreTrainedModel(FlaxPreTrainedModel):
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         if input_shape is None:
-            input_shape = (1, config.image_size, config.image_size, 3)
+            input_shape = (1, config.image_size, config.image_size, config.num_channels)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
