@@ -190,7 +190,6 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
-        gradient_checkpointing: bool = False,
     ):
         if config is None:
             raise ValueError("config cannot be None")
@@ -206,7 +205,6 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         self.key = PRNGKey(seed)
         self.dtype = dtype
         self.input_shape = input_shape
-        self.gradient_checkpointing = gradient_checkpointing
 
         # To check if the model was intialized automatically.
         self._is_initialized = _do_init
@@ -236,6 +234,9 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> Dict:
         raise NotImplementedError(f"init method has to be implemented for {self}")
+
+    def enable_gradient_checkpointing(self):
+        raise NotImplementedError(f"gradient checkpointing method has to be implemented for {self}")
 
     @classmethod
     def _from_config(cls, config, **kwargs):
@@ -596,7 +597,6 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
         _do_init = kwargs.pop("_do_init", True)
-        gradient_checkpointing = kwargs.pop("gradient_checkpointing", False)
 
         user_agent = {"file_type": "model", "framework": "flax", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
@@ -777,9 +777,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             )
 
         # init random models
-        model = cls(
-            config, *model_args, _do_init=_do_init, gradient_checkpointing=gradient_checkpointing, **model_kwargs
-        )
+        model = cls(config, *model_args, _do_init=_do_init, **model_kwargs)
 
         if from_pt:
             state = load_pytorch_checkpoint_in_flax_state_dict(model, resolved_archive_file)

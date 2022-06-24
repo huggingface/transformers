@@ -161,8 +161,9 @@ class FlaxBertModelTest(FlaxModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             # prepare inputs
             prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            model = model_class(config, gradient_checkpointing=False)
-            remat_model = model_class(config, gradient_checkpointing=True)
+            model = model_class(config)
+            remat_model = model_class(config)
+            remat_model.enable_gradient_checkpointing()
 
             outputs = model(**prepared_inputs_dict)
             remat_outputs = remat_model(**prepared_inputs_dict)
