@@ -24,7 +24,7 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from packaging import version
 from torch import nn
-
+from rich.progress import Progress
 
 if version.parse(torch.__version__) >= version.parse("1.6"):
     is_amp_available = True
@@ -3276,9 +3276,13 @@ class JukeboxModel(JukeboxPreTrainedModel):
         z_conds_list = split_batch(z_conds, n_samples, max_batch_size)
         y_list = split_batch(y, n_samples, max_batch_size)
         z_samples = []
-        for z_i, z_conds_i, y_i in zip(z_list, z_conds_list, y_list):
-            z_samples_i = prior.sample(n_samples=z_i.shape[0], z=z_i, z_conds=z_conds_i, y=y_i, **sampling_kwargs)
-            z_samples.append(z_samples_i)
+        
+        with Progress() as progress:
+            task3 = progress.add_task("[cyan]Sampling Tokens...", total=len(z_list))
+            for z_i, z_conds_i, y_i in zip(z_list, z_conds_list, y_list):
+                z_samples_i = prior.sample(n_samples=z_i.shape[0], z=z_i, z_conds=z_conds_i, y=y_i, **sampling_kwargs)
+                z_samples.append(z_samples_i)
+                progress.update(task3, advance=1)
         z = torch.cat(z_samples, dim=0)
 
         sampling_kwargs["max_batch_size"] = max_batch_size
@@ -3294,8 +3298,11 @@ class JukeboxModel(JukeboxPreTrainedModel):
         print(f"Sampling level {level}")
         prior = self.priors[level]
         if total_length >= prior.n_ctx:
-            for start in get_starts(total_length, prior.n_ctx, hop_length):
-                zs = self.sample_single_window(zs, labels, sampling_kwargs, level, start, hps)
+            with Progress() as progress:
+                task1 = progress.add_task("[red]Sampling single window...", total=len(get_starts(total_length, prior.n_ctx, hop_length)))
+                for start in get_starts(total_length, prior.n_ctx, hop_length):
+                    zs = self.sample_single_window(zs, labels, sampling_kwargs, level, start, hps)
+                    progress.update(task1, advance=1)
         else:
             zs = self.sample_partial_window(zs, labels, sampling_kwargs, level, total_length, hps)
         return zs
@@ -3315,12 +3322,14 @@ class JukeboxModel(JukeboxPreTrainedModel):
             total_length = hps.sample_length // prior.raw_to_tokens
             hop_length = int(hps.hop_fraction[-level - 1] * prior.n_ctx)
 
+            zs = self.sample_level(zs, labels[level], sampling_kwargs[level], level, total_length, hop_length, hps)
+            
             # TODO either mask them or ddo better
-            if level != len(sample_levels) - 1:
-                labels_level = labels[level][0][: 4 + hps.max_bow_genre_size].unsqueeze(0)
-                zs = self.sample_level(zs, labels_level, sampling_kwargs[level], level, total_length, hop_length, hps)
-            else:
-                zs = self.sample_level(zs, labels[level], sampling_kwargs[level], level, total_length, hop_length, hps)
+            # if level != len(sample_levels) - 1:
+            #     labels_level = labels[level][0][: 4 + hps.max_bow_genre_size].unsqueeze(0)
+            #     zs = self.sample_level(zs, labels_level, sampling_kwargs[level], level, total_length, hop_length, hps)
+            # else:
+            #     zs = self.sample_level(zs, labels[level], sampling_kwargs[level], level, total_length, hop_length, hps)
 
             prior.to(zs[0].device)
             empty_cache()

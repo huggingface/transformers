@@ -546,12 +546,13 @@ class JukeboxModelTest(unittest.TestCase):
         self.assertTrue(torch.allclose(zs[0][0][0:50], top_50_expected_zs.long(), atol=1e-4))
 
     def test_gpu_sampling(self):
-        model = JukeboxModel.from_pretrained("ArthurZ/jukebox-1b-lyrics-local").eval()  # .to("cuda")
+        model = JukeboxModel.from_pretrained("ArthurZ/jukebox-1b-lyrics").eval()  # .to("cuda")
 
         # model.priors[2].sample(1, y=torch.Tensor([[44100.0, 0, 44100.0] + 386 * [0]]).long().to("cuda"), chunk_size=32)
 
         tokenizer = JukeboxTokenizer.from_pretrained("ArthurZ/jukebox", max_n_lyric_tokens=384)
-
+        set_seed(0)
+        
         sampling_temperature = 0.98
         lower_batch_size = 16
         max_batch_size = 16
@@ -566,15 +567,15 @@ class JukeboxModelTest(unittest.TestCase):
         model.config.sr = 44100
         model.config.hop_fraction = [0.125, 0.5, 0.5]
         model.config.n_samples = 1
-        model.config.sample_length = 2 * model.config.sr  # 32768
+        model.config.sample_length = 2645888  # 32768
 
-        model.config.sample_length_in_seconds = 2
+        model.config.sample_length_in_seconds = 60
         model.config.total_sample_length_in_seconds = 180
 
         metas = dict(
             artist="Zac Brown Band",
             genres="Country",
-            total_length=model.config.total_sample_length_in_seconds * model.config.sr,
+            total_length=2645888,
             offset=0,
             lyrics="""I met a traveller from an antique land,
             Who said—“Two vast and trunkless legs of stone
@@ -595,19 +596,13 @@ class JukeboxModelTest(unittest.TestCase):
             sample_length=2 * model.config.sr,
         )
 
-        # tokens = tokenizer(
-        #     "Alan Jackson",
-        #     "rock",
-        #     "old town road",
-        #     total_length=model.config.total_sample_length_in_seconds * model.config.sr,
-        #     sample_length=2*model.config.sr,#32768, # 256 tokens from level 0, as row_to_tokens is 128
-        #     offset=0,
-        #     duration=2,
-        # )
-
         tokens = tokenizer(**metas)
-
         inputs, _ = tokens["input_ids"], tokens["attention_masks"]
+        zs = [torch.zeros(1,0) for _ in range(len(model.priors))]
+        labels = torch.tensor([[inputs]]*3)
+        zs = model._sample(zs,labels , sampling_kwargs, [2],model.config)
+
+        
         ys = np.array([[inputs]] * 3, dtype=np.int64)
         ys = torch.stack([torch.from_numpy(y) for y in ys], dim=0).long()  # .to("cuda")
 
