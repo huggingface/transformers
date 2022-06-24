@@ -45,7 +45,7 @@ class MvpConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 50267):
             Vocabulary size of the MVP model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`MvpModel`] or [`TFMvpModel`].
+            `inputs_ids` passed when calling [`MvpModel`].
         d_model (`int`, *optional*, defaults to 1024):
             Dimensionality of the layers and the pooler layer.
         encoder_layers (`int`, *optional*, defaults to 12):
