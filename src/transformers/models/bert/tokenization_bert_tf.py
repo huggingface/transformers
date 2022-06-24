@@ -5,7 +5,6 @@ import tensorflow as tf
 
 from tensorflow_text import FastBertTokenizer, ShrinkLongestTrimmer, case_fold_utf8, combine_segments, pad_model_inputs
 
-from ...utils import requires_backends
 from .tokenization_bert import BertTokenizer
 
 
@@ -65,8 +64,6 @@ class TFBertTokenizer(tf.keras.layers.Layer):
         return_attention_mask: bool = True,
     ):
         super().__init__()
-
-        requires_backends(self, ["tensorflow_text"])
         self.tf_tokenizer = FastBertTokenizer(
             vocab_list, token_out_type=tf.int64, lower_case_nfd_strip_accents=do_lower_case
         )
