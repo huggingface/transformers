@@ -255,6 +255,7 @@ class TFOpenAIGPTModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_xla_generate_fast(self):
         pass
 
+
 @require_tf
 class TFOPENAIGPTModelLanguageGenerationTest(unittest.TestCase):
     @slow
