@@ -84,7 +84,7 @@ VIT_INPUTS_DOCSTRING = r"""
 """
 
 
-class FlaxPatchEmbeddings(nn.Module):
+class FlaxViTPatchEmbeddings(nn.Module):
 
     config: ViTConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -94,6 +94,7 @@ class FlaxPatchEmbeddings(nn.Module):
         patch_size = self.config.patch_size
         num_patches = (image_size // patch_size) * (image_size // patch_size)
         self.num_patches = num_patches
+        self.num_channels = self.config.num_channels
         self.projection = nn.Conv(
             self.config.hidden_size,
             kernel_size=(patch_size, patch_size),
@@ -104,9 +105,14 @@ class FlaxPatchEmbeddings(nn.Module):
         )
 
     def __call__(self, pixel_values):
-        x = self.projection(pixel_values)
-        batch_size, _, _, channels = x.shape
-        return jnp.reshape(x, (batch_size, -1, channels))
+        num_channels = pixel_values.shape[-1]
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
+        embeddings = self.projection(pixel_values)
+        batch_size, _, _, channels = embeddings.shape
+        return jnp.reshape(embeddings, (batch_size, -1, channels))
 
 
 class FlaxViTEmbeddings(nn.Module):
@@ -117,7 +123,7 @@ class FlaxViTEmbeddings(nn.Module):
 
     def setup(self):
         self.cls_token = self.param("cls_token", nn.initializers.zeros, (1, 1, self.config.hidden_size))
-        self.patch_embeddings = FlaxPatchEmbeddings(self.config, dtype=self.dtype)
+        self.patch_embeddings = FlaxViTPatchEmbeddings(self.config, dtype=self.dtype)
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = self.param(
             "position_embeddings", nn.initializers.zeros, (1, num_patches + 1, self.config.hidden_size)
@@ -420,7 +426,7 @@ class FlaxViTPreTrainedModel(FlaxPreTrainedModel):
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         if input_shape is None:
-            input_shape = (1, config.image_size, config.image_size, 3)
+            input_shape = (1, config.image_size, config.image_size, config.num_channels)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
