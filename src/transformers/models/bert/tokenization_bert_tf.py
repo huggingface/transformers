@@ -134,6 +134,7 @@ class TFBertTokenizer(tf.keras.layers.Layer):
             tokenizer = BertTokenizer.from_pretrained(pretrained_model_name_or_path, *init_inputs, **kwargs)
         except:  # noqa: E722
             from .tokenization_bert_fast import BertTokenizerFast
+
             tokenizer = BertTokenizerFast.from_pretrained(pretrained_model_name_or_path, *init_inputs, **kwargs)
         return cls.from_tokenizer(tokenizer, **kwargs)
 
