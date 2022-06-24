@@ -69,30 +69,16 @@ TF_DEIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Inspired by
-# https://github.com/rwightman/pytorch-image-models/blob/b9bd960a032c75ca6b808ddeed76bee5f3ed4972/timm/models/layers/helpers.py
-# From PyTorch internals
-def to_2tuple(x):
-    if isinstance(x, collections.abc.Iterable):
-        return x
-    return (x, x)
-
-
-# Based on timm implementation, which can be found here:
-# https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
-
-
 class TFDeiTEmbeddings(tf.keras.layers.Layer):
     """
     Construct the CLS token, distillation token, position and patch embeddings. Optionally, also the mask token.
-
     """
 
     def __init__(self, config: DeiTConfig, use_mask_token: bool = False, **kwargs) -> None:
         super().__init__(**kwargs)
         self.config = config
         self.use_mask_token = use_mask_token
-        self.patch_embeddings = TFPatchEmbeddings(config=config, name="patch_embeddings")
+        self.patch_embeddings = TFDeiTPatchEmbeddings(config=config, name="patch_embeddings")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob, name="dropout")
 
     def build(self, input_shape: tf.TensorShape):
@@ -129,10 +115,10 @@ class TFDeiTEmbeddings(tf.keras.layers.Layer):
         self, pixel_values: tf.Tensor, bool_masked_pos: Optional[tf.Tensor] = None, training: bool = False
     ) -> tf.Tensor:
         embeddings = self.patch_embeddings(pixel_values)
-        batch_size, seq_len, _ = shape_list(embeddings)
+        batch_size, seq_length, _ = shape_list(embeddings)
 
         if bool_masked_pos is not None:
-            mask_tokens = self.mask_token.expand(batch_size, seq_len, -1)
+            mask_tokens = self.mask_token.expand(batch_size, seq_length, -1)
             # replace the masked visual tokens by mask_tokens
             mask = bool_masked_pos.unsqueeze(-1).type_as(mask_tokens)
             embeddings = embeddings * (1.0 - mask) + mask_tokens * mask
@@ -145,31 +131,32 @@ class TFDeiTEmbeddings(tf.keras.layers.Layer):
         return embeddings
 
 
-# Based on timm implementation, which can be found here:
-# https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
-
-# Copied from transformers.models.vit.modeling_tf_vit.TFPatchEmbeddings with ViT->DeiT
-class TFPatchEmbeddings(tf.keras.layers.Layer):
+# Copied from transformers.models.vit.modeling_tf_vit.TFViTPatchEmbeddings with ViT->DeiT
+class TFDeiTPatchEmbeddings(tf.keras.layers.Layer):
     """
-    Image to Patch Embedding.
+    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
+    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
+    Transformer.
     """
 
     def __init__(self, config: DeiTConfig, **kwargs):
         super().__init__(**kwargs)
-        image_size = to_2tuple(config.image_size)
-        patch_size = to_2tuple(config.patch_size)
+        image_size, patch_size = config.image_size, config.patch_size
+        num_channels, hidden_size = config.num_channels, config.hidden_size
+
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_patches = num_patches
-        self.num_channels = config.num_channels
-        self.embed_dim = config.hidden_size
+        self.num_channels = num_channels
         self.config = config
 
         self.projection = tf.keras.layers.Conv2D(
-            filters=self.embed_dim,
+            filters=hidden_size,
             kernel_size=patch_size,
-            strides=self.patch_size,
+            strides=patch_size,
             padding="valid",
             data_format="channels_last",
             use_bias=True,
@@ -182,8 +169,12 @@ class TFPatchEmbeddings(tf.keras.layers.Layer):
         self, pixel_values: tf.Tensor, interpolate_pos_encoding: bool = False, training: bool = False
     ) -> tf.Tensor:
         batch_size, num_channels, height, width = shape_list(pixel_values)
+        if tf.executing_eagerly() and num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
         if not interpolate_pos_encoding:
-            if getattr(height, "numpy", None) and getattr(width, "numpy", None):
+            if tf.executing_eagerly():
                 if height != self.image_size[0] or width != self.image_size[1]:
                     raise ValueError(
                         f"Input image size ({height}*{width}) doesn't match model"
@@ -200,9 +191,9 @@ class TFPatchEmbeddings(tf.keras.layers.Layer):
         # Change the 2D spatial dimensions to a single temporal dimension.
         # shape = (batch_size, num_patches, out_channels=embed_dim)
         num_patches = (width // self.patch_size[1]) * (height // self.patch_size[0])
-        x = tf.reshape(tensor=projection, shape=(batch_size, num_patches, -1))
+        embeddings = tf.reshape(tensor=projection, shape=(batch_size, num_patches, -1))
 
-        return x
+        return embeddings
 
 
 # Copied from transformers.models.vit.modeling_tf_vit.TFViTSelfAttention with ViT->DeiT
@@ -483,7 +474,7 @@ class TFDeiTMainLayer(tf.keras.layers.Layer):
         self.layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
         self.pooler = TFDeiTPooler(config, name="pooler") if add_pooling_layer else None
 
-    def get_input_embeddings(self) -> TFPatchEmbeddings:
+    def get_input_embeddings(self) -> TFDeiTPatchEmbeddings:
         return self.embeddings.patch_embeddings
 
     def _prune_heads(self, heads_to_prune):
@@ -764,8 +755,8 @@ class TFDeitDecoder(tf.keras.layers.Layer):
 
 
 @add_start_docstrings(
-    "DeiT Model with a decoder on top for masked image modeling, as proposed in `SimMIM"
-    " <https://arxiv.org/abs/2111.09886>`__.",
+    "DeiT Model with a decoder on top for masked image modeling, as proposed in"
+    " [SimMIM](https://arxiv.org/abs/2111.09886).",
     DEIT_START_DOCSTRING,
 )
 class TFDeiTForMaskedImageModeling(TFDeiTPreTrainedModel):
