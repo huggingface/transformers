@@ -74,7 +74,7 @@ MVP_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Copied from transformers.models.bart.modeling_bart.shift_tokens_right 
+# Copied from transformers.models.bart.modeling_bart.shift_tokens_right
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
     """
     Shift input ids one token to the right.
@@ -91,13 +91,13 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
     return shifted_input_ids
 
 
-# Copied from transformers.models.bart.modeling_bart._make_causal_mask 
+# Copied from transformers.models.bart.modeling_bart._make_causal_mask
 def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_values_length: int = 0):
     """
     Make causal mask used for bi-directional self-attention.
     """
     bsz, tgt_len = input_ids_shape
-    mask = torch.full((tgt_len, tgt_len), torch.tensor(float("-inf")))
+    mask = torch.full((tgt_len, tgt_len), torch.tensor(torch.finfo(dtype).min))
     mask_cond = torch.arange(mask.size(-1))
     mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
     mask = mask.to(dtype)
@@ -107,7 +107,7 @@ def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
 
-# Copied from transformers.models.bart.modeling_bart._expand_mask 
+# Copied from transformers.models.bart.modeling_bart._expand_mask
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
@@ -129,7 +129,7 @@ class MvpLearnedPositionalEmbedding(nn.Embedding):
     """
 
     def __init__(self, num_embeddings: int, embedding_dim: int):
-        # Mvp is set up so that if padding_idx is specified then offset the embedding ids by 2
+        # MVP is set up so that if padding_idx is specified then offset the embedding ids by 2
         # and adjust num_embeddings appropriately. Other models don't have this hack
         self.offset = 2
         super().__init__(num_embeddings + self.offset, embedding_dim)
@@ -1839,7 +1839,7 @@ class MvpForQuestionAnswering(MvpPretrainedModel):
         )
 
 
-# Copied from transformers.models.bart.modeling_bart.BartDecoderWrapper with Bart->MVP
+# Copied from transformers.models.bart.modeling_bart.BartDecoderWrapper with Bart->Mvp
 class MvpDecoderWrapper(MvpPretrainedModel):
     """
     This wrapper class is a helper class to correctly load pretrained checkpoints when the causal language model is

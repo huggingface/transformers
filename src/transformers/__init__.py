@@ -3870,6 +3870,7 @@ if TYPE_CHECKING:
             MvpForSequenceClassification,
             MvpModel,
             MvpPretrainedModel,
+        )
         from .models.nezha import (
             NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST,
             NezhaForMaskedLM,
