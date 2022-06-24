@@ -242,22 +242,4 @@ class ConvNextMaskRCNNModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head(self):
-        model = ConvNextMaskRCNNForImageClassification.from_pretrained("facebook/convnext-tiny-maskrcnn").to(
-            torch_device
-        )
-
-        feature_extractor = self.default_feature_extractor
-        image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
-
-        # forward pass
-        with torch.no_grad():
-            outputs = model(**inputs)
-
-        # verify the logits
-        expected_shape = torch.Size((1, 1000))
-        self.assertEqual(outputs.logits.shape, expected_shape)
-
-        expected_slice = torch.tensor([-0.0260, -0.4739, 0.1911]).to(torch_device)
-
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        raise NotImplementedError("To do")
