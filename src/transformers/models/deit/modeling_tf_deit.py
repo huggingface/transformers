@@ -118,9 +118,10 @@ class TFDeiTEmbeddings(tf.keras.layers.Layer):
         batch_size, seq_length, _ = shape_list(embeddings)
 
         if bool_masked_pos is not None:
-            mask_tokens = self.mask_token.expand(batch_size, seq_length, -1)
+            mask_tokens = tf.tile(self.mask_token, [batch_size, seq_length, 1])
             # replace the masked visual tokens by mask_tokens
-            mask = bool_masked_pos.unsqueeze(-1).type_as(mask_tokens)
+            mask = tf.expand_dims(bool_masked_pos, axis=-1)
+            mask = tf.cast(mask, dtype=mask_tokens.dtype)
             embeddings = embeddings * (1.0 - mask) + mask_tokens * mask
 
         cls_tokens = tf.repeat(self.cls_token, repeats=batch_size, axis=0)
@@ -131,7 +132,6 @@ class TFDeiTEmbeddings(tf.keras.layers.Layer):
         return embeddings
 
 
-# Copied from transformers.models.vit.modeling_tf_vit.TFViTPatchEmbeddings with ViT->DeiT
 class TFDeiTPatchEmbeddings(tf.keras.layers.Layer):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
@@ -139,7 +139,7 @@ class TFDeiTPatchEmbeddings(tf.keras.layers.Layer):
     Transformer.
     """
 
-    def __init__(self, config: DeiTConfig, **kwargs):
+    def __init__(self, config: DeiTConfig, **kwargs) -> None:
         super().__init__(**kwargs)
         image_size, patch_size = config.image_size, config.patch_size
         num_channels, hidden_size = config.num_channels, config.hidden_size
@@ -149,51 +149,25 @@ class TFDeiTPatchEmbeddings(tf.keras.layers.Layer):
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         self.image_size = image_size
         self.patch_size = patch_size
-        self.num_patches = num_patches
         self.num_channels = num_channels
-        self.config = config
+        self.num_patches = num_patches
 
-        self.projection = tf.keras.layers.Conv2D(
-            filters=hidden_size,
-            kernel_size=patch_size,
-            strides=patch_size,
-            padding="valid",
-            data_format="channels_last",
-            use_bias=True,
-            kernel_initializer=get_initializer(self.config.initializer_range),
-            bias_initializer="zeros",
-            name="projection",
-        )
+        self.projection = tf.keras.layers.Conv2D(hidden_size, kernel_size=patch_size, strides=patch_size)
 
-    def call(
-        self, pixel_values: tf.Tensor, interpolate_pos_encoding: bool = False, training: bool = False
-    ) -> tf.Tensor:
+    def forward(self, pixel_values: tf.Tensor) -> tf.Tensor:
         batch_size, num_channels, height, width = shape_list(pixel_values)
-        if tf.executing_eagerly() and num_channels != self.num_channels:
+        if num_channels != self.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
-        if not interpolate_pos_encoding:
-            if tf.executing_eagerly():
-                if height != self.image_size[0] or width != self.image_size[1]:
-                    raise ValueError(
-                        f"Input image size ({height}*{width}) doesn't match model"
-                        f" ({self.image_size[0]}*{self.image_size[1]})."
-                    )
-
-        # When running on CPU, `tf.keras.layers.Conv2D` doesn't support `NCHW` format.
-        # So change the input format from `NCHW` to `NHWC`.
-        # shape = (batch_size, in_height, in_width, in_channels=num_channels)
-        pixel_values = tf.transpose(pixel_values, perm=(0, 2, 3, 1))
-
-        projection = self.projection(pixel_values)
-
-        # Change the 2D spatial dimensions to a single temporal dimension.
-        # shape = (batch_size, num_patches, out_channels=embed_dim)
-        num_patches = (width // self.patch_size[1]) * (height // self.patch_size[0])
-        embeddings = tf.reshape(tensor=projection, shape=(batch_size, num_patches, -1))
-
-        return embeddings
+        if height != self.image_size[0] or width != self.image_size[1]:
+            raise ValueError(
+                f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
+            )
+        x = self.projection(pixel_values).flatten(2).transpose(1, 2)
+        x = tf.reshape(x, (shape_list(x)[0], shape_list(x)[1], -1))
+        x = tf.transpose(x, perm=(0, 2, 1))
+        return x
 
 
 # Copied from transformers.models.vit.modeling_tf_vit.TFViTSelfAttention with ViT->DeiT
@@ -360,6 +334,7 @@ class TFDeiTOutput(tf.keras.layers.Layer):
         hidden_states = hidden_states + input_tensor
 
         return hidden_states
+
 
 
 class TFDeiTLayer(tf.keras.layers.Layer):
@@ -733,7 +708,7 @@ class TFDeitDecoder(tf.keras.layers.Layer):
 
     def call(self, inputs: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = inputs
-        # B,C,H,W -> B,H,W,C
+        # (batch_size, num_channels, height, width) -> (batch_size, height, width, num_channels)
         hidden_states = tf.transpose(hidden_states, (0, 2, 3, 1))
         hidden_states = self.conv2d(hidden_states)
         # FIXME - put this in pixel shuffle. Copied from Swin
@@ -749,7 +724,7 @@ class TFDeitDecoder(tf.keras.layers.Layer):
         )
         hidden_states = tf.gather(params=hidden_states, indices=tf.tile(permutation, [batch_size, 1]), batch_dims=-1)
         hidden_states = self.pixel_shuffle(hidden_states)
-        # B,H,W,C -> B,C,H,W
+        # (batch_size, height, width, num_channels) -> (batch_size, num_channels, height, width)
         hidden_states = tf.transpose(hidden_states, (0, 3, 1, 2))
         return hidden_states
 
