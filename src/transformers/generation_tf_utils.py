@@ -1515,7 +1515,9 @@ class TFGenerationMixin:
 
         use_xla = not tf.executing_eagerly()
         if use_xla and not self.supports_xla_generation:
-            raise ValueError("The selected model does not support Graph mode nor XLA generation (e.g. from tf.function())")
+            raise ValueError(
+                "The selected model does not support Graph mode nor XLA generation (e.g. from tf.function())"
+            )
 
         # 2. Define model inputs
         input_ids = self._prepare_model_inputs(input_ids, bos_token_id)

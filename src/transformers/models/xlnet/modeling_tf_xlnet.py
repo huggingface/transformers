@@ -1192,6 +1192,8 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFXLNetMainLayer(config, name="transformer")
         self.lm_loss = TFXLNetLMHead(config, self.transformer.word_embedding, name="lm_loss")
+        # generate fails to convert to a graph with XLNet
+        self.supports_xla_generation = False
 
     def get_lm_head(self):
         return self.lm_loss
