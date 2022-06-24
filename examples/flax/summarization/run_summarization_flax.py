@@ -345,6 +345,7 @@ def data_loader(rng: jax.random.PRNGKey, dataset: Dataset, batch_size: int, shuf
 
     if shuffle:
         batch_idx = jax.random.permutation(rng, len(dataset))
+        batch_idx = np.asarray(batch_idx)
     else:
         batch_idx = np.arange(len(dataset))
 
