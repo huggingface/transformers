@@ -3220,9 +3220,9 @@ class GenerationMixin:
 
             next_token_scores_processed = logits_processor(input_ids, next_token_scores)
 
-            scores_for_all_vocab = next_token_scores_processed.clone()
-
             next_token_scores = next_token_scores_processed + beam_scores[:, None].expand_as(next_token_scores)
+
+            scores_for_all_vocab = next_token_scores.clone()
 
             # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
