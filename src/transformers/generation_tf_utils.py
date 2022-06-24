@@ -1905,6 +1905,16 @@ class TFGenerationMixin:
                     )
             return new_past
 
+        if "past_key_values" in model_outputs:
+            past = model_outputs.past_key_values
+        elif "mems" in model_outputs:
+            past = model_outputs.mems
+        elif "past_buckets_states" in model_outputs:
+            past = model_outputs.past_buckets_states
+        else:
+            raise ValueError(
+                f"No known past variable found in model outputs (model outputs keys: {list(model_outputs.keys())})"
+            )
         past = model_outputs.past_key_values
         is_past_initialized = model_kwargs.pop("past", None) is not None
 
