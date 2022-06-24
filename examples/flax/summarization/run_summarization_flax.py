@@ -20,6 +20,7 @@ Fine-tuning the library models for summarization.
 
 import json
 import logging
+import math
 import os
 import sys
 import time
@@ -340,12 +341,14 @@ def data_loader(rng: jax.random.PRNGKey, dataset: Dataset, batch_size: int, shuf
     Returns batches of size `batch_size` from `dataset`. The final batch may be incomplete, and range in size from 1 to `batch_size`.
     Shuffle batches if `shuffle` is `True`.
     """
+    steps_per_epoch = math.ceil(len(dataset) / batch_size)
+
     if shuffle:
         batch_idx = jax.random.permutation(rng, len(dataset))
     else:
         batch_idx = np.arange(len(dataset))
 
-    batch_idx = np.array_split(batch_idx, batch_size)
+    batch_idx = np.array_split(batch_idx, steps_per_epoch)
 
     for idx in batch_idx:
         batch = dataset[idx]
