@@ -727,7 +727,7 @@ class PixelShuffle(tf.keras.layers.Layer):
 class TFDeitDecoder(tf.keras.layers.Layer):
     def __init__(self, config: DeiTConfig, **kwargs) -> None:
         super().__init__(**kwargs)
-        self.conv2d = tf.keras.layers.Conv2D(filters=config.encoder_stride**2 * 3, kernel_size=1, name="0")
+        self.conv2d = tf.keras.layers.Conv2D(filters=config.encoder_stride**2 * config.num_channels, kernel_size=1, name="0")
         self._block_size = config.encoder_stride
         self.pixel_shuffle = PixelShuffle(config.encoder_stride, name="1")
 
