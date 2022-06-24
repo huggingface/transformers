@@ -119,6 +119,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
+# Copied from transformers.models.bart.modeling_bart.BartLearnedPositionalEmbedding with Bart->MVP
 class MvpLearnedPositionalEmbedding(nn.Embedding):
     """
     This module learns positional embeddings up to a fixed maximum size.
@@ -491,6 +492,7 @@ class MvpDecoderLayer(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.bart.modeling_bart.BartClassificationHead with Bart->MVP
 class MvpClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
@@ -1834,6 +1836,7 @@ class MvpForQuestionAnswering(MvpPretrainedModel):
         )
 
 
+# Copied from transformers.models.bart.modeling_bart.BartDecoderWrapper with Bart->MVP
 class MvpDecoderWrapper(MvpPretrainedModel):
     """
     This wrapper class is a helper class to correctly load pretrained checkpoints when the causal language model is
