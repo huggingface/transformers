@@ -1604,8 +1604,11 @@ class TFModelTesterMixin:
         """
         Basic quick test for generate-compatible classes that confirms that XLA-generated tokens are the same as their
         non XLA counterparts.
+
+        Either the model supports generation and passes the test, or it raises an appropriate error
         """
-        for model_class in self.all_generative_model_classes:
+
+        def _test_xla_generate():
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config.eos_token_id = None  # Generate until max length
             config.max_length = 10
@@ -1634,6 +1637,13 @@ class TFModelTesterMixin:
             generated_xla = generate_xla(inputs)
 
             self.assertListEqual(generated.numpy().tolist(), generated_xla.numpy().tolist())
+
+        for model_class in self.all_generative_model_classes:
+            if model_class.supports_xla_generation:
+                _test_xla_generate()
+            else:
+                with self.assertRaises(ValueError):
+                    _test_xla_generate()
 
     def _generate_random_bad_tokens(self, num_bad_tokens, model):
         # special tokens cannot be bad tokens

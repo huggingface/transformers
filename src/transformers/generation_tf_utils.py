@@ -347,6 +347,7 @@ class TFGenerationMixin:
     """
 
     seed_generator = tf.random.Generator.from_non_deterministic_state()
+    supports_xla_generation = True
 
     def prepare_inputs_for_generation(self, inputs, **kwargs):
         """
@@ -1511,6 +1512,10 @@ class TFGenerationMixin:
                 f"Unfeasable length constraints: the minimum length ({min_length}) is larger than the maximum "
                 f"length ({max_length})"
             )
+
+        use_xla = not tf.executing_eagerly()
+        if use_xla and not self.supports_xla_generation:
+            raise ValueError("The selected model does not support Graph mode nor XLA generation (e.g. from tf.function())")
 
         # 2. Define model inputs
         input_ids = self._prepare_model_inputs(input_ids, bos_token_id)
