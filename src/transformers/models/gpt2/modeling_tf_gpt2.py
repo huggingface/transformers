@@ -874,8 +874,9 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
             new_past = [None for _ in range(len(past))]
             slice_start_base = tf.constant([0, 0, 0, 1, 0])
             attention_mask_update_slice = tf.ones((batch_size, 1), dtype=attention_mask.dtype)
-            # correct 5 here
-            new_past_index = current_pos - 1
+            # -1 because current_pos has already been incremented before this function
+            # -1 again because last index = len - 1
+            new_past_index = current_pos - 2
 
             for i in range(len(past)):
                 update_slice = past[i][:, :, :, -1:]
