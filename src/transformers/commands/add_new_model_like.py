@@ -860,6 +860,7 @@ def add_model_to_main_init(
         if new_framework:
             # For a new framework, we need to skip until the else: block to get where the imports are.
             while lines[idx].strip() != "else:":
+                new_lines.append(lines[idx])
                 idx += 1
 
         # Skip if we are in a framework not wanted.
