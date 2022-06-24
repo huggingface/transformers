@@ -40,6 +40,7 @@ from . import (
     codegen,
     convbert,
     convnext,
+    convnext_maskrcnn,
     cpm,
     ctrl,
     cvt,

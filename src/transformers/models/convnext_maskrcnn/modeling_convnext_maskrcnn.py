@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch ConvNext model."""
+""" PyTorch ConvNextMaskRCNN model."""
 
 
 from typing import Optional, Tuple, Union
@@ -20,36 +20,28 @@ from typing import Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import (
-    BaseModelOutputWithNoAttention,
-    BaseModelOutputWithPoolingAndNoAttention,
-    ImageClassifierOutputWithNoAttention,
-)
+from ...modeling_outputs import BaseModelOutputWithNoAttention, BaseModelOutputWithPoolingAndNoAttention, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
-from .configuration_convnext import ConvNextConfig
+from .configuration_convnext_maskrcnn import ConvNextMaskRCNNConfig
 
 
 logger = logging.get_logger(__name__)
 
 # General docstring
-_CONFIG_FOR_DOC = "ConvNextConfig"
+_CONFIG_FOR_DOC = "ConvNextMaskRCNNConfig"
 _FEAT_EXTRACTOR_FOR_DOC = "ConvNextFeatureExtractor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "facebook/convnext-tiny-224"
+_CHECKPOINT_FOR_DOC = "facebook/convnext-tiny-maskrcnn"
 _EXPECTED_OUTPUT_SHAPE = [1, 768, 7, 7]
 
-# Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "facebook/convnext-tiny-224"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
-CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/convnext-tiny-224",
-    # See all ConvNext models at https://huggingface.co/models?filter=convnext
+CONVNEXTMASKRCNN_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "facebook/convnext-tiny-maskrcnn",
+    # See all ConvNextMaskRCNN models at https://huggingface.co/models?filter=convnext_maskrcnn
 ]
 
 
@@ -74,8 +66,8 @@ def drop_path(input, drop_prob: float = 0.0, training: bool = False):
     return output
 
 
-# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->ConvNext
-class ConvNextDropPath(nn.Module):
+# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->ConvNextMaskRCNN
+class ConvNextMaskRCNNDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob: Optional[float] = None) -> None:
@@ -89,7 +81,8 @@ class ConvNextDropPath(nn.Module):
         return "p={}".format(self.drop_prob)
 
 
-class ConvNextLayerNorm(nn.Module):
+# Copied from transformers.models.convnext.modeling_convnext.ConvNextLayerNorm with ConvNext->ConvNextMaskRCNN
+class ConvNextMaskRCNNLayerNorm(nn.Module):
     r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
     The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
     width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
@@ -109,17 +102,15 @@ class ConvNextLayerNorm(nn.Module):
         if self.data_format == "channels_last":
             x = torch.nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
         elif self.data_format == "channels_first":
-            input_dtype = x.dtype
-            x = x.float()
             u = x.mean(1, keepdim=True)
             s = (x - u).pow(2).mean(1, keepdim=True)
             x = (x - u) / torch.sqrt(s + self.eps)
-            x = x.to(dtype=input_dtype)
             x = self.weight[:, None, None] * x + self.bias[:, None, None]
         return x
 
 
-class ConvNextEmbeddings(nn.Module):
+# Copied from transformers.models.convnext.modeling_convnext.ConvNextEmbeddings with ConvNext->ConvNextMaskRCNN
+class ConvNextMaskRCNNEmbeddings(nn.Module):
     """This class is comparable to (and inspired by) the SwinEmbeddings class
     found in src/transformers/models/swin/modeling_swin.py.
     """
@@ -129,7 +120,7 @@ class ConvNextEmbeddings(nn.Module):
         self.patch_embeddings = nn.Conv2d(
             config.num_channels, config.hidden_sizes[0], kernel_size=config.patch_size, stride=config.patch_size
         )
-        self.layernorm = ConvNextLayerNorm(config.hidden_sizes[0], eps=1e-6, data_format="channels_first")
+        self.layernorm = ConvNextMaskRCNNLayerNorm(config.hidden_sizes[0], eps=1e-6, data_format="channels_first")
         self.num_channels = config.num_channels
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
@@ -143,7 +134,8 @@ class ConvNextEmbeddings(nn.Module):
         return embeddings
 
 
-class ConvNextLayer(nn.Module):
+# Copied from transformers.models.convnext.modeling_convnext.ConvNextLayer with ConvNext->ConvNextMaskRCNN
+class ConvNextMaskRCNNLayer(nn.Module):
     """This corresponds to the `Block` class in the original implementation.
 
     There are two equivalent implementations: [DwConv, LayerNorm (channels_first), Conv, GELU,1x1 Conv]; all in (N, C,
@@ -152,7 +144,7 @@ class ConvNextLayer(nn.Module):
     The authors used (2) as they find it slightly faster in PyTorch.
 
     Args:
-        config ([`ConvNextConfig`]): Model configuration class.
+        config ([`ConvNextMaskRCNNConfig`]): Model configuration class.
         dim (`int`): Number of input channels.
         drop_path (`float`): Stochastic depth rate. Default: 0.0.
     """
@@ -160,7 +152,7 @@ class ConvNextLayer(nn.Module):
     def __init__(self, config, dim, drop_path=0):
         super().__init__()
         self.dwconv = nn.Conv2d(dim, dim, kernel_size=7, padding=3, groups=dim)  # depthwise conv
-        self.layernorm = ConvNextLayerNorm(dim, eps=1e-6)
+        self.layernorm = ConvNextMaskRCNNLayerNorm(dim, eps=1e-6)
         self.pwconv1 = nn.Linear(dim, 4 * dim)  # pointwise/1x1 convs, implemented with linear layers
         self.act = ACT2FN[config.hidden_act]
         self.pwconv2 = nn.Linear(4 * dim, dim)
@@ -169,7 +161,7 @@ class ConvNextLayer(nn.Module):
             if config.layer_scale_init_value > 0
             else None
         )
-        self.drop_path = ConvNextDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        self.drop_path = ConvNextMaskRCNNDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
     def forward(self, hidden_states: torch.FloatTensor) -> torch.Tensor:
         input = hidden_states
@@ -187,11 +179,12 @@ class ConvNextLayer(nn.Module):
         return x
 
 
-class ConvNextStage(nn.Module):
-    """ConvNeXT stage, consisting of an optional downsampling layer + multiple residual blocks.
+# Copied from transformers.models.convnext.modeling_convnext.ConvNextStage with ConvNext->ConvNextMaskRCNN,ConvNeXT->ConvNextMaskRCNN
+class ConvNextMaskRCNNStage(nn.Module):
+    """ConvNextMaskRCNN stage, consisting of an optional downsampling layer + multiple residual blocks.
 
     Args:
-        config ([`ConvNextConfig`]): Model configuration class.
+        config ([`ConvNextMaskRCNNConfig`]): Model configuration class.
         in_channels (`int`): Number of input channels.
         out_channels (`int`): Number of output channels.
         depth (`int`): Number of residual blocks.
@@ -203,14 +196,14 @@ class ConvNextStage(nn.Module):
 
         if in_channels != out_channels or stride > 1:
             self.downsampling_layer = nn.Sequential(
-                ConvNextLayerNorm(in_channels, eps=1e-6, data_format="channels_first"),
+                ConvNextMaskRCNNLayerNorm(in_channels, eps=1e-6, data_format="channels_first"),
                 nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride),
             )
         else:
             self.downsampling_layer = nn.Identity()
         drop_path_rates = drop_path_rates or [0.0] * depth
         self.layers = nn.Sequential(
-            *[ConvNextLayer(config, dim=out_channels, drop_path=drop_path_rates[j]) for j in range(depth)]
+            *[ConvNextMaskRCNNLayer(config, dim=out_channels, drop_path=drop_path_rates[j]) for j in range(depth)]
         )
 
     def forward(self, hidden_states: torch.FloatTensor) -> torch.Tensor:
@@ -219,7 +212,8 @@ class ConvNextStage(nn.Module):
         return hidden_states
 
 
-class ConvNextEncoder(nn.Module):
+# Copied from transformers.models.convnext.modeling_convnext.ConvNextEncoder with ConvNext->ConvNextMaskRCNN
+class ConvNextMaskRCNNEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.stages = nn.ModuleList()
@@ -229,7 +223,7 @@ class ConvNextEncoder(nn.Module):
         prev_chs = config.hidden_sizes[0]
         for i in range(config.num_stages):
             out_chs = config.hidden_sizes[i]
-            stage = ConvNextStage(
+            stage = ConvNextMaskRCNNStage(
                 config,
                 in_channels=prev_chs,
                 out_channels=out_chs,
@@ -266,14 +260,15 @@ class ConvNextEncoder(nn.Module):
         )
 
 
-class ConvNextPreTrainedModel(PreTrainedModel):
+# Copied from transformers.models.convnext.modeling_convnext.ConvNextPreTrainedModel with ConvNext->ConvNextMaskRCNN,convnext->convnext_maskrcnn
+class ConvNextMaskRCNNPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = ConvNextConfig
-    base_model_prefix = "convnext"
+    config_class = ConvNextMaskRCNNConfig
+    base_model_prefix = "convnext_maskrcnn"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
@@ -290,22 +285,22 @@ class ConvNextPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, ConvNextModel):
+        if isinstance(module, ConvNextMaskRCNNModel):
             module.gradient_checkpointing = value
 
 
-CONVNEXT_START_DOCSTRING = r"""
+CONVNEXTMASKRCNN_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
     as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
 
     Parameters:
-        config ([`ConvNextConfig`]): Model configuration class with all the parameters of the model.
+        config ([`ConvNextMaskRCNNConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-CONVNEXT_INPUTS_DOCSTRING = r"""
+CONVNEXTMASKRCNN_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
@@ -320,16 +315,17 @@ CONVNEXT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare ConvNext model outputting raw features without any specific head on top.",
-    CONVNEXT_START_DOCSTRING,
+    "The bare ConvNextMaskRCNN model outputting raw features without any specific head on top.",
+    CONVNEXTMASKRCNN_START_DOCSTRING,
 )
-class ConvNextModel(ConvNextPreTrainedModel):
+# Copied from transformers.models.convnext.modeling_convnext.ConvNextModel with CONVNEXT->CONVNEXTMASKRCNN,ConvNext->ConvNextMaskRCNN
+class ConvNextMaskRCNNModel(ConvNextMaskRCNNPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = ConvNextEmbeddings(config)
-        self.encoder = ConvNextEncoder(config)
+        self.embeddings = ConvNextMaskRCNNEmbeddings(config)
+        self.encoder = ConvNextMaskRCNNEncoder(config)
 
         # final layernorm layer
         self.layernorm = nn.LayerNorm(config.hidden_sizes[-1], eps=config.layer_norm_eps)
@@ -337,7 +333,7 @@ class ConvNextModel(ConvNextPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(CONVNEXT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(CONVNEXTMASKRCNN_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -380,84 +376,37 @@ class ConvNextModel(ConvNextPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    ConvNext Model with an image classification head on top (a linear layer on top of the pooled features), e.g. for
-    ImageNet.
-    """,
-    CONVNEXT_START_DOCSTRING,
-)
-class ConvNextForImageClassification(ConvNextPreTrainedModel):
+class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.num_labels = config.num_labels
-        self.convnext = ConvNextModel(config)
-
-        # Classifier head
-        self.classifier = (
-            nn.Linear(config.hidden_sizes[-1], config.num_labels) if config.num_labels > 0 else nn.Identity()
-        )
+        self.convnext = ConvNextMaskRCNNModel(config)
+        # TODO neck, heads
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(CONVNEXT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=ImageClassifierOutputWithNoAttention,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
-    )
     def forward(
         self,
         pixel_values: torch.FloatTensor = None,
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, ImageClassifierOutputWithNoAttention]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
+    ) -> Union[Tuple, SequenceClassifierOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.convnext(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
-
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
-
-        logits = self.classifier(pooled_output)
+        logits = None
 
         loss = None
         if labels is not None:
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
+            raise NotImplementedError("Training is not yet supported.")
         if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return ImageClassifierOutputWithNoAttention(
+        return SequenceClassifierOutput(
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
