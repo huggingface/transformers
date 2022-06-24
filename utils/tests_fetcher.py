@@ -236,8 +236,6 @@ def get_test_dependencies(test_fname):
         return os.path.join(directory, f"{relative_import.replace('.', os.path.sep)}.py")
 
     dependencies = [_convert_relative_import_to_file(relative_import) for relative_import in relative_imports]
-    print(dependencies)
-
     return [f for f in dependencies if os.path.isfile(os.path.join(PATH_TO_TRANFORMERS, f))]
 
 
