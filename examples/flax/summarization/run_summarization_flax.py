@@ -931,7 +931,7 @@ def main():
 
             # generation
             if data_args.predict_with_generate:
-                generated_ids = p_generate_step(state.params, batch)
+                generated_ids = pad_shard_unpad(p_generate_step)(state.params, batch)
                 pred_generations.extend(jax.device_get(generated_ids.reshape(-1, gen_kwargs["max_length"])))
                 pred_labels.extend(labels)
 
