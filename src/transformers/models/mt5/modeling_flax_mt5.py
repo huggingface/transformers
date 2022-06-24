@@ -69,8 +69,8 @@ class FlaxMT5Model(FlaxT5Model):
 
 class FlaxMT5EncoderModel(FlaxT5EncoderModel):
     r"""
-    This class overrides [`FlaxT5EncoderModel`]. Please check the superclass for the appropriate documentation alongside usage
-    examples.
+    This class overrides [`FlaxT5EncoderModel`]. Please check the superclass for the appropriate documentation
+    alongside usage examples.
 
     Examples:
 
