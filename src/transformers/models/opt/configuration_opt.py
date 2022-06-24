@@ -144,11 +144,12 @@ class OPTConfig(PretrainedConfig):
         self.layerdrop = layerdrop
         self.use_cache = use_cache
         self.do_layer_norm_before = do_layer_norm_before
-            
+
         # Note that the only purpose of `_remove_final_layer_norm` is to keep backward compatibility
         # with checkpoints that have been fine-tuned before transformers v4.20.1
         # see https://github.com/facebookresearch/metaseq/pull/164
         self._remove_final_layer_norm = _remove_final_layer_norm
+
 
 class OPTOnnxConfig(OnnxConfigWithPast):
     def __init__(
