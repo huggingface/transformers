@@ -363,7 +363,6 @@ class CodeGenTokenizer(PreTrainedTokenizer):
             m = pattern.search(string, start_pos)
             return m.start() if m else -1
 
-        # terminals = [re.compile(r, re.MULTILINE) for r in ["^#", re.escape("<|endoftext|>"), "^'''", '^"""', "\n\n\n"]]
         terminals = [re.compile(pattern, re.MULTILINE) for pattern in truncate_before_pattern]
 
         prints = list(re.finditer("^print", completion, re.MULTILINE))
