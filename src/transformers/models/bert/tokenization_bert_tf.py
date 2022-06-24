@@ -130,7 +130,11 @@ class TFBertTokenizer(tf.keras.layers.Layer):
         tf_tokenizer = TFBertTokenizer.from_pretrained("bert-base-uncased")
         ```
         """
-        tokenizer = BertTokenizer.from_pretrained(pretrained_model_name_or_path, *init_inputs, **kwargs)
+        try:
+            tokenizer = BertTokenizer.from_pretrained(pretrained_model_name_or_path, *init_inputs, **kwargs)
+        except:  # noqa: E722
+            from .tokenization_bert import BertTokenizerFast
+            tokenizer = BertTokenizerFast.from_pretrained(pretrained_model_name_or_path, *init_inputs, **kwargs)
         return cls.from_tokenizer(tokenizer, **kwargs)
 
     def unpaired_tokenize(self, texts):
