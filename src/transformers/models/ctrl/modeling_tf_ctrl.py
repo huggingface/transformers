@@ -571,6 +571,8 @@ class TFCTRLLMHead(tf.keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
         self.vocab_size = config.vocab_size
+        # TODO (Joao): investigate why CTRL has numerical issues in XLA generate
+        self.supports_xla_generation = False
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.

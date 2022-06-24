@@ -722,6 +722,8 @@ class TFGPTJForCausalLM(TFGPTJPreTrainedModel, TFCausalLanguageModelingLoss):
         self.lm_head = tf.keras.layers.Dense(
             config.vocab_size, kernel_initializer=get_initializer(config.initializer_range), name="lm_head"
         )
+        # TODO (Joao): investigate why GPTJ has numerical issues in XLA generate
+        self.supports_xla_generation = False
 
     def get_output_embeddings(self):
         return self.lm_head

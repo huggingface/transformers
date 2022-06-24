@@ -1332,6 +1332,8 @@ class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCaus
         super().__init__(config)
         self.model = TFSpeech2TextMainLayer(config, name="model")
         self.lm_head = tf.keras.layers.Dense(self.config.vocab_size, use_bias=False, name="lm_head")
+        # TODO (Joao): investigate why Speech2Text has numerical issues in XLA generate
+        self.supports_xla_generation = False
 
     def get_encoder(self):
         return self.model.encoder
