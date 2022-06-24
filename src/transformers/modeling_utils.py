@@ -118,14 +118,14 @@ except ImportError:
         def forward(self, input):
             return input
 
-def replace_8bit_linear(model): 
-    quantized_model = deepcopy(model)
-    for name, module in model.named_modules():
+def replace_8bit_linear(model):
+    for n, module in model.named_children():
+        if len(list(module.children())) > 0:
+            replace_8bit_linear(module)
+            
         if isinstance(module, nn.Linear):
-            quantized_model[name] = Linear8bit(module.in_shape, module.out_shape, device=module.device)
-        else:
-            quantized_model[name] = module
-    return quantized_model
+            # setattr(model, n, bnb.nn.Linear8bitLt)
+            print(module)
 
 
 
@@ -2074,7 +2074,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
             init_contexts = [deepspeed.zero.Init(config_dict_or_path=deepspeed_config())] + init_contexts
         elif load_in_8bit:
-            from bitsandbytes.nn import Linear8bitLt as Linear8bit
+            # rom bitsandbytes.nn import Linear8bitLt as Linear8bit
 
             init_contexts = [init_empty_weights()] # Force enable init empty weights
 
