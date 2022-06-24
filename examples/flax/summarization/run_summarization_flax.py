@@ -41,9 +41,9 @@ import optax
 import transformers
 from filelock import FileLock
 from flax import jax_utils, traverse_util
-from flax.jax_utils import unreplicate
+from flax.jax_utils import pad_shard_unpad, unreplicate
 from flax.training import train_state
-from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
+from flax.training.common_utils import get_metrics, onehot, shard_prng_key
 from huggingface_hub import Repository
 from transformers import (
     CONFIG_MAPPING,
@@ -337,24 +337,19 @@ class TrainState(train_state.TrainState):
 
 def data_loader(rng: jax.random.PRNGKey, dataset: Dataset, batch_size: int, shuffle: bool = False):
     """
-    Returns batches of size `batch_size` from truncated `dataset`, sharded over all local devices.
+    Returns batches of size `batch_size` from `dataset`. The final batch may be incomplete, and range in size from 1 to `batch_size`.
     Shuffle batches if `shuffle` is `True`.
     """
-    steps_per_epoch = len(dataset) // batch_size
-
     if shuffle:
         batch_idx = jax.random.permutation(rng, len(dataset))
     else:
-        batch_idx = jnp.arange(len(dataset))
+        batch_idx = np.arange(len(dataset))
 
-    batch_idx = batch_idx[: steps_per_epoch * batch_size]  # Skip incomplete batch.
-    batch_idx = batch_idx.reshape((steps_per_epoch, batch_size))
+    batch_idx = np.array_split(batch_idx, batch_size)
 
     for idx in batch_idx:
         batch = dataset[idx]
-        batch = {k: jnp.array(v) for k, v in batch.items()}
-
-        batch = shard(batch)
+        batch = {k: np.array(v) for k, v in batch.items()}
 
         yield batch
 
@@ -850,7 +845,7 @@ def main():
         # train
         for _ in tqdm(range(steps_per_epoch), desc="Training...", position=1, leave=False):
             batch = next(train_loader)
-            state, train_metric = p_train_step(state, batch)
+            state, train_metric = pad_shard_unpad(p_train_step)(state, batch)
             train_metrics.append(train_metric)
 
         train_time += time.time() - train_start
@@ -874,14 +869,14 @@ def main():
             batch = next(eval_loader)
             labels = batch["labels"]
 
-            metrics = p_eval_step(state.params, batch)
+            metrics = pad_shard_unpad(p_eval_step)(state.params, batch)
             eval_metrics.append(metrics)
 
             # generation
             if data_args.predict_with_generate:
-                generated_ids = p_generate_step(state.params, batch)
+                generated_ids = pad_shard_unpad(p_generate_step)(state.params, batch)
                 eval_preds.extend(jax.device_get(generated_ids.reshape(-1, gen_kwargs["max_length"])))
-                eval_labels.extend(jax.device_get(labels.reshape(-1, labels.shape[-1])))
+                eval_labels.extend(labels)
 
         # normalize eval metrics
         eval_metrics = get_metrics(eval_metrics)
@@ -927,14 +922,14 @@ def main():
             batch = next(pred_loader)
             labels = batch["labels"]
 
-            metrics = p_eval_step(state.params, batch)
+            metrics = pad_shard_unpad(p_eval_step)(state.params, batch)
             pred_metrics.append(metrics)
 
             # generation
             if data_args.predict_with_generate:
                 generated_ids = p_generate_step(state.params, batch)
                 pred_generations.extend(jax.device_get(generated_ids.reshape(-1, gen_kwargs["max_length"])))
-                pred_labels.extend(jax.device_get(labels.reshape(-1, labels.shape[-1])))
+                pred_labels.extend(labels)
 
         # normalize prediction metrics
         pred_metrics = get_metrics(pred_metrics)
