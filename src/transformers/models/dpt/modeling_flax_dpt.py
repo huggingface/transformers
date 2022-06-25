@@ -81,7 +81,7 @@ DPT_INPUTS_DOCSTRING = r"""
 
 
 # Copied from transformers.models.vit.modeling_flax_vit.FlaxViTPatchEmbeddings with ViT->DPT
-class FlaxViTPatchEmbeddings(nn.Module):
+class FlaxDPTPatchEmbeddings(nn.Module):
 
     config: DPTConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -91,6 +91,7 @@ class FlaxViTPatchEmbeddings(nn.Module):
         patch_size = self.config.patch_size
         num_patches = (image_size // patch_size) * (image_size // patch_size)
         self.num_patches = num_patches
+        self.num_channels = self.config.num_channels
         self.projection = nn.Conv(
             self.config.hidden_size,
             kernel_size=(patch_size, patch_size),
@@ -101,9 +102,14 @@ class FlaxViTPatchEmbeddings(nn.Module):
         )
 
     def __call__(self, pixel_values):
-        x = self.projection(pixel_values)
-        batch_size, _, _, channels = x.shape
-        return jnp.reshape(x, (batch_size, -1, channels))
+        num_channels = pixel_values.shape[-1]
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
+        embeddings = self.projection(pixel_values)
+        batch_size, _, _, channels = embeddings.shape
+        return jnp.reshape(embeddings, (batch_size, -1, channels))
 
 
 # Copied from transformers.models.vit.modeling_flax_vit.FlaxViTEmbeddings with ViT->DPT
@@ -115,7 +121,7 @@ class FlaxDPTEmbeddings(nn.Module):
 
     def setup(self):
         self.cls_token = self.param("cls_token", nn.initializers.zeros, (1, 1, self.config.hidden_size))
-        self.patch_embeddings = FlaxPatchEmbeddings(self.config, dtype=self.dtype)
+        self.patch_embeddings = FlaxDPTPatchEmbeddings(self.config, dtype=self.dtype)
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = self.param(
             "position_embeddings", nn.initializers.zeros, (1, num_patches + 1, self.config.hidden_size)
