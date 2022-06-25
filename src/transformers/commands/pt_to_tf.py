@@ -23,7 +23,17 @@ from packaging import version
 
 import huggingface_hub
 
-from .. import AutoConfig, AutoFeatureExtractor, AutoProcessor, AutoTokenizer, is_tf_available, is_torch_available, PROCESSOR_MAPPING, FEATURE_EXTRACTOR_MAPPING, TOKENIZER_MAPPING
+from .. import (
+    FEATURE_EXTRACTOR_MAPPING,
+    PROCESSOR_MAPPING,
+    TOKENIZER_MAPPING,
+    AutoConfig,
+    AutoFeatureExtractor,
+    AutoProcessor,
+    AutoTokenizer,
+    is_tf_available,
+    is_torch_available,
+)
 from ..utils import logging
 from . import BaseTransformersCLICommand
 
