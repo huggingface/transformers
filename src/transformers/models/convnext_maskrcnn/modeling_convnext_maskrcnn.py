@@ -102,15 +102,12 @@ class ConvNextMaskRCNNLayerNorm(nn.Module):
             raise NotImplementedError(f"Unsupported data format: {self.data_format}")
         self.normalized_shape = (normalized_shape,)
 
-    def forward(self, x: torch.Tensor, print_values=False) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         if self.data_format == "channels_last":
             x = torch.nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
         elif self.data_format == "channels_first":
             x = x.permute(0, 2, 3, 1)
-            # print("Hidden states after permute:", x[0,0,:3,:3])
-            # print("Normalized shape, weight, bias, eps:")
             x = torch.nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
-            # print("Hidden states after LN:", x[0,0,:3,:3])
             x = x.permute(0, 3, 1, 2)
         return x
 
@@ -185,8 +182,9 @@ class ConvNextMaskRCNNLayer(nn.Module):
         return x
 
 
+# Copied from transformers.models.convnext.modeling_convnext.ConvNextStage with ConvNext->ConvNextMaskRCNN, ConvNeXT->ConvNeXTMaskRCNN
 class ConvNextMaskRCNNStage(nn.Module):
-    """ConvNextMaskRCNN stage, consisting of an optional downsampling layer + multiple residual blocks.
+    """ConvNeXTMaskRCNN stage, consisting of an optional downsampling layer + multiple residual blocks.
 
     Args:
         config ([`ConvNextMaskRCNNConfig`]): Model configuration class.
@@ -201,7 +199,7 @@ class ConvNextMaskRCNNStage(nn.Module):
 
         if in_channels != out_channels or stride > 1:
             self.downsampling_layer = nn.Sequential(
-                ConvNextMaskRCNNLayerNorm(in_channels, eps=1e-5, data_format="channels_first"),
+                ConvNextMaskRCNNLayerNorm(in_channels, eps=1e-6, data_format="channels_first"),
                 nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride),
             )
         else:
@@ -211,22 +209,13 @@ class ConvNextMaskRCNNStage(nn.Module):
             *[ConvNextMaskRCNNLayer(config, dim=out_channels, drop_path=drop_path_rates[j]) for j in range(depth)]
         )
 
-    def forward(self, hidden_states: torch.FloatTensor, print_values=False) -> torch.Tensor:
-        # print("Hidden states before downsampling:", hidden_states[0,0,:3,:3])
-        # hidden_states = self.downsampling_layer(hidden_states)
-        if isinstance(self.downsampling_layer, nn.Identity):
-            hidden_states = self.downsampling_layer(hidden_states)
-        else:
-            hidden_states = self.downsampling_layer[0](hidden_states, print_values=True)
-            # print("Hidden states after downsamplng layernorm:", hidden_states[0,0,:3,:3])
-            hidden_states = self.downsampling_layer[1](hidden_states)
-            # print("Hidden states after downsamplng conv2d:", hidden_states[0,0,:3,:3])
-        # print("Hidden states after downsamplng:", hidden_states[0,0,:3,:3])
+    def forward(self, hidden_states: torch.FloatTensor) -> torch.Tensor:
+        hidden_states = self.downsampling_layer(hidden_states)
         hidden_states = self.layers(hidden_states)
-        # print("Hidden states after layers:", hidden_states[0,0,:3,:3])
         return hidden_states
 
 
+# Copied from transformers.models.convnext.modeling_convnext.ConvNextEncoder with ConvNext->ConvNextMaskRCNN
 class ConvNextMaskRCNNEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -235,7 +224,6 @@ class ConvNextMaskRCNNEncoder(nn.Module):
             x.tolist() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths)).split(config.depths)
         ]
         prev_chs = config.hidden_sizes[0]
-
         for i in range(config.num_stages):
             out_chs = config.hidden_sizes[i]
             stage = ConvNextMaskRCNNStage(
@@ -249,8 +237,6 @@ class ConvNextMaskRCNNEncoder(nn.Module):
             self.stages.append(stage)
             prev_chs = out_chs
 
-        self.layernorms = nn.ModuleList([ConvNextMaskRCNNLayerNorm(config.hidden_sizes[i], data_format="channels_first") for i in range(config.num_stages)])
-
     def forward(
         self,
         hidden_states: torch.FloatTensor,
@@ -259,16 +245,11 @@ class ConvNextMaskRCNNEncoder(nn.Module):
     ) -> Union[Tuple, BaseModelOutputWithNoAttention]:
         all_hidden_states = () if output_hidden_states else None
 
-        for i, (stage_module, norm_module) in enumerate(zip(self.stages, self.layernorms)):
+        for i, stage_module in enumerate(self.stages):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            print("---------------Stage:----------------", i)
-            hidden_states = stage_module(hidden_states, print_values=True if i == 1 else False)
-            print("Shapes of hidden states:", hidden_states.shape)
-            print(f"First values after stage {i} before layernorm: ", hidden_states[0, 0, :3, :3])
-            # hidden_states = norm_module(hidden_states).contiguous()
-            # print(f"First values after stage {i} after layernorm: ", hidden_states[0, 0, :3, :3])
+            hidden_states = stage_module(hidden_states)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
