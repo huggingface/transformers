@@ -111,7 +111,7 @@ def convert_convnext_maskrcnn_checkpoint(checkpoint_path, pytorch_dump_folder_pa
             # TODO: neck, heads
             pass
         elif key.startswith("backbone.norm"):
-            # TODO: norms after stage outputs
+            # TODO: layernorms
             pass
         else:
             state_dict[rename_key(key)] = val
