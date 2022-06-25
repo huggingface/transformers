@@ -215,8 +215,11 @@ class ConvNextMaskRCNNStage(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextEncoder with ConvNext->ConvNextMaskRCNN
 class ConvNextMaskRCNNEncoder(nn.Module):
+    """
+    This class isn't copied from modeling_convnext.py as layernorms are added.
+    """
+
     def __init__(self, config):
         super().__init__()
         self.stages = nn.ModuleList()
@@ -237,6 +240,8 @@ class ConvNextMaskRCNNEncoder(nn.Module):
             self.stages.append(stage)
             prev_chs = out_chs
 
+        # self.layernorms = nn.ModuleList([ConvNextMaskRCNNLayerNorm(i, data_format="channels_first") for i in config.hidden_sizes])
+
     def forward(
         self,
         hidden_states: torch.FloatTensor,
@@ -246,10 +251,13 @@ class ConvNextMaskRCNNEncoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
 
         for i, stage_module in enumerate(self.stages):
+            print(f"------------stage {i} -----------")
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             hidden_states = stage_module(hidden_states)
+
+            print(f"Output after stage {i}:", hidden_states[0,0,:3,:3])
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
@@ -394,7 +402,8 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
     ) -> Union[Tuple, SequenceClassifierOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.convnext(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
+        # we need the intermediate hidden states
+        outputs = self.convnext(pixel_values, output_hidden_states=True, return_dict=return_dict)
         logits = None
 
         loss = None
