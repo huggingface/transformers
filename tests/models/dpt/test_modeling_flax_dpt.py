@@ -20,7 +20,7 @@ import unittest
 import numpy as np
 
 from transformers import DPTConfig, is_flax_available
-from transformers.testing_utils import require_flax, slow, is_pt_flax_cross_test
+from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, ids_tensor
@@ -250,7 +250,6 @@ class FlaxDPTModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 self.assertEqual(fx_keys, pt_keys)
                 self.check_pt_flax_outputs(fx_outputs_loaded, pt_outputs, model_class)
 
-
     @is_pt_flax_cross_test
     def test_equivalence_flax_to_pt(self):
         import tempfile
@@ -320,6 +319,7 @@ class FlaxDPTModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
                 self.assertEqual(fx_keys, pt_keys)
                 self.check_pt_flax_outputs(fx_outputs, pt_outputs_loaded, model_class)
+
 
 # TODO: add tests for segmentation and depth estimation (logits)
 #     @require_vision
