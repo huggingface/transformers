@@ -226,14 +226,14 @@ class TFXGLMModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_xglm(self, verify_outputs=True):
         model = TFXGLMForCausalLM.from_pretrained("facebook/xglm-564M")
-        input_ids = tf.convert_to_tensor([2, 268, 9865], dtype=tf.int32)  # The dog
+        input_ids = tf.convert_to_tensor([[2, 268, 9865]], dtype=tf.int32)  # The dog
         # </s> The dog is a very friendly dog. He is very affectionate and loves to play with other
         # fmt: off
         expected_output_ids = [2, 268, 9865, 67, 11, 1988, 57252, 9865, 5, 984, 67, 1988, 213838, 1658, 53, 70446, 33, 6657, 278, 1581]
         # fmt: on
         output_ids = model.generate(input_ids, do_sample=False, num_beams=1)
         if verify_outputs:
-            self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
+            self.assertListEqual(output_ids[0].numpy().tolist(), expected_output_ids)
 
     @slow
     def test_xglm_sample(self):
@@ -243,10 +243,12 @@ class TFXGLMModelLanguageGenerationTest(unittest.TestCase):
         tf.random.set_seed(0)
         tokenized = tokenizer("Today is a nice day and", return_tensors="tf")
         input_ids = tokenized.input_ids
-        output_ids = model.generate(input_ids, do_sample=True, num_beams=1)
+        output_ids = model.generate(input_ids, do_sample=True, seed=[7, 0])
         output_str = tokenizer.decode(output_ids[0], skip_special_tokens=True)
 
-        EXPECTED_OUTPUT_STR = "Today is a nice day and the sun is shining. A nice day with warm rainy"
+        EXPECTED_OUTPUT_STR = (
+            "Today is a nice day and warm evening here over Southern Alberta!! Today when they closed schools due"
+        )
         self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
 
     @slow
@@ -255,7 +257,6 @@ class TFXGLMModelLanguageGenerationTest(unittest.TestCase):
         tokenizer = XGLMTokenizer.from_pretrained("facebook/xglm-564M")
         model = TFXGLMForCausalLM.from_pretrained("facebook/xglm-564M")
 
-        tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "left"
 
         generation_kwargs = {
@@ -278,6 +279,6 @@ class TFXGLMModelLanguageGenerationTest(unittest.TestCase):
         sentences = ["Today is a beautiful day and", "This is a very long input that we absolutely don't care about"]
         input_ids = tokenizer(sentences, return_tensors="tf", padding=True)
         # longer max length to capture the full length (remember: it is left padded)
-        output_ids = model.generate(**input_ids, **generation_kwargs, max_length=27)
+        output_ids = model.generate(**input_ids, **generation_kwargs, max_length=28)
         output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
         self.assertEqual(output_strings[0], expected_output_string)
