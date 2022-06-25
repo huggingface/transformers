@@ -65,6 +65,13 @@ class ConvNextMaskRCNNConfig(PretrainedConfig):
             The initial value for the layer scale.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
             The drop rate for stochastic depth.
+        backbone_out_indices (`List[int]`, *optional*, defaults to [0, 1, 2, 3]):
+            Indices of the intermediate hidden states to use from backbone.
+        fpn_out_channels (`int`, optional, defaults to 256):
+            Number of output channels (feature dimension) of the output feature maps of the Feature Pyramid Network
+            (FPN).
+        fpn_num_outputs (`int`, optional, defaults to 5):
+            Number of output feature maps of the Feature Pyramid Network (FPN).
 
     Example:
     ```python
@@ -89,10 +96,22 @@ class ConvNextMaskRCNNConfig(PretrainedConfig):
         hidden_act="gelu",
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        is_encoder_decoder=False,
         layer_scale_init_value=1e-6,
         drop_path_rate=0.0,
         image_size=224,
+        # FPN
+        backbone_out_indices=[0, 1, 2, 3],
+        fpn_out_channels=256,
+        fpn_num_outputs=5,
+        # Anchor generator
+        anchor_generator_scales=[8],
+        anchor_generator_ratios=[0.5, 1.0, 2.0],
+        anchor_generator_strides=[4, 8, 16, 32, 64],
+        # RPN
+        rpn_in_channels=256,
+        rpn_feat_channels=256,
+        rpn_loss_cls=dict(type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0),
+        rpn_loss_bbox=dict(type='L1Loss', loss_weight=1.0),
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -108,6 +127,19 @@ class ConvNextMaskRCNNConfig(PretrainedConfig):
         self.layer_scale_init_value = layer_scale_init_value
         self.drop_path_rate = drop_path_rate
         self.image_size = image_size
+        # FPN
+        self.backbone_out_indices = backbone_out_indices
+        self.fpn_out_channels = fpn_out_channels
+        self.fpn_num_outputs = fpn_num_outputs
+        # Anchor generator
+        self.anchor_generator_scales = anchor_generator_scales
+        self.anchor_generator_ratios = anchor_generator_ratios
+        self.anchor_generator_strides = anchor_generator_strides
+        # RPN
+        self.rpn_in_channels = rpn_in_channels
+        self.rpn_feat_channels = rpn_feat_channels
+        self.rpn_loss_cls=rpn_loss_cls
+        self.rpn_loss_bbox=rpn_loss_bbox
 
 
 class ConvNextMaskRCNNOnnxConfig(OnnxConfig):
