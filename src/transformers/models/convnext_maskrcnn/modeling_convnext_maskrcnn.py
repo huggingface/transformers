@@ -240,7 +240,9 @@ class ConvNextMaskRCNNEncoder(nn.Module):
             self.stages.append(stage)
             prev_chs = out_chs
 
-        # self.layernorms = nn.ModuleList([ConvNextMaskRCNNLayerNorm(i, data_format="channels_first") for i in config.hidden_sizes])
+        self.layernorms = nn.ModuleList(
+            [ConvNextMaskRCNNLayerNorm(i, data_format="channels_first") for i in config.hidden_sizes]
+        )
 
     def forward(
         self,
@@ -251,16 +253,17 @@ class ConvNextMaskRCNNEncoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
 
         for i, stage_module in enumerate(self.stages):
-            print(f"------------stage {i} -----------")
             if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
+                if i == 0:
+                    # add initial embeddings
+                    all_hidden_states = all_hidden_states + (hidden_states,)
+                else:
+                    all_hidden_states = all_hidden_states + (self.layernorms[i - 1](hidden_states),)
 
             hidden_states = stage_module(hidden_states)
 
-            print(f"Output after stage {i}:", hidden_states[0,0,:3,:3])
-
         if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
+            all_hidden_states = all_hidden_states + (self.layernorms[-1](hidden_states),)
 
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
