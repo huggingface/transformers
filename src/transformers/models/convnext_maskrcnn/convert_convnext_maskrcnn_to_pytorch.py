@@ -19,9 +19,11 @@ URL: https://github.com/open-mmlab/mmdetection"""
 
 import argparse
 import json
+import requests
 
 import torch
 from PIL import Image
+import torchvision.transforms as T
 
 import requests
 from huggingface_hub import hf_hub_download
@@ -117,12 +119,25 @@ def convert_convnext_maskrcnn_checkpoint(checkpoint_path, pytorch_dump_folder_pa
     model.load_state_dict(state_dict)
     model.eval()
 
-    # # Check outputs on an image, prepared by ConvNextFeatureExtractor
-    # size = 224 if "224" in checkpoint_url else 384
-    # feature_extractor = ConvNextFeatureExtractor(size=size)
-    # pixel_values = feature_extractor(images=prepare_img(), return_tensors="pt").pixel_values
+    print("PRINTING PARAMETERS")
+    print(model.convnext.encoder.stages[1].downsampling_layer[0].weight)
+    print(model.convnext.encoder.stages[1].downsampling_layer[0].bias)
+    print(model.convnext.encoder.stages[1].downsampling_layer[0].eps)
 
-    # logits = model(pixel_values).logits
+    url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+    image = Image.open(requests.get(url, stream=True).raw)
+    
+    # standard PyTorch mean-std input image normalization
+    transform = T.Compose([
+        T.Resize(800),
+        T.ToTensor(),
+        T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ])
+    
+    pixel_values = transform(image).unsqueeze(0)
+
+    outputs = model(pixel_values)
+    print(outputs.keys())
 
     # assert torch.allclose(logits[0, :3], expected_logits, atol=1e-3)
     # assert logits.shape == expected_shape
