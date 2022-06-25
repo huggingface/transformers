@@ -49,6 +49,8 @@ def get_convnext_maskrcnn_config():
 
 
 def rename_key(name):
+    if "backbone.norm" in name:
+        name = name.replace("backbone.norm", "convnext.encoder.layernorms.")
     if "backbone" in name:
         name = name.replace("backbone", "convnext")
     if "downsample_layers.0.0" in name:
@@ -77,7 +79,7 @@ def rename_key(name):
         name = name.replace("depthwise_conv", "dwconv")
     if "pointwise_conv" in name:
         name = name.replace("pointwise_conv", "pwconv")
-    if "norm" in name:
+    if "norm" in name and "layernorm" not in name:
         name = name.replace("norm", "layernorm")
     if "gamma" in name:
         name = name.replace("gamma", "layer_scale_parameter")
@@ -110,9 +112,6 @@ def convert_convnext_maskrcnn_checkpoint(checkpoint_path, pytorch_dump_folder_pa
         if "backbone" not in key:
             # TODO: neck, heads
             pass
-        elif key.startswith("backbone.norm"):
-            # TODO: layernorms
-            pass
         else:
             state_dict[rename_key(key)] = val
 
@@ -120,11 +119,6 @@ def convert_convnext_maskrcnn_checkpoint(checkpoint_path, pytorch_dump_folder_pa
     model = ConvNextMaskRCNNForObjectDetection(config)
     model.load_state_dict(state_dict)
     model.eval()
-
-    # print("PRINTING PARAMETERS")
-    # print(model.convnext.encoder.stages[1].downsampling_layer[0].weight)
-    # print(model.convnext.encoder.stages[1].downsampling_layer[0].bias)
-    # print(model.convnext.encoder.stages[1].downsampling_layer[0].eps)
 
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     image = Image.open(requests.get(url, stream=True).raw)
@@ -135,10 +129,12 @@ def convert_convnext_maskrcnn_checkpoint(checkpoint_path, pytorch_dump_folder_pa
     pixel_values = transform(image).unsqueeze(0)
 
     outputs = model(pixel_values, output_hidden_states=True)
-    for idx, out in enumerate(outputs.hidden_states):
-        print(f"Output of layer {idx}:", out[0,0,:3,:3])
+    expected_slice = torch.tensor(
+        [[-0.0836, -0.1298, -0.1237], [-0.0743, -0.1090, -0.0873], [-0.0231, 0.0851, 0.0792]]
+    )
 
-    # assert torch.allclose(logits[0, :3], expected_logits, atol=1e-3)
+    assert torch.allclose(outputs.hidden_states[-1][0, 0, :3, :3], expected_slice, atol=1e-3)
+    print("Looks ok!")
     # assert logits.shape == expected_shape
 
     # Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
