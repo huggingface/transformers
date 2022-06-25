@@ -20,7 +20,7 @@ import unittest
 import numpy as np
 
 from transformers import DPTConfig, is_flax_available
-from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow
+from transformers.testing_utils import require_flax, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, ids_tensor
@@ -141,141 +141,6 @@ class FlaxDPTModelTest(FlaxModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @is_pt_flax_cross_test
-    def test_equivalence_pt_to_flax(self):
-        import tempfile
-
-        import torch
-
-        import jax.numpy as jnp
-        import transformers
-        from transformers.modeling_flax_pytorch_utils import convert_pytorch_state_dict_to_flax
-        from transformers.testing_utils import torch_device
-
-        # It might be better to put this inside the for loop below (because we modify the config there).
-        # But logically, it is fine.
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            with self.subTest(model_class.__name__):
-
-                # Output all for aggressive testing
-                config.output_hidden_states = True
-                config.output_attentions = self.has_attentions
-
-                # prepare inputs
-                prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-                prepared_inputs_dict.pop("labels")
-                pt_inputs = {k: torch.tensor(v.tolist(), device=torch_device) for k, v in prepared_inputs_dict.items()}
-
-                # load corresponding PyTorch class
-                pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
-                pt_model_class = getattr(transformers, pt_model_class_name)
-
-                pt_model = pt_model_class(config).eval()
-                # Flax models don't use the `use_cache` option and cache is not returned as a default.
-                # So we disable `use_cache` here for PyTorch model.
-                pt_model.config.use_cache = False
-                fx_model = model_class(config, dtype=jnp.float32)
-
-                fx_state = convert_pytorch_state_dict_to_flax(pt_model.state_dict(), fx_model)
-                fx_model.params = fx_state
-
-                # send pytorch model to the correct device
-                pt_model.to(torch_device)
-
-                with torch.no_grad():
-                    pt_outputs = pt_model(**pt_inputs)
-                fx_outputs = fx_model(**prepared_inputs_dict)
-
-                fx_keys = tuple([k for k, v in fx_outputs.items() if v is not None])
-                pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
-
-                self.assertEqual(fx_keys, pt_keys)
-                self.check_outputs(fx_outputs.to_tuple(), pt_outputs.to_tuple(), model_class, names=fx_keys)
-
-                with tempfile.TemporaryDirectory() as tmpdirname:
-                    pt_model.save_pretrained(tmpdirname)
-                    fx_model_loaded = model_class.from_pretrained(tmpdirname, from_pt=True)
-
-                fx_outputs_loaded = fx_model_loaded(**prepared_inputs_dict)
-
-                fx_keys = tuple([k for k, v in fx_outputs_loaded.items() if v is not None])
-                pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
-
-                self.assertEqual(fx_keys, pt_keys)
-                self.check_outputs(fx_outputs_loaded.to_tuple(), pt_outputs.to_tuple(), model_class, names=fx_keys)
-
-    @is_pt_flax_cross_test
-    def test_equivalence_flax_to_pt(self):
-        import tempfile
-
-        import torch
-
-        import jax.numpy as jnp
-        import transformers
-        from transformers.modeling_flax_pytorch_utils import load_flax_weights_in_pytorch_model
-        from transformers.testing_utils import torch_device
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            with self.subTest(model_class.__name__):
-
-                # Output all for aggressive testing
-                config.output_hidden_states = True
-                config.output_attentions = self.has_attentions
-
-                # prepare inputs
-                prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-                prepared_inputs_dict.pop("labels")
-                pt_inputs = {k: torch.tensor(v.tolist(), device=torch_device) for k, v in prepared_inputs_dict.items()}
-
-                # load corresponding PyTorch class
-                pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
-                pt_model_class = getattr(transformers, pt_model_class_name)
-
-                pt_model = pt_model_class(config).eval()
-                # Flax models don't use the `use_cache` option and cache is not returned as a default.
-                # So we disable `use_cache` here for PyTorch model.
-                pt_model.config.use_cache = False
-                fx_model = model_class(config, dtype=jnp.float32)
-
-                pt_model = load_flax_weights_in_pytorch_model(pt_model, fx_model.params)
-
-                # make sure weights are tied in PyTorch
-                pt_model.tie_weights()
-
-                # send pytorch model to the correct device
-                pt_model.to(torch_device)
-
-                with torch.no_grad():
-                    pt_outputs = pt_model(**pt_inputs)
-                fx_outputs = fx_model(**prepared_inputs_dict)
-
-                fx_keys = tuple([k for k, v in fx_outputs.items() if v is not None])
-                pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
-
-                self.assertEqual(fx_keys, pt_keys)
-                self.check_outputs(fx_outputs.to_tuple(), pt_outputs.to_tuple(), model_class, names=fx_keys)
-
-                with tempfile.TemporaryDirectory() as tmpdirname:
-                    fx_model.save_pretrained(tmpdirname)
-                    pt_model_loaded = pt_model_class.from_pretrained(tmpdirname, from_flax=True)
-
-                # send pytorch model to the correct device
-                pt_model_loaded.to(torch_device)
-                pt_model_loaded.eval()
-
-                with torch.no_grad():
-                    pt_outputs_loaded = pt_model_loaded(**pt_inputs)
-
-                fx_keys = tuple([k for k, v in fx_outputs.items() if v is not None])
-                pt_keys = tuple([k for k, v in pt_outputs_loaded.items() if v is not None])
-
-                self.assertEqual(fx_keys, pt_keys)
-                self.check_outputs(fx_outputs.to_tuple(), pt_outputs_loaded.to_tuple(), model_class, names=fx_keys)
-
     # We neeed to override this test because ViT's forward signature is different than text models.
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -320,4 +185,10 @@ class FlaxDPTModelTest(FlaxModelTesterMixin, unittest.TestCase):
             outputs = model(np.ones((1, 3, 384, 384)))
             self.assertIsNotNone(outputs)
 
-    # TODO: add tests for segmentation and depth estimation (logits)
+
+# TODO: add tests for segmentation and depth estimation (logits)
+#     @require_vision
+#     @slow
+#     def test_model_from_pretrained_example(self):
+#         model = FlaxDPTForDepthEstimation.from_pretrained("Intel/dpt-large", from_pt=True)
+#         image = prepare_img()
