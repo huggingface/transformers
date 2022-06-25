@@ -15,11 +15,12 @@
 """ PyTorch ConvNextMaskRCNN model."""
 
 
-from typing import Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
+from torch.nn.modules.utils import _pair
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
@@ -274,6 +275,204 @@ class ConvNextMaskRCNNEncoder(nn.Module):
         )
 
 
+class ConvNextMaskRCNNFPN(nn.Module):
+    """
+    Feature Pyramid Network (FPN).
+
+    This is an implementation of [Feature Pyramid Networks for Object Detection](https://arxiv.org/abs/1612.03144).
+    """
+
+    def __init__(self, config):
+        super().__init__()
+
+        self.num_outs = config.fpn_num_outputs
+        self.lateral_convs = nn.ModuleList()
+        self.fpn_convs = nn.ModuleList()
+
+        for hidden_size in config.hidden_sizes:
+            lateral_conv = nn.Conv2d(hidden_size, config.fpn_out_channels, kernel_size=1)
+            fpn_conv = nn.Conv2d(config.fpn_out_channels, config.fpn_out_channels, kernel_size=3, padding=1)
+
+            self.lateral_convs.append(lateral_conv)
+            self.fpn_convs.append(fpn_conv)
+
+    def forward(self, hidden_states: List[torch.Tensor]):
+        # build laterals
+        laterals = [lateral_conv(hidden_states[i]) for i, lateral_conv in enumerate(self.lateral_convs)]
+
+        # build top-down path
+        used_backbone_levels = len(laterals)
+        for i in range(used_backbone_levels - 1, 0, -1):
+            prev_shape = laterals[i - 1].shape[2:]
+            laterals[i - 1] = laterals[i - 1] + nn.functional.interpolate(laterals[i], size=prev_shape, mode="nearest")
+
+        # build outputs
+        # part 1: from original levels
+        outs = [self.fpn_convs[i](laterals[i]) for i in range(used_backbone_levels)]
+
+        # part 2: add extra levels
+        if self.num_outs > len(outs):
+            # use max pool to get more levels on top of outputs
+            # (e.g., Faster R-CNN, Mask R-CNN)
+            for i in range(self.num_outs - used_backbone_levels):
+                outs.append(nn.functional.max_pool2d(outs[-1], 1, stride=2))
+
+        return outs
+
+
+class ConvNextMaskRCNNAnchorGenerator(nn.Module):
+    """
+    Standard 2D anchor generator.
+
+    Source: https://github.com/open-mmlab/mmdetection/blob/master/mmdet/core/anchor/anchor_generator.py.
+    """
+    def __init__(self, config):
+        super().__init__()
+
+        # calculate base sizes of anchors
+        self.strides = [_pair(stride) for stride in config.anchor_generator_strides]
+        self.base_sizes = [min(stride) for stride in self.strides]
+        assert len(self.base_sizes) == len(self.strides), \
+            'The number of strides should be the same as base sizes, got ' \
+            f'{self.strides} and {self.base_sizes}'
+
+        # calculate scales of anchors
+        self.scales = torch.Tensor(config.anchor_generator_scales)
+        
+        self.ratios = torch.Tensor(config.anchor_generator_ratios)
+        # TODO support the following 3 attributes in the config
+        self.scale_major = True
+        self.centers = None
+        self.center_offset = 0.
+        self.base_anchors = self.gen_base_anchors()
+
+    @property
+    def num_base_anchors(self):
+        """list[int]: total number of base anchors in a feature grid"""
+        return self.num_base_priors
+    
+    @property
+    def num_base_priors(self):
+        """list[int]: The number of priors (anchors) at a point
+        on the feature grid"""
+        return [base_anchors.size(0) for base_anchors in self.base_anchors]
+    
+    def gen_base_anchors(self):
+        """Generate base anchors.
+        
+        Returns:
+            list(torch.Tensor): Base anchors of a feature grid in multiple \
+                feature levels.
+        """
+        multi_level_base_anchors = []
+        for i, base_size in enumerate(self.base_sizes):
+            center = None
+            if self.centers is not None:
+                center = self.centers[i]
+            multi_level_base_anchors.append(
+                self.gen_single_level_base_anchors(
+                    base_size,
+                    scales=self.scales,
+                    ratios=self.ratios,
+                    center=center))
+        return multi_level_base_anchors
+
+    def gen_single_level_base_anchors(self,
+                                      base_size,
+                                      scales,
+                                      ratios,
+                                      center=None):
+        """Generate base anchors of a single level.
+        Args:
+            base_size (int | float): Basic size of an anchor.
+            scales (torch.Tensor): Scales of the anchor.
+            ratios (torch.Tensor): The ratio between between the height
+                and width of anchors in a single level.
+            center (tuple[float], optional): The center of the base anchor
+                related to a single feature grid. Defaults to None.
+        Returns:
+            torch.Tensor: Anchors in a single-level feature maps.
+        """
+        w = base_size
+        h = base_size
+        if center is None:
+            x_center = self.center_offset * w
+            y_center = self.center_offset * h
+        else:
+            x_center, y_center = center
+
+        h_ratios = torch.sqrt(ratios)
+        w_ratios = 1 / h_ratios
+        if self.scale_major:
+            ws = (w * w_ratios[:, None] * scales[None, :]).view(-1)
+            hs = (h * h_ratios[:, None] * scales[None, :]).view(-1)
+        else:
+            ws = (w * scales[:, None] * w_ratios[None, :]).view(-1)
+            hs = (h * scales[:, None] * h_ratios[None, :]).view(-1)
+
+        # use float anchor and the anchor's center is aligned with the
+        # pixel center
+        base_anchors = [
+            x_center - 0.5 * ws, y_center - 0.5 * hs, x_center + 0.5 * ws,
+            y_center + 0.5 * hs
+        ]
+        base_anchors = torch.stack(base_anchors, dim=-1)
+
+        return base_anchors
+
+
+class ConvNextMaskRCNNRPN(nn.Module):
+    """
+    Anchor-based Region Proposal Network (RPN).
+    """
+
+    def __init__(self, config):
+        super().__init__()
+
+        self.prior_generator = ConvNextMaskRCNNAnchorGenerator(config)
+        self.num_base_priors = self.prior_generator.num_base_priors[0]
+        
+        self.use_sigmoid_cls = config.rpn_loss_cls.get('use_sigmoid', False)
+        if self.use_sigmoid_cls:
+            self.cls_out_channels = config.num_labels
+        else:
+            self.cls_out_channels = config.num_labels + 1
+
+        if self.cls_out_channels <= 0:
+            raise ValueError(f'num_classes={config.num_labels} is too small')
+        
+        self.rpn_conv = nn.Conv2d(config.rpn_in_channels, config.rpn_feat_channels, kernel_size=3, padding=1)
+        self.rpn_cls = nn.Conv2d(config.rpn_feat_channels,
+                                 self.num_base_priors * self.cls_out_channels,
+                                 1)
+        self.rpn_reg = nn.Conv2d(config.rpn_feat_channels, self.num_base_priors * 4,
+                                 1)
+
+    def forward_single(self, hidden_state):
+        """Forward feature map of a single scale level."""
+        hidden_state = self.rpn_conv(hidden_state)
+        hidden_state = nn.functional.relu(hidden_state, inplace=True)
+        rpn_cls_score = self.rpn_cls(hidden_state)
+        rpn_bbox_pred = self.rpn_reg(hidden_state)
+        return rpn_cls_score, rpn_bbox_pred
+    
+    def forward(self, hidden_states):
+        """Forward features from the upstream network.
+        
+        Args:
+            hidden_states (tuple[torch.Tensor]): Features from the upstream network, each is a 4D-tensor.
+        Returns:
+            tuple: A tuple of classification scores and bbox prediction.
+                - cls_scores (list[Tensor]): Classification scores for all \
+                    scale levels, each is a 4D-tensor, the channels number \
+                    is num_base_priors * num_classes.
+                - bbox_preds (list[Tensor]): Box energies / deltas for all \
+                    scale levels, each is a 4D-tensor, the channels number \
+                    is num_base_priors * 4.
+        """
+        return map(self.forward_single, hidden_states)
+
+
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextPreTrainedModel with ConvNext->ConvNextMaskRCNN,convnext->convnext_maskrcnn
 class ConvNextMaskRCNNPreTrainedModel(PreTrainedModel):
     """
@@ -373,15 +572,11 @@ class ConvNextMaskRCNNModel(ConvNextMaskRCNNPreTrainedModel):
 
         last_hidden_state = encoder_outputs[0]
 
-        # global average pooling, (N, C, H, W) -> (N, C)
-        # pooled_output = self.layernorm(last_hidden_state.mean([-2, -1]))
-
         if not return_dict:
             return (last_hidden_state,) + encoder_outputs[1:]
 
-        return BaseModelOutputWithPoolingAndNoAttention(
+        return BaseModelOutputWithNoAttention(
             last_hidden_state=last_hidden_state,
-            pooler_output=None,
             hidden_states=encoder_outputs.hidden_states,
         )
 
@@ -391,7 +586,9 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
         super().__init__(config)
 
         self.convnext = ConvNextMaskRCNNModel(config)
-        # TODO neck, heads
+        self.neck = ConvNextMaskRCNNFPN(config)
+        self.rpn_head = ConvNextMaskRCNNRPN(config)
+        # TODO: ROI head
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -407,10 +604,27 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
 
         # we need the intermediate hidden states
         outputs = self.convnext(pixel_values, output_hidden_states=True, return_dict=return_dict)
-        logits = None
 
-        loss = None
+        hidden_states = outputs.hidden_states if return_dict else outputs[1]
+
+        # only keep certain features based on config.backbone_out_indices
+        # note that the hidden_states also include the initial embeddings
+        hidden_states = [
+            feature for idx, feature in enumerate(hidden_states[1:]) if idx in self.config.backbone_out_indices
+        ]
+
+        hidden_states = self.neck(hidden_states)
+
+        for idx, out in enumerate(hidden_states):
+            print(out.shape)
+            print(f"First values after neck {idx}: ", out[0, 0, :3, :3])
+
+        rpn_outs = self.rpn_head(hidden_states)
+        # proposal_list = self.get_bboxes(*rpn_outs, img_metas=img_metas)
+
+        logits, loss = None, None
         if labels is not None:
+            losses = dict()
             raise NotImplementedError("Training is not yet supported.")
         if not return_dict:
             output = (logits,) + outputs[2:]

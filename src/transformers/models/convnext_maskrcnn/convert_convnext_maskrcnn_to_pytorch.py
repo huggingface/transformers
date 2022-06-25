@@ -37,13 +37,13 @@ logger = logging.get_logger(__name__)
 def get_convnext_maskrcnn_config():
     config = ConvNextMaskRCNNConfig()
 
-    # set label information
-    repo_id = "datasets/huggingface/label-files"
-    filename = "coco-detection-id2label.json"
-    id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
-    id2label = {int(k): v for k, v in id2label.items()}
-    config.id2label = id2label
-    config.label2id = {v: k for k, v in id2label.items()}
+    # TODO: set label information
+    # repo_id = "datasets/huggingface/label-files"
+    # filename = "coco-detection-id2label.json"
+    # id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
+    # id2label = {int(k): v for k, v in id2label.items()}
+    # config.id2label = id2label
+    # config.label2id = {v: k for k, v in id2label.items()}
 
     return config
 
@@ -85,6 +85,12 @@ def rename_key(name):
         name = name.replace("gamma", "layer_scale_parameter")
     if "convnext.layernorm" in name:
         name = name.replace("layernorm", "encoder.layernorms.")
+    # neck
+    if "lateral" in name or "fpn" in name:
+        if "conv.weight" in name:
+            name = name.replace("conv.weight", "weight")
+        if "conv.bias" in name:
+            name = name.replace("conv.bias", "bias")
 
     return name
 
@@ -109,8 +115,8 @@ def convert_convnext_maskrcnn_checkpoint(checkpoint_path, pytorch_dump_folder_pa
     # rename keys
     for key in state_dict.copy().keys():
         val = state_dict.pop(key)
-        if "backbone" not in key:
-            # TODO: neck, heads
+        if "roi_head" in key:
+            # TODO: ROI heads
             pass
         else:
             state_dict[rename_key(key)] = val
@@ -129,10 +135,13 @@ def convert_convnext_maskrcnn_checkpoint(checkpoint_path, pytorch_dump_folder_pa
     pixel_values = transform(image).unsqueeze(0)
 
     outputs = model(pixel_values, output_hidden_states=True)
+
+    for i in outputs.hidden_states[1:]:
+        print(i.shape)
+
     expected_slice = torch.tensor(
         [[-0.0836, -0.1298, -0.1237], [-0.0743, -0.1090, -0.0873], [-0.0231, 0.0851, 0.0792]]
     )
-
     assert torch.allclose(outputs.hidden_states[-1][0, 0, :3, :3], expected_slice, atol=1e-3)
     print("Looks ok!")
     # assert logits.shape == expected_shape
