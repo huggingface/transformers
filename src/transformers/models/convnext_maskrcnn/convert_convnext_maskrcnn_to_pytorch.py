@@ -19,11 +19,10 @@ URL: https://github.com/open-mmlab/mmdetection"""
 
 import argparse
 import json
-import requests
 
 import torch
-from PIL import Image
 import torchvision.transforms as T
+from PIL import Image
 
 import requests
 from huggingface_hub import hf_hub_download
@@ -111,6 +110,9 @@ def convert_convnext_maskrcnn_checkpoint(checkpoint_path, pytorch_dump_folder_pa
         if "backbone" not in key:
             # TODO: neck, heads
             pass
+        elif key.startswith("backbone.norm"):
+            # TODO: norms after stage outputs
+            pass
         else:
             state_dict[rename_key(key)] = val
 
@@ -119,25 +121,22 @@ def convert_convnext_maskrcnn_checkpoint(checkpoint_path, pytorch_dump_folder_pa
     model.load_state_dict(state_dict)
     model.eval()
 
-    print("PRINTING PARAMETERS")
-    print(model.convnext.encoder.stages[1].downsampling_layer[0].weight)
-    print(model.convnext.encoder.stages[1].downsampling_layer[0].bias)
-    print(model.convnext.encoder.stages[1].downsampling_layer[0].eps)
+    # print("PRINTING PARAMETERS")
+    # print(model.convnext.encoder.stages[1].downsampling_layer[0].weight)
+    # print(model.convnext.encoder.stages[1].downsampling_layer[0].bias)
+    # print(model.convnext.encoder.stages[1].downsampling_layer[0].eps)
 
-    url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     image = Image.open(requests.get(url, stream=True).raw)
-    
+
     # standard PyTorch mean-std input image normalization
-    transform = T.Compose([
-        T.Resize(800),
-        T.ToTensor(),
-        T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-    ])
-    
+    transform = T.Compose([T.Resize(800), T.ToTensor(), T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])])
+
     pixel_values = transform(image).unsqueeze(0)
 
-    outputs = model(pixel_values)
-    print(outputs.keys())
+    outputs = model(pixel_values, output_hidden_states=True)
+    for idx, out in enumerate(outputs.hidden_states):
+        print(f"Output of layer {idx}:", out[0,0,:3,:3])
 
     # assert torch.allclose(logits[0, :3], expected_logits, atol=1e-3)
     # assert logits.shape == expected_shape
