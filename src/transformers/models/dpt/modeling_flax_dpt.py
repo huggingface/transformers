@@ -80,8 +80,8 @@ DPT_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.vit.modeling_flax_vit.FlaxPatchEmbeddings with ViT->DPT
-class FlaxPatchEmbeddings(nn.Module):
+# Copied from transformers.models.vit.modeling_flax_vit.FlaxViTPatchEmbeddings with ViT->DPT
+class FlaxViTPatchEmbeddings(nn.Module):
 
     config: DPTConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
