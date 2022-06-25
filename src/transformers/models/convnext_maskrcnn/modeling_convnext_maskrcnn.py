@@ -106,10 +106,12 @@ class ConvNextMaskRCNNLayerNorm(nn.Module):
         if self.data_format == "channels_last":
             x = torch.nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
         elif self.data_format == "channels_first":
-            u = x.mean(1, keepdim=True)
-            s = (x - u).pow(2).mean(1, keepdim=True)
-            x = (x - u) / torch.sqrt(s + self.eps)
-            x = self.weight[:, None, None] * x + self.bias[:, None, None]
+            x = x.permute(0, 2, 3, 1)
+            # print("Hidden states after permute:", x[0,0,:3,:3])
+            # print("Normalized shape, weight, bias, eps:")
+            x = torch.nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
+            # print("Hidden states after LN:", x[0,0,:3,:3])
+            x = x.permute(0, 3, 1, 2)
         return x
 
 
@@ -209,19 +211,19 @@ class ConvNextMaskRCNNStage(nn.Module):
             *[ConvNextMaskRCNNLayer(config, dim=out_channels, drop_path=drop_path_rates[j]) for j in range(depth)]
         )
 
-    def forward(self, hidden_states: torch.FloatTensor) -> torch.Tensor:
-        print("Hidden states before downsampling:", hidden_states[0,0,:3,:3])
+    def forward(self, hidden_states: torch.FloatTensor, print_values=False) -> torch.Tensor:
+        # print("Hidden states before downsampling:", hidden_states[0,0,:3,:3])
         # hidden_states = self.downsampling_layer(hidden_states)
         if isinstance(self.downsampling_layer, nn.Identity):
             hidden_states = self.downsampling_layer(hidden_states)
         else:
             hidden_states = self.downsampling_layer[0](hidden_states, print_values=True)
-            print("Hidden states after downsamplng layernorm:", hidden_states[0,0,:3,:3])
+            # print("Hidden states after downsamplng layernorm:", hidden_states[0,0,:3,:3])
             hidden_states = self.downsampling_layer[1](hidden_states)
-            print("Hidden states after downsamplng conv2d:", hidden_states[0,0,:3,:3])
-        print("Hidden states after downsamplng:", hidden_states[0,0,:3,:3])
+            # print("Hidden states after downsamplng conv2d:", hidden_states[0,0,:3,:3])
+        # print("Hidden states after downsamplng:", hidden_states[0,0,:3,:3])
         hidden_states = self.layers(hidden_states)
-        print("Hidden states after layers:", hidden_states[0,0,:3,:3])
+        # print("Hidden states after layers:", hidden_states[0,0,:3,:3])
         return hidden_states
 
 
@@ -257,16 +259,16 @@ class ConvNextMaskRCNNEncoder(nn.Module):
     ) -> Union[Tuple, BaseModelOutputWithNoAttention]:
         all_hidden_states = () if output_hidden_states else None
 
-        for i, (layer_module, norm_module) in enumerate(zip(self.stages, self.layernorms)):
+        for i, (stage_module, norm_module) in enumerate(zip(self.stages, self.layernorms)):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             print("---------------Stage:----------------", i)
-            hidden_states = layer_module(hidden_states)
+            hidden_states = stage_module(hidden_states, print_values=True if i == 1 else False)
             print("Shapes of hidden states:", hidden_states.shape)
             print(f"First values after stage {i} before layernorm: ", hidden_states[0, 0, :3, :3])
-            hidden_states = norm_module(hidden_states).contiguous()
-            print(f"First values after stage {i} after layernorm: ", hidden_states[0, 0, :3, :3])
+            # hidden_states = norm_module(hidden_states).contiguous()
+            # print(f"First values after stage {i} after layernorm: ", hidden_states[0, 0, :3, :3])
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)

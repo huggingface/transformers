@@ -255,11 +255,11 @@ class ConvNextEncoder(nn.Module):
     ) -> Union[Tuple, BaseModelOutputWithNoAttention]:
         all_hidden_states = () if output_hidden_states else None
 
-        for i, layer_module in enumerate(self.stages):
+        for i, stage_module in enumerate(self.stages):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            hidden_states = layer_module(hidden_states)
+            hidden_states = stage_module(hidden_states)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
