@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import collections
 import contextlib
 import inspect
 import logging
@@ -67,7 +68,8 @@ from .utils import (
     is_timm_available,
     is_tokenizers_available,
     is_torch_available,
-    is_torch_bf16_available,
+    is_torch_bf16_cpu_available,
+    is_torch_bf16_gpu_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
     is_torchaudio_available,
@@ -83,8 +85,10 @@ DUMMY_DIFF_TOKENIZER_IDENTIFIER = "julien-c/dummy-diff-tokenizer"
 
 # Used to test the hub
 USER = "__DUMMY_TRANSFORMERS_USER__"
-PASS = "__DUMMY_TRANSFORMERS_PASS__"
-ENDPOINT_STAGING = "https://moon-staging.huggingface.co"
+ENDPOINT_STAGING = "https://hub-ci.huggingface.co"
+
+# Not critical, only usable on the sandboxed CI instance.
+TOKEN = "hf_94wBhPGp6KrrTH3KDchhKpRxZwd6dmHWLL"
 
 
 def parse_flag_from_env(key, default=False):
@@ -486,11 +490,19 @@ def require_torch_gpu(test_case):
     return unittest.skipUnless(torch_device == "cuda", "test requires CUDA")(test_case)
 
 
-def require_torch_bf16(test_case):
-    """Decorator marking a test that requires torch>=1.10, using Ampere GPU or newer arch with cuda>=11.0 or using CPU."""
+def require_torch_bf16_gpu(test_case):
+    """Decorator marking a test that requires torch>=1.10, using Ampere GPU or newer arch with cuda>=11.0"""
     return unittest.skipUnless(
-        is_torch_bf16_available(),
-        "test requires torch>=1.10, using Ampere GPU or newer arch with cuda>=11.0 or using CPU",
+        is_torch_bf16_gpu_available(),
+        "test requires torch>=1.10, using Ampere GPU or newer arch with cuda>=11.0",
+    )(test_case)
+
+
+def require_torch_bf16_cpu(test_case):
+    """Decorator marking a test that requires torch>=1.10, using CPU."""
+    return unittest.skipUnless(
+        is_torch_bf16_cpu_available(),
+        "test requires torch>=1.10, using CPU",
     )(test_case)
 
 
@@ -1523,3 +1535,9 @@ def check_json_file_has_correct_format(file_path):
                 left_indent = len(lines[1]) - len(lines[1].lstrip())
                 assert left_indent == 2
             assert lines[-1].strip() == "}"
+
+
+def to_2tuple(x):
+    if isinstance(x, collections.abc.Iterable):
+        return x
+    return (x, x)

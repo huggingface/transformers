@@ -30,7 +30,7 @@ from unittest.mock import Mock, patch
 
 import numpy as np
 
-from huggingface_hub import Repository, delete_repo, login
+from huggingface_hub import HfFolder, Repository, delete_repo, set_access_token
 from parameterized import parameterized
 from requests.exceptions import HTTPError
 from transformers import (
@@ -43,7 +43,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     ENDPOINT_STAGING,
-    PASS,
+    TOKEN,
     USER,
     CaptureLogger,
     TestCasePlus,
@@ -57,7 +57,8 @@ from transformers.testing_utils import (
     require_sigopt,
     require_tokenizers,
     require_torch,
-    require_torch_bf16,
+    require_torch_bf16_cpu,
+    require_torch_bf16_gpu,
     require_torch_gpu,
     require_torch_multi_gpu,
     require_torch_non_multi_gpu,
@@ -554,7 +555,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertGreater(trainer.optimizer.state_dict()["param_groups"][0]["lr"], 0)
 
     @require_torch_gpu
-    @require_torch_bf16
+    @require_torch_bf16_gpu
     def test_mixed_bf16(self):
 
         # very basic test
@@ -641,7 +642,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         train_output = trainer.train()
         self.assertEqual(train_output.global_step, 10)
 
-    @require_torch_bf16
+    @require_torch_bf16_cpu
     @require_intel_extension_for_pytorch
     def test_number_of_steps_in_training_with_ipex(self):
         for mix_bf16 in [True, False]:
@@ -885,7 +886,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         expected_acc = AlmostAccuracy()((pred + 1, y))["accuracy"]
         self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
-    @require_torch_bf16
+    @require_torch_bf16_cpu
     @require_intel_extension_for_pytorch
     def test_evaluate_with_ipex(self):
         for mix_bf16 in [True, False]:
@@ -1005,7 +1006,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertTrue(np.array_equal(labels[0], trainer.eval_dataset.ys[0]))
         self.assertTrue(np.array_equal(labels[1], trainer.eval_dataset.ys[1]))
 
-    @require_torch_bf16
+    @require_torch_bf16_cpu
     @require_intel_extension_for_pytorch
     def test_predict_with_ipex(self):
         for mix_bf16 in [True, False]:
@@ -1888,7 +1889,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertGreater(orig_peak_mem, peak_mem * 2)
 
     @require_torch_gpu
-    @require_torch_bf16
+    @require_torch_bf16_gpu
     def test_bf16_full_eval(self):
         # note: most of the logic is the same as test_fp16_full_eval
 
@@ -1965,18 +1966,20 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 class TrainerIntegrationWithHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls._token = login(username=USER, password=PASS)
+        cls._token = TOKEN
+        set_access_token(TOKEN)
+        HfFolder.save_token(TOKEN)
 
     @classmethod
     def tearDownClass(cls):
         for model in ["test-trainer", "test-trainer-epoch", "test-trainer-step"]:
             try:
-                delete_repo(token=cls._token, name=model)
+                delete_repo(token=cls._token, repo_id=model)
             except HTTPError:
                 pass
 
         try:
-            delete_repo(token=cls._token, name="test-trainer-org", organization="valid_org")
+            delete_repo(token=cls._token, repo_id="valid_org/test-trainer-org")
         except HTTPError:
             pass
 

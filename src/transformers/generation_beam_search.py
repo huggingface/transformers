@@ -655,7 +655,13 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         full_hypotheses = torch.cat((input_ids[sent_beam_indices], sent_beam_tokens.unsqueeze(-1)), dim=-1)
 
         # need to make new hypothesis that advance the constraints
-        track_new = {"new_seqs": [], "new_states": [], "new_indices": [], "new_tokens": [], "new_scores": []}
+        track_new = {
+            "new_seqs": full_hypotheses.tolist(),
+            "new_states": [],
+            "new_indices": [],
+            "new_tokens": [],
+            "new_scores": [],
+        }
         for seq_idx, pre_seq in enumerate(this_batch_input_ids):
             # pre_seq = ith sequence generated before this step.
 
