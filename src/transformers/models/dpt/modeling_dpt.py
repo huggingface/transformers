@@ -582,10 +582,10 @@ class DPTFeatureFusionLayer(nn.Module):
             The align_corner setting for bilinear upsample.
     """
 
-    def __init__(self, config, align_corners=True):
+    def __init__(self, config):
         super().__init__()
 
-        self.align_corners = align_corners
+        self.align_corners = config.align_corners
 
         self.projection = nn.Conv2d(config.fusion_hidden_size, config.fusion_hidden_size, kernel_size=1, bias=True)
 
@@ -832,7 +832,7 @@ class DPTDepthEstimationHead(nn.Module):
         features = config.fusion_hidden_size
         self.head = nn.Sequential(
             nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1),
-            nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
+            nn.Upsample(scale_factor=2, mode="bilinear", align_corners=self.config.align_corners),
             nn.Conv2d(features // 2, 32, kernel_size=3, stride=1, padding=1),
             ACT2FN["relu"],
             nn.Conv2d(32, 1, kernel_size=1, stride=1, padding=0),
@@ -979,7 +979,7 @@ class DPTSemanticSegmentationHead(nn.Module):
             ACT2FN["relu"],
             nn.Dropout(config.semantic_classifier_dropout),
             nn.Conv2d(features, config.num_labels, kernel_size=1),
-            nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
+            nn.Upsample(scale_factor=2, mode="bilinear", align_corners=self.config.align_corners),
         )
 
     def forward(self, hidden_states: List[torch.Tensor]) -> torch.Tensor:

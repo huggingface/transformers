@@ -102,6 +102,7 @@ class FlaxDPTModelTester(unittest.TestCase):
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             is_decoder=False,
             initializer_range=self.initializer_range,
+            align_corners=False,
         )
 
         return config, pixel_values, labels

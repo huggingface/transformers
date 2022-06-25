@@ -137,6 +137,7 @@ class DPTConfig(PretrainedConfig):
         auxiliary_loss_weight=0.4,
         semantic_loss_ignore_index=255,
         semantic_classifier_dropout=0.1,
+        align_corners=True,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -168,3 +169,4 @@ class DPTConfig(PretrainedConfig):
         self.auxiliary_loss_weight = auxiliary_loss_weight
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
         self.semantic_classifier_dropout = semantic_classifier_dropout
+        self.align_corners = align_corners
