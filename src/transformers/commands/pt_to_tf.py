@@ -23,7 +23,7 @@ from packaging import version
 
 import huggingface_hub
 
-from .. import AutoConfig, AutoFeatureExtractor, AutoProcessor, AutoTokenizer, is_tf_available, is_torch_available
+from .. import AutoConfig, AutoFeatureExtractor, AutoProcessor, AutoTokenizer, is_tf_available, is_torch_available, PROCESSOR_MAPPING, FEATURE_EXTRACTOR_MAPPING, TOKENIZER_MAPPING
 from ..utils import logging
 from . import BaseTransformersCLICommand
 
@@ -175,9 +175,7 @@ class PTtoTFCommand(BaseTransformersCLICommand):
 
         model_forward_signature = set(inspect.signature(pt_model.forward).parameters.keys())
         processor_inputs = {}
-        model_input_names = []
         if "input_ids" in model_forward_signature:
-            model_input_names += ["input_ids"]
             processor_inputs.update(
                 {
                     "text": ["Hi there!", "I am a batch with more than one row and different input lengths."],
@@ -186,26 +184,26 @@ class PTtoTFCommand(BaseTransformersCLICommand):
                 }
             )
         if "pixel_values" in model_forward_signature:
-            model_input_names += ["pixel_values"]
             sample_images = load_dataset("cifar10", "plain_text", split="test")[:2]["img"]
             processor_inputs.update({"images": sample_images})
         if "input_features" in model_forward_signature:
-            model_input_names += ["input_features"]
             processor_inputs.update({"raw_speech": _get_audio_input(), "padding": True})
         if "input_values" in model_forward_signature:  # Wav2Vec2 audio input
-            model_input_names += ["input_values"]
             processor_inputs.update({"raw_speech": _get_audio_input(), "padding": True})
 
-        if len(model_input_names) > 1:
+        model_config_class = type(pt_model.config)
+        if model_config_class in PROCESSOR_MAPPING:
             processor = AutoProcessor.from_pretrained(self._local_dir)
-            if "input_ids" in model_input_names and processor.tokenizer.pad_token is None:
+            if model_config_class in TOKENIZER_MAPPING and processor.tokenizer.pad_token is None:
                 processor.tokenizer.pad_token = processor.tokenizer.eos_token
-        elif model_input_names[0] == "input_ids":
+        elif model_config_class in FEATURE_EXTRACTOR_MAPPING:
+            processor = AutoFeatureExtractor.from_pretrained(self._local_dir)
+        elif model_config_class in TOKENIZER_MAPPING:
             processor = AutoTokenizer.from_pretrained(self._local_dir)
             if processor.pad_token is None:
                 processor.pad_token = processor.eos_token
         else:
-            processor = AutoFeatureExtractor.from_pretrained(self._local_dir)
+            raise ValueError(f"Unknown data processing type (model config type: {model_config_class})")
 
         pt_input = processor(**processor_inputs, return_tensors="pt")
         tf_input = processor(**processor_inputs, return_tensors="tf")
