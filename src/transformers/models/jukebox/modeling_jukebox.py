@@ -2215,6 +2215,8 @@ class JukeboxConditionalAutoregressive(nn.Module):
             assert x.shape == (n_samples, 1)
             empty_cache()
             # for sample_t in get_range(range(len(xs), sample_tokens)):
+            total = (sample_tokens - len(xs))
+            task3 = progress.add_task("Sampling indivdual tokens (super slow)", total = total )
             for sample_t in range(len(xs), sample_tokens):
 
                 x, cond = self.get_emb(sample_t, n_samples, x, x_cond, y_cond)
@@ -2232,6 +2234,9 @@ class JukeboxConditionalAutoregressive(nn.Module):
                 x = torch.distributions.Categorical(logits=x).sample()  # Sample and replace x
                 assert x.shape == (n_samples, 1)
                 xs.append(x.clone())
+                progress.update(task3,advance=1)
+                progress.update(0,advance=1/total)
+                
 
             del x
             self.transformer.del_cache()
@@ -3195,13 +3200,33 @@ def get_alignment(x, zs, labels, prior, level, fp16, hps):
     return alignments
 
 
+
+
+
+
+from rich.live import Live
+from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn,TimeRemainingColumn,TimeElapsedColumn
+
+
+
+progress = Progress(
+    "{task.description}",
+    SpinnerColumn(),
+    BarColumn(),
+    TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+    TimeElapsedColumn(),
+    TimeRemainingColumn()
+)
+
+
 @add_start_docstrings(
     "The bare JUKEBOX Model from which you can sample",
     JUKEBOX_START_DOCSTRING,
 )
 class JukeboxModel(JukeboxPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["attn.masked_bias"]
-
+   
+    
     def __init__(self, config):
         super().__init__(config)
 
@@ -3276,13 +3301,9 @@ class JukeboxModel(JukeboxPreTrainedModel):
         z_conds_list = split_batch(z_conds, n_samples, max_batch_size)
         y_list = split_batch(y, n_samples, max_batch_size)
         z_samples = []
-        
-        with Progress() as progress:
-            task3 = progress.add_task("[cyan]Sampling Tokens...", total=len(z_list))
-            for z_i, z_conds_i, y_i in zip(z_list, z_conds_list, y_list):
-                z_samples_i = prior.sample(n_samples=z_i.shape[0], z=z_i, z_conds=z_conds_i, y=y_i, **sampling_kwargs)
-                z_samples.append(z_samples_i)
-                progress.update(task3, advance=1)
+        for z_i, z_conds_i, y_i in zip(z_list, z_conds_list, y_list):
+            z_samples_i = prior.sample(n_samples=z_i.shape[0], z=z_i, z_conds=z_conds_i, y=y_i, **sampling_kwargs)
+            z_samples.append(z_samples_i)
         z = torch.cat(z_samples, dim=0)
 
         sampling_kwargs["max_batch_size"] = max_batch_size
@@ -3298,11 +3319,11 @@ class JukeboxModel(JukeboxPreTrainedModel):
         print(f"Sampling level {level}")
         prior = self.priors[level]
         if total_length >= prior.n_ctx:
-            with Progress() as progress:
-                task1 = progress.add_task("[red]Sampling single window...", total=len(get_starts(total_length, prior.n_ctx, hop_length)))
+            with Live(progress):
+                progress.add_task("[red]Sampling single window...", total=len(get_starts(total_length, prior.n_ctx, hop_length)))
                 for start in get_starts(total_length, prior.n_ctx, hop_length):
                     zs = self.sample_single_window(zs, labels, sampling_kwargs, level, start, hps)
-                    progress.update(task1, advance=1)
+                    # progress.update(task1, advance=1)
         else:
             zs = self.sample_partial_window(zs, labels, sampling_kwargs, level, total_length, hps)
         return zs
