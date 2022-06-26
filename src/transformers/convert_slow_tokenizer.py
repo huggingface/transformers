@@ -1009,6 +1009,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "BlenderbotTokenizer": BlenderbotConverter,
     "CamembertTokenizer": CamembertConverter,
     "CLIPTokenizer": CLIPConverter,
+    "CodeGenTokenizer": GPT2Converter,
     "ConvBertTokenizer": BertConverter,
     "DebertaTokenizer": DebertaConverter,
     "DebertaV2Tokenizer": DebertaV2Converter,
