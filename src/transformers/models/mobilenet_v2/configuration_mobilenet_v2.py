@@ -29,6 +29,7 @@ logger = logging.get_logger(__name__)
 MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "Matthijs/mobilenet_v2_1.4_224": "https://huggingface.co/Matthijs/mobilenet_v2_1.4_224/resolve/main/config.json",
     "Matthijs/mobilenet_v2_1.0_224": "https://huggingface.co/Matthijs/mobilenet_v2_1.0_224/resolve/main/config.json",
+    "Matthijs/mobilenet_v2_0.75_160": "https://huggingface.co/Matthijs/mobilenet_v2_0.75_160/resolve/main/config.json",
     "Matthijs/mobilenet_v2_0.35_96": "https://huggingface.co/Matthijs/mobilenet_v2_0.35_96/resolve/main/config.json",
     # See all MobileNetV2 models at https://huggingface.co/models?filter=mobilenet_v2
 }
@@ -58,6 +59,11 @@ class MobileNetV2Config(PretrainedConfig):
             All layers will have at least this many channels.
         expand_ratio (`float`, *optional*, defaults to 6.0):
             The number of output channels of the first layer in each block is input channels times expansion ratio.
+        output_stride (`int`, *optional*, defaults to 32):
+            The ratio between the spatial resolution of the input and output feature maps. By default the model reduces
+            the input dimensions by a factor of 32. If `output_stride` is 8 or 16, the model uses dilated convolutions
+            on the depthwise layers instead of regular convolutions, so that the feature maps never become more than 8x
+            or 16x smaller than the input image.
         first_layer_is_expansion (`bool`, `optional`, defaults to `True`):
             True if the very first convolution layer is also the expansion layer for the first expansion block.
         finegrained_output (`bool`, `optional`, defaults to `True`):
@@ -90,17 +96,6 @@ class MobileNetV2Config(PretrainedConfig):
     ```"""
     model_type = "mobilenet_v2"
 
-
-#MIH
-    #   - outputStride: The ratio between the spatial resolution of the input and
-    #     output feature maps. By default the model scales down the input image
-    #     by a factor of 32. If outputStride is 8 or 16, the model uses dilated
-    #     convolutions on the depthwise layers instead of regular convolutions,
-    #     so that the feature maps never become more than 8x or 16x smaller than
-    #     the input image. Either -1 (never dilate), 8, 16, or 32.
-    #   - pooling: What kind of pooling to apply to the last feature map.
-
-
     def __init__(
         self,
         num_channels=3,
@@ -109,6 +104,7 @@ class MobileNetV2Config(PretrainedConfig):
         depth_divisible_by=8,
         min_depth=8,
         expand_ratio=6,
+        output_stride=32,
         first_layer_is_expansion=True,
         finegrained_output=True,
         hidden_act="relu6",
@@ -129,6 +125,7 @@ class MobileNetV2Config(PretrainedConfig):
         self.depth_divisible_by = depth_divisible_by
         self.min_depth = min_depth
         self.expand_ratio = expand_ratio
+        self.output_stride = output_stride
         self.first_layer_is_expansion = first_layer_is_expansion
         self.finegrained_output = finegrained_output
         self.hidden_act = hidden_act

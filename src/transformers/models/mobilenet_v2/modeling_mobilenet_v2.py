@@ -47,6 +47,7 @@ _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 MOBILENET_V2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "Matthijs/mobilenet_v2_1.4_224",
     "Matthijs/mobilenet_v2_1.0_224",
+    "Matthijs/mobilenet_v2_0.37_160",
     "Matthijs/mobilenet_v2_0.35_96",
     # See all MobileNetV2 models at https://huggingface.co/models?filter=mobilenet_v2
 ]
@@ -214,6 +215,7 @@ def apply_tf_padding(features: torch.Tensor, conv_layer: nn.Conv2d) -> torch.Ten
     in_height, in_width = features.shape[-2:]
     stride_height, stride_width = conv_layer.stride
     kernel_height, kernel_width = conv_layer.kernel_size
+    dilation_height, dilation_width = conv_layer.dilation
 
     if in_height % stride_height == 0:
         pad_along_height = max(kernel_height - stride_height, 0)
@@ -230,7 +232,7 @@ def apply_tf_padding(features: torch.Tensor, conv_layer: nn.Conv2d) -> torch.Ten
     pad_top = pad_along_height // 2
     pad_bottom = pad_along_height - pad_top
 
-    padding = (pad_left, pad_right, pad_top, pad_bottom)
+    padding = (pad_left * dilation_width, pad_right * dilation_width, pad_top * dilation_height, pad_bottom * dilation_height)
     return nn.functional.pad(features, padding, "constant", 0.0)
 
 
@@ -353,9 +355,8 @@ class MobileNetV2Stem(nn.Module):
     def __init__(self, config: MobileNetV2Config, in_channels: int, expanded_channels: int, out_channels: int) -> None:
         super().__init__()
 
-        # The very first layer is a regular 3x3 convolution with stride 2 that
-        # expands to 32 channels. All other expansion layers use the expansion
-        # factor to compute their number of output channels.
+        # The very first layer is a regular 3x3 convolution with stride 2 that expands to 32 channels.
+        # All other expansion layers use the expansion factor to compute the number of output channels.
         self.first_conv = MobileNetV2ConvLayer(
             config,
             in_channels=in_channels,
@@ -453,14 +454,14 @@ class MobileNetV2Model(MobileNetV2PreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        def calc_depth(channels: int) -> int:
+        def apply_depth_multiplier(channels: int) -> int:
             return make_divisible(
                 int(round(channels * config.depth_multiplier)), config.depth_divisible_by, config.min_depth
             )
 
         # Output channels for the projection layers
         channels = [16, 24, 24, 32, 32, 32, 64, 64, 64, 64, 96, 96, 96, 160, 160, 160, 320]
-        channels = [calc_depth(x) for x in channels]
+        channels = [apply_depth_multiplier(x) for x in channels]
 
         # Strides for the depthwise layers
         strides = [2, 1, 2, 1, 1, 2, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1]
@@ -468,46 +469,39 @@ class MobileNetV2Model(MobileNetV2PreTrainedModel):
         self.conv_stem = MobileNetV2Stem(
             config,
             in_channels=config.num_channels,
-            expanded_channels=calc_depth(32),
+            expanded_channels=apply_depth_multiplier(32),
             out_channels=channels[0],
         )
 
-    # var currentStride = 2   // first conv layer has stride 2
-    # var dilationRate = 1
+        current_stride = 2  # first conv layer has stride 2
+        dilation = 1
 
         self.layer = nn.ModuleList()
         for i in range(16):
-    #   // Keep making the feature maps smaller or use dilated convolution?
-    #   let layerStride: Int
-    #   let layerDilation: Int
-    #   if outputStride > 0 && currentStride == outputStride {
-    #     layerStride = 1
-    #     layerDilation = dilationRate
-    #     dilationRate *= strides[i]    // larger dilation starts in next block
-    #   } else {
-    #     layerStride = strides[i]
-    #     layerDilation = 1
-    #     currentStride *= strides[i]
-    #   }
-        #     if strides[i] == 2 or i == 0:
-        #         depth *= 2
-        #         out_channels = max(int(depth * config.depth_multiplier), config.min_depth)
-
-            # pass layerDilation to the MobileNetV2InvertedResidual
+            # Keep making the feature maps smaller or use dilated convolution?
+            if current_stride == config.output_stride:
+                layer_stride = 1
+                layer_dilation = dilation
+                dilation *= strides[i]  # larger dilation starts in next block
+            else:
+                layer_stride = strides[i]
+                layer_dilation = 1
+                current_stride *= layer_stride
 
             self.layer.append(
                 MobileNetV2InvertedResidual(
                     config,
                     in_channels=channels[i],
                     out_channels=channels[i + 1],
-                    stride=strides[i],
+                    stride=layer_stride,
+                    dilation=layer_dilation,
                 )
             )
 
         if config.finegrained_output and config.depth_multiplier < 1.0:
             output_channels = 1280
         else:
-            output_channels = calc_depth(1280)
+            output_channels = apply_depth_multiplier(1280)
 
         self.conv_1x1 = MobileNetV2ConvLayer(
             config,

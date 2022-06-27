@@ -41,7 +41,7 @@ logger = logging.get_logger(__name__)
 def get_mobilenet_v2_config(model_name):
     config = MobileNetV2Config(layer_norm_eps=0.001)
 
-    if "_quant" in model_name:
+    if "quant" in model_name:
         raise ValueError("Quantized models are not supported.")
 
     matches = re.match(r"^mobilenet_v2_([^_]*)_([^_]*)$", model_name)
@@ -91,18 +91,19 @@ def convert_movilevit_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
 
     assert logits.shape == (1, 1001)
 
-    #MIH: fix
-    # if model_name == "mobilenet_v2_1.4_224":
-    #     expected_logits = torch.tensor([-4.1739, -1.1233, 3.1205])
-    # elif model_name == "mobilenet_v2_1.0_224":
-    #     expected_logits = torch.tensor([-4.1739, -1.1233, 3.1205])
-    # elif model_name == "mobilenet_v2_0.35_96":
-    #     expected_logits = torch.tensor([-3.9440, -2.3141, -0.3333])
-    # else:
-    #     expected_logits = None
+    if model_name == "mobilenet_v2_1.4_224":
+        expected_logits = torch.tensor([0.0181, -1.0015,  0.4688])
+    elif model_name == "mobilenet_v2_1.0_224":
+        expected_logits = torch.tensor([0.2445, -1.1993,  0.1905])
+    elif model_name == "mobilenet_v2_0.75_160":
+        expected_logits = torch.tensor([0.2482, 0.4136, 0.6669])
+    elif model_name == "mobilenet_v2_0.35_96":
+        expected_logits = torch.tensor([0.1451, -0.4624,  0.7192])
+    else:
+        expected_logits = None
 
-    # if expected_logits is not None:
-    #     assert torch.allclose(logits[0, :3], expected_logits, atol=1e-4)
+    if expected_logits is not None:
+        assert torch.allclose(logits[0, :3], expected_logits, atol=1e-4)
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
