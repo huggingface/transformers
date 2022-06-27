@@ -774,15 +774,15 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
-        _gradient_checkpointing: bool = False,
-        _remat_policy: Callable[..., bool] = (None,),
+        gradient_checkpointing: bool = False,
+        remat_policy: Callable[..., bool] = (None,),
         **kwargs
     ):
         module = self.module_class(
             config=config,
             dtype=dtype,
-            gradient_checkpointing=_gradient_checkpointing,
-            remat_policy=_remat_policy,
+            gradient_checkpointing=gradient_checkpointing,
+            remat_policy=remat_policy,
             **kwargs,
         )
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
