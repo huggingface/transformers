@@ -1224,7 +1224,7 @@ class TFSwinModel(TFSwinPreTrainedModel):
         return swin_outputs
 
 
-class PixelShuffle(tf.keras.layers.Layer):
+class TFSwinPixelShuffle(tf.keras.layers.Layer):
     """TF layer implementation of torch.nn.PixelShuffle"""
 
     def __init__(self, upscale_factor: int, **kwargs) -> None:
@@ -1256,7 +1256,7 @@ class TFSwinDecoder(tf.keras.layers.Layer):
         self.conv2d = tf.keras.layers.Conv2D(
             filters=config.encoder_stride**2 * config.num_channels, kernel_size=1, strides=1, name="0"
         )
-        self.pixel_shuffle = PixelShuffle(config.encoder_stride, name="1")
+        self.pixel_shuffle = TFSwinPixelShuffle(config.encoder_stride, name="1")
 
     def call(self, x: tf.Tensor) -> tf.Tensor:
         hidden_states = x
