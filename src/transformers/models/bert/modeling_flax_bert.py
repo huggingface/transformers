@@ -552,12 +552,12 @@ class FlaxBertLayerCollection(nn.Module):
 
     def setup(self):
         if self.gradient_checkpointing:
-            FlaxBertBlockLayer = remat(FlaxBertLayer, static_argnums=(5, 6, 7), policy=self.remat_policy)
+            FlaxBertCheckpointLayer = remat(FlaxBertLayer, static_argnums=(5, 6, 7), policy=self.remat_policy)
         else:
-            FlaxBertBlockLayer = FlaxBertLayer
+            FlaxBertCheckpointLayer = FlaxBertLayer
 
         self.layers = [
-            FlaxBertBlockLayer(self.config, name=str(i), dtype=self.dtype)
+            FlaxBertCheckpointLayer(self.config, name=str(i), dtype=self.dtype)
             for i in range(self.config.num_hidden_layers)
         ]
 
