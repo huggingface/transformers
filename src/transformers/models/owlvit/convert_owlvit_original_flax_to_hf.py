@@ -1,17 +1,3 @@
-# coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 import os
 import json
 from typing import Any, Mapping, Optional
@@ -20,22 +6,21 @@ import collections
 from absl import logging
 
 import flax
+from flax.training import checkpoints
 import jax
 import jax.numpy as jnp
 import numpy as np
 import torch
 
-import models
+from clip_model import CLIP, OwlViTClassPredictor, OwlViTBoxPredictor, OwlViTImageTextEmbedder
 from PIL import Image
 from configs import clip_b16, clip_b32, clip_l14
-from owlvit import load
-from transformers import OwlViTConfig, OwlViTModel, OwlViTClassPredictor, OwlViTBoxPredictor, OwlViTImageTextEmbedder
+from transformers import OwlViTConfig, OwlViTModel, OwlViTForObjectDetection
 
-PyTree = Any
 CONFIGS = {
     'vit_b32': dict(embed_dim=512,
-    				image_resolution=224,
-   					context_length=16,
+                    image_resolution=224,
+                    context_length=16,
                     vocab_size=49408,
                     vision_layers=12,
                     vision_width=768,
@@ -44,8 +29,8 @@ CONFIGS = {
                     transformer_heads=8,
                     transformer_layers=12),
     'vit_b16': dict(embed_dim=512,
-    				image_resolution=224,
-    				context_length=16,
+                    image_resolution=224,
+                    context_length=16,
                     vocab_size=49408,
                     vision_layers=12,
                     vision_width=768,
@@ -54,8 +39,8 @@ CONFIGS = {
                     transformer_heads=8,
                     transformer_layers=12),
     'vit_l14': dict(embed_dim=768,
-    				image_resolution=224,
-    				context_length=16,
+                    image_resolution=224,
+                    context_length=16,
                     vocab_size=49408,
                     vision_layers=24,
                     vision_width=1024,
@@ -81,6 +66,120 @@ def flatten_nested_dict(params, parent_key='', sep='/'):
 
 def to_f32(params):
     return jax.tree_map(lambda x: x.astype(jnp.float32) if x.dtype == jnp.bfloat16 else x, params)
+
+
+def copy_attn_layer(hf_attn_layer, pt_attn_layer):
+    q_proj, k_proj, v_proj = pt_attn_layer.in_proj_weight.chunk(3, dim=0)
+    q_proj_bias, k_proj_bias, v_proj_bias = pt_attn_layer.in_proj_bias.chunk(3, dim=0)
+
+    out_proj_weights = pt_attn_layer.out_proj.weight
+    out_proj_bias = pt_attn_layer.out_proj.bias
+
+    hf_attn_layer.q_proj.weight.data = q_proj
+    hf_attn_layer.q_proj.bias.data = q_proj_bias
+
+    hf_attn_layer.k_proj.weight.data = k_proj
+    hf_attn_layer.k_proj.bias.data = k_proj_bias
+
+    hf_attn_layer.v_proj.weight.data = v_proj
+    hf_attn_layer.v_proj.bias.data = v_proj_bias
+
+    hf_attn_layer.out_proj.weight = out_proj_weights
+    hf_attn_layer.out_proj.bias = out_proj_bias
+
+
+def copy_mlp(hf_mlp, pt_mlp):
+    copy_linear(hf_mlp.fc1, pt_mlp.c_fc)
+    copy_linear(hf_mlp.fc2, pt_mlp.c_proj)
+
+
+def copy_linear(hf_linear, pt_linear):
+    hf_linear.weight = pt_linear.weight
+    hf_linear.bias = pt_linear.bias
+
+
+def copy_layer(hf_layer, pt_layer):
+    # copy layer norms
+    copy_linear(hf_layer.layer_norm1, pt_layer.ln_1)
+    copy_linear(hf_layer.layer_norm2, pt_layer.ln_2)
+
+    # copy MLP
+    copy_mlp(hf_layer.mlp, pt_layer.mlp)
+
+    # copy attn
+    copy_attn_layer(hf_layer.self_attn, pt_layer.attn)
+
+
+def copy_layers(hf_layers, pt_layers):
+    for hf_layer, pt_layer in zip(hf_layers, pt_layers):
+        copy_layer(hf_layer, pt_layer)
+
+
+def copy_encoder(hf_encoder, pt_model):
+    # copy  embeds
+    hf_encoder.embeddings.token_embedding.weight = pt_model.token_embedding.weight
+    hf_encoder.embeddings.position_embedding.weight.data = pt_model.positional_embedding
+
+    # copy layer norm
+    copy_linear(hf_encoder.final_layer_norm, pt_model.ln_final)
+
+    # copy hidden layers
+    copy_layers(hf_encoder.encoder.layers, pt_model.transformer.resblocks)
+
+
+def copy_text_model_and_projection(hf_model, pt_model):
+    # copy projection
+    hf_model.text_projection.weight.data = pt_model.text_projection.data.T
+
+    # copy text encoder
+    copy_encoder(hf_model.text_model, pt_model)
+
+
+def copy_vison_model_and_projection(hf_model, pt_model):
+    # copy projection
+    hf_model.visual_projection.weight.data = pt_model.visual.proj.data.T
+
+    # copy layer norms
+    copy_linear(hf_model.vision_model.pre_layrnorm, pt_model.visual.ln_pre)
+    copy_linear(hf_model.vision_model.post_layernorm, pt_model.visual.ln_post)
+
+    # copy embeds
+    hf_model.vision_model.embeddings.patch_embedding.weight.data = pt_model.visual.conv1.weight.data
+    hf_model.vision_model.embeddings.class_embedding = pt_model.visual.class_embedding
+    hf_model.vision_model.embeddings.position_embedding.weight.data = pt_model.visual.positional_embedding.data
+
+    # copy encoder
+    copy_layers(hf_model.vision_model.encoder.layers, pt_model.visual.transformer.resblocks)
+
+
+@torch.no_grad()
+def convert_clip_checkpoint(pt_model, pytorch_dump_folder_path, config_path=None):
+    """
+    Copy/paste/tweak model's weights to transformers design.
+    """
+    if config_path is not None:
+        config = OwlViTConfig.from_pretrained(config_path)
+    else:
+        config = OwlViTConfig()
+
+    hf_model = OwlViTModel(config).eval()
+
+    copy_text_model_and_projection(hf_model, pt_model)
+    copy_vison_model_and_projection(hf_model, pt_model)
+    hf_model.logit_scale = pt_model.logit_scale
+
+    input_ids = torch.arange(0, 77).unsqueeze(0)
+    pixel_values = torch.randn(1, 3, 224, 224)
+
+    hf_logits_per_image, hf_logits_per_text = hf_model(
+        input_ids=input_ids, pixel_values=pixel_values, return_dict=True
+    )[1:3]
+    pt_logits_per_image, pt_logits_per_text = pt_model(pixel_values, input_ids)
+
+    assert torch.allclose(hf_logits_per_image, pt_logits_per_image, atol=1e-3)
+    assert torch.allclose(hf_logits_per_text, pt_logits_per_text, atol=1e-3)
+
+    hf_model.save_pretrained(pytorch_dump_folder_path)
 
 
 def _convert_attn_layers(params):
@@ -228,7 +327,7 @@ if __name__ == "__main__":
         "--owlvit_checkpoint", default=None, type=str, required=True, help="Name of flax model."
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default="./", type=str, help="Path to the output PyTorch model."
+        "--pytorch_dump_folder_path", default="hf_model.pt", type=str, help="Path to the output PyTorch model."
     )
     args = parser.parse_args()
 
@@ -251,19 +350,18 @@ if __name__ == "__main__":
     elif model_name == "clip_l14":
         torch_config = CONFIGS["vit_l14"]
 
-    flax_model = models.TextZeroShotDetectionModule(
-        body_configs=config.model.body,
-        normalize=config.model.normalize,
-        box_bias=config.model.box_bias)
-
     # Load from checkpoint and convert params to float-32
-    #variables = flax_model.load_variables(config.init_from.checkpoint_path)
-    variables = flax_model.load_variables("checkpoints/clip_vit_b32")
-    flax_params = jax.tree_map(lambda x: x.astype(jnp.float32) if x.dtype == jnp.bfloat16 else x, variables['params'])
+    variables = checkpoints.restore_checkpoint("checkpoints/clip_vit_b32", target=None)["optimizer"]["target"]
+    flax_params = jax.tree_map(lambda x: x.astype(jnp.float32) if x.dtype == jnp.bfloat16 else x, variables)
     del variables
  
-    #with torch.no_grad():
-    #    img_feats = torch_model.encode_image(torch.zeros(1,3,768,768))
-    torch_backbone_params, clip = convert_clip_backbone(flax_params, torch_config)
-    torch_class_token_params = convert_embedder(clip, flax_params, config, torch_config)
-    torch_class_params, torch_box_params = convert_class_box_heads(flax_params, torch_config)
+    #hf_config = OwlViTConfig()
+    #hf_model = OwlViTForObjectDetection(hf_config)
+
+    torch_backbone_params, clip_pt = convert_clip_backbone(flax_params, torch_config)
+    clip_pt.eval()
+    convert_clip_checkpoint(clip_pt, args.pytorch_dump_folder_path)
+
+    #torch_class_token_params = convert_embedder(clip_pt, flax_params, config, torch_config)
+    #torch_class_params, torch_box_params = convert_class_box_heads(flax_params, torch_config)
+
