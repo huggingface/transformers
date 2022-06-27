@@ -120,6 +120,11 @@ class ConvNextMaskRCNNConfig(PretrainedConfig):
         bbox_roi_extractor_out_channels=256,
         bbox_roi_extractor_featmap_strides=[4, 8, 16, 32],
         bbox_head_in_channels=256,
+        bbox_head_bbox_coder_target_means=[0.0, 0.0, 0.0, 0.0],
+        bbox_head_bbox_coder_target_stds=[0.1, 0.1, 0.2, 0.2],
+        rcnn_test_cfg=dict(
+            score_thr=0.05, nms=dict(type="nms", iou_threshold=0.5), max_per_img=100, mask_thr_binary=0.5
+        ),
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -156,6 +161,9 @@ class ConvNextMaskRCNNConfig(PretrainedConfig):
         self.bbox_roi_extractor_out_channels = bbox_roi_extractor_out_channels
         self.bbox_roi_extractor_featmap_strides = bbox_roi_extractor_featmap_strides
         self.bbox_head_in_channels = bbox_head_in_channels
+        self.bbox_head_bbox_coder_target_means = bbox_head_bbox_coder_target_means
+        self.bbox_head_bbox_coder_target_stds = bbox_head_bbox_coder_target_stds
+        self.rcnn_test_cfg = rcnn_test_cfg
 
 
 class ConvNextMaskRCNNOnnxConfig(OnnxConfig):
