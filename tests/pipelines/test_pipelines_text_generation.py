@@ -240,7 +240,10 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
             out,
             [
                 {
-                    "generated_text": "This is a test test test test test test test test test test test test test test test test test"
+                    "generated_text": (
+                        "This is a test test test test test test test test test test test test test test test test"
+                        " test"
+                    )
                 }
             ],
         )
@@ -254,7 +257,10 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
             out,
             [
                 {
-                    "generated_text": "This is a test test test test test test test test test test test test test test test test test"
+                    "generated_text": (
+                        "This is a test test test test test test test test test test test test test test test test"
+                        " test"
+                    )
                 }
             ],
         )
@@ -268,7 +274,10 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
             out,
             [
                 {
-                    "generated_text": "This is a test test test test test test test test test test test test test test test test test"
+                    "generated_text": (
+                        "This is a test test test test test test test test test test test test test test test test"
+                        " test"
+                    )
                 }
             ],
         )

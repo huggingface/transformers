@@ -569,13 +569,15 @@ def pipeline(
     if device_map is not None:
         if "device_map" in model_kwargs:
             raise ValueError(
-                'You cannot use both `pipeline(... device_map=..., model_kwargs={"device_map":...})` as those arguments might conflict, use only one.)'
+                'You cannot use both `pipeline(... device_map=..., model_kwargs={"device_map":...})` as those'
+                " arguments might conflict, use only one.)"
             )
         model_kwargs["device_map"] = device_map
     if torch_dtype is not None:
         if "torch_dtype" in model_kwargs:
             raise ValueError(
-                'You cannot use both `pipeline(... torch_dtype=..., model_kwargs={"torch_dtype":...})` as those arguments might conflict, use only one.)'
+                'You cannot use both `pipeline(... torch_dtype=..., model_kwargs={"torch_dtype":...})` as those'
+                " arguments might conflict, use only one.)"
             )
         model_kwargs["torch_dtype"] = torch_dtype
 
