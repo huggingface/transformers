@@ -61,7 +61,6 @@ deps = {
     "starlette": "starlette",
     "tensorflow-cpu": "tensorflow-cpu>=2.3",
     "tensorflow": "tensorflow>=2.3",
-    "tensorflow-text": "tensorflow-text",
     "tf2onnx": "tf2onnx",
     "timeout-decorator": "timeout-decorator",
     "timm": "timm",

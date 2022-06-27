@@ -44,6 +44,8 @@ from .base import (
     get_default_model_and_revision,
     infer_framework_load_model,
 )
+from .base import PipelineRegistry as _PipelineRegistry
+from .base import get_default_model, infer_framework_load_model
 from .conversational import Conversation, ConversationalPipeline
 from .feature_extraction import FeatureExtractionPipeline
 from .fill_mask import FillMaskPipeline
@@ -61,7 +63,6 @@ from .token_classification import (
     TokenClassificationArgumentHandler,
     TokenClassificationPipeline,
 )
-from .visual_question_answering import VisualQuestionAnsweringPipeline
 from .zero_shot_classification import ZeroShotClassificationArgumentHandler, ZeroShotClassificationPipeline
 from .zero_shot_image_classification import ZeroShotImageClassificationPipeline
 
@@ -95,7 +96,6 @@ if is_torch_available():
         MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
-        MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING,
         AutoModel,
         AutoModelForAudioClassification,
         AutoModelForCausalLM,
@@ -111,7 +111,6 @@ if is_torch_available():
         AutoModelForSpeechSeq2Seq,
         AutoModelForTableQuestionAnswering,
         AutoModelForTokenClassification,
-        AutoModelForVisualQuestionAnswering,
     )
 if TYPE_CHECKING:
     from ..modeling_tf_utils import TFPreTrainedModel
@@ -124,7 +123,6 @@ logger = logging.get_logger(__name__)
 TASK_ALIASES = {
     "sentiment-analysis": "text-classification",
     "ner": "token-classification",
-    "vqa": "visual-question-answering",
 }
 SUPPORTED_TASKS = {
     "audio-classification": {
@@ -309,14 +307,14 @@ for task, values in SUPPORTED_TASKS.items():
     elif values["type"] != "multimodal":
         raise ValueError(f"SUPPORTED_TASK {task} contains invalid type {values['type']}")
 
+PipelineRegistry = _PipelineRegistry.from_dict(supported_tasks=SUPPORTED_TASKS, task_aliases=TASK_ALIASES)  # type: ignore (possible unbound type due to lazy module import)
+
 
 def get_supported_tasks() -> List[str]:
     """
     Returns a list of supported task strings.
     """
-    supported_tasks = list(SUPPORTED_TASKS.keys()) + list(TASK_ALIASES.keys())
-    supported_tasks.sort()
-    return supported_tasks
+    return PipelineRegistry.get_supported_tasks()
 
 
 def get_task(model: str, use_auth_token: Optional[str] = None) -> str:
@@ -375,20 +373,7 @@ def check_task(task: str) -> Tuple[Dict, Any]:
 
 
     """
-    if task in TASK_ALIASES:
-        task = TASK_ALIASES[task]
-    if task in SUPPORTED_TASKS:
-        targeted_task = SUPPORTED_TASKS[task]
-        return targeted_task, None
-
-    if task.startswith("translation"):
-        tokens = task.split("_")
-        if len(tokens) == 4 and tokens[0] == "translation" and tokens[2] == "to":
-            targeted_task = SUPPORTED_TASKS["translation"]
-            return targeted_task, (tokens[1], tokens[3])
-        raise KeyError(f"Invalid translation task {task}, use 'translation_XX_to_YY' format")
-
-    raise KeyError(f"Unknown task {task}, available tasks are {get_supported_tasks() + ['translation_XX_to_YY']}")
+    return PipelineRegistry.check_task(task)
 
 
 def pipeline(

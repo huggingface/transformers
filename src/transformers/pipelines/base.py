@@ -871,8 +871,6 @@ class Pipeline(_ScikitCompat):
         elif isinstance(inputs, tuple):
             return tuple([self._ensure_tensor_on_device(item, device) for item in inputs])
         elif isinstance(inputs, torch.Tensor):
-            if device == torch.device("cpu") and inputs.dtype in {torch.float16, torch.bfloat16}:
-                inputs = inputs.float()
             return inputs.to(device)
         else:
             return inputs
@@ -1087,3 +1085,48 @@ class ChunkPipeline(Pipeline):
         model_iterator = PipelinePackIterator(dataloader, self.forward, forward_params, loader_batch_size=batch_size)
         final_iterator = PipelineIterator(model_iterator, self.postprocess, postprocess_params)
         return final_iterator
+
+
+class PipelineRegistry:
+    TASK_ALIASES: Dict[str, str]
+    SUPPORTED_TASKS: Dict[str, Any]
+
+    def get_supported_tasks(self) -> List[str]:
+        supported_task = list(self.SUPPORTED_TASKS.keys()) + list(self.TASK_ALIASES.keys())
+        supported_task.sort()
+        return supported_task
+
+    def check_task(self, task: str) -> Tuple[Dict, Any]:
+        if task in self.TASK_ALIASES:
+            task = self.TASK_ALIASES[task]
+        if task in self.SUPPORTED_TASKS:
+            targeted_task = self.SUPPORTED_TASKS[task]
+            return targeted_task, None  # type: ignore (unfinshed types)
+
+        if task.startswith("translation"):
+            tokens = task.split("_")
+            if len(tokens) == 4 and tokens[0] == "translation" and tokens[2] == "to":
+                targeted_task = self.SUPPORTED_TASKS["translation"]
+                return targeted_task, (tokens[1], tokens[3])
+            raise KeyError(f"Invalid translation task {task}, use 'translation_XX_to_YY' format")
+
+        raise KeyError(
+            f"Unknown task {task}, available tasks are {self.get_supported_tasks() + ['translation_XX_to_YY']}"
+        )
+
+    @classmethod
+    def register_pipeline(cls, task: str, task_impl: Dict[str, Any]) -> None:
+        if task in cls.SUPPORTED_TASKS:
+            logger.warning(f"{task} is already registered. Overwriting pipeline for task {task}...")
+
+        cls.SUPPORTED_TASKS[task] = task_impl
+
+    @classmethod
+    def from_dict(cls, supported_tasks: Dict[str, Any], task_aliases: Dict[str, str]) -> "PipelineRegistry":
+        klass = cls()
+        klass.SUPPORTED_TASKS = supported_tasks
+        klass.TASK_ALIASES = task_aliases
+        return klass
+
+    def to_dict(self):
+        return self.SUPPORTED_TASKS
