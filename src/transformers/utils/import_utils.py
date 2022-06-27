@@ -491,6 +491,10 @@ def is_spacy_available():
     return importlib.util.find_spec("spacy") is not None
 
 
+def is_tensorflow_text_available():
+    return importlib.util.find_spec("tensorflow_text") is not None
+
+
 def is_in_notebook():
     try:
         # Test adapted from tqdm.autonotebook: https://github.com/tqdm/tqdm/blob/master/tqdm/autonotebook.py
@@ -721,6 +725,12 @@ TENSORFLOW_PROBABILITY_IMPORT_ERROR = """
 explained here: https://github.com/tensorflow/probability.
 """
 
+# docstyle-ignore
+TENSORFLOW_TEXT_IMPORT_ERROR = """
+{0} requires the tensorflow_text library but it was not found in your environment. You can install it with pip as
+explained here: https://www.tensorflow.org/text/guide/tf_text_intro.
+"""
+
 
 # docstyle-ignore
 PANDAS_IMPORT_ERROR = """
@@ -800,6 +810,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("speech", (is_speech_available, SPEECH_IMPORT_ERROR)),
         ("tensorflow_probability", (is_tensorflow_probability_available, TENSORFLOW_PROBABILITY_IMPORT_ERROR)),
         ("tf", (is_tf_available, TENSORFLOW_IMPORT_ERROR)),
+        ("tensorflow_text", (is_tensorflow_text_available, TENSORFLOW_TEXT_IMPORT_ERROR)),
         ("timm", (is_timm_available, TIMM_IMPORT_ERROR)),
         ("tokenizers", (is_tokenizers_available, TOKENIZERS_IMPORT_ERROR)),
         ("torch", (is_torch_available, PYTORCH_IMPORT_ERROR)),

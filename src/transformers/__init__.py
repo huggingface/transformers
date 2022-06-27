@@ -35,6 +35,7 @@ from .utils import (
     is_scatter_available,
     is_sentencepiece_available,
     is_speech_available,
+    is_tensorflow_text_available,
     is_tf_available,
     is_timm_available,
     is_tokenizers_available,
@@ -435,6 +436,7 @@ _import_structure = {
         "is_sentencepiece_available",
         "is_sklearn_available",
         "is_speech_available",
+        "is_tensorflow_text_available",
         "is_tf_available",
         "is_timm_available",
         "is_tokenizers_available",
@@ -574,6 +576,19 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["models.mctct"].append("MCTCTFeatureExtractor")
     _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
+
+# Tensorflow-text-specific objects
+try:
+    if not is_tensorflow_text_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    from .utils import dummy_tensorflow_text_objects
+
+    _import_structure["utils.dummy_tensorflow_text_objects"] = [
+        name for name in dir(dummy_tensorflow_text_objects) if not name.startswith("_")
+    ]
+else:
+    _import_structure["models.bert"].append("TFBertTokenizer")
 
 try:
     if not (is_sentencepiece_available() and is_speech_available()):
@@ -3067,6 +3082,7 @@ if TYPE_CHECKING:
         is_sentencepiece_available,
         is_sklearn_available,
         is_speech_available,
+        is_tensorflow_text_available,
         is_tf_available,
         is_timm_available,
         is_tokenizers_available,
@@ -3182,6 +3198,14 @@ if TYPE_CHECKING:
     else:
         from .models.mctct import MCTCTFeatureExtractor
         from .models.speech_to_text import Speech2TextFeatureExtractor
+
+    try:
+        if not is_tensorflow_text_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        from .utils.dummy_tensorflow_text_objects import *
+    else:
+        from .models.bert import TFBertTokenizer
 
     try:
         if not (is_speech_available() and is_sentencepiece_available()):
