@@ -2509,10 +2509,6 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         self.assertListEqual(
             generated_text,
-            # [
-            #     "The soldiers were not prepared and didn't know how big the big weapons would be, so they scared them"
-            #     " off. They had no idea what to do",
-            # ],
             [
                 "The soldiers were not prepared and didn't know what to do. They had no idea how they would react if"
                 " the enemy attacked them, big weapons scared"
@@ -2552,10 +2548,6 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         self.assertListEqual(
             generated_text,
-            # [
-            #     "The soldiers, who were all scared and screaming at each other as they tried to get out of the",
-            #     "The child was taken to a local hospital where she screamed and scared for her life, police said.",
-            # ],
             [
                 "The soldiers, who had been stationed at the base for more than a year before being evacuated"
                 " screaming scared",
@@ -2593,10 +2585,6 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         self.assertListEqual(
             generated_text,
-            # [
-            #     "The soldiers, who were all scared and screaming at each other as they tried to get out of the",
-            #     "The child was taken to a local hospital where she screamed and scared for her life, police said.",
-            # ],
             [
                 "The soldiers, who had been stationed at the base for more than a year before being evacuated"
                 " screaming scared",
