@@ -110,6 +110,9 @@ class TFPTAutoModelTest(unittest.TestCase):
             self.assertIsInstance(config, GPT2Config)
 
             model = TFAutoModelForCausalLM.from_pretrained(model_name, from_pt=True)
+            model, loading_info = TFAutoModelForCausalLM.from_pretrained(
+                model_name, output_loading_info=True, from_pt=True
+            )
             self.assertIsNotNone(model)
             self.assertIsInstance(model, TFGPT2LMHeadModel)
 
@@ -143,6 +146,9 @@ class TFPTAutoModelTest(unittest.TestCase):
             self.assertIsInstance(config, BertConfig)
 
             model = TFAutoModelForMaskedLM.from_pretrained(model_name, from_pt=True)
+            model, loading_info = TFAutoModelForMaskedLM.from_pretrained(
+                model_name, output_loading_info=True, from_pt=True
+            )
             self.assertIsNotNone(model)
             self.assertIsInstance(model, TFBertForMaskedLM)
 
@@ -161,6 +167,9 @@ class TFPTAutoModelTest(unittest.TestCase):
             self.assertIsInstance(config, T5Config)
 
             model = TFAutoModelForSeq2SeqLM.from_pretrained(model_name, from_pt=True)
+            model, loading_info = TFAutoModelForSeq2SeqLM.from_pretrained(
+                model_name, output_loading_info=True, from_pt=True
+            )
             self.assertIsNotNone(model)
             self.assertIsInstance(model, TFT5ForConditionalGeneration)
 
