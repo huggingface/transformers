@@ -397,6 +397,8 @@ def pipeline(
     revision: Optional[str] = None,
     use_fast: bool = True,
     use_auth_token: Optional[Union[str, bool]] = None,
+    device_map=None,
+    torch_dtype=None,
     model_kwargs: Dict[str, Any] = None,
     pipeline_class: Optional[Any] = None,
     **kwargs
@@ -480,6 +482,11 @@ def pipeline(
         use_auth_token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
             when running `transformers-cli login` (stored in `~/.huggingface`).
+        device_map:
+            Sent directly as `model_kwargs` (just a simpler shortcut) to load the model automatically on multiple GPUs if `accelerate`
+            is available (do not use `device_map` AND `device` at the same time).
+        torch_dtype:
+            Sent directly as `model_kwargs` (just a simpler shortcut) to use the available precision for this model (`float16`, `bfloat16`, or `auto`).
         model_kwargs:
             Additional dictionary of keyword arguments passed along to the model's `from_pretrained(...,
             **model_kwargs)` function.
@@ -550,6 +557,18 @@ def pipeline(
 
     # Retrieve use_auth_token and add it to model_kwargs to be used in .from_pretrained
     model_kwargs["use_auth_token"] = model_kwargs.get("use_auth_token", use_auth_token)
+    if device_map is not None:
+        if "device_map" in model_kwargs:
+            raise ValueError(
+                'You cannot use both `pipeline(... device_map=..., model_kwargs={"device_map":...})` as those arguments might conflict, use only one.)'
+            )
+        model_kwargs["device_map"] = device_map
+    if torch_dtype is not None:
+        if "torch_dtype" in model_kwargs:
+            raise ValueError(
+                'You cannot use both `pipeline(... torch_dtype=..., model_kwargs={"torch_dtype":...})` as those arguments might conflict, use only one.)'
+            )
+        model_kwargs["torch_dtype"] = torch_dtype
 
     # Config is the primordial information item.
     # Instantiate config if needed
