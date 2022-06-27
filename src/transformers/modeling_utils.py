@@ -22,7 +22,6 @@ import shutil
 import tempfile
 import warnings
 from contextlib import contextmanager
-from copy import deepcopy
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
@@ -118,15 +117,20 @@ except ImportError:
         def forward(self, input):
             return input
 
+
 def replace_8bit_linear(model):
+    import bitsandbytes as bnb
+
     for n, module in model.named_children():
         if len(list(module.children())) > 0:
             replace_8bit_linear(module)
-            
-        if isinstance(module, nn.Linear):
-            # setattr(model, n, bnb.nn.Linear8bitLt)
-            print(module)
 
+        if isinstance(module, nn.Linear):
+            with init_empty_weights():
+                model._modules[n] = bnb.nn.Linear8bitLt(
+                    module.in_features, module.out_features, module.bias is not None, has_fp16_weights=True
+                )
+    return model
 
 
 def get_parameter_device(parameter: Union[nn.Module, GenerationMixin, "ModuleUtilsMixin"]):
@@ -2076,7 +2080,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         elif load_in_8bit:
             # rom bitsandbytes.nn import Linear8bitLt as Linear8bit
 
-            init_contexts = [init_empty_weights()] # Force enable init empty weights
+            init_contexts = [init_empty_weights()]  # Force enable init empty weights
 
             logger.info("Detected 8-bit loading: activating 8-bit loading for this model")
             # init_contexts.append()
@@ -2148,6 +2152,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 offload_folder=offload_folder,
                 offload_state_dict=offload_state_dict,
                 dtype=torch_dtype,
+                load_in_8bit=load_in_8bit,
             )
 
         # make sure token embedding weights are still tied if needed
@@ -2187,6 +2192,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         offload_folder=None,
         offload_state_dict=False,
         dtype=None,
+        load_in_8bit=False,
     ):
         if device_map is not None and "disk" in device_map.values():
             if offload_folder is None:
@@ -2243,7 +2249,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # retrieve weights on meta device and put them back on CPU.
         # This is not ideal in terms of memory, but if we don't do that not, we can't initialize them in the next step
-        if low_cpu_mem_usage:
+        if low_cpu_mem_usage or (load_in_8bit and device_map is None):
             for key in missing_keys:
                 if key.startswith(prefix):
                     key = ".".join(key.split(".")[1:])
