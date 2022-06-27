@@ -1,5 +1,7 @@
 # coding=utf-8
-# Copyright 2022 Meta Platforms, Inc. and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 Meta Platforms, Inc.,
+# MMDetection Contributors. (2018). OpenMMLab Detection Toolbox and Benchmark [Computer software]. https://github.com/open-mmlab/mmdetection
+# and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,8 +17,12 @@
 """ PyTorch ConvNextMaskRCNN model."""
 
 
-from typing import List, Optional, Tuple, Union
+import copy
+import warnings
+from functools import partial
+from typing import Any, Dict, List, Optional, Tuple, Union
 
+import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import nn
@@ -48,6 +54,379 @@ CONVNEXTMASKRCNN_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/convnext-tiny-maskrcnn",
     # See all ConvNextMaskRCNN models at https://huggingface.co/models?filter=convnext_maskrcnn
 ]
+
+
+def multi_apply(func, *args, **kwargs):
+    """Apply function to a list of arguments.
+    Note:
+        This function applies the ``func`` to multiple inputs and
+        map the multiple outputs of the ``func`` into different
+        list. Each list contains the same type of outputs corresponding
+        to different inputs.
+    Args:
+        func (Function): A function that will be applied to a list of
+            arguments
+    Returns:
+        tuple(list): A tuple containing multiple list, each list contains \
+            a kind of returned results by the function
+    """
+    pfunc = partial(func, **kwargs) if kwargs else func
+    map_results = map(pfunc, *args)
+    return tuple(map(list, zip(*map_results)))
+
+
+def select_single_mlvl(mlvl_tensors, batch_id, detach=True):
+    """Extract a multi-scale single image tensor from a multi-scale batch
+    tensor based on batch index.
+
+    Note: The default value of detach is True, because the proposal gradient needs to be detached during the training
+    of the two-stage model. E.g Cascade Mask R-CNN.
+
+    Args:
+        mlvl_tensors (list[Tensor]): Batch tensor for all scale levels,
+           each is a 4D-tensor.
+        batch_id (int): Batch index.
+        detach (bool): Whether detach gradient. Default True.
+
+    Returns:
+        list[Tensor]: Multi-scale single image tensor.
+    """
+    assert isinstance(mlvl_tensors, (list, tuple))
+    num_levels = len(mlvl_tensors)
+
+    if detach:
+        mlvl_tensor_list = [mlvl_tensors[i][batch_id].detach() for i in range(num_levels)]
+    else:
+        mlvl_tensor_list = [mlvl_tensors[i][batch_id] for i in range(num_levels)]
+    return mlvl_tensor_list
+
+
+def bbox2delta(proposals, gt, means=(0.0, 0.0, 0.0, 0.0), stds=(1.0, 1.0, 1.0, 1.0)):
+    """Compute deltas of proposals w.r.t. gt.
+    We usually compute the deltas of x, y, w, h of proposals w.r.t ground
+    truth bboxes to get regression target.
+    This is the inverse function of :func:`delta2bbox`.
+    Args:
+        proposals (Tensor): Boxes to be transformed, shape (N, ..., 4)
+        gt (Tensor): Gt bboxes to be used as base, shape (N, ..., 4)
+        means (Sequence[float]): Denormalizing means for delta coordinates
+        stds (Sequence[float]): Denormalizing standard deviation for delta
+            coordinates
+    Returns:
+        Tensor: deltas with shape (N, 4), where columns represent dx, dy,
+            dw, dh.
+    """
+    assert proposals.size() == gt.size()
+
+    proposals = proposals.float()
+    gt = gt.float()
+    px = (proposals[..., 0] + proposals[..., 2]) * 0.5
+    py = (proposals[..., 1] + proposals[..., 3]) * 0.5
+    pw = proposals[..., 2] - proposals[..., 0]
+    ph = proposals[..., 3] - proposals[..., 1]
+
+    gx = (gt[..., 0] + gt[..., 2]) * 0.5
+    gy = (gt[..., 1] + gt[..., 3]) * 0.5
+    gw = gt[..., 2] - gt[..., 0]
+    gh = gt[..., 3] - gt[..., 1]
+
+    dx = (gx - px) / pw
+    dy = (gy - py) / ph
+    dw = torch.log(gw / pw)
+    dh = torch.log(gh / ph)
+    deltas = torch.stack([dx, dy, dw, dh], dim=-1)
+
+    means = deltas.new_tensor(means).unsqueeze(0)
+    stds = deltas.new_tensor(stds).unsqueeze(0)
+    deltas = deltas.sub_(means).div_(stds)
+
+    return deltas
+
+
+def delta2bbox(
+    rois,
+    deltas,
+    means=(0.0, 0.0, 0.0, 0.0),
+    stds=(1.0, 1.0, 1.0, 1.0),
+    max_shape=None,
+    wh_ratio_clip=16 / 1000,
+    clip_border=True,
+    add_ctr_clamp=False,
+    ctr_clamp=32,
+):
+    """Apply deltas to shift/scale base boxes.
+    Typically the rois are anchor or proposed bounding boxes and the deltas are
+    network outputs used to shift/scale those boxes.
+    This is the inverse function of :func:`bbox2delta`.
+    Args:
+        rois (Tensor): Boxes to be transformed. Has shape (N, 4).
+        deltas (Tensor): Encoded offsets relative to each roi.
+            Has shape (N, num_classes * 4) or (N, 4). Note
+            N = num_base_anchors * W * H, when rois is a grid of
+            anchors. Offset encoding follows [1]_.
+        means (Sequence[float]): Denormalizing means for delta coordinates.
+            Default (0., 0., 0., 0.).
+        stds (Sequence[float]): Denormalizing standard deviation for delta
+            coordinates. Default (1., 1., 1., 1.).
+        max_shape (tuple[int, int]): Maximum bounds for boxes, specifies
+           (H, W). Default None.
+        wh_ratio_clip (float): Maximum aspect ratio for boxes. Default
+            16 / 1000.
+        clip_border (bool, optional): Whether clip the objects outside the
+            border of the image. Default True.
+        add_ctr_clamp (bool): Whether to add center clamp. When set to True,
+            the center of the prediction bounding box will be clamped to
+            avoid being too far away from the center of the anchor.
+            Only used by YOLOF. Default False.
+        ctr_clamp (int): the maximum pixel shift to clamp. Only used by YOLOF.
+            Default 32.
+    Returns:
+        Tensor: Boxes with shape (N, num_classes * 4) or (N, 4), where 4
+           represent tl_x, tl_y, br_x, br_y.
+    References:
+        .. [1] https://arxiv.org/abs/1311.2524
+    Example:
+        >>> rois = torch.Tensor([[ 0.,  0.,  1.,  1.],
+        >>>                      [ 0.,  0.,  1.,  1.],
+        >>>                      [ 0.,  0.,  1.,  1.],
+        >>>                      [ 5.,  5.,  5.,  5.]])
+        >>> deltas = torch.Tensor([[  0.,   0.,   0.,   0.],
+        >>>                        [  1.,   1.,   1.,   1.],
+        >>>                        [  0.,   0.,   2.,  -1.],
+        >>>                        [ 0.7, -1.9, -0.5,  0.3]])
+        >>> delta2bbox(rois, deltas, max_shape=(32, 32, 3))
+        tensor([[0.0000, 0.0000, 1.0000, 1.0000],
+                [0.1409, 0.1409, 2.8591, 2.8591],
+                [0.0000, 0.3161, 4.1945, 0.6839],
+                [5.0000, 5.0000, 5.0000, 5.0000]])
+    """
+    num_bboxes, num_classes = deltas.size(0), deltas.size(1) // 4
+    if num_bboxes == 0:
+        return deltas
+
+    deltas = deltas.reshape(-1, 4)
+
+    means = deltas.new_tensor(means).view(1, -1)
+    stds = deltas.new_tensor(stds).view(1, -1)
+    denorm_deltas = deltas * stds + means
+
+    dxy = denorm_deltas[:, :2]
+    dwh = denorm_deltas[:, 2:]
+
+    # Compute width/height of each roi
+    rois_ = rois.repeat(1, num_classes).reshape(-1, 4)
+    pxy = (rois_[:, :2] + rois_[:, 2:]) * 0.5
+    pwh = rois_[:, 2:] - rois_[:, :2]
+
+    dxy_wh = pwh * dxy
+
+    max_ratio = np.abs(np.log(wh_ratio_clip))
+    if add_ctr_clamp:
+        dxy_wh = torch.clamp(dxy_wh, max=ctr_clamp, min=-ctr_clamp)
+        dwh = torch.clamp(dwh, max=max_ratio)
+    else:
+        dwh = dwh.clamp(min=-max_ratio, max=max_ratio)
+
+    gxy = pxy + dxy_wh
+    gwh = pwh * dwh.exp()
+    x1y1 = gxy - (gwh * 0.5)
+    x2y2 = gxy + (gwh * 0.5)
+    bboxes = torch.cat([x1y1, x2y2], dim=-1)
+    if clip_border and max_shape is not None:
+        bboxes[..., 0::2].clamp_(min=0, max=max_shape[1])
+        bboxes[..., 1::2].clamp_(min=0, max=max_shape[0])
+    bboxes = bboxes.reshape(num_bboxes, -1)
+    return bboxes
+
+
+class NMSop(torch.autograd.Function):
+    @staticmethod
+    def forward(
+        ctx: Any,
+        bboxes: torch.Tensor,
+        scores: torch.Tensor,
+        iou_threshold: float,
+        offset: int,
+        score_threshold: float,
+        max_num: int,
+    ) -> torch.Tensor:
+        is_filtering_by_score = score_threshold > 0
+        if is_filtering_by_score:
+            valid_mask = scores > score_threshold
+            bboxes, scores = bboxes[valid_mask], scores[valid_mask]
+            valid_inds = torch.nonzero(valid_mask, as_tuple=False).squeeze(dim=1)
+
+        inds = ext_module.nms(bboxes, scores, iou_threshold=float(iou_threshold), offset=offset)
+
+        if max_num > 0:
+            inds = inds[:max_num]
+        if is_filtering_by_score:
+            inds = valid_inds[inds]
+        return inds
+
+
+array_like_type = Union[torch.Tensor, np.ndarray]
+
+
+def nms(
+    boxes: array_like_type,
+    scores: array_like_type,
+    iou_threshold: float,
+    offset: int = 0,
+    score_threshold: float = 0,
+    max_num: int = -1,
+) -> Tuple[array_like_type, array_like_type]:
+    """Dispatch to either CPU or GPU NMS implementations.
+    The input can be either torch tensor or numpy array. GPU NMS will be used
+    if the input is gpu tensor, otherwise CPU NMS
+    will be used. The returned type will always be the same as inputs.
+    Arguments:
+        boxes (torch.Tensor or np.ndarray): boxes in shape (N, 4).
+        scores (torch.Tensor or np.ndarray): scores in shape (N, ).
+        iou_threshold (float): IoU threshold for NMS.
+        offset (int, 0 or 1): boxes' width or height is (x2 - x1 + offset).
+        score_threshold (float): score threshold for NMS.
+        max_num (int): maximum number of boxes after NMS.
+    Returns:
+        tuple: kept dets (boxes and scores) and indice, which always have
+        the same data type as the input.
+    Example:
+        >>> boxes = np.array([[49.1, 32.4, 51.0, 35.9],
+        >>>                   [49.3, 32.9, 51.0, 35.3],
+        >>>                   [49.2, 31.8, 51.0, 35.4],
+        >>>                   [35.1, 11.5, 39.1, 15.7],
+        >>>                   [35.6, 11.8, 39.3, 14.2],
+        >>>                   [35.3, 11.5, 39.9, 14.5],
+        >>>                   [35.2, 11.7, 39.7, 15.7]], dtype=np.float32)
+        >>> scores = np.array([0.9, 0.9, 0.5, 0.5, 0.5, 0.4, 0.3],\
+               dtype=np.float32)
+        >>> iou_threshold = 0.6
+        >>> dets, inds = nms(boxes, scores, iou_threshold)
+        >>> assert len(inds) == len(dets) == 3
+    """
+    assert isinstance(boxes, (torch.Tensor, np.ndarray))
+    assert isinstance(scores, (torch.Tensor, np.ndarray))
+    is_numpy = False
+    if isinstance(boxes, np.ndarray):
+        is_numpy = True
+        boxes = torch.from_numpy(boxes)
+    if isinstance(scores, np.ndarray):
+        scores = torch.from_numpy(scores)
+    assert boxes.size(1) == 4
+    assert boxes.size(0) == scores.size(0)
+    assert offset in (0, 1)
+
+    inds = NMSop.apply(boxes, scores, iou_threshold, offset, score_threshold, max_num)
+    dets = torch.cat((boxes[inds], scores[inds].reshape(-1, 1)), dim=1)
+    if is_numpy:
+        dets = dets.cpu().numpy()
+        inds = inds.cpu().numpy()
+    return dets, inds
+
+
+def batched_nms(
+    boxes: torch.Tensor,
+    scores: torch.Tensor,
+    idxs: torch.Tensor,
+    nms_cfg: Optional[Dict],
+    class_agnostic: bool = False,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    r"""Performs non-maximum suppression in a batched fashion.
+    Modified from [torchvision/ops/boxes.py#L39](https://github.com/pytorch/vision/blob/
+    505cd6957711af790211896d32b40291bea1bc21/torchvision/ops/boxes.py#L39). In order to perform NMS independently per
+    class, we add an offset to all the boxes. The offset is dependent only on the class idx, and is large enough so
+    that boxes from different classes do not overlap. Note:
+        In v1.4.1 and later, `batched_nms` supports skipping the NMS and returns sorted raw results when *nms_cfg* is
+        None.
+
+    Args:
+        boxes (torch.Tensor): boxes in shape (N, 4) or (N, 5).
+        scores (torch.Tensor): scores in shape (N, ).
+        idxs (torch.Tensor): each index value correspond to a bbox cluster,
+            and NMS will not be applied between elements of different idxs, shape (N, ).
+        nms_cfg (dict | optional): Supports skipping the nms when *nms_cfg*
+            is None, otherwise it should specify nms type and other parameters like *iou_thr*. Possible keys includes
+            the following.
+            - iou_threshold (float): IoU threshold used for NMS.
+            - split_thr (float): threshold number of boxes. In some cases the number of boxes is large (e.g., 200k). To
+              avoid OOM during training, the users could set *split_thr* to a small value. If the number of boxes is
+              greater than the threshold, it will perform NMS on each group of boxes separately and sequentially.
+              Defaults to 10000.
+        class_agnostic (bool): if true, nms is class agnostic,
+            i.e. IoU thresholding happens over all boxes, regardless of the predicted class. Defaults to False.
+    Returns:
+        tuple: kept dets and indice.
+        - boxes (Tensor): Bboxes with score after nms, has shape (num_bboxes, 5). last dimension 5 arrange as (x1, y1,
+          x2, y2, score)
+        - keep (Tensor): The indices of remaining boxes in input boxes.
+    """
+    # skip nms when nms_cfg is None
+    if nms_cfg is None:
+        scores, inds = scores.sort(descending=True)
+        boxes = boxes[inds]
+        return torch.cat([boxes, scores[:, None]], -1), inds
+
+    nms_cfg_ = nms_cfg.copy()
+    class_agnostic = nms_cfg_.pop("class_agnostic", class_agnostic)
+    if class_agnostic:
+        boxes_for_nms = boxes
+    else:
+        # When using rotated boxes, only apply offsets on center.
+        if boxes.size(-1) == 5:
+            # Strictly, the maximum coordinates of the rotating box
+            # (x,y,w,h,a) should be calculated by polygon coordinates.
+            # But the conversion from rotated box to polygon will
+            # slow down the speed.
+            # So we use max(x,y) + max(w,h) as max coordinate
+            # which is larger than polygon max coordinate
+            # max(x1, y1, x2, y2,x3, y3, x4, y4)
+            max_coordinate = boxes[..., :2].max() + boxes[..., 2:4].max()
+            offsets = idxs.to(boxes) * (max_coordinate + torch.tensor(1).to(boxes))
+            boxes_ctr_for_nms = boxes[..., :2] + offsets[:, None]
+            boxes_for_nms = torch.cat([boxes_ctr_for_nms, boxes[..., 2:5]], dim=-1)
+        else:
+            max_coordinate = boxes.max()
+            offsets = idxs.to(boxes) * (max_coordinate + torch.tensor(1).to(boxes))
+            boxes_for_nms = boxes + offsets[:, None]
+
+    nms_type = nms_cfg_.pop("type", "nms")
+    nms_op = eval(nms_type)
+
+    split_thr = nms_cfg_.pop("split_thr", 10000)
+    # Won't split to multiple nms nodes when exporting to onnx
+    if boxes_for_nms.shape[0] < split_thr or torch.onnx.is_in_onnx_export():
+        dets, keep = nms_op(boxes_for_nms, scores, **nms_cfg_)
+        boxes = boxes[keep]
+
+        # This assumes `dets` has arbitrary dimensions where
+        # the last dimension is score.
+        # Currently it supports bounding boxes [x1, y1, x2, y2, score] or
+        # rotated boxes [cx, cy, w, h, angle_radian, score].
+
+        scores = dets[:, -1]
+    else:
+        max_num = nms_cfg_.pop("max_num", -1)
+        total_mask = scores.new_zeros(scores.size(), dtype=torch.bool)
+        # Some type of nms would reweight the score, such as SoftNMS
+        scores_after_nms = scores.new_zeros(scores.size())
+        for id in torch.unique(idxs):
+            mask = (idxs == id).nonzero(as_tuple=False).view(-1)
+            dets, keep = nms_op(boxes_for_nms[mask], scores[mask], **nms_cfg_)
+            total_mask[mask[keep]] = True
+            scores_after_nms[mask[keep]] = dets[:, -1]
+        keep = total_mask.nonzero(as_tuple=False).view(-1)
+
+        scores, inds = scores_after_nms[keep].sort(descending=True)
+        keep = keep[inds]
+        boxes = boxes[keep]
+
+        if max_num > 0:
+            keep = keep[:max_num]
+            boxes = boxes[:max_num]
+            scores = scores[:max_num]
+
+    boxes = torch.cat([boxes, scores[:, None]], -1)
+    return boxes, keep
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
@@ -326,40 +705,46 @@ class ConvNextMaskRCNNAnchorGenerator(nn.Module):
 
     Source: https://github.com/open-mmlab/mmdetection/blob/master/mmdet/core/anchor/anchor_generator.py.
     """
+
     def __init__(self, config):
         super().__init__()
 
         # calculate base sizes of anchors
         self.strides = [_pair(stride) for stride in config.anchor_generator_strides]
         self.base_sizes = [min(stride) for stride in self.strides]
-        assert len(self.base_sizes) == len(self.strides), \
-            'The number of strides should be the same as base sizes, got ' \
-            f'{self.strides} and {self.base_sizes}'
+        assert len(self.base_sizes) == len(
+            self.strides
+        ), f"The number of strides should be the same as base sizes, got {self.strides} and {self.base_sizes}"
 
         # calculate scales of anchors
         self.scales = torch.Tensor(config.anchor_generator_scales)
-        
+
         self.ratios = torch.Tensor(config.anchor_generator_ratios)
         # TODO support the following 3 attributes in the config
         self.scale_major = True
         self.centers = None
-        self.center_offset = 0.
+        self.center_offset = 0.0
         self.base_anchors = self.gen_base_anchors()
 
     @property
     def num_base_anchors(self):
         """list[int]: total number of base anchors in a feature grid"""
         return self.num_base_priors
-    
+
     @property
     def num_base_priors(self):
         """list[int]: The number of priors (anchors) at a point
         on the feature grid"""
         return [base_anchors.size(0) for base_anchors in self.base_anchors]
-    
+
+    @property
+    def num_levels(self):
+        """int: number of feature levels that the generator will be applied"""
+        return len(self.strides)
+
     def gen_base_anchors(self):
         """Generate base anchors.
-        
+
         Returns:
             list(torch.Tensor): Base anchors of a feature grid in multiple \
                 feature levels.
@@ -370,18 +755,11 @@ class ConvNextMaskRCNNAnchorGenerator(nn.Module):
             if self.centers is not None:
                 center = self.centers[i]
             multi_level_base_anchors.append(
-                self.gen_single_level_base_anchors(
-                    base_size,
-                    scales=self.scales,
-                    ratios=self.ratios,
-                    center=center))
+                self.gen_single_level_base_anchors(base_size, scales=self.scales, ratios=self.ratios, center=center)
+            )
         return multi_level_base_anchors
 
-    def gen_single_level_base_anchors(self,
-                                      base_size,
-                                      scales,
-                                      ratios,
-                                      center=None):
+    def gen_single_level_base_anchors(self, base_size, scales, ratios, center=None):
         """Generate base anchors of a single level.
         Args:
             base_size (int | float): Basic size of an anchor.
@@ -412,41 +790,233 @@ class ConvNextMaskRCNNAnchorGenerator(nn.Module):
 
         # use float anchor and the anchor's center is aligned with the
         # pixel center
-        base_anchors = [
-            x_center - 0.5 * ws, y_center - 0.5 * hs, x_center + 0.5 * ws,
-            y_center + 0.5 * hs
-        ]
+        base_anchors = [x_center - 0.5 * ws, y_center - 0.5 * hs, x_center + 0.5 * ws, y_center + 0.5 * hs]
         base_anchors = torch.stack(base_anchors, dim=-1)
 
         return base_anchors
 
+    def _meshgrid(self, x, y, row_major=True):
+        """Generate mesh grid of x and y.
+        Args:
+            x (torch.Tensor): Grids of x dimension.
+            y (torch.Tensor): Grids of y dimension.
+            row_major (bool, optional): Whether to return y grids first.
+                Defaults to True.
+        Returns:
+            tuple[torch.Tensor]: The mesh grids of x and y.
+        """
+        # use shape instead of len to keep tracing while exporting to onnx
+        xx = x.repeat(y.shape[0])
+        yy = y.view(-1, 1).repeat(1, x.shape[0]).view(-1)
+        if row_major:
+            return xx, yy
+        else:
+            return yy, xx
+
+    def grid_priors(self, featmap_sizes, dtype=torch.float32, device="cuda"):
+        """Generate grid anchors in multiple feature levels.
+        Args:
+            featmap_sizes (list[tuple]): List of feature map sizes in
+                multiple feature levels.
+            dtype (:obj:`torch.dtype`): Dtype of priors.
+                Default: torch.float32.
+            device (str): The device where the anchors will be put on.
+        Return:
+            list[torch.Tensor]: Anchors in multiple feature levels. \
+                The sizes of each tensor should be [N, 4], where \
+                N = width * height * num_base_anchors, width and height \
+                are the sizes of the corresponding feature level, \
+                num_base_anchors is the number of anchors for that level.
+        """
+        assert self.num_levels == len(featmap_sizes)
+        multi_level_anchors = []
+        for i in range(self.num_levels):
+            anchors = self.single_level_grid_priors(featmap_sizes[i], level_idx=i, dtype=dtype, device=device)
+            multi_level_anchors.append(anchors)
+        return multi_level_anchors
+
+    def single_level_grid_priors(self, featmap_size, level_idx, dtype=torch.float32, device="cuda"):
+        """Generate grid anchors of a single level.
+        Note:
+            This function is usually called by method ``self.grid_priors``.
+        Args:
+            featmap_size (tuple[int]): Size of the feature maps.
+            level_idx (int): The index of corresponding feature map level.
+            dtype (obj:`torch.dtype`): Date type of points.Defaults to
+                ``torch.float32``.
+            device (str, optional): The device the tensor will be put on.
+                Defaults to 'cuda'.
+        Returns:
+            torch.Tensor: Anchors in the overall feature maps.
+        """
+
+        base_anchors = self.base_anchors[level_idx].to(device).to(dtype)
+        feat_h, feat_w = featmap_size
+        stride_w, stride_h = self.strides[level_idx]
+        # First create Range with the default dtype, than convert to
+        # target `dtype` for onnx exporting.
+        shift_x = torch.arange(0, feat_w, device=device).to(dtype) * stride_w
+        shift_y = torch.arange(0, feat_h, device=device).to(dtype) * stride_h
+
+        shift_xx, shift_yy = self._meshgrid(shift_x, shift_y)
+        shifts = torch.stack([shift_xx, shift_yy, shift_xx, shift_yy], dim=-1)
+        # first feat_w elements correspond to the first row of shifts
+        # add A anchors (1, A, 4) to K shifts (K, 1, 4) to get
+        # shifted anchors (K, A, 4), reshape to (K*A, 4)
+
+        all_anchors = base_anchors[None, :, :] + shifts[:, None, :]
+        all_anchors = all_anchors.view(-1, 4)
+        # first A rows correspond to A anchors of (0, 0) in feature map,
+        # then (0, 1), (0, 2), ...
+        return all_anchors
+
+
+class ConvNextMaskRCNNDeltaXYWHBBoxCoder(nn.Module):
+    """Delta XYWH BBox coder.
+    Following the practice in [R-CNN](https://arxiv.org/abs/1311.2524),
+    this coder encodes bbox (x1, y1, x2, y2) into delta (dx, dy, dw, dh) and
+    decodes delta (dx, dy, dw, dh) back to original bbox (x1, y1, x2, y2).
+
+    Args:
+        target_means (Sequence[float]): Denormalizing means of target for
+            delta coordinates
+        target_stds (Sequence[float]): Denormalizing standard deviation of
+            target for delta coordinates
+        clip_border (bool, optional): Whether clip the objects outside the
+            border of the image. Defaults to True.
+        add_ctr_clamp (bool): Whether to add center clamp, when added, the
+            predicted box is clamped is its center is too far away from
+            the original anchor's center. Only used by YOLOF. Default False.
+        ctr_clamp (int): the maximum pixel shift to clamp. Only used by YOLOF.
+            Default 32.
+    """
+
+    def __init__(
+        self,
+        target_means=(0.0, 0.0, 0.0, 0.0),
+        target_stds=(1.0, 1.0, 1.0, 1.0),
+        clip_border=True,
+        add_ctr_clamp=False,
+        ctr_clamp=32,
+    ):
+        super().__init__()
+        self.means = target_means
+        self.stds = target_stds
+        self.clip_border = clip_border
+        self.add_ctr_clamp = add_ctr_clamp
+        self.ctr_clamp = ctr_clamp
+
+    def encode(self, bboxes, gt_bboxes):
+        """Get box regression transformation deltas that can be used to
+        transform the ``bboxes`` into the ``gt_bboxes``.
+        Args:
+            bboxes (torch.Tensor): Source boxes, e.g., object proposals.
+            gt_bboxes (torch.Tensor): Target of the transformation, e.g.,
+                ground-truth boxes.
+        Returns:
+            torch.Tensor: Box transformation deltas
+        """
+
+        assert bboxes.size(0) == gt_bboxes.size(0)
+        assert bboxes.size(-1) == gt_bboxes.size(-1) == 4
+        encoded_bboxes = bbox2delta(bboxes, gt_bboxes, self.means, self.stds)
+        return encoded_bboxes
+
+    def decode(self, bboxes, pred_bboxes, max_shape=None, wh_ratio_clip=16 / 1000):
+        """Apply transformation `pred_bboxes` to `boxes`.
+        Args:
+            bboxes (torch.Tensor): Basic boxes. Shape (B, N, 4) or (N, 4)
+            pred_bboxes (Tensor): Encoded offsets with respect to each roi.
+               Has shape (B, N, num_classes * 4) or (B, N, 4) or
+               (N, num_classes * 4) or (N, 4). Note N = num_anchors * W * H
+               when rois is a grid of anchors.Offset encoding follows [1]_.
+            max_shape (Sequence[int] or torch.Tensor or Sequence[
+               Sequence[int]],optional): Maximum bounds for boxes, specifies
+               (H, W, C) or (H, W). If bboxes shape is (B, N, 4), then
+               the max_shape should be a Sequence[Sequence[int]]
+               and the length of max_shape should also be B.
+            wh_ratio_clip (float, optional): The allowed ratio between
+                width and height.
+        Returns:
+            torch.Tensor: Decoded boxes.
+        """
+
+        assert pred_bboxes.size(0) == bboxes.size(0)
+        if pred_bboxes.ndim == 3:
+            assert pred_bboxes.size(1) == bboxes.size(1)
+
+        if pred_bboxes.ndim == 2 and not torch.onnx.is_in_onnx_export():
+            # single image decode
+            decoded_bboxes = delta2bbox(
+                bboxes,
+                pred_bboxes,
+                self.means,
+                self.stds,
+                max_shape,
+                wh_ratio_clip,
+                self.clip_border,
+                self.add_ctr_clamp,
+                self.ctr_clamp,
+            )
+        else:
+            if pred_bboxes.ndim == 3 and not torch.onnx.is_in_onnx_export():
+                warnings.warn(
+                    "DeprecationWarning: onnx_delta2bbox is deprecated "
+                    "in the case of batch decoding and non-ONNX, "
+                    "please use “delta2bbox” instead. In order to improve "
+                    "the decoding speed, the batch function will no "
+                    "longer be supported. "
+                )
+            raise NotImplementedError("ONNX is not yet supported")
+            # decoded_bboxes = onnx_delta2bbox(
+            #     bboxes,
+            #     pred_bboxes,
+            #     self.means,
+            #     self.stds,
+            #     max_shape,
+            #     wh_ratio_clip,
+            #     self.clip_border,
+            #     self.add_ctr_clamp,
+            #     self.ctr_clamp,
+            # )
+
+        return decoded_bboxes
+
 
 class ConvNextMaskRCNNRPN(nn.Module):
     """
-    Anchor-based Region Proposal Network (RPN).
+    Anchor-based Region Proposal Network (RPN). The RPN learns to convert anchors into region proposals, by
+
+    1) classifying anchors as either positive/negative/neutral (based on IoU overlap with ground-truth boxes)
+    2) for the anchors classified as positive/negative, regressing the anchor box to the ground-truth box.
+
+    RPN was originally proposed in [Faster R-CNN: Towards Real-Time Object Detection with Region Proposal Networks](https://arxiv.org/abs/1506.01497).
     """
 
-    def __init__(self, config):
+    def __init__(self, config, num_classes=1):
         super().__init__()
 
+        # anchor generator
         self.prior_generator = ConvNextMaskRCNNAnchorGenerator(config)
         self.num_base_priors = self.prior_generator.num_base_priors[0]
-        
-        self.use_sigmoid_cls = config.rpn_loss_cls.get('use_sigmoid', False)
+
+        self.bbox_coder = ConvNextMaskRCNNDeltaXYWHBBoxCoder()
+
+        # layers
+        self.use_sigmoid_cls = config.rpn_loss_cls.get("use_sigmoid", False)
         if self.use_sigmoid_cls:
-            self.cls_out_channels = config.num_labels
+            self.cls_out_channels = num_classes
         else:
-            self.cls_out_channels = config.num_labels + 1
+            self.cls_out_channels = num_classes + 1
 
         if self.cls_out_channels <= 0:
-            raise ValueError(f'num_classes={config.num_labels} is too small')
-        
+            raise ValueError(f"num_classes={num_classes} is too small")
+
         self.rpn_conv = nn.Conv2d(config.rpn_in_channels, config.rpn_feat_channels, kernel_size=3, padding=1)
-        self.rpn_cls = nn.Conv2d(config.rpn_feat_channels,
-                                 self.num_base_priors * self.cls_out_channels,
-                                 1)
-        self.rpn_reg = nn.Conv2d(config.rpn_feat_channels, self.num_base_priors * 4,
-                                 1)
+        self.rpn_cls = nn.Conv2d(config.rpn_feat_channels, self.num_base_priors * self.cls_out_channels, 1)
+        self.rpn_reg = nn.Conv2d(config.rpn_feat_channels, self.num_base_priors * 4, 1)
+
+        self.test_cfg = config.rpn_test_cfg
 
     def forward_single(self, hidden_state):
         """Forward feature map of a single scale level."""
@@ -455,22 +1025,219 @@ class ConvNextMaskRCNNRPN(nn.Module):
         rpn_cls_score = self.rpn_cls(hidden_state)
         rpn_bbox_pred = self.rpn_reg(hidden_state)
         return rpn_cls_score, rpn_bbox_pred
-    
+
     def forward(self, hidden_states):
         """Forward features from the upstream network.
-        
+
         Args:
             hidden_states (tuple[torch.Tensor]): Features from the upstream network, each is a 4D-tensor.
         Returns:
             tuple: A tuple of classification scores and bbox prediction.
                 - cls_scores (list[Tensor]): Classification scores for all \
-                    scale levels, each is a 4D-tensor, the channels number \
-                    is num_base_priors * num_classes.
+                    scale levels, each is a 4D-tensor, the channels number \ is num_base_priors * num_classes.
                 - bbox_preds (list[Tensor]): Box energies / deltas for all \
-                    scale levels, each is a 4D-tensor, the channels number \
-                    is num_base_priors * 4.
+                    scale levels, each is a 4D-tensor, the channels number \ is num_base_priors * 4.
         """
-        return map(self.forward_single, hidden_states)
+        return multi_apply(self.forward_single, hidden_states)
+
+    def get_bboxes(
+        self,
+        cls_scores,
+        bbox_preds,
+        score_factors=None,
+        img_metas=None,
+        cfg=None,
+        rescale=False,
+        with_nms=True,
+        **kwargs
+    ):
+        """Transform network outputs of a batch into bbox results.
+        Note: When score_factors is not None, the cls_scores are usually multiplied by it then obtain the real score
+        used in NMS, such as CenterNess in FCOS, IoU branch in ATSS.
+
+        Args:
+            cls_scores (list[Tensor]): Classification scores for all
+                scale levels, each is a 4D-tensor, has shape (batch_size, num_priors * num_classes, H, W).
+            bbox_preds (list[Tensor]): Box energies / deltas for all
+                scale levels, each is a 4D-tensor, has shape (batch_size, num_priors * 4, H, W).
+            score_factors (list[Tensor], Optional): Score factor for
+                all scale level, each is a 4D-tensor, has shape (batch_size, num_priors * 1, H, W). Default None.
+            img_metas (list[dict], Optional): Image meta info. Default None.
+            cfg (mmcv.Config, Optional): Test / postprocessing configuration,
+                if None, test_cfg would be used. Default None.
+            rescale (bool): If True, return boxes in original image space.
+                Default False.
+            with_nms (bool): If True, do nms before return boxes.
+                Default True.
+
+        Returns:
+            list[list[Tensor, Tensor]]: Each item in result_list is 2-tuple.
+                The first item is an (n, 5) tensor, where the first 4 columns are bounding box positions (tl_x, tl_y,
+                br_x, br_y) and the 5-th column is a score between 0 and 1. The second item is a (n,) tensor where each
+                item is the predicted class label of the corresponding box.
+        """
+        assert len(cls_scores) == len(bbox_preds)
+
+        if score_factors is None:
+            # e.g. Retina, FreeAnchor, Foveabox, etc.
+            with_score_factors = False
+        else:
+            # e.g. FCOS, PAA, ATSS, AutoAssign, etc.
+            with_score_factors = True
+            assert len(cls_scores) == len(score_factors)
+
+        num_levels = len(cls_scores)
+
+        featmap_sizes = [cls_scores[i].shape[-2:] for i in range(num_levels)]
+        mlvl_priors = self.prior_generator.grid_priors(
+            featmap_sizes, dtype=cls_scores[0].dtype, device=cls_scores[0].device
+        )
+
+        result_list = []
+
+        for img_id in range(len(img_metas)):
+            img_meta = img_metas[img_id]
+            cls_score_list = select_single_mlvl(cls_scores, img_id)
+            bbox_pred_list = select_single_mlvl(bbox_preds, img_id)
+            if with_score_factors:
+                score_factor_list = select_single_mlvl(score_factors, img_id)
+            else:
+                score_factor_list = [None for _ in range(num_levels)]
+
+            results = self._get_bboxes_single(
+                cls_score_list,
+                bbox_pred_list,
+                score_factor_list,
+                mlvl_priors,
+                img_meta,
+                cfg,
+                rescale,
+                with_nms,
+                **kwargs,
+            )
+            result_list.append(results)
+        return result_list
+
+    def _get_bboxes_single(
+        self,
+        cls_score_list,
+        bbox_pred_list,
+        score_factor_list,
+        mlvl_anchors,
+        img_meta,
+        cfg,
+        rescale=False,
+        with_nms=True,
+        **kwargs
+    ):
+        """Transform outputs of a single image into bbox predictions.
+
+        Args:
+            cls_score_list (list[Tensor]): Box scores from all scale
+                levels of a single image, each item has shape (num_anchors * num_classes, H, W).
+            bbox_pred_list (list[Tensor]): Box energies / deltas from
+                all scale levels of a single image, each item has shape (num_anchors * 4, H, W).
+            score_factor_list (list[Tensor]): Score factor from all scale
+                levels of a single image. RPN head does not need this value.
+            mlvl_anchors (list[Tensor]): Anchors of all scale level
+                each item has shape (num_anchors, 4).
+            img_meta (dict): Image meta info.
+            cfg (mmcv.Config): Test / postprocessing configuration,
+                if None, test_cfg would be used.
+            rescale (bool): If True, return boxes in original image space.
+                Default: False.
+            with_nms (bool): If True, do nms before return boxes.
+                Default: True.
+
+        Returns:
+            Tensor: Labeled boxes in shape (n, 5), where the first 4 columns
+                are bounding box positions (tl_x, tl_y, br_x, br_y) and the 5-th column is a score between 0 and 1.
+        """
+        cfg = self.test_cfg if cfg is None else cfg
+        cfg = copy.deepcopy(cfg)
+        img_shape = img_meta["img_shape"]
+
+        # bboxes from different level should be independent during NMS,
+        # level_ids are used as labels for batched NMS to separate them
+        level_ids = []
+        mlvl_scores = []
+        mlvl_bbox_preds = []
+        mlvl_valid_anchors = []
+        nms_pre = cfg.get("nms_pre", -1)
+        for level_idx in range(len(cls_score_list)):
+            rpn_cls_score = cls_score_list[level_idx]
+            rpn_bbox_pred = bbox_pred_list[level_idx]
+            assert rpn_cls_score.size()[-2:] == rpn_bbox_pred.size()[-2:]
+            rpn_cls_score = rpn_cls_score.permute(1, 2, 0)
+            if self.use_sigmoid_cls:
+                rpn_cls_score = rpn_cls_score.reshape(-1)
+                scores = rpn_cls_score.sigmoid()
+            else:
+                rpn_cls_score = rpn_cls_score.reshape(-1, 2)
+                # We set FG labels to [0, num_class-1] and BG label to
+                # num_class in RPN head since mmdet v2.5, which is unified to
+                # be consistent with other head since mmdet v2.0. In mmdet v2.0
+                # to v2.4 we keep BG label as 0 and FG label as 1 in rpn head.
+                scores = rpn_cls_score.softmax(dim=1)[:, 0]
+            rpn_bbox_pred = rpn_bbox_pred.permute(1, 2, 0).reshape(-1, 4)
+
+            anchors = mlvl_anchors[level_idx]
+            if 0 < nms_pre < scores.shape[0]:
+                # sort is faster than topk
+                # _, topk_inds = scores.topk(cfg.nms_pre)
+                ranked_scores, rank_inds = scores.sort(descending=True)
+                topk_inds = rank_inds[:nms_pre]
+                scores = ranked_scores[:nms_pre]
+                rpn_bbox_pred = rpn_bbox_pred[topk_inds, :]
+                anchors = anchors[topk_inds, :]
+
+            mlvl_scores.append(scores)
+            mlvl_bbox_preds.append(rpn_bbox_pred)
+            mlvl_valid_anchors.append(anchors)
+            level_ids.append(scores.new_full((scores.size(0),), level_idx, dtype=torch.long))
+
+        return self._bbox_post_process(mlvl_scores, mlvl_bbox_preds, mlvl_valid_anchors, level_ids, cfg, img_shape)
+
+    def _bbox_post_process(self, mlvl_scores, mlvl_bboxes, mlvl_valid_anchors, level_ids, cfg, img_shape, **kwargs):
+        """bbox post-processing method.
+        Args:
+        Do the nms operation for bboxes in same level.
+            mlvl_scores (list[Tensor]): Box scores from all scale
+                levels of a single image, each item has shape (num_bboxes, ).
+            mlvl_bboxes (list[Tensor]): Decoded bboxes from all scale
+                levels of a single image, each item has shape (num_bboxes, 4).
+            mlvl_valid_anchors (list[Tensor]): Anchors of all scale level
+                each item has shape (num_bboxes, 4).
+            level_ids (list[Tensor]): Indexes from all scale levels of a
+                single image, each item has shape (num_bboxes, ).
+            cfg (mmcv.Config): Test / postprocessing configuration,
+                if None, `self.test_cfg` would be used.
+            img_shape (tuple(int)): The shape of model's input image.
+        Returns:
+            Tensor: Labeled boxes in shape (n, 5), where the first 4 columns
+                are bounding box positions (tl_x, tl_y, br_x, br_y) and the 5-th column is a score between 0 and 1.
+        """
+        scores = torch.cat(mlvl_scores)
+        anchors = torch.cat(mlvl_valid_anchors)
+        rpn_bbox_pred = torch.cat(mlvl_bboxes)
+        proposals = self.bbox_coder.decode(anchors, rpn_bbox_pred, max_shape=img_shape)
+        ids = torch.cat(level_ids)
+
+        if cfg["min_bbox_size"] >= 0:
+            w = proposals[:, 2] - proposals[:, 0]
+            h = proposals[:, 3] - proposals[:, 1]
+            valid_mask = (w > cfg["min_bbox_size"]) & (h > cfg["min_bbox_size"])
+            if not valid_mask.all():
+                proposals = proposals[valid_mask]
+                scores = scores[valid_mask]
+                ids = ids[valid_mask]
+
+        if proposals.numel() > 0:
+            dets, _ = batched_nms(proposals, scores, ids, cfg["nms"])
+        else:
+            return proposals.new_zeros(0, 5)
+
+        return dets[: cfg["max_per_img"]]
 
 
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextPreTrainedModel with ConvNext->ConvNextMaskRCNN,convnext->convnext_maskrcnn
@@ -613,18 +1380,33 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
             feature for idx, feature in enumerate(hidden_states[1:]) if idx in self.config.backbone_out_indices
         ]
 
+        # the FPN outputs feature maps at 5 different scales
         hidden_states = self.neck(hidden_states)
 
+        print("Neck outputs:")
         for idx, out in enumerate(hidden_states):
             print(out.shape)
-            print(f"First values after neck {idx}: ", out[0, 0, :3, :3])
 
+        # next, RPN computes a tuple of (class, bounding box) features for each of the 5 feature maps
+        # rpn_outs[0] are the class features for each of the feature maps
+        # rpn_outs[1] are the bounding box features for each of the feature maps
         rpn_outs = self.rpn_head(hidden_states)
-        # proposal_list = self.get_bboxes(*rpn_outs, img_metas=img_metas)
+
+        print(rpn_outs[0][0].shape)
+        print(rpn_outs[0][0][0, 0, :3, :3])
+
+        # TODO here: compute loss using losses = self.rpn_head.loss(...)
+
+        # TODO: remove img_metas, compute shape based on pixel_values
+        img_metas = [dict(img_shape=(800, 1067, 3))]
+        proposal_list = self.rpn_head.get_bboxes(*rpn_outs, img_metas=img_metas)
+        # print(proposal_list)
+
+        # TODO here:
+        # outputs = self.roi_head(hidden_states, proposal_list)
 
         logits, loss = None, None
         if labels is not None:
-            losses = dict()
             raise NotImplementedError("Training is not yet supported.")
         if not return_dict:
             output = (logits,) + outputs[2:]
