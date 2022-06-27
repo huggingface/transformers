@@ -54,11 +54,15 @@ class MobileNetV2ModelTester:
         num_channels=3,
         image_size=32,
         depth_multiplier=0.25,
+        depth_divisible_by=8,
         min_depth=8,
-        tf_padding=True,
-        last_hidden_size=1024,
+        expand_ratio=6,
         output_stride=32,
+        first_layer_is_expansion=True,
+        finegrained_output=True,
+        tf_padding=True,
         hidden_act="relu6",
+        last_hidden_size=1280,
         classifier_dropout_prob=0.1,
         initializer_range=0.02,
         is_training=True,
@@ -71,11 +75,15 @@ class MobileNetV2ModelTester:
         self.num_channels = num_channels
         self.image_size = image_size
         self.depth_multiplier = depth_multiplier
+        self.depth_divisible_by = depth_divisible_by
         self.min_depth = min_depth
+        self.expand_ratio = expand_ratio
         self.tf_padding = tf_padding
-        self.last_hidden_size = int(last_hidden_size * depth_multiplier)
         self.output_stride = output_stride
+        self.first_layer_is_expansion = first_layer_is_expansion
+        self.finegrained_output = finegrained_output
         self.hidden_act = hidden_act
+        self.last_hidden_size = last_hidden_size if finegrained_output else int(last_hidden_size * depth_multiplier)
         self.classifier_dropout_prob = classifier_dropout_prob
         self.use_labels = use_labels
         self.is_training = is_training
@@ -101,9 +109,14 @@ class MobileNetV2ModelTester:
             num_channels=self.num_channels,
             image_size=self.image_size,
             depth_multiplier=self.depth_multiplier,
+            depth_divisible_by=self.depth_divisible_by,
             min_depth=self.min_depth,
-            tf_padding=self.tf_padding,
+            expand_ratio=self.expand_ratio,
+            output_stride=self.output_stride,
+            first_layer_is_expansion=self.first_layer_is_expansion,
+            finegrained_output=self.finegrained_output,
             hidden_act=self.hidden_act,
+            tf_padding=self.tf_padding,
             classifier_dropout_prob=self.classifier_dropout_prob,
             initializer_range=self.initializer_range,
         )
@@ -120,6 +133,13 @@ class MobileNetV2ModelTester:
                 self.last_hidden_size,
                 self.image_size // self.output_stride,
                 self.image_size // self.output_stride,
+            ),
+        )
+        self.parent.assertEqual(
+            result.pooler_output.shape,
+            (
+                self.batch_size,
+                self.last_hidden_size,
             ),
         )
 
@@ -198,7 +218,7 @@ class MobileNetV2ModelTest(ModelTesterMixin, unittest.TestCase):
 
             hidden_states = outputs.hidden_states
 
-            expected_num_stages = 26
+            expected_num_stages = 16
             self.assertEqual(len(hidden_states), expected_num_stages)
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -257,6 +277,6 @@ class MobileNetV2ModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1001))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-4.1739, -1.1233, 3.1205]).to(torch_device)
+        expected_slice = torch.tensor([0.2445, -1.1993, 0.1905]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
