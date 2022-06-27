@@ -24,7 +24,9 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from packaging import version
 from torch import nn
+
 from rich.progress import Progress
+
 
 if version.parse(torch.__version__) >= version.parse("1.6"):
     is_amp_available = True
@@ -1890,7 +1892,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
             n_depth=depth,
             attn_dropout=attn_dropout,
             resid_dropout=resid_dropout,
-            afn="relu",
+            afn="quick_gelu",
             scale=True,
             mask=mask,
             zero_out=zero_out,
@@ -2088,7 +2090,9 @@ class JukeboxConditionalAutoregressive(nn.Module):
 
                 x, cond = self.get_emb(sample_t, n_samples, x, x_cond, y_cond)
                 self.transformer.check_cache(n_samples, sample_t, fp16)
-                x = self.transformer(x, encoder_kv=encoder_kv, sample=True, fp16=fp16)  # Transformer
+                x = self.transformer(
+                    x, encoder_kv=encoder_kv, sample=True, fp16=True
+                )  # TODO put fp16 back # Transformer
                 if self.add_cond_after_transformer:
                     x = x + cond
                 assert x.shape == (n_samples, 1, self.width)
@@ -2174,6 +2178,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
             start = 0
             x = None
             # for current_chunk_size in get_range(chunk_sizes):
+            task2 = progress.add_task("Primed Sampling chunks ", total=len(chunk_sizes))
             for current_chunk_size in chunk_sizes:
 
                 xs_prime, conds_prime = [], []
@@ -2202,6 +2207,8 @@ class JukeboxConditionalAutoregressive(nn.Module):
                 else:
                     del x_prime
 
+                progress.update(task2, advance=1)
+
             if get_preds:
                 x_prime = torch.cat(x_primes, dim=1)
                 assert x_prime.shape == (n_samples, len(xs), self.width)
@@ -2215,10 +2222,9 @@ class JukeboxConditionalAutoregressive(nn.Module):
             assert x.shape == (n_samples, 1)
             empty_cache()
             # for sample_t in get_range(range(len(xs), sample_tokens)):
-            total = (sample_tokens - len(xs))
-            task3 = progress.add_task("Sampling indivdual tokens (super slow)", total = total )
+            total = sample_tokens - len(xs)
+            task3 = progress.add_task("Sampling indivdual tokens ", total=total)
             for sample_t in range(len(xs), sample_tokens):
-
                 x, cond = self.get_emb(sample_t, n_samples, x, x_cond, y_cond)
                 self.transformer.check_cache(n_samples, sample_t, fp16)
                 x = self.transformer(x, encoder_kv=encoder_kv, sample=True, fp16=fp16)  # Transformer
@@ -2234,9 +2240,8 @@ class JukeboxConditionalAutoregressive(nn.Module):
                 x = torch.distributions.Categorical(logits=x).sample()  # Sample and replace x
                 assert x.shape == (n_samples, 1)
                 xs.append(x.clone())
-                progress.update(task3,advance=1)
-                progress.update(0,advance=1/total)
-                
+                progress.update(task3, advance=1)
+                progress.update(0, advance=1 / total)
 
             del x
             self.transformer.del_cache()
@@ -3200,13 +3205,8 @@ def get_alignment(x, zs, labels, prior, level, fp16, hps):
     return alignments
 
 
-
-
-
-
 from rich.live import Live
-from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn,TimeRemainingColumn,TimeElapsedColumn
-
+from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn
 
 
 progress = Progress(
@@ -3215,7 +3215,7 @@ progress = Progress(
     BarColumn(),
     TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
     TimeElapsedColumn(),
-    TimeRemainingColumn()
+    TimeRemainingColumn(),
 )
 
 
@@ -3225,8 +3225,7 @@ progress = Progress(
 )
 class JukeboxModel(JukeboxPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["attn.masked_bias"]
-   
-    
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -3289,7 +3288,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         z_conds = prior.get_z_conds(zs, start, end)
         # if there are no levels above should return None!
 
-        # set y offset, sample_length and lyrics tokens
+        # set y offset, sample_length and lyrics okens
         y = prior.get_y(labels, start)
 
         empty_cache()
@@ -3320,7 +3319,9 @@ class JukeboxModel(JukeboxPreTrainedModel):
         prior = self.priors[level]
         if total_length >= prior.n_ctx:
             with Live(progress):
-                progress.add_task("[red]Sampling single window...", total=len(get_starts(total_length, prior.n_ctx, hop_length)))
+                progress.add_task(
+                    "[red]Sampling single window...", total=len(get_starts(total_length, prior.n_ctx, hop_length))
+                )
                 for start in get_starts(total_length, prior.n_ctx, hop_length):
                     zs = self.sample_single_window(zs, labels, sampling_kwargs, level, start, hps)
                     # progress.update(task1, advance=1)
@@ -3344,7 +3345,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
             hop_length = int(hps.hop_fraction[-level - 1] * prior.n_ctx)
 
             zs = self.sample_level(zs, labels[level], sampling_kwargs[level], level, total_length, hop_length, hps)
-            
+
             # TODO either mask them or ddo better
             # if level != len(sample_levels) - 1:
             #     labels_level = labels[level][0][: 4 + hps.max_bow_genre_size].unsqueeze(0)

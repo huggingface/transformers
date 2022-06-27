@@ -552,7 +552,7 @@ class JukeboxModelTest(unittest.TestCase):
 
         tokenizer = JukeboxTokenizer.from_pretrained("ArthurZ/jukebox", max_n_lyric_tokens=384)
         set_seed(0)
-        
+
         sampling_temperature = 0.98
         lower_batch_size = 16
         max_batch_size = 16
@@ -598,11 +598,10 @@ class JukeboxModelTest(unittest.TestCase):
 
         tokens = tokenizer(**metas)
         inputs, _ = tokens["input_ids"], tokens["attention_masks"]
-        zs = [torch.zeros(1,0) for _ in range(len(model.priors))]
-        labels = torch.tensor([[inputs]]*3)
-        zs = model._sample(zs,labels , sampling_kwargs, [2],model.config)
+        zs = [torch.zeros(1, 0) for _ in range(len(model.priors))]
+        labels = torch.tensor([[inputs]] * 3)
+        zs = model._sample(zs, labels, sampling_kwargs, [2], model.config)
 
-        
         ys = np.array([[inputs]] * 3, dtype=np.int64)
         ys = torch.stack([torch.from_numpy(y) for y in ys], dim=0).long()  # .to("cuda")
 

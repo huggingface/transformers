@@ -291,7 +291,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
     # a type argument to add an artist token with self.getattr('artist') ?
     # TODO : is a call function required ?
 
-    def __call__(self, artist, genres, lyrics, total_length, sample_length, offset, duration):
+    def __call__(self, artist, genres, lyrics, total_length, sample_length, offset):
         """Convert the raw string to token ids
 
         Args:
@@ -307,13 +307,11 @@ class JukeboxTokenizer(PreTrainedTokenizer):
                 _description_
             offset (`_type_`):
                 _description_
-            duration (`_type_`):
-                _description_
         """
         input_ids = [total_length, offset, sample_length]
         artists_tokens, genres_tokens, lyrics_tokens = self.tokenize(artist, genres, lyrics)
         artists_id, genres_ids, lyric_ids = self._convert_token_to_id(
-            artists_tokens, genres_tokens, lyrics_tokens, total_length, offset, duration
+            artists_tokens, genres_tokens, lyrics_tokens, total_length, offset, sample_length
         )
         input_ids += [artists_id] + genres_ids + lyric_ids
         attention_masks = [-INFINITY] * (self.max_n_lyric_tokens - len(lyrics_tokens)) + [0] * len(lyrics_tokens)
