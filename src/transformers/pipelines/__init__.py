@@ -483,8 +483,12 @@ def pipeline(
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
             when running `transformers-cli login` (stored in `~/.huggingface`).
         device_map:
-            Sent directly as `model_kwargs` (just a simpler shortcut) to load the model automatically on multiple GPUs if `accelerate`
-            is available (do not use `device_map` AND `device` at the same time).
+            Sent directly as `model_kwargs` (just a simpler shortcut).
+            When `accelerate` library is present, set `device_map="auto"` to compute the most optimized `device_map` automatically.
+            [More information](https://huggingface.co/docs/accelerate/main/en/big_modeling#accelerate.cpu_offload)
+            <Tip warning={true}>
+            Do not use `device_map` AND `device` at the same time as they will conflict
+            </Tip>
         torch_dtype:
             Sent directly as `model_kwargs` (just a simpler shortcut) to use the available precision for this model (`float16`, `bfloat16`, or `auto`).
         model_kwargs:
