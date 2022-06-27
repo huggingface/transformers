@@ -20,11 +20,12 @@
 import copy
 import warnings
 from functools import partial
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
 import torch.utils.checkpoint
+import torchvision
 from torch import nn
 from torch.nn.modules.utils import _pair
 
@@ -59,10 +60,8 @@ CONVNEXTMASKRCNN_PRETRAINED_MODEL_ARCHIVE_LIST = [
 def multi_apply(func, *args, **kwargs):
     """Apply function to a list of arguments.
     Note:
-        This function applies the ``func`` to multiple inputs and
-        map the multiple outputs of the ``func`` into different
-        list. Each list contains the same type of outputs corresponding
-        to different inputs.
+        This function applies the `func` to multiple inputs and map the multiple outputs of the `func` into
+        different list. Each list contains the same type of outputs corresponding to different inputs.
     Args:
         func (Function): A function that will be applied to a list of
             arguments
@@ -103,10 +102,9 @@ def select_single_mlvl(mlvl_tensors, batch_id, detach=True):
 
 def bbox2delta(proposals, gt, means=(0.0, 0.0, 0.0, 0.0), stds=(1.0, 1.0, 1.0, 1.0)):
     """Compute deltas of proposals w.r.t. gt.
-    We usually compute the deltas of x, y, w, h of proposals w.r.t ground
-    truth bboxes to get regression target.
-    This is the inverse function of :func:`delta2bbox`.
     Args:
+    We usually compute the deltas of x, y, w, h of proposals w.r.t ground truth bboxes to get regression target. This
+    is the inverse function of [`delta2bbox`].
         proposals (Tensor): Boxes to be transformed, shape (N, ..., 4)
         gt (Tensor): Gt bboxes to be used as base, shape (N, ..., 4)
         means (Sequence[float]): Denormalizing means for delta coordinates
@@ -155,14 +153,12 @@ def delta2bbox(
     ctr_clamp=32,
 ):
     """Apply deltas to shift/scale base boxes.
-    Typically the rois are anchor or proposed bounding boxes and the deltas are
-    network outputs used to shift/scale those boxes.
-    This is the inverse function of :func:`bbox2delta`.
     Args:
+    Typically the rois are anchor or proposed bounding boxes and the deltas are network outputs used to shift/scale
+    those boxes. This is the inverse function of [`bbox2delta`].
         rois (Tensor): Boxes to be transformed. Has shape (N, 4).
         deltas (Tensor): Encoded offsets relative to each roi.
-            Has shape (N, num_classes * 4) or (N, 4). Note
-            N = num_base_anchors * W * H, when rois is a grid of
+            Has shape (N, num_classes * 4) or (N, 4). Note N = num_base_anchors * W * H, when rois is a grid of
             anchors. Offset encoding follows [1]_.
         means (Sequence[float]): Denormalizing means for delta coordinates.
             Default (0., 0., 0., 0.).
@@ -175,9 +171,8 @@ def delta2bbox(
         clip_border (bool, optional): Whether clip the objects outside the
             border of the image. Default True.
         add_ctr_clamp (bool): Whether to add center clamp. When set to True,
-            the center of the prediction bounding box will be clamped to
-            avoid being too far away from the center of the anchor.
-            Only used by YOLOF. Default False.
+            the center of the prediction bounding box will be clamped to avoid being too far away from the center of
+            the anchor. Only used by YOLOF. Default False.
         ctr_clamp (int): the maximum pixel shift to clamp. Only used by YOLOF.
             Default 32.
     Returns:
@@ -186,19 +181,11 @@ def delta2bbox(
     References:
         .. [1] https://arxiv.org/abs/1311.2524
     Example:
-        >>> rois = torch.Tensor([[ 0.,  0.,  1.,  1.],
-        >>>                      [ 0.,  0.,  1.,  1.],
-        >>>                      [ 0.,  0.,  1.,  1.],
-        >>>                      [ 5.,  5.,  5.,  5.]])
-        >>> deltas = torch.Tensor([[  0.,   0.,   0.,   0.],
-        >>>                        [  1.,   1.,   1.,   1.],
-        >>>                        [  0.,   0.,   2.,  -1.],
-        >>>                        [ 0.7, -1.9, -0.5,  0.3]])
-        >>> delta2bbox(rois, deltas, max_shape=(32, 32, 3))
-        tensor([[0.0000, 0.0000, 1.0000, 1.0000],
-                [0.1409, 0.1409, 2.8591, 2.8591],
-                [0.0000, 0.3161, 4.1945, 0.6839],
-                [5.0000, 5.0000, 5.0000, 5.0000]])
+        >>> rois = torch.Tensor([[ 0., 0., 1., 1.], >>> [ 0., 0., 1., 1.], >>> [ 0., 0., 1., 1.], >>> [ 5., 5., 5.,
+        5.]]) >>> deltas = torch.Tensor([[ 0., 0., 0., 0.], >>> [ 1., 1., 1., 1.], >>> [ 0., 0., 2., -1.], >>> [ 0.7,
+        -1.9, -0.5, 0.3]]) >>> delta2bbox(rois, deltas, max_shape=(32, 32, 3)) tensor([[0.0000, 0.0000, 1.0000,
+        1.0000],
+                [0.1409, 0.1409, 2.8591, 2.8591], [0.0000, 0.3161, 4.1945, 0.6839], [5.0000, 5.0000, 5.0000, 5.0000]])
     """
     num_bboxes, num_classes = deltas.size(0), deltas.size(1) // 4
     if num_bboxes == 0:
@@ -239,32 +226,6 @@ def delta2bbox(
     return bboxes
 
 
-class NMSop(torch.autograd.Function):
-    @staticmethod
-    def forward(
-        ctx: Any,
-        bboxes: torch.Tensor,
-        scores: torch.Tensor,
-        iou_threshold: float,
-        offset: int,
-        score_threshold: float,
-        max_num: int,
-    ) -> torch.Tensor:
-        is_filtering_by_score = score_threshold > 0
-        if is_filtering_by_score:
-            valid_mask = scores > score_threshold
-            bboxes, scores = bboxes[valid_mask], scores[valid_mask]
-            valid_inds = torch.nonzero(valid_mask, as_tuple=False).squeeze(dim=1)
-
-        inds = ext_module.nms(bboxes, scores, iou_threshold=float(iou_threshold), offset=offset)
-
-        if max_num > 0:
-            inds = inds[:max_num]
-        if is_filtering_by_score:
-            inds = valid_inds[inds]
-        return inds
-
-
 array_like_type = Union[torch.Tensor, np.ndarray]
 
 
@@ -277,10 +238,9 @@ def nms(
     max_num: int = -1,
 ) -> Tuple[array_like_type, array_like_type]:
     """Dispatch to either CPU or GPU NMS implementations.
-    The input can be either torch tensor or numpy array. GPU NMS will be used
-    if the input is gpu tensor, otherwise CPU NMS
-    will be used. The returned type will always be the same as inputs.
     Arguments:
+    The input can be either torch tensor or numpy array. GPU NMS will be used if the input is gpu tensor, otherwise CPU
+    NMS will be used. The returned type will always be the same as inputs.
         boxes (torch.Tensor or np.ndarray): boxes in shape (N, 4).
         scores (torch.Tensor or np.ndarray): scores in shape (N, ).
         iou_threshold (float): IoU threshold for NMS.
@@ -288,21 +248,14 @@ def nms(
         score_threshold (float): score threshold for NMS.
         max_num (int): maximum number of boxes after NMS.
     Returns:
-        tuple: kept dets (boxes and scores) and indice, which always have
-        the same data type as the input.
+        tuple: kept dets (boxes and scores) and indice, which always have the same data type as the input.
     Example:
-        >>> boxes = np.array([[49.1, 32.4, 51.0, 35.9],
-        >>>                   [49.3, 32.9, 51.0, 35.3],
-        >>>                   [49.2, 31.8, 51.0, 35.4],
-        >>>                   [35.1, 11.5, 39.1, 15.7],
-        >>>                   [35.6, 11.8, 39.3, 14.2],
-        >>>                   [35.3, 11.5, 39.9, 14.5],
-        >>>                   [35.2, 11.7, 39.7, 15.7]], dtype=np.float32)
-        >>> scores = np.array([0.9, 0.9, 0.5, 0.5, 0.5, 0.4, 0.3],\
+        >>> boxes = np.array([[49.1, 32.4, 51.0, 35.9], >>> [49.3, 32.9, 51.0, 35.3], >>> [49.2, 31.8, 51.0, 35.4], >>>
+        [35.1, 11.5, 39.1, 15.7], >>> [35.6, 11.8, 39.3, 14.2], >>> [35.3, 11.5, 39.9, 14.5], >>> [35.2, 11.7, 39.7,
+        15.7]], dtype=np.float32) >>> scores = np.array([0.9, 0.9, 0.5, 0.5, 0.5, 0.4, 0.3],\
                dtype=np.float32)
-        >>> iou_threshold = 0.6
-        >>> dets, inds = nms(boxes, scores, iou_threshold)
-        >>> assert len(inds) == len(dets) == 3
+        >>> iou_threshold = 0.6 >>> dets, inds = nms(boxes, scores, iou_threshold) >>> assert len(inds) == len(dets) ==
+        3
     """
     assert isinstance(boxes, (torch.Tensor, np.ndarray))
     assert isinstance(scores, (torch.Tensor, np.ndarray))
@@ -316,7 +269,9 @@ def nms(
     assert boxes.size(0) == scores.size(0)
     assert offset in (0, 1)
 
-    inds = NMSop.apply(boxes, scores, iou_threshold, offset, score_threshold, max_num)
+    # TODO use the NMS op of mmcv: https://github.com/open-mmlab/mmcv/blob/d71d067da19d71d79e7b4d7ae967891c7bb00c05/mmcv/ops/nms.py#L28
+    # inds = NMSop.apply(boxes, scores, iou_threshold, offset, score_threshold, max_num)
+    inds = torchvision.ops.nms(boxes, scores, iou_threshold)
     dets = torch.cat((boxes[inds], scores[inds].reshape(-1, 1)), dim=1)
     if is_numpy:
         dets = dets.cpu().numpy()
@@ -818,15 +773,14 @@ class ConvNextMaskRCNNAnchorGenerator(nn.Module):
         Args:
             featmap_sizes (list[tuple]): List of feature map sizes in
                 multiple feature levels.
-            dtype (:obj:`torch.dtype`): Dtype of priors.
+            dtype (`torch.dtype`): Dtype of priors.
                 Default: torch.float32.
             device (str): The device where the anchors will be put on.
         Return:
             list[torch.Tensor]: Anchors in multiple feature levels. \
-                The sizes of each tensor should be [N, 4], where \
-                N = width * height * num_base_anchors, width and height \
-                are the sizes of the corresponding feature level, \
-                num_base_anchors is the number of anchors for that level.
+                The sizes of each tensor should be [N, 4], where \ N = width * height * num_base_anchors, width and
+                height \ are the sizes of the corresponding feature level, \ num_base_anchors is the number of anchors
+                for that level.
         """
         assert self.num_levels == len(featmap_sizes)
         multi_level_anchors = []
@@ -838,12 +792,12 @@ class ConvNextMaskRCNNAnchorGenerator(nn.Module):
     def single_level_grid_priors(self, featmap_size, level_idx, dtype=torch.float32, device="cuda"):
         """Generate grid anchors of a single level.
         Note:
-            This function is usually called by method ``self.grid_priors``.
+            This function is usually called by method `self.grid_priors`.
         Args:
             featmap_size (tuple[int]): Size of the feature maps.
             level_idx (int): The index of corresponding feature map level.
-            dtype (obj:`torch.dtype`): Date type of points.Defaults to
-                ``torch.float32``.
+            dtype (obj:*torch.dtype*): Date type of points.Defaults to
+                `torch.float32`.
             device (str, optional): The device the tensor will be put on.
                 Defaults to 'cuda'.
         Returns:
@@ -873,9 +827,8 @@ class ConvNextMaskRCNNAnchorGenerator(nn.Module):
 
 class ConvNextMaskRCNNDeltaXYWHBBoxCoder(nn.Module):
     """Delta XYWH BBox coder.
-    Following the practice in [R-CNN](https://arxiv.org/abs/1311.2524),
-    this coder encodes bbox (x1, y1, x2, y2) into delta (dx, dy, dw, dh) and
-    decodes delta (dx, dy, dw, dh) back to original bbox (x1, y1, x2, y2).
+    Following the practice in [R-CNN](https://arxiv.org/abs/1311.2524), this coder encodes bbox (x1, y1, x2, y2) into
+    delta (dx, dy, dw, dh) and decodes delta (dx, dy, dw, dh) back to original bbox (x1, y1, x2, y2).
 
     Args:
         target_means (Sequence[float]): Denormalizing means of target for
@@ -885,8 +838,8 @@ class ConvNextMaskRCNNDeltaXYWHBBoxCoder(nn.Module):
         clip_border (bool, optional): Whether clip the objects outside the
             border of the image. Defaults to True.
         add_ctr_clamp (bool): Whether to add center clamp, when added, the
-            predicted box is clamped is its center is too far away from
-            the original anchor's center. Only used by YOLOF. Default False.
+            predicted box is clamped is its center is too far away from the original anchor's center. Only used by
+            YOLOF. Default False.
         ctr_clamp (int): the maximum pixel shift to clamp. Only used by YOLOF.
             Default 32.
     """
@@ -908,8 +861,8 @@ class ConvNextMaskRCNNDeltaXYWHBBoxCoder(nn.Module):
 
     def encode(self, bboxes, gt_bboxes):
         """Get box regression transformation deltas that can be used to
-        transform the ``bboxes`` into the ``gt_bboxes``.
         Args:
+        transform the `bboxes` into the `gt_bboxes`.
             bboxes (torch.Tensor): Source boxes, e.g., object proposals.
             gt_bboxes (torch.Tensor): Target of the transformation, e.g.,
                 ground-truth boxes.
@@ -927,14 +880,12 @@ class ConvNextMaskRCNNDeltaXYWHBBoxCoder(nn.Module):
         Args:
             bboxes (torch.Tensor): Basic boxes. Shape (B, N, 4) or (N, 4)
             pred_bboxes (Tensor): Encoded offsets with respect to each roi.
-               Has shape (B, N, num_classes * 4) or (B, N, 4) or
-               (N, num_classes * 4) or (N, 4). Note N = num_anchors * W * H
-               when rois is a grid of anchors.Offset encoding follows [1]_.
+               Has shape (B, N, num_classes * 4) or (B, N, 4) or (N, num_classes * 4) or (N, 4). Note N = num_anchors *
+               W * H when rois is a grid of anchors.Offset encoding follows [1]_.
             max_shape (Sequence[int] or torch.Tensor or Sequence[
-               Sequence[int]],optional): Maximum bounds for boxes, specifies
-               (H, W, C) or (H, W). If bboxes shape is (B, N, 4), then
-               the max_shape should be a Sequence[Sequence[int]]
-               and the length of max_shape should also be B.
+               Sequence[int]],optional): Maximum bounds for boxes, specifies (H, W, C) or (H, W). If bboxes shape is
+               (B, N, 4), then the max_shape should be a Sequence[Sequence[int]] and the length of max_shape should
+               also be B.
             wh_ratio_clip (float, optional): The allowed ratio between
                 width and height.
         Returns:
@@ -987,10 +938,11 @@ class ConvNextMaskRCNNRPN(nn.Module):
     """
     Anchor-based Region Proposal Network (RPN). The RPN learns to convert anchors into region proposals, by
 
-    1) classifying anchors as either positive/negative/neutral (based on IoU overlap with ground-truth boxes)
-    2) for the anchors classified as positive/negative, regressing the anchor box to the ground-truth box.
+    1) classifying anchors as either positive/negative/neutral (based on IoU overlap with ground-truth boxes) 2) for
+    the anchors classified as positive/negative, regressing the anchor box to the ground-truth box.
 
-    RPN was originally proposed in [Faster R-CNN: Towards Real-Time Object Detection with Region Proposal Networks](https://arxiv.org/abs/1506.01497).
+    RPN was originally proposed in [Faster R-CNN: Towards Real-Time Object Detection with Region Proposal
+    Networks](https://arxiv.org/abs/1506.01497).
     """
 
     def __init__(self, config, num_classes=1):
@@ -1004,6 +956,7 @@ class ConvNextMaskRCNNRPN(nn.Module):
 
         # layers
         self.use_sigmoid_cls = config.rpn_loss_cls.get("use_sigmoid", False)
+        # TODO: fix num_classes
         if self.use_sigmoid_cls:
             self.cls_out_channels = num_classes
         else:
@@ -1240,6 +1193,36 @@ class ConvNextMaskRCNNRPN(nn.Module):
         return dets[: cfg["max_per_img"]]
 
 
+class ConvNextMaskRCNNRoIHead(nn.Module):
+    """
+    ConvNeXT standard Region of Interest (RoI) head including one bbox head and one mask head.
+
+    This head takes the proposals of the RPN as input and transforms them into a set of bounding boxes + classes.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+
+    def forward_test(self):
+        """Test without augmentation (originally called `simple_test`).
+
+        Args:
+            x (tuple[Tensor]): Features from upstream network. Each
+                has shape (batch_size, c, h, w).
+            proposal_list (list(Tensor)): Proposals from rpn head.
+                Each has shape (num_proposals, 5), last dimension 5 represent (x1, y1, x2, y2, score).
+            img_metas (list[dict]): Meta information of images.
+            rescale (bool): Whether to rescale the results to
+                the original image. Default: True.
+        Returns:
+            list[list[np.ndarray]] or list[tuple]: When no mask branch, it is bbox results of each image and classes
+            with type `list[list[np.ndarray]]`. The outer list corresponds to each image. The inner list corresponds to
+            each class. When the model has mask branch, it contains bbox results and mask results. The outer list
+            corresponds to each image, and first element of tuple is bbox results, second element is mask results.
+        """
+        return -1
+
+
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextPreTrainedModel with ConvNext->ConvNextMaskRCNN,convnext->convnext_maskrcnn
 class ConvNextMaskRCNNPreTrainedModel(PreTrainedModel):
     """
@@ -1400,7 +1383,8 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
         # TODO: remove img_metas, compute shape based on pixel_values
         img_metas = [dict(img_shape=(800, 1067, 3))]
         proposal_list = self.rpn_head.get_bboxes(*rpn_outs, img_metas=img_metas)
-        # print(proposal_list)
+        print("Proposal list:")
+        print(proposal_list[0][:3, :3])
 
         # TODO here:
         # outputs = self.roi_head(hidden_states, proposal_list)
