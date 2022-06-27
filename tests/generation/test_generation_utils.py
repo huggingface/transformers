@@ -2557,7 +2557,8 @@ class GenerationIntegrationTests(unittest.TestCase):
             #     "The child was taken to a local hospital where she screamed and scared for her life, police said.",
             # ],
             [
-                "The soldiers, who had been stationed at the base for more than a year before being evacuated screaming scared",
+                "The soldiers, who had been stationed at the base for more than a year before being evacuated"
+                " screaming scared",
                 "The child was taken to a local hospital where he died.\n 'I don't think screaming scared",
             ],
         )
@@ -2597,7 +2598,8 @@ class GenerationIntegrationTests(unittest.TestCase):
             #     "The child was taken to a local hospital where she screamed and scared for her life, police said.",
             # ],
             [
-                "The soldiers, who had been stationed at the base for more than a year before being evacuated screaming scared",
+                "The soldiers, who had been stationed at the base for more than a year before being evacuated"
+                " screaming scared",
                 "The child was taken to a local hospital where he died.\n 'I don't think screaming scared",
             ],
         )
