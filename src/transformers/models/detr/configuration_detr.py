@@ -228,3 +228,7 @@ class DetrOnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-5
+
+    @property
+    def default_onnx_opset(self) -> int:
+        return 12

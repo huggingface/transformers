@@ -77,6 +77,13 @@ class OnnxConfig(ABC):
         "causal-lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
         "default": OrderedDict({"last_hidden_state": {0: "batch", 1: "sequence"}}),
         "image-classification": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
+        "image-segmentation": OrderedDict(
+            {
+                "logits": {0: "batch", 1: "sequence"},
+                "pred_boxes": {0: "batch", 1: "sequence"},
+                "pred_masks": {0: "batch", 1: "sequence"},
+            }
+        ),
         "masked-im": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
         "masked-lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
         "multiple-choice": OrderedDict({"logits": {0: "batch"}}),

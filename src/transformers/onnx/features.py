@@ -15,6 +15,7 @@ if is_torch_available():
         AutoModel,
         AutoModelForCausalLM,
         AutoModelForImageClassification,
+        AutoModelForImageSegmentation,
         AutoModelForMaskedImageModeling,
         AutoModelForMaskedLM,
         AutoModelForMultipleChoice,
@@ -87,6 +88,7 @@ class FeaturesManager:
             "object-detection": AutoModelForObjectDetection,
             "question-answering": AutoModelForQuestionAnswering,
             "image-classification": AutoModelForImageClassification,
+            "image-segmentation": AutoModelForImageSegmentation,
             "masked-im": AutoModelForMaskedImageModeling,
         }
     if is_tf_available():
@@ -232,6 +234,7 @@ class FeaturesManager:
         "detr": supported_features_mapping(
             "default",
             "object-detection",
+            "image-segmentation",
             onnx_config_cls="models.detr.DetrOnnxConfig",
         ),
         "distilbert": supported_features_mapping(
