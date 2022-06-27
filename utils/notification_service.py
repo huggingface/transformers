@@ -691,7 +691,7 @@ if __name__ == "__main__":
             artifact = retrieve_artifact(artifact_path["name"], artifact_path["gpu"])
             if "stats" in artifact:
                 # Link to the GitHub Action job
-                model_results[model]["job_link"][artifact_path['gpu']] = github_actions_job_links.get(
+                model_results[model]["job_link"][artifact_path["gpu"]] = github_actions_job_links.get(
                     # The job names use `matrix.folder` which contain things like `models/bert` instead of `models_bert`
                     f"Model tests ({model.replace('models_', 'models/')}, {artifact_path['gpu']}-gpu)"
                 )
