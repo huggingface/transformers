@@ -1246,7 +1246,7 @@ class TFSwinPixelShuffle(tf.keras.layers.Layer):
             [[i + j * block_size_squared for i in range(block_size_squared) for j in range(output_depth)]]
         )
         hidden_states = tf.gather(params=hidden_states, indices=tf.tile(permutation, [batch_size, 1]), batch_dims=-1)
-        hidden_states = tf.nn.depth_to_space(x, block_size=self.upscale_factor)
+        hidden_states = tf.nn.depth_to_space(hidden_states, block_size=self.upscale_factor, data_format="NHWC")
         return hidden_states
 
 
