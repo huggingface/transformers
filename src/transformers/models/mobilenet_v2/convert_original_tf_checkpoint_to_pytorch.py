@@ -92,13 +92,13 @@ def convert_movilevit_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
     assert logits.shape == (1, 1001)
 
     if model_name == "mobilenet_v2_1.4_224":
-        expected_logits = torch.tensor([0.0181, -1.0015,  0.4688])
+        expected_logits = torch.tensor([0.0181, -1.0015, 0.4688])
     elif model_name == "mobilenet_v2_1.0_224":
-        expected_logits = torch.tensor([0.2445, -1.1993,  0.1905])
+        expected_logits = torch.tensor([0.2445, -1.1993, 0.1905])
     elif model_name == "mobilenet_v2_0.75_160":
         expected_logits = torch.tensor([0.2482, 0.4136, 0.6669])
     elif model_name == "mobilenet_v2_0.35_96":
-        expected_logits = torch.tensor([0.1451, -0.4624,  0.7192])
+        expected_logits = torch.tensor([0.1451, -0.4624, 0.7192])
     else:
         expected_logits = None
 

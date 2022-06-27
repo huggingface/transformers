@@ -194,8 +194,8 @@ def load_tf_weights_in_mobilenet_v2(model, config, tf_checkpoint_path):
 
 def make_divisible(value: int, divisor: int = 8, min_value: Optional[int] = None) -> int:
     """
-    Ensure that all layers have a channel count that is divisible by `divisor`. This function is taken from the original
-    TensorFlow repo. It can be seen here:
+    Ensure that all layers have a channel count that is divisible by `divisor`. This function is taken from the
+    original TensorFlow repo. It can be seen here:
     https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet/mobilenet.py
     """
     if min_value is None:
@@ -232,7 +232,12 @@ def apply_tf_padding(features: torch.Tensor, conv_layer: nn.Conv2d) -> torch.Ten
     pad_top = pad_along_height // 2
     pad_bottom = pad_along_height - pad_top
 
-    padding = (pad_left * dilation_width, pad_right * dilation_width, pad_top * dilation_height, pad_bottom * dilation_height)
+    padding = (
+        pad_left * dilation_width,
+        pad_right * dilation_width,
+        pad_top * dilation_height,
+        pad_bottom * dilation_height,
+    )
     return nn.functional.pad(features, padding, "constant", 0.0)
 
 
