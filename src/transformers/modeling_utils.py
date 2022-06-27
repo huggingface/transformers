@@ -2078,12 +2078,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
             init_contexts = [deepspeed.zero.Init(config_dict_or_path=deepspeed_config())] + init_contexts
         elif load_in_8bit:
-            # rom bitsandbytes.nn import Linear8bitLt as Linear8bit
 
             init_contexts = [init_empty_weights()]  # Force enable init empty weights
 
             logger.info("Detected 8-bit loading: activating 8-bit loading for this model")
-            # init_contexts.append()
         elif low_cpu_mem_usage:
             init_contexts.append(init_empty_weights())
 
@@ -2249,7 +2247,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # retrieve weights on meta device and put them back on CPU.
         # This is not ideal in terms of memory, but if we don't do that not, we can't initialize them in the next step
-        if low_cpu_mem_usage or (load_in_8bit and device_map is None):
+        if low_cpu_mem_usage:
             for key in missing_keys:
                 if key.startswith(prefix):
                     key = ".".join(key.split(".")[1:])
