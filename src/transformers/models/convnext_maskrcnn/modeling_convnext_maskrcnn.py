@@ -60,8 +60,8 @@ CONVNEXTMASKRCNN_PRETRAINED_MODEL_ARCHIVE_LIST = [
 def multi_apply(func, *args, **kwargs):
     """Apply function to a list of arguments.
     Note:
-        This function applies the `func` to multiple inputs and map the multiple outputs of the `func` into
-        different list. Each list contains the same type of outputs corresponding to different inputs.
+        This function applies the `func` to multiple inputs and map the multiple outputs of the `func` into different
+        list. Each list contains the same type of outputs corresponding to different inputs.
     Args:
         func (Function): A function that will be applied to a list of
             arguments
@@ -105,10 +105,9 @@ def bbox2delta(proposals, gt, means=(0.0, 0.0, 0.0, 0.0), stds=(1.0, 1.0, 1.0, 1
     Args:
     We usually compute the deltas of x, y, w, h of proposals w.r.t ground truth bboxes to get regression target. This
     is the inverse function of [`delta2bbox`].
-        proposals (Tensor): Boxes to be transformed, shape (N, ..., 4)
-        gt (Tensor): Gt bboxes to be used as base, shape (N, ..., 4)
-        means (Sequence[float]): Denormalizing means for delta coordinates
-        stds (Sequence[float]): Denormalizing standard deviation for delta
+        proposals (Tensor): Boxes to be transformed, shape (N, ..., 4) gt (Tensor): Gt bboxes to be used as base, shape
+        (N, ..., 4) means (Sequence[float]): Denormalizing means for delta coordinates stds (Sequence[float]):
+        Denormalizing standard deviation for delta
             coordinates
     Returns:
         Tensor: deltas with shape (N, 4), where columns represent dx, dy,
@@ -156,8 +155,8 @@ def delta2bbox(
     Args:
     Typically the rois are anchor or proposed bounding boxes and the deltas are network outputs used to shift/scale
     those boxes. This is the inverse function of [`bbox2delta`].
-        rois (Tensor): Boxes to be transformed. Has shape (N, 4).
-        deltas (Tensor): Encoded offsets relative to each roi.
+        rois (Tensor): Boxes to be transformed. Has shape (N, 4). deltas (Tensor): Encoded offsets relative to each
+        roi.
             Has shape (N, num_classes * 4) or (N, 4). Note N = num_base_anchors * W * H, when rois is a grid of
             anchors. Offset encoding follows [1]_.
         means (Sequence[float]): Denormalizing means for delta coordinates.
@@ -239,14 +238,11 @@ def nms(
 ) -> Tuple[array_like_type, array_like_type]:
     """Dispatch to either CPU or GPU NMS implementations.
     Arguments:
-    The input can be either torch tensor or numpy array. GPU NMS will be used if the input is gpu tensor, otherwise CPU
+    The input can be either torch tensor or numpy array. GPU NMS will be used if the input is gpu tensor, otherwise CPU:
     NMS will be used. The returned type will always be the same as inputs.
-        boxes (torch.Tensor or np.ndarray): boxes in shape (N, 4).
-        scores (torch.Tensor or np.ndarray): scores in shape (N, ).
-        iou_threshold (float): IoU threshold for NMS.
-        offset (int, 0 or 1): boxes' width or height is (x2 - x1 + offset).
-        score_threshold (float): score threshold for NMS.
-        max_num (int): maximum number of boxes after NMS.
+        boxes (torch.Tensor or np.ndarray): boxes in shape (N, 4). scores (torch.Tensor or np.ndarray): scores in shape
+        (N, ). iou_threshold (float): IoU threshold for NMS. offset (int, 0 or 1): boxes' width or height is (x2 - x1 +
+        offset). score_threshold (float): score threshold for NMS. max_num (int): maximum number of boxes after NMS.
     Returns:
         tuple: kept dets (boxes and scores) and indice, which always have the same data type as the input.
     Example:
@@ -382,6 +378,26 @@ def batched_nms(
 
     boxes = torch.cat([boxes, scores[:, None]], -1)
     return boxes, keep
+
+
+def bbox2roi(bbox_list):
+    """Convert a list of bboxes to roi format.
+    Args:
+        bbox_list (list[Tensor]): a list of bboxes corresponding to a batch
+            of images.
+    Returns:
+        Tensor: shape (n, 5), [batch_ind, x1, y1, x2, y2]
+    """
+    rois_list = []
+    for img_id, bboxes in enumerate(bbox_list):
+        if bboxes.size(0) > 0:
+            img_inds = bboxes.new_full((bboxes.size(0), 1), img_id)
+            rois = torch.cat([img_inds, bboxes[:, :4]], dim=-1)
+        else:
+            rois = bboxes.new_zeros((0, 5))
+        rois_list.append(rois)
+    rois = torch.cat(rois_list, 0)
+    return rois
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
@@ -863,8 +879,8 @@ class ConvNextMaskRCNNDeltaXYWHBBoxCoder(nn.Module):
         """Get box regression transformation deltas that can be used to
         Args:
         transform the `bboxes` into the `gt_bboxes`.
-            bboxes (torch.Tensor): Source boxes, e.g., object proposals.
-            gt_bboxes (torch.Tensor): Target of the transformation, e.g.,
+            bboxes (torch.Tensor): Source boxes, e.g., object proposals. gt_bboxes (torch.Tensor): Target of the
+            transformation, e.g.,
                 ground-truth boxes.
         Returns:
             torch.Tensor: Box transformation deltas
@@ -952,7 +968,9 @@ class ConvNextMaskRCNNRPN(nn.Module):
         self.prior_generator = ConvNextMaskRCNNAnchorGenerator(config)
         self.num_base_priors = self.prior_generator.num_base_priors[0]
 
-        self.bbox_coder = ConvNextMaskRCNNDeltaXYWHBBoxCoder()
+        self.bbox_coder = ConvNextMaskRCNNDeltaXYWHBBoxCoder(
+            target_means=config.rpn_bbox_coder_target_means, target_stds=config.rpn_bbox_coder_target_stds
+        )
 
         # layers
         self.use_sigmoid_cls = config.rpn_loss_cls.get("use_sigmoid", False)
@@ -1193,22 +1211,372 @@ class ConvNextMaskRCNNRPN(nn.Module):
         return dets[: cfg["max_per_img"]]
 
 
+class RoIAlign(nn.Module):
+    """
+    Wrapper around torchvision's roi_align op.
+
+    Based on:
+    https://github.com/open-mmlab/mmcv/blob/d71d067da19d71d79e7b4d7ae967891c7bb00c05/mmcv/ops/roi_align.py#L136
+    """
+
+    def __init__(
+        self,
+        output_size: tuple,
+        spatial_scale: float = 1.0,
+        sampling_ratio: int = 0,
+        pool_mode: str = "avg",
+        aligned: bool = True,
+    ):
+        super().__init__()
+
+        self.output_size = _pair(output_size)
+        self.spatial_scale = float(spatial_scale)
+        self.sampling_ratio = int(sampling_ratio)
+        self.pool_mode = pool_mode
+        self.aligned = aligned
+
+    def forward(self, input: torch.Tensor, rois: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            input: NCHW images
+            rois: Bx5 boxes. First column is the index into N.\
+                The other 4 columns are xyxy.
+        """
+        return torchvision.ops.roi_align(
+            input, rois, self.output_size, self.spatial_scale, self.sampling_ratio, self.aligned
+        )
+
+    def __repr__(self):
+        s = self.__class__.__name__
+        s += f"(output_size={self.output_size}, "
+        s += f"spatial_scale={self.spatial_scale}, "
+        s += f"sampling_ratio={self.sampling_ratio}, "
+        s += f"pool_mode={self.pool_mode}, "
+        s += f"aligned={self.aligned}, "
+        return s
+
+
+class ConvNextMaskRCNNSingleRoIExtractor(nn.Module):
+    """Extract RoI features from a single level feature map."""
+
+    def __init__(self, roi_layer, out_channels, featmap_strides, finest_scale=56):
+        super().__init__()
+
+        self.roi_layers = self.build_roi_layers(roi_layer, featmap_strides)
+        self.out_channels = out_channels
+        self.featmap_strides = featmap_strides
+        self.finest_scale = finest_scale
+
+    def build_roi_layers(self, layer_cfg, featmap_strides):
+        """Build RoI operator to extract feature from each level feature map.
+        Args:
+            layer_cfg (dict): Dictionary to construct and config RoI layer
+                operation. Options are modules under `mmcv/ops` such as `RoIAlign`.
+            featmap_strides (List[int]): The stride of input feature map w.r.t
+                to the original image size, which would be used to scale RoI coordinate (original image coordinate
+                system) to feature coordinate system.
+        Returns:
+            nn.ModuleList: The RoI extractor modules for each level feature
+                map.
+        """
+
+        cfg = layer_cfg.copy()
+        cfg.pop("type")
+        # layer_type = cfg.pop("type")
+        # TODO: use the RoIAlign op of mmcv: https://github.com/open-mmlab/mmcv/blob/master/mmcv/ops/roi_align.py
+        # assert hasattr(ops, layer_type)
+        # layer_cls = getattr(ops, layer_type)
+        layer_cls = RoIAlign
+        roi_layers = nn.ModuleList([layer_cls(spatial_scale=1 / s, **cfg) for s in featmap_strides])
+        return roi_layers
+
+    def map_roi_levels(self, rois, num_levels):
+        """Map rois to corresponding feature levels by scales.
+        - scale < finest_scale * 2: level 0
+        - finest_scale * 2 <= scale < finest_scale * 4: level 1
+        - finest_scale * 4 <= scale < finest_scale * 8: level 2
+        - scale >= finest_scale * 8: level 3
+        Args:
+            rois (Tensor): Input RoIs, shape (k, 5).
+            num_levels (int): Total level number.
+        Returns:
+            Tensor: Level index (0-based) of each RoI, shape (k, )
+        """
+        scale = torch.sqrt((rois[:, 3] - rois[:, 1]) * (rois[:, 4] - rois[:, 2]))
+        target_lvls = torch.floor(torch.log2(scale / self.finest_scale + 1e-6))
+        target_lvls = target_lvls.clamp(min=0, max=num_levels - 1).long()
+        return target_lvls
+
+    def forward(self, feats, rois, roi_scale_factor=None):
+        """Forward function."""
+        out_size = self.roi_layers[0].output_size
+        num_levels = len(feats)
+        expand_dims = (-1, self.out_channels * out_size[0] * out_size[1])
+        if torch.onnx.is_in_onnx_export():
+            # Work around to export mask-rcnn to onnx
+            roi_feats = rois[:, :1].clone().detach()
+            roi_feats = roi_feats.expand(*expand_dims)
+            roi_feats = roi_feats.reshape(-1, self.out_channels, *out_size)
+            roi_feats = roi_feats * 0
+        else:
+            roi_feats = feats[0].new_zeros(rois.size(0), self.out_channels, *out_size)
+        # TODO: remove this when parrots supports
+        if torch.__version__ == "parrots":
+            roi_feats.requires_grad = True
+
+        if num_levels == 1:
+            if len(rois) == 0:
+                return roi_feats
+            return self.roi_layers[0](feats[0], rois)
+
+        target_lvls = self.map_roi_levels(rois, num_levels)
+
+        if roi_scale_factor is not None:
+            rois = self.roi_rescale(rois, roi_scale_factor)
+
+        for i in range(num_levels):
+            mask = target_lvls == i
+            if torch.onnx.is_in_onnx_export():
+                # To keep all roi_align nodes exported to onnx
+                # and skip nonzero op
+                mask = mask.float().unsqueeze(-1)
+                # select target level rois and reset the rest rois to zero.
+                rois_i = rois.clone().detach()
+                rois_i *= mask
+                mask_exp = mask.expand(*expand_dims).reshape(roi_feats.shape)
+                roi_feats_t = self.roi_layers[i](feats[i], rois_i)
+                roi_feats_t *= mask_exp
+                roi_feats += roi_feats_t
+                continue
+            inds = mask.nonzero(as_tuple=False).squeeze(1)
+            if inds.numel() > 0:
+                rois_ = rois[inds]
+                roi_feats_t = self.roi_layers[i](feats[i], rois_)
+                roi_feats[inds] = roi_feats_t
+            else:
+                # Sometimes some pyramid levels will not be used for RoI
+                # feature extraction and this will cause an incomplete
+                # computation graph in one GPU, which is different from those
+                # in other GPUs and will cause a hanging error.
+                # Therefore, we add it to ensure each feature pyramid is
+                # included in the computation graph to avoid runtime bugs.
+                roi_feats += sum(x.view(-1)[0] for x in self.parameters()) * 0.0 + feats[i].sum() * 0.0
+        return roi_feats
+
+
+class ConvNextMaskRNNShared2FCBBoxHead(nn.Module):
+    """
+    A bounding box head with 2 shared fully-connected (fc) layers.
+
+    This class is a simplified version of
+    https://github.com/open-mmlab/mmdetection/blob/ca11860f4f3c3ca2ce8340e2686eeaec05b29111/mmdet/models/roi_heads/bbox_heads/convfc_bbox_head.py#L11.
+    """
+
+    def __init__(self, config, roi_feat_size=7, fc_out_channels=1024, num_branch_fcs=2):
+        super().__init__()
+
+        # TODO make init attributes configurable
+        self.roi_feat_size = _pair(roi_feat_size)
+        self.roi_feat_area = self.roi_feat_size[0] * self.roi_feat_size[1]
+        self.fc_out_channels = fc_out_channels
+
+        last_layer_dim = config.bbox_head_in_channels
+        last_layer_dim *= self.roi_feat_area
+
+        # add branch specific fc layers
+        branch_fcs = nn.ModuleList()
+        for i in range(num_branch_fcs):
+            fc_in_channels = last_layer_dim if i == 0 else self.fc_out_channels
+            branch_fcs.append(nn.Linear(fc_in_channels, self.fc_out_channels))
+        self.shared_fcs = branch_fcs
+
+        self.relu = nn.ReLU(inplace=True)
+
+        # add class and regression fully-connected layers
+        self.fc_cls = nn.Linear(in_features=self.fc_out_channels, out_features=config.num_labels + 1)
+        self.fc_reg = nn.Linear(in_features=self.fc_out_channels, out_features=config.num_labels * 4)
+
+    def forward(self, hidden_states):
+        # shared part
+        hidden_states = hidden_states.flatten(1)
+        for fc in self.shared_fcs:
+            hidden_states = self.relu(fc(hidden_states))
+
+        # separate branches
+        cls_score = self.fc_cls(hidden_states)
+        bbox_pred = self.fc_reg(hidden_states)
+
+        return cls_score, bbox_pred
+
+    def get_bboxes(self, rois, cls_score, bbox_pred, img_shape, scale_factor, rescale=False, cfg=None):
+        """Transform network output for a batch into bbox predictions.
+
+        Args:
+            rois (Tensor): Boxes to be transformed. Has shape (num_boxes, 5).
+                last dimension 5 arrange as (batch_index, x1, y1, x2, y2).
+            cls_score (Tensor): Box scores, has shape
+                (num_boxes, num_classes + 1).
+            bbox_pred (Tensor, optional): Box energies / deltas.
+                has shape (num_boxes, num_classes * 4).
+            img_shape (Sequence[int], optional): Maximum bounds for boxes,
+                specifies (H, W, C) or (H, W).
+            scale_factor (ndarray): Scale factor of the
+               image arrange as (w_scale, h_scale, w_scale, h_scale).
+            rescale (bool): If True, return boxes in original image space.
+                Default: False.
+            cfg (obj:`ConfigDict`): `test_cfg` of Bbox Head. Default: None
+
+        Returns:
+            tuple[Tensor, Tensor]:
+                First tensor is `det_bboxes`, has the shape
+                (num_boxes, 5) and last
+                dimension 5 represent (tl_x, tl_y, br_x, br_y, score).
+                Second tensor is the labels with shape (num_boxes, ).
+        """
+
+        # some loss (Seesaw loss..) may have custom activation
+        if self.custom_cls_channels:
+            scores = self.loss_cls.get_activation(cls_score)
+        else:
+            scores = nn.functional.softmax(cls_score, dim=-1) if cls_score is not None else None
+        # bbox_pred would be None in some detector when with_reg is False,
+        # e.g. Grid R-CNN.
+        if bbox_pred is not None:
+            bboxes = self.bbox_coder.decode(rois[..., 1:], bbox_pred, max_shape=img_shape)
+        else:
+            bboxes = rois[:, 1:].clone()
+            if img_shape is not None:
+                bboxes[:, [0, 2]].clamp_(min=0, max=img_shape[1])
+                bboxes[:, [1, 3]].clamp_(min=0, max=img_shape[0])
+
+        if rescale and bboxes.size(0) > 0:
+            scale_factor = bboxes.new_tensor(scale_factor)
+            bboxes = (bboxes.view(bboxes.size(0), -1, 4) / scale_factor).view(bboxes.size()[0], -1)
+
+        if cfg is None:
+            return bboxes, scores
+        else:
+            det_bboxes, det_labels = multiclass_nms(bboxes, scores, cfg.score_thr, cfg.nms, cfg.max_per_img)
+
+            return det_bboxes, det_labels
+
+
 class ConvNextMaskRCNNRoIHead(nn.Module):
     """
     ConvNeXT standard Region of Interest (RoI) head including one bbox head and one mask head.
 
-    This head takes the proposals of the RPN as input and transforms them into a set of bounding boxes + classes.
+    This head takes the proposals of the RPN + features of the backbone as input and transforms them into a set of
+    bounding boxes + classes.
     """
 
     def __init__(self, config):
         super().__init__()
 
-    def forward_test(self):
+        self.bbox_roi_extractor = ConvNextMaskRCNNSingleRoIExtractor(
+            roi_layer=config.bbox_roi_extractor_roi_layer,
+            out_channels=config.bbox_roi_extractor_out_channels,
+            featmap_strides=config.bbox_roi_extractor_featmap_strides,
+        )
+        self.bbox_head = ConvNextMaskRNNShared2FCBBoxHead(config)
+
+        # TODO: mask roi extractor + mask head
+
+    def _bbox_forward(self, x, rois):
+        """Box head forward function used in both training and testing."""
+        # TODO: a more flexible way to decide which feature maps to use
+        bbox_feats = self.bbox_roi_extractor(x[: self.bbox_roi_extractor.num_inputs], rois)
+        # if self.with_shared_head:
+        #     bbox_feats = self.shared_head(bbox_feats)
+        cls_score, bbox_pred = self.bbox_head(bbox_feats)
+
+        bbox_results = dict(cls_score=cls_score, bbox_pred=bbox_pred, bbox_feats=bbox_feats)
+        return bbox_results
+
+    def simple_test_bboxes(self, x, img_metas, proposals, rcnn_test_cfg, rescale=False):
+        """Test only det bboxes without augmentation.
+        Args:
+            x (tuple[Tensor]): Feature maps of all scale level.
+            img_metas (list[dict]): Image meta info.
+            proposals (List[Tensor]): Region proposals.
+            rcnn_test_cfg (obj:`ConfigDict`): `test_cfg` of R-CNN.
+            rescale (bool): If True, return boxes in original image space.
+                Default: False.
+        Returns:
+            tuple[list[Tensor], list[Tensor]]: The first list contains
+                the boxes of the corresponding image in a batch, each
+                tensor has the shape (num_boxes, 5) and last dimension
+                5 represent (tl_x, tl_y, br_x, br_y, score). Each Tensor
+                in the second list is the labels with shape (num_boxes, ).
+                The length of both lists should be equal to batch_size.
+        """
+
+        rois = bbox2roi(proposals)
+
+        if rois.shape[0] == 0:
+            batch_size = len(proposals)
+            det_bbox = rois.new_zeros(0, 5)
+            det_label = rois.new_zeros((0,), dtype=torch.long)
+            if rcnn_test_cfg is None:
+                det_bbox = det_bbox[:, :4]
+                det_label = rois.new_zeros((0, self.bbox_head.fc_cls.out_features))
+            # There is no proposal in the whole batch
+            return [det_bbox] * batch_size, [det_label] * batch_size
+
+        bbox_results = self._bbox_forward(x, rois)
+        img_shapes = tuple(meta["img_shape"] for meta in img_metas)
+        scale_factors = tuple(meta["scale_factor"] for meta in img_metas)
+
+        # split batch bbox prediction back to each image
+        cls_score = bbox_results["cls_score"]
+        bbox_pred = bbox_results["bbox_pred"]
+        num_proposals_per_img = tuple(len(p) for p in proposals)
+        rois = rois.split(num_proposals_per_img, 0)
+        cls_score = cls_score.split(num_proposals_per_img, 0)
+
+        # some detector with_reg is False, bbox_pred will be None
+        if bbox_pred is not None:
+            # TODO move this to a sabl_roi_head
+            # the bbox prediction of some detectors like SABL is not Tensor
+            if isinstance(bbox_pred, torch.Tensor):
+                bbox_pred = bbox_pred.split(num_proposals_per_img, 0)
+            else:
+                bbox_pred = self.bbox_head.bbox_pred_split(bbox_pred, num_proposals_per_img)
+        else:
+            bbox_pred = (None,) * len(proposals)
+
+        # apply bbox post-processing to each image individually
+        det_bboxes = []
+        det_labels = []
+        for i in range(len(proposals)):
+            if rois[i].shape[0] == 0:
+                # There is no proposal in the single image
+                det_bbox = rois[i].new_zeros(0, 5)
+                det_label = rois[i].new_zeros((0,), dtype=torch.long)
+                if rcnn_test_cfg is None:
+                    det_bbox = det_bbox[:, :4]
+                    det_label = rois[i].new_zeros((0, self.bbox_head.fc_cls.out_features))
+
+            else:
+                det_bbox, det_label = self.bbox_head.get_bboxes(
+                    rois[i],
+                    cls_score[i],
+                    bbox_pred[i],
+                    img_shapes[i],
+                    scale_factors[i],
+                    rescale=rescale,
+                    cfg=rcnn_test_cfg,
+                )
+            det_bboxes.append(det_bbox)
+            det_labels.append(det_label)
+        return det_bboxes, det_labels
+
+    def forward_test(self, hidden_states, proposal_list, img_metas, rescale=True):
         """Test without augmentation (originally called `simple_test`).
 
+        Source: https://github.com/open-mmlab/mmdetection/blob/ca11860f4f3c3ca2ce8340e2686eeaec05b29111/mmdet/models/detectors/two_stage.py#L173.
+
         Args:
-            x (tuple[Tensor]): Features from upstream network. Each
-                has shape (batch_size, c, h, w).
+            hidden_states (tuple[Tensor]): Features from upstream network. Each has shape (batch_size, c, h, w).
             proposal_list (list(Tensor)): Proposals from rpn head.
                 Each has shape (num_proposals, 5), last dimension 5 represent (x1, y1, x2, y2, score).
             img_metas (list[dict]): Meta information of images.
@@ -1220,6 +1588,18 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
             each class. When the model has mask branch, it contains bbox results and mask results. The outer list
             corresponds to each image, and first element of tuple is bbox results, second element is mask results.
         """
+        det_bboxes, det_labels = self.simple_test_bboxes(
+            hidden_states, img_metas, proposal_list, self.test_cfg, rescale=rescale
+        )
+
+        # TODO
+
+        # bbox_results = [
+        #     bbox2result(det_bboxes[i], det_labels[i], self.bbox_head.num_classes) for i in range(len(det_bboxes))
+        # ]
+
+        # TODO also compute masks
+
         return -1
 
 
@@ -1338,7 +1718,7 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
         self.convnext = ConvNextMaskRCNNModel(config)
         self.neck = ConvNextMaskRCNNFPN(config)
         self.rpn_head = ConvNextMaskRCNNRPN(config)
-        # TODO: ROI head
+        self.roi_head = ConvNextMaskRCNNRoIHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1387,7 +1767,7 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
         print(proposal_list[0][:3, :3])
 
         # TODO here:
-        # outputs = self.roi_head(hidden_states, proposal_list)
+        # outputs = self.roi_head.forward_test(hidden_states, proposal_list)
 
         logits, loss = None, None
         if labels is not None:
