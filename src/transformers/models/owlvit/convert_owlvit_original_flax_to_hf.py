@@ -194,43 +194,35 @@ def copy_class_box_heads(hf_model, flax_params):
         if name in pt_params.keys():
             pt_params[name].copy_(param)
 
-    return
 
-@torch.no_grad()
-def convert_owlvit_checkpoint(pt_backbone, flax_params, pytorch_dump_folder_path, config_path=None):
-    """
-    Copy/paste/tweak model's weights to transformers design.
-    """
-    if config_path is not None:
-        config = OwlViTConfig.from_pretrained(config_path)
-    else:
-        config = OwlViTConfig()
+def copy_flax_attn_params(hf_backbone, flax_attn_params):
+    for k, v in flax_attn_params.items():
+        if k.startswith("transformer"):
+            torch_key = k.replace("transformer.resblocks", "text_model.encoder.layers")
+        else:
+            torch_key = k.replace("visual.transformer.resblocks", "vision_model.encoder.layers")
 
-    hf_backbone = OwlViTModel(config).eval()
-    hf_model = OwlViTForObjectDetection(config).eval()
+        torch_key = torch_key.replace("attn", "self_attn")
+        torch_key = torch_key.replace("key", "k_proj")
+        torch_key = torch_key.replace("value", "v_proj")
+        torch_key = torch_key.replace("query", "q_proj")
+        torch_key = torch_key.replace("out", "out_proj")
+        
+        if "bias" in torch_key and v.ndim==2:
+            shape = v.shape[0] * v.shape[1]
+            v = v.reshape(shape)
 
-    copy_text_model_and_projection(hf_backbone, pt_backbone)
-    copy_vison_model_and_projection(hf_backbone, pt_backbone)
-    hf_backbone.logit_scale = pt_backbone.logit_scale
+        if "weight" in torch_key and "out" in torch_key:
+            shape = (v.shape[0] * v.shape[1], v.shape[2])
+            v = v.reshape(shape).T
 
-    hf_model._embedder.clip = hf_backbone
-    copy_class_merge_token(hf_model, flax_params)
-    print(hf_model._box_head.dense0.bias)
-    copy_class_box_heads(hf_model, flax_params)
-    print(hf_model._box_head.dense0.bias)
-    """
-    input_ids = torch.arange(0, 16).unsqueeze(0)
-    pixel_values = torch.randn(1, 3, 768, 768)
+        if "weight" in torch_key and "out" not in torch_key:
+            shape = (v.shape[0], v.shape[1] * v.shape[2])
+            v = v.reshape(shape).T
 
-    hf_logits_per_image, hf_logits_per_text = hf_model(
-        input_ids=input_ids, pixel_values=pixel_values, return_dict=True
-    )[1:3]
-    pt_logits_per_image, pt_logits_per_text = pt_model(pixel_values, input_ids)
-
-    assert torch.allclose(hf_logits_per_image, pt_logits_per_image, atol=1e-3)
-    assert torch.allclose(hf_logits_per_text, pt_logits_per_text, atol=1e-3)
-    """
-    hf_model.save_pretrained(pytorch_dump_folder_path)
+        # Copy flax CLIP attn params to HF PyTorch params
+        v = torch.from_numpy(v)
+        hf_backbone.state_dict()[torch_key].copy_(v)
 
 
 def _convert_attn_layers(params):
@@ -280,18 +272,48 @@ def convert_clip_backbone(flax_params, torch_config):
         elif "weight" in torch_key and v.ndim == 2 and "embedding" not in torch_key:
             # Fully connected layers are transposed, embeddings are not
             v = v.T
+
         new_torch_params[torch_key] = v
 
     attn_params = _convert_attn_layers(new_torch_params)
     new_torch_params.update(attn_params)
+    attn_params = {}
+
 
     # Copy flax CLIP backbone params to PyTorch params
     for name, param in new_torch_params.items():
         if name in torch_clip_params.keys():
             new_param = torch.from_numpy(new_torch_params[name])
             torch_clip_params[name].copy_(new_param)
+        else:
+            attn_params[name] = param
 
-    return torch_clip_params, torch_model
+    return torch_clip_params, torch_model, attn_params
+
+
+@torch.no_grad()
+def convert_owlvit_checkpoint(pt_backbone, flax_params, attn_params, pytorch_dump_folder_path, config_path=None):
+    """
+    Copy/paste/tweak model's weights to transformers design.
+    """
+    if config_path is not None:
+        config = OwlViTConfig.from_pretrained(config_path)
+    else:
+        config = OwlViTConfig()
+
+    hf_backbone = OwlViTModel(config).eval()
+    hf_model = OwlViTForObjectDetection(config).eval()
+
+    copy_text_model_and_projection(hf_backbone, pt_backbone)
+    copy_vison_model_and_projection(hf_backbone, pt_backbone)
+    hf_backbone.logit_scale = pt_backbone.logit_scale
+    copy_flax_attn_params(hf_backbone, attn_params)
+
+    hf_model._embedder.clip = hf_backbone
+    copy_class_merge_token(hf_model, flax_params)
+    copy_class_box_heads(hf_model, flax_params)
+
+    hf_model.save_pretrained(pytorch_dump_folder_path)
  
 
 
@@ -299,7 +321,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--owlvit_version", default=None, type=str, required=True, help="OwlViT model version."
+        "--owlvit_version", default=None, type=str, required=True, help="Path to flax model checkpoint."
     )
     parser.add_argument(
         "--owlvit_checkpoint", default=None, type=str, required=True, help="Path to flax model checkpoint."
@@ -310,7 +332,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Load flax model and print parameters 
-    model_name = args.owlvit_checkpoint
+    model_name = args.owlvit_version
     if model_name == "clip_b16":
         config = clip_b16.get_config()
     elif model_name == "clip_b32":
@@ -329,13 +351,13 @@ if __name__ == "__main__":
         torch_config = CONFIGS["vit_l14"]
 
     # Load from checkpoint and convert params to float-32
-    variables = checkpoints.restore_checkpoint("checkpoints/clip_vit_b32", target=None)["optimizer"]["target"]
+    variables = checkpoints.restore_checkpoint(args.owlvit_checkpoint, target=None)["optimizer"]["target"]
     flax_params = jax.tree_map(lambda x: x.astype(jnp.float32) if x.dtype == jnp.bfloat16 else x, variables)
     del variables
 
     # Convert CLIP backbone
-    pt_backbone_params, clip_pt = convert_clip_backbone(flax_params, torch_config)
+    pt_backbone_params, clip_pt, attn_params = convert_clip_backbone(flax_params, torch_config)
     clip_pt.eval()
 
-    convert_owlvit_checkpoint(clip_pt, flax_params, args.pytorch_dump_folder_path)
+    convert_owlvit_checkpoint(clip_pt, flax_params, attn_params, args.pytorch_dump_folder_path)
 
