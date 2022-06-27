@@ -108,11 +108,18 @@ class ConvNextMaskRCNNConfig(PretrainedConfig):
         anchor_generator_ratios=[0.5, 1.0, 2.0],
         anchor_generator_strides=[4, 8, 16, 32, 64],
         # RPN
+        rpn_bbox_coder_target_means=[0.0, 0.0, 0.0, 0.0],
+        rpn_bbox_coder_target_stds=[1.0, 1.0, 1.0, 1.0],
         rpn_in_channels=256,
         rpn_feat_channels=256,
         rpn_loss_cls=dict(type="CrossEntropyLoss", use_sigmoid=True, loss_weight=1.0),
         rpn_loss_bbox=dict(type="L1Loss", loss_weight=1.0),
         rpn_test_cfg=dict(nms_pre=1000, max_per_img=1000, nms=dict(type="nms", iou_threshold=0.7), min_bbox_size=0),
+        # ROI heads
+        bbox_roi_extractor_roi_layer=dict(type="RoIAlign", output_size=7, sampling_ratio=0),
+        bbox_roi_extractor_out_channels=256,
+        bbox_roi_extractor_featmap_strides=[4, 8, 16, 32],
+        bbox_head_in_channels=256,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -137,11 +144,18 @@ class ConvNextMaskRCNNConfig(PretrainedConfig):
         self.anchor_generator_ratios = anchor_generator_ratios
         self.anchor_generator_strides = anchor_generator_strides
         # RPN
+        self.rpn_bbox_coder_target_means = rpn_bbox_coder_target_means
+        self.rpn_bbox_coder_target_stds = rpn_bbox_coder_target_stds
         self.rpn_in_channels = rpn_in_channels
         self.rpn_feat_channels = rpn_feat_channels
         self.rpn_loss_cls = rpn_loss_cls
         self.rpn_loss_bbox = rpn_loss_bbox
         self.rpn_test_cfg = rpn_test_cfg
+        # ROI heads
+        self.bbox_roi_extractor_roi_layer = bbox_roi_extractor_roi_layer
+        self.bbox_roi_extractor_out_channels = bbox_roi_extractor_out_channels
+        self.bbox_roi_extractor_featmap_strides = bbox_roi_extractor_featmap_strides
+        self.bbox_head_in_channels = bbox_head_in_channels
 
 
 class ConvNextMaskRCNNOnnxConfig(OnnxConfig):
