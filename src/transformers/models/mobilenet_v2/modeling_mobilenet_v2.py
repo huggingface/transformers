@@ -65,14 +65,15 @@ def _build_tf_to_pytorch_map(model, config, tf_weights=None):
         backbone = model
 
     # Use the EMA weights if available
-    ema = lambda x: x + "/ExponentialMovingAverage" if x + "/ExponentialMovingAverage" in tf_weights else x
+    def ema(x):
+        return x + "/ExponentialMovingAverage" if x + "/ExponentialMovingAverage" in tf_weights else x
 
     prefix = "MobilenetV2/Conv/"
-    tf_to_pt_map[ema(prefix + "weights")] = backbone.conv_stem.conv.convolution.weight
-    tf_to_pt_map[ema(prefix + "BatchNorm/beta")] = backbone.conv_stem.conv.normalization.bias
-    tf_to_pt_map[ema(prefix + "BatchNorm/gamma")] = backbone.conv_stem.conv.normalization.weight
-    tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = backbone.conv_stem.conv.normalization.running_mean
-    tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = backbone.conv_stem.conv.normalization.running_var
+    tf_to_pt_map[ema(prefix + "weights")] = backbone.conv_stem.first_conv.convolution.weight
+    tf_to_pt_map[ema(prefix + "BatchNorm/beta")] = backbone.conv_stem.first_conv.normalization.bias
+    tf_to_pt_map[ema(prefix + "BatchNorm/gamma")] = backbone.conv_stem.first_conv.normalization.weight
+    tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = backbone.conv_stem.first_conv.normalization.running_mean
+    tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = backbone.conv_stem.first_conv.normalization.running_var
 
     prefix = "MobilenetV2/expanded_conv/depthwise/"
     tf_to_pt_map[ema(prefix + "depthwise_weights")] = backbone.conv_stem.conv_3x3.convolution.weight
@@ -87,6 +88,44 @@ def _build_tf_to_pytorch_map(model, config, tf_weights=None):
     tf_to_pt_map[ema(prefix + "BatchNorm/gamma")] = backbone.conv_stem.reduce_1x1.normalization.weight
     tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = backbone.conv_stem.reduce_1x1.normalization.running_mean
     tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = backbone.conv_stem.reduce_1x1.normalization.running_var
+
+    for i in range(16):
+        tf_index = i + 1
+        pt_index = i
+        pointer = backbone.layer[pt_index]
+
+        prefix = f"MobilenetV2/expanded_conv_{tf_index}/expand/"
+        tf_to_pt_map[ema(prefix + "weights")] = pointer.expand_1x1.convolution.weight
+        tf_to_pt_map[ema(prefix + "BatchNorm/beta")] = pointer.expand_1x1.normalization.bias
+        tf_to_pt_map[ema(prefix + "BatchNorm/gamma")] = pointer.expand_1x1.normalization.weight
+        tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = pointer.expand_1x1.normalization.running_mean
+        tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = pointer.expand_1x1.normalization.running_var
+
+        prefix = f"MobilenetV2/expanded_conv_{tf_index}/depthwise/"
+        tf_to_pt_map[ema(prefix + "depthwise_weights")] = pointer.conv_3x3.convolution.weight
+        tf_to_pt_map[ema(prefix + "BatchNorm/beta")] = pointer.conv_3x3.normalization.bias
+        tf_to_pt_map[ema(prefix + "BatchNorm/gamma")] = pointer.conv_3x3.normalization.weight
+        tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = pointer.conv_3x3.normalization.running_mean
+        tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = pointer.conv_3x3.normalization.running_var
+
+        prefix = f"MobilenetV2/expanded_conv_{tf_index}/project/"
+        tf_to_pt_map[ema(prefix + "weights")] = pointer.reduce_1x1.convolution.weight
+        tf_to_pt_map[ema(prefix + "BatchNorm/beta")] = pointer.reduce_1x1.normalization.bias
+        tf_to_pt_map[ema(prefix + "BatchNorm/gamma")] = pointer.reduce_1x1.normalization.weight
+        tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = pointer.reduce_1x1.normalization.running_mean
+        tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = pointer.reduce_1x1.normalization.running_var
+
+    prefix = "MobilenetV2/Conv_1/"
+    tf_to_pt_map[ema(prefix + "weights")] = backbone.conv_1x1.convolution.weight
+    tf_to_pt_map[ema(prefix + "BatchNorm/beta")] = backbone.conv_1x1.normalization.bias
+    tf_to_pt_map[ema(prefix + "BatchNorm/gamma")] = backbone.conv_1x1.normalization.weight
+    tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = backbone.conv_1x1.normalization.running_mean
+    tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = backbone.conv_1x1.normalization.running_var
+
+    if isinstance(model, MobileNetV2ForImageClassification):
+        prefix = "MobilenetV2/Logits/Conv2d_1c_1x1/"
+        tf_to_pt_map[ema(prefix + "weights")] = model.classifier.weight
+        tf_to_pt_map[ema(prefix + "biases")] = model.classifier.bias
 
     return tf_to_pt_map
 
@@ -314,11 +353,10 @@ class MobileNetV2Stem(nn.Module):
     def __init__(self, config: MobileNetV2Config, in_channels: int, expanded_channels: int, out_channels: int) -> None:
         super().__init__()
 
-        expanded_channels = make_divisible(
-            int(round(expanded_channels * config.depth_multiplier)), config.depth_divisible_by, config.min_depth
-        )
-
-        self.conv = MobileNetV2ConvLayer(
+        # The very first layer is a regular 3x3 convolution with stride 2 that
+        # expands to 32 channels. All other expansion layers use the expansion
+        # factor to compute their number of output channels.
+        self.first_conv = MobileNetV2ConvLayer(
             config,
             in_channels=in_channels,
             out_channels=expanded_channels,
@@ -351,7 +389,7 @@ class MobileNetV2Stem(nn.Module):
         )
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
-        features = self.conv(features)
+        features = self.first_conv(features)
         if self.expand_1x1 is not None:
             features = self.expand_1x1(features)
         features = self.conv_3x3(features)
@@ -415,55 +453,68 @@ class MobileNetV2Model(MobileNetV2PreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        # Strides for the depthwise layers in the original TensorFlow model
-        # strides = [ 1, 2, 1, 2, 1, 1, 2, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1 ]
+        def calc_depth(channels: int) -> int:
+            return make_divisible(
+                int(round(channels * config.depth_multiplier)), config.depth_divisible_by, config.min_depth
+            )
 
-        # Number of output channels for the projection layers
-        # channels = [ 16, 24, 24, 32, 32, 32, 64, 64, 64, 64, 96, 96, 96, 160, 160, 160, 320 ]
+        # Output channels for the projection layers
+        channels = [16, 24, 24, 32, 32, 32, 64, 64, 64, 64, 96, 96, 96, 160, 160, 160, 320]
+        channels = [calc_depth(x) for x in channels]
+
+        # Strides for the depthwise layers
+        strides = [2, 1, 2, 1, 1, 2, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1]
 
         self.conv_stem = MobileNetV2Stem(
             config,
             in_channels=config.num_channels,
-            expanded_channels=32,
-            out_channels=16,
+            expanded_channels=calc_depth(32),
+            out_channels=channels[0],
         )
 
+    # var currentStride = 2   // first conv layer has stride 2
+    # var dilationRate = 1
 
-        # self.layer = MobileNetV2InvertedResidual(
-        #     config,
-        #     in_channels=expanded_channels,
-        #     out_channels=16,
-        #     stride=1,
-        # )
-
-
-        # self.layer = nn.ModuleList()
-        # for i in range(13):
-        #     in_channels = out_channels
-
+        self.layer = nn.ModuleList()
+        for i in range(16):
+    #   // Keep making the feature maps smaller or use dilated convolution?
+    #   let layerStride: Int
+    #   let layerDilation: Int
+    #   if outputStride > 0 && currentStride == outputStride {
+    #     layerStride = 1
+    #     layerDilation = dilationRate
+    #     dilationRate *= strides[i]    // larger dilation starts in next block
+    #   } else {
+    #     layerStride = strides[i]
+    #     layerDilation = 1
+    #     currentStride *= strides[i]
+    #   }
         #     if strides[i] == 2 or i == 0:
         #         depth *= 2
         #         out_channels = max(int(depth * config.depth_multiplier), config.min_depth)
 
-        #     self.layer.append(
-        #         MobileNetV2ConvLayer(
-        #             config,
-        #             in_channels=in_channels,
-        #             out_channels=in_channels,
-        #             kernel_size=3,
-        #             stride=strides[i],
-        #             groups=in_channels,
-        #         )
-        #     )
+            # pass layerDilation to the MobileNetV2InvertedResidual
 
-        #     self.layer.append(
-        #         MobileNetV2ConvLayer(
-        #             config,
-        #             in_channels=in_channels,
-        #             out_channels=out_channels,
-        #             kernel_size=1,
-        #         )
-        #     )
+            self.layer.append(
+                MobileNetV2InvertedResidual(
+                    config,
+                    in_channels=channels[i],
+                    out_channels=channels[i + 1],
+                    stride=strides[i],
+                )
+            )
+
+        if config.finegrained_output and config.depth_multiplier < 1.0:
+            output_channels = 1280
+        else:
+            output_channels = calc_depth(1280)
+
+        self.conv_1x1 = MobileNetV2ConvLayer(
+            config,
+            in_channels=channels[-1],
+            out_channels=output_channels,
+            kernel_size=1,
+        )
 
         self.pooler = nn.AdaptiveAvgPool2d((1, 1)) if add_pooling_layer else None
 
@@ -500,13 +551,13 @@ class MobileNetV2Model(MobileNetV2PreTrainedModel):
 
         all_hidden_states = () if output_hidden_states else None
 
-        # for i, layer_module in enumerate(self.layer):
-        #     hidden_states = layer_module(hidden_states)
+        for i, layer_module in enumerate(self.layer):
+            hidden_states = layer_module(hidden_states)
 
-        #     if output_hidden_states:
-        #         all_hidden_states = all_hidden_states + (hidden_states,)
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
 
-        last_hidden_state = hidden_states
+        last_hidden_state = self.conv_1x1(hidden_states)
 
         if self.pooler is not None:
             pooled_output = torch.flatten(self.pooler(last_hidden_state), start_dim=1)
@@ -537,8 +588,7 @@ class MobileNetV2ForImageClassification(MobileNetV2PreTrainedModel):
         self.num_labels = config.num_labels
         self.mobilenet_v2 = MobileNetV2Model(config)
 
-        #last_hidden_size = self.mobilenet_v2.layer[-1].convolution.out_channels
-        last_hidden_size = 16 ##MIH
+        last_hidden_size = self.mobilenet_v2.conv_1x1.convolution.out_channels
 
         # Classifier head
         self.dropout = nn.Dropout(config.classifier_dropout_prob, inplace=True)

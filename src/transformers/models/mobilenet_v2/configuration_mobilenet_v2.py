@@ -60,6 +60,9 @@ class MobileNetV2Config(PretrainedConfig):
             The number of output channels of the first layer in each block is input channels times expansion ratio.
         first_layer_is_expansion (`bool`, `optional`, defaults to `True`):
             True if the very first convolution layer is also the expansion layer for the first expansion block.
+        finegrained_output (`bool`, `optional`, defaults to `True`):
+            If true, the number of output channels in the final convolution layer will stay large (1280) even if
+            `depth_multiplier` is less than 1.
         hidden_act (`str` or `function`, *optional*, defaults to `"relu6"`):
             The non-linear activation function (function or string) in the Transformer encoder and convolution layers.
         tf_padding (`bool`, `optional`, defaults to `True`):
@@ -89,9 +92,6 @@ class MobileNetV2Config(PretrainedConfig):
 
 
 #MIH
-    #   - finegrainedOutput: If true, the number of output channels in the final
-    #     convolution layer will stay large (1280) even if `depthMultiplier` is
-    #     less than 1.
     #   - outputStride: The ratio between the spatial resolution of the input and
     #     output feature maps. By default the model scales down the input image
     #     by a factor of 32. If outputStride is 8 or 16, the model uses dilated
@@ -108,8 +108,9 @@ class MobileNetV2Config(PretrainedConfig):
         depth_multiplier=1.0,
         depth_divisible_by=8,
         min_depth=8,
-        expand_ratio=8,
+        expand_ratio=6,
         first_layer_is_expansion=True,
+        finegrained_output=True,
         hidden_act="relu6",
         tf_padding=True,
         classifier_dropout_prob=0.8,
@@ -129,6 +130,7 @@ class MobileNetV2Config(PretrainedConfig):
         self.min_depth = min_depth
         self.expand_ratio = expand_ratio
         self.first_layer_is_expansion = first_layer_is_expansion
+        self.finegrained_output = finegrained_output
         self.hidden_act = hidden_act
         self.tf_padding = tf_padding
         self.classifier_dropout_prob = classifier_dropout_prob
