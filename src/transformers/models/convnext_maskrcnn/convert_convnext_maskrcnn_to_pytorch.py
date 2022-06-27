@@ -38,12 +38,12 @@ def get_convnext_maskrcnn_config():
     config = ConvNextMaskRCNNConfig()
 
     # TODO: set label information
-    # repo_id = "datasets/huggingface/label-files"
-    # filename = "coco-detection-id2label.json"
-    # id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
-    # id2label = {int(k): v for k, v in id2label.items()}
-    # config.id2label = id2label
-    # config.label2id = {v: k for k, v in id2label.items()}
+    repo_id = "datasets/huggingface/label-files"
+    filename = "coco-detection-id2label.json"
+    id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
+    id2label = {int(k): v for k, v in id2label.items()}
+    config.id2label = id2label
+    config.label2id = {v: k for k, v in id2label.items()}
 
     return config
 
@@ -136,8 +136,8 @@ def convert_convnext_maskrcnn_checkpoint(checkpoint_path, pytorch_dump_folder_pa
 
     outputs = model(pixel_values, output_hidden_states=True)
 
-    for i in outputs.hidden_states[1:]:
-        print(i.shape)
+    # for i in outputs.hidden_states[1:]:
+    #     print(i.shape)
 
     expected_slice = torch.tensor(
         [[-0.0836, -0.1298, -0.1237], [-0.0743, -0.1090, -0.0873], [-0.0231, 0.0851, 0.0792]]

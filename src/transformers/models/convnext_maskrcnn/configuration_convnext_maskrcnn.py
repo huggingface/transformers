@@ -110,8 +110,9 @@ class ConvNextMaskRCNNConfig(PretrainedConfig):
         # RPN
         rpn_in_channels=256,
         rpn_feat_channels=256,
-        rpn_loss_cls=dict(type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0),
-        rpn_loss_bbox=dict(type='L1Loss', loss_weight=1.0),
+        rpn_loss_cls=dict(type="CrossEntropyLoss", use_sigmoid=True, loss_weight=1.0),
+        rpn_loss_bbox=dict(type="L1Loss", loss_weight=1.0),
+        rpn_test_cfg=dict(nms_pre=1000, max_per_img=1000, nms=dict(type="nms", iou_threshold=0.7), min_bbox_size=0),
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -138,8 +139,9 @@ class ConvNextMaskRCNNConfig(PretrainedConfig):
         # RPN
         self.rpn_in_channels = rpn_in_channels
         self.rpn_feat_channels = rpn_feat_channels
-        self.rpn_loss_cls=rpn_loss_cls
-        self.rpn_loss_bbox=rpn_loss_bbox
+        self.rpn_loss_cls = rpn_loss_cls
+        self.rpn_loss_bbox = rpn_loss_bbox
+        self.rpn_test_cfg = rpn_test_cfg
 
 
 class ConvNextMaskRCNNOnnxConfig(OnnxConfig):
