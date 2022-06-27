@@ -874,7 +874,6 @@ class OwlViTModel(OwlViTPreTrainedModel):
 
         text_config = config.text_config
         vision_config = config.vision_config
-        body_config = config.body_config
 
         self.projection_dim = config.projection_dim
         self.text_embed_dim = text_config.hidden_size
@@ -883,7 +882,6 @@ class OwlViTModel(OwlViTPreTrainedModel):
         self.text_model = OwlViTTextTransformer(text_config)
         self.vision_model = OwlViTVisionTransformer(vision_config)
 
-        self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
         self.logit_scale = nn.Parameter(torch.ones([]) * self.config.logit_scale_init_value)
 
@@ -982,9 +980,8 @@ class OwlViTModel(OwlViTPreTrainedModel):
         )
 
         pooled_output = vision_outputs[1]  # pooled_output
-        image_features = self.visual_projection(pooled_output)
 
-        return image_features
+        return pooled_output
 
     @add_start_docstrings_to_model_forward(OWLVIT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=OwlViTOutput, config_class=OwlViTConfig)
@@ -998,6 +995,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        normalize: Optional[bool] = True,
     ) -> Union[Tuple, OwlViTOutput]:
         r"""
         Returns:
@@ -1053,8 +1051,9 @@ class OwlViTModel(OwlViTPreTrainedModel):
         text_embeds = self.text_projection(text_embeds)
 
         # normalized features
-        image_embeds = image_embeds / image_embeds.norm(p=2, dim=-1, keepdim=True)
-        text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
+        if normalize:
+            image_embeds = image_embeds / image_embeds.norm(p=2, dim=-1, keepdim=True)
+            text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
 
         # cosine similarity as logits
         logit_scale = self.logit_scale.exp()
@@ -1079,13 +1078,15 @@ class OwlViTModel(OwlViTPreTrainedModel):
             vision_model_output=vision_outputs,
         )
 
-class OwlViTBoxPredictor(OwlViTPreTrainedModel):
-    def __init__(self, width: int, out_dim: int = 4):
+class OwlViTBoxPredictionHead(nn.Module):
+    def __init__(self, config: OwlViTConfig):
         super().__init__()
+
+        width = config.vision_config.hidden_size
         self.dense0 = nn.Linear(width, width)
         self.dense1 = nn.Linear(width, width)
         self.gelu = nn.GELU()
-        self.dense2 = nn.Linear(width, out_dim)
+        self.dense2 = nn.Linear(width, 4)
 
     def forward(self, image_features: torch.Tensor):
         output = self.dense0(image_features)
@@ -1096,21 +1097,24 @@ class OwlViTBoxPredictor(OwlViTPreTrainedModel):
         return output
 
 
-class OwlViTClassPredictor(OwlViTPreTrainedModel):
-    def __init__(self, out_dim: int, query_dim: int, normalize: bool = True):
+class OwlViTClassPredictionHead(nn.Module):
+    def __init__(self, config: OwlViTConfig):
         super().__init__()
+
+        out_dim = config.text_config.hidden_size
+        query_dim = config.vision_config.hidden_size
+
         self.dense0 = nn.Linear(query_dim, out_dim)
         self.logit_shift = nn.Linear(query_dim, 1)
         self.logit_scale = nn.Linear(query_dim, 1)
-        self.normalize = normalize
         self.elu = nn.ELU()
 
     def forward(self, input: torch.Tensor, query_embeddings: torch.Tensor, query_mask: torch.Tensor):
         image_class_emb = self.dense0(input)
 
-        if self.normalize:
-            image_class_emb /= torch.linalg.norm(image_class_emb, dim=-1, keepdim=True) + 1e-6
-            query_embeddings /= torch.linalg.norm(query_embeddings, dim=-1, keepdim=True) + 1e-6
+        # Normalize features
+        image_class_emb /= torch.linalg.norm(image_class_emb, dim=-1, keepdim=True) + 1e-6
+        query_embeddings /= torch.linalg.norm(query_embeddings, dim=-1, keepdim=True) + 1e-6
 
         pred_logits = torch.einsum('...pd,...qd->...pq', image_class_emb, query_embeddings)
 
@@ -1128,16 +1132,12 @@ class OwlViTClassPredictor(OwlViTPreTrainedModel):
         return {'pred_logits': pred_logits, 'class_embeddings': image_class_emb}
 
 
-class OwlViTImageTextEmbedder(OwlViTPreTrainedModel):
-    def __init__(self,
-                 merge_class_token,
-                 vision_width,
-                 backbone,
-                 ):
+class OwlViTImageTextEmbedder(nn.Module):
+    def __init__(self, config: OwlViTConfig):
         super().__init__()
 
-        self.clip = backbone
-        self.layer_norm = LayerNorm(vision_width)
+        self.clip = OwlViTModel(config)
+        self.layer_norm = nn.LayerNorm(config.vision_config.hidden_size)
 
     def forward(self, images=None, texts=None):
 
@@ -1149,33 +1149,28 @@ class OwlViTImageTextEmbedder(OwlViTPreTrainedModel):
         image_emb, text_emb = self.clip(images, texts, normalize=False)
 
         # Resize class token
-        if img_emb is not None:
+        if image_emb is not None:
             new_size = tuple(np.array(image_emb.shape) - np.array((0, 1, 0)))
             class_token_out = torch.broadcast_to(image_emb[:, :1, :], new_size)
 
-            if merge_class_token == 'sum-ln':
-                image_emb = image_emb[:, 1:, :] + class_token_out  
-                image_emb = nn.LayerNorm(image_emb)
-
-            elif merge_class_token == 'mul-ln':
-                img_emb = img_emb[:, 1:, :] * class_token_out  
-                img_emb = nn.LayerNorm(image_emb)
+            # Merge image embedding with class tokens
+            image_emb = img_emb[:, 1:, :] * class_token_out  
+            image_emb = self.layer_norm(image_emb)
 
         if text_emb is not None and len(texts_shape) > 2:
-          text_emb = text_emb.reshape(texts_shape[:-1] + (-1,))
+            text_emb = text_emb.reshape(texts_shape[:-1] + (-1,))
         return image_emb, text_emb
 
 
-class OwlViTObjectDetectionHead(OwlViTPreTrainedModel):
+class OwlViTForObjectDetection(OwlViTPreTrainedModel):
     """Head for object classification tasks."""
 
-    def __init__(self, embedder, class_head, box_head, box_bias="both"):
-        super().__init__()
+    def __init__(self, config: OwlViTConfig):
+        super().__init__(config)
 
-        self._embedder = embedder
-        self._class_head = class_head
-        self._box_head = box_head
-        self.box_bias = box_bias
+        self._embedder = OwlViTImageTextEmbedder(config)
+        self._class_head = OwlViTClassPredictionHead(config)
+        self._box_head = OwlViTBoxPredictionHead(config)
         self.sigmoid = nn.Sigmoid()
 
     def normalize_grid_corner_coordinates(feature_map, padding_mask=None):
@@ -1186,18 +1181,18 @@ class OwlViTObjectDetectionHead(OwlViTPreTrainedModel):
             assert feature_map.ndim == 4  # [B, H, W, C]
             h, w = feature_map.shape[1:3]
 
-        xy = np.stack(np.meshgrid(np.arange(1, w+1), np.arange(1, h+1)), axis=-1).astype(np.float32)
-        xy /= np.array([w, h], np.float32)
-        # Flatten h, w dimensions
-        xy.reshape(*(xy.shape[:-3] + (-1, 2)))
-        xy = torch.from_numpy(xy)
-      else:
-        assert padding_mask.ndim == 3  # [B, H, W]
-        y = torch.cumsum(padding_mask, axis=1)
-        x = torch.cumsum(padding_mask, axis=2)
-        xy = torch.stack([x/(x[:, :, -1:] + 1e-6), y/(y[:, -1:] + 1e-6)], axis=-1)
+            xy = np.stack(np.meshgrid(np.arange(1, w+1), np.arange(1, h+1)), axis=-1).astype(np.float32)
+            xy /= np.array([w, h], np.float32)
+            # Flatten h, w dimensions
+            xy.reshape(*(xy.shape[:-3] + (-1, 2)))
+            xy = torch.from_numpy(xy)
+        else:
+            assert padding_mask.ndim == 3  # [B, H, W]
+            y = torch.cumsum(padding_mask, axis=1)
+            x = torch.cumsum(padding_mask, axis=2)
+            xy = torch.stack([x/(x[:, :, -1:] + 1e-6), y/(y[:, -1:] + 1e-6)], axis=-1)
       
-      return xy
+        return xy
 
     def compute_box_bias(self, feature_map, padding_mask=None):
         """
@@ -1232,7 +1227,7 @@ class OwlViTObjectDetectionHead(OwlViTPreTrainedModel):
         # Bounding box detection head [batch_size, num_boxes, 4].
         pred_boxes = self._box_head(image_features)
         # Compute the location of each token on the grid and use it to compute a bias for the bbox prediction
-        pred_boxes += self.compute_box_bias(feature_map, kind=self.box_bias)
+        pred_boxes += self.compute_box_bias(feature_map)
         pred_boxes = self.sigmoid(pred_boxes)
         return {'pred_boxes': pred_boxes}
 

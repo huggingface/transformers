@@ -168,13 +168,6 @@ _import_structure = {
         "CLIPTokenizer",
         "CLIPVisionConfig",
     ],
-    "models.owlvit": [
-        "OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "OwlViTConfig",
-        "OwlViTTextConfig",
-       
-        "OwlViTVisionConfig",
-    ],
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
     "models.convnext": ["CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNextConfig"],
     "models.cpm": [],
@@ -267,6 +260,12 @@ _import_structure = {
     ],
     "models.openai": ["OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OpenAIGPTConfig", "OpenAIGPTTokenizer"],
     "models.opt": ["OPTConfig"],
+    "models.owlvit": [
+        "OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "OwlViTConfig",
+        "OwlViTTextConfig",
+        "OwlViTVisionConfig",
+    ],
     "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
     "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
     "models.phobert": ["PhobertTokenizer"],
@@ -927,15 +926,6 @@ else:
             "CLIPVisionModel",
         ]
     )
-    _import_structure["models.owlvit"].extend(
-        [
-            "OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "OwlViTModel",
-            "OwlViTPreTrainedModel",
-            "OwlViTTextModel",
-            "OwlViTVisionModel",
-        ]
-    )
     _import_structure["models.convbert"].extend(
         [
             "CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1423,6 +1413,16 @@ else:
             "OPTForCausalLM",
             "OPTModel",
             "OPTPreTrainedModel",
+        ]
+    )
+    _import_structure["models.owlvit"].extend(
+        [
+            "OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "OwlViTModel",
+            "OwlViTPreTrainedModel",
+            "OwlViTTextModel",
+            "OwlViTVisionModel",
+            "OwlViTForObjectDetection",
         ]
     )
     _import_structure["models.pegasus"].extend(
@@ -2811,13 +2811,6 @@ if TYPE_CHECKING:
         CLIPTokenizer,
         CLIPVisionConfig,
     )
-    from .models.owlvit import (
-        OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        OwlViTConfig,
-        OwlViTTextConfig,
-       
-        OwlViTVisionConfig,
-    )
     from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
     from .models.convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
@@ -2904,6 +2897,12 @@ if TYPE_CHECKING:
     from .models.nystromformer import NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, NystromformerConfig
     from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
     from .models.opt import OPTConfig
+    from .models.owlvit import (
+        OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        OwlViTConfig,
+        OwlViTTextConfig,
+        OwlViTVisionConfig,
+    )
     from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
     from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
     from .models.phobert import PhobertTokenizer
@@ -3470,13 +3469,6 @@ if TYPE_CHECKING:
             CLIPTextModel,
             CLIPVisionModel,
         )
-        from .models.owlvit import (
-            OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            OwlViTModel,
-            OwlViTPreTrainedModel,
-            OwlViTTextModel,
-            OwlViTVisionModel,
-        )
         from .models.convbert import (
             CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             ConvBertForMaskedLM,
@@ -3875,6 +3867,14 @@ if TYPE_CHECKING:
             PegasusForConditionalGeneration,
             PegasusModel,
             PegasusPreTrainedModel,
+        )
+        from .models.owlvit import (
+            OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            OwlViTModel,
+            OwlViTPreTrainedModel,
+            OwlViTTextModel,
+            OwlViTVisionModel,
+            OwlViTForObjectDetection,
         )
         from .models.perceiver import (
             PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -270,7 +270,6 @@ class OwlViTConfig(PretrainedConfig):
         self,
         text_config_dict=None,
         vision_config_dict=None,
-        body_config=None,
         projection_dim=512,
         logit_scale_init_value=2.6592,
         **kwargs
@@ -287,7 +286,6 @@ class OwlViTConfig(PretrainedConfig):
 
         self.text_config = OwlViTTextConfig(**text_config_dict)
         self.vision_config = OwlViTVisionConfig(**vision_config_dict)
-        self.body_config = OwlViTBodyConfig(**body_config_dict)
 
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value

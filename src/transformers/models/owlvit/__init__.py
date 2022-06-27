@@ -40,6 +40,7 @@ else:
         "OwlViTPreTrainedModel",
         "OwlViTTextModel",
         "OwlViTVisionModel",
+        "OwlViTForObjectDetection"
     ]
 
 if TYPE_CHECKING:
@@ -57,6 +58,7 @@ if TYPE_CHECKING:
             OwlViTPreTrainedModel,
             OwlViTTextModel,
             OwlViTVisionModel,
+            OwlVitObjectDetection,
         )
 
 else:
