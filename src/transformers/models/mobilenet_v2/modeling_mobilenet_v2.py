@@ -261,7 +261,8 @@ def apply_tf_padding(features: torch.Tensor, conv_layer: nn.Conv2d) -> torch.Ten
     Apply TensorFlow-style "SAME" padding to a convolution layer. See the notes at:
     https://www.tensorflow.org/api_docs/python/tf/nn#notes_on_padding_2
     """
-    in_height, in_width = features.shape[-2:]
+    in_height = int(features.shape[-2])
+    in_width = int(features.shape[-1])
     stride_height, stride_width = conv_layer.stride
     kernel_height, kernel_width = conv_layer.kernel_size
     dilation_height, dilation_width = conv_layer.dilation
