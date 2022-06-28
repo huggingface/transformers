@@ -681,46 +681,19 @@ class TFDeiTPooler(tf.keras.layers.Layer):
         return pooled_output
 
 
-class PixelShuffle(tf.keras.layers.Layer):
+class TFDeitPixelShuffle(tf.keras.layers.Layer):
     """TF layer implementation of torch.nn.PixelShuffle"""
 
-    def __init__(
-        self,
-        upscale_factor: int,
-        data_format: str = "NHWC",
-        trainable: bool = True,
-        name: str = None,
-        dtype=None,
-        dynamic: bool = False,
-        **kwargs
-    ) -> None:
-        super().__init__(trainable, name, dtype, dynamic, **kwargs)
-        if upscale_factor < 2:
-            raise ValueError("upscale_factor must be an integer value >= 2")
+    def __init__(self, upscale_factor: int, **kwargs) -> None:
+        super().__init__(**kwargs)
+        if not isinstance(upscale_factor, int) or upscale_factor < 2:
+            raise ValueError(f"upscale_factor must be an integer value >= 2 got {upscale_factor}")
         self.upscale_factor = upscale_factor
-        self.data_format = data_format
 
     def call(self, x: tf.Tensor) -> tf.Tensor:
-        return tf.nn.depth_to_space(x, block_size=self.upscale_factor, data_format=self.data_format)
-
-
-class TFDeitDecoder(tf.keras.layers.Layer):
-    def __init__(self, config: DeiTConfig, **kwargs) -> None:
-        super().__init__(**kwargs)
-        self.conv2d = tf.keras.layers.Conv2D(
-            filters=config.encoder_stride**2 * config.num_channels, kernel_size=1, name="0"
-        )
-        self._block_size = config.encoder_stride
-        self.pixel_shuffle = PixelShuffle(config.encoder_stride, name="1")
-
-    def call(self, inputs: tf.Tensor, training: bool = False) -> tf.Tensor:
-        hidden_states = inputs
-        # (batch_size, num_channels, height, width) -> (batch_size, height, width, num_channels)
-        hidden_states = tf.transpose(hidden_states, (0, 2, 3, 1))
-        hidden_states = self.conv2d(hidden_states)
-        # FIXME - put this in pixel shuffle. Copied from Swin
+        hidden_states = x
         batch_size, _, _, num_input_channels = shape_list(hidden_states)
-        block_size_squared = self._block_size**2
+        block_size_squared = self.upscale_factor**2
         output_depth = int(num_input_channels / block_size_squared)
         # When the number of output channels >= 2, PyTorch's PixelShuffle and
         # TF's depth_to_space differ in their output as the order of channels selected for combining
@@ -730,6 +703,24 @@ class TFDeitDecoder(tf.keras.layers.Layer):
             [[i + j * block_size_squared for i in range(block_size_squared) for j in range(output_depth)]]
         )
         hidden_states = tf.gather(params=hidden_states, indices=tf.tile(permutation, [batch_size, 1]), batch_dims=-1)
+        hidden_states = tf.nn.depth_to_space(hidden_states, block_size=self.upscale_factor, data_format="NHWC")
+        return hidden_states
+
+
+class TFDeitDecoder(tf.keras.layers.Layer):
+    def __init__(self, config: DeiTConfig, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.conv2d = tf.keras.layers.Conv2D(
+            filters=config.encoder_stride**2 * config.num_channels, kernel_size=1, name="0"
+        )
+        self._block_size = config.encoder_stride
+        self.pixel_shuffle = TFDeitPixelShuffle(config.encoder_stride, name="1")
+
+    def call(self, inputs: tf.Tensor, training: bool = False) -> tf.Tensor:
+        hidden_states = inputs
+        # (batch_size, num_channels, height, width) -> (batch_size, height, width, num_channels)
+        hidden_states = tf.transpose(hidden_states, (0, 2, 3, 1))
+        hidden_states = self.conv2d(hidden_states)
         hidden_states = self.pixel_shuffle(hidden_states)
         # (batch_size, height, width, num_channels) -> (batch_size, num_channels, height, width)
         hidden_states = tf.transpose(hidden_states, (0, 3, 1, 2))
@@ -815,7 +806,7 @@ class TFDeiTForMaskedImageModeling(TFDeiTPreTrainedModel):
         reconstructed_pixel_values = self.decoder(sequence_output, training=training)
 
         masked_im_loss = None
-        if bool_masked_pos is not None:  # FIXME - double check
+        if bool_masked_pos is not None:
             size = self.config.image_size // self.config.patch_size
             bool_masked_pos = tf.reshape(bool_masked_pos, (-1, size, size))
             mask = tf.repeat(bool_masked_pos, self.config.patch_size, 1)
