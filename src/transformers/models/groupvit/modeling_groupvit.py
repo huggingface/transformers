@@ -40,10 +40,10 @@ from .configuration_groupvit import GroupViTConfig, GroupViTTextConfig, GroupViT
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "nvidia/groupvit-gccyfcc"
+_CHECKPOINT_FOR_DOC = "nvidia/groupvit-gcc-yfcc"
 
 GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "nvidia/groupvit-gccyfcc",
+    "nvidia/groupvit-gcc-yfcc",
     # See all GroupViT models at https://huggingface.co/models?filter=groupvit
 ]
 
@@ -1188,8 +1188,8 @@ class GroupViTTextModel(GroupViTPreTrainedModel):
         ```python
         >>> from transformers import CLIPTokenizer, GroupViTTextModel
 
-        >>> tokenizer = CLIPTokenizer.from_pretrained("nvidia/groupvit-gccyfcc")
-        >>> model = GroupViTTextModel.from_pretrained("nvidia/groupvit-gccyfcc")
+        >>> tokenizer = CLIPTokenizer.from_pretrained("nvidia/groupvit-gcc-yfcc")
+        >>> model = GroupViTTextModel.from_pretrained("nvidia/groupvit-gcc-yfcc")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
 
@@ -1297,8 +1297,8 @@ class GroupViTVisionModel(GroupViTPreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, GroupViTVisionModel
 
-        >>> processor = AutoPProcessor.from_pretrained("nvidia/groupvit-gccyfcc")
-        >>> model = GroupViTVisionModel.from_pretrained("nvidia/groupvit-gccyfcc")
+        >>> processor = AutoPProcessor.from_pretrained("nvidia/groupvit-gcc-yfcc")
+        >>> model = GroupViTVisionModel.from_pretrained("nvidia/groupvit-gcc-yfcc")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1384,8 +1384,8 @@ class GroupViTModel(GroupViTPreTrainedModel):
         ```python
         >>> from transformers import CLIPTokenizer, GroupViTModel
 
-        >>> model = GroupViTModel.from_pretrained("nvidia/groupvit-gccyfcc")
-        >>> tokenizer = CLIPTokenizer.from_pretrained("nvidia/groupvit-gccyfcc")
+        >>> model = GroupViTModel.from_pretrained("nvidia/groupvit-gcc-yfcc")
+        >>> tokenizer = CLIPTokenizer.from_pretrained("nvidia/groupvit-gcc-yfcc")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
@@ -1431,8 +1431,8 @@ class GroupViTModel(GroupViTPreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, GroupViTModel
 
-        >>> model = GroupViTModel.from_pretrained("nvidia/groupvit-gccyfcc")
-        >>> processor = AutoProcessor.from_pretrained("nvidia/groupvit-gccyfcc")
+        >>> model = GroupViTModel.from_pretrained("nvidia/groupvit-gcc-yfcc")
+        >>> processor = AutoProcessor.from_pretrained("nvidia/groupvit-gcc-yfcc")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1484,8 +1484,8 @@ class GroupViTModel(GroupViTPreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, GroupViTModel
 
-        >>> model = GroupViTModel.from_pretrained("nvidia/groupvit-gccyfcc")
-        >>> processor = AutoProcessor.from_pretrained("nvidia/groupvit-gccyfcc")
+        >>> model = GroupViTModel.from_pretrained("nvidia/groupvit-gcc-yfcc")
+        >>> processor = AutoProcessor.from_pretrained("nvidia/groupvit-gcc-yfcc")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)

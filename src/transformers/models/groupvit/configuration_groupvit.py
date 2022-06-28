@@ -25,7 +25,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "nvidia/groupvit-gccyfcc": "https://huggingface.co/nvidia/groupvit-gccyfcc/resolve/main/config.json",
+    "nvidia/groupvit-gcc-yfcc": "https://huggingface.co/nvidia/groupvit-gcc-yfcc/resolve/main/config.json",
 }
 
 
@@ -34,7 +34,7 @@ class GroupViTTextConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`GroupViTTextModel`]. It is used to instantiate an
     GroupViT model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the GroupViT
-    [nvidia/groupvit-gccyfcc](https://huggingface.co/nvidia/groupvit-gccyfcc) architecture.
+    [nvidia/groupvit-gcc-yfcc](https://huggingface.co/nvidia/groupvit-gcc-yfcc) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -74,7 +74,7 @@ class GroupViTTextConfig(PretrainedConfig):
     ```python
     >>> from transformers import GroupViTTextConfig, GroupViTTextModel
 
-    >>> # Initializing a GroupViTTextModel with nvidia/groupvit-gccyfcc style configuration
+    >>> # Initializing a GroupViTTextModel with nvidia/groupvit-gcc-yfcc style configuration
     >>> configuration = GroupViTTextConfig()
 
     >>> model = GroupViTTextModel(configuration)
@@ -141,7 +141,7 @@ class GroupViTVisionConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`GroupViTVisionModel`]. It is used to instantiate
     an GroupViT model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the GroupViT
-    [nvidia/groupvit-gccyfcc](https://huggingface.co/nvidia/groupvit-gccyfcc) architecture.
+    [nvidia/groupvit-gcc-yfcc](https://huggingface.co/nvidia/groupvit-gcc-yfcc) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -183,7 +183,7 @@ class GroupViTVisionConfig(PretrainedConfig):
     ```python
     >>> from transformers import GroupViTVisionConfig, GroupViTVisionModel
 
-    >>> # Initializing a GroupViTVisionModel with nvidia/groupvit-gccyfcc style configuration
+    >>> # Initializing a GroupViTVisionModel with nvidia/groupvit-gcc-yfcc style configuration
     >>> configuration = GroupViTVisionConfig()
 
     >>> model = GroupViTVisionModel(configuration)
