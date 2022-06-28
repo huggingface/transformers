@@ -38,7 +38,6 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import TFViTMAEForPreTraining, TFViTMAEModel
-    from transformers.models.vit_mae.modeling_tf_vit_mae import to_2tuple
 
 
 if is_vision_available():
@@ -67,6 +66,7 @@ class TFViTMAEModelTester:
         type_sequence_label_size=10,
         initializer_range=0.02,
         num_labels=3,
+        mask_ratio=0.6,
         scope=None,
     ):
         self.parent = parent
@@ -85,7 +85,13 @@ class TFViTMAEModelTester:
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
+        self.mask_ratio = mask_ratio
         self.scope = scope
+
+        # in ViTMAE, the expected sequence length = (num_patches + 1) * (1 - config.mask_ratio), rounded above
+        # (we add 1 for the [CLS] token)
+        num_patches = (image_size // patch_size) ** 2
+        self.seq_length = int(math.ceil((1 - mask_ratio) * (num_patches + 1)))
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -116,29 +122,21 @@ class TFViTMAEModelTester:
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             is_decoder=False,
             initializer_range=self.initializer_range,
+            mask_ratio=self.mask_ratio,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
         model = TFViTMAEModel(config=config)
         result = model(pixel_values, training=False)
-        # expected sequence length = (num_patches + 1) * (1 - config.mask_ratio), rounded above
-        # (we add 1 for the [CLS] token)
-        image_size = to_2tuple(self.image_size)
-        patch_size = to_2tuple(self.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        expected_seq_len = int(math.ceil((1 - config.mask_ratio) * (num_patches + 1)))
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, expected_seq_len, self.hidden_size))
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_for_pretraining(self, config, pixel_values, labels):
         model = TFViTMAEForPreTraining(config)
         result = model(pixel_values, training=False)
         # expected sequence length = num_patches
-        image_size = to_2tuple(self.image_size)
-        patch_size = to_2tuple(self.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        expected_seq_len = num_patches
+        num_patches = (self.image_size // self.patch_size) ** 2
         expected_num_channels = self.patch_size**2 * self.num_channels
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, expected_seq_len, expected_num_channels))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, num_patches, expected_num_channels))
 
         # test greyscale images
         config.num_channels = 1
@@ -147,7 +145,7 @@ class TFViTMAEModelTester:
         pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
         result = model(pixel_values, training=False)
         expected_num_channels = self.patch_size**2
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, expected_seq_len, expected_num_channels))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, num_patches, expected_num_channels))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -179,7 +177,6 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="ViTMAE does not use inputs_embeds")
     def test_inputs_embeds(self):
-        # ViTMAE does not use inputs_embeds
         pass
 
     def test_model_common_attributes(self):
@@ -265,114 +262,6 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
             output_for_dict_input = model(inputs_np, noise=noise)
             output_for_kw_input = model(**inputs_np, noise=noise)
             self.assert_outputs_same(output_for_dict_input, output_for_kw_input)
-
-    def test_attention_outputs(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.return_dict = True
-
-        # in ViTMAE, the seq_len equals (number of patches + 1) * (1 - mask_ratio), rounded above
-        image_size = to_2tuple(self.model_tester.image_size)
-        patch_size = to_2tuple(self.model_tester.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        seq_len = int(math.ceil((1 - config.mask_ratio) * (num_patches + 1)))
-        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
-        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
-        chunk_length = getattr(self.model_tester, "chunk_length", None)
-        if chunk_length is not None and hasattr(self.model_tester, "num_hashes"):
-            encoder_seq_length = encoder_seq_length * self.model_tester.num_hashes
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = False
-            config.return_dict = True
-            model = model_class(config)
-            outputs = model(**self._prepare_for_class(inputs_dict, model_class), training=False)
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-
-            # check that output_attentions also work using config
-            del inputs_dict["output_attentions"]
-            config.output_attentions = True
-            model = model_class(config)
-            outputs = model(**self._prepare_for_class(inputs_dict, model_class), training=False)
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-
-            if chunk_length is not None:
-                self.assertListEqual(
-                    list(attentions[0].shape[-4:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
-                )
-            else:
-                self.assertListEqual(
-                    list(attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-                )
-            out_len = len(outputs)
-
-            # Check attention is always last and order is fine
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = True
-            model = model_class(config)
-            outputs = model(**self._prepare_for_class(inputs_dict, model_class), training=False)
-
-            if hasattr(self.model_tester, "num_hidden_states_types"):
-                added_hidden_states = self.model_tester.num_hidden_states_types
-            elif self.is_encoder_decoder:
-                added_hidden_states = 2
-            else:
-                added_hidden_states = 1
-            self.assertEqual(out_len + added_hidden_states, len(outputs))
-
-            self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
-
-            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
-            if chunk_length is not None:
-                self.assertListEqual(
-                    list(self_attentions[0].shape[-4:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
-                )
-            else:
-                self.assertListEqual(
-                    list(self_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-                )
-
-    def test_hidden_states_output(self):
-        def check_hidden_states_output(inputs_dict, config, model_class):
-            model = model_class(config)
-
-            outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
-
-            expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
-            )
-            self.assertEqual(len(hidden_states), expected_num_layers)
-
-            # ViTMAE has a different seq_length
-            image_size = to_2tuple(self.model_tester.image_size)
-            patch_size = to_2tuple(self.model_tester.patch_size)
-            num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-            seq_length = int(math.ceil((1 - config.mask_ratio) * (num_patches + 1)))
-
-            self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
-                [seq_length, self.model_tester.hidden_size],
-            )
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_hidden_states"] = True
-            check_hidden_states_output(inputs_dict, config, model_class)
-
-            # check that output_hidden_states also work using config
-            del inputs_dict["output_hidden_states"]
-            config.output_hidden_states = True
-
-            check_hidden_states_output(inputs_dict, config, model_class)
 
     # overwrite from common since TFViTMAEForPretraining has random masking, we need to fix the noise
     # to generate masks during test
