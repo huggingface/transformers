@@ -402,7 +402,7 @@ MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES = OrderedDict(
         ("data2vec-vision", "Data2VecVisionForSemanticSegmentation"),
         ("dpt", "DPTForSemanticSegmentation"),
         ("mobilevit", "MobileViTForSemanticSegmentation"),
-        ("mobilenet_v1", "MobileNetV1ForSemanticSegmentation"),
+        ("mobilenet_v2", "MobileNetV2ForSemanticSegmentation"),
         ("segformer", "SegformerForSemanticSegmentation"),
     ]
 )

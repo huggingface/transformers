@@ -29,6 +29,7 @@ from transformers import (
     MobileNetV2Config,
     MobileNetV2FeatureExtractor,
     MobileNetV2ForImageClassification,
+    MobileNetV2ForSemanticSegmentation,
     load_tf_weights_in_mobilenet_v2,
 )
 from transformers.utils import logging
@@ -78,6 +79,11 @@ def convert_movilevit_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
     config = get_mobilenet_v2_config(model_name)
 
     # Load 🤗 model
+#MIH
+    # if mobilevit_name.startswith("deeplabv3_"):
+    #     model = MobileViTForSemanticSegmentation(config).eval()
+    # else:
+    #     model = MobileViTForImageClassification(config).eval()
     model = MobileNetV2ForImageClassification(config).eval()
 
     # Load weights from TensorFlow checkpoint

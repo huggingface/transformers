@@ -22,9 +22,9 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutputWithPoolingAndNoAttention, ImageClassifierOutputWithNoAttention
+from ...modeling_outputs import BaseModelOutputWithPoolingAndNoAttention, ImageClassifierOutputWithNoAttention, SemanticSegmenterOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_mobilenet_v2 import MobileNetV2Config
 
 
@@ -248,12 +248,13 @@ class MobileNetV2ConvLayer(nn.Module):
         in_channels: int,
         out_channels: int,
         kernel_size: int,
-        stride: Optional[int] = 1,
-        groups: Optional[int] = 1,
+        stride: int = 1,
+        groups: int = 1,
         bias: bool = False,
-        dilation: Optional[int or tuple] = 1,
-        use_normalization: Optional[bool] = True,
-        use_activation: Optional[bool or str] = True,
+        dilation: int = 1,
+        use_normalization: bool = True,
+        use_activation: Union[bool, str] = True,
+        layer_norm_eps: Optional[float] = None,
     ) -> None:
         super().__init__()
         self.config = config
@@ -280,7 +281,7 @@ class MobileNetV2ConvLayer(nn.Module):
         if use_normalization:
             self.normalization = nn.BatchNorm2d(
                 num_features=out_channels,
-                eps=config.layer_norm_eps,
+                eps=config.layer_norm_eps if layer_norm_eps is None else layer_norm_eps,
                 momentum=0.997,
                 affine=True,
                 track_running_stats=True,
@@ -656,4 +657,172 @@ class MobileNetV2ForImageClassification(MobileNetV2PreTrainedModel):
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
+        )
+
+
+class MobileNetV2DeepLabV3Plus(nn.Module):
+    """
+    The neural network from the paper "Encoder-Decoder with Atrous Separable Convolution for Semantic Image Segmentation"
+    https://arxiv.org/abs/1802.02611
+    """
+    def __init__(self, config: MobileNetV2Config) -> None:
+        super().__init__()
+
+        self.avg_pool = nn.AdaptiveAvgPool2d(output_size=1)
+
+        self.conv_pool = MobileNetV2ConvLayer(
+            config,
+            in_channels=320,
+            out_channels=256,
+            kernel_size=1,
+            stride=1,
+            use_normalization=True,
+            use_activation="relu",
+            layer_norm_eps=1e-5,
+        )
+
+        self.conv_aspp = MobileNetV2ConvLayer(
+            config,
+            in_channels=320,
+            out_channels=256,
+            kernel_size=1,
+            stride=1,
+            use_normalization=True,
+            use_activation="relu",
+            layer_norm_eps=1e-5,
+        )
+
+        self.conv_projection = MobileNetV2ConvLayer(
+            config,
+            in_channels=512,
+            out_channels=256,
+            kernel_size=1,
+            stride=1,
+            use_normalization=True,
+            use_activation="relu",
+            layer_norm_eps=1e-5,
+        )
+
+        self.dropout = nn.Dropout2d(config.classifier_dropout_prob)
+
+        self.classifier = MobileNetV2ConvLayer(
+            config,
+            in_channels=256,
+            out_channels=config.num_labels,
+            kernel_size=1,
+            use_normalization=False,
+            use_activation=False,
+            bias=True,
+        )
+
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        spatial_size = features.shape[-2:]
+
+        features_pool = self.avg_pool(features)
+        features_pool = self.conv_pool(features_pool)
+        features_pool = nn.functional.interpolate(features_pool, size=spatial_size, mode="bilinear", align_corners=True)
+
+        features_aspp = self.conv_aspp(features)
+
+        features = torch.cat([features_pool, features_aspp], dim=1)
+
+        features = self.conv_projection(features)
+        features = self.dropout(features)
+        features = self.classifier(features)
+        return features
+
+
+@add_start_docstrings(
+    """
+    MobileNetV2 model with a semantic segmentation head on top, e.g. for Pascal VOC.
+    """,
+    MOBILENET_V2_START_DOCSTRING,
+)
+class MobileNetV2ForSemanticSegmentation(MobileNetV2PreTrainedModel):
+    def __init__(self, config: MobileNetV2Config) -> None:
+        super().__init__(config)
+
+        self.num_labels = config.num_labels
+        self.mobilenet_v2 = MobileNetV2Model(config)
+        self.segmentation_head = MobileNetV2DeepLabV3Plus(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(MOBILENET_V2_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=SemanticSegmenterOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        pixel_values: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[tuple, SemanticSegmenterOutput]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
+            Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
+
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import MobileNetV2FeatureExtractor, MobileNetV2ForSemanticSegmentation
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> feature_extractor = MobileNetV2FeatureExtractor.from_pretrained("Matthijs/MIHdeeplabv3-mobilevit-small")
+        >>> model = MobileNetV2ForSemanticSegmentation.from_pretrained("Matthijs/MIHdeeplabv3-mobilevit-small")
+
+        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+
+        >>> # logits are of shape (batch_size, num_labels, height, width)
+        >>> logits = outputs.logits
+        ```"""
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.mobilenet_v2(
+            pixel_values,
+            output_hidden_states=True,  # we need the intermediate hidden states
+            return_dict=return_dict,
+        )
+
+        encoder_hidden_states = outputs.hidden_states if return_dict else outputs[1]
+
+        logits = self.segmentation_head(encoder_hidden_states[-1])
+
+        loss = None
+        if labels is not None:
+            if self.config.num_labels == 1:
+                raise ValueError("The number of labels should be greater than one")
+            else:
+                # upsample logits to the images' original size
+                upsampled_logits = nn.functional.interpolate(
+                    logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
+                )
+                loss_fct = CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
+                loss = loss_fct(upsampled_logits, labels)
+
+        if not return_dict:
+            if output_hidden_states:
+                output = (logits,) + outputs[1:]
+            else:
+                output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return SemanticSegmenterOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            attentions=None,
         )

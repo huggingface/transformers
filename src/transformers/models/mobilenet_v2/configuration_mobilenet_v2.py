@@ -79,6 +79,8 @@ class MobileNetV2Config(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 0.001):
             The epsilon used by the layer normalization layers.
+        semantic_loss_ignore_index (`int`, *optional*, defaults to 255):
+            The index that is ignored by the loss function of the semantic segmentation model.
 
     Example:
 
@@ -112,6 +114,7 @@ class MobileNetV2Config(PretrainedConfig):
         classifier_dropout_prob=0.8,
         initializer_range=0.02,
         layer_norm_eps=0.001,
+        semantic_loss_ignore_index=255,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -133,6 +136,7 @@ class MobileNetV2Config(PretrainedConfig):
         self.classifier_dropout_prob = classifier_dropout_prob
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
+        self.semantic_loss_ignore_index = semantic_loss_ignore_index
 
 
 class MobileNetV2OnnxConfig(OnnxConfig):

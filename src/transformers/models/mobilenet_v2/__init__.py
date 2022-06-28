@@ -45,6 +45,7 @@ else:
     _import_structure["modeling_mobilenet_v2"] = [
         "MOBILENET_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
         "MobileNetV2ForImageClassification",
+        "MobileNetV2ForSemanticSegmentation",
         "MobileNetV2Model",
         "MobileNetV2PreTrainedModel",
         "load_tf_weights_in_mobilenet_v2",
@@ -75,6 +76,7 @@ if TYPE_CHECKING:
         from .modeling_mobilenet_v2 import (
             MOBILENET_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
             MobileNetV2ForImageClassification,
+            MobileNetV2ForSemanticSegmentation,
             MobileNetV2Model,
             MobileNetV2PreTrainedModel,
             load_tf_weights_in_mobilenet_v2,
