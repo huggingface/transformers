@@ -71,19 +71,15 @@ class TFResNetConvLayer(tf.keras.layers.Layer):
         )
         # Use same default momentum and epsilon as PyTorch equivalent
         self.normalization = tf.keras.layers.BatchNormalization(
-            axis=1, epsilon=1e-5, momentum=0.1, name="normalization"
+            epsilon=1e-5, momentum=0.1, name="normalization"
         )
         self.activation = ACT2FN[activation] if activation is not None else IdentityLayer()
 
     def convolution(self, hidden_state: tf.Tensor) -> tf.Tensor:
         # Pad to match that done in the PyTorch Conv2D model
         height_pad = width_pad = (self.pad_value, self.pad_value)
-        hidden_state = tf.pad(hidden_state, [(0, 0), (0, 0), height_pad, width_pad])
-        # (batch_size, num_channels, height, width) -> (batch_size, height, width, num_channels)
-        hidden_state = tf.transpose(hidden_state, (0, 2, 3, 1))
+        hidden_state = tf.pad(hidden_state, [(0, 0), height_pad, width_pad, (0, 0)])
         hidden_state = self.conv(hidden_state)
-        # (batch_size, height, width, num_channels) -> (batch_size, num_channels, height, width)
-        hidden_state = tf.transpose(hidden_state, (0, 3, 1, 2))
         return hidden_state
 
     def call(self, hidden_state: tf.Tensor, training: bool = False) -> tf.Tensor:
@@ -111,19 +107,15 @@ class TFResNetEmbeddings(tf.keras.layers.Layer):
         self.num_channels = config.num_channels
 
     def call(self, pixel_values: tf.Tensor, training: bool = False) -> tf.Tensor:
-        _, num_channels, _, _ = shape_list(pixel_values)
+        _, _, _, num_channels = shape_list(pixel_values)
         if tf.executing_eagerly() and num_channels != self.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
         hidden_state = pixel_values
         hidden_state = self.embedder(hidden_state)
-        hidden_state = tf.pad(hidden_state, [[0, 0], [0, 0], [1, 1], [1, 1]])
-        # (batch_size, num_channels, height, width) -> (batch_size, height, width, num_channels)
-        hidden_state = tf.transpose(hidden_state, (0, 2, 3, 1))
+        hidden_state = tf.pad(hidden_state, [[0, 0], [1, 1], [1, 1], [0, 0]])
         hidden_state = self.pooler(hidden_state)
-        # (batch_size, height, width, num_channels) -> (batch_size, num_channels, height, width)
-        hidden_state = tf.transpose(hidden_state, (0, 3, 1, 2))
         return hidden_state
 
 
@@ -140,16 +132,12 @@ class TFResNetShortCut(tf.keras.layers.Layer):
         )
         # Use same default momentum and epsilon as PyTorch equivalent
         self.normalization = tf.keras.layers.BatchNormalization(
-            axis=1, epsilon=1e-5, momentum=0.1, name="normalization"
+            epsilon=1e-5, momentum=0.1, name="normalization"
         )
 
     def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_state = x
-        # (batch_size, num_channels, height, width) -> (batch_size, height, width, num_channels)
-        hidden_state = tf.transpose(hidden_state, (0, 2, 3, 1))
         hidden_state = self.convolution(hidden_state)
-        # (batch_size, height, width, num_channels) -> (batch_size, num_channels, height, width)
-        hidden_state = tf.transpose(hidden_state, (0, 3, 1, 2))
         hidden_state = self.normalization(hidden_state, training=training)
         return hidden_state
 
@@ -351,7 +339,7 @@ class TFResNetMainLayer(tf.keras.layers.Layer):
         self.config = config
         self.embedder = TFResNetEmbeddings(config, name="embedder")
         self.encoder = TFResNetEncoder(config, name="encoder")
-        self.pooler = tf.keras.layers.GlobalAveragePooling2D(data_format="channels_first", keepdims=True)
+        self.pooler = tf.keras.layers.GlobalAveragePooling2D(keepdims=True)
 
     @unpack_inputs
     def call(
@@ -366,6 +354,10 @@ class TFResNetMainLayer(tf.keras.layers.Layer):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        # TF 2.0 image layers can't use NCHW format when running on CPU.
+        # We transpose to NHWC format and then transpose back after the full forward pass.
+        # (batch_size, num_channels, height, width) -> (batch_size, height, width, num_channels)
+        pixel_values = tf.transpose(pixel_values, perm=[0, 2, 3, 1])
         embedding_output = self.embedder(pixel_values, training=training)
 
         encoder_outputs = self.encoder(
@@ -376,13 +368,23 @@ class TFResNetMainLayer(tf.keras.layers.Layer):
 
         pooled_output = self.pooler(last_hidden_state)
 
+        # Transpose all the outputs to the NCHW format
+        # (batch_size, height, width, num_channels) -> (batch_size, num_channels, height, width)
+        last_hidden_state = tf.transpose(last_hidden_state, (0, 3, 1, 2))
+        pooled_output = tf.transpose(pooled_output, (0, 3, 1, 2))
+        hidden_states = ()
+        for hidden_state in encoder_outputs[1:]:
+            hidden_states = hidden_states + tuple(tf.transpose(h, (0, 3, 1, 2)) for h in hidden_state)
+
         if not return_dict:
-            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
+            return (last_hidden_state, pooled_output) + hidden_states
+
+        hidden_states = hidden_states if output_hidden_states else None
 
         return TFBaseModelOutputWithPoolingAndNoAttention(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
+            hidden_states=hidden_states,
         )
 
 
