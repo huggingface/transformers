@@ -16,8 +16,9 @@
 
 
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple, Union
+from typing import Dict, Any, Optional, Tuple, Union
 
+import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import nn
@@ -112,6 +113,35 @@ class OwlViTOutput(ModelOutput):
         )
 
 
+@dataclass
+class OwlViTObjectDetectionOutput(ModelOutput):
+    """
+    Output type of [`OwlViTForObjectDetection`].
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
+            Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
+            bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
+            scale-invariant IoU loss.
+        loss_dict (`Dict`, *optional*):
+            A dictionary containing the individual losses. Useful for logging.
+        logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes + 1)`):
+            Classification logits (including no-object) for all queries.
+        pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+            Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
+            values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
+            possible padding). You can use [`~OwlViTFeatureExtractor.post_process`] to retrieve the unnormalized bounding
+            boxes.
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of the last layer of the decoder of the model.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    loss_dict: Optional[Dict] = None
+    logits: torch.FloatTensor = None
+    pred_boxes: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+
+
 # Copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings with CLIP->OwlViT
 class OwlViTVisionEmbeddings(nn.Module):
     def __init__(self, config: OwlViTVisionConfig):
@@ -136,6 +166,7 @@ class OwlViTVisionEmbeddings(nn.Module):
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
+
         patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
 
@@ -943,7 +974,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        project: Optional[bool] = False,
+        project: Optional[bool] = True,
         return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
@@ -983,7 +1014,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
         )
 
         pooled_output = vision_outputs[1]  # pooled_output
-
+        
         # Return projected output if in training mode
         if project:
             image_features = self.visual_projection(pooled_output)
@@ -1149,18 +1180,27 @@ class OwlViTImageTextEmbedder(nn.Module):
         self.clip = OwlViTModel(config)
         self.layer_norm = nn.LayerNorm(config.vision_config.hidden_size)
 
-    def forward(self, pixel_values: Optional[torch.FloatTensor] = None, texts=None):
+    def forward(
+        self, 
+        pixel_values: Optional[torch.FloatTensor] = None, 
+        texts: Optional[torch.FloatTensor] = None
+    ):
+        # Encode text
+        if texts is not None:
+            texts_shape = texts.shape
+            if len(texts_shape) > 2:
+                texts = texts.reshape(-1, texts_shape[-1])
 
-        texts_shape = texts.shape
-        if len(texts_shape) > 2:
-            texts = texts.reshape(-1, texts_shape[-1])
+            text_embeds = self.clip.get_text_features(texts)
+        
+            if len(texts_shape) > 2:
+                text_embeds = text_embeds.reshape(texts_shape[:-1] + (-1,))
 
-        # Encode images and texts
-        image_embeds = self.clip.get_image_features(pixel_values)
-        text_embeds = self.clip.get_text_features(texts)
+        # Encode image 
+        if pixel_values is not None:
+            image_embeds = self.clip.get_image_features(pixel_values)
 
-        # Resize class token
-        if image_emb is not None:
+            # Resize class token
             new_size = tuple(np.array(image_embeds.shape) - np.array((0, 1, 0)))
             class_token_out = torch.broadcast_to(image_embeds[:, :1, :], new_size)
 
@@ -1168,8 +1208,7 @@ class OwlViTImageTextEmbedder(nn.Module):
             image_embeds = img_embeds[:, 1:, :] * class_token_out  
             image_embeds = self.layer_norm(image_embeds)
 
-        if text_embeds is not None and len(texts_shape) > 2:
-            text_embeds = text_embeds.reshape(texts_shape[:-1] + (-1,))
+
         return image_embeds, text_embeds
 
 
@@ -1256,11 +1295,11 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         class_embedding_logits = self._class_head(image_features, query_embeddings, query_mask)
         return class_embedding_logits
 
-    def image_embedder(self, images):
+    def image_embedder(self, pixel_values):
         """
         Returns a 2D map of image features.
         """
-        image_feats, _ = self._embedder(images=images)
+        image_feats, _ = self._embedder(pixel_values=pixel_values)
 
         new_size = (
             image_feats.shape[0], 
@@ -1274,10 +1313,10 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         text_feats, _ = self._embedder(texts=text_queries)
         return text_feats
 
-    def forward(self, inputs, text_queries):
+    def forward(self, pixel_values: torch.FloatTensor, text_queries):
         """
         Args:
-          inputs: Images [batch_size, 3, height, width].
+          pixel_values: Images [batch_size, 3, height, width].
           text_queries: Queries to condition the model on. Queries starting with 0
             stand for padding [batch_size, num_queries, max_query_length].
 
@@ -1289,7 +1328,9 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         """
 
         # Embed images
-        feature_map = self.image_embedder(inputs)
+        feature_map = self.image_embedder(pixel_values)
+        print(feature_map.shape)
+        print(feature_map)
         b, h, w, d = feature_map.shape
         image_features = torch.reshape(feature_map, (b, h*w, d))
 
