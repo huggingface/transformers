@@ -98,7 +98,7 @@ if stale_egg_info.exists():
 _deps = [
     "Pillow",
     "accelerate>=0.10.0",
-    "black~=22.0,>=22.3",
+    "black==22.3",
     "codecarbon==1.2.0",
     "cookiecutter==1.7.3",
     "dataclasses",
