@@ -191,7 +191,11 @@ class MobileNetV2ModelTest(ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (MobileNetV2Model, MobileNetV2ForImageClassification, MobileNetV2ForSemanticSegmentation) if is_torch_available() else ()
+    all_model_classes = (
+        (MobileNetV2Model, MobileNetV2ForImageClassification, MobileNetV2ForSemanticSegmentation)
+        if is_torch_available()
+        else ()
+    )
 
     test_pruning = False
     test_resize_embeddings = False

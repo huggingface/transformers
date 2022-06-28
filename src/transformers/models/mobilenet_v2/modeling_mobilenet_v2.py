@@ -22,9 +22,19 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutputWithPoolingAndNoAttention, ImageClassifierOutputWithNoAttention, SemanticSegmenterOutput
+from ...modeling_outputs import (
+    BaseModelOutputWithPoolingAndNoAttention,
+    ImageClassifierOutputWithNoAttention,
+    SemanticSegmenterOutput,
+)
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_mobilenet_v2 import MobileNetV2Config
 
 
@@ -665,6 +675,7 @@ class MobileNetV2DeepLabV3Plus(nn.Module):
     The neural network from the paper "Encoder-Decoder with Atrous Separable Convolution for Semantic Image Segmentation"
     https://arxiv.org/abs/1802.02611
     """
+
     def __init__(self, config: MobileNetV2Config) -> None:
         super().__init__()
 
@@ -720,7 +731,9 @@ class MobileNetV2DeepLabV3Plus(nn.Module):
 
         features_pool = self.avg_pool(features)
         features_pool = self.conv_pool(features_pool)
-        features_pool = nn.functional.interpolate(features_pool, size=spatial_size, mode="bilinear", align_corners=True)
+        features_pool = nn.functional.interpolate(
+            features_pool, size=spatial_size, mode="bilinear", align_corners=True
+        )
 
         features_aspp = self.conv_aspp(features)
 

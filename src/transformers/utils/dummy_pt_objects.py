@@ -3522,6 +3522,13 @@ class MobileViTForSemanticSegmentation(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class MobileNetV2ForSemanticSegmentation(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class MobileNetV2Model(metaclass=DummyObject):
     _backends = ["torch"]
 
