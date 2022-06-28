@@ -188,6 +188,11 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls="models.camembert.CamembertOnnxConfig",
         ),
+        "codegen": supported_features_mapping(
+            "default",
+            "causal-lm",
+            onnx_config_cls="models.codegen.CodeGenOnnxConfig",
+        ),
         "convbert": supported_features_mapping(
             "default",
             "masked-lm",
