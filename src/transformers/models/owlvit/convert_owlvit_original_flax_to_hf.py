@@ -114,7 +114,7 @@ def copy_layers(hf_layers, pt_layers):
 def copy_encoder(hf_encoder, pt_model):
     # copy  embeds
     hf_encoder.embeddings.token_embedding.weight = pt_model.token_embedding.weight
-    hf_encoder.embeddings.position_embedding.weight.data = pt_model.positional_embedding
+    hf_encoder.embeddings.position_embedding.data = pt_model.positional_embedding.data
 
     # copy layer norm
     copy_linear(hf_encoder.final_layer_norm, pt_model.ln_final)
@@ -142,7 +142,7 @@ def copy_vison_model_and_projection(hf_model, pt_model):
     # copy embeds
     hf_model.vision_model.embeddings.patch_embedding.weight.data = pt_model.visual.conv1.weight.data
     hf_model.vision_model.embeddings.class_embedding = pt_model.visual.class_embedding
-    hf_model.vision_model.embeddings.position_embedding.weight.data = pt_model.visual.positional_embedding.data
+    hf_model.vision_model.embeddings.position_embedding.data = pt_model.visual.positional_embedding.data
 
     # copy encoder
     copy_layers(hf_model.vision_model.encoder.layers, pt_model.visual.transformer.resblocks)
@@ -289,7 +289,7 @@ def convert_clip_backbone(flax_params, torch_config):
             attn_params[name] = param
 
     return torch_clip_params, torch_model, attn_params
-
+ 
 
 @torch.no_grad()
 def convert_owlvit_checkpoint(pt_backbone, flax_params, attn_params, pytorch_dump_folder_path, config_path=None):
@@ -314,7 +314,6 @@ def convert_owlvit_checkpoint(pt_backbone, flax_params, attn_params, pytorch_dum
     copy_class_box_heads(hf_model, flax_params)
 
     hf_model.save_pretrained(pytorch_dump_folder_path)
- 
 
 
 if __name__ == "__main__":
