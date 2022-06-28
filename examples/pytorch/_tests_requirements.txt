@@ -22,4 +22,3 @@ protobuf
 torchvision
 jiwer
 librosa
-torch < 1.12
