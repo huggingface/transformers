@@ -1014,12 +1014,12 @@ class OwlViTModel(OwlViTPreTrainedModel):
         )
 
         pooled_output = vision_outputs[1]  # pooled_output
-        
+
         # Return projected output if in training mode
         if project:
             image_features = self.visual_projection(pooled_output)
         else:
-            image_features = pooled_output
+            image_features = vision_outputs[0]
         return image_features
 
     @add_start_docstrings_to_model_forward(OWLVIT_INPUTS_DOCSTRING)
@@ -1185,6 +1185,9 @@ class OwlViTImageTextEmbedder(nn.Module):
         pixel_values: Optional[torch.FloatTensor] = None, 
         texts: Optional[torch.FloatTensor] = None
     ):
+
+        image_embeds, text_embeds = None, None
+
         # Encode text
         if texts is not None:
             texts_shape = texts.shape
@@ -1198,16 +1201,15 @@ class OwlViTImageTextEmbedder(nn.Module):
 
         # Encode image 
         if pixel_values is not None:
-            image_embeds = self.clip.get_image_features(pixel_values)
+            image_embeds = self.clip.get_image_features(pixel_values, project=False)
 
             # Resize class token
             new_size = tuple(np.array(image_embeds.shape) - np.array((0, 1, 0)))
             class_token_out = torch.broadcast_to(image_embeds[:, :1, :], new_size)
 
             # Merge image embedding with class tokens
-            image_embeds = img_embeds[:, 1:, :] * class_token_out  
+            image_embeds = image_embeds[:, 1:, :] * class_token_out  
             image_embeds = self.layer_norm(image_embeds)
-
 
         return image_embeds, text_embeds
 
@@ -1303,8 +1305,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         new_size = (
             image_feats.shape[0], 
-            int(np.sqrt(image_feats.shape[-1])), 
-            int(np.sqrt(image_feats.shape[-1])),  
+            int(np.sqrt(image_feats.shape[1])), 
+            int(np.sqrt(image_feats.shape[1])),  
             image_feats.shape[-1]
         )
         return image_feats.reshape(new_size)
@@ -1329,8 +1331,6 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         # Embed images
         feature_map = self.image_embedder(pixel_values)
-        print(feature_map.shape)
-        print(feature_map)
         b, h, w, d = feature_map.shape
         image_features = torch.reshape(feature_map, (b, h*w, d))
 
