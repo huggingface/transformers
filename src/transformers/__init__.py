@@ -218,6 +218,12 @@ _import_structure = {
     "models.gpt_neo": ["GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoConfig"],
     "models.gpt_neox": ["GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXConfig"],
     "models.gptj": ["GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTJConfig"],
+    "models.groupvit": [
+        "GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "GroupViTConfig",
+        "GroupViTTextConfig",
+        "GroupViTVisionConfig",
+    ],
     "models.herbert": ["HerbertTokenizer"],
     "models.hubert": ["HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "HubertConfig"],
     "models.ibert": ["IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IBertConfig"],
@@ -1203,6 +1209,15 @@ else:
             "GPTJForSequenceClassification",
             "GPTJModel",
             "GPTJPreTrainedModel",
+        ]
+    )
+    _import_structure["models.groupvit"].extend(
+        [
+            "GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GroupViTModel",
+            "GroupViTPreTrainedModel",
+            "GroupViTTextModel",
+            "GroupViTVisionModel",
         ]
     )
     _import_structure["models.codegen"].extend(
@@ -2883,6 +2898,12 @@ if TYPE_CHECKING:
     from .models.gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
     from .models.gpt_neox import GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXConfig
     from .models.gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig
+    from .models.groupvit import (
+        GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        GroupViTConfig,
+        GroupViTTextConfig,
+        GroupViTVisionConfig,
+    )
     from .models.herbert import HerbertTokenizer
     from .models.hubert import HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, HubertConfig
     from .models.ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
@@ -3726,6 +3747,13 @@ if TYPE_CHECKING:
             GPTJForSequenceClassification,
             GPTJModel,
             GPTJPreTrainedModel,
+        )
+        from .models.groupvit import (
+            GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GroupViTModel,
+            GroupViTPreTrainedModel,
+            GroupViTTextModel,
+            GroupViTVisionModel,
         )
         from .models.hubert import (
             HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
