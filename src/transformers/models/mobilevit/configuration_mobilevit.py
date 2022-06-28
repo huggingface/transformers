@@ -56,9 +56,9 @@ class MobileViTConfig(PretrainedConfig):
     Args:
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
-        image_size (`int`, *optional*, defaults to `256`):
+        image_size (`int`, *optional*, defaults to 256):
             The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to `2`):
+        patch_size (`int`, *optional*, defaults to 2):
             The size (resolution) of each patch.
         hidden_sizes (`List[int]`, *optional*, defaults to `[144, 192, 240]`):
             Dimensionality (hidden size) of the Transformer encoders at each stage.

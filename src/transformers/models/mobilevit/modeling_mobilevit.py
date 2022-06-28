@@ -71,12 +71,10 @@ MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-def make_divisible(
-    value: Union[float, int], divisor: Optional[int] = 8, min_value: Optional[Union[float, int]] = None
-) -> Union[float, int]:
+def make_divisible(value: int, divisor: int = 8, min_value: Optional[int] = None) -> int:
     """
-    Ensure that all layers have a channel number that is divisible by 8. This function is taken from the original
-    TensorFlow repo. It can be seen here:
+    Ensure that all layers have a channel count that is divisible by `divisor`. This function is taken from the
+    original TensorFlow repo. It can be seen here:
     https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet/mobilenet.py
     """
     if min_value is None:
@@ -85,7 +83,7 @@ def make_divisible(
     # Make sure that round down does not go down by more than 10%.
     if new_value < 0.9 * value:
         new_value += divisor
-    return new_value
+    return int(new_value)
 
 
 class MobileViTConvLayer(nn.Module):
@@ -95,12 +93,12 @@ class MobileViTConvLayer(nn.Module):
         in_channels: int,
         out_channels: int,
         kernel_size: int,
-        stride: Optional[int] = 1,
-        groups: Optional[int] = 1,
+        stride: int = 1,
+        groups: int = 1,
         bias: bool = False,
-        dilation: Optional[int or tuple] = 1,
-        use_normalization: Optional[bool] = True,
-        use_activation: Optional[bool or str] = True,
+        dilation: int = 1,
+        use_normalization: bool = True,
+        use_activation: Union[bool, str] = True,
     ) -> None:
         super().__init__()
         padding = int((kernel_size - 1) / 2) * dilation
@@ -552,7 +550,7 @@ class MobileViTEncoder(nn.Module):
         self.layer = nn.ModuleList()
         self.gradient_checkpointing = False
 
-        # segmentation architectures like Deeplab and PSPNet modify the strides
+        # segmentation architectures like DeepLab and PSPNet modify the strides
         # of the classification backbones
         dilate_layer_4 = dilate_layer_5 = False
         if config.output_stride == 8:
@@ -965,7 +963,7 @@ class MobileViTASPP(nn.Module):
         return pooled_features
 
 
-class MobileViTDeeplabV3(nn.Module):
+class MobileViTDeepLabV3(nn.Module):
     """
     DeepLabv3 architecture: https://arxiv.org/abs/1706.05587
     """
@@ -1005,7 +1003,7 @@ class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
 
         self.num_labels = config.num_labels
         self.mobilevit = MobileViTModel(config, expand_output=False)
-        self.segmentation_head = MobileViTDeeplabV3(config)
+        self.segmentation_head = MobileViTDeepLabV3(config)
 
         # Initialize weights and apply final processing
         self.post_init()
