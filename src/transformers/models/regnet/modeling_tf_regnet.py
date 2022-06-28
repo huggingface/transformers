@@ -174,7 +174,7 @@ class TFRegNetXLayer(tf.keras.layers.Layer):
             TFRegNetConvLayer(
                 out_channels, stride=stride, groups=groups, activation=config.hidden_act, name="layer.1"
             ),
-            TFRegNetConvLayer(out_channels, out_channels, kernel_size=1, activation=None, name="layer.2"),
+            TFRegNetConvLayer(out_channels, kernel_size=1, activation=None, name="layer.2"),
         ]
         self.activation = ACT2FN[config.hidden_act]
 
