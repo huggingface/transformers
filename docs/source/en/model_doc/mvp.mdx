@@ -28,7 +28,7 @@ Tips:
 - We have released a series of models [here](https://huggingface.co/models?filter=mvp), including MVP, MVP with task-specific prompts, and multi-task pre-trained variants.
 - If you want to use a model without prompts (standard Transformer), you can load it through `MvpForConditionalGeneration.from_pretrained('RUCAIBox/mvp')`.
 - If you want to use a model with task-specific prompts, such as summarization, you can load it through `MvpForConditionalGeneration.from_pretrained('RUCAIBox/mvp-summarization')`.
-- Our model supports lightweight prompt tuning following [Prefix-tuning](https://arxiv.org/abs/2101.00190) with config `lightweight_tuning=True`.
+- Our model supports lightweight prompt tuning following [Prefix-tuning](https://arxiv.org/abs/2101.00190) with method `set_lightweight_tuning()`.
 
 This model was contributed by [Tianyi Tang](https://huggingface.co/StevenTang). The detailed information and instructions can be found [here](https://github.com/RUCAIBox/MVP).
 
@@ -81,39 +81,36 @@ For lightweight tuning, *i.e.*, fixing the model and only tuning prompts, you ca
 ```python
 >>> from transformers import MvpForConditionalGeneration
 
+>>> model = MvpForConditionalGeneration.from_pretrained("RUCAIBox/mvp", use_prompt=True)
+>>> # the number of trainable parameters (full tuning)
+>>> sum(p.numel() for p in model.parameters() if p.requires_grad)
+468116832
+
 >>> # lightweight tuning with randomly initialized prompts
->>> model = MvpForConditionalGeneration.from_pretrained("RUCAIBox/mvp", use_prompt=True, lightweight_tuning=True)
->>> # lightweight tuning with task-specific prompts
->>> model = MvpForConditionalGeneration.from_pretrained("RUCAIBox/mtl-data-to-text", lightweight_tuning=True)
->>> # original Prefix-tuning
->>> model = MvpForConditionalGeneration.from_pretrained(
-...     "facebook/bart-large", use_prompt=True, lightweight_tuning=True
-... )
->>> # the number of trainable parameters
+>>> model.set_lightweight_tuning()
+>>> # the number of trainable parameters (lightweight tuning)
 >>> sum(p.numel() for p in model.parameters() if p.requires_grad)
 61823328
 
->>> # MVP without lightweight tuning
->>> model = MvpForConditionalGeneration.from_pretrained("RUCAIBox/mvp")
->>> # the number of trainable parameters
->>> sum(p.numel() for p in model.parameters() if p.requires_grad)
-406293504
+>>> # lightweight tuning with task-specific prompts
+>>> model = MvpForConditionalGeneration.from_pretrained("RUCAIBox/mtl-data-to-text")
+>>> set_lightweight_tuning()
+>>> # original Prefix-tuning
+>>> model = MvpForConditionalGeneration.from_pretrained("facebook/bart-large", use_prompt=True)
+>>> set_lightweight_tuning()
 ```
 
 ## MvpConfig
 
 [[autodoc]] MvpConfig
-    - all
 
 ## MvpTokenizer
 
 [[autodoc]] MvpTokenizer
-    - all
 
 ## MvpTokenizerFast
 
 [[autodoc]] MvpTokenizerFast
-    - all
 
 ## MvpModel
 

@@ -46,7 +46,7 @@ else:
         "MvpForQuestionAnswering",
         "MvpForSequenceClassification",
         "MvpModel",
-        "MvpPretrainedModel",
+        "MvpPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
@@ -74,7 +74,7 @@ if TYPE_CHECKING:
             MvpForQuestionAnswering,
             MvpForSequenceClassification,
             MvpModel,
-            MvpPretrainedModel,
+            MvpPreTrainedModel,
         )
 
 else:

@@ -830,7 +830,7 @@ else:
             "MvpForQuestionAnswering",
             "MvpForSequenceClassification",
             "MvpModel",
-            "MvpPretrainedModel",
+            "MvpPreTrainedModel",
         ]
     )
     _import_structure["models.beit"].extend(
@@ -3911,7 +3911,7 @@ if TYPE_CHECKING:
             MvpForQuestionAnswering,
             MvpForSequenceClassification,
             MvpModel,
-            MvpPretrainedModel,
+            MvpPreTrainedModel,
         )
         from .models.nezha import (
             NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST,

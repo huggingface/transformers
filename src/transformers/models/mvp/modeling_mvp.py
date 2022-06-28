@@ -523,16 +523,18 @@ class MvpClassificationHead(nn.Module):
 class MvpPrompt(nn.Module):
     """Layer-wise prompt for encoder or decoder."""
 
-    def __init__(self, prompt_length, embed_dim, prompt_mid_dim, num_layers, num_heads, dropout):
+    def __init__(self, config, num_layers, num_heads):
         super().__init__()
-        self.prompt_length = prompt_length
+        self.prompt_length = config.prompt_length
         self.num_layers = num_layers
         self.num_heads = num_heads
-        self.head_dim = embed_dim // num_heads
-        self.dropout = nn.Dropout(p=dropout)
-        self.prompt_embedding = nn.Embedding(prompt_length, embed_dim)
+        self.head_dim = config.d_model // num_heads
+        self.dropout = nn.Dropout(p=config.dropout)
+        self.prompt_embedding = nn.Embedding(config.prompt_length, config.d_model)
         self.prompt_trans = nn.Sequential(
-            nn.Linear(embed_dim, prompt_mid_dim), nn.GELU(), nn.Linear(prompt_mid_dim, num_layers * 2 * embed_dim)
+            nn.Linear(config.d_model, config.prompt_mid_dim),
+            nn.GELU(),
+            nn.Linear(config.prompt_mid_dim, num_layers * 2 * config.d_model),
         )
 
     def forward(self, prompt_ids: torch.Tensor) -> Tuple[torch.Tensor]:
@@ -543,7 +545,7 @@ class MvpPrompt(nn.Module):
         return prompt
 
 
-class MvpPretrainedModel(PreTrainedModel):
+class MvpPreTrainedModel(PreTrainedModel):
     config_class = MvpConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
@@ -782,7 +784,7 @@ MVP_QUESTION_ANSWERING_SAMPLE = r"""
 """
 
 
-class MvpEncoder(MvpPretrainedModel):
+class MvpEncoder(MvpPreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
     [`MvpEncoderLayer`].
@@ -822,12 +824,9 @@ class MvpEncoder(MvpPretrainedModel):
         if use_prompt:
             self.prompt_length = config.prompt_length
             self.self_attn_prompt = MvpPrompt(
-                config.prompt_length,
-                config.d_model,
-                config.prompt_mid_dim,
+                config,
                 config.encoder_layers,
                 config.encoder_attention_heads,
-                config.dropout,
             )
 
         self.gradient_checkpointing = False
@@ -980,7 +979,7 @@ class MvpEncoder(MvpPretrainedModel):
         )
 
 
-class MvpDecoder(MvpPretrainedModel):
+class MvpDecoder(MvpPreTrainedModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`MvpDecoderLayer`]
 
@@ -1016,20 +1015,14 @@ class MvpDecoder(MvpPretrainedModel):
         if use_prompt:
             self.prompt_length = config.prompt_length
             self.self_attn_prompt = MvpPrompt(
-                config.prompt_length,
-                config.d_model,
-                config.prompt_mid_dim,
+                config,
                 config.decoder_layers,
                 config.decoder_attention_heads,
-                config.dropout,
             )
             self.cross_attn_prompt = MvpPrompt(
-                config.prompt_length,
-                config.d_model,
-                config.prompt_mid_dim,
+                config,
                 config.decoder_layers,
                 config.decoder_attention_heads,
-                config.dropout,
             )
 
         self.gradient_checkpointing = False
@@ -1291,24 +1284,18 @@ class MvpDecoder(MvpPretrainedModel):
     "The bare MVP Model outputting raw hidden-states without any specific head on top.",
     MVP_START_DOCSTRING,
 )
-class MvpModel(MvpPretrainedModel):
+class MvpModel(MvpPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"final_logits_bias", r"lm_head.weight"]
 
     def __init__(self, config: MvpConfig):
         super().__init__(config)
 
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
+        self.use_prompt = config.use_prompt
         self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
 
         self.encoder = MvpEncoder(config, self.shared, config.use_prompt)
         self.decoder = MvpDecoder(config, self.shared, config.use_prompt)
-
-        # Whether to use lightweight tuning
-        if config.lightweight_tuning:
-            self.requires_grad_(False)
-            self.encoder.self_attn_prompt.requires_grad_(True)
-            self.decoder.self_attn_prompt.requires_grad_(True)
-            self.decoder.cross_attn_prompt.requires_grad_(True)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1326,6 +1313,14 @@ class MvpModel(MvpPretrainedModel):
 
     def get_decoder(self):
         return self.decoder
+
+    def set_lightweight_tuning(self):
+        assert self.use_prompt, "If you want to use lightweight tuning, make sure that `use_prompt=True`."
+
+        self.requires_grad_(False)
+        self.encoder.self_attn_prompt.requires_grad_(True)
+        self.decoder.self_attn_prompt.requires_grad_(True)
+        self.decoder.cross_attn_prompt.requires_grad_(True)
 
     @add_start_docstrings_to_model_forward(MVP_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -1427,16 +1422,12 @@ class MvpModel(MvpPretrainedModel):
 @add_start_docstrings(
     "The MVP Model with a language modeling head. Can be used for various text generation tasks.", MVP_START_DOCSTRING
 )
-class MvpForConditionalGeneration(MvpPretrainedModel):
+class MvpForConditionalGeneration(MvpPreTrainedModel):
     def __init__(self, config: MvpConfig):
         super().__init__(config)
         self.model = MvpModel(config)
         self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
         self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
-
-        # Whether to use lightweight tuning
-        if config.lightweight_tuning:
-            self.lm_head.requires_grad__ = False
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1466,6 +1457,10 @@ class MvpForConditionalGeneration(MvpPretrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
+
+    def set_lightweight_tuning(self):
+        self.model.set_lightweight_tuning()
+        self.lm_head.requires_grad_(False)
 
     @add_start_docstrings_to_model_forward(MVP_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -1597,7 +1592,7 @@ class MvpForConditionalGeneration(MvpPretrainedModel):
     """,
     MVP_START_DOCSTRING,
 )
-class MvpForSequenceClassification(MvpPretrainedModel):
+class MvpForSequenceClassification(MvpPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"final_logits_bias", r"lm_head.weight"]
 
     def __init__(self, config: MvpConfig, **kwargs):
@@ -1610,12 +1605,12 @@ class MvpForSequenceClassification(MvpPretrainedModel):
             config.classifier_dropout,
         )
 
-        # Whether to use lightweight tuning
-        if config.lightweight_tuning:
-            self.classification_head.requires_grad_(False)
-
         self.model._init_weights(self.classification_head.dense)
         self.model._init_weights(self.classification_head.out_proj)
+
+    def set_lightweight_tuning(self):
+        self.model.set_lightweight_tuning()
+        self.classification_head.requires_grad_(False)
 
     @add_start_docstrings_to_model_forward(MVP_INPUTS_DOCSTRING)
     @add_end_docstrings(MVP_SEQUENCE_CLASSIFICATION_SAMPLE)
@@ -1724,7 +1719,7 @@ class MvpForSequenceClassification(MvpPretrainedModel):
     """,
     MVP_START_DOCSTRING,
 )
-class MvpForQuestionAnswering(MvpPretrainedModel):
+class MvpForQuestionAnswering(MvpPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"final_logits_bias", r"lm_head.weight"]
 
     def __init__(self, config):
@@ -1736,11 +1731,11 @@ class MvpForQuestionAnswering(MvpPretrainedModel):
         self.model = MvpModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
-        # Whether to use lightweight tuning
-        if config.lightweight_tuning:
-            self.qa_outputs.requires_grad_(False)
-
         self.model._init_weights(self.qa_outputs)
+
+    def set_lightweight_tuning(self):
+        self.model.set_lightweight_tuning()
+        self.qa_outputs.requires_grad_(False)
 
     @add_start_docstrings_to_model_forward(MVP_INPUTS_DOCSTRING)
     @add_end_docstrings(MVP_QUESTION_ANSWERING_SAMPLE)
@@ -1840,7 +1835,7 @@ class MvpForQuestionAnswering(MvpPretrainedModel):
 
 
 # Copied from transformers.models.bart.modeling_bart.BartDecoderWrapper with Bart->Mvp
-class MvpDecoderWrapper(MvpPretrainedModel):
+class MvpDecoderWrapper(MvpPreTrainedModel):
     """
     This wrapper class is a helper class to correctly load pretrained checkpoints when the causal language model is
     used in combination with the [`EncoderDecoderModel`] framework.
@@ -1854,7 +1849,7 @@ class MvpDecoderWrapper(MvpPretrainedModel):
         return self.decoder(*args, **kwargs)
 
 
-class MvpForCausalLM(MvpPretrainedModel):
+class MvpForCausalLM(MvpPreTrainedModel):
     def __init__(self, config):
         config = copy.deepcopy(config)
         config.is_decoder = True
@@ -1863,10 +1858,6 @@ class MvpForCausalLM(MvpPretrainedModel):
         self.model = MvpDecoderWrapper(config)
 
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
-        # Whether to use lightweight tuning
-        if config.lightweight_tuning:
-            self.lm_head.requires_grad_(False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1888,6 +1879,10 @@ class MvpForCausalLM(MvpPretrainedModel):
 
     def get_decoder(self):
         return self.model.decoder
+
+    def set_lightweight_tuning(self):
+        self.model.set_lightweight_tuning()
+        self.lm_head.requires_grad_(False)
 
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
