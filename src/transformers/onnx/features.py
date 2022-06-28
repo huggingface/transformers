@@ -15,9 +15,11 @@ if is_torch_available():
         AutoModel,
         AutoModelForCausalLM,
         AutoModelForImageClassification,
+        AutoModelForImageSegmentation,
         AutoModelForMaskedImageModeling,
         AutoModelForMaskedLM,
         AutoModelForMultipleChoice,
+        AutoModelForObjectDetection,
         AutoModelForQuestionAnswering,
         AutoModelForSeq2SeqLM,
         AutoModelForSequenceClassification,
@@ -83,8 +85,10 @@ class FeaturesManager:
             "sequence-classification": AutoModelForSequenceClassification,
             "token-classification": AutoModelForTokenClassification,
             "multiple-choice": AutoModelForMultipleChoice,
+            "object-detection": AutoModelForObjectDetection,
             "question-answering": AutoModelForQuestionAnswering,
             "image-classification": AutoModelForImageClassification,
+            "image-segmentation": AutoModelForImageSegmentation,
             "masked-im": AutoModelForMaskedImageModeling,
         }
     if is_tf_available():
@@ -226,6 +230,12 @@ class FeaturesManager:
         ),
         "deit": supported_features_mapping(
             "default", "image-classification", "masked-im", onnx_config_cls="models.deit.DeiTOnnxConfig"
+        ),
+        "detr": supported_features_mapping(
+            "default",
+            "object-detection",
+            "image-segmentation",
+            onnx_config_cls="models.detr.DetrOnnxConfig",
         ),
         "distilbert": supported_features_mapping(
             "default",
