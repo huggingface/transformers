@@ -233,15 +233,11 @@ class Message:
                     individual_reports.append(key)
 
         header = "Single |  Multi | Category\n"
-        category_failures_report = header + "\n".join(sorted(individual_reports))
+        category_failures_report = prepare_reports(
+            title="The following modeling categories had failures", header=header, reports=individual_reports
+        )
 
-        return {
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": f"The following modeling categories had failures:\n\n```\n{category_failures_report}\n```",
-            },
-        }
+        return {"type": "section", "text": {"type": "mrkdwn", "text": category_failures_report}}
 
     @property
     def model_failures(self) -> Dict:
@@ -302,21 +298,22 @@ class Message:
 
         model_header = "Single PT |  Multi PT | Single TF |  Multi TF |     Other | Category\n"
         sorted_model_reports = sorted(model_reports, key=lambda s: s.split("] ")[-1])
-        model_failures_report = model_header + "\n".join(sorted_model_reports)
+        model_failures_report = prepare_reports(
+            title="These following model modules had failures", header=model_header, reports=sorted_model_reports
+        )
 
         module_header = "Single |  Multi | Category\n"
         sorted_module_reports = sorted(other_module_reports, key=lambda s: s.split("] ")[-1])
-        module_failures_report = module_header + "\n".join(sorted_module_reports)
+        module_failures_report = prepare_reports(
+            title="The following non-model modules had failures", header=module_header, reports=sorted_module_reports
+        )
 
-        report = ""
+        model_failure_sections = [
+            {"type": "section", "text": {"type": "mrkdwn", "text": model_failures_report}},
+            {"type": "section", "text": {"type": "mrkdwn", "text": module_failures_report}},
+        ]
 
-        if len(model_reports):
-            report += f"These following model modules had failures:\n```\n{model_failures_report}\n```\n\n"
-
-        if len(other_module_reports):
-            report += f"The following non-model modules had failures:\n```\n{module_failures_report}\n```\n\n"
-
-        return {"type": "section", "text": {"type": "mrkdwn", "text": report}}
+        return model_failure_sections
 
     @property
     def additional_failures(self) -> Dict:
@@ -337,15 +334,11 @@ class Message:
                 individual_reports.append(report)
 
         header = "Single |  Multi | Category\n"
-        failures_report = header + "\n".join(sorted(individual_reports))
+        failures_report = prepare_reports(
+            title="The following non-modeling tests had failures", header=header, reports=individual_reports
+        )
 
-        return {
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": f"The following non-modeling tests had failures:\n```\n{failures_report}\n```",
-            },
-        }
+        return {"type": "section", "text": {"type": "mrkdwn", "text": failures_report}}
 
     @property
     def payload(self) -> str:
@@ -358,7 +351,8 @@ class Message:
             blocks.append(self.failures)
 
         if self.n_model_failures > 0:
-            blocks.extend([self.category_failures, self.model_failures])
+            blocks.append(self.category_failures)
+            blocks.extend([self.model_failures])
 
         if self.n_additional_failures > 0:
             blocks.append(self.additional_failures)
@@ -580,6 +574,26 @@ def retrieve_available_artifacts():
             _available_artifacts[artifact_name].add_path(directory)
 
     return _available_artifacts
+
+
+def prepare_reports(title, header, reports):
+    report = ""
+
+    if len(reports) > 0:
+        # `text` must be less than 3001 characters in Slack SDK
+        # keep some room for adding "[Truncated]" when necessary
+        MAX_ERROR_TEXT = 3000 - len("[Truncated]")
+
+        for idx in range(len(reports)):
+            _report = header + "\n".join(reports[:idx])
+            new_report = f"{title}:\n```\n{_report}\n```\n"
+            if len(new_report) > MAX_ERROR_TEXT:
+                # `report` here has length <= 3000
+                report = report + "[Truncated]"
+                break
+            report = new_report
+
+    return report
 
 
 if __name__ == "__main__":
