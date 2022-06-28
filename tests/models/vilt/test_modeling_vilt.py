@@ -37,6 +37,7 @@ if is_torch_available():
         ViltForImagesAndTextClassification,
         ViltForMaskedLM,
         ViltForQuestionAnswering,
+        ViltForTokenClassification,
         ViltModel,
     )
     from transformers.models.vilt.modeling_vilt import VILT_PRETRAINED_MODEL_ARCHIVE_LIST
@@ -204,6 +205,7 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
             ViltForQuestionAnswering,
             ViltForImageAndTextRetrieval,
             ViltForMaskedLM,
+            ViltForTokenClassification,
         )
         if is_torch_available()
         else ()
@@ -224,7 +226,7 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
                 inputs_dict["labels"] = torch.zeros(
                     self.model_tester.batch_size, self.model_tester.num_labels, device=torch_device
                 )
-            elif model_class.__name__ == "ViltForMaskedLM":
+            elif model_class.__name__ in ["ViltForMaskedLM", "ViltForTokenClassification"]:
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
                 )

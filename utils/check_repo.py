@@ -128,6 +128,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "ViltForQuestionAnswering",
     "ViltForImagesAndTextClassification",
     "ViltForImageAndTextRetrieval",
+    "ViltForTokenClassification",
     "ViltForMaskedLM",
     "XGLMEncoder",
     "XGLMDecoder",
