@@ -226,6 +226,7 @@ class GPTNeoXModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
 
+    @unittest.skip(reason="GPT-NeoX requires 80G RAM for testing")
     @slow
     def test_model_from_pretrained(self):
         for model_name in GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
@@ -233,6 +234,7 @@ class GPTNeoXModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsNotNone(model)
 
 
+@unittest.skip(reason="GPT-NeoX requires 80G RAM for testing")
 @require_torch
 class GPTNeoXModelIntegrationTest(unittest.TestCase):
     @slow
