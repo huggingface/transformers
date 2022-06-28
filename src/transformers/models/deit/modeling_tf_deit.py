@@ -753,14 +753,14 @@ class TFDeiTForMaskedImageModeling(TFDeiTPreTrainedModel):
         training: bool = False,
     ) -> Union[tuple, TFMaskedLMOutput]:
         r"""
-        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
+        bool_masked_pos (`tf.Tensor` of type bool and shape `(batch_size, num_patches)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
 
         Returns:
 
         Examples:
         ```python
-        >>> from transformers import DeiTFeatureExtractor, DeiTForMaskedImageModeling
+        >>> from transformers import DeiTFeatureExtractor, TFDeiTForMaskedImageModeling
         >>> import tensorflow as tf
         >>> from PIL import Image
         >>> import requests
@@ -769,12 +769,12 @@ class TFDeiTForMaskedImageModeling(TFDeiTPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> feature_extractor = DeiTFeatureExtractor.from_pretrained("facebook/deit-base-distilled-patch16-224")
-        >>> model = TFDeiTForMaskedImageModeling.from_pretrained("facebook/deit-base-distilled-patch16-224")
+        >>> model = TFDeiTForMaskedImageModeling.from_pretrained("facebook/deit-base-distilled-patch16-224", from_pt=True)
 
         >>> num_patches = (model.config.image_size // model.config.patch_size) ** 2
-        >>> pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values
+        >>> pixel_values = feature_extractor(images=image, return_tensors="tf").pixel_values
         >>> # create random boolean mask of shape (batch_size, num_patches)
-        >>> bool_masked_pos = torch.randint(low=0, high=2, size=(1, num_patches)).bool()
+        >>> bool_masked_pos = tf.cast(tf.random.uniform((1, num_patches), minval=0, maxval=2, dtype=tf.int32), tf.bool)
 
         >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
         >>> loss, reconstructed_pixel_values = outputs.loss, outputs.logits
@@ -881,7 +881,7 @@ class TFDeiTForImageClassification(TFDeiTPreTrainedModel, TFSequenceClassificati
         training: bool = False,
     ) -> Union[tf.Tensor, TFImageClassifierOutput]:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+        labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
@@ -891,21 +891,21 @@ class TFDeiTForImageClassification(TFDeiTPreTrainedModel, TFSequenceClassificati
         Examples:
 
         ```python
-        >>> from transformers import DeiTFeatureExtractor, DeiTForImageClassification
-        >>> import torch
+        >>> from transformers import DeiTFeatureExtractor, TFDeiTForImageClassification
+        >>> import tensorflow as tf
         >>> from PIL import Image
         >>> import requests
 
-        >>> torch.manual_seed(3)  # doctest: +IGNORE_RESULT
+        >>> tf.random.set_seed(3)  # doctest: +IGNORE_RESULT
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> # note: we are loading a DeiTForImageClassificationWithTeacher from the hub here,
+        >>> # note: we are loading a TFDeiTForImageClassificationWithTeacher from the hub here,
         >>> # so the head will be randomly initialized, hence the predictions will be random
         >>> feature_extractor = DeiTFeatureExtractor.from_pretrained("facebook/deit-base-distilled-patch16-224")
-        >>> model = DeiTForImageClassification.from_pretrained("facebook/deit-base-distilled-patch16-224")
+        >>> model = TFDeiTForImageClassification.from_pretrained("facebook/deit-base-distilled-patch16-224", from_pt=True)
 
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> inputs = feature_extractor(images=image, return_tensors="tf")
         >>> outputs = model(**inputs)
         >>> logits = outputs.logits
         >>> # model predicts one of the 1000 ImageNet classes
