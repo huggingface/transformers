@@ -18,7 +18,7 @@
 import unittest
 
 from transformers import GPTNeoXConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
@@ -28,7 +28,6 @@ if is_torch_available():
     import torch
 
     from transformers import GPTNeoXForCausalLM, GPTNeoXModel
-    from transformers.models.gpt_neox.modeling_gpt_neox import GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class GPTNeoXModelTester:
