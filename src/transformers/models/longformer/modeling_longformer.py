@@ -467,8 +467,6 @@ class LongformerEmbeddings(nn.Module):
         else:
             input_shape = inputs_embeds.size()[:-1]
 
-        seq_length = input_shape[1]
-
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=position_ids.device)
 
