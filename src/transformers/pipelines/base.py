@@ -1090,25 +1090,26 @@ class ChunkPipeline(Pipeline):
 
 
 class PipelineRegistry:
-    TASK_ALIASES: Dict[str, str]
-    SUPPORTED_TASKS: Dict[str, Any]
+    def __init__(self, supported_tasks: Dict[str, Any], task_aliases: Dict[str, str]) -> None:
+        self.supported_tasks = supported_tasks
+        self.task_aliases = task_aliases
 
     def get_supported_tasks(self) -> List[str]:
-        supported_task = list(self.SUPPORTED_TASKS.keys()) + list(self.TASK_ALIASES.keys())
+        supported_task = list(self.supported_tasks.keys()) + list(self.task_aliases.keys())
         supported_task.sort()
         return supported_task
 
     def check_task(self, task: str) -> Tuple[Dict, Any]:
-        if task in self.TASK_ALIASES:
-            task = self.TASK_ALIASES[task]
-        if task in self.SUPPORTED_TASKS:
-            targeted_task = self.SUPPORTED_TASKS[task]
+        if task in self.task_aliases:
+            task = self.task_aliases[task]
+        if task in self.supported_tasks:
+            targeted_task = self.supported_tasks[task]
             return targeted_task, None
 
         if task.startswith("translation"):
             tokens = task.split("_")
             if len(tokens) == 4 and tokens[0] == "translation" and tokens[2] == "to":
-                targeted_task = self.SUPPORTED_TASKS["translation"]
+                targeted_task = self.supported_tasks["translation"]
                 return targeted_task, (tokens[1], tokens[3])
             raise KeyError(f"Invalid translation task {task}, use 'translation_XX_to_YY' format")
 
@@ -1116,19 +1117,11 @@ class PipelineRegistry:
             f"Unknown task {task}, available tasks are {self.get_supported_tasks() + ['translation_XX_to_YY']}"
         )
 
-    @classmethod
-    def register_pipeline(cls, task: str, task_impl: Dict[str, Any]) -> None:
-        if task in cls.SUPPORTED_TASKS:
+    def register_pipeline(self, task: str, task_impl: Dict[str, Any]) -> None:
+        if task in self.supported_tasks:
             logger.warning(f"{task} is already registered. Overwriting pipeline for task {task}...")
 
-        cls.SUPPORTED_TASKS[task] = task_impl
-
-    @classmethod
-    def from_dict(cls, supported_tasks: Dict[str, Any], task_aliases: Dict[str, str]) -> "PipelineRegistry":
-        klass = cls()
-        klass.SUPPORTED_TASKS = supported_tasks
-        klass.TASK_ALIASES = task_aliases
-        return klass
+        self.supported_tasks[task] = task_impl
 
     def to_dict(self):
-        return self.SUPPORTED_TASKS
+        return self.supported_tasks

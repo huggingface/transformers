@@ -42,10 +42,10 @@ from .base import (
     PipelineDataFormat,
     PipelineException,
     get_default_model_and_revision,
+    PipelineRegistry,
+    get_default_model,
     infer_framework_load_model,
 )
-from .base import PipelineRegistry as _PipelineRegistry
-from .base import get_default_model, infer_framework_load_model
 from .conversational import Conversation, ConversationalPipeline
 from .feature_extraction import FeatureExtractionPipeline
 from .fill_mask import FillMaskPipeline
@@ -315,14 +315,14 @@ for task, values in SUPPORTED_TASKS.items():
     elif values["type"] != "multimodal":
         raise ValueError(f"SUPPORTED_TASK {task} contains invalid type {values['type']}")
 
-PipelineRegistry = _PipelineRegistry.from_dict(supported_tasks=SUPPORTED_TASKS, task_aliases=TASK_ALIASES)
+PIPELINE_REGISTRY = PipelineRegistry(supported_tasks=SUPPORTED_TASKS, task_aliases=TASK_ALIASES)
 
 
 def get_supported_tasks() -> List[str]:
     """
     Returns a list of supported task strings.
     """
-    return PipelineRegistry.get_supported_tasks()
+    return PIPELINE_REGISTRY.get_supported_tasks()
 
 
 def get_task(model: str, use_auth_token: Optional[str] = None) -> str:
@@ -381,7 +381,7 @@ def check_task(task: str) -> Tuple[Dict, Any]:
 
 
     """
-    return PipelineRegistry.check_task(task)
+    return PIPELINE_REGISTRY.check_task(task)
 
 
 def pipeline(

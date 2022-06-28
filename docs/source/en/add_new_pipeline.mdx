@@ -117,8 +117,8 @@ following task template:
 ```python
 my_new_task = {
     "impl": MyPipeline,
-    "tf": (),  # provide a TFAutoModel for your task
-    "pt": (),  # provide a AutoModel for your task,
+    "tf": (),
+    "pt": (AutoModelForAudioClassification,) if is_torch_available() else (),
     "default": {"model": {"pt": "user/awesome_model"}},
     "type": "audio",  # current support type: text, audio, image, multimodal
 }
@@ -132,12 +132,12 @@ If possible your custom task should provide a default model.
 </Tip>
 
 Then add your custom task to the list of supported tasks via
-`PipelineRegistry.register_pipeline()`:
+`PIPELINE_REGISTRY.register_pipeline()`:
 
 ```python
-from transformers.pipelines import PipelineRegistry
+from transformers.pipelines import PIPELINE_REGISTRY
 
-PipelineRegistry.register_pipeline("new-task", my_new_task)
+PIPELINE_REGISTRY.register_pipeline("new-task", my_new_task)
 ```
 
 
