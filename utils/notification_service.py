@@ -352,7 +352,7 @@ class Message:
 
         if self.n_model_failures > 0:
             blocks.append(self.category_failures)
-            blocks.extend([self.model_failures])
+            blocks.extend(self.model_failures)
 
         if self.n_additional_failures > 0:
             blocks.append(self.additional_failures)
