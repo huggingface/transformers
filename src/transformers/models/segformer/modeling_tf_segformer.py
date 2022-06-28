@@ -147,7 +147,6 @@ class TFSegformerEfficientSelfAttention(tf.keras.layers.Layer):
         training: bool = False,
     ) -> Union[tf.Tensor, Tuple[tf.Tensor, tf.Tensor]]:
         batch_size = shape_list(hidden_states)[0]
-        seq_len = shape_list(hidden_states)[1]
         num_channels = shape_list(hidden_states)[2]
 
         query_layer = self.transpose_for_scores(self.query(hidden_states))
