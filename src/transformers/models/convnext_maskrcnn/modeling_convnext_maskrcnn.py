@@ -19,6 +19,7 @@
 
 import copy
 import warnings
+from dataclasses import dataclass
 from functools import partial
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -30,13 +31,15 @@ from torch import nn
 from torch.nn.modules.utils import _pair
 
 from ...activations import ACT2FN
-from ...modeling_outputs import (
-    BaseModelOutputWithNoAttention,
-    BaseModelOutputWithPoolingAndNoAttention,
-    SequenceClassifierOutput,
-)
+from ...modeling_outputs import BaseModelOutputWithNoAttention, BaseModelOutputWithPoolingAndNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import (
+    ModelOutput,
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+)
 from .configuration_convnext_maskrcnn import ConvNextMaskRCNNConfig
 
 
@@ -55,6 +58,40 @@ CONVNEXTMASKRCNN_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/convnext-tiny-maskrcnn",
     # See all ConvNextMaskRCNN models at https://huggingface.co/models?filter=convnext_maskrcnn
 ]
+
+BYTES_PER_FLOAT = 4
+# TODO: This memory limit may be too much or too little. It would be better to
+# determine it based on available resources.
+GPU_MEM_LIMIT = 1024**3  # 1 GB memory limit
+
+
+@dataclass
+class MaskRCNNModelOutput(ModelOutput):
+    """
+    Base class for models that leverage the Mask R-CNN framework.
+
+    Args:
+        loss (...)
+            ...
+        results (...)
+            ...
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of
+            the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+            the self-attention heads.
+    """
+
+    loss: torch.FloatTensor = None
+    results: List[List[np.ndarray]] = None
+    last_hidden_state: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 def multi_apply(func, *args, **kwargs):
@@ -495,6 +532,63 @@ def bbox2result(bboxes, labels, num_classes):
             bboxes = bboxes.detach().cpu().numpy()
             labels = labels.detach().cpu().numpy()
         return [bboxes[labels == i, :] for i in range(num_classes)]
+
+
+def _do_paste_mask(masks, boxes, img_h, img_w, skip_empty=True):
+    """Paste instance masks according to boxes.
+    Args:
+    This implementation is modified from https://github.com/facebookresearch/detectron2/
+        masks (Tensor): N, 1, H, W boxes (Tensor): N, 4 img_h (int): Height of the image to be pasted. img_w (int):
+        Width of the image to be pasted. skip_empty (bool): Only paste masks within the region that
+            tightly bound all boxes, and returns the results this region only. An important optimization for CPU.
+    Returns:
+        tuple: (Tensor, tuple). The first item is mask tensor, the second one
+            is the slice object.
+        If skip_empty == False, the whole image will be pasted. It will
+            return a mask of shape (N, img_h, img_w) and an empty tuple.
+        If skip_empty == True, only area around the mask will be pasted.
+            A mask of shape (N, h', w') and its start and end coordinates in the original image will be returned.
+    """
+    # On GPU, paste all masks together (up to chunk size)
+    # by using the entire image to sample the masks
+    # Compared to pasting them one by one,
+    # this has more operations but is faster on COCO-scale dataset.
+    device = masks.device
+    if skip_empty:
+        x0_int, y0_int = torch.clamp(boxes.min(dim=0).values.floor()[:2] - 1, min=0).to(dtype=torch.int32)
+        x1_int = torch.clamp(boxes[:, 2].max().ceil() + 1, max=img_w).to(dtype=torch.int32)
+        y1_int = torch.clamp(boxes[:, 3].max().ceil() + 1, max=img_h).to(dtype=torch.int32)
+    else:
+        x0_int, y0_int = 0, 0
+        x1_int, y1_int = img_w, img_h
+    x0, y0, x1, y1 = torch.split(boxes, 1, dim=1)  # each is Nx1
+
+    N = masks.shape[0]
+
+    img_y = torch.arange(y0_int, y1_int, device=device).to(torch.float32) + 0.5
+    img_x = torch.arange(x0_int, x1_int, device=device).to(torch.float32) + 0.5
+    img_y = (img_y - y0) / (y1 - y0) * 2 - 1
+    img_x = (img_x - x0) / (x1 - x0) * 2 - 1
+    # img_x, img_y have shapes (N, w), (N, h)
+    # IsInf op is not supported with ONNX<=1.7.0
+    if not torch.onnx.is_in_onnx_export():
+        if torch.isinf(img_x).any():
+            inds = torch.where(torch.isinf(img_x))
+            img_x[inds] = 0
+        if torch.isinf(img_y).any():
+            inds = torch.where(torch.isinf(img_y))
+            img_y[inds] = 0
+
+    gx = img_x[:, None, :].expand(N, img_y.size(1), img_x.size(1))
+    gy = img_y[:, :, None].expand(N, img_y.size(1), img_x.size(1))
+    grid = torch.stack([gx, gy], dim=3)
+
+    img_masks = nn.functional.grid_sample(masks.to(dtype=torch.float32), grid, align_corners=False)
+
+    if skip_empty:
+        return img_masks[:, 0], (slice(y0_int, y1_int), slice(x0_int, x1_int))
+    else:
+        return img_masks[:, 0], ()
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
@@ -1339,6 +1433,8 @@ class RoIAlign(nn.Module):
             rois: Bx5 boxes. First column is the index into N.\
                 The other 4 columns are xyxy.
         """
+        print("Input dtype:", input.dtype)
+        print("Rois dtype:", rois.dtype)
         return torchvision.ops.roi_align(
             input, rois, self.output_size, self.spatial_scale, self.sampling_ratio, self.aligned
         )
@@ -1539,10 +1635,8 @@ class ConvNextMaskRNNShared2FCBBoxHead(nn.Module):
 
         Returns:
             tuple[Tensor, Tensor]:
-                First tensor is `det_bboxes`, has the shape
-                (num_boxes, 5) and last
-                dimension 5 represent (tl_x, tl_y, br_x, br_y, score).
-                Second tensor is the labels with shape (num_boxes, ).
+                First tensor is `det_bboxes`, has the shape (num_boxes, 5) and last dimension 5 represent (tl_x, tl_y,
+                br_x, br_y, score). Second tensor is the labels with shape (num_boxes, ).
         """
 
         # # some loss (Seesaw loss..) may have custom activation
@@ -1572,6 +1666,144 @@ class ConvNextMaskRNNShared2FCBBoxHead(nn.Module):
             return det_bboxes, det_labels
 
 
+class ConvNextMaskRCNNFCNMaskHead(nn.Module):
+    """ """
+
+    def __init__(
+        self, config, num_convs=4, in_channels=256, conv_out_channels=256, conv_kernel_size=3, scale_factor=2
+    ):
+        super().__init__()
+
+        self.num_classes = config.num_labels
+        self.class_agnostic = False
+
+        # TODO make init attributes configurable
+        self.convs = nn.ModuleList()
+        for i in range(num_convs):
+            in_channels = in_channels if i == 0 else conv_out_channels
+            padding = (conv_kernel_size - 1) // 2
+            self.convs.append(nn.Conv2d(in_channels, conv_out_channels, conv_kernel_size, padding=padding))
+        self.upsample = nn.ConvTranspose2d(
+            in_channels=conv_out_channels,
+            out_channels=conv_out_channels,
+            kernel_size=scale_factor,
+            stride=scale_factor,
+        )
+        self.relu = nn.ReLU(inplace=True)
+        self.conv_logits = nn.Conv2d(conv_out_channels, self.num_classes, 1)
+
+    def forward(self, x):
+        for conv in self.convs:
+            x = conv(x)
+        x = self.upsample(x)
+        x = self.relu(x)
+        mask_pred = self.conv_logits(x)
+        return mask_pred
+
+    def get_seg_masks(self, mask_pred, det_bboxes, det_labels, rcnn_test_cfg, ori_shape, scale_factor, rescale):
+        """Get segmentation masks from mask_pred and bboxes.
+        Args:
+            mask_pred (Tensor or ndarray): shape (n, #class, h, w).
+                For single-scale testing, mask_pred is the direct output of model, whose type is Tensor, while for
+                multi-scale testing, it will be converted to numpy array outside of this method.
+            det_bboxes (Tensor): shape (n, 4/5)
+            det_labels (Tensor): shape (n, )
+            rcnn_test_cfg (dict): rcnn testing config
+            ori_shape (Tuple): original image height and width, shape (2,)
+            scale_factor(ndarray | Tensor): If `rescale is True`, box
+                coordinates are divided by this scale factor to fit `ori_shape`.
+            rescale (bool): If True, the resulting masks will be rescaled to
+                `ori_shape`.
+        Returns:
+            list[list]: encoded masks. The c-th item in the outer list
+                corresponds to the c-th class. Given the c-th outer list, the i-th item in that inner list is the mask
+                for the i-th box with class label c.
+        Example:
+            >>> import mmcv >>> from mmdet.models.roi_heads.mask_heads.fcn_mask_head import * # NOQA >>> N = 7 # N =
+            number of extracted ROIs >>> C, H, W = 11, 32, 32 >>> # Create example instance of FCN Mask Head. >>> self
+            = FCNMaskHead(num_classes=C, num_convs=0) >>> inputs = torch.rand(N, self.in_channels, H, W) >>> mask_pred
+            = self.forward(inputs) >>> # Each input is associated with some bounding box >>> det_bboxes =
+            torch.Tensor([[1, 1, 42, 42 ]] * N) >>> det_labels = torch.randint(0, C, size=(N,)) >>> rcnn_test_cfg =
+            mmcv.Config({'mask_thr_binary': 0, }) >>> ori_shape = (H * 4, W * 4) >>> scale_factor =
+            torch.FloatTensor((1, 1)) >>> rescale = False >>> # Encoded masks are a list for each category. >>>
+            encoded_masks = self.get_seg_masks( >>> mask_pred, det_bboxes, det_labels, rcnn_test_cfg, ori_shape, >>>
+            scale_factor, rescale >>> ) >>> assert len(encoded_masks) == C >>> assert sum(list(map(len,
+            encoded_masks))) == N
+        """
+        if isinstance(mask_pred, torch.Tensor):
+            mask_pred = mask_pred.sigmoid()
+        else:
+            # In AugTest, has been activated before
+            mask_pred = det_bboxes.new_tensor(mask_pred)
+
+        device = mask_pred.device
+        cls_segms = [[] for _ in range(self.num_classes)]  # BG is not included in num_classes
+        bboxes = det_bboxes[:, :4]
+        labels = det_labels
+
+        # In most cases, scale_factor should have been
+        # converted to Tensor when rescale the bbox
+        if not isinstance(scale_factor, torch.Tensor):
+            if isinstance(scale_factor, float):
+                scale_factor = np.array([scale_factor] * 4)
+                warnings.warn(
+                    "Scale_factor should be a Tensor or ndarray with shape (4,), float would be deprecated. "
+                )
+            assert isinstance(scale_factor, np.ndarray)
+            scale_factor = torch.Tensor(scale_factor)
+
+        if rescale:
+            img_h, img_w = ori_shape[:2]
+            bboxes = bboxes / scale_factor.to(bboxes)
+        else:
+            w_scale, h_scale = scale_factor[0], scale_factor[1]
+            img_h = np.round(ori_shape[0] * h_scale.item()).astype(np.int32)
+            img_w = np.round(ori_shape[1] * w_scale.item()).astype(np.int32)
+
+        N = len(mask_pred)
+        # The actual implementation split the input into chunks,
+        # and paste them chunk by chunk.
+        if device.type == "cpu":
+            # CPU is most efficient when they are pasted one by one with
+            # skip_empty=True, so that it performs minimal number of
+            # operations.
+            num_chunks = N
+        else:
+            # GPU benefits from parallelism for larger chunks,
+            # but may have memory issue
+            # the types of img_w and img_h are np.int32,
+            # when the image resolution is large,
+            # the calculation of num_chunks will overflow.
+            # so we need to change the types of img_w and img_h to int.
+            # See https://github.com/open-mmlab/mmdetection/pull/5191
+            num_chunks = int(np.ceil(N * int(img_h) * int(img_w) * BYTES_PER_FLOAT / GPU_MEM_LIMIT))
+            assert num_chunks <= N, "Default GPU_MEM_LIMIT is too small; try increasing it"
+        chunks = torch.chunk(torch.arange(N, device=device), num_chunks)
+
+        threshold = rcnn_test_cfg["mask_thr_binary"]
+        im_mask = torch.zeros(N, img_h, img_w, device=device, dtype=torch.bool if threshold >= 0 else torch.uint8)
+
+        if not self.class_agnostic:
+            mask_pred = mask_pred[range(N), labels][:, None]
+
+        for inds in chunks:
+            masks_chunk, spatial_inds = _do_paste_mask(
+                mask_pred[inds], bboxes[inds], img_h, img_w, skip_empty=device.type == "cpu"
+            )
+
+            if threshold >= 0:
+                masks_chunk = (masks_chunk >= threshold).to(dtype=torch.bool)
+            else:
+                # for visualization and debugging
+                masks_chunk = (masks_chunk * 255).to(dtype=torch.uint8)
+
+            im_mask[(inds,) + spatial_inds] = masks_chunk
+
+        for i in range(N):
+            cls_segms[labels[i]].append(im_mask[i].detach().cpu().numpy())
+        return cls_segms
+
+
 class ConvNextMaskRCNNRoIHead(nn.Module):
     """
     Mask R-CNN standard Region of Interest (RoI) head including one bbox head and one mask head.
@@ -1591,9 +1823,13 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         )
         self.bbox_head = ConvNextMaskRNNShared2FCBBoxHead(config)
 
-        # TODO: mask roi extractor + mask head
-        # self.mask_roi_extractor = ...
-        # self.mask_head = ...
+        # TODO: verify mask roi extractor + mask head
+        self.mask_roi_extractor = ConvNextMaskRCNNSingleRoIExtractor(
+            roi_layer=config.mask_roi_extractor_roi_layer,
+            out_channels=config.mask_roi_extractor_out_channels,
+            featmap_strides=config.mask_roi_extractor_featmap_strides,
+        )
+        self.mask_head = ConvNextMaskRCNNFCNMaskHead(config)
 
     def _bbox_forward(self, x, rois):
         """Box head forward function used in both training and testing."""
@@ -1602,11 +1838,6 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         # if self.with_shared_head:
         #     bbox_feats = self.shared_head(bbox_feats)
         cls_score, bbox_pred = self.bbox_head(bbox_feats)
-
-        print("cls_score:", cls_score.shape)
-        print("First values of cls_score:", cls_score[:3, :3])
-        print("bbox_pred:", bbox_pred.shape)
-        print("First values of bbox_pred:", bbox_pred[:3, :3])
 
         bbox_results = dict(cls_score=cls_score, bbox_pred=bbox_pred, bbox_feats=bbox_feats)
         return bbox_results
@@ -1623,11 +1854,9 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
                 Default: False.
         Returns:
             tuple[list[Tensor], list[Tensor]]: The first list contains
-                the boxes of the corresponding image in a batch, each
-                tensor has the shape (num_boxes, 5) and last dimension
-                5 represent (tl_x, tl_y, br_x, br_y, score). Each Tensor
-                in the second list is the labels with shape (num_boxes, ).
-                The length of both lists should be equal to batch_size.
+                the boxes of the corresponding image in a batch, each tensor has the shape (num_boxes, 5) and last
+                dimension 5 represent (tl_x, tl_y, br_x, br_y, score). Each Tensor in the second list is the labels
+                with shape (num_boxes, ). The length of both lists should be equal to batch_size.
         """
 
         rois = bbox2roi(proposals)
@@ -1690,10 +1919,80 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
             det_labels.append(det_label)
         return det_bboxes, det_labels
 
+    def _mask_forward(self, x, rois=None, pos_inds=None, bbox_feats=None):
+        """Mask head forward function used in both training and testing."""
+        assert (rois is not None) ^ (pos_inds is not None and bbox_feats is not None)
+        if rois is not None:
+            mask_feats = self.mask_roi_extractor(x[: self.mask_roi_extractor.num_inputs], rois)
+            # if self.with_shared_head:
+            #     mask_feats = self.shared_head(mask_feats)
+        else:
+            assert bbox_feats is not None
+            mask_feats = bbox_feats[pos_inds]
+
+        mask_pred = self.mask_head(mask_feats)
+        mask_results = dict(mask_pred=mask_pred, mask_feats=mask_feats)
+        return mask_results
+
+    def simple_test_mask(self, x, img_metas, det_bboxes, det_labels, rescale=False):
+        """Simple test for mask head without augmentation."""
+        # image shapes of images in the batch
+        ori_shapes = tuple(meta["ori_shape"] for meta in img_metas)
+        scale_factors = tuple(meta["scale_factor"] for meta in img_metas)
+
+        if isinstance(scale_factors[0], float):
+            warnings.warn(
+                "Scale factor in img_metas should be a "
+                "ndarray with shape (4,) "
+                "arrange as (factor_w, factor_h, factor_w, factor_h), "
+                "The scale_factor with float type has been deprecated. "
+            )
+            scale_factors = np.array([scale_factors] * 4, dtype=np.float32)
+
+        num_imgs = len(det_bboxes)
+        if all(det_bbox.shape[0] == 0 for det_bbox in det_bboxes):
+            segm_results = [[[] for _ in range(self.mask_head.num_classes)] for _ in range(num_imgs)]
+        else:
+            # if det_bboxes is rescaled to the original image size, we need to
+            # rescale it back to the testing scale to obtain RoIs.
+            if rescale:
+                scale_factors = [
+                    torch.from_numpy(scale_factor).to(det_bboxes[0].device) for scale_factor in scale_factors
+                ]
+            _bboxes = [
+                det_bboxes[i][:, :4] * scale_factors[i] if rescale else det_bboxes[i][:, :4]
+                for i in range(len(det_bboxes))
+            ]
+            mask_rois = bbox2roi(_bboxes)
+            mask_results = self._mask_forward(x, mask_rois)
+            mask_pred = mask_results["mask_pred"]
+            # split batch mask prediction back to each image
+            num_mask_roi_per_img = [len(det_bbox) for det_bbox in det_bboxes]
+            mask_preds = mask_pred.split(num_mask_roi_per_img, 0)
+
+            # apply mask post-processing to each image individually
+            segm_results = []
+            for i in range(num_imgs):
+                if det_bboxes[i].shape[0] == 0:
+                    segm_results.append([[] for _ in range(self.mask_head.num_classes)])
+                else:
+                    segm_result = self.mask_head.get_seg_masks(
+                        mask_preds[i],
+                        _bboxes[i],
+                        det_labels[i],
+                        self.test_cfg,
+                        ori_shapes[i],
+                        scale_factors[i],
+                        rescale,
+                    )
+                    segm_results.append(segm_result)
+        return segm_results
+
     def forward_test(self, hidden_states, proposal_list, img_metas, rescale=True):
         """Test without augmentation (originally called `simple_test`).
 
-        Source: https://github.com/open-mmlab/mmdetection/blob/ca11860f4f3c3ca2ce8340e2686eeaec05b29111/mmdet/models/detectors/two_stage.py#L173.
+        Source:
+        https://github.com/open-mmlab/mmdetection/blob/ca11860f4f3c3ca2ce8340e2686eeaec05b29111/mmdet/models/roi_heads/standard_roi_head.py#L223.
 
         Args:
             hidden_states (tuple[Tensor]): Features from upstream network. Each has shape (batch_size, c, h, w).
@@ -1719,9 +2018,9 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
             bbox2result(det_bboxes[i], det_labels[i], self.bbox_head.num_classes) for i in range(len(det_bboxes))
         ]
 
-        # TODO also compute masks
+        segm_results = self.simple_test_mask(hidden_states, img_metas, det_bboxes, det_labels, rescale=rescale)
 
-        return bbox_results
+        return list(zip(bbox_results, segm_results))
 
 
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextPreTrainedModel with ConvNext->ConvNextMaskRCNN,convnext->convnext_maskrcnn
@@ -1850,7 +2149,7 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SequenceClassifierOutput]:
+    ) -> Union[Tuple, MaskRCNNModelOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # we need the intermediate hidden states
@@ -1882,24 +2181,34 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
         # TODO here: compute loss using losses = self.rpn_head.loss(...)
 
         # TODO: remove img_metas, compute `img_shape`` based on pixel_values
-        # and figure out where `scale_factor` comes from (probably test_pipeline)
-        img_metas = [dict(img_shape=(800, 1067, 3), scale_factor=[1.6671875, 1.6666666, 1.6671875, 1.6666666])]
+        # and figure out where `scale_factor` and `ori_shape` come from (probably test_pipeline)
+        img_metas = [
+            dict(
+                img_shape=(800, 1067, 3),
+                scale_factor=np.array([1.6671875, 1.6666666, 1.6671875, 1.6666666], dtype=np.float32),
+                ori_shape=(480, 640, 3),
+            )
+        ]
         proposal_list = self.rpn_head.get_bboxes(*rpn_outs, img_metas=img_metas)
-        print("Proposal list:")
-        print(proposal_list[0][:3, :3])
+
+        # TODO: remove this check
+        expected_slice = torch.tensor(
+            [[0.0000, 58.6872, 685.7259], [360.0827, 6.2272, 1045.1245], [37.4163, 113.3484, 535.2910]]
+        )
+        assert torch.allclose(proposal_list[0][:3, :3], expected_slice)
 
         # TODO: support training of RoI heads
         results = self.roi_head.forward_test(hidden_states, proposal_list, img_metas=img_metas)
 
-        logits, loss = None, None
+        loss = None
         if labels is not None:
             raise NotImplementedError("Training is not yet supported.")
         if not return_dict:
-            output = (logits,) + outputs[2:]
+            output = (results,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return SequenceClassifierOutput(
+        return MaskRCNNModelOutput(
             loss=loss,
-            logits=logits,
+            results=results,
             hidden_states=outputs.hidden_states,
         )

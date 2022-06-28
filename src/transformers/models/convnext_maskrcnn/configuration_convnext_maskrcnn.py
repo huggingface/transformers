@@ -72,6 +72,7 @@ class ConvNextMaskRCNNConfig(PretrainedConfig):
             (FPN).
         fpn_num_outputs (`int`, optional, defaults to 5):
             Number of output feature maps of the Feature Pyramid Network (FPN).
+        (...)
 
     Example:
     ```python
@@ -115,16 +116,19 @@ class ConvNextMaskRCNNConfig(PretrainedConfig):
         rpn_loss_cls=dict(type="CrossEntropyLoss", use_sigmoid=True, loss_weight=1.0),
         rpn_loss_bbox=dict(type="L1Loss", loss_weight=1.0),
         rpn_test_cfg=dict(nms_pre=1000, max_per_img=1000, nms=dict(type="nms", iou_threshold=0.7), min_bbox_size=0),
-        # ROI heads
+        # RoI heads (box + mask)
+        rcnn_test_cfg=dict(
+            score_thr=0.05, nms=dict(type="nms", iou_threshold=0.5), max_per_img=100, mask_thr_binary=0.5
+        ),
         bbox_roi_extractor_roi_layer=dict(type="RoIAlign", output_size=7, sampling_ratio=0),
         bbox_roi_extractor_out_channels=256,
         bbox_roi_extractor_featmap_strides=[4, 8, 16, 32],
         bbox_head_in_channels=256,
         bbox_head_bbox_coder_target_means=[0.0, 0.0, 0.0, 0.0],
         bbox_head_bbox_coder_target_stds=[0.1, 0.1, 0.2, 0.2],
-        rcnn_test_cfg=dict(
-            score_thr=0.05, nms=dict(type="nms", iou_threshold=0.5), max_per_img=100, mask_thr_binary=0.5
-        ),
+        mask_roi_extractor_roi_layer=dict(type="RoIAlign", output_size=14, sampling_ratio=0),
+        mask_roi_extractor_out_channels=256,
+        mask_roi_extractor_featmap_strides=[4, 8, 16, 32],
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -156,14 +160,17 @@ class ConvNextMaskRCNNConfig(PretrainedConfig):
         self.rpn_loss_cls = rpn_loss_cls
         self.rpn_loss_bbox = rpn_loss_bbox
         self.rpn_test_cfg = rpn_test_cfg
-        # ROI heads
+        # RoI heads
+        self.rcnn_test_cfg = rcnn_test_cfg
         self.bbox_roi_extractor_roi_layer = bbox_roi_extractor_roi_layer
         self.bbox_roi_extractor_out_channels = bbox_roi_extractor_out_channels
         self.bbox_roi_extractor_featmap_strides = bbox_roi_extractor_featmap_strides
         self.bbox_head_in_channels = bbox_head_in_channels
         self.bbox_head_bbox_coder_target_means = bbox_head_bbox_coder_target_means
         self.bbox_head_bbox_coder_target_stds = bbox_head_bbox_coder_target_stds
-        self.rcnn_test_cfg = rcnn_test_cfg
+        self.mask_roi_extractor_roi_layer = mask_roi_extractor_roi_layer
+        self.mask_roi_extractor_out_channels = mask_roi_extractor_out_channels
+        self.mask_roi_extractor_featmap_strides = mask_roi_extractor_featmap_strides
 
 
 class ConvNextMaskRCNNOnnxConfig(OnnxConfig):
