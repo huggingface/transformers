@@ -18,6 +18,7 @@ URL: https://github.com/open-mmlab/mmdetection"""
 
 
 import argparse
+from pathlib import Path
 
 import torch
 import torchvision.transforms as T
@@ -84,8 +85,8 @@ def rename_key(name):
         name = name.replace("gamma", "layer_scale_parameter")
     if "convnext.layernorm" in name:
         name = name.replace("layernorm", "encoder.layernorms.")
-    # neck
-    if "lateral" in name or "fpn" in name:
+    # neck (simply remove "conv" attribute due to use of `ConvModule` in mmdet)
+    if "lateral" in name or "fpn" in name or "mask_head" in name:
         if "conv.weight" in name:
             name = name.replace("conv.weight", "weight")
         if "conv.bias" in name:
@@ -102,7 +103,7 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_convnext_maskrcnn_checkpoint(checkpoint_path, pytorch_dump_folder_path):
+def convert_convnext_maskrcnn_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_to_hub):
     """
     Copy/paste/tweak model's weights to our ConvNextMaskRCNN structure.
     """
@@ -114,11 +115,7 @@ def convert_convnext_maskrcnn_checkpoint(checkpoint_path, pytorch_dump_folder_pa
     # rename keys
     for key in state_dict.copy().keys():
         val = state_dict.pop(key)
-        if "mask_head" in key:
-            # TODO: mask head
-            pass
-        else:
-            state_dict[rename_key(key)] = val
+        state_dict[rename_key(key)] = val
 
     # load HuggingFace model
     model = ConvNextMaskRCNNForObjectDetection(config)
@@ -134,6 +131,7 @@ def convert_convnext_maskrcnn_checkpoint(checkpoint_path, pytorch_dump_folder_pa
     pixel_values = transform(image).unsqueeze(0)
 
     outputs = model(pixel_values, output_hidden_states=True)
+    print("Results:", outputs.results)
 
     # for i in outputs.hidden_states[1:]:
     #     print(i.shape)
@@ -145,11 +143,16 @@ def convert_convnext_maskrcnn_checkpoint(checkpoint_path, pytorch_dump_folder_pa
     print("Looks ok!")
     # assert logits.shape == expected_shape
 
-    # Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-    # print(f"Saving model to {pytorch_dump_folder_path}")
-    # model.save_pretrained(pytorch_dump_folder_path)
-    # print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    # feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    if pytorch_dump_folder_path is not None:
+        Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
+        print(f"Saving model and feature extractor to {pytorch_dump_folder_path}")
+        model.save_pretrained(pytorch_dump_folder_path)
+        # feature_extractor.save_pretrained(pytorch_dump_folder_path)
+
+    if push_to_hub:
+        print("Pushing to the hub...")
+        model_name = "convnext-tiny-maskrcnn"
+        model.push_to_hub(model_name, organization="nielsr")
 
 
 if __name__ == "__main__":
@@ -158,15 +161,23 @@ if __name__ == "__main__":
     parser.add_argument(
         "--checkpoint_path",
         default="/home/niels/checkpoints/convnext_maskrcnn/mask_rcnn_convnext-t_p4_w7_fpn_fp16_ms-crop_3x_coco_20220426_154953-050731f4.pth",
+        required=False,
         type=str,
         help="Path to the original ConvNextMaskRCNN checkpoint you'd like to convert.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",
         default=None,
+        required=False,
         type=str,
         help="Path to the output PyTorch model directory.",
     )
+    parser.add_argument(
+        "--push_to_hub",
+        required=False,
+        action="store_true",
+        help="Whether or not to push the converted model to the 🤗 hub.",
+    )
 
     args = parser.parse_args()
-    convert_convnext_maskrcnn_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path)
+    convert_convnext_maskrcnn_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub)
