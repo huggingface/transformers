@@ -95,7 +95,7 @@ For lightweight tuning, *i.e.*, fixing the model and only tuning prompts, you ca
 >>> # lightweight tuning with task-specific prompts
 >>> model = MvpForConditionalGeneration.from_pretrained("RUCAIBox/mtl-data-to-text")
 >>> model.set_lightweight_tuning()
->>> # original Prefix-tuning
+>>> # original lightweight Prefix-tuning
 >>> model = MvpForConditionalGeneration.from_pretrained("facebook/bart-large", use_prompt=True)
 >>> model.set_lightweight_tuning()
 ```
