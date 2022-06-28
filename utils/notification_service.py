@@ -352,7 +352,9 @@ class Message:
 
         if self.n_model_failures > 0:
             blocks.append(self.category_failures)
-            blocks.extend(self.model_failures)
+            for block in self.model_failures:
+                if block["text"]["text"]:
+                    blocks.append(block)
 
         if self.n_additional_failures > 0:
             blocks.append(self.additional_failures)
