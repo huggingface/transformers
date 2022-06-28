@@ -214,7 +214,7 @@ class TFResNetBottleNeckLayer(tf.keras.layers.Layer):
 
 class TFResNetStage(tf.keras.layers.Layer):
     """
-    A ResNet stage composed by stacked layers.
+    A ResNet stage composed of stacked layers.
     """
 
     def __init__(
