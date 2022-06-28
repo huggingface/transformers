@@ -47,7 +47,7 @@ _FEAT_EXTRACTOR_FOR_DOC = "MobileNetV2FeatureExtractor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "Matthijs/mobilenet_v2_1.0_224"
-_EXPECTED_OUTPUT_SHAPE = [1, 1024, 7, 7]
+_EXPECTED_OUTPUT_SHAPE = [1, 1280, 7, 7]
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "Matthijs/mobilenet_v2_1.0_224"
@@ -70,7 +70,7 @@ def _build_tf_to_pytorch_map(model, config, tf_weights=None):
 
     tf_to_pt_map = {}
 
-    if isinstance(model, MobileNetV2ForImageClassification):
+    if isinstance(model, (MobileNetV2ForImageClassification, MobileNetV2ForSemanticSegmentation)):
         backbone = model.mobilenet_v2
     else:
         backbone = model
@@ -138,6 +138,40 @@ def _build_tf_to_pytorch_map(model, config, tf_weights=None):
         tf_to_pt_map[ema(prefix + "weights")] = model.classifier.weight
         tf_to_pt_map[ema(prefix + "biases")] = model.classifier.bias
 
+    if isinstance(model, MobileNetV2ForSemanticSegmentation):
+        prefix = "image_pooling/"
+        tf_to_pt_map[prefix + "weights"] = model.segmentation_head.conv_pool.convolution.weight
+        tf_to_pt_map[prefix + "BatchNorm/beta"] = model.segmentation_head.conv_pool.normalization.bias
+        tf_to_pt_map[prefix + "BatchNorm/gamma"] = model.segmentation_head.conv_pool.normalization.weight
+        tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = model.segmentation_head.conv_pool.normalization.running_mean
+        tf_to_pt_map[
+            prefix + "BatchNorm/moving_variance"
+        ] = model.segmentation_head.conv_pool.normalization.running_var
+
+        prefix = "aspp0/"
+        tf_to_pt_map[prefix + "weights"] = model.segmentation_head.conv_aspp.convolution.weight
+        tf_to_pt_map[prefix + "BatchNorm/beta"] = model.segmentation_head.conv_aspp.normalization.bias
+        tf_to_pt_map[prefix + "BatchNorm/gamma"] = model.segmentation_head.conv_aspp.normalization.weight
+        tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = model.segmentation_head.conv_aspp.normalization.running_mean
+        tf_to_pt_map[
+            prefix + "BatchNorm/moving_variance"
+        ] = model.segmentation_head.conv_aspp.normalization.running_var
+
+        prefix = "concat_projection/"
+        tf_to_pt_map[prefix + "weights"] = model.segmentation_head.conv_projection.convolution.weight
+        tf_to_pt_map[prefix + "BatchNorm/beta"] = model.segmentation_head.conv_projection.normalization.bias
+        tf_to_pt_map[prefix + "BatchNorm/gamma"] = model.segmentation_head.conv_projection.normalization.weight
+        tf_to_pt_map[
+            prefix + "BatchNorm/moving_mean"
+        ] = model.segmentation_head.conv_projection.normalization.running_mean
+        tf_to_pt_map[
+            prefix + "BatchNorm/moving_variance"
+        ] = model.segmentation_head.conv_projection.normalization.running_var
+
+        prefix = "logits/semantic/"
+        tf_to_pt_map[ema(prefix + "weights")] = model.segmentation_head.classifier.convolution.weight
+        tf_to_pt_map[ema(prefix + "biases")] = model.segmentation_head.classifier.convolution.bias
+
     return tf_to_pt_map
 
 
@@ -197,6 +231,7 @@ def load_tf_weights_in_mobilenet_v2(model, config, tf_checkpoint_path):
         tf_weights.pop(name + "/RMSProp", None)
         tf_weights.pop(name + "/RMSProp_1", None)
         tf_weights.pop(name + "/ExponentialMovingAverage", None)
+        tf_weights.pop(name + "/Momentum", None)
 
     logger.info(f"Weights not copied to PyTorch model: {', '.join(tf_weights.keys())}")
     return model
@@ -215,6 +250,10 @@ def make_divisible(value: int, divisor: int = 8, min_value: Optional[int] = None
     if new_value < 0.9 * value:
         new_value += divisor
     return int(new_value)
+
+
+def apply_depth_multiplier(config: MobileNetV2Config, channels: int) -> int:
+    return make_divisible(int(round(channels * config.depth_multiplier)), config.depth_divisible_by, config.min_depth)
 
 
 def apply_tf_padding(features: torch.Tensor, conv_layer: nn.Conv2d) -> torch.Tensor:
@@ -470,14 +509,9 @@ class MobileNetV2Model(MobileNetV2PreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        def apply_depth_multiplier(channels: int) -> int:
-            return make_divisible(
-                int(round(channels * config.depth_multiplier)), config.depth_divisible_by, config.min_depth
-            )
-
         # Output channels for the projection layers
         channels = [16, 24, 24, 32, 32, 32, 64, 64, 64, 64, 96, 96, 96, 160, 160, 160, 320]
-        channels = [apply_depth_multiplier(x) for x in channels]
+        channels = [apply_depth_multiplier(config, x) for x in channels]
 
         # Strides for the depthwise layers
         strides = [2, 1, 2, 1, 1, 2, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1]
@@ -485,7 +519,7 @@ class MobileNetV2Model(MobileNetV2PreTrainedModel):
         self.conv_stem = MobileNetV2Stem(
             config,
             in_channels=config.num_channels,
-            expanded_channels=apply_depth_multiplier(32),
+            expanded_channels=apply_depth_multiplier(config, 32),
             out_channels=channels[0],
         )
 
@@ -517,7 +551,7 @@ class MobileNetV2Model(MobileNetV2PreTrainedModel):
         if config.finegrained_output and config.depth_multiplier < 1.0:
             output_channels = 1280
         else:
-            output_channels = apply_depth_multiplier(1280)
+            output_channels = apply_depth_multiplier(config, 1280)
 
         self.conv_1x1 = MobileNetV2ConvLayer(
             config,
@@ -672,8 +706,8 @@ class MobileNetV2ForImageClassification(MobileNetV2PreTrainedModel):
 
 class MobileNetV2DeepLabV3Plus(nn.Module):
     """
-    The neural network from the paper "Encoder-Decoder with Atrous Separable Convolution for Semantic Image Segmentation"
-    https://arxiv.org/abs/1802.02611
+    The neural network from the paper "Encoder-Decoder with Atrous Separable Convolution for Semantic Image
+    Segmentation" https://arxiv.org/abs/1802.02611
     """
 
     def __init__(self, config: MobileNetV2Config) -> None:
@@ -683,7 +717,7 @@ class MobileNetV2DeepLabV3Plus(nn.Module):
 
         self.conv_pool = MobileNetV2ConvLayer(
             config,
-            in_channels=320,
+            in_channels=apply_depth_multiplier(config, 320),
             out_channels=256,
             kernel_size=1,
             stride=1,
@@ -694,7 +728,7 @@ class MobileNetV2DeepLabV3Plus(nn.Module):
 
         self.conv_aspp = MobileNetV2ConvLayer(
             config,
-            in_channels=320,
+            in_channels=apply_depth_multiplier(config, 320),
             out_channels=256,
             kernel_size=1,
             stride=1,
@@ -756,7 +790,7 @@ class MobileNetV2ForSemanticSegmentation(MobileNetV2PreTrainedModel):
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.mobilenet_v2 = MobileNetV2Model(config)
+        self.mobilenet_v2 = MobileNetV2Model(config, add_pooling_layer=False)
         self.segmentation_head = MobileNetV2DeepLabV3Plus(config)
 
         # Initialize weights and apply final processing
@@ -788,8 +822,8 @@ class MobileNetV2ForSemanticSegmentation(MobileNetV2PreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = MobileNetV2FeatureExtractor.from_pretrained("Matthijs/MIHdeeplabv3-mobilevit-small")
-        >>> model = MobileNetV2ForSemanticSegmentation.from_pretrained("Matthijs/MIHdeeplabv3-mobilevit-small")
+        >>> feature_extractor = MobileNetV2FeatureExtractor.from_pretrained("Matthijs/deeplabv3_mobilenet_v2_1.0_513")
+        >>> model = MobileNetV2ForSemanticSegmentation.from_pretrained("Matthijs/deeplabv3_mobilenet_v2_1.0_513")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
 

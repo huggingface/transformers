@@ -45,19 +45,30 @@ def get_mobilenet_v2_config(model_name):
     if "quant" in model_name:
         raise ValueError("Quantized models are not supported.")
 
-    matches = re.match(r"^mobilenet_v2_([^_]*)_([^_]*)$", model_name)
+    matches = re.match(r"^.*mobilenet_v2_([^_]*)_([^_]*)$", model_name)
     if matches:
         config.depth_multiplier = float(matches[1])
         config.image_size = int(matches[2])
 
-    # The TensorFlow version of MobileNetV2 predicts 1001 classes instead of
-    # the usual 1000. The first class (index 0) is "background".
-    config.num_labels = 1001
-    filename = "imagenet-1k-id2label.json"
+    if model_name.startswith("deeplabv3_"):
+        config.output_stride = 8
+        config.num_labels = 21
+        filename = "pascal-voc-id2label.json"
+    else:
+        # The TensorFlow version of MobileNetV2 predicts 1001 classes instead
+        # of the usual 1000. The first class (index 0) is "background".
+        config.num_labels = 1001
+        filename = "imagenet-1k-id2label.json"
+
     repo_id = "datasets/huggingface/label-files"
     id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
-    id2label = {int(k) + 1: v for k, v in id2label.items()}
-    id2label[0] = "background"
+
+    if config.num_labels == 1001:
+        id2label = {int(k) + 1: v for k, v in id2label.items()}
+        id2label[0] = "background"
+    else:
+        id2label = {int(k): v for k, v in id2label.items()}
+
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
 
@@ -79,12 +90,10 @@ def convert_movilevit_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
     config = get_mobilenet_v2_config(model_name)
 
     # Load 🤗 model
-#MIH
-    # if mobilevit_name.startswith("deeplabv3_"):
-    #     model = MobileViTForSemanticSegmentation(config).eval()
-    # else:
-    #     model = MobileViTForImageClassification(config).eval()
-    model = MobileNetV2ForImageClassification(config).eval()
+    if model_name.startswith("deeplabv3_"):
+        model = MobileNetV2ForSemanticSegmentation(config).eval()
+    else:
+        model = MobileNetV2ForImageClassification(config).eval()
 
     # Load weights from TensorFlow checkpoint
     load_tf_weights_in_mobilenet_v2(model, config, checkpoint_path)
@@ -95,21 +104,38 @@ def convert_movilevit_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
     outputs = model(**encoding)
     logits = outputs.logits
 
-    assert logits.shape == (1, 1001)
+    if model_name.startswith("deeplabv3_"):
+        assert logits.shape == (1, 21, 65, 65)
 
-    if model_name == "mobilenet_v2_1.4_224":
-        expected_logits = torch.tensor([0.0181, -1.0015, 0.4688])
-    elif model_name == "mobilenet_v2_1.0_224":
-        expected_logits = torch.tensor([0.2445, -1.1993, 0.1905])
-    elif model_name == "mobilenet_v2_0.75_160":
-        expected_logits = torch.tensor([0.2482, 0.4136, 0.6669])
-    elif model_name == "mobilenet_v2_0.35_96":
-        expected_logits = torch.tensor([0.1451, -0.4624, 0.7192])
+        if model_name == "deeplabv3_mobilenet_v2_1.0_513":
+            expected_logits = torch.tensor(
+                [
+                    [[17.5790, 17.7581, 18.3355], [18.3257, 18.4230, 18.8973], [18.6169, 18.8650, 19.2187]],
+                    [[-2.1595, -2.0977, -2.3741], [-2.4226, -2.3028, -2.6835], [-2.7819, -2.5991, -2.7706]],
+                    [[4.2058, 4.8317, 4.7638], [4.4136, 5.0361, 4.9383], [4.5028, 4.9644, 4.8734]],
+                ]
+            )
+
+        else:
+            raise ValueError(f"Unknown model name: {model_name}")
+
+        assert torch.allclose(logits[0, :3, :3, :3], expected_logits, atol=1e-4)
     else:
-        expected_logits = None
+        assert logits.shape == (1, 1001)
 
-    if expected_logits is not None:
-        assert torch.allclose(logits[0, :3], expected_logits, atol=1e-4)
+        if model_name == "mobilenet_v2_1.4_224":
+            expected_logits = torch.tensor([0.0181, -1.0015, 0.4688])
+        elif model_name == "mobilenet_v2_1.0_224":
+            expected_logits = torch.tensor([0.2445, -1.1993, 0.1905])
+        elif model_name == "mobilenet_v2_0.75_160":
+            expected_logits = torch.tensor([0.2482, 0.4136, 0.6669])
+        elif model_name == "mobilenet_v2_0.35_96":
+            expected_logits = torch.tensor([0.1451, -0.4624, 0.7192])
+        else:
+            expected_logits = None
+
+        if expected_logits is not None:
+            assert torch.allclose(logits[0, :3], expected_logits, atol=1e-4)
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model {model_name} to {pytorch_dump_folder_path}")

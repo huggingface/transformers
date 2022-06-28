@@ -317,10 +317,10 @@ class MobileNetV2ModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_semantic_segmentation(self):
-        model = MobileNetV2ForSemanticSegmentation.from_pretrained("Matthijs/MIHdeeplabv3-mobilevit-xx-small")
+        model = MobileNetV2ForSemanticSegmentation.from_pretrained("Matthijs/deeplabv3_mobilenet_v2_1.0_513")
         model = model.to(torch_device)
 
-        feature_extractor = MobileNetV2FeatureExtractor.from_pretrained("Matthijs/MIHdeeplabv3-mobilevit-xx-small")
+        feature_extractor = MobileNetV2FeatureExtractor.from_pretrained("Matthijs/deeplabv3_mobilenet_v2_1.0_513")
 
         image = prepare_img()
         inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
@@ -331,14 +331,14 @@ class MobileNetV2ModelIntegrationTest(unittest.TestCase):
         logits = outputs.logits
 
         # verify the logits
-        expected_shape = torch.Size((1, 21, 32, 32))
+        expected_shape = torch.Size((1, 21, 65, 65))
         self.assertEqual(logits.shape, expected_shape)
 
         expected_slice = torch.tensor(
             [
-                [[6.9713, 6.9786, 7.2422], [7.2893, 7.2825, 7.4446], [7.6580, 7.8797, 7.9420]],
-                [[-10.6869, -10.3250, -10.3471], [-10.4228, -9.9868, -9.7132], [-11.0405, -11.0221, -10.7318]],
-                [[-3.3089, -2.8539, -2.6740], [-3.2706, -2.5621, -2.5108], [-3.2534, -2.6615, -2.6651]],
+                [[17.5790, 17.7581, 18.3355], [18.3257, 18.4230, 18.8973], [18.6169, 18.8650, 19.2187]],
+                [[-2.1595, -2.0977, -2.3741], [-2.4226, -2.3028, -2.6835], [-2.7819, -2.5991, -2.7706]],
+                [[4.2058, 4.8317, 4.7638], [4.4136, 5.0361, 4.9383], [4.5028, 4.9644, 4.8734]],
             ],
             device=torch_device,
         )
