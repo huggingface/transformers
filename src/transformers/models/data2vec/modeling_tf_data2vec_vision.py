@@ -100,7 +100,7 @@ class TFData2VecVisionModelOutputWithPooling(TFBaseModelOutputWithPooling):
     attentions: Optional[Tuple[tf.Tensor]] = None
 
 
-class TFDropPath(tf.keras.layers.Layer):
+class TFData2VecVisionDropPath(tf.keras.layers.Layer):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
     References:
         (1) github.com:rwightman/pytorch-image-models
@@ -120,8 +120,6 @@ class TFDropPath(tf.keras.layers.Layer):
         return x
 
 
-# Based on timm implementation, which can be found here:
-# https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
 class TFData2VecVisionEmbeddings(tf.keras.layers.Layer):
     """
     Construct the CLS token, position and patch embeddings. Optionally, also the mask token.
@@ -132,9 +130,7 @@ class TFData2VecVisionEmbeddings(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.config = config
 
-        self.patch_embeddings = TFPatchEmbeddings(
-            config=config, image_size=config.image_size, patch_size=config.patch_size, name="patch_embeddings"
-        )
+        self.patch_embeddings = TFData2VecVisionPatchEmbeddings(config, name="patch_embeddings")
         self.num_patches = self.patch_embeddings.num_patches
         self.config = config
 
@@ -192,40 +188,32 @@ class TFData2VecVisionEmbeddings(tf.keras.layers.Layer):
         return embeddings
 
 
-# Based on timm implementation, which can be found here:
-# https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
-class TFPatchEmbeddings(tf.keras.layers.Layer):
+class TFData2VecVisionPatchEmbeddings(tf.keras.layers.Layer):
     """
     Image to Patch Embedding.
     """
 
-    def __init__(self, config: Data2VecVisionConfig, image_size: int = 224, patch_size: int = 16, **kwargs):
+    def __init__(self, config: Data2VecVisionConfig, **kwargs):
         super().__init__(**kwargs)
         self.config = config
 
-        image_size = (
-            config.image_size
-            if isinstance(config.image_size, collections.abc.Iterable)
-            else (config.image_size, config.image_size)
-        )
-        patch_size = (
-            config.patch_size
-            if isinstance(config.patch_size, collections.abc.Iterable)
-            else (config.patch_size, config.patch_size)
-        )
+        image_size, patch_size = config.image_size, config.patch_size
+        num_channels, hidden_size = config.num_channels, config.hidden_size
+
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         patch_shape = (image_size[0] // patch_size[0], image_size[1] // patch_size[1])
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_patches = num_patches
         self.patch_shape = patch_shape
-        self.num_channels = config.num_channels
-        self.embed_dim = config.hidden_size
+        self.num_channels = num_channels
 
         self.projection = tf.keras.layers.Conv2D(
-            filters=self.embed_dim,
-            kernel_size=self.patch_size,
-            strides=self.patch_size,
+            filters=hidden_size,
+            kernel_size=patch_size,
+            strides=patch_size,
             padding="valid",
             data_format="channels_last",
             kernel_initializer="glorot_uniform",  # following torch.nn.Linear
@@ -235,7 +223,12 @@ class TFPatchEmbeddings(tf.keras.layers.Layer):
 
     def call(self, pixel_values: tf.Tensor, training: bool = False) -> tf.Tensor:
         batch_size, num_channels, height, width = shape_list(pixel_values)
-        if getattr(height, "numpy", None) and getattr(width, "numpy", None):
+        if tf.executing_eagerly():
+            if num_channels != self.num_channels:
+                raise ValueError(
+                    "Make sure that the channel dimension of the pixel values match with the one set in the"
+                    " configuration."
+                )
             if height != self.image_size[0] or width != self.image_size[1]:
                 raise ValueError(
                     f"Input image size ({height}*{width}) doesn't match model"
@@ -465,7 +458,7 @@ class TFData2VecVisionLayer(tf.keras.layers.Layer):
         # Using `layers.Activation` instead of `tf.identity` to better control `training`
         # behaviour.
         self.drop_path = (
-            TFDropPath(drop_path_rate, name="drop_path")
+            TFData2VecVisionDropPath(drop_path_rate, name="drop_path")
             if drop_path_rate > 0.0
             else tf.keras.layers.Activation("linear", name="drop_path")
         )
