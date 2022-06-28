@@ -36,13 +36,14 @@ The figure below illustrates the architecture of SegFormer. Taken from the [orig
 
 <img width="600" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/segformer_architecture.png"/>
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/NVlabs/SegFormer).
+This model was contributed by [nielsr](https://huggingface.co/nielsr). The TensorFlow version 
+of the model was contributed by [sayakpaul](https://huggingface.co/sayakpaul). The original code can be found [here](https://github.com/NVlabs/SegFormer).
 
 Tips:
 
-- SegFormer consists of a hierarchical Transformer encoder, and a lightweight all-MLP decode head.
+- SegFormer consists of a hierarchical Transformer encoder, and a lightweight all-MLP decoder head.
   [`SegformerModel`] is the hierarchical Transformer encoder (which in the paper is also referred to
-  as Mix Transformer or MiT). [`SegformerForSemanticSegmentation`] adds the all-MLP decode head on
+  as Mix Transformer or MiT). [`SegformerForSemanticSegmentation`] adds the all-MLP decoder head on
   top to perform semantic segmentation of images. In addition, there's
   [`SegformerForImageClassification`] which can be used to - you guessed it - classify images. The
   authors of SegFormer first pre-trained the Transformer encoder on ImageNet-1k to classify images. Next, they throw
@@ -104,3 +105,23 @@ Tips:
 
 [[autodoc]] SegformerForSemanticSegmentation
     - forward
+
+## TFSegformerDecodeHead
+
+[[autodoc]] TFSegformerDecodeHead
+    - call
+
+## TFSegformerModel
+
+[[autodoc]] TFSegformerModel
+    - call 
+
+## TFSegformerForImageClassification
+
+[[autodoc]] TFSegformerForImageClassification
+    - call 
+
+## TFSegformerForSemanticSegmentation
+
+[[autodoc]] TFSegformerForSemanticSegmentation
+    - call 

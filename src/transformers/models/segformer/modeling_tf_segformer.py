@@ -102,7 +102,14 @@ class TFSegformerEfficientSelfAttention(tf.keras.layers.Layer):
     """SegFormer's efficient self-attention mechanism. Employs the sequence reduction process introduced in the [PvT
     paper](https://arxiv.org/abs/2102.12122)."""
 
-    def __init__(self, config, hidden_size: int, num_attention_heads: int, sequence_reduction_ratio: int, **kwargs):
+    def __init__(
+        self,
+        config: SegformerConfig,
+        hidden_size: int,
+        num_attention_heads: int,
+        sequence_reduction_ratio: int,
+        **kwargs
+    ):
         super().__init__(**kwargs)
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
@@ -187,7 +194,7 @@ class TFSegformerEfficientSelfAttention(tf.keras.layers.Layer):
 
 
 class TFSegformerSelfOutput(tf.keras.layers.Layer):
-    def __init__(self, config, hidden_size: int, **kwargs):
+    def __init__(self, config: SegformerConfig, hidden_size: int, **kwargs):
         super().__init__(**kwargs)
         self.dense = tf.keras.layers.Dense(hidden_size, name="dense")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
@@ -199,7 +206,14 @@ class TFSegformerSelfOutput(tf.keras.layers.Layer):
 
 
 class TFSegformerAttention(tf.keras.layers.Layer):
-    def __init__(self, config, hidden_size: int, num_attention_heads: int, sequence_reduction_ratio: int, **kwargs):
+    def __init__(
+        self,
+        config: SegformerConfig,
+        hidden_size: int,
+        num_attention_heads: int,
+        sequence_reduction_ratio: int,
+        **kwargs
+    ):
         super().__init__(**kwargs)
         self.self = TFSegformerEfficientSelfAttention(
             config=config,
@@ -241,7 +255,14 @@ class TFSegformerDWConv(tf.keras.layers.Layer):
 
 
 class TFSegformerMixFFN(tf.keras.layers.Layer):
-    def __init__(self, config, in_features: int, hidden_features: int = None, out_features: int = None, **kwargs):
+    def __init__(
+        self,
+        config: SegformerConfig,
+        in_features: int,
+        hidden_features: int = None,
+        out_features: int = None,
+        **kwargs
+    ):
         super().__init__(**kwargs)
         out_features = out_features or in_features
         self.dense1 = tf.keras.layers.Dense(hidden_features, name="dense1")
@@ -325,7 +346,7 @@ class TFSegformerLayer(tf.keras.layers.Layer):
 
 
 class TFSegformerEncoder(tf.keras.layers.Layer):
-    def __init__(self, config, **kwargs):
+    def __init__(self, config: SegformerConfig, **kwargs):
         super().__init__(**kwargs)
         self.config = config
 
@@ -468,13 +489,19 @@ class TFSegformerMainLayer(tf.keras.layers.Layer):
             training=training,
         )
         sequence_output = encoder_outputs[0]
+        # Change to NCHW output format have uniformity in the modules
+        sequence_output = tf.transpose(sequence_output, perm=[0, 3, 1, 2])
+
+        # Change the other hidden state outputs to NCHW as well
+        if output_hidden_states:
+            hidden_states = tuple([tf.transpose(h, perm=(0, 3, 1, 2)) for h in encoder_outputs[1]])
 
         if not return_dict:
             return (sequence_output,) + encoder_outputs[1:]
 
         return TFBaseModelOutput(
             last_hidden_state=sequence_output,
-            hidden_states=encoder_outputs.hidden_states,
+            hidden_states=hidden_states if output_hidden_states else encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
 
@@ -497,8 +524,7 @@ class TFSegformerPreTrainedModel(TFPreTrainedModel):
         Returns:
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
-        # (todo: sayakpaul): change the batch size to 3
-        VISION_DUMMY_INPUTS = tf.random.uniform(shape=(1, self.config.num_channels, 512, 512), dtype=tf.float32)
+        VISION_DUMMY_INPUTS = tf.random.uniform(shape=(3, self.config.num_channels, 512, 512), dtype=tf.float32)
         return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
 
     @tf.function(
@@ -531,7 +557,7 @@ SEGFORMER_START_DOCSTRING = r"""
     Parameters:
         config ([`SegformerConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+            configuration. Check out the [`~TFPreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 SEGFORMER_INPUTS_DOCSTRING = r"""
@@ -552,8 +578,8 @@ SEGFORMER_INPUTS_DOCSTRING = r"""
             used instead.
 
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This argument can be used
-            in eager mode, in graph mode the value will always be set to True.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple. This argument can be used in
+            eager mode, in graph mode the value will always be set to True.
 
         training (`bool`, *optional*, defaults to `False``):
             Whether or not to use the model in training mode (some modules like dropout modules have different
@@ -609,7 +635,7 @@ class TFSegformerModel(TFSegformerPreTrainedModel):
     SEGFORMER_START_DOCSTRING,
 )
 class TFSegformerForImageClassification(TFSegformerPreTrainedModel):
-    def __init__(self, config, *inputs, **kwargs):
+    def __init__(self, config: SegformerConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
         self.num_labels = config.num_labels
@@ -646,6 +672,7 @@ class TFSegformerForImageClassification(TFSegformerPreTrainedModel):
 
         # convert last hidden states to (batch_size, height*width, hidden_size)
         batch_size = shape_list(sequence_output)[0]
+        sequence_output = tf.transpose(sequence_output, perm=[0, 2, 3, 1])
         sequence_output = tf.reshape(sequence_output, (batch_size, -1, self.config.hidden_sizes[-1]))
 
         # global average pooling
@@ -683,7 +710,7 @@ class TFSegformerMLP(tf.keras.layers.Layer):
 
 
 class TFSegformerDecodeHead(TFSegformerPreTrainedModel):
-    def __init__(self, config, **kwargs):
+    def __init__(self, config: SegformerConfig, **kwargs):
         super().__init__(config, **kwargs)
         # linear layers which will unify the channel dimension of each of the encoder blocks to the same config.decoder_hidden_size
         mlps = []
@@ -710,20 +737,24 @@ class TFSegformerDecodeHead(TFSegformerPreTrainedModel):
         all_hidden_states = ()
         for encoder_hidden_state, mlp in zip(encoder_hidden_states, self.mlps):
             if self.config.reshape_last_stage is False and len(shape_list(encoder_hidden_state)) == 3:
-                height = tf.math.sqrt(tf.cast(shape_list(encoder_hidden_state)[-1], tf.float32))
+                height = tf.math.sqrt(tf.cast(shape_list(encoder_hidden_state)[1], tf.float32))
                 height = width = tf.cast(height, tf.int32)
                 encoder_hidden_state = tf.reshape(encoder_hidden_state, (batch_size, height, width, -1))
 
             # unify channel dimension
+            encoder_hidden_state = tf.transpose(encoder_hidden_state, perm=[0, 2, 3, 1])
             height = shape_list(encoder_hidden_state)[1]
             width = shape_list(encoder_hidden_state)[2]
             encoder_hidden_state = mlp(encoder_hidden_state)
             encoder_hidden_state = tf.reshape(encoder_hidden_state, (batch_size, height, width, -1))
+
             # upsample
+            temp_state = tf.transpose(encoder_hidden_states[0], perm=[0, 2, 3, 1])
             encoder_hidden_state = tf.image.resize(
-                encoder_hidden_state, size=shape_list(encoder_hidden_states[0])[1:-1], method="bilinear"
+                encoder_hidden_state, size=shape_list(temp_state)[1:-1], method="bilinear"
             )
             all_hidden_states += (encoder_hidden_state,)
+
         hidden_states = self.linear_fuse(tf.concat(all_hidden_states[::-1], axis=-1))
         hidden_states = self.batch_norm(hidden_states)
         hidden_states = self.activation(hidden_states)
@@ -740,7 +771,7 @@ class TFSegformerDecodeHead(TFSegformerPreTrainedModel):
     SEGFORMER_START_DOCSTRING,
 )
 class TFSegformerForSemanticSegmentation(TFSegformerPreTrainedModel):
-    def __init__(self, config, **kwargs):
+    def __init__(self, config: SegformerConfig, **kwargs):
         super().__init__(config, **kwargs)
         self.segformer = TFSegformerMainLayer(config, name="segformer")
         self.decode_head = TFSegformerDecodeHead(config, name="decode_head")
