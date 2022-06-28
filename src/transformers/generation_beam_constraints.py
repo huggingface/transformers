@@ -1,5 +1,8 @@
+import collections
+import copy
+import itertools
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import Iterable, Iterator, List, Optional, Union
 
 
 class Constraint(ABC):
@@ -201,61 +204,213 @@ class PhrasalConstraint(Constraint):
         return new_constraint
 
 
-class DisjunctiveTrie:
-    def __init__(self, nested_token_ids: List[List[int]], no_subsets=True):
-        r"""
-        A helper class that builds a trie with the words represented in `nested_token_ids`.
-        """
-        self.max_height = max([len(one) for one in nested_token_ids])
+class DisjointSet(object):
+    r"""
+    A helper class that maintains a disjoint-set.
+    """
 
-        root = dict()
-        for token_ids in nested_token_ids:
-            level = root
-            for tidx, token_id in enumerate(token_ids):
-                if token_id not in level:
-                    level[token_id] = dict()
+    def __init__(self, length: int):
+        self.roots = list(range(length))
 
-                level = level[token_id]
+    def __getitem__(self, node: int) -> int:
+        if self.roots[node] != self.roots[self.roots[node]]:
+            self.roots[node] = self[self.roots[node]]
+        return self.roots[node]
 
-        if no_subsets and self.has_subsets(root, nested_token_ids):
-            raise ValueError(
-                "Each list in `nested_token_ids` can't be a complete subset of another list, but is"
-                f" {nested_token_ids}."
-            )
+    def __ior__(self, nodes: Iterable[int]):
+        roots = {self[node] for node in nodes}
+        if 1 < len(roots):
+            min_root = min(roots)
+            roots.remove(min_root)
+            for root in roots:
+                self.roots[root] = min_root
+        return self
 
-        self.trie = root
+    def __iter__(self) -> Iterator[int]:
+        for index in range(len(self.roots)):
+            yield self[index]
 
-    def next_tokens(self, current_seq):
-        """
-        The next possible tokens that will progress the trie, given the current sequence of tokens in `current_seq`.
-        """
-        start = self.trie
 
-        for current_token in current_seq:
-            start = start[current_token]
+class ACAutomaton(object):
+    r"""
+    A helper class that builds an AC Automaton with the words represented in `force_words_ids`. The Aho-Corasick
+    algorithm is adapted to handle both conjunctive and disjunctive cases at the same time. Disjoint Set is used to
+    handle the edge cases where disjuncitve constraints share words.
+    """
 
-        next_tokens = list(start.keys())
+    def __init__(self, force_words_ids: Iterable[Union[Iterable[int], Iterable[Iterable[int]]]]):
+        self.current_node = 0
+        self.unfulfilled = 0
 
-        return next_tokens
+        self.trie = [{}]
+        self.parent = [(0, 0)]
+        self.conj_count = [0]
+        self.height = [0]
+        self.disj_set = [set()]
 
-    def reached_leaf(self, current_seq):
-        next_tokens = self.next_tokens(current_seq)
+        self.disj_constraints = []
+        self.disj_max_height = []
 
-        return len(next_tokens) == 0
+        for word_ids in map(iter, force_words_ids):
+            try:
+                word_id = next(word_ids)
+            except StopIteration:
+                continue
+            word_ids = itertools.chain((word_id,), word_ids)
+            if isinstance(word_id, int):
+                word_ids = (word_ids,)
 
-    def count_leaves(self, root):
-        next_nodes = list(root.values())
-        if len(next_nodes) == 0:
-            return 1
-        else:
-            return sum([self.count_leaves(nn) for nn in next_nodes])
+            nodes = set(map(self.insert_leaf, word_ids))
+            nodes.discard(0)
 
-    def has_subsets(self, trie, nested_token_ids):
-        """
-        Returns whether # of leaves == # of words. Otherwise some word is a subset of another.
-        """
-        leaf_count = self.count_leaves(trie)
-        return len(nested_token_ids) != leaf_count
+            if len(nodes) == 1:
+                (node,) = nodes
+                self.conj_count[node] += 1
+                self.unfulfilled += self.height[node]
+            else:
+                for node in nodes:
+                    self.disj_set[node].add(len(self.disj_constraints))
+                self.disj_constraints.append(nodes)
+                max_height = max(self.height[node] for node in nodes)
+                self.disj_max_height.append(max_height)
+                self.unfulfilled += max_height
+
+        if self.disj_constraints:
+            self.disj_group = DisjointSet(len(self.disj_constraints))
+            for node in set.union(*self.disj_constraints):
+                self.disj_group |= self.disj_set[node]
+            self.disj_group_count = dict(collections.Counter(self.disj_group))
+
+        self.suffix = [0] * len(self.trie)
+        self.output = [0] * len(self.trie)
+
+        queue = collections.deque(self.trie[0].values())
+        while queue:
+            root = queue.popleft()
+
+            suffix = self.suffix[root]
+            self.output[root] = suffix if self.conj_count[suffix] or self.disj_set[suffix] else self.output[suffix]
+
+            for token_id, node in self.trie[root].items():
+                self.suffix[node] = self.does_advance(suffix, token_id)
+                queue.append(node)
+
+    def insert_leaf(self, token_ids: Iterable[int]) -> int:
+        node = 0
+        for height, token_id in enumerate(token_ids, 1):
+            if token_id not in self.trie[node]:
+                self.trie[node][token_id] = len(self.trie)
+                self.trie.append({})
+                self.parent.append((node, token_id))
+                self.conj_count.append(0)
+                self.height.append(height)
+                self.disj_set.append(set())
+            node = self.trie[node][token_id]
+        return node
+
+    def is_invalid(self, node: int) -> bool:
+        return node and self.conj_count[node] + len(self.disj_set[node]) == 0 and not self.trie[node]
+
+    def delete_from_trie(self, node: int):
+        while self.is_invalid(node):
+            node, token_id = self.parent[node]
+            del self.trie[node][token_id]
+
+    def try_decrease_disj_group_count(self, group: int, decrease: int):
+        if 0 < decrease:
+            self.disj_group_count[group] -= decrease
+
+            if self.disj_group_count[group] == 0:
+                disj_group = [index for index, root in enumerate(self.disj_group) if root == group]
+                self.unfulfilled -= sum(self.disj_max_height[index] for index in disj_group)
+
+                for node in {node for index in disj_group for node in self.disj_constraints[index]}:
+                    self.disj_set[node].clear()
+
+                    if self.conj_count[node] <= 0:
+                        self.unfulfilled -= self.conj_count[node] * self.height[node]
+                        self.conj_count[node] = 0
+                        self.delete_from_trie(node)
+
+    def try_delete_disj_leaf(self, node: int):
+        if self.conj_count[node] < 0 and self.conj_count[node] + len(self.disj_set[node]) == 0:
+            group = self.disj_group[next(iter(self.disj_set[node]))]
+            disj_group = {index for index, root in enumerate(self.disj_group) if root == group}
+
+            leaves_to_delete = [node]
+            while leaves_to_delete:
+                leaf = leaves_to_delete.pop()
+
+                self.unfulfilled -= self.conj_count[leaf] * self.height[leaf]
+                self.conj_count[leaf] = 0
+
+                disj_group -= self.disj_set[leaf]
+                self.unfulfilled -= sum(self.disj_max_height[index] for index in self.disj_set[leaf])
+
+                for node in {
+                    node for index in self.disj_set[leaf] for node in self.disj_constraints[index] if node != leaf
+                }:
+                    self.disj_set[node] -= self.disj_set[leaf]
+
+                    if self.conj_count[node] + len(self.disj_set[node]) == 0:
+                        leaves_to_delete.append(node)
+
+                while self.disj_set[leaf]:
+                    index = self.disj_set[leaf].pop()
+                    self.disj_group.roots[index] = index
+
+                self.delete_from_trie(leaf)
+
+            nodes = {node for index in disj_group for node in self.disj_constraints[index]}
+
+            for i in disj_group:
+                self.disj_group.roots[i] = i
+            for node in nodes:
+                self.disj_group |= self.disj_set[node]
+
+            self.disj_group_count.update(collections.Counter(self.disj_group[index] for index in disj_group))
+            for node in nodes:
+                if self.conj_count[node] < 0:
+                    self.try_decrease_disj_group_count(
+                        self.disj_group[next(iter(self.disj_set[node]))], -self.conj_count[node]
+                    )
+
+    def try_delete_leaf(self, node: int):
+        if 0 < self.conj_count[node] + len(self.disj_set[node]):
+            self.conj_count[node] -= 1
+            self.unfulfilled -= self.height[node]
+
+            if self.conj_count[node] == 0 and not self.disj_set[node]:
+                self.delete_from_trie(node)
+            elif self.conj_count[node] < 0:
+                self.try_decrease_disj_group_count(self.disj_group[next(iter(self.disj_set[node]))], 1)
+                self.try_delete_disj_leaf(node)
+
+    def does_advance(self, node: int, token_id: int) -> int:
+        while node and token_id not in self.trie[node]:
+            while self.is_invalid(self.suffix[node]):
+                self.suffix[node] = self.suffix[self.suffix[node]]
+            node = self.suffix[node]
+        return self.trie[node].get(token_id, 0)
+
+    def update(self, token_id: int):
+        node = self.current_node
+
+        output = node = self.does_advance(node, token_id)
+        while output:
+            self.try_delete_leaf(output)
+
+            while self.is_invalid(self.output[output]):
+                self.output[output] = self.output[self.output[output]]
+            output = self.output[output]
+
+        while node and not self.trie[node]:
+            node = self.suffix[node]
+
+        self.current_node = node
+
+    def remaining(self) -> int:
+        return self.unfulfilled - self.height[self.current_node]
 
 
 class DisjunctiveConstraint(Constraint):
@@ -282,69 +437,64 @@ class DisjunctiveConstraint(Constraint):
                 f"Each list in `nested_token_ids` has to be a list of positive integers, but is {nested_token_ids}."
             )
 
-        self.trie = DisjunctiveTrie(nested_token_ids)
+        self.ac_automaton = ACAutomaton([nested_token_ids])
         self.token_ids = nested_token_ids
 
-        self.seqlen = self.trie.max_height
+        self.seqlen = self.remaining()
         self.current_seq = []
-        self.completed = False
+
+        for node in range(len(self.ac_automaton.trie)):
+            if self.ac_automaton.trie[node] and (
+                self.ac_automaton.output[node]
+                or self.ac_automaton.conj_count[node]
+                or self.ac_automaton.disj_set[node]
+            ):
+                raise ValueError(
+                    "Each list in `nested_token_ids` can't be a complete subset of another list, but is"
+                    f" {nested_token_ids}."
+                )
 
     def advance(self):
-        token_list = self.trie.next_tokens(self.current_seq)
-
-        if len(token_list) == 0:
-            return None
-        else:
-            return token_list
+        return list(self.ac_automaton.trie[self.ac_automaton.current_node]) or None
 
     def does_advance(self, token_id: int):
         if not isinstance(token_id, int):
             raise ValueError(f"`token_id` is supposed to be type `int`, but is {token_id} of type {type(token_id)}")
 
-        next_tokens = self.trie.next_tokens(self.current_seq)
-
-        return token_id in next_tokens
+        return self.ac_automaton.does_advance(self.ac_automaton.current_node, token_id) != 0
 
     def update(self, token_id: int):
         if not isinstance(token_id, int):
             raise ValueError(f"`token_id` is supposed to be type `int`, but is {token_id} of type {type(token_id)}")
 
-        stepped = False
-        completed = False
-        reset = False
+        self.ac_automaton.update(token_id)
+        self.current_seq.append(token_id)
 
-        if self.does_advance(token_id):
-            self.current_seq.append(token_id)
-            stepped = True
-        else:
-            reset = True
+        stepped = self.remaining() < self.seqlen
+        completed = self.completed
+        reset = self.remaining() == self.seqlen
+
+        if reset:
             self.reset()
-
-        completed = self.trie.reached_leaf(self.current_seq)
-        self.completed = completed
 
         return stepped, completed, reset
 
     def reset(self):
-        self.completed = False
-        self.current_seq = []
+        if self.ac_automaton.unfulfilled == self.seqlen:
+            self.ac_automaton.current_node = 0
+        else:
+            self.ac_automaton = ACAutomaton([self.token_ids])
+        self.current_seq.clear()
 
     def remaining(self):
-        if self.completed:
-            # since this can be completed without reaching max height
-            return 0
-        else:
-            return self.seqlen - len(self.current_seq)
+        return self.ac_automaton.remaining()
+
+    @property
+    def completed(self):
+        return self.remaining() == 0
 
     def copy(self, stateful=False):
-        new_constraint = DisjunctiveConstraint(self.token_ids)
-
-        if stateful:
-            new_constraint.seq_len = self.seqlen
-            new_constraint.current_seq = self.current_seq
-            new_constraint.completed = self.completed
-
-        return new_constraint
+        return copy.deepcopy(self) if stateful else type(self)(self.token_ids)
 
 
 class ConstraintListState:
