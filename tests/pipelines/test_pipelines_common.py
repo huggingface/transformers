@@ -35,8 +35,8 @@ from transformers import (
     TextClassificationPipeline,
     pipeline,
 )
-from transformers.pipelines import get_task
-from transformers.pipelines.base import _pad
+from transformers.pipelines import PIPELINE_REGISTRY, get_task
+from transformers.pipelines.base import Pipeline, _pad
 from transformers.testing_utils import (
     is_pipeline_test,
     nested_simplify,
@@ -746,3 +746,45 @@ class PipelineUtilsTest(unittest.TestCase):
                 models_are_equal = False
 
         return models_are_equal
+
+
+class CustomPipeline(Pipeline):
+    def _sanitize_parameters(self, **kwargs):
+        preprocess_kwargs = {}
+        if "maybe_arg" in kwargs:
+            preprocess_kwargs["maybe_arg"] = kwargs["maybe_arg"]
+        return preprocess_kwargs, {}, {}
+
+    def preprocess(self, text, maybe_arg=2):
+        input_ids = self.tokenizer(text, return_tensors="pt")
+        return input_ids
+
+    def _forward(self, model_inputs):
+        outputs = self.model(**model_inputs)
+        return outputs
+
+    def postprocess(self, model_outputs):
+        return model_outputs["logits"].softmax(-1).numpy()
+
+
+@is_pipeline_test
+class PipelineRegistryTest(unittest.TestCase):
+    @require_torch
+    def test_register_pipeline(self):
+        from transformers import AutoModelForSequenceClassification
+        from transformers.utils import is_torch_available
+
+        custom_text_classification = {
+            "impl": CustomPipeline,
+            "tf": (),
+            "pt": (AutoModelForSequenceClassification,) if is_torch_available() else (),
+            "default": {"model": {"pt": "hf-internal-testing/tiny-random-distilbert"}},
+            "type": "text",
+        }
+        PIPELINE_REGISTRY.register_pipeline("custom-text-classification", custom_text_classification)
+        assert "custom-text-classification" in PIPELINE_REGISTRY.get_supported_tasks()
+
+        task_def, _ = PIPELINE_REGISTRY.check_task("custom-text-classification")
+        self.assertEqual(task_def, custom_text_classification)
+        self.assertEqual(task_def["type"], "text")
+        self.assertEqual(task_def["impl"], CustomPipeline)
