@@ -15,6 +15,7 @@
 """PyTorch BLOOM model."""
 
 import math
+from sys import prefix
 from typing import Tuple, Union
 
 import torch
@@ -77,7 +78,7 @@ def split_tensor_along_last_dim(tensor, num_partitions, contiguous_split_chunks=
     return tensor_list
 
 
-def attention_mask_func(attention_scores, attention_mask, causal_mask):
+def attention_mask_func(attention_scores, attention_mask, causal_mask, prefix_length):
     if attention_mask.dtype == torch.bool:
         attention_mask_bool = ~attention_mask
     else:
@@ -89,6 +90,12 @@ def attention_mask_func(attention_scores, attention_mask, causal_mask):
         + ~causal_mask[:, :, key_length - query_length : key_length, :key_length]
     ).bool()
     padded_causal_mask = padded_causal_mask + attention_mask_bool[:, None, None, :key_length].bool()
+    
+    # ensure the initial prefix_length tokens attend to themselves
+    if prefix_length is not None:
+        # print(padded_causal_mask.shape)
+        padded_causal_mask[:,:,:prefix_length,:prefix_length] = True
+        # print(padded_causal_mask)
     # Make use of floats
     return (
         attention_scores.masked_fill_(padded_causal_mask.expand(-1, n_heads, -1, -1), -10000.0),
@@ -284,7 +291,7 @@ class BloomScaledSoftmax(nn.Module):
         if not (self.scale is None or softmax_in_fp32):
             raise ValueError("softmax should be in fp32 when scaled")
 
-    def forward(self, input, mask, max_positions):
+    def forward(self, input, mask, max_positions, prefix_length):
         input_dtype = input.dtype
         input_in_16bit = input_dtype in [torch.float16, torch.bfloat16]
         softmax_dtype = torch.float32 if self.softmax_in_fp32 else input_dtype
@@ -301,7 +308,7 @@ class BloomScaledSoftmax(nn.Module):
             .view(1, 1, max_positions, max_positions)
             .to(input.device)
         )
-        mask_output, padded_causal_mask = self.mask_func(input, mask, causal_mask)
+        mask_output, padded_causal_mask = self.mask_func(input, mask, causal_mask, prefix_length)
         probs = nn.functional.softmax(mask_output, dim=-1, dtype=softmax_dtype) * (~padded_causal_mask)
 
         if input_in_16bit and self.softmax_in_fp32:
@@ -357,6 +364,7 @@ class BloomAttention(nn.Module):
         head_mask=None,
         use_cache=False,
         output_attentions=False,
+        prefix_length=None,
     ):
         # hidden_states: [batch_size, seq_length, hidden_size]
         # repeat alibi tensor with the batch size
@@ -413,7 +421,7 @@ class BloomAttention(nn.Module):
 
         # attention scores and attention mask [b, np, sq, sk]
         max_positions = max(attention_scores.shape[-1], attention_scores.shape[-2])
-        attention_probs = self.scale_mask_softmax(attention_scores, attention_mask, max_positions).to(
+        attention_probs = self.scale_mask_softmax(attention_scores, attention_mask, max_positions, prefix_length).to(
             value_layer.dtype
         )
         attention_probs = self.attention_dropout(attention_probs)
@@ -524,6 +532,7 @@ class BloomBlock(nn.Module):
         use_cache=False,
         output_attentions=False,
         alibi=None,
+        prefix_length=None,
     ):
         # hidden_states: [batch_size, seq_length, hidden_size]
 
@@ -546,6 +555,7 @@ class BloomBlock(nn.Module):
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
+            prefix_length=prefix_length,
         )
 
         attention_output = attn_outputs[0]
@@ -731,6 +741,7 @@ class BloomModel(BloomPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        prefix_length=None,
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -811,6 +822,7 @@ class BloomModel(BloomPreTrainedModel):
                     use_cache=use_cache,
                     output_attentions=output_attentions,
                     alibi=alibi,
+                    prefix_length=prefix_length,
                 )
 
             hidden_states = outputs[0]
@@ -870,6 +882,7 @@ class BloomForCausalLM(BloomPreTrainedModel):
 
         attention_mask = kwargs.get("attention_mask", None)
         position_ids = kwargs.get("position_ids", None)
+        prefix_length = kwargs.get("prefix_length", None)
 
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
@@ -885,6 +898,7 @@ class BloomForCausalLM(BloomPreTrainedModel):
             "use_cache": kwargs.get("use_cache"),
             "position_ids": position_ids,
             "attention_mask": attention_mask,
+            "prefix_length": prefix_length,
         }
 
     @add_start_docstrings_to_model_forward(BLOOM_INPUTS_DOCSTRING)
@@ -907,6 +921,7 @@ class BloomForCausalLM(BloomPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        prefix_length=None,
     ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -915,7 +930,7 @@ class BloomForCausalLM(BloomPreTrainedModel):
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
+ 
         transformer_outputs = self.transformer(
             input_ids,
             past_key_values=past_key_values,
@@ -927,6 +942,7 @@ class BloomForCausalLM(BloomPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            prefix_length=prefix_length,
         )
         hidden_states = transformer_outputs[0]
 
