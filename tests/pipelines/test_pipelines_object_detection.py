@@ -104,10 +104,9 @@ class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
     def test_small_model_tf(self):
         pass
 
-    @unittest.skip("Model has moved, skip until it's fixed.")
     @require_torch
     def test_small_model_pt(self):
-        model_id = "mishig/tiny-detr-mobilenetsv3"
+        model_id = "hf-internal-testing/tiny-detr-mobilenetsv3"
 
         model = AutoModelForObjectDetection.from_pretrained(model_id)
         feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
