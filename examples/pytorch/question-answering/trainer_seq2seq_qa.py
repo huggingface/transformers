@@ -15,14 +15,14 @@
 """
 A subclass of `Trainer` specific to Question-Answering tasks
 """
+import math
+import time
 from typing import Dict, List, Optional
 
 from torch.utils.data import Dataset
 
 from transformers import Seq2SeqTrainer, is_torch_tpu_available
 from transformers.trainer_utils import PredictionOutput, speed_metrics
-import time
-import math
 
 
 if is_torch_tpu_available():
