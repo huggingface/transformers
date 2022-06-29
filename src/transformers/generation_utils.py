@@ -1972,7 +1972,14 @@ class GenerationMixin:
 
             # To avoid all `-inf` along the vocab dimension (dim -1), which gives `nan` after `softmax` and error
             # in `torch.multinomial`.
-            _next_token_scores = torch.max(next_token_scores, torch.tensor(torch.finfo(next_token_scores.dtype).min, dtype=next_token_scores.dtype, device=next_token_scores.device))
+            _next_token_scores = torch.max(
+                next_token_scores,
+                torch.tensor(
+                    torch.finfo(next_token_scores.dtype).min,
+                    dtype=next_token_scores.dtype,
+                    device=next_token_scores.device,
+                ),
+            )
 
             # sample
             probs = nn.functional.softmax(_next_token_scores, dim=-1)
