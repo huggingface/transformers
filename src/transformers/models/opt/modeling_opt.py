@@ -217,9 +217,7 @@ class OPTAttention(nn.Module):
 
         # upcast to fp32 if the weights are in fp16. Please see https://github.com/huggingface/transformers/pull/17437
         if dtype_attn_weights == torch.float16:
-            attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(
-                dtype_attn_weights
-            )
+            attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(dtype_attn_weights)
         else:
             attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
