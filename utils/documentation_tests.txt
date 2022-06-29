@@ -50,6 +50,8 @@ src/transformers/models/pegasus/modeling_pegasus.py
 src/transformers/models/plbart/modeling_plbart.py
 src/transformers/models/poolformer/modeling_poolformer.py
 src/transformers/models/reformer/modeling_reformer.py
+src/transformers/models/regnet/modeling_regnet.py
+src/transformers/models/regnet/modeling_tf_regnet.py
 src/transformers/models/resnet/modeling_resnet.py
 src/transformers/models/roberta/modeling_roberta.py
 src/transformers/models/roberta/modeling_tf_roberta.py
