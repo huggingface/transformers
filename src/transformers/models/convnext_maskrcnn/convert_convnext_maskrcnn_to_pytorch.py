@@ -143,6 +143,20 @@ def convert_convnext_maskrcnn_checkpoint(checkpoint_path, pytorch_dump_folder_pa
     print("Looks ok!")
     # assert logits.shape == expected_shape
 
+    # filter results
+    bbox_results = outputs.results[0][0]
+    detections = []
+    for label in range(len(bbox_results)):
+        if len(bbox_results[label]) > 0:
+            for detection in bbox_results[label]:
+                detections.append((label, detection))
+
+    predicted_classes = [det[0] for det in detections]
+    assert predicted_classes == [15, 15, 57, 57, 59, 65, 65, 79]
+    # predicted_bbox = detections[0][1]
+    # print("Predicted bbox:", predicted_bbox)
+    # assert np.testing.assert_allclose(predicted_bbox, np.array([17.905708, 55.41647, 318.95575, 470.25925, 0.9981325], dtype=np.float32), atol=10)
+
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
         print(f"Saving model and feature extractor to {pytorch_dump_folder_path}")
