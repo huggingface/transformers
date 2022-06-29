@@ -77,7 +77,7 @@ LAYOUTLMV3_INPUTS_DOCSTRING = r"""
             {1}
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Batch of document images. Each Image is divided into patches of shape `(num_channels, config.patch_size,
-            config.patch_size)` and the total number of patches (=`patch_sequence_length`) equals to 
+            config.patch_size)` and the total number of patches (=`patch_sequence_length`) equals to
             `((height / config.patch_size) * (width / config.patch_size))`.
 
         attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
@@ -121,7 +121,7 @@ LAYOUTLMV3_INPUTS_DOCSTRING = r"""
 """
 
 LAYOUTLMV3MODEL_INPUTS_DOCSTRING = r"""
-            Note that `sequence_length = token_sequence_length + patch_sequence_length + 1` where `1` is for 
+            Note that `sequence_length = token_sequence_length + patch_sequence_length + 1` where `1` is for
             [CLS] token. See `pixel_values` for `patch_sequence_length`.
 """
 
