@@ -52,7 +52,7 @@ if is_torch_available():
     import torch
     import torch.distributed as dist
 
-if is_torch_tpu_available():
+if is_torch_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
 
 

@@ -1215,6 +1215,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         output_columns = list(output_signature.keys())
         feature_cols = [col for col in output_columns if col in model_inputs and col not in model_labels]
         label_cols = [col for col in output_columns if col in model_labels]
+
+        if drop_remainder is None:
+            drop_remainder = shuffle
         tf_dataset = dataset.to_tf_dataset(
             columns=feature_cols,
             label_cols=label_cols,
