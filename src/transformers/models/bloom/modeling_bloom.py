@@ -78,7 +78,7 @@ def split_tensor_along_last_dim(tensor, num_partitions, contiguous_split_chunks=
     return tensor_list
 
 
-def attention_mask_func(attention_scores, attention_mask, causal_mask, prefix_length):
+def attention_mask_func(attention_scores, attention_mask, causal_mask, prefix_mask):
     if attention_mask.dtype == torch.bool:
         attention_mask_bool = ~attention_mask
     else:
@@ -92,9 +92,29 @@ def attention_mask_func(attention_scores, attention_mask, causal_mask, prefix_le
     padded_causal_mask = padded_causal_mask + attention_mask_bool[:, None, None, :key_length].bool()
     
     # ensure the initial prefix_length tokens attend to themselves
-    if prefix_length is not None:
-        # print(padded_causal_mask.shape)
-        padded_causal_mask[:,:,:prefix_length,:prefix_length] = True
+    if prefix_mask is not None:
+        # print(prefix_mask[:, :, : key_length, :key_length].shape)
+        if prefix_mask.shape[-1] != key_length:
+            # this conditional means the prefix_mask is smaller than the key_length. 
+            # In this case, we need to pad out the prefix_mask to the size of the causal_mask.
+            # print(causal_mask.shape)
+            # print(padded_causal_mask.shape)
+            # print(padded_causal_mask) 
+            # extend the prefix_mask to the key_length. the original prefix mask stays in the "bottom left" of the prefix_mask tensor.
+            new_prefix_mask = torch.zeros(*causal_mask.shape, dtype=torch.bool, device=padded_causal_mask.device)
+            new_prefix_mask[:, :, new_prefix_mask.shape[2] - prefix_mask.shape[2] : , : prefix_mask.shape[3] ] = prefix_mask
+            # prefix_mask = new_prefix_mask[]
+            prefix_mask = new_prefix_mask
+            # print(prefix_mask)
+            # print(prefix_mask)
+            # print(causal_mask.shape)
+            # prefix_mask = prefix_mask[:, :, : key_length, :key_length]
+        # print(prefix_mask)
+        # print(key_length)
+        # print(query_length)
+        # print(padded_causal_mask[:, :, :key_length, :key_length].shape)
+        # print(prefix_mask[:, :, key_length - query_length :key_length, :key_length].shape)
+        padded_causal_mask = prefix_mask[:, :, key_length - query_length : key_length, :key_length]
         # print(padded_causal_mask)
     # Make use of floats
     return (
@@ -291,7 +311,7 @@ class BloomScaledSoftmax(nn.Module):
         if not (self.scale is None or softmax_in_fp32):
             raise ValueError("softmax should be in fp32 when scaled")
 
-    def forward(self, input, mask, max_positions, prefix_length):
+    def forward(self, input, mask, max_positions, prefix_mask):
         input_dtype = input.dtype
         input_in_16bit = input_dtype in [torch.float16, torch.bfloat16]
         softmax_dtype = torch.float32 if self.softmax_in_fp32 else input_dtype
@@ -308,7 +328,7 @@ class BloomScaledSoftmax(nn.Module):
             .view(1, 1, max_positions, max_positions)
             .to(input.device)
         )
-        mask_output, padded_causal_mask = self.mask_func(input, mask, causal_mask, prefix_length)
+        mask_output, padded_causal_mask = self.mask_func(input, mask, causal_mask, prefix_mask)
         probs = nn.functional.softmax(mask_output, dim=-1, dtype=softmax_dtype) * (~padded_causal_mask)
 
         if input_in_16bit and self.softmax_in_fp32:
@@ -364,7 +384,7 @@ class BloomAttention(nn.Module):
         head_mask=None,
         use_cache=False,
         output_attentions=False,
-        prefix_length=None,
+        prefix_mask=None,
     ):
         # hidden_states: [batch_size, seq_length, hidden_size]
         # repeat alibi tensor with the batch size
@@ -421,7 +441,7 @@ class BloomAttention(nn.Module):
 
         # attention scores and attention mask [b, np, sq, sk]
         max_positions = max(attention_scores.shape[-1], attention_scores.shape[-2])
-        attention_probs = self.scale_mask_softmax(attention_scores, attention_mask, max_positions, prefix_length).to(
+        attention_probs = self.scale_mask_softmax(attention_scores, attention_mask, max_positions, prefix_mask).to(
             value_layer.dtype
         )
         attention_probs = self.attention_dropout(attention_probs)
@@ -532,7 +552,7 @@ class BloomBlock(nn.Module):
         use_cache=False,
         output_attentions=False,
         alibi=None,
-        prefix_length=None,
+        prefix_mask=None,
     ):
         # hidden_states: [batch_size, seq_length, hidden_size]
 
@@ -555,7 +575,7 @@ class BloomBlock(nn.Module):
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            prefix_length=prefix_length,
+            prefix_mask=prefix_mask
         )
 
         attention_output = attn_outputs[0]
@@ -741,7 +761,7 @@ class BloomModel(BloomPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        prefix_length=None,
+        prefix_mask=None,
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -822,7 +842,7 @@ class BloomModel(BloomPreTrainedModel):
                     use_cache=use_cache,
                     output_attentions=output_attentions,
                     alibi=alibi,
-                    prefix_length=prefix_length,
+                    prefix_mask=prefix_mask,
                 )
 
             hidden_states = outputs[0]
@@ -882,7 +902,7 @@ class BloomForCausalLM(BloomPreTrainedModel):
 
         attention_mask = kwargs.get("attention_mask", None)
         position_ids = kwargs.get("position_ids", None)
-        prefix_length = kwargs.get("prefix_length", None)
+        prefix_mask = kwargs.get("prefix_mask", None)
 
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
@@ -898,7 +918,7 @@ class BloomForCausalLM(BloomPreTrainedModel):
             "use_cache": kwargs.get("use_cache"),
             "position_ids": position_ids,
             "attention_mask": attention_mask,
-            "prefix_length": prefix_length,
+            "prefix_mask": prefix_mask,
         }
 
     @add_start_docstrings_to_model_forward(BLOOM_INPUTS_DOCSTRING)
@@ -921,7 +941,7 @@ class BloomForCausalLM(BloomPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        prefix_length=None,
+        prefix_mask=None,
     ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -942,7 +962,147 @@ class BloomForCausalLM(BloomPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            prefix_length=prefix_length,
+            prefix_mask=prefix_mask,
+        )
+        hidden_states = transformer_outputs[0]
+
+        lm_logits = self.lm_head(hidden_states)
+
+        loss = None
+        if labels is not None:
+            # Shift so that tokens < n predict n
+            shift_logits = lm_logits[..., :-1, :].contiguous()
+            shift_labels = labels[..., 1:].contiguous()
+            # Flatten the tokens
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+
+        if not return_dict:
+            output = (lm_logits,) + transformer_outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return CausalLMOutputWithCrossAttentions(
+            loss=loss,
+            logits=lm_logits,
+            past_key_values=transformer_outputs.past_key_values,
+            hidden_states=transformer_outputs.hidden_states,
+            attentions=transformer_outputs.attentions,
+        )
+
+    @staticmethod
+    def _reorder_cache(past: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor) -> Tuple[Tuple[torch.Tensor]]:
+        """
+        This function is used to re-order the `past_key_values` cache if [`~PreTrainedModel.beam_search`] or
+        [`~PreTrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
+        beam_idx at every generation step.
+        """
+        return tuple(
+            tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
+            for layer_past in past
+        )
+
+@add_start_docstrings(
+    """
+    The Bloom Model transformer with a language modeling head on top (linear layer with weights tied to the input
+    embeddings). Uses prefix language modeling (bidirectional attention on inputs to `generate()`) and can use an additional mask passed as `prefix_mask`
+    to override the default prefix LM mask. See https://arxiv.org/pdf/2204.05832.pdf for more details.
+    """,
+    BLOOM_START_DOCSTRING,
+)
+class BloomForPrefixLM(BloomPreTrainedModel):
+    _keys_to_ignore_on_load_missing = [r"h.*.self_attention.scale_mask_softmax.causal_mask", r"lm_head.weight"]
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.transformer = BloomModel(config)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
+    def prepare_inputs_for_generation(self, input_ids, past=None, **kwargs):
+        # only last token for inputs_ids if past is defined in kwargs
+        if past:
+            input_ids = input_ids[:, -1].unsqueeze(-1)
+
+        attention_mask = kwargs.get("attention_mask", None)
+        position_ids = kwargs.get("position_ids", None)
+        prefix_mask = kwargs.get("prefix_mask", None)
+
+        if attention_mask is not None and position_ids is None:
+            # create position_ids on the fly for batch generation
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            if past:
+                position_ids = position_ids[:, -1].unsqueeze(-1)
+        else:
+            position_ids = None
+
+        # generate a prefix-LM mask, if none is provided.
+        # store this in the model class so that it can be reused for a whole generation call. Will be erased on next `generate()` call.
+        if prefix_mask is None and past is None:
+            prefix_mask = torch.ones(input_ids.shape[0], 1, input_ids.shape[1], input_ids.shape[1], dtype=torch.bool, device=input_ids.device)
+            self.prefix_mask = prefix_mask
+        else:
+            prefix_mask = self.prefix_mask
+
+        return {
+            "input_ids": input_ids,
+            "past_key_values": past,
+            "use_cache": kwargs.get("use_cache"),
+            "position_ids": position_ids,
+            "attention_mask": attention_mask,
+            "prefix_mask": prefix_mask,
+        }
+
+    # @add_start_docstrings_to_model_forward(BLOOM_INPUTS_DOCSTRING)
+    # @add_code_sample_docstrings(
+    #     processor_class=_TOKENIZER_FOR_DOC,
+    #     checkpoint=_CHECKPOINT_FOR_DOC,
+    #     output_type=CausalLMOutputWithCrossAttentions,
+    #     config_class=_CONFIG_FOR_DOC,
+    # )
+    def forward(
+        self,
+        input_ids=None,
+        past_key_values=None,
+        attention_mask=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        prefix_mask=None,
+    ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
+            `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
+            are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        transformer_outputs = self.transformer(
+            input_ids,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            prefix_mask=prefix_mask,
         )
         hidden_states = transformer_outputs[0]
 

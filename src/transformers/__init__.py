@@ -886,6 +886,7 @@ else:
         [
             "BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST",
             "BloomForCausalLM",
+            "BloomForPrefixLM",
             "BloomModel",
             "BloomPreTrainedModel",
             "BloomForSequenceClassification",

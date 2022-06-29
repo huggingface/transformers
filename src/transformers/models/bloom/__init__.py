@@ -44,6 +44,7 @@ else:
     _import_structure["modeling_bloom"] = [
         "BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST",
         "BloomForCausalLM",
+        "BloomForPrefixLM",
         "BloomModel",
         "BloomPreTrainedModel",
         "BloomForSequenceClassification",
@@ -70,6 +71,7 @@ if TYPE_CHECKING:
         from .modeling_bloom import (
             BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST,
             BloomForCausalLM,
+            BloomForPrefixLM,
             BloomForSequenceClassification,
             BloomForTokenClassification,
             BloomModel,
