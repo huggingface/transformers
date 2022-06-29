@@ -114,15 +114,6 @@ If you want to directly load such a sharded checkpoint inside a model without us
 
 ## Low memory loading
 
-Sharded checkpoints reduce the memory usage during step 2 of the worflow mentioned above, but when loadin a pretrained model, why keep the random weights in memory? The option `low_cpu_mem_usage` will destroy the weights of the randomly initialized model, then progressively load the weights inside, then perform a random initialization for potential missing weights (if you are loadding a model with a newly initialized head for a fine-tuning task for instance).
+Sharded checkpoints reduce the memory usage during step 2 of the workflow mentioned above, but in order to use that model in a low memory setting, we recommend leveraging our tools based on the Accelerate library.
 
-It's very easy to use, just add `low_cpu_mem_usage=True` to your call to [`~PreTrainedModel.from_pretrained`]:
-
-```py
-from transformers import AutoModelForSequenceClas
-
-model = AutoModel.from_pretrained("bert-base-cased", low_cpu_mem_usage=True)
-```
-
-This can be used in conjunction with a sharded checkpoint.
-
+Please read the following guide for more information: [Large model loading using Accelerate](./main_classes/model#large-model-loading)
