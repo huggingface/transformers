@@ -434,7 +434,7 @@ class Message:
             content["accessory"] = {
                 "type": "button",
                 "text": {"type": "plain_text", "text": "GitHub Action job", "emoji": True},
-                "url": job_result["job_link"],
+                "url": job_result["job_link"][device],
             }
 
         return [
@@ -678,6 +678,7 @@ if __name__ == "__main__":
             "success": 0,
             "time_spent": "",
             "failures": {},
+            "job_link": {},
         }
         for model in models
         if f"run_all_tests_gpu_{model}_test_reports" in available_artifacts
@@ -690,7 +691,7 @@ if __name__ == "__main__":
             artifact = retrieve_artifact(artifact_path["name"], artifact_path["gpu"])
             if "stats" in artifact:
                 # Link to the GitHub Action job
-                model_results[model]["job_link"] = github_actions_job_links.get(
+                model_results[model]["job_link"][artifact_path["gpu"]] = github_actions_job_links.get(
                     # The job names use `matrix.folder` which contain things like `models/bert` instead of `models_bert`
                     f"Model tests ({model.replace('models_', 'models/')}, {artifact_path['gpu']}-gpu)"
                 )
@@ -762,7 +763,7 @@ if __name__ == "__main__":
             "time_spent": "",
             "error": False,
             "failures": {},
-            "job_link": github_actions_job_links.get(key),
+            "job_link": {},
         }
         for key in additional_files.keys()
     }
@@ -776,9 +777,12 @@ if __name__ == "__main__":
 
         for artifact_path in available_artifacts[additional_files[key]].paths:
             if artifact_path["gpu"] is not None:
-                additional_results[key]["job_link"] = github_actions_job_links.get(
+                additional_results[key]["job_link"][artifact_path["gpu"]] = github_actions_job_links.get(
                     f"{key} ({artifact_path['gpu']}-gpu)"
                 )
+            else:
+                additional_results[key]["job_link"][artifact_path["gpu"]] = github_actions_job_links.get(key)
+
             artifact = retrieve_artifact(artifact_path["name"], artifact_path["gpu"])
             stacktraces = handle_stacktraces(artifact["failures_line"])
 
