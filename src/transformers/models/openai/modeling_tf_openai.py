@@ -556,6 +556,8 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel, TFCausalLanguageModelin
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFOpenAIGPTMainLayer(config, name="transformer")
+        # OpenAIGPT does not have past caching features
+        self.supports_xla_generation = False
 
     def get_output_embeddings(self):
         return self.get_input_embeddings()
