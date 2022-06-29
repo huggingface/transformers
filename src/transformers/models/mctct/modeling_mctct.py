@@ -27,12 +27,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...deepspeed import is_deepspeed_zero3_enabled
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
-from ...modeling_outputs import (
-    BaseModelOutput, 
-    CausalLMOutput, 
-    TokenClassifierOutput,
-    SequenceClassifierOutput
-)
+from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput, TokenClassifierOutput
 from ...modeling_utils import (
     PreTrainedModel,
     apply_chunking_to_forward,
@@ -839,11 +834,10 @@ class MCTCTForCTC(MCTCTPreTrainedModel):
         )
 
 
-
 @add_start_docstrings(
     """
-    MCTCT Model with a frame classification head on top (a linear layer over the pooled output) for tasks like
-    Language Identification (LID). It outputs the language prediction for each audio frame.
+    MCTCT Model with a frame classification head on top (a linear layer over the pooled output) for tasks like Language
+    Identification (LID). It outputs the language prediction for each audio frame.
     """,
     MCTCT_START_DOCSTRING,
 )
@@ -885,7 +879,7 @@ class MCTCTForAudioFrameClassification(MCTCTPreTrainedModel):
         for param in self.mctct.parameters():
             param.requires_grad = False
 
-    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(MCTCT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_FRAME_CLASS_CHECKPOINT,
@@ -939,10 +933,6 @@ class MCTCTForAudioFrameClassification(MCTCTPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-
-
-
 
 
 @add_start_docstrings(
@@ -1029,21 +1019,21 @@ class MCTCTForSequenceClassification(MCTCTPreTrainedModel):
         hidden_states = outputs[0]
 
         logits = self.classifier(hidden_states)
+        pooled_logits = logits.mean(dim=1)
+        pooled_logits = nn.functional.log_softmax(pooled_logits, dim=1)
 
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
+            loss = loss_fct(pooled_logits.view(-1, self.config.num_labels), labels.view(-1))
 
         if not return_dict:
-            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
+            output = (pooled_logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
             loss=loss,
-            logits=logits,
+            logits=pooled_logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-

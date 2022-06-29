@@ -43,6 +43,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_mctct"] = [
         "MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "MCTCTForAudioFrameClassification",
         "MCTCTForSequenceClassification",
         "MCTCTForCTC",
         "MCTCTModel",
@@ -70,6 +71,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_mctct import (
             MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MCTCTForAudioFrameClassification,
             MCTCTForCTC,
             MCTCTForSequenceClassification,
             MCTCTModel,

@@ -1326,6 +1326,7 @@ else:
     _import_structure["models.mctct"].extend(
         [
             "MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MCTCTForAudioFrameClassification",
             "MCTCTForSequenceClassification",
             "MCTCTForCTC",
             "MCTCTModel",
@@ -3762,6 +3763,7 @@ if TYPE_CHECKING:
         )
         from .models.mctct import (
             MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MCTCTForAudioFrameClassification,
             MCTCTForCTC,
             MCTCTForSequenceClassification,
             MCTCTModel,

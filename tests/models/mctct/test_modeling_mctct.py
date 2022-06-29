@@ -15,6 +15,7 @@
 """ Testing suite for the PyTorch MCTCT model. """
 
 import inspect
+import json
 import math
 import unittest
 
@@ -30,7 +31,13 @@ from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_
 if is_torch_available():
     import torch
 
-    from transformers import MCTCTForCTC, MCTCTModel, MCTCTProcessor
+    from transformers import (
+        MCTCTForAudioFrameClassification,
+        MCTCTForCTC,
+        MCTCTForSequenceClassification,
+        MCTCTModel,
+        MCTCTProcessor,
+    )
 
 
 class MCTCTModelTester:
@@ -214,6 +221,31 @@ class MCTCTModelTester:
         self.parent.assertTrue(isinstance(sum_loss, float))
         self.parent.assertTrue(isinstance(mean_loss, float))
 
+    def check_seq_classifier_loss(self, config, input_values, *args):
+        model = MCTCTForSequenceClassification(config=config)
+        model.to(torch_device)
+
+        # make sure that dropout is disabled
+        model.eval()
+
+        input_values = input_values[:3]
+        attention_mask = torch.ones(input_values.shape, device=torch_device, dtype=torch.long)
+
+        input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
+        labels = ids_tensor((input_values.shape[0], 1), len(model.config.id2label))
+
+        # pad input
+        for i in range(len(input_lengths)):
+            input_values[i, input_lengths[i] :] = 0.0
+            attention_mask[i, input_lengths[i] :] = 0
+
+        masked_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss.item()
+        unmasked_loss = model(input_values, labels=labels).loss.item()
+
+        self.parent.assertTrue(isinstance(masked_loss, float))
+        self.parent.assertTrue(isinstance(unmasked_loss, float))
+        self.parent.assertTrue(masked_loss != unmasked_loss)
+
     def check_ctc_training(self, config, input_features, *args):
         config.ctc_zero_infinity = True
         model = MCTCTForCTC(config=config)
@@ -240,6 +272,29 @@ class MCTCTModelTester:
 
         loss.backward()
 
+    def check_seq_classifier_training(self, config, input_values, *args):
+        config.ctc_zero_infinity = True
+        model = MCTCTForSequenceClassification(config=config)
+        model.to(torch_device)
+        model.train()
+
+        # freeze everything but the classification head
+        model.freeze_base_model()
+
+        input_values = input_values[:3]
+
+        input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
+        labels = ids_tensor((input_values.shape[0], 1), len(model.config.id2label))
+
+        # pad input
+        for i in range(len(input_lengths)):
+            input_values[i, input_lengths[i] :] = 0.0
+
+        loss = model(input_values, labels=labels).loss
+        self.parent.assertFalse(torch.isinf(loss).item())
+
+        loss.backward()
+
     def check_labels_out_of_vocab(self, config, input_features, *args):
         model = MCTCTForCTC(config)
         model.to(torch_device)
@@ -262,7 +317,7 @@ class MCTCTModelTester:
 
 @require_torch
 class MCTCTModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (MCTCTForCTC, MCTCTModel) if is_torch_available() else ()
+    all_model_classes = (MCTCTForCTC, MCTCTModel, MCTCTForSequenceClassification) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
@@ -417,7 +472,11 @@ class MCTCTModelTest(ModelTesterMixin, unittest.TestCase):
 
 @require_torch
 class MCTCTRobustModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (MCTCTForCTC, MCTCTModel) if is_torch_available() else ()
+    all_model_classes = (
+        (MCTCTForCTC, MCTCTModel, MCTCTForSequenceClassification, MCTCTForAudioFrameClassification)
+        if is_torch_available()
+        else ()
+    )
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
@@ -645,3 +704,370 @@ class MCTCTModelIntegrationTest(unittest.TestCase):
             "his instant panic was followed by a small sharp blow high on his chestr.",
         ]
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
+
+    def test_inference_language_identification_sequence(self):
+        model = MCTCTForSequenceClassification.from_pretrained("cwkeam/m-ctc-t-large-sequence-lid").to(torch_device)
+        processor = MCTCTProcessor.from_pretrained("cwkeam/m-ctc-t-large-sequence-lid")
+
+        input_speech = self._load_datasamples(4)
+
+        inputs = processor(input_speech, return_tensors="pt", padding=True, return_attention_mask=True)
+
+        input_features = inputs.input_features.to(torch_device)
+        attention_mask = inputs.attention_mask.to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(input_features, attention_mask=attention_mask)
+        predicted_logits, predicted_ids = torch.max(outputs.logits, dim=-1)
+
+        expected_labels = [12, 12, 12, 12]
+        expected_logits = torch.tensor([-6.3363e-04, -1.1384e-04, -1.8120e-05, -4.5656e-05], device=torch_device)
+
+        self.assertListEqual(predicted_ids.tolist(), expected_labels)
+        self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=1e-2))
+
+    def test_inference_language_identification_frame(self):
+        model = MCTCTForAudioFrameClassification.from_pretrained("cwkeam/m-ctc-t-large-frame-lid").to(torch_device)
+        processor = MCTCTProcessor.from_pretrained("cwkeam/m-ctc-t-large-frame-lid")
+        input_speech = self._load_datasamples(1)
+
+        inputs = processor(input_speech, return_tensors="pt", padding=True, return_attention_mask=True)
+
+        input_features = inputs.input_features.to(torch_device)
+        attention_mask = inputs.attention_mask.to(torch_device)
+        with torch.no_grad():
+            outputs = model(input_features, attention_mask=attention_mask)
+        # labels is a one-hot array of shape (num_frames, num_speakers)
+        predicted_logits, predicted_ids = torch.max(outputs.logits, dim=-1)
+
+        print("predicted_logits", predicted_logits.shape, predicted_logits)
+        print("predicted_ids", predicted_ids.shape, predicted_ids)
+
+        dd = {"predicted_logits": predicted_logits.tolist(), "predicted_ids": predicted_ids.tolist()}
+        json.dump(dd, open("out.json", "w"))
+
+        expected_labels = [
+            [
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+                12,
+            ]
+        ]
+
+        expected_logits = torch.tensor(
+            [
+                [
+                    7.9360,
+                    15.8037,
+                    16.0126,
+                    20.3511,
+                    18.0490,
+                    9.9210,
+                    10.6310,
+                    12.4788,
+                    12.7958,
+                    12.8745,
+                    10.6439,
+                    13.2847,
+                    13.0339,
+                    13.2283,
+                    14.0484,
+                    14.9399,
+                    15.7532,
+                    13.3280,
+                    12.2956,
+                    9.4065,
+                    11.2357,
+                    12.5112,
+                    12.3560,
+                    14.4157,
+                    15.2506,
+                    14.6573,
+                    14.3423,
+                    14.4024,
+                    14.2402,
+                    13.9902,
+                    15.5082,
+                    15.5778,
+                    15.1825,
+                    12.1422,
+                    13.8429,
+                    11.8761,
+                    11.9978,
+                    12.9925,
+                    16.2976,
+                    19.9270,
+                    19.8755,
+                    21.7474,
+                    18.3556,
+                    19.5489,
+                    19.8939,
+                    22.2198,
+                    17.7486,
+                    15.1393,
+                    13.0432,
+                    13.1702,
+                    14.7238,
+                    13.4017,
+                    13.3733,
+                    11.3629,
+                    12.5704,
+                    12.3977,
+                    12.1543,
+                    12.0771,
+                    10.9381,
+                    10.7305,
+                    11.4283,
+                    11.2800,
+                    11.7423,
+                    14.5899,
+                    16.3371,
+                    14.2758,
+                    12.8891,
+                    13.0260,
+                    14.2817,
+                    16.0576,
+                    17.4712,
+                    18.2411,
+                    18.4239,
+                    18.1439,
+                    17.9034,
+                    17.8699,
+                    17.9258,
+                    17.8444,
+                    16.9439,
+                    13.3500,
+                    11.9772,
+                    11.0363,
+                    12.1412,
+                    12.5304,
+                    12.8417,
+                    13.5550,
+                    14.2507,
+                    14.5797,
+                    14.6733,
+                    12.6404,
+                    15.9241,
+                    14.4345,
+                    13.9107,
+                    11.0028,
+                    10.5374,
+                    10.3953,
+                    11.2629,
+                    12.7741,
+                    15.9424,
+                    16.5134,
+                    16.9130,
+                    17.5562,
+                    17.7774,
+                    16.7273,
+                    14.3234,
+                    12.6110,
+                    14.6707,
+                    14.7164,
+                    15.4562,
+                    16.2521,
+                    16.9523,
+                    16.1032,
+                    17.5658,
+                    17.4538,
+                    17.1755,
+                    15.4870,
+                    13.5441,
+                    15.1389,
+                    16.4010,
+                    14.4348,
+                    12.2258,
+                    13.6891,
+                    14.2447,
+                    15.3609,
+                    12.2236,
+                    15.3371,
+                    14.0066,
+                    10.9680,
+                    12.0724,
+                    12.0757,
+                    16.6806,
+                    17.9701,
+                    14.2914,
+                    17.1361,
+                    17.2913,
+                    18.0000,
+                    18.8089,
+                    19.1631,
+                    18.8615,
+                    18.8267,
+                    18.9081,
+                    18.8704,
+                    18.9477,
+                    19.1295,
+                    19.0375,
+                    15.5902,
+                    15.4022,
+                    15.4496,
+                    15.4633,
+                    15.6904,
+                    20.2605,
+                    20.2311,
+                    14.6112,
+                    9.4459,
+                    9.5174,
+                ]
+            ],
+            device=torch_device,
+        )
+
+        self.assertListEqual(predicted_ids.tolist(), expected_labels)
+        self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=1e-2))
