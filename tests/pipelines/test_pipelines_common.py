@@ -769,6 +769,18 @@ class CustomPipeline(Pipeline):
 
 @is_pipeline_test
 class PipelineRegistryTest(unittest.TestCase):
+    def test_warning_logs(self):
+        from transformers.testing_utils import CaptureLogger
+        from transformers.utils import logging as transformers_logging
+
+        transformers_logging.set_verbosity_debug()
+        logger_ = transformers_logging.get_logger("transformers.pipelines.base")
+
+        alias = "text-classification"
+        with CaptureLogger(logger_) as cm:
+            PIPELINE_REGISTRY.register_pipeline(alias, {})
+        self.assertIn(f"{alias} is already registered", cm.out)
+
     @require_torch
     def test_register_pipeline(self):
         from transformers import AutoModelForSequenceClassification
