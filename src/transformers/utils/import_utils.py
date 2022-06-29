@@ -407,9 +407,6 @@ def is_torch_tpu_available(check_device=True):
                 import torch_xla.core.xla_model as xm
 
                 _ = xm.xla_device()
-                import pdb
-
-                pdb.set_trace()
                 return True
             except RuntimeError:
                 return False
