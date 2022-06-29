@@ -173,7 +173,6 @@ class OwlViTVisionEmbeddings(nn.Module):
 
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-
         embeddings = embeddings + self.position_embedding
         return embeddings
 
@@ -782,6 +781,7 @@ class OwlViTVisionTransformer(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        train: Optional[bool] = False,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
         Returns:
@@ -798,7 +798,6 @@ class OwlViTVisionTransformer(nn.Module):
 
         hidden_states = self.embeddings(pixel_values)
         hidden_states = self.pre_layrnorm(hidden_states)
-
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
             output_attentions=output_attentions,
@@ -808,7 +807,11 @@ class OwlViTVisionTransformer(nn.Module):
 
         last_hidden_state = encoder_outputs[0]
         pooled_output = last_hidden_state[:, 0, :]
-        pooled_output = self.post_layernorm(pooled_output)
+
+        if train:
+            pooled_output = self.post_layernorm(pooled_output)
+        else:
+            pooled_output = self.post_layernorm(last_hidden_state)
 
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
@@ -960,8 +963,8 @@ class OwlViTModel(OwlViTPreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        project: Optional[bool] = True,
         return_dict: Optional[bool] = None,
+        train: Optional[bool] = True,
     ) -> torch.FloatTensor:
         r"""
         Returns:
@@ -1002,10 +1005,10 @@ class OwlViTModel(OwlViTPreTrainedModel):
         pooled_output = vision_outputs[1]  # pooled_output
 
         # Return projected output if in training mode
-        if project:
+        if train:
             image_features = self.visual_projection(pooled_output)
         else:
-            image_features = vision_outputs[0]
+            image_features = pooled_output
         return image_features
 
     @add_start_docstrings_to_model_forward(OWLVIT_INPUTS_DOCSTRING)
@@ -1182,7 +1185,7 @@ class OwlViTImageTextEmbedder(nn.Module):
 
         # Encode image 
         if pixel_values is not None:
-            image_embeds = self.clip.get_image_features(pixel_values, project=False)
+            image_embeds = self.clip.get_image_features(pixel_values, train=False)
 
             # Resize class token
             new_size = tuple(np.array(image_embeds.shape) - np.array((0, 1, 0)))
