@@ -64,6 +64,7 @@ from transformers.testing_utils import (
     require_torch_tf32,
     require_torch_up_to_2_gpus,
     require_torchdynamo,
+    require_torch_tensorrt_fx,
     require_wandb,
     slow,
 )
@@ -1720,6 +1721,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     @require_torch_non_multi_gpu
     @require_torchdynamo
+    @require_torch_tensorrt_fx
     def test_torchdynamo_full_eval(self):
         # torchdynamo at the moment doesn't support DP/DDP, therefore require a single gpu
         n_gpus = get_gpu_count()
@@ -1765,6 +1767,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     @require_torch_non_multi_gpu
     @require_torchdynamo
+    @require_torch_tensorrt_fx
     def test_torchdynamo_memory(self):
         # torchdynamo at the moment doesn't support DP/DDP, therefore require a single gpu
         class CustomTrainer(Trainer):
