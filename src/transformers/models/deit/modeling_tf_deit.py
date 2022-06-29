@@ -764,7 +764,9 @@ class TFDeiTForMaskedImageModeling(TFDeiTPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> feature_extractor = DeiTFeatureExtractor.from_pretrained("facebook/deit-base-distilled-patch16-224")
-        >>> model = TFDeiTForMaskedImageModeling.from_pretrained("facebook/deit-base-distilled-patch16-224", from_pt=True)
+        >>> model = TFDeiTForMaskedImageModeling.from_pretrained(
+        ...     "facebook/deit-base-distilled-patch16-224", from_pt=True
+        ... )
 
         >>> num_patches = (model.config.image_size // model.config.patch_size) ** 2
         >>> pixel_values = feature_extractor(images=image, return_tensors="tf").pixel_values
@@ -901,7 +903,9 @@ class TFDeiTForImageClassification(TFDeiTPreTrainedModel, TFSequenceClassificati
         >>> # note: we are loading a TFDeiTForImageClassificationWithTeacher from the hub here,
         >>> # so the head will be randomly initialized, hence the predictions will be random
         >>> feature_extractor = DeiTFeatureExtractor.from_pretrained("facebook/deit-base-distilled-patch16-224")
-        >>> model = TFDeiTForImageClassification.from_pretrained("facebook/deit-base-distilled-patch16-224", from_pt=True)
+        >>> model = TFDeiTForImageClassification.from_pretrained(
+        ...     "facebook/deit-base-distilled-patch16-224", from_pt=True
+        ... )
 
         >>> inputs = feature_extractor(images=image, return_tensors="tf")
         >>> outputs = model(**inputs)
