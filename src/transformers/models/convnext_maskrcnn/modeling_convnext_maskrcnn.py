@@ -1433,8 +1433,6 @@ class RoIAlign(nn.Module):
             rois: Bx5 boxes. First column is the index into N.\
                 The other 4 columns are xyxy.
         """
-        print("Input dtype:", input.dtype)
-        print("Rois dtype:", rois.dtype)
         return torchvision.ops.roi_align(
             input, rois, self.output_size, self.spatial_scale, self.sampling_ratio, self.aligned
         )
@@ -1679,10 +1677,12 @@ class ConvNextMaskRCNNFCNMaskHead(nn.Module):
 
         # TODO make init attributes configurable
         self.convs = nn.ModuleList()
+        self.activations = nn.ModuleList()
         for i in range(num_convs):
             in_channels = in_channels if i == 0 else conv_out_channels
             padding = (conv_kernel_size - 1) // 2
             self.convs.append(nn.Conv2d(in_channels, conv_out_channels, conv_kernel_size, padding=padding))
+            self.activations.append(nn.ReLU(inplace=True))
         self.upsample = nn.ConvTranspose2d(
             in_channels=conv_out_channels,
             out_channels=conv_out_channels,
@@ -1693,8 +1693,12 @@ class ConvNextMaskRCNNFCNMaskHead(nn.Module):
         self.conv_logits = nn.Conv2d(conv_out_channels, self.num_classes, 1)
 
     def forward(self, x):
-        for conv in self.convs:
+        print("Hidden states before convs:", x[0, 0, :3, :3])
+        for conv, activation in zip(self.convs, self.activations):
             x = conv(x)
+            x = activation(x)
+
+        print("Hidden states after convs:", x[0, 0, :3, :3])
         x = self.upsample(x)
         x = self.relu(x)
         mask_pred = self.conv_logits(x)
@@ -1823,7 +1827,6 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         )
         self.bbox_head = ConvNextMaskRNNShared2FCBBoxHead(config)
 
-        # TODO: verify mask roi extractor + mask head
         self.mask_roi_extractor = ConvNextMaskRCNNSingleRoIExtractor(
             roi_layer=config.mask_roi_extractor_roi_layer,
             out_channels=config.mask_roi_extractor_out_channels,
@@ -1930,7 +1933,12 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
             assert bbox_feats is not None
             mask_feats = bbox_feats[pos_inds]
 
+        print("Mask_feats:", mask_feats[0, 0, :3, :3])
+
         mask_pred = self.mask_head(mask_feats)
+
+        print("Mask pred:", mask_pred[0, 0, :3, :3])
+
         mask_results = dict(mask_pred=mask_pred, mask_feats=mask_feats)
         return mask_results
 
@@ -2010,9 +2018,6 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         det_bboxes, det_labels = self.simple_test_bboxes(
             hidden_states, img_metas, proposal_list, self.test_cfg, rescale=rescale
         )
-
-        print("Det_bboxes:", det_bboxes)
-        print("Det_labels:", det_labels)
 
         bbox_results = [
             bbox2result(det_bboxes[i], det_labels[i], self.bbox_head.num_classes) for i in range(len(det_bboxes))

@@ -18,6 +18,7 @@ URL: https://github.com/open-mmlab/mmdetection"""
 
 
 import argparse
+import json
 from pathlib import Path
 
 import torch
@@ -25,6 +26,7 @@ import torchvision.transforms as T
 from PIL import Image
 
 import requests
+from huggingface_hub import hf_hub_download
 from transformers import ConvNextMaskRCNNConfig, ConvNextMaskRCNNForObjectDetection
 from transformers.utils import logging
 
@@ -37,13 +39,12 @@ def get_convnext_maskrcnn_config():
     config = ConvNextMaskRCNNConfig()
 
     config.num_labels = 80
-    # TODO: set id2label mappings
-    # repo_id = "datasets/huggingface/label-files"
-    # filename = "coco-detection-id2label.json"
-    # id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
-    # id2label = {int(k): v for k, v in id2label.items()}
-    # config.id2label = id2label
-    # config.label2id = {v: k for k, v in id2label.items()}
+    repo_id = "datasets/huggingface/label-files"
+    filename = "coco-detection-mmdet-id2label.json"
+    id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
+    id2label = {int(k): v for k, v in id2label.items()}
+    config.id2label = id2label
+    config.label2id = {v: k for k, v in id2label.items()}
 
     return config
 
@@ -131,7 +132,6 @@ def convert_convnext_maskrcnn_checkpoint(checkpoint_path, pytorch_dump_folder_pa
     pixel_values = transform(image).unsqueeze(0)
 
     outputs = model(pixel_values, output_hidden_states=True)
-    print("Results:", outputs.results)
 
     # for i in outputs.hidden_states[1:]:
     #     print(i.shape)
