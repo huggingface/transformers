@@ -396,13 +396,14 @@ def is_ftfy_available():
     return _ftfy_available
 
 
-def is_torch_tpu_available(check_device=False):
+def is_torch_tpu_available(check_device=True):
     "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
     if not _torch_available:
         return False
     if importlib.util.find_spec("torch_xla") is not None:
         if check_device:
             # We need to check if `xla_device` can be found, will raise a RuntimeError if not
+            import pdb; pdb.set_trace()
             try:
                 import torch_xla.core.xla_model as xm
 
