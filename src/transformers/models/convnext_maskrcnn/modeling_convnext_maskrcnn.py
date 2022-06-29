@@ -1278,16 +1278,14 @@ class ConvNextMaskRCNNBboxOverlaps2D:
             bboxes1 (Tensor): bboxes have shape (m, 4) in <x1, y1, x2, y2>
                 format, or shape (m, 5) in <x1, y1, x2, y2, score> format.
             bboxes2 (Tensor): bboxes have shape (m, 4) in <x1, y1, x2, y2>
-                format, shape (m, 5) in <x1, y1, x2, y2, score> format, or be
-                empty. If ``is_aligned `` is ``True``, then m and n must be
-                equal.
+                format, shape (m, 5) in <x1, y1, x2, y2, score> format, or be empty. If `is_aligned ` is `True`, then m
+                and n must be equal.
             mode (str): "iou" (intersection over union), "iof" (intersection
-                over foreground), or "giou" (generalized intersection over
-                union).
+                over foreground), or "giou" (generalized intersection over union).
             is_aligned (bool, optional): If True, then m and n must be equal.
                 Default False.
         Returns:
-            Tensor: shape (m, n) if ``is_aligned `` is False else shape (m,)
+            Tensor: shape (m, n) if `is_aligned ` is False else shape (m,)
         """
         assert bboxes1.size(-1) in [0, 4, 5]
         assert bboxes2.size(-1) in [0, 4, 5]
@@ -1316,98 +1314,58 @@ class ConvNextMaskRCNNBboxOverlaps2D:
 
 def bbox_overlaps(bboxes1, bboxes2, mode="iou", is_aligned=False, eps=1e-6):
     """Calculate overlap between two set of bboxes.
-    FP16 Contributed by https://github.com/open-mmlab/mmdetection/pull/4889
-    Note:
-        Assume bboxes1 is M x 4, bboxes2 is N x 4, when mode is 'iou',
-        there are some new generated variable when calculating IOU
-        using bbox_overlaps function:
-        1) is_aligned is False
-            area1: M x 1
-            area2: N x 1
-            lt: M x N x 2
-            rb: M x N x 2
-            wh: M x N x 2
-            overlap: M x N x 1
-            union: M x N x 1
-            ious: M x N x 1
-            Total memory:
+    FP16 Contributed by https://github.com/open-mmlab/mmdetection/pull/4889 Note:
+        Assume bboxes1 is M x 4, bboxes2 is N x 4, when mode is 'iou', there are some new generated variable when
+        calculating IOU using bbox_overlaps function: 1) is_aligned is False
+            area1: M x 1 area2: N x 1 lt: M x N x 2 rb: M x N x 2 wh: M x N x 2 overlap: M x N x 1 union: M x N x 1
+            ious: M x N x 1 Total memory:
                 S = (9 x N x M + N + M) * 4 Byte,
             When using FP16, we can reduce:
-                R = (9 x N x M + N + M) * 4 / 2 Byte
-                R large than (N + M) * 4 * 2 is always true when N and M >= 1.
+                R = (9 x N x M + N + M) * 4 / 2 Byte R large than (N + M) * 4 * 2 is always true when N and M >= 1.
                 Obviously, N + M <= N * M < 3 * N * M, when N >=2 and M >=2,
                            N + 1 < 3 * N, when N or M is 1.
-            Given M = 40 (ground truth), N = 400000 (three anchor boxes
-            in per grid, FPN, R-CNNs),
+            Given M = 40 (ground truth), N = 400000 (three anchor boxes in per grid, FPN, R-CNNs),
                 R = 275 MB (one times)
             A special case (dense detection), M = 512 (ground truth),
                 R = 3516 MB = 3.43 GB
             When the batch size is B, reduce:
                 B x R
-            Therefore, CUDA memory runs out frequently.
-            Experiments on GeForce RTX 2080Ti (11019 MiB):
-            |   dtype   |   M   |   N   |   Use    |   Real   |   Ideal   |
-            |:----:|:----:|:----:|:----:|:----:|:----:|
-            |   FP32   |   512 | 400000 | 8020 MiB |   --   |   --   |
-            |   FP16   |   512 | 400000 |   4504 MiB | 3516 MiB | 3516 MiB |
-            |   FP32   |   40 | 400000 |   1540 MiB |   --   |   --   |
-            |   FP16   |   40 | 400000 |   1264 MiB |   276MiB   | 275 MiB |
+            Therefore, CUDA memory runs out frequently. Experiments on GeForce RTX 2080Ti (11019 MiB): | dtype | M | N
+            | Use | Real | Ideal | |:----:|:----:|:----:|:----:|:----:|:----:| | FP32 | 512 | 400000 | 8020 MiB | -- |
+            -- | | FP16 | 512 | 400000 | 4504 MiB | 3516 MiB | 3516 MiB | | FP32 | 40 | 400000 | 1540 MiB | -- | -- | |
+            FP16 | 40 | 400000 | 1264 MiB | 276MiB | 275 MiB |
         2) is_aligned is True
-            area1: N x 1
-            area2: N x 1
-            lt: N x 2
-            rb: N x 2
-            wh: N x 2
-            overlap: N x 1
-            union: N x 1
-            ious: N x 1
-            Total memory:
+            area1: N x 1 area2: N x 1 lt: N x 2 rb: N x 2 wh: N x 2 overlap: N x 1 union: N x 1 ious: N x 1 Total
+            memory:
                 S = 11 x N * 4 Byte
             When using FP16, we can reduce:
                 R = 11 x N * 4 / 2 Byte
-        So do the 'giou' (large than 'iou').
-        Time-wise, FP16 is generally faster than FP32.
-        When gpu_assign_thr is not -1, it takes more time on cpu
-        but not reduce memory.
-        There, we can reduce half the memory and keep the speed.
-    If ``is_aligned`` is ``False``, then calculate the overlaps between each
-    bbox of bboxes1 and bboxes2, otherwise the overlaps between each aligned
-    pair of bboxes1 and bboxes2.
+        So do the 'giou' (large than 'iou'). Time-wise, FP16 is generally faster than FP32. When gpu_assign_thr is not
+        -1, it takes more time on cpu but not reduce memory. There, we can reduce half the memory and keep the speed.
     Args:
-        bboxes1 (Tensor): shape (B, m, 4) in <x1, y1, x2, y2> format or empty.
-        bboxes2 (Tensor): shape (B, n, 4) in <x1, y1, x2, y2> format or empty.
-            B indicates the batch dim, in shape (B1, B2, ..., Bn).
-            If ``is_aligned`` is ``True``, then m and n must be equal.
+    If `is_aligned` is `False`, then calculate the overlaps between each bbox of bboxes1 and bboxes2, otherwise the:
+    overlaps between each aligned pair of bboxes1 and bboxes2.
+        bboxes1 (Tensor): shape (B, m, 4) in <x1, y1, x2, y2> format or empty. bboxes2 (Tensor): shape (B, n, 4) in
+        <x1, y1, x2, y2> format or empty.
+            B indicates the batch dim, in shape (B1, B2, ..., Bn). If `is_aligned` is `True`, then m and n must be
+            equal.
         mode (str): "iou" (intersection over union), "iof" (intersection over
-            foreground) or "giou" (generalized intersection over union).
-            Default "iou".
+            foreground) or "giou" (generalized intersection over union). Default "iou".
         is_aligned (bool, optional): If True, then m and n must be equal.
             Default False.
         eps (float, optional): A value added to the denominator for numerical
             stability. Default 1e-6.
     Returns:
-        Tensor: shape (m, n) if ``is_aligned`` is False else shape (m,)
+        Tensor: shape (m, n) if `is_aligned` is False else shape (m,)
     Example:
-        >>> bboxes1 = torch.FloatTensor([
-        >>>     [0, 0, 10, 10],
-        >>>     [10, 10, 20, 20],
-        >>>     [32, 32, 38, 42],
-        >>> ])
-        >>> bboxes2 = torch.FloatTensor([
-        >>>     [0, 0, 10, 20],
-        >>>     [0, 10, 10, 19],
-        >>>     [10, 10, 20, 20],
-        >>> ])
-        >>> overlaps = bbox_overlaps(bboxes1, bboxes2)
-        >>> assert overlaps.shape == (3, 3)
-        >>> overlaps = bbox_overlaps(bboxes1, bboxes2, is_aligned=True)
-        >>> assert overlaps.shape == (3, )
+        >>> bboxes1 = torch.FloatTensor([ >>> [0, 0, 10, 10], >>> [10, 10, 20, 20], >>> [32, 32, 38, 42], >>> ]) >>>
+        bboxes2 = torch.FloatTensor([ >>> [0, 0, 10, 20], >>> [0, 10, 10, 19], >>> [10, 10, 20, 20], >>> ]) >>>
+        overlaps = bbox_overlaps(bboxes1, bboxes2) >>> assert overlaps.shape == (3, 3) >>> overlaps =
+        bbox_overlaps(bboxes1, bboxes2, is_aligned=True) >>> assert overlaps.shape == (3, )
     Example:
-        >>> empty = torch.empty(0, 4)
-        >>> nonempty = torch.FloatTensor([[0, 0, 10, 9]])
-        >>> assert tuple(bbox_overlaps(empty, nonempty).shape) == (0, 1)
-        >>> assert tuple(bbox_overlaps(nonempty, empty).shape) == (1, 0)
-        >>> assert tuple(bbox_overlaps(empty, empty).shape) == (0, 0)
+        >>> empty = torch.empty(0, 4) >>> nonempty = torch.FloatTensor([[0, 0, 10, 9]]) >>> assert
+        tuple(bbox_overlaps(empty, nonempty).shape) == (0, 1) >>> assert tuple(bbox_overlaps(nonempty, empty).shape) ==
+        (1, 0) >>> assert tuple(bbox_overlaps(empty, empty).shape) == (0, 0)
     """
 
     assert mode in ["iou", "iof", "giou"], f"Unsupported mode {mode}"
@@ -1478,32 +1436,31 @@ def bbox_overlaps(bboxes1, bboxes2, mode="iou", is_aligned=False, eps=1e-6):
 
 class ConvNextMaskRCNNMaxIoUAssigner:
     """Assign a corresponding gt bbox or background to each bbox.
-    Each proposals will be assigned with `-1`, or a semi-positive integer
-    indicating the ground truth index.
+    Each proposals will be assigned with `-1`, or a semi-positive integer indicating the ground truth index.
     - -1: negative sample, no assigned gt
     - semi-positive integer: positive sample, index (0-based) of assigned gt
 
-    Source: https://github.com/open-mmlab/mmdetection/blob/78e3ec8e6adc63763cab4060009e37a5d63c5c7a/mmdet/core/bbox/assigners/max_iou_assigner.py
+    Source:
+    https://github.com/open-mmlab/mmdetection/blob/78e3ec8e6adc63763cab4060009e37a5d63c5c7a/mmdet/core/bbox/assigners/max_iou_assigner.py
 
     Args:
         pos_iou_thr (float): IoU threshold for positive bboxes.
         neg_iou_thr (float or tuple): IoU threshold for negative bboxes.
         min_pos_iou (float): Minimum iou for a bbox to be considered as a
-            positive bbox. Positive samples can have smaller IoU than
-            pos_iou_thr due to the 4th step (assign max IoU sample to each gt).
+            positive bbox. Positive samples can have smaller IoU than pos_iou_thr due to the 4th step (assign max IoU
+            sample to each gt).
         gt_max_assign_all (bool): Whether to assign all bboxes with the same
             highest overlap with some gt to that gt.
         ignore_iof_thr (float): IoF threshold for ignoring bboxes (if
-            `gt_bboxes_ignore` is specified). Negative values mean not
-            ignoring any bboxes.
+            `gt_bboxes_ignore` is specified). Negative values mean not ignoring any bboxes.
         ignore_wrt_candidates (bool): Whether to compute the iof between
             `bboxes` and `gt_bboxes_ignore`, or the contrary.
         match_low_quality (bool): Whether to allow low quality matches. This is
-            usually allowed for RPN and single stage detectors, but not allowed
-            in the second stage. Details are demonstrated in Step 4.
+            usually allowed for RPN and single stage detectors, but not allowed in the second stage. Details are
+            demonstrated in Step 4.
         gpu_assign_thr (int): The upper bound of the number of GT for GPU
-            assign. When the number of gt is above this threshold, will assign
-            on CPU device. Negative values mean not assign on CPU.
+            assign. When the number of gt is above this threshold, will assign on CPU device. Negative values mean not
+            assign on CPU.
     """
 
     def __init__(
@@ -1532,31 +1489,25 @@ class ConvNextMaskRCNNMaxIoUAssigner:
 
     def assign(self, bboxes, gt_bboxes, gt_bboxes_ignore=None, gt_labels=None):
         """Assign gt to bboxes.
-        This method assign a gt bbox to every bbox (proposal/anchor), each bbox
-        will be assigned with -1, or a semi-positive number. -1 means negative
-        sample, semi-positive number is the index (0-based) of assigned gt.
-        The assignment is done in following steps, the order matters.
+        This method assign a gt bbox to every bbox (proposal/anchor), each bbox will be assigned with -1, or a
+        semi-positive number. -1 means negative sample, semi-positive number is the index (0-based) of assigned gt. The
+        assignment is done in following steps, the order matters.
         1. assign every bbox to the background
         2. assign proposals whose iou with all gts < neg_iou_thr to 0
-        3. for each bbox, if the iou with its nearest gt >= pos_iou_thr,
-           assign it to that bbox
-        4. for each gt bbox, assign its nearest proposals (may be more than
-           one) to itself
+        3. for each bbox, if the iou with its nearest gt >= pos_iou_thr, assign it to that bbox
+        4. for each gt bbox, assign its nearest proposals (may be more than one) to itself
         Args:
             bboxes (Tensor): Bounding boxes to be assigned, shape(n, 4).
             gt_bboxes (Tensor): Groundtruth boxes, shape (k, 4).
             gt_bboxes_ignore (Tensor, optional): Ground truth bboxes that are
-                labelled as `ignored`, e.g., crowd boxes in COCO.
+                labelled as *ignored*, e.g., crowd boxes in COCO.
             gt_labels (Tensor, optional): Label of gt_bboxes, shape (k, ).
         Returns:
-            :obj:`AssignResult`: The assign result.
+            `AssignResult`: The assign result.
         Example:
-            >>> self = MaxIoUAssigner(0.5, 0.5)
-            >>> bboxes = torch.Tensor([[0, 0, 10, 10], [10, 10, 20, 20]])
-            >>> gt_bboxes = torch.Tensor([[0, 0, 10, 9]])
-            >>> assign_result = self.assign(bboxes, gt_bboxes)
-            >>> expected_gt_inds = torch.LongTensor([1, 0])
-            >>> assert torch.all(assign_result.gt_inds == expected_gt_inds)
+            >>> self = MaxIoUAssigner(0.5, 0.5) >>> bboxes = torch.Tensor([[0, 0, 10, 10], [10, 10, 20, 20]]) >>>
+            gt_bboxes = torch.Tensor([[0, 0, 10, 9]]) >>> assign_result = self.assign(bboxes, gt_bboxes) >>>
+            expected_gt_inds = torch.LongTensor([1, 0]) >>> assert torch.all(assign_result.gt_inds == expected_gt_inds)
         """
         assign_on_cpu = True if (self.gpu_assign_thr > 0) and (gt_bboxes.shape[0] > self.gpu_assign_thr) else False
         # compute overlap and assign gt on CPU when number of GT is large
@@ -1600,7 +1551,7 @@ class ConvNextMaskRCNNMaxIoUAssigner:
                 shape(k, n).
             gt_labels (Tensor, optional): Labels of k gt_bboxes, shape (k, ).
         Returns:
-            :obj:`AssignResult`: The assign result.
+            `AssignResult`: The assign result.
         """
         num_gts, num_bboxes = overlaps.size(0), overlaps.size(1)
 
@@ -1694,12 +1645,10 @@ class ConvNextMaskRCNNRandomSampler:
 
     def random_choice(self, gallery, num):
         """Random select some elements from the gallery.
-        If `gallery` is a Tensor, the returned indices will be a Tensor;
-        If `gallery` is a ndarray or list, the returned indices will be a
-        ndarray.
         Args:
-            gallery (Tensor | ndarray | list): indices pool.
-            num (int): expected sample num.
+        If `gallery` is a Tensor, the returned indices will be a Tensor; If `gallery` is a ndarray or list, the
+        returned indices will be a ndarray.
+            gallery (Tensor | ndarray | list): indices pool. num (int): expected sample num.
         Returns:
             Tensor or ndarray: sampled indices.
         """
@@ -1743,27 +1692,19 @@ class ConvNextMaskRCNNRandomSampler:
 
     def sample(self, assign_result, bboxes, gt_bboxes, gt_labels=None, **kwargs):
         """Sample positive and negative bboxes.
-        This is a simple implementation of bbox sampling given candidates,
-        assigning results and ground truth bboxes.
         Args:
-            assign_result (:obj:`AssignResult`): Bbox assigning results.
-            bboxes (Tensor): Boxes to be sampled from.
-            gt_bboxes (Tensor): Ground truth bboxes.
-            gt_labels (Tensor, optional): Class labels of ground truth bboxes.
+        This is a simple implementation of bbox sampling given candidates, assigning results and ground truth bboxes.
+            assign_result (`AssignResult`): Bbox assigning results. bboxes (Tensor): Boxes to be sampled from.
+            gt_bboxes (Tensor): Ground truth bboxes. gt_labels (Tensor, optional): Class labels of ground truth bboxes.
         Returns:
-            :obj:`SamplingResult`: Sampling result.
+            `SamplingResult`: Sampling result.
         Example:
-            >>> from mmdet.core.bbox import RandomSampler
-            >>> from mmdet.core.bbox import AssignResult
-            >>> from mmdet.core.bbox.demodata import ensure_rng, random_boxes
-            >>> rng = ensure_rng(None)
-            >>> assign_result = AssignResult.random(rng=rng)
-            >>> bboxes = random_boxes(assign_result.num_preds, rng=rng)
-            >>> gt_bboxes = random_boxes(assign_result.num_gts, rng=rng)
-            >>> gt_labels = None
-            >>> self = RandomSampler(num=32, pos_fraction=0.5, neg_pos_ub=-1,
-            >>>                      add_gt_as_proposals=False)
-            >>> self = self.sample(assign_result, bboxes, gt_bboxes, gt_labels)
+            >>> from mmdet.core.bbox import RandomSampler >>> from mmdet.core.bbox import AssignResult >>> from
+            mmdet.core.bbox.demodata import ensure_rng, random_boxes >>> rng = ensure_rng(None) >>> assign_result =
+            AssignResult.random(rng=rng) >>> bboxes = random_boxes(assign_result.num_preds, rng=rng) >>> gt_bboxes =
+            random_boxes(assign_result.num_gts, rng=rng) >>> gt_labels = None >>> self = RandomSampler(num=32,
+            pos_fraction=0.5, neg_pos_ub=-1, >>> add_gt_as_proposals=False) >>> self = self.sample(assign_result,
+            bboxes, gt_bboxes, gt_labels)
         """
         if len(bboxes.shape) < 2:
             bboxes = bboxes[None, :]
@@ -1876,6 +1817,27 @@ class ConvNextMaskRCNNRPN(nn.Module):
         """
         return multi_apply(self.forward_single, hidden_states)
 
+    def forward_train(self, hidden_states, img_metas, gt_bboxes, gt_labels=None, gt_bboxes_ignore=None):
+        rpn_outs = self(hidden_states)
+
+        if gt_labels is None:
+            loss_inputs = rpn_outs + (gt_bboxes, img_metas)
+        else:
+            loss_inputs = rpn_outs + (gt_bboxes, gt_labels, img_metas)
+
+        losses = self.loss(*loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)
+
+        proposal_list = self.rpn_head.get_bboxes(*rpn_outs, img_metas=img_metas)
+
+        return losses, proposal_list
+
+    def forward_test(self, hidden_states, img_metas):
+        rpn_outs = self(hidden_states)
+
+        proposal_list = self.get_bboxes(*rpn_outs, img_metas=img_metas)
+
+        return proposal_list
+
     def get_anchors(self, featmap_sizes, img_metas, device="cuda"):
         """Get anchors according to feature map sizes.
 
@@ -1886,8 +1848,8 @@ class ConvNextMaskRCNNRPN(nn.Module):
 
         Returns:
             tuple:
-                anchor_list (list[Tensor]): Anchors of each image.
-                valid_flag_list (list[Tensor]): Valid flags of each image.
+                anchor_list (list[Tensor]): Anchors of each image. valid_flag_list (list[Tensor]): Valid flags of each
+                image.
         """
         num_imgs = len(img_metas)
 
@@ -1937,12 +1899,10 @@ class ConvNextMaskRCNNRPN(nn.Module):
 
         Returns:
             tuple:
-                labels_list (list[Tensor]): Labels of each level
-                label_weights_list (list[Tensor]): Label weights of each level
-                bbox_targets_list (list[Tensor]): BBox targets of each level
-                bbox_weights_list (list[Tensor]): BBox weights of each level
-                num_total_pos (int): Number of positive samples in all images
-                num_total_neg (int): Number of negative samples in all images
+                labels_list (list[Tensor]): Labels of each level label_weights_list (list[Tensor]): Label weights of
+                each level bbox_targets_list (list[Tensor]): BBox targets of each level bbox_weights_list
+                (list[Tensor]): BBox weights of each level num_total_pos (int): Number of positive samples in all
+                images num_total_neg (int): Number of negative samples in all images
         """
         inside_flags = anchor_inside_flags(
             flat_anchors, valid_flags, img_meta["img_shape"][:2], self.train_cfg["allowed_border"]
@@ -2008,39 +1968,31 @@ class ConvNextMaskRCNNRPN(nn.Module):
         return_sampling_results=False,
     ):
         """Compute regression and classification targets for anchors in
-        multiple images.
         Args:
+        multiple images.
             anchor_list (list[list[Tensor]]): Multi level anchors of each
-                image. The outer list indicates images, and the inner list
-                corresponds to feature levels of the image. Each element of
-                the inner list is a tensor of shape (num_anchors, 4).
+                image. The outer list indicates images, and the inner list corresponds to feature levels of the image.
+                Each element of the inner list is a tensor of shape (num_anchors, 4).
             valid_flag_list (list[list[Tensor]]): Multi level valid flags of
-                each image. The outer list indicates images, and the inner list
-                corresponds to feature levels of the image. Each element of
-                the inner list is a tensor of shape (num_anchors, )
-            gt_bboxes_list (list[Tensor]): Ground truth bboxes of each image.
-            img_metas (list[dict]): Meta info of each image.
-            gt_bboxes_ignore_list (list[Tensor]): Ground truth bboxes to be
+                each image. The outer list indicates images, and the inner list corresponds to feature levels of the
+                image. Each element of the inner list is a tensor of shape (num_anchors, )
+            gt_bboxes_list (list[Tensor]): Ground truth bboxes of each image. img_metas (list[dict]): Meta info of each
+            image. gt_bboxes_ignore_list (list[Tensor]): Ground truth bboxes to be
                 ignored.
-            gt_labels_list (list[Tensor]): Ground truth labels of each box.
-            label_channels (int): Channel of label.
+            gt_labels_list (list[Tensor]): Ground truth labels of each box. label_channels (int): Channel of label.
             unmap_outputs (bool): Whether to map outputs back to the original
                 set of anchors.
         Returns:
             tuple: Usually returns a tuple containing learning targets.
                 - labels_list (list[Tensor]): Labels of each level.
-                - label_weights_list (list[Tensor]): Label weights of each
-                  level.
+                - label_weights_list (list[Tensor]): Label weights of each level.
                 - bbox_targets_list (list[Tensor]): BBox targets of each level.
                 - bbox_weights_list (list[Tensor]): BBox weights of each level.
-                - num_total_pos (int): Number of positive samples in all
-                  images.
-                - num_total_neg (int): Number of negative samples in all
-                  images.
+                - num_total_pos (int): Number of positive samples in all images.
+                - num_total_neg (int): Number of negative samples in all images.
             additional_returns: This function enables user-defined returns from
-                `self._get_targets_single`. These returns are currently refined
-                to properties at each feature map (i.e. having HxW dimension).
-                The results will be concatenated after the end
+                `self._get_targets_single`. These returns are currently refined to properties at each feature map (i.e.
+                having HxW dimension). The results will be concatenated after the end
         """
         num_imgs = len(img_metas)
         assert len(anchor_list) == len(valid_flag_list) == num_imgs
@@ -2121,8 +2073,7 @@ class ConvNextMaskRCNNRPN(nn.Module):
             bbox_weights (Tensor): BBox regression loss weights of each anchor
                 with shape (N, num_total_anchors, 4).
             num_total_samples (int): If sampling, num total samples equal to
-                the number of total anchors; Otherwise, it is the number of
-                positive anchors.
+                the number of total anchors; Otherwise, it is the number of positive anchors.
 
         Returns:
             dict[str, Tensor]: A dictionary of loss components.
@@ -3190,7 +3141,6 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
         # next, RPN computes a tuple of (class, bounding box) features for each of the 5 feature maps
         # rpn_outs[0] are the class features for each of the feature maps
         # rpn_outs[1] are the bounding box features for each of the feature maps
-        rpn_outs = self.rpn_head(hidden_states)
 
         # TODO: remove img_metas, compute `img_shape`` based on pixel_values
         # and figure out where `scale_factor` and `ori_shape` come from (probably test_pipeline)
@@ -3201,14 +3151,10 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
                 ori_shape=(480, 640, 3),
             )
         ]
-
-        losses = None
         if labels is not None:
-            # TODO verify loss computation
-            loss_inputs = rpn_outs + (labels["gt_bboxes"], labels["gt_labels"], img_metas)
-            losses = self.rpn_head.loss(*loss_inputs, gt_bboxes_ignore=labels["gt_bboxes_ignore"])
-
-        proposal_list = self.rpn_head.get_bboxes(*rpn_outs, img_metas=img_metas)
+            losses, proposal_list = self.rpn_head.forward_train(hidden_states, img_metas)
+        else:
+            proposal_list = self.rpn_head.forward_test(hidden_states, img_metas)
 
         # TODO: remove this check
         expected_slice = torch.tensor(
