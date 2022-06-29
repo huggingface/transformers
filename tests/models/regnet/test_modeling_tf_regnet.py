@@ -248,7 +248,7 @@ class TFRegNetModelTest(TFModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in TF_REGNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFRegNetModel.from_pretrained(model_name, from_pt=True)
+            model = TFRegNetModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
@@ -271,9 +271,7 @@ class RegNetModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head(self):
-        model = TFRegNetForImageClassification.from_pretrained(
-            TF_REGNET_PRETRAINED_MODEL_ARCHIVE_LIST[0], from_pt=True
-        )
+        model = TFRegNetForImageClassification.from_pretrained(TF_REGNET_PRETRAINED_MODEL_ARCHIVE_LIST[0])
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
