@@ -15,7 +15,6 @@
 """ Testing suite for the PyTorch MCTCT model. """
 
 import inspect
-import json
 import math
 import unittest
 
