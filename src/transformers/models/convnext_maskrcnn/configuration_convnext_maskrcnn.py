@@ -130,11 +130,16 @@ class ConvNextMaskRCNNConfig(PretrainedConfig):
         mask_roi_extractor_out_channels=256,
         mask_roi_extractor_featmap_strides=[4, 8, 16, 32],
         # Training configurations
+        rpn_train_cfg=dict(allowed_border=-1, pos_weight=-1, debug=False),
         rpn_assigner_pos_iou_thr=0.7,
         rpn_assigner_neg_iou_thr=0.3,
         rpn_assigner_min_pos_iou=0.3,
         rpn_assigner_match_low_quality=True,
         rpn_assigner_ignore_iof_thr=-1,
+        rpn_sampler_num=256,
+        rpn_sampler_pos_fraction=0.5,
+        rpn_sampler_neg_pos_ub=-1,
+        rpn_sampler_add_gt_as_proposals=False,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -178,11 +183,16 @@ class ConvNextMaskRCNNConfig(PretrainedConfig):
         self.mask_roi_extractor_out_channels = mask_roi_extractor_out_channels
         self.mask_roi_extractor_featmap_strides = mask_roi_extractor_featmap_strides
         # Training configurations
+        self.rpn_train_cfg = rpn_train_cfg
         self.rpn_assigner_pos_iou_thr = rpn_assigner_pos_iou_thr
         self.rpn_assigner_neg_iou_thr = rpn_assigner_neg_iou_thr
         self.rpn_assigner_min_pos_iou = rpn_assigner_min_pos_iou
         self.rpn_assigner_match_low_quality = rpn_assigner_match_low_quality
         self.rpn_assigner_ignore_iof_thr = rpn_assigner_ignore_iof_thr
+        self.rpn_sampler_num = rpn_sampler_num
+        self.rpn_sampler_pos_fraction = rpn_sampler_pos_fraction
+        self.rpn_sampler_neg_pos_ub = rpn_sampler_neg_pos_ub
+        self.rpn_sampler_add_gt_as_proposals = rpn_sampler_add_gt_as_proposals
 
 
 class ConvNextMaskRCNNOnnxConfig(OnnxConfig):
