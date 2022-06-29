@@ -15,9 +15,11 @@ if is_torch_available():
         AutoModel,
         AutoModelForCausalLM,
         AutoModelForImageClassification,
+        AutoModelForImageSegmentation,
         AutoModelForMaskedImageModeling,
         AutoModelForMaskedLM,
         AutoModelForMultipleChoice,
+        AutoModelForObjectDetection,
         AutoModelForQuestionAnswering,
         AutoModelForSeq2SeqLM,
         AutoModelForSequenceClassification,
@@ -83,8 +85,10 @@ class FeaturesManager:
             "sequence-classification": AutoModelForSequenceClassification,
             "token-classification": AutoModelForTokenClassification,
             "multiple-choice": AutoModelForMultipleChoice,
+            "object-detection": AutoModelForObjectDetection,
             "question-answering": AutoModelForQuestionAnswering,
             "image-classification": AutoModelForImageClassification,
+            "image-segmentation": AutoModelForImageSegmentation,
             "masked-im": AutoModelForMaskedImageModeling,
         }
     if is_tf_available():
@@ -184,6 +188,11 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls="models.camembert.CamembertOnnxConfig",
         ),
+        "codegen": supported_features_mapping(
+            "default",
+            "causal-lm",
+            onnx_config_cls="models.codegen.CodeGenOnnxConfig",
+        ),
         "convbert": supported_features_mapping(
             "default",
             "masked-lm",
@@ -207,8 +216,31 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls="models.data2vec.Data2VecTextOnnxConfig",
         ),
+        "deberta": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "sequence-classification",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls="models.deberta.DebertaOnnxConfig",
+        ),
+        "deberta-v2": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "sequence-classification",
+            "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls="models.deberta_v2.DebertaV2OnnxConfig",
+        ),
         "deit": supported_features_mapping(
             "default", "image-classification", "masked-im", onnx_config_cls="models.deit.DeiTOnnxConfig"
+        ),
+        "detr": supported_features_mapping(
+            "default",
+            "object-detection",
+            "image-segmentation",
+            onnx_config_cls="models.detr.DetrOnnxConfig",
         ),
         "distilbert": supported_features_mapping(
             "default",
@@ -280,6 +312,13 @@ class FeaturesManager:
             "sequence-classification",
             "token-classification",
             onnx_config_cls="models.layoutlm.LayoutLMOnnxConfig",
+        ),
+        "longt5": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "seq2seq-lm",
+            "seq2seq-lm-with-past",
+            onnx_config_cls="models.longt5.LongT5OnnxConfig",
         ),
         "marian": supported_features_mapping(
             "default",

@@ -85,7 +85,11 @@ class HfArgumentParser(ArgumentParser):
         origin_type = getattr(field.type, "__origin__", field.type)
         if origin_type is Union:
             if len(field.type.__args__) != 2 or type(None) not in field.type.__args__:
-                raise ValueError("Only `Union[X, NoneType]` (i.e., `Optional[X]`) is allowed for `Union`")
+                raise ValueError(
+                    "Only `Union[X, NoneType]` (i.e., `Optional[X]`) is allowed for `Union` because"
+                    " the argument parser only supports one type per argument."
+                    f" Problem encountered in field '{field.name}'."
+                )
             if bool not in field.type.__args__:
                 # filter `NoneType` in Union (except for `Union[bool, NoneType]`)
                 field.type = (

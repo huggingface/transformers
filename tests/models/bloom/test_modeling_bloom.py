@@ -28,7 +28,14 @@ from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attenti
 if is_torch_available():
     import torch
 
-    from transformers import BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST, BloomForCausalLM, BloomModel, BloomTokenizerFast
+    from transformers import (
+        BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST,
+        BloomForCausalLM,
+        BloomForSequenceClassification,
+        BloomForTokenClassification,
+        BloomModel,
+        BloomTokenizerFast,
+    )
 
 
 @require_torch
@@ -96,9 +103,13 @@ class BloomModelTester:
         if self.use_input_mask:
             input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
+        sequence_labels = None
+        if self.use_labels:
+            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+
         config = self.get_config(gradient_checkpointing=gradient_checkpointing)
 
-        return (config, input_ids, input_mask)
+        return (config, input_ids, input_mask, sequence_labels)
 
     def get_config(self, gradient_checkpointing=False, slow_but_exact=True):
         return BloomConfig(
@@ -116,6 +127,7 @@ class BloomModelTester:
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
+            num_labels=self.num_labels,
             gradient_checkpointing=gradient_checkpointing,
             slow_but_exact=slow_but_exact,
             dtype="float32",
@@ -245,6 +257,23 @@ class BloomModelTester:
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
+    def create_and_check_sequence_classification_model(self, config, input_ids, input_mask, *args):
+        config.num_labels = self.num_labels
+        model = BloomForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+
+        result = model(input_ids, attention_mask=input_mask)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
+    def create_and_check_token_classification_model(self, config, input_ids, input_mask, *args):
+        model = BloomForTokenClassification(config)
+        model.to(torch_device)
+        model.eval()
+
+        result = model(input_ids, attention_mask=input_mask)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+
     def create_and_check_forward_and_backwards(
         self, config, input_ids, input_mask, *args, gradient_checkpointing=False
     ):
@@ -269,7 +298,7 @@ class BloomModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
 
-        config, input_ids, input_mask = config_and_inputs
+        config, input_ids, input_mask, sequence_labels = config_and_inputs
 
         inputs_dict = {"input_ids": input_ids}
 
@@ -279,7 +308,17 @@ class BloomModelTester:
 @require_torch
 class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
-    all_model_classes = (BloomModel, BloomForCausalLM) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            BloomModel,
+            BloomForCausalLM,
+            BloomForSequenceClassification,
+            BloomForTokenClassification,
+        )
+        if is_torch_available()
+        else ()
+    )
+
     all_generative_model_classes = (BloomForCausalLM,) if is_torch_available() else ()
     fx_compatible = False
     test_missing_keys = False
@@ -312,6 +351,14 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     def test_bloom_lm_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_lm_head_model(*config_and_inputs)
+
+    def test_bloom_sequence_classification_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_sequence_classification_model(*config_and_inputs)
+
+    def test_bloom_token_classification_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_token_classification_model(*config_and_inputs)
 
     def test_bloom_gradient_checkpointing(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -392,6 +439,33 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         self.assertEqual(
             tokenizer.decode(greedy_output[-1, 3:], skip_special_tokens=True),
             tokenizer.decode(greedy_output_without_pad[0, :-3], skip_special_tokens=True),
+        )
+
+    @slow
+    def test_right_left_batched_input(self):
+        path_1b3 = "bigscience/bloom-1b3"
+        model = BloomForCausalLM.from_pretrained(path_1b3, use_cache=True)
+        model = model.eval()
+
+        tokenizer = BloomTokenizerFast.from_pretrained(path_1b3)
+        tokenizer.padding_side = "right"
+
+        inputs = ["Hello there", "Joe Biden is the president of the"]
+        inputs_right = tokenizer(inputs, return_tensors="pt", padding=True)
+
+        tokenizer.padding_side = "left"
+        inputs_left = tokenizer(inputs, return_tensors="pt", padding=True)
+
+        # test token values are different
+        self.assertNotEqual(inputs_right["input_ids"].tolist(), inputs_left["input_ids"].tolist())
+
+        # test reconstructions are the same
+        outputs_right = model.generate(**inputs_right, max_length=10, do_sample=False)
+        outputs_left = model.generate(**inputs_left, max_length=10, do_sample=False)
+
+        self.assertEqual(
+            tokenizer.decode(outputs_right[0], skip_special_tokens=True),
+            tokenizer.decode(outputs_left[0], skip_special_tokens=True),
         )
 
 
@@ -676,7 +750,7 @@ class BloomEmbeddingTest(unittest.TestCase):
         }
 
         if cuda_available:
-            self.assertEqual(MEAN_VALUE_LAST_LM, logits.last_hidden_state.mean().item())
+            self.assertAlmostEqual(MEAN_VALUE_LAST_LM, logits.last_hidden_state.mean().item(), places=4)
         else:
             self.assertAlmostEqual(MEAN_VALUE_LAST_LM, logits.last_hidden_state.mean().item(), places=3)
 

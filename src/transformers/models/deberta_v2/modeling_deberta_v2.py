@@ -20,6 +20,7 @@ from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
+import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 
@@ -132,7 +133,9 @@ class XSoftmax(torch.autograd.Function):
             g.op("Sub", g.op("Constant", value_t=torch.tensor(1, dtype=torch.int64)), mask_cast_value),
             to_i=sym_help.cast_pytorch_to_onnx["Byte"],
         )
-        output = masked_fill(g, self, r_mask, g.op("Constant", value_t=torch.tensor(torch.finfo(self.dtype).min)))
+        output = masked_fill(
+            g, self, r_mask, g.op("Constant", value_t=torch.tensor(torch.finfo(self.type().dtype()).min))
+        )
         output = softmax(g, output, dim)
         return masked_fill(g, output, r_mask, g.op("Constant", value_t=torch.tensor(0, dtype=torch.uint8)))
 

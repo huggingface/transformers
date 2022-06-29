@@ -141,6 +141,7 @@ Now you need a second preprocessing function to capture text truncated from any 
 >>> def group_texts(examples):
 ...     concatenated_examples = {k: sum(examples[k], []) for k in examples.keys()}
 ...     total_length = len(concatenated_examples[list(examples.keys())[0]])
+...     total_length = (total_length // block_size) * block_size
 ...     result = {
 ...         k: [t[i : i + block_size] for i in range(0, total_length, block_size)]
 ...         for k, t in concatenated_examples.items()

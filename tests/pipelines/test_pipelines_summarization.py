@@ -18,6 +18,7 @@ from transformers import (
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     LEDConfig,
+    LongT5Config,
     SummarizationPipeline,
     T5Config,
     pipeline,
@@ -54,8 +55,8 @@ class SummarizationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMe
         )
         self.assertEqual(outputs, [{"summary_text": ANY(str)}])
 
-        if not isinstance(model.config, (T5Config, LEDConfig)):
-            # LED, T5 can handle it.
+        if not isinstance(model.config, (T5Config, LongT5Config, LEDConfig)):
+            # LED, T5, LongT5 can handle it.
             # Too long.
             with self.assertRaises(Exception):
                 outputs = summarizer("This " * 1000)
