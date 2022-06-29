@@ -1088,6 +1088,10 @@ class Trainer:
         dataloader.dataset does not exist or has no length, estimates as best it can
         """
         try:
+            dataset = dataloader.dataset
+            # Special case for IterableDatasetShard, we need to dig deeper
+            if isinstance(dataset, IterableDatasetShard):
+                return len(dataloader.dataset.dataset)
             return len(dataloader.dataset)
         except (NameError, AttributeError, TypeError):  # no dataset or length, estimate by length of dataloader
             return len(dataloader) * self.args.per_device_train_batch_size
