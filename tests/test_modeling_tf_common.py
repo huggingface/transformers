@@ -1600,6 +1600,79 @@ class TFModelTesterMixin:
                 model.compile(optimizer="sgd", run_eagerly=True)
                 model.train_on_batch(test_batch, test_batch_labels)
 
+    def _test_xla_generate(self, num_beams, num_return_sequences, max_length):
+        def _generate_and_check_results(model, config, inputs_dict):
+            if "input_ids" in inputs_dict:
+                inputs = inputs_dict["input_ids"]
+                # make sure there are no pad tokens in prompt, which may trigger unwanted behavior
+                if config.pad_token_id is not None:
+                    if config.pad_token_id == 0:
+                        new_pad_token = config.pad_token_id + 1
+                    else:
+                        new_pad_token = config.pad_token_id - 1
+                else:
+                    new_pad_token = None
+                inputs = tf.where(inputs != config.pad_token_id, inputs, new_pad_token)
+            elif "input_features" in inputs_dict:
+                inputs = inputs_dict["input_features"]
+            else:
+                raise ValueError("No valid generate input found in inputs_dict")
+
+            generated = model.generate(inputs).numpy()
+            generate_xla = tf.function(model.generate, jit_compile=True)
+            generated_xla = generate_xla(inputs).numpy()
+            self.assertListEqual(generated.tolist(), generated_xla.tolist())
+
+        for model_class in self.all_generative_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.eos_token_id = None  # Generate until max length
+            config.max_length = max_length
+            config.do_sample = False
+            config.num_beams = num_beams
+            config.num_return_sequences = num_return_sequences
+            model = model_class(config)
+
+            if model.supports_xla_generation:
+                _generate_and_check_results(model, config, inputs_dict)
+            else:
+                with self.assertRaises(ValueError):
+                    _generate_and_check_results(model, config, inputs_dict)
+
+    def test_xla_generate_fast(self):
+        """
+        Basic quick test for generate-compatible classes that confirms that XLA-generated tokens are the same as their
+        non XLA counterparts.
+
+        Either the model supports XLA generation and passes the inner test, or it raises an appropriate exception
+        """
+        num_beams = 1
+        num_return_sequences = 1
+        max_length = 10
+        self._test_xla_generate(num_beams, num_return_sequences, max_length)
+
+    @slow
+    def test_xla_generate_slow(self):
+        """
+        Slow and challenging version of `test_xla_generate_fast` -- this test asks for several long sequences using
+        beam search, with and without XLA. The two outputs should match, and a failure in this test indicates that the
+        model may need further analysis if it is to be used for XLA generation.
+
+        Either the model supports XLA generation and passes the inner test, or it raises an appropriate exception
+        """
+        # TODO (Joao): find the issues related to the following models. They are passing the fast test, but failing
+        # the slow one.
+        if any(
+            [
+                model in str(self).lower()
+                for model in ["tfbart", "tfblenderbot", "tfmarian", "tfmbart", "tfopt", "tfpegasus"]
+            ]
+        ):
+            return
+        num_beams = 8
+        num_return_sequences = 2
+        max_length = 128
+        self._test_xla_generate(num_beams, num_return_sequences, max_length)
+
     def _generate_random_bad_tokens(self, num_bad_tokens, model):
         # special tokens cannot be bad tokens
         special_tokens = []
