@@ -106,6 +106,12 @@ class TrainingArguments:
         default=None, metadata={"help": "The name of the repository to keep in sync with the local `output_dir`."}
     )
     hub_token: str = field(default=None, metadata={"help": "The token to use to push to the Model Hub."})
+    gradient_checkpointing: bool = field(
+        default=False,
+        metadata={
+            "help": "If True, use gradient checkpointing to save memory at the expense of slower backward pass."
+        },
+    )
 
     def __post_init__(self):
         if self.output_dir is not None:
@@ -634,6 +640,9 @@ def main():
             dtype=getattr(jnp, model_args.dtype),
             use_auth_token=True if model_args.use_auth_token else None,
         )
+
+    if training_args.gradient_checkpointing:
+        model.enable_gradient_checkpointing()
 
     # Store some constant
     num_epochs = int(training_args.num_train_epochs)
