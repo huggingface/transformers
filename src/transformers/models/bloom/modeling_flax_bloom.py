@@ -48,6 +48,9 @@ _CHECKPOINT_FOR_DOC = "bigscience/bloom"
 _CONFIG_FOR_DOC = "BloomConfig"
 _TOKENIZER_FOR_DOC = "BloomTokenizer"
 
+def attention_mask_func(args):
+    # TODO: implement this helper fn. see pytorch impl. for reference
+    raise NotImplementedError
 
 BLOOM_START_DOCSTRING = r"""
 
@@ -191,27 +194,21 @@ class FlaxBloomAttention(nn.Module):
 
         self.scale_mask_softmax = FlaxBloomScaledSoftmax(
             self.config,
-            attention_mask_func, # TODO: define this (in pytorch impl. it is a helper fn)
+            attention_mask_func,
             self.attention_softmax_in_fp32,
             self.layer_number,
         )
 
         dense = partial(
             nn.Dense,
-            self.hidden_size,
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
         )
 
-        # TODO: make this one dense layer that is split into 3 on forward named self.query_key_value
-        self.q_proj, self.k_proj, self.v_proj = dense(), dense(), dense()
-        self.dense = dense()
+        
+        self.query_key_value = dense(self.hidden_size * 3)
+        self.dense = dense(self.hidden_size)
         self.attention_dropout = nn.Dropout(self.config.attention_dropout)
-
-        # TODO: check correctness of causal mask (unedited from gptneo causal mask)
-        # TODO: how to deal with reliance on max_position_embeddings?
-        max_position_embeddings = 2048
-        self.causal_mask = make_causal_mask(jnp.ones((1, max_position_embeddings), dtype="bool"), dtype="bool")
 
     def _split_heads(self, hidden_states):
         return hidden_states.reshape(hidden_states.shape[:2] + (self.num_heads, self.head_dim))
@@ -263,12 +260,11 @@ class FlaxBloomAttention(nn.Module):
         init_cache: bool = False,
         output_attentions: bool = False,
     ):
-        # TODO: this is still from the gpt-neo impl. needs to be rewritten
-        # TODO: this needs checking for correctness of implementation.
-        # TODO: modify so that it uses self.query_key_value?
-        query = self.q_proj(hidden_states)
-        key = self.k_proj(hidden_states)
-        value = self.v_proj(hidden_states)
+        # TODO: this module __call__ needs checking for correctness of implementation.
+
+        fused_qkv = self.query_key_value(hidden_states)
+
+        query, key, value = jnp.split(fused_qkv, 3, axis=-1)
 
         query = self._split_heads(query)
         key = self._split_heads(key)
@@ -276,14 +272,17 @@ class FlaxBloomAttention(nn.Module):
 
         query_length, key_length = query.shape[1], key.shape[1]
 
+        # TODO: check size of hidden_states to confirm this is the right dim for causal mask to use
+        causal_mask = make_causal_mask(jnp.ones((1, hidden_states.shape[0]), dtype="bool"), dtype="bool")
+
         if self.has_variable("cache", "cached_key"):
             mask_shift = self.variables["cache"]["cache_index"]
             max_decoder_length = self.variables["cache"]["cached_key"].shape[1]
             causal_mask = lax.dynamic_slice(
-                self.causal_mask, (0, 0, mask_shift, 0), (1, 1, query_length, max_decoder_length)
+                causal_mask, (0, 0, mask_shift, 0), (1, 1, query_length, max_decoder_length)
             )
         else:
-            causal_mask = self.causal_mask[:, :, :query_length, :key_length]
+            causal_mask = causal_mask[:, :, :query_length, :key_length]
 
         batch_size = hidden_states.shape[0]
         causal_mask = jnp.broadcast_to(causal_mask, (batch_size,) + causal_mask.shape[1:])
@@ -376,8 +375,6 @@ class FlaxBloomBlock(nn.Module):
         
         self.input_layernorm = nn.LayerNorm(epsilon=self.config.layer_norm_epsilon, dtype=self.dtype)
 
-        # TODO: should check if this line (n_head) can be removed. if so, can be removed in pytorch impl.
-        self.n_heads = self.config.n_head
         self.self_attention = FlaxBloomAttention(self.config, layer_number=self.layer_number, dtype=self.dtype)
         self.post_attention_layernorm = nn.LayerNorm(epsilon=self.config.layer_norm_epsilon, dtype=self.dtype)
 
@@ -421,6 +418,8 @@ class FlaxBloomBlock(nn.Module):
 
         outputs = attn_outputs[1:]
 
+        attention_output = attention_output + residual
+
         post_layernorm = self.post_attention_layernorm(attention_output)
 
         # set residual based on config
@@ -431,8 +430,9 @@ class FlaxBloomBlock(nn.Module):
         
         output = self.mlp(post_layernorm, residual, deterministic=deterministic)
 
-        # TODO: init_cache is separate from use_cache flag
-        if init_cache:
+        output = output + residual
+        
+        if use_cache:
             outputs = (output,) + outputs
         else:
             outputs = (output,) + outputs[1:]
