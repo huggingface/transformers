@@ -94,6 +94,7 @@ from . import (
     mobilebert,
     mpnet,
     mt5,
+    mvp,
     nezha,
     nystromformer,
     openai,
