@@ -31,6 +31,7 @@ from torch import nn
 from torch.nn.modules.utils import _pair
 
 from ...activations import ACT2FN
+from ...assign_result import AssignResult
 from ...modeling_outputs import BaseModelOutputWithNoAttention, BaseModelOutputWithPoolingAndNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -111,6 +112,19 @@ def multi_apply(func, *args, **kwargs):
     return tuple(map(list, zip(*map_results)))
 
 
+def unmap(data, count, inds, fill=0):
+    """Unmap a subset of item (data) back to the original set of items (of size
+    count)"""
+    if data.dim() == 1:
+        ret = data.new_full((count,), fill)
+        ret[inds.type(torch.bool)] = data
+    else:
+        new_size = (count,) + data.size()[1:]
+        ret = data.new_full(new_size, fill)
+        ret[inds.type(torch.bool), :] = data
+    return ret
+
+
 def select_single_mlvl(mlvl_tensors, batch_id, detach=True):
     """Extract a multi-scale single image tensor from a multi-scale batch
     tensor based on batch index.
@@ -135,6 +149,47 @@ def select_single_mlvl(mlvl_tensors, batch_id, detach=True):
     else:
         mlvl_tensor_list = [mlvl_tensors[i][batch_id] for i in range(num_levels)]
     return mlvl_tensor_list
+
+
+def images_to_levels(target, num_levels):
+    """Convert targets by image to targets by feature level.
+    [target_img0, target_img1] -> [target_level0, target_level1, ...]
+    """
+    target = torch.stack(target, 0)
+    level_targets = []
+    start = 0
+    for n in num_levels:
+        end = start + n
+        # level_targets.append(target[:, start:end].squeeze(0))
+        level_targets.append(target[:, start:end])
+        start = end
+    return level_targets
+
+
+def anchor_inside_flags(flat_anchors, valid_flags, img_shape, allowed_border=0):
+    """Check whether the anchors are inside the border.
+    Args:
+        flat_anchors (torch.Tensor): Flatten anchors, shape (n, 4).
+        valid_flags (torch.Tensor): An existing valid flags of anchors.
+        img_shape (tuple(int)): Shape of current image.
+        allowed_border (int, optional): The border to allow the valid anchor.
+            Defaults to 0.
+    Returns:
+        torch.Tensor: Flags indicating whether the anchors are inside a \
+            valid range.
+    """
+    img_h, img_w = img_shape[:2]
+    if allowed_border >= 0:
+        inside_flags = (
+            valid_flags
+            & (flat_anchors[:, 0] >= -allowed_border)
+            & (flat_anchors[:, 1] >= -allowed_border)
+            & (flat_anchors[:, 2] < img_w + allowed_border)
+            & (flat_anchors[:, 3] < img_h + allowed_border)
+        )
+    else:
+        inside_flags = valid_flags
+    return inside_flags
 
 
 def bbox2delta(proposals, gt, means=(0.0, 0.0, 0.0, 0.0), stds=(1.0, 1.0, 1.0, 1.0)):
@@ -1031,6 +1086,55 @@ class ConvNextMaskRCNNAnchorGenerator(nn.Module):
         # then (0, 1), (0, 2), ...
         return all_anchors
 
+    def valid_flags(self, featmap_sizes, pad_shape, device="cuda"):
+        """Generate valid flags of anchors in multiple feature levels.
+        Args:
+            featmap_sizes (list(tuple)): List of feature map sizes in
+                multiple feature levels.
+            pad_shape (tuple): The padded shape of the image.
+            device (str): Device where the anchors will be put on.
+        Return:
+            list(torch.Tensor): Valid flags of anchors in multiple levels.
+        """
+        assert self.num_levels == len(featmap_sizes)
+        multi_level_flags = []
+        for i in range(self.num_levels):
+            anchor_stride = self.strides[i]
+            feat_h, feat_w = featmap_sizes[i]
+            h, w = pad_shape[:2]
+            valid_feat_h = min(int(np.ceil(h / anchor_stride[1])), feat_h)
+            valid_feat_w = min(int(np.ceil(w / anchor_stride[0])), feat_w)
+            flags = self.single_level_valid_flags(
+                (feat_h, feat_w), (valid_feat_h, valid_feat_w), self.num_base_anchors[i], device=device
+            )
+            multi_level_flags.append(flags)
+        return multi_level_flags
+
+    def single_level_valid_flags(self, featmap_size, valid_size, num_base_anchors, device="cuda"):
+        """Generate the valid flags of anchor in a single feature map.
+        Args:
+            featmap_size (tuple[int]): The size of feature maps, arrange
+                as (h, w).
+            valid_size (tuple[int]): The valid size of the feature maps.
+            num_base_anchors (int): The number of base anchors.
+            device (str, optional): Device where the flags will be put on.
+                Defaults to 'cuda'.
+        Returns:
+            torch.Tensor: The valid flags of each anchor in a single level \
+                feature map.
+        """
+        feat_h, feat_w = featmap_size
+        valid_h, valid_w = valid_size
+        assert valid_h <= feat_h and valid_w <= feat_w
+        valid_x = torch.zeros(feat_w, dtype=torch.bool, device=device)
+        valid_y = torch.zeros(feat_h, dtype=torch.bool, device=device)
+        valid_x[:valid_w] = 1
+        valid_y[:valid_h] = 1
+        valid_xx, valid_yy = self._meshgrid(valid_x, valid_y)
+        valid = valid_xx & valid_yy
+        valid = valid[:, None].expand(valid.size(0), num_base_anchors).contiguous().view(-1)
+        return valid
+
 
 class ConvNextMaskRCNNDeltaXYWHBBoxCoder(nn.Module):
     """Delta XYWH BBox coder.
@@ -1118,6 +1222,7 @@ class ConvNextMaskRCNNDeltaXYWHBBoxCoder(nn.Module):
             )
         else:
             if pred_bboxes.ndim == 3 and not torch.onnx.is_in_onnx_export():
+                # TODO: remove this deprecation
                 warnings.warn(
                     "DeprecationWarning: onnx_delta2bbox is deprecated "
                     "in the case of batch decoding and non-ONNX, "
@@ -1139,6 +1244,425 @@ class ConvNextMaskRCNNDeltaXYWHBBoxCoder(nn.Module):
             # )
 
         return decoded_bboxes
+
+
+## Everything related to IoU calculator ##
+
+
+def cast_tensor_type(x, scale=1.0, dtype=None):
+    if dtype == "fp16":
+        # scale is for preventing overflows
+        x = (x / scale).half()
+    return x
+
+
+def fp16_clamp(x, min=None, max=None):
+    if not x.is_cuda and x.dtype == torch.float16:
+        # clamp for cpu float16, tensor fp16 has no clamp implementation
+        return x.float().clamp(min, max).half()
+
+    return x.clamp(min, max)
+
+
+class ConvNextMaskRCNNBboxOverlaps2D:
+    """2D Overlaps (e.g. IoUs, GIoUs) Calculator."""
+
+    def __init__(self, scale=1.0, dtype=None):
+        self.scale = scale
+        self.dtype = dtype
+
+    def __call__(self, bboxes1, bboxes2, mode="iou", is_aligned=False):
+        """Calculate IoU between 2D bboxes.
+        Args:
+            bboxes1 (Tensor): bboxes have shape (m, 4) in <x1, y1, x2, y2>
+                format, or shape (m, 5) in <x1, y1, x2, y2, score> format.
+            bboxes2 (Tensor): bboxes have shape (m, 4) in <x1, y1, x2, y2>
+                format, shape (m, 5) in <x1, y1, x2, y2, score> format, or be
+                empty. If ``is_aligned `` is ``True``, then m and n must be
+                equal.
+            mode (str): "iou" (intersection over union), "iof" (intersection
+                over foreground), or "giou" (generalized intersection over
+                union).
+            is_aligned (bool, optional): If True, then m and n must be equal.
+                Default False.
+        Returns:
+            Tensor: shape (m, n) if ``is_aligned `` is False else shape (m,)
+        """
+        assert bboxes1.size(-1) in [0, 4, 5]
+        assert bboxes2.size(-1) in [0, 4, 5]
+        if bboxes2.size(-1) == 5:
+            bboxes2 = bboxes2[..., :4]
+        if bboxes1.size(-1) == 5:
+            bboxes1 = bboxes1[..., :4]
+
+        if self.dtype == "fp16":
+            # change tensor type to save cpu and cuda memory and keep speed
+            bboxes1 = cast_tensor_type(bboxes1, self.scale, self.dtype)
+            bboxes2 = cast_tensor_type(bboxes2, self.scale, self.dtype)
+            overlaps = bbox_overlaps(bboxes1, bboxes2, mode, is_aligned)
+            if not overlaps.is_cuda and overlaps.dtype == torch.float16:
+                # resume cpu float32
+                overlaps = overlaps.float()
+            return overlaps
+
+        return bbox_overlaps(bboxes1, bboxes2, mode, is_aligned)
+
+    def __repr__(self):
+        """str: a string describing the module"""
+        repr_str = self.__class__.__name__ + f"(scale={self.scale}, dtype={self.dtype})"
+        return repr_str
+
+
+def bbox_overlaps(bboxes1, bboxes2, mode="iou", is_aligned=False, eps=1e-6):
+    """Calculate overlap between two set of bboxes.
+    FP16 Contributed by https://github.com/open-mmlab/mmdetection/pull/4889
+    Note:
+        Assume bboxes1 is M x 4, bboxes2 is N x 4, when mode is 'iou',
+        there are some new generated variable when calculating IOU
+        using bbox_overlaps function:
+        1) is_aligned is False
+            area1: M x 1
+            area2: N x 1
+            lt: M x N x 2
+            rb: M x N x 2
+            wh: M x N x 2
+            overlap: M x N x 1
+            union: M x N x 1
+            ious: M x N x 1
+            Total memory:
+                S = (9 x N x M + N + M) * 4 Byte,
+            When using FP16, we can reduce:
+                R = (9 x N x M + N + M) * 4 / 2 Byte
+                R large than (N + M) * 4 * 2 is always true when N and M >= 1.
+                Obviously, N + M <= N * M < 3 * N * M, when N >=2 and M >=2,
+                           N + 1 < 3 * N, when N or M is 1.
+            Given M = 40 (ground truth), N = 400000 (three anchor boxes
+            in per grid, FPN, R-CNNs),
+                R = 275 MB (one times)
+            A special case (dense detection), M = 512 (ground truth),
+                R = 3516 MB = 3.43 GB
+            When the batch size is B, reduce:
+                B x R
+            Therefore, CUDA memory runs out frequently.
+            Experiments on GeForce RTX 2080Ti (11019 MiB):
+            |   dtype   |   M   |   N   |   Use    |   Real   |   Ideal   |
+            |:----:|:----:|:----:|:----:|:----:|:----:|
+            |   FP32   |   512 | 400000 | 8020 MiB |   --   |   --   |
+            |   FP16   |   512 | 400000 |   4504 MiB | 3516 MiB | 3516 MiB |
+            |   FP32   |   40 | 400000 |   1540 MiB |   --   |   --   |
+            |   FP16   |   40 | 400000 |   1264 MiB |   276MiB   | 275 MiB |
+        2) is_aligned is True
+            area1: N x 1
+            area2: N x 1
+            lt: N x 2
+            rb: N x 2
+            wh: N x 2
+            overlap: N x 1
+            union: N x 1
+            ious: N x 1
+            Total memory:
+                S = 11 x N * 4 Byte
+            When using FP16, we can reduce:
+                R = 11 x N * 4 / 2 Byte
+        So do the 'giou' (large than 'iou').
+        Time-wise, FP16 is generally faster than FP32.
+        When gpu_assign_thr is not -1, it takes more time on cpu
+        but not reduce memory.
+        There, we can reduce half the memory and keep the speed.
+    If ``is_aligned`` is ``False``, then calculate the overlaps between each
+    bbox of bboxes1 and bboxes2, otherwise the overlaps between each aligned
+    pair of bboxes1 and bboxes2.
+    Args:
+        bboxes1 (Tensor): shape (B, m, 4) in <x1, y1, x2, y2> format or empty.
+        bboxes2 (Tensor): shape (B, n, 4) in <x1, y1, x2, y2> format or empty.
+            B indicates the batch dim, in shape (B1, B2, ..., Bn).
+            If ``is_aligned`` is ``True``, then m and n must be equal.
+        mode (str): "iou" (intersection over union), "iof" (intersection over
+            foreground) or "giou" (generalized intersection over union).
+            Default "iou".
+        is_aligned (bool, optional): If True, then m and n must be equal.
+            Default False.
+        eps (float, optional): A value added to the denominator for numerical
+            stability. Default 1e-6.
+    Returns:
+        Tensor: shape (m, n) if ``is_aligned`` is False else shape (m,)
+    Example:
+        >>> bboxes1 = torch.FloatTensor([
+        >>>     [0, 0, 10, 10],
+        >>>     [10, 10, 20, 20],
+        >>>     [32, 32, 38, 42],
+        >>> ])
+        >>> bboxes2 = torch.FloatTensor([
+        >>>     [0, 0, 10, 20],
+        >>>     [0, 10, 10, 19],
+        >>>     [10, 10, 20, 20],
+        >>> ])
+        >>> overlaps = bbox_overlaps(bboxes1, bboxes2)
+        >>> assert overlaps.shape == (3, 3)
+        >>> overlaps = bbox_overlaps(bboxes1, bboxes2, is_aligned=True)
+        >>> assert overlaps.shape == (3, )
+    Example:
+        >>> empty = torch.empty(0, 4)
+        >>> nonempty = torch.FloatTensor([[0, 0, 10, 9]])
+        >>> assert tuple(bbox_overlaps(empty, nonempty).shape) == (0, 1)
+        >>> assert tuple(bbox_overlaps(nonempty, empty).shape) == (1, 0)
+        >>> assert tuple(bbox_overlaps(empty, empty).shape) == (0, 0)
+    """
+
+    assert mode in ["iou", "iof", "giou"], f"Unsupported mode {mode}"
+    # Either the boxes are empty or the length of boxes' last dimension is 4
+    assert bboxes1.size(-1) == 4 or bboxes1.size(0) == 0
+    assert bboxes2.size(-1) == 4 or bboxes2.size(0) == 0
+
+    # Batch dim must be the same
+    # Batch dim: (B1, B2, ... Bn)
+    assert bboxes1.shape[:-2] == bboxes2.shape[:-2]
+    batch_shape = bboxes1.shape[:-2]
+
+    rows = bboxes1.size(-2)
+    cols = bboxes2.size(-2)
+    if is_aligned:
+        assert rows == cols
+
+    if rows * cols == 0:
+        if is_aligned:
+            return bboxes1.new(batch_shape + (rows,))
+        else:
+            return bboxes1.new(batch_shape + (rows, cols))
+
+    area1 = (bboxes1[..., 2] - bboxes1[..., 0]) * (bboxes1[..., 3] - bboxes1[..., 1])
+    area2 = (bboxes2[..., 2] - bboxes2[..., 0]) * (bboxes2[..., 3] - bboxes2[..., 1])
+
+    if is_aligned:
+        lt = torch.max(bboxes1[..., :2], bboxes2[..., :2])  # [B, rows, 2]
+        rb = torch.min(bboxes1[..., 2:], bboxes2[..., 2:])  # [B, rows, 2]
+
+        wh = fp16_clamp(rb - lt, min=0)
+        overlap = wh[..., 0] * wh[..., 1]
+
+        if mode in ["iou", "giou"]:
+            union = area1 + area2 - overlap
+        else:
+            union = area1
+        if mode == "giou":
+            enclosed_lt = torch.min(bboxes1[..., :2], bboxes2[..., :2])
+            enclosed_rb = torch.max(bboxes1[..., 2:], bboxes2[..., 2:])
+    else:
+        lt = torch.max(bboxes1[..., :, None, :2], bboxes2[..., None, :, :2])  # [B, rows, cols, 2]
+        rb = torch.min(bboxes1[..., :, None, 2:], bboxes2[..., None, :, 2:])  # [B, rows, cols, 2]
+
+        wh = fp16_clamp(rb - lt, min=0)
+        overlap = wh[..., 0] * wh[..., 1]
+
+        if mode in ["iou", "giou"]:
+            union = area1[..., None] + area2[..., None, :] - overlap
+        else:
+            union = area1[..., None]
+        if mode == "giou":
+            enclosed_lt = torch.min(bboxes1[..., :, None, :2], bboxes2[..., None, :, :2])
+            enclosed_rb = torch.max(bboxes1[..., :, None, 2:], bboxes2[..., None, :, 2:])
+
+    eps = union.new_tensor([eps])
+    union = torch.max(union, eps)
+    ious = overlap / union
+    if mode in ["iou", "iof"]:
+        return ious
+    # calculate gious
+    enclose_wh = fp16_clamp(enclosed_rb - enclosed_lt, min=0)
+    enclose_area = enclose_wh[..., 0] * enclose_wh[..., 1]
+    enclose_area = torch.max(enclose_area, eps)
+    gious = ious - (enclose_area - union) / enclose_area
+    return gious
+
+
+class ConvNextMaskRCNNMaxIoUAssigner:
+    """Assign a corresponding gt bbox or background to each bbox.
+    Each proposals will be assigned with `-1`, or a semi-positive integer
+    indicating the ground truth index.
+    - -1: negative sample, no assigned gt
+    - semi-positive integer: positive sample, index (0-based) of assigned gt
+
+    Source: https://github.com/open-mmlab/mmdetection/blob/78e3ec8e6adc63763cab4060009e37a5d63c5c7a/mmdet/core/bbox/assigners/max_iou_assigner.py
+
+    Args:
+        pos_iou_thr (float): IoU threshold for positive bboxes.
+        neg_iou_thr (float or tuple): IoU threshold for negative bboxes.
+        min_pos_iou (float): Minimum iou for a bbox to be considered as a
+            positive bbox. Positive samples can have smaller IoU than
+            pos_iou_thr due to the 4th step (assign max IoU sample to each gt).
+        gt_max_assign_all (bool): Whether to assign all bboxes with the same
+            highest overlap with some gt to that gt.
+        ignore_iof_thr (float): IoF threshold for ignoring bboxes (if
+            `gt_bboxes_ignore` is specified). Negative values mean not
+            ignoring any bboxes.
+        ignore_wrt_candidates (bool): Whether to compute the iof between
+            `bboxes` and `gt_bboxes_ignore`, or the contrary.
+        match_low_quality (bool): Whether to allow low quality matches. This is
+            usually allowed for RPN and single stage detectors, but not allowed
+            in the second stage. Details are demonstrated in Step 4.
+        gpu_assign_thr (int): The upper bound of the number of GT for GPU
+            assign. When the number of gt is above this threshold, will assign
+            on CPU device. Negative values mean not assign on CPU.
+    """
+
+    def __init__(
+        self,
+        pos_iou_thr,
+        neg_iou_thr,
+        min_pos_iou=0.0,
+        gt_max_assign_all=True,
+        ignore_iof_thr=-1,
+        ignore_wrt_candidates=True,
+        match_low_quality=True,
+        gpu_assign_thr=-1,
+        iou_calculator=dict(type="BboxOverlaps2D"),
+    ):
+        # TODO remove iou_calculator argument since it defaults to ConvNextMaskRCNNBboxOverlaps2D
+
+        self.pos_iou_thr = pos_iou_thr
+        self.neg_iou_thr = neg_iou_thr
+        self.min_pos_iou = min_pos_iou
+        self.gt_max_assign_all = gt_max_assign_all
+        self.ignore_iof_thr = ignore_iof_thr
+        self.ignore_wrt_candidates = ignore_wrt_candidates
+        self.gpu_assign_thr = gpu_assign_thr
+        self.match_low_quality = match_low_quality
+        self.iou_calculator = ConvNextMaskRCNNBboxOverlaps2D()
+
+    def assign(self, bboxes, gt_bboxes, gt_bboxes_ignore=None, gt_labels=None):
+        """Assign gt to bboxes.
+        This method assign a gt bbox to every bbox (proposal/anchor), each bbox
+        will be assigned with -1, or a semi-positive number. -1 means negative
+        sample, semi-positive number is the index (0-based) of assigned gt.
+        The assignment is done in following steps, the order matters.
+        1. assign every bbox to the background
+        2. assign proposals whose iou with all gts < neg_iou_thr to 0
+        3. for each bbox, if the iou with its nearest gt >= pos_iou_thr,
+           assign it to that bbox
+        4. for each gt bbox, assign its nearest proposals (may be more than
+           one) to itself
+        Args:
+            bboxes (Tensor): Bounding boxes to be assigned, shape(n, 4).
+            gt_bboxes (Tensor): Groundtruth boxes, shape (k, 4).
+            gt_bboxes_ignore (Tensor, optional): Ground truth bboxes that are
+                labelled as `ignored`, e.g., crowd boxes in COCO.
+            gt_labels (Tensor, optional): Label of gt_bboxes, shape (k, ).
+        Returns:
+            :obj:`AssignResult`: The assign result.
+        Example:
+            >>> self = MaxIoUAssigner(0.5, 0.5)
+            >>> bboxes = torch.Tensor([[0, 0, 10, 10], [10, 10, 20, 20]])
+            >>> gt_bboxes = torch.Tensor([[0, 0, 10, 9]])
+            >>> assign_result = self.assign(bboxes, gt_bboxes)
+            >>> expected_gt_inds = torch.LongTensor([1, 0])
+            >>> assert torch.all(assign_result.gt_inds == expected_gt_inds)
+        """
+        assign_on_cpu = True if (self.gpu_assign_thr > 0) and (gt_bboxes.shape[0] > self.gpu_assign_thr) else False
+        # compute overlap and assign gt on CPU when number of GT is large
+        if assign_on_cpu:
+            device = bboxes.device
+            bboxes = bboxes.cpu()
+            gt_bboxes = gt_bboxes.cpu()
+            if gt_bboxes_ignore is not None:
+                gt_bboxes_ignore = gt_bboxes_ignore.cpu()
+            if gt_labels is not None:
+                gt_labels = gt_labels.cpu()
+
+        overlaps = self.iou_calculator(gt_bboxes, bboxes)
+
+        if (
+            self.ignore_iof_thr > 0
+            and gt_bboxes_ignore is not None
+            and gt_bboxes_ignore.numel() > 0
+            and bboxes.numel() > 0
+        ):
+            if self.ignore_wrt_candidates:
+                ignore_overlaps = self.iou_calculator(bboxes, gt_bboxes_ignore, mode="iof")
+                ignore_max_overlaps, _ = ignore_overlaps.max(dim=1)
+            else:
+                ignore_overlaps = self.iou_calculator(gt_bboxes_ignore, bboxes, mode="iof")
+                ignore_max_overlaps, _ = ignore_overlaps.max(dim=0)
+            overlaps[:, ignore_max_overlaps > self.ignore_iof_thr] = -1
+
+        assign_result = self.assign_wrt_overlaps(overlaps, gt_labels)
+        if assign_on_cpu:
+            assign_result.gt_inds = assign_result.gt_inds.to(device)
+            assign_result.max_overlaps = assign_result.max_overlaps.to(device)
+            if assign_result.labels is not None:
+                assign_result.labels = assign_result.labels.to(device)
+        return assign_result
+
+    def assign_wrt_overlaps(self, overlaps, gt_labels=None):
+        """Assign w.r.t. the overlaps of bboxes with gts.
+        Args:
+            overlaps (Tensor): Overlaps between k gt_bboxes and n bboxes,
+                shape(k, n).
+            gt_labels (Tensor, optional): Labels of k gt_bboxes, shape (k, ).
+        Returns:
+            :obj:`AssignResult`: The assign result.
+        """
+        num_gts, num_bboxes = overlaps.size(0), overlaps.size(1)
+
+        # 1. assign -1 by default
+        assigned_gt_inds = overlaps.new_full((num_bboxes,), -1, dtype=torch.long)
+
+        if num_gts == 0 or num_bboxes == 0:
+            # No ground truth or boxes, return empty assignment
+            max_overlaps = overlaps.new_zeros((num_bboxes,))
+            if num_gts == 0:
+                # No truth, assign everything to background
+                assigned_gt_inds[:] = 0
+            if gt_labels is None:
+                assigned_labels = None
+            else:
+                assigned_labels = overlaps.new_full((num_bboxes,), -1, dtype=torch.long)
+            return AssignResult(num_gts, assigned_gt_inds, max_overlaps, labels=assigned_labels)
+
+        # for each anchor, which gt best overlaps with it
+        # for each anchor, the max iou of all gts
+        max_overlaps, argmax_overlaps = overlaps.max(dim=0)
+        # for each gt, which anchor best overlaps with it
+        # for each gt, the max iou of all proposals
+        gt_max_overlaps, gt_argmax_overlaps = overlaps.max(dim=1)
+
+        # 2. assign negative: below
+        # the negative inds are set to be 0
+        if isinstance(self.neg_iou_thr, float):
+            assigned_gt_inds[(max_overlaps >= 0) & (max_overlaps < self.neg_iou_thr)] = 0
+        elif isinstance(self.neg_iou_thr, tuple):
+            assert len(self.neg_iou_thr) == 2
+            assigned_gt_inds[(max_overlaps >= self.neg_iou_thr[0]) & (max_overlaps < self.neg_iou_thr[1])] = 0
+
+        # 3. assign positive: above positive IoU threshold
+        pos_inds = max_overlaps >= self.pos_iou_thr
+        assigned_gt_inds[pos_inds] = argmax_overlaps[pos_inds] + 1
+
+        if self.match_low_quality:
+            # Low-quality matching will overwrite the assigned_gt_inds assigned
+            # in Step 3. Thus, the assigned gt might not be the best one for
+            # prediction.
+            # For example, if bbox A has 0.9 and 0.8 iou with GT bbox 1 & 2,
+            # bbox 1 will be assigned as the best target for bbox A in step 3.
+            # However, if GT bbox 2's gt_argmax_overlaps = A, bbox A's
+            # assigned_gt_inds will be overwritten to be bbox B.
+            # This might be the reason that it is not used in ROI Heads.
+            for i in range(num_gts):
+                if gt_max_overlaps[i] >= self.min_pos_iou:
+                    if self.gt_max_assign_all:
+                        max_iou_inds = overlaps[i, :] == gt_max_overlaps[i]
+                        assigned_gt_inds[max_iou_inds] = i + 1
+                    else:
+                        assigned_gt_inds[gt_argmax_overlaps[i]] = i + 1
+
+        if gt_labels is not None:
+            assigned_labels = assigned_gt_inds.new_full((num_bboxes,), -1)
+            pos_inds = torch.nonzero(assigned_gt_inds > 0, as_tuple=False).squeeze()
+            if pos_inds.numel() > 0:
+                assigned_labels[pos_inds] = gt_labels[assigned_gt_inds[pos_inds] - 1]
+        else:
+            assigned_labels = None
+
+        return AssignResult(num_gts, assigned_gt_inds, max_overlaps, labels=assigned_labels)
 
 
 class ConvNextMaskRCNNRPN(nn.Module):
@@ -1180,6 +1704,15 @@ class ConvNextMaskRCNNRPN(nn.Module):
 
         self.test_cfg = config.rpn_test_cfg
 
+        # IoU assigner
+        self.assigner = ConvNextMaskRCNNMaxIoUAssigner(
+            pos_iou_thr=config.rpn_assigner_pos_iou_thr,
+            neg_iou_thr=config.rpn_assigner_neg_iou_thr,
+            min_pos_iou=config.rpn_assigner_min_pos_iou,
+            match_low_quality=config.rpn_assigner_match_low_quality,
+            ignore_iof_thr=config.rpn_assigner_ignore_iof_thr,
+        )
+
     def forward_single(self, hidden_state):
         """Forward feature map of a single scale level."""
         hidden_state = self.rpn_conv(hidden_state)
@@ -1201,6 +1734,346 @@ class ConvNextMaskRCNNRPN(nn.Module):
                     scale levels, each is a 4D-tensor, the channels number \ is num_base_priors * 4.
         """
         return multi_apply(self.forward_single, hidden_states)
+
+    def get_anchors(self, featmap_sizes, img_metas, device="cuda"):
+        """Get anchors according to feature map sizes.
+
+        Args:
+            featmap_sizes (list[tuple]): Multi-level feature map sizes.
+            img_metas (list[dict]): Image meta info.
+            device (torch.device | str): Device for returned tensors
+
+        Returns:
+            tuple:
+                anchor_list (list[Tensor]): Anchors of each image.
+                valid_flag_list (list[Tensor]): Valid flags of each image.
+        """
+        num_imgs = len(img_metas)
+
+        # since feature map sizes of all images are the same, we only compute
+        # anchors for one time
+        multi_level_anchors = self.prior_generator.grid_priors(featmap_sizes, device=device)
+        anchor_list = [multi_level_anchors for _ in range(num_imgs)]
+
+        # for each image, we compute valid flags of multi level anchors
+        valid_flag_list = []
+        for img_id, img_meta in enumerate(img_metas):
+            multi_level_flags = self.prior_generator.valid_flags(featmap_sizes, img_meta["pad_shape"], device)
+            valid_flag_list.append(multi_level_flags)
+
+        return anchor_list, valid_flag_list
+
+    def _get_targets_single(
+        self,
+        flat_anchors,
+        valid_flags,
+        gt_bboxes,
+        gt_bboxes_ignore,
+        gt_labels,
+        img_meta,
+        label_channels=1,
+        unmap_outputs=True,
+    ):
+        """Compute regression and classification targets for anchors in a
+        single image.
+
+        Args:
+            flat_anchors (Tensor): Multi-level anchors of the image, which are
+                concatenated into a single tensor of shape (num_anchors ,4)
+            valid_flags (Tensor): Multi level valid flags of the image,
+                which are concatenated into a single tensor of
+                    shape (num_anchors,).
+            gt_bboxes (Tensor): Ground truth bboxes of the image,
+                shape (num_gts, 4).
+            gt_bboxes_ignore (Tensor): Ground truth bboxes to be
+                ignored, shape (num_ignored_gts, 4).
+            img_meta (dict): Meta info of the image.
+            gt_labels (Tensor): Ground truth labels of each box,
+                shape (num_gts,).
+            label_channels (int): Channel of label.
+            unmap_outputs (bool): Whether to map outputs back to the original
+                set of anchors.
+
+        Returns:
+            tuple:
+                labels_list (list[Tensor]): Labels of each level
+                label_weights_list (list[Tensor]): Label weights of each level
+                bbox_targets_list (list[Tensor]): BBox targets of each level
+                bbox_weights_list (list[Tensor]): BBox weights of each level
+                num_total_pos (int): Number of positive samples in all images
+                num_total_neg (int): Number of negative samples in all images
+        """
+        inside_flags = anchor_inside_flags(
+            flat_anchors, valid_flags, img_meta["img_shape"][:2], self.train_cfg.allowed_border
+        )
+        if not inside_flags.any():
+            return (None,) * 7
+        # assign gt and sample anchors
+        anchors = flat_anchors[inside_flags, :]
+
+        assign_result = self.assigner.assign(
+            anchors, gt_bboxes, gt_bboxes_ignore, None if self.sampling else gt_labels
+        )
+        sampling_result = self.sampler.sample(assign_result, anchors, gt_bboxes)
+
+        num_valid_anchors = anchors.shape[0]
+        bbox_targets = torch.zeros_like(anchors)
+        bbox_weights = torch.zeros_like(anchors)
+        labels = anchors.new_full((num_valid_anchors,), self.num_classes, dtype=torch.long)
+        label_weights = anchors.new_zeros(num_valid_anchors, dtype=torch.float)
+
+        pos_inds = sampling_result.pos_inds
+        neg_inds = sampling_result.neg_inds
+        if len(pos_inds) > 0:
+            if not self.reg_decoded_bbox:
+                pos_bbox_targets = self.bbox_coder.encode(sampling_result.pos_bboxes, sampling_result.pos_gt_bboxes)
+            else:
+                pos_bbox_targets = sampling_result.pos_gt_bboxes
+            bbox_targets[pos_inds, :] = pos_bbox_targets
+            bbox_weights[pos_inds, :] = 1.0
+            if gt_labels is None:
+                # Only rpn gives gt_labels as None
+                # Foreground is the first class since v2.5.0
+                labels[pos_inds] = 0
+            else:
+                labels[pos_inds] = gt_labels[sampling_result.pos_assigned_gt_inds]
+            if self.train_cfg.pos_weight <= 0:
+                label_weights[pos_inds] = 1.0
+            else:
+                label_weights[pos_inds] = self.train_cfg.pos_weight
+        if len(neg_inds) > 0:
+            label_weights[neg_inds] = 1.0
+
+        # map up to original set of anchors
+        if unmap_outputs:
+            num_total_anchors = flat_anchors.size(0)
+            labels = unmap(labels, num_total_anchors, inside_flags, fill=self.num_classes)  # fill bg label
+            label_weights = unmap(label_weights, num_total_anchors, inside_flags)
+            bbox_targets = unmap(bbox_targets, num_total_anchors, inside_flags)
+            bbox_weights = unmap(bbox_weights, num_total_anchors, inside_flags)
+
+        return (labels, label_weights, bbox_targets, bbox_weights, pos_inds, neg_inds, sampling_result)
+
+    def get_targets(
+        self,
+        anchor_list,
+        valid_flag_list,
+        gt_bboxes_list,
+        img_metas,
+        gt_bboxes_ignore_list=None,
+        gt_labels_list=None,
+        label_channels=1,
+        unmap_outputs=True,
+        return_sampling_results=False,
+    ):
+        """Compute regression and classification targets for anchors in
+        multiple images.
+        Args:
+            anchor_list (list[list[Tensor]]): Multi level anchors of each
+                image. The outer list indicates images, and the inner list
+                corresponds to feature levels of the image. Each element of
+                the inner list is a tensor of shape (num_anchors, 4).
+            valid_flag_list (list[list[Tensor]]): Multi level valid flags of
+                each image. The outer list indicates images, and the inner list
+                corresponds to feature levels of the image. Each element of
+                the inner list is a tensor of shape (num_anchors, )
+            gt_bboxes_list (list[Tensor]): Ground truth bboxes of each image.
+            img_metas (list[dict]): Meta info of each image.
+            gt_bboxes_ignore_list (list[Tensor]): Ground truth bboxes to be
+                ignored.
+            gt_labels_list (list[Tensor]): Ground truth labels of each box.
+            label_channels (int): Channel of label.
+            unmap_outputs (bool): Whether to map outputs back to the original
+                set of anchors.
+        Returns:
+            tuple: Usually returns a tuple containing learning targets.
+                - labels_list (list[Tensor]): Labels of each level.
+                - label_weights_list (list[Tensor]): Label weights of each
+                  level.
+                - bbox_targets_list (list[Tensor]): BBox targets of each level.
+                - bbox_weights_list (list[Tensor]): BBox weights of each level.
+                - num_total_pos (int): Number of positive samples in all
+                  images.
+                - num_total_neg (int): Number of negative samples in all
+                  images.
+            additional_returns: This function enables user-defined returns from
+                `self._get_targets_single`. These returns are currently refined
+                to properties at each feature map (i.e. having HxW dimension).
+                The results will be concatenated after the end
+        """
+        num_imgs = len(img_metas)
+        assert len(anchor_list) == len(valid_flag_list) == num_imgs
+
+        # anchor number of multi levels
+        num_level_anchors = [anchors.size(0) for anchors in anchor_list[0]]
+        # concat all level anchors to a single tensor
+        concat_anchor_list = []
+        concat_valid_flag_list = []
+        for i in range(num_imgs):
+            assert len(anchor_list[i]) == len(valid_flag_list[i])
+            concat_anchor_list.append(torch.cat(anchor_list[i]))
+            concat_valid_flag_list.append(torch.cat(valid_flag_list[i]))
+
+        # compute targets for each image
+        if gt_bboxes_ignore_list is None:
+            gt_bboxes_ignore_list = [None for _ in range(num_imgs)]
+        if gt_labels_list is None:
+            gt_labels_list = [None for _ in range(num_imgs)]
+        results = multi_apply(
+            self._get_targets_single,
+            concat_anchor_list,
+            concat_valid_flag_list,
+            gt_bboxes_list,
+            gt_bboxes_ignore_list,
+            gt_labels_list,
+            img_metas,
+            label_channels=label_channels,
+            unmap_outputs=unmap_outputs,
+        )
+        (
+            all_labels,
+            all_label_weights,
+            all_bbox_targets,
+            all_bbox_weights,
+            pos_inds_list,
+            neg_inds_list,
+            sampling_results_list,
+        ) = results[:7]
+        rest_results = list(results[7:])  # user-added return values
+        # no valid anchors
+        if any([labels is None for labels in all_labels]):
+            return None
+        # sampled anchors of all images
+        num_total_pos = sum([max(inds.numel(), 1) for inds in pos_inds_list])
+        num_total_neg = sum([max(inds.numel(), 1) for inds in neg_inds_list])
+        # split targets to a list w.r.t. multiple levels
+        labels_list = images_to_levels(all_labels, num_level_anchors)
+        label_weights_list = images_to_levels(all_label_weights, num_level_anchors)
+        bbox_targets_list = images_to_levels(all_bbox_targets, num_level_anchors)
+        bbox_weights_list = images_to_levels(all_bbox_weights, num_level_anchors)
+        res = (labels_list, label_weights_list, bbox_targets_list, bbox_weights_list, num_total_pos, num_total_neg)
+        if return_sampling_results:
+            res = res + (sampling_results_list,)
+        for i, r in enumerate(rest_results):  # user-added return values
+            rest_results[i] = images_to_levels(r, num_level_anchors)
+
+        return res + tuple(rest_results)
+
+    def loss_single(
+        self, cls_score, bbox_pred, anchors, labels, label_weights, bbox_targets, bbox_weights, num_total_samples
+    ):
+        """Compute loss of a single scale level.
+
+        Args:
+            cls_score (Tensor): Box scores for each scale level
+                Has shape (N, num_anchors * num_classes, H, W).
+            bbox_pred (Tensor): Box energies / deltas for each scale
+                level with shape (N, num_anchors * 4, H, W).
+            anchors (Tensor): Box reference for each scale level with shape
+                (N, num_total_anchors, 4).
+            labels (Tensor): Labels of each anchors with shape
+                (N, num_total_anchors).
+            label_weights (Tensor): Label weights of each anchor with shape
+                (N, num_total_anchors)
+            bbox_targets (Tensor): BBox regression targets of each anchor
+                weight shape (N, num_total_anchors, 4).
+            bbox_weights (Tensor): BBox regression loss weights of each anchor
+                with shape (N, num_total_anchors, 4).
+            num_total_samples (int): If sampling, num total samples equal to
+                the number of total anchors; Otherwise, it is the number of
+                positive anchors.
+
+        Returns:
+            dict[str, Tensor]: A dictionary of loss components.
+        """
+        # classification loss
+        labels = labels.reshape(-1)
+        label_weights = label_weights.reshape(-1)
+        cls_score = cls_score.permute(0, 2, 3, 1).reshape(-1, self.cls_out_channels)
+        loss_cls = self.loss_cls(cls_score, labels, label_weights, avg_factor=num_total_samples)
+        # regression loss
+        bbox_targets = bbox_targets.reshape(-1, 4)
+        bbox_weights = bbox_weights.reshape(-1, 4)
+        bbox_pred = bbox_pred.permute(0, 2, 3, 1).reshape(-1, 4)
+        if self.reg_decoded_bbox:
+            # When the regression loss (e.g. `IouLoss`, `GIouLoss`)
+            # is applied directly on the decoded bounding boxes, it
+            # decodes the already encoded coordinates to absolute format.
+            anchors = anchors.reshape(-1, 4)
+            bbox_pred = self.bbox_coder.decode(anchors, bbox_pred)
+        loss_bbox = self.loss_bbox(bbox_pred, bbox_targets, bbox_weights, avg_factor=num_total_samples)
+        return loss_cls, loss_bbox
+
+    def loss(self, cls_scores, bbox_preds, gt_bboxes, gt_labels, img_metas, gt_bboxes_ignore=None):
+        """Compute losses of the head.
+
+        Args:
+            cls_scores (list[Tensor]): Box scores for each scale level
+                Has shape (N, num_anchors * num_classes, H, W)
+            bbox_preds (list[Tensor]): Box energies / deltas for each scale
+                level with shape (N, num_anchors * 4, H, W)
+            gt_bboxes (list[Tensor]): Ground truth bboxes for each image with
+                shape (num_gts, 4) in [tl_x, tl_y, br_x, br_y] format.
+            gt_labels (list[Tensor]): class indices corresponding to each box
+            img_metas (list[dict]): Meta information of each image, e.g.,
+                image size, scaling factor, etc.
+            gt_bboxes_ignore (None | list[Tensor]): specify which bounding
+                boxes can be ignored when computing the loss. Default: None
+
+        Returns:
+            dict[str, Tensor]: A dictionary of loss components.
+        """
+        # TODO RPN head sets gt_labels = None
+        gt_labels = None
+
+        featmap_sizes = [featmap.size()[-2:] for featmap in cls_scores]
+        assert len(featmap_sizes) == self.prior_generator.num_levels
+
+        device = cls_scores[0].device
+
+        anchor_list, valid_flag_list = self.get_anchors(featmap_sizes, img_metas, device=device)
+        label_channels = self.cls_out_channels if self.use_sigmoid_cls else 1
+        cls_reg_targets = self.get_targets(
+            anchor_list,
+            valid_flag_list,
+            gt_bboxes,
+            img_metas,
+            gt_bboxes_ignore_list=gt_bboxes_ignore,
+            gt_labels_list=gt_labels,
+            label_channels=label_channels,
+        )
+        if cls_reg_targets is None:
+            return None
+        (
+            labels_list,
+            label_weights_list,
+            bbox_targets_list,
+            bbox_weights_list,
+            num_total_pos,
+            num_total_neg,
+        ) = cls_reg_targets
+        num_total_samples = num_total_pos + num_total_neg if self.sampling else num_total_pos
+
+        # anchor number of multi levels
+        num_level_anchors = [anchors.size(0) for anchors in anchor_list[0]]
+        # concat all level anchors and flags to a single tensor
+        concat_anchor_list = []
+        for i in range(len(anchor_list)):
+            concat_anchor_list.append(torch.cat(anchor_list[i]))
+        all_anchor_list = images_to_levels(concat_anchor_list, num_level_anchors)
+
+        losses_cls, losses_bbox = multi_apply(
+            self.loss_single,
+            cls_scores,
+            bbox_preds,
+            all_anchor_list,
+            labels_list,
+            label_weights_list,
+            bbox_targets_list,
+            bbox_weights_list,
+            num_total_samples=num_total_samples,
+        )
+        return dict(loss_cls=losses_cls, loss_bbox=losses_bbox)
 
     def get_bboxes(
         self,
@@ -1750,6 +2623,7 @@ class ConvNextMaskRCNNFCNMaskHead(nn.Module):
         if not isinstance(scale_factor, torch.Tensor):
             if isinstance(scale_factor, float):
                 scale_factor = np.array([scale_factor] * 4)
+                # TODO: remove this deprecation
                 warnings.warn(
                     "Scale_factor should be a Tensor or ndarray with shape (4,), float would be deprecated. "
                 )
@@ -1949,6 +2823,7 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         scale_factors = tuple(meta["scale_factor"] for meta in img_metas)
 
         if isinstance(scale_factors[0], float):
+            # TODO: remove this deprecation
             warnings.warn(
                 "Scale factor in img_metas should be a "
                 "ndarray with shape (4,) "
@@ -2171,19 +3046,10 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
         # the FPN outputs feature maps at 5 different scales
         hidden_states = self.neck(hidden_states)
 
-        print("Neck outputs:")
-        for idx, out in enumerate(hidden_states):
-            print(out.shape)
-
         # next, RPN computes a tuple of (class, bounding box) features for each of the 5 feature maps
         # rpn_outs[0] are the class features for each of the feature maps
         # rpn_outs[1] are the bounding box features for each of the feature maps
         rpn_outs = self.rpn_head(hidden_states)
-
-        print(rpn_outs[0][0].shape)
-        print(rpn_outs[0][0][0, 0, :3, :3])
-
-        # TODO here: compute loss using losses = self.rpn_head.loss(...)
 
         # TODO: remove img_metas, compute `img_shape`` based on pixel_values
         # and figure out where `scale_factor` and `ori_shape` come from (probably test_pipeline)
@@ -2194,6 +3060,12 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
                 ori_shape=(480, 640, 3),
             )
         ]
+
+        if labels is not None:
+            # TODO here: compute loss using losses = self.rpn_head.loss(...)
+            loss_inputs = rpn_outs + (labels["gt_bboxes"], labels["gt_labels"], img_metas)
+            losses = self.rpn_head.loss(*loss_inputs, gt_bboxes_ignore=labels["gt_bboxes_ignore"])
+
         proposal_list = self.rpn_head.get_bboxes(*rpn_outs, img_metas=img_metas)
 
         # TODO: remove this check
