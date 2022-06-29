@@ -255,7 +255,7 @@ class LayoutLMv3OnnxConfig(OnnxConfig):
                 The height of the generated images.
 
         Returns:
-            Mapping[str, Any]: _description_
+            Mapping[str, Any]: holding the kwargs to provide to the model's forward function
         """
 
         # A dummy image is used so OCR should not be applied
