@@ -705,8 +705,8 @@ class MCTCTModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
 
     def test_inference_language_identification_sequence(self):
-        model = MCTCTForSequenceClassification.from_pretrained("cwkeam/m-ctc-t-large-sequence-lid").to(torch_device)
-        processor = MCTCTProcessor.from_pretrained("cwkeam/m-ctc-t-large-sequence-lid")
+        model = MCTCTForSequenceClassification.from_pretrained("cwkeam/m-ctc-t-large-lid").to(torch_device)
+        processor = MCTCTProcessor.from_pretrained("cwkeam/m-ctc-t-large-lid")
 
         input_speech = self._load_datasamples(4)
 
@@ -726,8 +726,8 @@ class MCTCTModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=1e-2))
 
     def test_inference_language_identification_frame(self):
-        model = MCTCTForAudioFrameClassification.from_pretrained("cwkeam/m-ctc-t-large-frame-lid").to(torch_device)
-        processor = MCTCTProcessor.from_pretrained("cwkeam/m-ctc-t-large-frame-lid")
+        model = MCTCTForAudioFrameClassification.from_pretrained("cwkeam/m-ctc-t-large-lid").to(torch_device)
+        processor = MCTCTProcessor.from_pretrained("cwkeam/m-ctc-t-large-lid")
         input_speech = self._load_datasamples(1)
 
         inputs = processor(input_speech, return_tensors="pt", padding=True, return_attention_mask=True)

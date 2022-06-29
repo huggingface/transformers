@@ -57,12 +57,12 @@ _CTC_EXPECTED_LOSS = 1885.65
 
 # Audio class docstring
 _FEAT_EXTRACTOR_FOR_DOC = "MCTCTFeatureExtractor"
-_SEQ_CLASS_CHECKPOINT = "cwkeam/m-ctc-t-large-sequence-lid"
+_SEQ_CLASS_CHECKPOINT = "cwkeam/m-ctc-t-large-lid"
 _SEQ_CLASS_EXPECTED_OUTPUT = "en"
 _SEQ_CLASS_EXPECTED_LOSS = 6.54
 
 # Frame class docstring
-_FRAME_CLASS_CHECKPOINT = "cwkeam/m-ctc-t-large-frame-lid"
+_FRAME_CLASS_CHECKPOINT = "cwkeam/m-ctc-t-large-lid"
 _FRAME_EXPECTED_OUTPUT = [12, 12]
 
 MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -892,7 +892,7 @@ class MCTCTForAudioFrameClassification(MCTCTPreTrainedModel):
     )
     def forward(
         self,
-        input_values: Optional[torch.Tensor],
+        input_features: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -909,7 +909,7 @@ class MCTCTForAudioFrameClassification(MCTCTPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.mctct(
-            input_values,
+            input_features,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -994,7 +994,7 @@ class MCTCTForSequenceClassification(MCTCTPreTrainedModel):
     )
     def forward(
         self,
-        input_values: Optional[torch.Tensor],
+        input_features: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1011,7 +1011,7 @@ class MCTCTForSequenceClassification(MCTCTPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.mctct(
-            input_values,
+            input_features,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
