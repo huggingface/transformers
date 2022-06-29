@@ -146,6 +146,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
     def test_small_model_tf(self):
         pass
 
+    @unittest.skip("Model has moved, skip until it's fixed.")
     @require_torch
     def test_small_model_pt(self):
         model_id = "mishig/tiny-detr-mobilenetsv3-panoptic"
