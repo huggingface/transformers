@@ -93,29 +93,19 @@ def attention_mask_func(attention_scores, attention_mask, causal_mask, prefix_ma
     
     # ensure the initial prefix_length tokens attend to themselves
     if prefix_mask is not None:
-        # print(prefix_mask[:, :, : key_length, :key_length].shape)
         if prefix_mask.shape[-1] != key_length:
             # this conditional means the prefix_mask is smaller than the key_length. 
             # In this case, we need to pad out the prefix_mask to the size of the causal_mask.
-            # print(causal_mask.shape)
-            # print(padded_causal_mask.shape)
-            # print(padded_causal_mask) 
+            
+
             # extend the prefix_mask to the key_length. the original prefix mask stays in the "bottom left" of the prefix_mask tensor.
             new_prefix_mask = torch.zeros(*causal_mask.shape, dtype=torch.bool, device=padded_causal_mask.device)
             new_prefix_mask[:, :, new_prefix_mask.shape[2] - prefix_mask.shape[2] : , : prefix_mask.shape[3] ] = prefix_mask
-            # prefix_mask = new_prefix_mask[]
+            
             prefix_mask = new_prefix_mask
-            # print(prefix_mask)
-            # print(prefix_mask)
-            # print(causal_mask.shape)
-            # prefix_mask = prefix_mask[:, :, : key_length, :key_length]
-        # print(prefix_mask)
-        # print(key_length)
-        # print(query_length)
-        # print(padded_causal_mask[:, :, :key_length, :key_length].shape)
-        # print(prefix_mask[:, :, key_length - query_length :key_length, :key_length].shape)
+            
         padded_causal_mask = prefix_mask[:, :, key_length - query_length : key_length, :key_length]
-        # print(padded_causal_mask)
+    
     # Make use of floats
     return (
         attention_scores.masked_fill_(padded_causal_mask.expand(-1, n_heads, -1, -1), -10000.0),
