@@ -153,8 +153,8 @@ def convert_convnext_maskrcnn_checkpoint(checkpoint_path, pytorch_dump_folder_pa
 
     predicted_classes = [det[0] for det in detections]
     assert predicted_classes == [15, 15, 57, 57, 59, 65, 65, 79]
-    # predicted_bbox = detections[0][1]
-    # print("Predicted bbox:", predicted_bbox)
+    predicted_bbox = detections[0][1]
+    print("Predicted bbox:", predicted_bbox)
     # assert np.testing.assert_allclose(predicted_bbox, np.array([17.905708, 55.41647, 318.95575, 470.25925, 0.9981325], dtype=np.float32), atol=10)
 
     if pytorch_dump_folder_path is not None:

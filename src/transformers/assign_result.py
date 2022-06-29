@@ -1,9 +1,10 @@
 # Copyright (c) OpenMMLab. All rights reserved.
-import torch
 import warnings
 
+import torch
 
-class AssignResult():
+
+class AssignResult:
     """Stores assignments between predicted and truth boxes.
 
     Attributes:
@@ -52,7 +53,7 @@ class AssignResult():
         try:
             nice = self.__nice__()
             classname = self.__class__.__name__
-            return f'<{classname}({nice}) at {hex(id(self))}>'
+            return f"<{classname}({nice}) at {hex(id(self))}>"
         except NotImplementedError as ex:
             warnings.warn(str(ex), category=RuntimeWarning)
             return object.__repr__(self)
@@ -62,11 +63,11 @@ class AssignResult():
         try:
             classname = self.__class__.__name__
             nice = self.__nice__()
-            return f'<{classname}({nice})>'
+            return f"<{classname}({nice})>"
         except NotImplementedError as ex:
             warnings.warn(str(ex), category=RuntimeWarning)
             return object.__repr__(self)
-    
+
     @property
     def num_preds(self):
         """int: the number of predictions in this assignment"""
@@ -85,11 +86,11 @@ class AssignResult():
     def info(self):
         """dict: a dictionary of info about the object"""
         basic_info = {
-            'num_gts': self.num_gts,
-            'num_preds': self.num_preds,
-            'gt_inds': self.gt_inds,
-            'max_overlaps': self.max_overlaps,
-            'labels': self.labels,
+            "num_gts": self.num_gts,
+            "num_preds": self.num_preds,
+            "gt_inds": self.gt_inds,
+            "max_overlaps": self.max_overlaps,
+            "labels": self.labels,
         }
         basic_info.update(self._extra_properties)
         return basic_info
@@ -97,21 +98,20 @@ class AssignResult():
     def __nice__(self):
         """str: a "nice" summary string describing this assign result"""
         parts = []
-        parts.append(f'num_gts={self.num_gts!r}')
+        parts.append(f"num_gts={self.num_gts!r}")
         if self.gt_inds is None:
-            parts.append(f'gt_inds={self.gt_inds!r}')
+            parts.append(f"gt_inds={self.gt_inds!r}")
         else:
-            parts.append(f'gt_inds.shape={tuple(self.gt_inds.shape)!r}')
+            parts.append(f"gt_inds.shape={tuple(self.gt_inds.shape)!r}")
         if self.max_overlaps is None:
-            parts.append(f'max_overlaps={self.max_overlaps!r}')
+            parts.append(f"max_overlaps={self.max_overlaps!r}")
         else:
-            parts.append('max_overlaps.shape='
-                         f'{tuple(self.max_overlaps.shape)!r}')
+            parts.append(f"max_overlaps.shape={tuple(self.max_overlaps.shape)!r}")
         if self.labels is None:
-            parts.append(f'labels={self.labels!r}')
+            parts.append(f"labels={self.labels!r}")
         else:
-            parts.append(f'labels.shape={tuple(self.labels.shape)!r}')
-        return ', '.join(parts)
+            parts.append(f"labels.shape={tuple(self.labels.shape)!r}")
+        return ", ".join(parts)
 
     @classmethod
     def random(cls, **kwargs):
@@ -136,14 +136,15 @@ class AssignResult():
             >>> print(self.info)
         """
         from mmdet.core.bbox import demodata
-        rng = demodata.ensure_rng(kwargs.get('rng', None))
 
-        num_gts = kwargs.get('num_gts', None)
-        num_preds = kwargs.get('num_preds', None)
-        p_ignore = kwargs.get('p_ignore', 0.3)
-        p_assigned = kwargs.get('p_assigned', 0.7)
-        p_use_label = kwargs.get('p_use_label', 0.5)
-        num_classes = kwargs.get('p_use_label', 3)
+        rng = demodata.ensure_rng(kwargs.get("rng", None))
+
+        num_gts = kwargs.get("num_gts", None)
+        num_preds = kwargs.get("num_preds", None)
+        p_ignore = kwargs.get("p_ignore", 0.3)
+        p_assigned = kwargs.get("p_assigned", 0.7)
+        p_use_label = kwargs.get("p_use_label", 0.5)
+        num_classes = kwargs.get("p_use_label", 3)
 
         if num_gts is None:
             num_gts = rng.randint(0, 8)
@@ -159,6 +160,7 @@ class AssignResult():
                 labels = None
         else:
             import numpy as np
+
             # Create an overlap for each predicted box
             max_overlaps = torch.from_numpy(rng.rand(num_preds))
 
@@ -175,8 +177,7 @@ class AssignResult():
             is_assigned[:] = 0
             is_assigned[assigned_idxs] = True
 
-            is_ignore = torch.from_numpy(
-                rng.rand(num_preds) < p_ignore) & is_assigned
+            is_ignore = torch.from_numpy(rng.rand(num_preds) < p_ignore) & is_assigned
 
             gt_inds = torch.zeros(num_preds, dtype=torch.int64)
 
@@ -185,8 +186,7 @@ class AssignResult():
             true_idxs = torch.from_numpy(true_idxs)
             gt_inds[is_assigned] = true_idxs[:n_assigned]
 
-            gt_inds = torch.from_numpy(
-                rng.randint(1, num_gts + 1, size=num_preds))
+            gt_inds = torch.from_numpy(rng.randint(1, num_gts + 1, size=num_preds))
             gt_inds[is_ignore] = -1
             gt_inds[~is_assigned] = 0
             max_overlaps[~is_assigned] = 0
@@ -199,7 +199,8 @@ class AssignResult():
                         # remind that we set FG labels to [0, num_class-1]
                         # since mmdet v2.0
                         # BG cat_id: num_class
-                        rng.randint(0, num_classes, size=num_preds))
+                        rng.randint(0, num_classes, size=num_preds)
+                    )
                     labels[~is_assigned] = 0
             else:
                 labels = None
@@ -213,12 +214,10 @@ class AssignResult():
         Args:
             gt_labels (torch.Tensor): Labels of gt boxes
         """
-        self_inds = torch.arange(
-            1, len(gt_labels) + 1, dtype=torch.long, device=gt_labels.device)
+        self_inds = torch.arange(1, len(gt_labels) + 1, dtype=torch.long, device=gt_labels.device)
         self.gt_inds = torch.cat([self_inds, self.gt_inds])
 
-        self.max_overlaps = torch.cat(
-            [self.max_overlaps.new_ones(len(gt_labels)), self.max_overlaps])
+        self.max_overlaps = torch.cat([self.max_overlaps.new_ones(len(gt_labels)), self.max_overlaps])
 
         if self.labels is not None:
             self.labels = torch.cat([gt_labels, self.labels])
