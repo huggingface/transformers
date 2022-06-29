@@ -157,7 +157,7 @@ class TFDeiTPatchEmbeddings(tf.keras.layers.Layer):
         )
 
     def call(self, pixel_values: tf.Tensor) -> tf.Tensor:
-        batch_size, num_channels, height, width = shape_list(pixel_values)
+        batch_size, height, width, num_channels = shape_list(pixel_values)
         if tf.executing_eagerly() and num_channels != self.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
@@ -166,13 +166,9 @@ class TFDeiTPatchEmbeddings(tf.keras.layers.Layer):
             raise ValueError(
                 f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
             )
-        # (batch_size, num_channels, height, width) -> (batch_size, height, width, num_channels)
-        x = tf.transpose(pixel_values, (0, 2, 3, 1))
-        x = self.projection(x)
-        # (batch_size, height, width, num_channels) -> (batch_size, num_channels, height, width)
-        x = tf.transpose(x, (0, 3, 1, 2))
-        x = tf.reshape(x, (*shape_list(x)[:2], -1))
-        x = tf.transpose(x, perm=(0, 2, 1))
+        x = self.projection(pixel_values)
+        batch_size, height, width, num_channels = shape_list(x)
+        x = tf.reshape(x, (batch_size, height * width, num_channels))
         return x
 
 
@@ -492,6 +488,10 @@ class TFDeiTMainLayer(tf.keras.layers.Layer):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
+        # TF 2.0 image layers can't use NCHW format when running on CPU.
+        # (batch_size, num_channels, height, width) -> (batch_size, height, width, num_channels)
+        pixel_values = tf.transpose(pixel_values, (0, 2, 3, 1))
+
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape bsz x n_heads x N x N
@@ -713,17 +713,12 @@ class TFDeitDecoder(tf.keras.layers.Layer):
         self.conv2d = tf.keras.layers.Conv2D(
             filters=config.encoder_stride**2 * config.num_channels, kernel_size=1, name="0"
         )
-        self._block_size = config.encoder_stride
         self.pixel_shuffle = TFDeitPixelShuffle(config.encoder_stride, name="1")
 
     def call(self, inputs: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = inputs
-        # (batch_size, num_channels, height, width) -> (batch_size, height, width, num_channels)
-        hidden_states = tf.transpose(hidden_states, (0, 2, 3, 1))
         hidden_states = self.conv2d(hidden_states)
         hidden_states = self.pixel_shuffle(hidden_states)
-        # (batch_size, height, width, num_channels) -> (batch_size, num_channels, height, width)
-        hidden_states = tf.transpose(hidden_states, (0, 3, 1, 2))
         return hidden_states
 
 
@@ -799,11 +794,14 @@ class TFDeiTForMaskedImageModeling(TFDeiTPreTrainedModel):
         sequence_output = sequence_output[:, 1:-1]
         batch_size, sequence_length, num_channels = shape_list(sequence_output)
         height = width = int(sequence_length**0.5)
-        sequence_output = tf.transpose(sequence_output, (0, 2, 1))
-        sequence_output = tf.reshape(sequence_output, (batch_size, num_channels, height, width))
+        sequence_output = tf.reshape(sequence_output, (batch_size, height, width, num_channels))
 
         # Reconstruct pixel values
         reconstructed_pixel_values = self.decoder(sequence_output, training=training)
+        # TF 2.0 image layers can't use NCHW format when running on CPU, so intermediate layers use NHWC,
+        # including the The decoder. We transpose to compute the loss against the pixel values
+        # (batch_size, height, width, num_channels) -> (batch_size, num_channels, height, width)
+        reconstructed_pixel_values = tf.transpose(reconstructed_pixel_values, (0, 3, 1, 2))
 
         masked_im_loss = None
         if bool_masked_pos is not None:
