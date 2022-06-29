@@ -3761,11 +3761,11 @@ if TYPE_CHECKING:
             MBartPreTrainedModel,
         )
         from .models.mctct import (
-            MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST, 
-            MCTCTForSequenceClassification, 
-            MCTCTForCTC, 
-            MCTCTModel, 
-            MCTCTPreTrainedModel
+            MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MCTCTForCTC,
+            MCTCTForSequenceClassification,
+            MCTCTModel,
+            MCTCTPreTrainedModel,
         )
         from .models.megatron_bert import (
             MEGATRON_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,

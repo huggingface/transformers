@@ -2810,6 +2810,13 @@ class MCTCTForCTC(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class MCTCTForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class MCTCTModel(metaclass=DummyObject):
     _backends = ["torch"]
 

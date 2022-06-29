@@ -69,11 +69,11 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_mctct import (
-            MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST, 
+            MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MCTCTForCTC,
             MCTCTForSequenceClassification,
-            MCTCTForCTC, 
             MCTCTModel,
-            MCTCTPreTrainedModel
+            MCTCTPreTrainedModel,
         )
 
 else:
