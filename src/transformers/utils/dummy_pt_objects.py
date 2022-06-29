@@ -2803,14 +2803,14 @@ class MBartPreTrainedModel(metaclass=DummyObject):
 MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class MCTCTForCTC(metaclass=DummyObject):
+class MCTCTForAudioFrameClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class MCTCTForAudioFrameClassification(metaclass=DummyObject):
+class MCTCTForCTC(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

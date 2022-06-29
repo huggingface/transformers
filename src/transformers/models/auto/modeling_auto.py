@@ -472,6 +472,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("led", "LEDForSequenceClassification"),
         ("longformer", "LongformerForSequenceClassification"),
         ("mbart", "MBartForSequenceClassification"),
+        ("mctct", "MCTCTForSequenceClassification"),
         ("megatron-bert", "MegatronBertForSequenceClassification"),
         ("mobilebert", "MobileBertForSequenceClassification"),
         ("mpnet", "MPNetForSequenceClassification"),
@@ -668,6 +669,7 @@ MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Audio Classification mapping
         ("data2vec-audio", "Data2VecAudioForAudioFrameClassification"),
+        ("mctct", "MCTCTForAudioFrameClassification"),
         ("unispeech-sat", "UniSpeechSatForAudioFrameClassification"),
         ("wav2vec2", "Wav2Vec2ForAudioFrameClassification"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerForAudioFrameClassification"),
