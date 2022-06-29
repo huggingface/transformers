@@ -31,7 +31,7 @@ if is_torch_available():
     from torch import nn
 
     from transformers import YolosForObjectDetection, YolosModel
-    from transformers.models.yolos.modeling_yolos import YOLOS_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
+    from transformers.models.yolos.modeling_yolos import YOLOS_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -86,9 +86,7 @@ class YolosModelTester:
         self.num_detection_tokens = num_detection_tokens
         # we set the expected sequence length (which is used in several tests)
         # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token) + num_detection_tokens
-        image_size = to_2tuple(self.image_size)
-        patch_size = to_2tuple(self.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        num_patches = (image_size[1] // patch_size) * (image_size[0] // patch_size)
         self.expected_seq_len = num_patches + 1 + self.num_detection_tokens
 
     def prepare_config_and_inputs(self):

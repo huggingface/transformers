@@ -22,7 +22,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.20.0.dev0"
+__version__ = "4.21.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -35,6 +35,7 @@ from .utils import (
     is_scatter_available,
     is_sentencepiece_available,
     is_speech_available,
+    is_tensorflow_text_available,
     is_tf_available,
     is_timm_available,
     is_tokenizers_available,
@@ -168,6 +169,7 @@ _import_structure = {
         "CLIPTokenizer",
         "CLIPVisionConfig",
     ],
+    "models.codegen": ["CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP", "CodeGenConfig", "CodeGenTokenizer"],
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
     "models.convnext": ["CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNextConfig"],
     "models.cpm": [],
@@ -216,6 +218,12 @@ _import_structure = {
     "models.gpt_neo": ["GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoConfig"],
     "models.gpt_neox": ["GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXConfig"],
     "models.gptj": ["GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTJConfig"],
+    "models.groupvit": [
+        "GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "GroupViTConfig",
+        "GroupViTTextConfig",
+        "GroupViTVisionConfig",
+    ],
     "models.herbert": ["HerbertTokenizer"],
     "models.hubert": ["HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "HubertConfig"],
     "models.ibert": ["IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IBertConfig"],
@@ -239,6 +247,7 @@ _import_structure = {
     "models.led": ["LED_PRETRAINED_CONFIG_ARCHIVE_MAP", "LEDConfig", "LEDTokenizer"],
     "models.levit": ["LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LevitConfig"],
     "models.longformer": ["LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongformerConfig", "LongformerTokenizer"],
+    "models.longt5": ["LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongT5Config"],
     "models.luke": ["LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP", "LukeConfig", "LukeTokenizer"],
     "models.lxmert": ["LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LxmertConfig", "LxmertTokenizer"],
     "models.m2m_100": ["M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP", "M2M100Config"],
@@ -254,6 +263,7 @@ _import_structure = {
     "models.mobilebert": ["MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileBertConfig", "MobileBertTokenizer"],
     "models.mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetTokenizer"],
     "models.mt5": ["MT5Config"],
+    "models.nezha": ["NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP", "NezhaConfig"],
     "models.nystromformer": [
         "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "NystromformerConfig",
@@ -377,6 +387,7 @@ _import_structure = {
         "TextGenerationPipeline",
         "TokenClassificationPipeline",
         "TranslationPipeline",
+        "VisualQuestionAnsweringPipeline",
         "ZeroShotClassificationPipeline",
         "ZeroShotImageClassificationPipeline",
         "pipeline",
@@ -431,6 +442,7 @@ _import_structure = {
         "is_sentencepiece_available",
         "is_sklearn_available",
         "is_speech_available",
+        "is_tensorflow_text_available",
         "is_tf_available",
         "is_timm_available",
         "is_tokenizers_available",
@@ -501,6 +513,7 @@ else:
     _import_structure["models.bloom"].append("BloomTokenizerFast")
     _import_structure["models.camembert"].append("CamembertTokenizerFast")
     _import_structure["models.clip"].append("CLIPTokenizerFast")
+    _import_structure["models.codegen"].append("CodeGenTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
     _import_structure["models.cpm"].append("CpmTokenizerFast")
     _import_structure["models.deberta"].append("DebertaTokenizerFast")
@@ -569,6 +582,19 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["models.mctct"].append("MCTCTFeatureExtractor")
     _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
+
+# Tensorflow-text-specific objects
+try:
+    if not is_tensorflow_text_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    from .utils import dummy_tensorflow_text_objects
+
+    _import_structure["utils.dummy_tensorflow_text_objects"] = [
+        name for name in dir(dummy_tensorflow_text_objects) if not name.startswith("_")
+    ]
+else:
+    _import_structure["models.bert"].append("TFBertTokenizer")
 
 try:
     if not (is_sentencepiece_available() and is_speech_available()):
@@ -758,6 +784,7 @@ else:
             "MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING",
             "MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
             "MODEL_FOR_VISION_2_SEQ_MAPPING",
+            "MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING",
             "MODEL_MAPPING",
             "MODEL_WITH_LM_HEAD_MAPPING",
             "AutoModel",
@@ -783,6 +810,7 @@ else:
             "AutoModelForTableQuestionAnswering",
             "AutoModelForTokenClassification",
             "AutoModelForVision2Seq",
+            "AutoModelForVisualQuestionAnswering",
             "AutoModelWithLMHead",
         ]
     )
@@ -866,6 +894,8 @@ else:
             "BloomForCausalLM",
             "BloomModel",
             "BloomPreTrainedModel",
+            "BloomForSequenceClassification",
+            "BloomForTokenClassification",
         ]
     )
     _import_structure["models.blenderbot"].extend(
@@ -1181,6 +1211,23 @@ else:
             "GPTJPreTrainedModel",
         ]
     )
+    _import_structure["models.groupvit"].extend(
+        [
+            "GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GroupViTModel",
+            "GroupViTPreTrainedModel",
+            "GroupViTTextModel",
+            "GroupViTVisionModel",
+        ]
+    )
+    _import_structure["models.codegen"].extend(
+        [
+            "CODEGEN_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CodeGenForCausalLM",
+            "CodeGenModel",
+            "CodeGenPreTrainedModel",
+        ]
+    )
     _import_structure["models.hubert"].extend(
         [
             "HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1272,6 +1319,15 @@ else:
             "LongformerModel",
             "LongformerPreTrainedModel",
             "LongformerSelfAttention",
+        ]
+    )
+    _import_structure["models.longt5"].extend(
+        [
+            "LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "LongT5EncoderModel",
+            "LongT5ForConditionalGeneration",
+            "LongT5Model",
+            "LongT5PreTrainedModel",
         ]
     )
     _import_structure["models.luke"].extend(
@@ -1379,6 +1435,20 @@ else:
         ]
     )
     _import_structure["models.mt5"].extend(["MT5EncoderModel", "MT5ForConditionalGeneration", "MT5Model"])
+    _import_structure["models.nezha"].extend(
+        [
+            "NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "NezhaForMaskedLM",
+            "NezhaForPreTraining",
+            "NezhaForNextSentencePrediction",
+            "NezhaForMultipleChoice",
+            "NezhaForQuestionAnswering",
+            "NezhaForSequenceClassification",
+            "NezhaForTokenClassification",
+            "NezhaModel",
+            "NezhaPreTrainedModel",
+        ]
+    )
     _import_structure["models.nystromformer"].extend(
         [
             "NYSTROMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2585,6 +2655,9 @@ else:
         ["FlaxGPTNeoForCausalLM", "FlaxGPTNeoModel", "FlaxGPTNeoPreTrainedModel"]
     )
     _import_structure["models.gptj"].extend(["FlaxGPTJForCausalLM", "FlaxGPTJModel", "FlaxGPTJPreTrainedModel"])
+    _import_structure["models.longt5"].extend(
+        ["FlaxLongT5ForConditionalGeneration", "FlaxLongT5Model", "FlaxLongT5PreTrainedModel"]
+    )
     _import_structure["models.marian"].extend(
         [
             "FlaxMarianModel",
@@ -2778,6 +2851,7 @@ if TYPE_CHECKING:
         CLIPTokenizer,
         CLIPVisionConfig,
     )
+    from .models.codegen import CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP, CodeGenConfig, CodeGenTokenizer
     from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
     from .models.convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
@@ -2826,6 +2900,12 @@ if TYPE_CHECKING:
     from .models.gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
     from .models.gpt_neox import GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXConfig
     from .models.gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig
+    from .models.groupvit import (
+        GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        GroupViTConfig,
+        GroupViTTextConfig,
+        GroupViTVisionConfig,
+    )
     from .models.herbert import HerbertTokenizer
     from .models.hubert import HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, HubertConfig
     from .models.ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
@@ -2849,6 +2929,7 @@ if TYPE_CHECKING:
     from .models.led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig, LEDTokenizer
     from .models.levit import LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, LevitConfig
     from .models.longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig, LongformerTokenizer
+    from .models.longt5 import LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP, LongT5Config
     from .models.luke import LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP, LukeConfig, LukeTokenizer
     from .models.lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertConfig, LxmertTokenizer
     from .models.m2m_100 import M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP, M2M100Config
@@ -2861,6 +2942,7 @@ if TYPE_CHECKING:
     from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer
     from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
     from .models.mt5 import MT5Config
+    from .models.nezha import NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP, NezhaConfig
     from .models.nystromformer import NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, NystromformerConfig
     from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
     from .models.opt import OPTConfig
@@ -2963,6 +3045,7 @@ if TYPE_CHECKING:
         TextGenerationPipeline,
         TokenClassificationPipeline,
         TranslationPipeline,
+        VisualQuestionAnsweringPipeline,
         ZeroShotClassificationPipeline,
         ZeroShotImageClassificationPipeline,
         pipeline,
@@ -3022,6 +3105,7 @@ if TYPE_CHECKING:
         is_sentencepiece_available,
         is_sklearn_available,
         is_speech_available,
+        is_tensorflow_text_available,
         is_tf_available,
         is_timm_available,
         is_tokenizers_available,
@@ -3080,6 +3164,7 @@ if TYPE_CHECKING:
         from .models.bloom import BloomTokenizerFast
         from .models.camembert import CamembertTokenizerFast
         from .models.clip import CLIPTokenizerFast
+        from .models.codegen import CodeGenTokenizerFast
         from .models.convbert import ConvBertTokenizerFast
         from .models.cpm import CpmTokenizerFast
         from .models.deberta import DebertaTokenizerFast
@@ -3136,6 +3221,14 @@ if TYPE_CHECKING:
     else:
         from .models.mctct import MCTCTFeatureExtractor
         from .models.speech_to_text import Speech2TextFeatureExtractor
+
+    try:
+        if not is_tensorflow_text_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        from .utils.dummy_tensorflow_text_objects import *
+    else:
+        from .models.bert import TFBertTokenizer
 
     try:
         if not (is_speech_available() and is_sentencepiece_available()):
@@ -3293,6 +3386,7 @@ if TYPE_CHECKING:
             MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
             MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             MODEL_FOR_VISION_2_SEQ_MAPPING,
+            MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING,
             MODEL_MAPPING,
             MODEL_WITH_LM_HEAD_MAPPING,
             AutoModel,
@@ -3318,6 +3412,7 @@ if TYPE_CHECKING:
             AutoModelForTableQuestionAnswering,
             AutoModelForTokenClassification,
             AutoModelForVision2Seq,
+            AutoModelForVisualQuestionAnswering,
             AutoModelWithLMHead,
         )
         from .models.bart import (
@@ -3399,6 +3494,8 @@ if TYPE_CHECKING:
         from .models.bloom import (
             BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST,
             BloomForCausalLM,
+            BloomForSequenceClassification,
+            BloomForTokenClassification,
             BloomModel,
             BloomPreTrainedModel,
         )
@@ -3429,6 +3526,12 @@ if TYPE_CHECKING:
             CLIPPreTrainedModel,
             CLIPTextModel,
             CLIPVisionModel,
+        )
+        from .models.codegen import (
+            CODEGEN_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CodeGenForCausalLM,
+            CodeGenModel,
+            CodeGenPreTrainedModel,
         )
         from .models.convbert import (
             CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -3647,6 +3750,13 @@ if TYPE_CHECKING:
             GPTJModel,
             GPTJPreTrainedModel,
         )
+        from .models.groupvit import (
+            GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GroupViTModel,
+            GroupViTPreTrainedModel,
+            GroupViTTextModel,
+            GroupViTVisionModel,
+        )
         from .models.hubert import (
             HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             HubertForCTC,
@@ -3721,6 +3831,13 @@ if TYPE_CHECKING:
             LongformerModel,
             LongformerPreTrainedModel,
             LongformerSelfAttention,
+        )
+        from .models.longt5 import (
+            LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST,
+            LongT5EncoderModel,
+            LongT5ForConditionalGeneration,
+            LongT5Model,
+            LongT5PreTrainedModel,
         )
         from .models.luke import (
             LUKE_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -3809,6 +3926,18 @@ if TYPE_CHECKING:
             MPNetPreTrainedModel,
         )
         from .models.mt5 import MT5EncoderModel, MT5ForConditionalGeneration, MT5Model
+        from .models.nezha import (
+            NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            NezhaForMaskedLM,
+            NezhaForMultipleChoice,
+            NezhaForNextSentencePrediction,
+            NezhaForPreTraining,
+            NezhaForQuestionAnswering,
+            NezhaForSequenceClassification,
+            NezhaForTokenClassification,
+            NezhaModel,
+            NezhaPreTrainedModel,
+        )
         from .models.nystromformer import (
             NYSTROMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             NystromformerForMaskedLM,
@@ -4787,6 +4916,7 @@ if TYPE_CHECKING:
         from .models.gpt2 import FlaxGPT2LMHeadModel, FlaxGPT2Model, FlaxGPT2PreTrainedModel
         from .models.gpt_neo import FlaxGPTNeoForCausalLM, FlaxGPTNeoModel, FlaxGPTNeoPreTrainedModel
         from .models.gptj import FlaxGPTJForCausalLM, FlaxGPTJModel, FlaxGPTJPreTrainedModel
+        from .models.longt5 import FlaxLongT5ForConditionalGeneration, FlaxLongT5Model, FlaxLongT5PreTrainedModel
         from .models.marian import FlaxMarianModel, FlaxMarianMTModel, FlaxMarianPreTrainedModel
         from .models.mbart import (
             FlaxMBartForConditionalGeneration,

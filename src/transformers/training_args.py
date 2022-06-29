@@ -35,10 +35,12 @@ from .utils import (
     ExplicitEnum,
     cached_property,
     get_full_repo_name,
+    is_accelerate_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_torch_available,
-    is_torch_bf16_available,
+    is_torch_bf16_cpu_available,
+    is_torch_bf16_gpu_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
     logging,
@@ -74,6 +76,15 @@ def default_logdir() -> str:
 
     current_time = datetime.now().strftime("%b%d_%H-%M-%S")
     return os.path.join("runs", current_time + "_" + socket.gethostname())
+
+
+def get_int_from_env(env_keys, default):
+    """Returns the first positive env value found in the `env_keys` list or the default."""
+    for e in env_keys:
+        val = int(os.environ.get(e, -1))
+        if val >= 0:
+            return val
+    return default
 
 
 class OptimizerNames(ExplicitEnum):
@@ -236,6 +247,8 @@ class TrainingArguments:
             Random seed to be used with data samplers. If not set, random generators for data sampling will use the
             same seed as `seed`. This can be used to ensure reproducibility of data sampling, independent of the model
             seed.
+        jit_mode_eval (`bool`, *optional*, defaults to `False`):
+            Whether or not to use PyTorch jit trace for inference.
         use_ipex (`bool`, *optional*, defaults to `False`):
             Use Intel extension for PyTorch when it is available. [IPEX
             installation](https://github.com/intel/intel-extension-for-pytorch).
@@ -305,8 +318,8 @@ class TrainingArguments:
 
             <Tip>
 
-            When set to `True`, the parameters `save_strategy` needs to be the same as `eval_strategy`, and in the case
-            it is "steps", `save_steps` must be a round multiple of `eval_steps`.
+            When set to `True`, the parameters `save_strategy` needs to be the same as `evaluation_strategy`, and in
+            the case it is "steps", `save_steps` must be a round multiple of `eval_steps`.
 
             </Tip>
 
@@ -456,6 +469,12 @@ class TrainingArguments:
         torchdynamo (`str`, *optional*):
             The token that is used to set the backend compiler for TorchDynamo. Possible choices are ["eager",
             "nvfuser]. This is an experimental API and subject to change.
+        ray_scope (`str`, *optional*, defaults to `"last"`):
+            The scope to use when doing hyperparameter search with Ray. By default, `"last"` will be used. Ray will
+            then use the last checkpoint of all trials, compare those, and select the best one. However, other options
+            are also available. See the [Ray documentation](
+            https://docs.ray.io/en/latest/tune/api_docs/analysis.html#ray.tune.ExperimentAnalysis.get_best_trial) for
+            more options.
     """
 
     output_dir: str = field(
@@ -610,6 +629,9 @@ class TrainingArguments:
     no_cuda: bool = field(default=False, metadata={"help": "Do not use CUDA even when it is available"})
     seed: int = field(default=42, metadata={"help": "Random seed that will be set at the beginning of training."})
     data_seed: Optional[int] = field(default=None, metadata={"help": "Random seed to be used with data samplers."})
+    jit_mode_eval: bool = field(
+        default=False, metadata={"help": "Whether or not to use PyTorch jit trace for inference"}
+    )
     use_ipex: bool = field(
         default=False,
         metadata={
@@ -916,6 +938,19 @@ class TrainingArguments:
             "choices": ["eager", "nvfuser"],
         },
     )
+    ray_scope: Optional[str] = field(
+        default="last",
+        metadata={
+            "help": (
+                'The scope to use when doing hyperparameter search with Ray. By default, `"last"` will be used. Ray'
+                " will then use the last checkpoint of all trials, compare those, and select the best one. However,"
+                " other options are also available. See the Ray documentation"
+                " (https://docs.ray.io/en/latest/tune/api_docs/analysis.html"
+                "#ray.tune.ExperimentAnalysis.get_best_trial)"
+                " for more options."
+            )
+        },
+    )
 
     def __post_init__(self):
         # Handle --use_env option in torch.distributed.launch (local_rank not passed as an arg then).
@@ -1002,14 +1037,23 @@ class TrainingArguments:
             )
             self.half_precision_backend = self.fp16_backend
 
-        if (self.bf16 or self.bf16_full_eval) and not is_torch_bf16_available() and not self.no_cuda:
-            raise ValueError(
-                "Your setup doesn't support bf16. You need torch>=1.10, using Ampere GPU with cuda>=11.0 or using CPU"
-                " (no_cuda)"
-            )
+        if self.bf16 or self.bf16_full_eval:
+
+            if self.no_cuda and not is_torch_bf16_cpu_available():
+                # cpu
+                raise ValueError("Your setup doesn't support bf16/cpu. You need torch>=1.10")
+            elif not self.no_cuda and not is_torch_bf16_gpu_available():
+                # gpu
+                raise ValueError(
+                    "Your setup doesn't support bf16/gpu. You need torch>=1.10, using Ampere GPU with cuda>=11.0"
+                )
 
         if self.fp16 and self.bf16:
             raise ValueError("At most one of fp16 and bf16 can be True, but not both")
+
+        if self.fp16_full_eval and self.bf16_full_eval:
+            raise ValueError("At most one of fp16 and bf16 can be True for full eval, but not both")
+
         if self.bf16:
             if self.half_precision_backend == "apex":
                 raise ValueError(
@@ -1130,6 +1174,8 @@ class TrainingArguments:
         if self.deepspeed:
             # - must be run very last in arg parsing, since it will use a lot of these settings.
             # - must be run before the model is created.
+            if not is_accelerate_available():
+                raise ValueError("--deepspeed requires Accelerate to be installed: `pip install accelerate`.")
             from transformers.deepspeed import HfTrainerDeepSpeedConfig
 
             # will be used later by the Trainer
@@ -1227,6 +1273,10 @@ class TrainingArguments:
         if self.no_cuda:
             device = torch.device("cpu")
             self._n_gpu = 0
+            self.local_rank = get_int_from_env(
+                ["LOCAL_RANK", "MPI_LOCALRANKID", "OMPI_COMM_WORLD_LOCAL_RANK", "MV2_COMM_WORLD_LOCAL_RANK"],
+                self.local_rank,
+            )
             if self.local_rank != -1 and not torch.distributed.is_initialized():
                 # Initializes distributed backend for cpu
                 if self.xpu_backend not in ("mpi", "ccl"):
@@ -1234,7 +1284,30 @@ class TrainingArguments:
                         "CPU distributed training backend is not properly set. "
                         "Please set '--xpu_backend' to either 'mpi' or 'ccl'."
                     )
-                torch.distributed.init_process_group(backend=self.xpu_backend)
+                if self.xpu_backend == "ccl" and int(os.environ.get("CCL_WORKER_COUNT", 0)) < 1:
+                    raise ValueError(
+                        "CPU distributed training backend is ccl. but CCL_WORKER_COUNT is not correctly set. "
+                        "Please use like 'export CCL_WORKER_COUNT = 1' to set."
+                    )
+
+                # Try to get launch configuration from environment variables set by MPI launcher - works for Intel MPI, OpenMPI and MVAPICH
+                rank = get_int_from_env(["RANK", "PMI_RANK", "OMPI_COMM_WORLD_RANK", "MV2_COMM_WORLD_RANK"], 0)
+                size = get_int_from_env(["WORLD_SIZE", "PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE"], 1)
+                local_size = get_int_from_env(
+                    ["MPI_LOCALNRANKS", "OMPI_COMM_WORLD_LOCAL_SIZE", "MV2_COMM_WORLD_LOCAL_SIZE"], 1
+                )
+                os.environ["RANK"] = str(rank)
+                os.environ["WORLD_SIZE"] = str(size)
+                os.environ["LOCAL_RANK"] = str(self.local_rank)
+                if not os.environ.get("MASTER_PORT", None):
+                    os.environ["MASTER_PORT"] = "29500"
+                if not os.environ.get("MASTER_ADDR", None):
+                    if local_size != size or self.xpu_backend != "mpi":
+                        raise ValueError(
+                            "Looks like distributed multinode run but MASTER_ADDR env not set, "
+                            "please try exporting rank 0's hostname as MASTER_ADDR"
+                        )
+                torch.distributed.init_process_group(backend=self.xpu_backend, rank=rank, world_size=size)
         elif is_torch_tpu_available():
             device = xm.xla_device()
             self._n_gpu = 0

@@ -584,8 +584,64 @@ def retrieve_available_artifacts():
 
 if __name__ == "__main__":
 
+    org = "huggingface"
+    repo = "transformers"
+    repository_full_name = f"{org}/{repo}"
+
     # This env. variable is set in workflow file (under the job `send_results`).
     ci_event = os.environ["CI_EVENT"]
+
+    # To find the PR number in a commit title, for example, `Add AwesomeFormer model (#99999)`
+    pr_number_re = re.compile(r"\(#(\d+)\)$")
+
+    title = f"🤗 Results of the {ci_event} tests."
+    # Add Commit/PR title with a link for push CI
+    # (check the title in 2 env. variables - depending on the CI is triggered via `push` or `workflow_run` event)
+    ci_title_push = os.environ.get("CI_TITLE_PUSH")
+    ci_title_workflow_run = os.environ.get("CI_TITLE_WORKFLOW_RUN")
+    ci_title = ci_title_push if ci_title_push else ci_title_workflow_run
+
+    ci_sha = os.environ.get("CI_SHA")
+
+    ci_url = None
+    if ci_sha:
+        ci_url = f"https://github.com/{repository_full_name}/commit/{ci_sha}"
+
+    if ci_title is not None:
+        if ci_url is None:
+            raise ValueError(
+                "When a title is found (`ci_title`), it means a `push` event or a `workflow_run` even (triggered by "
+                "another `push` event), and the commit SHA has to be provided in order to create the URL to the "
+                "commit page."
+            )
+        ci_title = ci_title.strip().split("\n")[0].strip()
+
+        # Retrieve the PR title and author login to complete the report
+        commit_number = ci_url.split("/")[-1]
+        ci_detail_url = f"https://api.github.com/repos/{repository_full_name}/commits/{commit_number}"
+        ci_details = requests.get(ci_detail_url).json()
+        ci_author = ci_details["author"]["login"]
+
+        merged_by = None
+        # Find the PR number (if any) and change the url to the actual PR page.
+        numbers = pr_number_re.findall(ci_title)
+        if len(numbers) > 0:
+            pr_number = numbers[0]
+            ci_detail_url = f"https://api.github.com/repos/{repository_full_name}/pulls/{pr_number}"
+            ci_details = requests.get(ci_detail_url).json()
+
+            ci_author = ci_details["user"]["login"]
+            ci_url = f"https://github.com/{repository_full_name}/pull/{pr_number}"
+
+            merged_by = ci_details["merged_by"]["login"]
+
+        if merged_by is None:
+            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: {ci_author}"
+        else:
+            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: {ci_author} | Merged by: {merged_by}"
+
+    else:
+        ci_title = ""
 
     arguments = sys.argv[1:][0]
     try:
@@ -746,45 +802,6 @@ if __name__ == "__main__":
                         additional_results[key]["failures"][artifact_path["gpu"]].append(
                             {"line": line, "trace": stacktraces.pop(0)}
                         )
-
-    # To find the PR number in a commit title, for example, `Add AwesomeFormer model (#99999)`
-    pr_number_re = re.compile(r"\(#(\d+)\)$")
-
-    title = f"🤗 Results of the {ci_event} tests."
-    # Add PR title with a link for push CI
-    ci_title = os.environ.get("CI_TITLE")
-    ci_url = os.environ.get("CI_COMMIT_URL")
-
-    if ci_title is not None:
-        assert ci_url is not None
-        ci_title = ci_title.strip().split("\n")[0].strip()
-
-        # Retrieve the PR title and author login to complete the report
-        commit_number = ci_url.split("/")[-1]
-        ci_detail_url = f"https://api.github.com/repos/huggingface/transformers/commits/{commit_number}"
-        ci_details = requests.get(ci_detail_url).json()
-        ci_author = ci_details["author"]["login"]
-
-        merged_by = None
-        # Find the PR number (if any) and change the url to the actual PR page.
-        numbers = pr_number_re.findall(ci_title)
-        if len(numbers) > 0:
-            pr_number = numbers[0]
-            ci_detail_url = f"https://api.github.com/repos/huggingface/transformers/pulls/{pr_number}"
-            ci_details = requests.get(ci_detail_url).json()
-
-            ci_author = ci_details["user"]["login"]
-            ci_url = f"https://github.com/huggingface/transformers/pull/{pr_number}"
-
-            merged_by = ci_details["merged_by"]["login"]
-
-        if merged_by is None:
-            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: {ci_author}"
-        else:
-            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: {ci_author} | Merged by: {merged_by}"
-
-    else:
-        ci_title = ""
 
     message = Message(title, ci_title, model_results, additional_results)
 

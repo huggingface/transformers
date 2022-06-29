@@ -938,7 +938,7 @@ class TFRemBertModel(TFRemBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="rembert",
+        checkpoint="google/rembert",
         output_type=TFBaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1041,7 +1041,7 @@ class TFRemBertForMaskedLM(TFRemBertPreTrainedModel, TFMaskedLanguageModelingLos
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="rembert",
+        checkpoint="google/rembert",
         output_type=TFMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1131,7 +1131,7 @@ class TFRemBertForCausalLM(TFRemBertPreTrainedModel, TFCausalLanguageModelingLos
     @unpack_inputs
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="rembert",
+        checkpoint="google/rembert",
         output_type=TFCausalLMOutputWithCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1262,7 +1262,7 @@ class TFRemBertForSequenceClassification(TFRemBertPreTrainedModel, TFSequenceCla
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="rembert",
+        checkpoint="google/rembert",
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1352,7 +1352,7 @@ class TFRemBertForMultipleChoice(TFRemBertPreTrainedModel, TFMultipleChoiceLoss)
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="rembert",
+        checkpoint="google/rembert",
         output_type=TFMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1471,7 +1471,7 @@ class TFRemBertForTokenClassification(TFRemBertPreTrainedModel, TFTokenClassific
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="rembert",
+        checkpoint="google/rembert",
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1550,7 +1550,7 @@ class TFRemBertForQuestionAnswering(TFRemBertPreTrainedModel, TFQuestionAnswerin
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="rembert",
+        checkpoint="google/rembert",
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )

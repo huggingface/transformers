@@ -226,20 +226,17 @@ def get_test_dependencies(test_fname):
     relative_imports = re.findall(r"from\s+(\.\S+)\s+import\s+([^\n]+)\n", content)
     relative_imports = [test for test, imp in relative_imports if "# tests_ignore" not in imp]
 
-    # Removes the double trailing '..' for parent imports, and creates an absolute path from the root dir with
-    # `tests` as a prefix.
-    parent_imports = [imp.strip(".") for imp in relative_imports if ".." in imp]
-    parent_imports = [os.path.join("tests", f"{test.replace('.', os.path.sep)}.py") for test in parent_imports]
+    def _convert_relative_import_to_file(relative_import):
+        level = 0
+        while relative_import.startswith("."):
+            level += 1
+            relative_import = relative_import[1:]
 
-    # Removes the single trailing '.' for current dir imports, and creates an absolute path from the root dir with
-    # tests/{module_name} as a prefix.
-    current_dir_imports = [imp.strip(".") for imp in relative_imports if ".." not in imp]
-    directory = os.path.sep.join(test_fname.split(os.path.sep)[:-1])
-    current_dir_imports = [
-        os.path.join(directory, f"{test.replace('.', os.path.sep)}.py") for test in current_dir_imports
-    ]
+        directory = os.path.sep.join(test_fname.split(os.path.sep)[:-level])
+        return os.path.join(directory, f"{relative_import.replace('.', os.path.sep)}.py")
 
-    return [f for f in [*parent_imports, *current_dir_imports] if os.path.isfile(f)]
+    dependencies = [_convert_relative_import_to_file(relative_import) for relative_import in relative_imports]
+    return [f for f in dependencies if os.path.isfile(os.path.join(PATH_TO_TRANFORMERS, f))]
 
 
 def create_reverse_dependency_tree():

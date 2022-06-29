@@ -139,8 +139,9 @@ class DebertaTokenizerFast(GPT2TokenizerFast):
         Deberta tokenizer has a special mask token to be used in the fill-mask pipeline. The mask token will greedily
         comprise the space before the *[MASK]*.
         """
-        if self._mask_token is None and self.verbose:
-            logger.error("Using mask_token, but it is not set yet.")
+        if self._mask_token is None:
+            if self.verbose:
+                logger.error("Using mask_token, but it is not set yet.")
             return None
         return str(self._mask_token)
 
