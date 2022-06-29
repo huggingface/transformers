@@ -1,28 +1,22 @@
 # Copyright (c) OpenMMLab. All rights reserved.
-import torch
 import warnings
 
-class SamplingResult():
+import torch
+
+
+class SamplingResult:
     """Bbox sampling result.
 
     Example:
-        >>> # xdoctest: +IGNORE_WANT
-        >>> from mmdet.core.bbox.samplers.sampling_result import *  # NOQA
-        >>> self = SamplingResult.random(rng=10)
-        >>> print(f'self = {self}')
-        self = <SamplingResult({
-            'neg_bboxes': torch.Size([12, 4]),
-            'neg_inds': tensor([ 0,  1,  2,  4,  5,  6,  7,  8,  9, 10, 11, 12]),
-            'num_gts': 4,
-            'pos_assigned_gt_inds': tensor([], dtype=torch.int64),
-            'pos_bboxes': torch.Size([0, 4]),
-            'pos_inds': tensor([], dtype=torch.int64),
-            'pos_is_gt': tensor([], dtype=torch.uint8)
+        >>> # xdoctest: +IGNORE_WANT >>> from mmdet.core.bbox.samplers.sampling_result import * # NOQA >>> self =
+        SamplingResult.random(rng=10) >>> print(f'self = {self}') self = <SamplingResult({
+            'neg_bboxes': torch.Size([12, 4]), 'neg_inds': tensor([ 0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12]), 'num_gts':
+            4, 'pos_assigned_gt_inds': tensor([], dtype=torch.int64), 'pos_bboxes': torch.Size([0, 4]), 'pos_inds':
+            tensor([], dtype=torch.int64), 'pos_is_gt': tensor([], dtype=torch.uint8)
         })>
     """
 
-    def __init__(self, pos_inds, neg_inds, bboxes, gt_bboxes, assign_result,
-                 gt_flags):
+    def __init__(self, pos_inds, neg_inds, bboxes, gt_bboxes, assign_result, gt_flags):
         self.pos_inds = pos_inds
         self.neg_inds = neg_inds
         self.pos_bboxes = bboxes[pos_inds]
@@ -52,21 +46,21 @@ class SamplingResult():
         try:
             nice = self.__nice__()
             classname = self.__class__.__name__
-            return f'<{classname}({nice}) at {hex(id(self))}>'
+            return f"<{classname}({nice}) at {hex(id(self))}>"
         except NotImplementedError as ex:
             warnings.warn(str(ex), category=RuntimeWarning)
             return object.__repr__(self)
-    
+
     def __str__(self):
         """str: the string of the module"""
         try:
             classname = self.__class__.__name__
             nice = self.__nice__()
-            return f'<{classname}({nice})>'
+            return f"<{classname}({nice})>"
         except NotImplementedError as ex:
             warnings.warn(str(ex), category=RuntimeWarning)
             return object.__repr__(self)
-    
+
     @property
     def bboxes(self):
         """torch.Tensor: concatenated positive and negative boxes"""
@@ -76,9 +70,7 @@ class SamplingResult():
         """Change the device of the data inplace.
 
         Example:
-            >>> self = SamplingResult.random()
-            >>> print(f'self = {self.to(None)}')
-            >>> # xdoctest: +REQUIRES(--gpu)
+            >>> self = SamplingResult.random() >>> print(f'self = {self.to(None)}') >>> # xdoctest: +REQUIRES(--gpu)
             >>> print(f'self = {self.to(0)}')
         """
         _dict = self.__dict__
@@ -89,23 +81,23 @@ class SamplingResult():
 
     def __nice__(self):
         data = self.info.copy()
-        data['pos_bboxes'] = data.pop('pos_bboxes').shape
-        data['neg_bboxes'] = data.pop('neg_bboxes').shape
+        data["pos_bboxes"] = data.pop("pos_bboxes").shape
+        data["neg_bboxes"] = data.pop("neg_bboxes").shape
         parts = [f"'{k}': {v!r}" for k, v in sorted(data.items())]
-        body = '    ' + ',\n    '.join(parts)
-        return '{\n' + body + '\n}'
+        body = "    " + ",\n    ".join(parts)
+        return "{\n" + body + "\n}"
 
     @property
     def info(self):
         """Returns a dictionary of info about the object."""
         return {
-            'pos_inds': self.pos_inds,
-            'neg_inds': self.neg_inds,
-            'pos_bboxes': self.pos_bboxes,
-            'neg_bboxes': self.neg_bboxes,
-            'pos_is_gt': self.pos_is_gt,
-            'num_gts': self.num_gts,
-            'pos_assigned_gt_inds': self.pos_assigned_gt_inds,
+            "pos_inds": self.pos_inds,
+            "neg_inds": self.neg_inds,
+            "pos_bboxes": self.pos_bboxes,
+            "neg_bboxes": self.neg_bboxes,
+            "pos_is_gt": self.pos_is_gt,
+            "num_gts": self.num_gts,
+            "pos_assigned_gt_inds": self.pos_assigned_gt_inds,
         }
 
     @classmethod
@@ -123,16 +115,16 @@ class SamplingResult():
                 - p_use_label (float | bool): with labels or not.
 
         Returns:
-            :obj:`SamplingResult`: Randomly generated sampling result.
+            `SamplingResult`: Randomly generated sampling result.
 
         Example:
-            >>> from mmdet.core.bbox.samplers.sampling_result import *  # NOQA
-            >>> self = SamplingResult.random()
-            >>> print(self.__dict__)
+            >>> from mmdet.core.bbox.samplers.sampling_result import * # NOQA >>> self = SamplingResult.random() >>>
+            print(self.__dict__)
         """
         from mmdet.core.bbox import demodata
         from mmdet.core.bbox.assigners.assign_result import AssignResult
         from mmdet.core.bbox.samplers.random_sampler import RandomSampler
+
         rng = demodata.ensure_rng(rng)
 
         # make probabalistic?
@@ -162,10 +154,7 @@ class SamplingResult():
             add_gt_as_proposals = True  # make probabalistic?
 
         sampler = RandomSampler(
-            num,
-            pos_fraction,
-            neg_pos_ub=neg_pos_ub,
-            add_gt_as_proposals=add_gt_as_proposals,
-            rng=rng)
+            num, pos_fraction, neg_pos_ub=neg_pos_ub, add_gt_as_proposals=add_gt_as_proposals, rng=rng
+        )
         self = sampler.sample(assign_result, bboxes, gt_bboxes, gt_labels)
         return self
