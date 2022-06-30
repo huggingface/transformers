@@ -384,16 +384,12 @@ class Trainer:
             if args.local_rank == -1:
                 raise ValueError("Using fsdp only works in distributed training.")
 
-            # dep_version_check("torch>=1.13.0.dev")
-            # Would have to update setup.py with torch>=1.13.0.dev
-            # which isn't ideally given that it's a dev version
-            # and it will force people not using FSDP to also use torch>=1.13.0.dev
+            # dep_version_check("torch>=1.12.0")
+            # Would have to update setup.py with torch>=1.12.0
+            # which isn't ideally given that it will force people not using FSDP to also use torch>=1.12.0
             # below is the current alternative.
-            if (
-                version.parse(version.parse(torch.__version__).base_version) < version.parse("1.13.0")
-                and version.parse(torch.__version__).dev is None
-            ):
-                raise ValueError("FSDP requires PyTorch >= 1.13.0.dev")
+            if version.parse(torch.__version__) < version.parse("1.12.0"):
+                raise ValueError("FSDP requires PyTorch >= 1.12.0")
 
             from torch.distributed.fsdp.fully_sharded_data_parallel import ShardingStrategy
 
