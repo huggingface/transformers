@@ -125,8 +125,8 @@ class LongformerOnnxConfig(OnnxConfig):
 
     @property
     def default_onnx_opset(self) -> int:
-        # needs to be >= 12 to support einsum operator
-        return max(super().default_onnx_opset, 12)
+        # needs to be >= 14 to support tril operator
+        return max(super().default_onnx_opset, 14)
 
     def generate_dummy_inputs(
         self,
