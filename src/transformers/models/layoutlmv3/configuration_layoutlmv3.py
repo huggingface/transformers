@@ -15,17 +15,19 @@
 """ LayoutLMv3 model configuration"""
 
 from collections import OrderedDict
-from typing import Any, Mapping, Optional
+from typing import TYPE_CHECKING, Any, Mapping, Optional
 
 from packaging import version
-
-from transformers import TensorType
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...onnx.utils import compute_effective_axis_dimension
-from ...processing_utils import ProcessorMixin
 from ...utils import logging
+
+
+if TYPE_CHECKING:
+    from ...processing_utils import ProcessorMixin
+    from ...utils import TensorType
 
 
 logger = logging.get_logger(__name__)
@@ -224,11 +226,11 @@ class LayoutLMv3OnnxConfig(OnnxConfig):
 
     def generate_dummy_inputs(
         self,
-        processor: ProcessorMixin,
+        processor: "ProcessorMixin",
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
-        framework: Optional[TensorType] = None,
+        framework: Optional["TensorType"] = None,
         num_channels: int = 3,
         image_width: int = 40,
         image_height: int = 40,
