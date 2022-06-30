@@ -28,6 +28,7 @@ from transformers import (
     FEATURE_EXTRACTOR_MAPPING,
     TOKENIZER_MAPPING,
     AutoFeatureExtractor,
+    AutoModelForSequenceClassification,
     AutoTokenizer,
     DistilBertForSequenceClassification,
     IBertConfig,
@@ -38,6 +39,7 @@ from transformers import (
 from transformers.pipelines import PIPELINE_REGISTRY, get_task
 from transformers.pipelines.base import Pipeline, _pad
 from transformers.testing_utils import (
+    CaptureLogger,
     is_pipeline_test,
     nested_simplify,
     require_scatter,
@@ -46,6 +48,7 @@ from transformers.testing_utils import (
     require_torch,
     slow,
 )
+from transformers.utils import logging as transformers_logging
 
 
 logger = logging.getLogger(__name__)
@@ -770,9 +773,6 @@ class CustomPipeline(Pipeline):
 @is_pipeline_test
 class PipelineRegistryTest(unittest.TestCase):
     def test_warning_logs(self):
-        from transformers.testing_utils import CaptureLogger
-        from transformers.utils import logging as transformers_logging
-
         transformers_logging.set_verbosity_debug()
         logger_ = transformers_logging.get_logger("transformers.pipelines.base")
 
@@ -783,13 +783,10 @@ class PipelineRegistryTest(unittest.TestCase):
 
     @require_torch
     def test_register_pipeline(self):
-        from transformers import AutoModelForSequenceClassification
-        from transformers.utils import is_torch_available
-
         custom_text_classification = {
             "impl": CustomPipeline,
             "tf": (),
-            "pt": (AutoModelForSequenceClassification,) if is_torch_available() else (),
+            "pt": (AutoModelForSequenceClassification,),
             "default": {"model": {"pt": "hf-internal-testing/tiny-random-distilbert"}},
             "type": "text",
         }
