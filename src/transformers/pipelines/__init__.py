@@ -553,7 +553,8 @@ def pipeline(
         revision = revision if revision is not None else default_revision
         logger.warning(
             f"No model was supplied, defaulted to {model} and revision"
-            f" {revision} ({HUGGINGFACE_CO_RESOLVE_ENDPOINT}/{model})"
+            f" {revision} ({HUGGINGFACE_CO_RESOLVE_ENDPOINT}/{model}).\n"
+            "Using a pipeline without specifying a model name and revision in production is not recommended."
         )
 
     # Retrieve use_auth_token and add it to model_kwargs to be used in .from_pretrained
