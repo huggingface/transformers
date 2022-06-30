@@ -292,8 +292,8 @@ _import_structure = {
     "models.mluke": [],
     "models.mmbt": ["MMBTConfig"],
     "models.mobilebert": ["MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileBertConfig", "MobileBertTokenizer"],
-    "models.mobilevit": ["MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileViTConfig"],
     "models.mobilenet_v2": ["MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileNetV2Config"],
+    "models.mobilevit": ["MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileViTConfig"],
     "models.mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetTokenizer"],
     "models.mt5": ["MT5Config"],
     "models.mvp": ["MvpConfig", "MvpTokenizer"],
@@ -1660,15 +1660,6 @@ else:
             "load_tf_weights_in_mobilebert",
         ]
     )
-    _import_structure["models.mobilevit"].extend(
-        [
-            "MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "MobileViTForImageClassification",
-            "MobileViTForSemanticSegmentation",
-            "MobileViTModel",
-            "MobileViTPreTrainedModel",
-        ]
-    )
     _import_structure["models.mobilenet_v2"].extend(
         [
             "MOBILENET_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1677,6 +1668,15 @@ else:
             "MobileNetV2Model",
             "MobileNetV2PreTrainedModel",
             "load_tf_weights_in_mobilenet_v2",
+        ]
+    )
+    _import_structure["models.mobilevit"].extend(
+        [
+            "MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MobileViTForImageClassification",
+            "MobileViTForSemanticSegmentation",
+            "MobileViTModel",
+            "MobileViTPreTrainedModel",
         ]
     )
     _import_structure["models.mpnet"].extend(
@@ -3405,8 +3405,8 @@ if TYPE_CHECKING:
     from .models.megatron_bert import MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MegatronBertConfig
     from .models.mmbt import MMBTConfig
     from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer
-    from .models.mobilevit import MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileViTConfig
     from .models.mobilenet_v2 import MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileNetV2Config
+    from .models.mobilevit import MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileViTConfig
     from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
     from .models.mt5 import MT5Config
     from .models.mvp import MvpConfig, MvpTokenizer
@@ -4519,13 +4519,6 @@ if TYPE_CHECKING:
             MobileBertPreTrainedModel,
             load_tf_weights_in_mobilebert,
         )
-        from .models.mobilevit import (
-            MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            MobileViTForImageClassification,
-            MobileViTForSemanticSegmentation,
-            MobileViTModel,
-            MobileViTPreTrainedModel,
-        )
         from .models.mobilenet_v2 import (
             MOBILENET_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
             MobileNetV2ForImageClassification,
@@ -4533,6 +4526,13 @@ if TYPE_CHECKING:
             MobileNetV2Model,
             MobileNetV2PreTrainedModel,
             load_tf_weights_in_mobilenet_v2,
+        )
+        from .models.mobilevit import (
+            MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MobileViTForImageClassification,
+            MobileViTForSemanticSegmentation,
+            MobileViTModel,
+            MobileViTPreTrainedModel,
         )
         from .models.mpnet import (
             MPNET_PRETRAINED_MODEL_ARCHIVE_LIST,
