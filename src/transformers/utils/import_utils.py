@@ -396,19 +396,22 @@ def is_ftfy_available():
     return _ftfy_available
 
 
-def is_torch_tpu_available():
+def is_torch_tpu_available(check_device=True):
+    "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
     if not _torch_available:
         return False
-    if importlib.util.find_spec("torch_xla") is None:
-        return False
-    import torch_xla.core.xla_model as xm
+    if importlib.util.find_spec("torch_xla") is not None:
+        if check_device:
+            # We need to check if `xla_device` can be found, will raise a RuntimeError if not
+            try:
+                import torch_xla.core.xla_model as xm
 
-    # We need to check if `xla_device` can be found, will raise a RuntimeError if not
-    try:
-        xm.xla_device()
+                _ = xm.xla_device()
+                return True
+            except RuntimeError:
+                return False
         return True
-    except RuntimeError:
-        return False
+    return False
 
 
 def is_torchdynamo_available():
@@ -489,6 +492,10 @@ def is_pytesseract_available():
 
 def is_spacy_available():
     return importlib.util.find_spec("spacy") is not None
+
+
+def is_tensorflow_text_available():
+    return importlib.util.find_spec("tensorflow_text") is not None
 
 
 def is_in_notebook():
@@ -721,6 +728,12 @@ TENSORFLOW_PROBABILITY_IMPORT_ERROR = """
 explained here: https://github.com/tensorflow/probability.
 """
 
+# docstyle-ignore
+TENSORFLOW_TEXT_IMPORT_ERROR = """
+{0} requires the tensorflow_text library but it was not found in your environment. You can install it with pip as
+explained here: https://www.tensorflow.org/text/guide/tf_text_intro.
+"""
+
 
 # docstyle-ignore
 PANDAS_IMPORT_ERROR = """
@@ -800,6 +813,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("speech", (is_speech_available, SPEECH_IMPORT_ERROR)),
         ("tensorflow_probability", (is_tensorflow_probability_available, TENSORFLOW_PROBABILITY_IMPORT_ERROR)),
         ("tf", (is_tf_available, TENSORFLOW_IMPORT_ERROR)),
+        ("tensorflow_text", (is_tensorflow_text_available, TENSORFLOW_TEXT_IMPORT_ERROR)),
         ("timm", (is_timm_available, TIMM_IMPORT_ERROR)),
         ("tokenizers", (is_tokenizers_available, TOKENIZERS_IMPORT_ERROR)),
         ("torch", (is_torch_available, PYTORCH_IMPORT_ERROR)),
