@@ -304,6 +304,8 @@
       title: mLUKE
     - local: model_doc/mobilebert
       title: MobileBERT
+    - local: model_doc/mobilevit
+      title: MobileViT
     - local: model_doc/mpnet
       title: MPNet
     - local: model_doc/mt5

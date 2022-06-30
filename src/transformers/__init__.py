@@ -261,6 +261,7 @@ _import_structure = {
     "models.mluke": [],
     "models.mmbt": ["MMBTConfig"],
     "models.mobilebert": ["MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileBertConfig", "MobileBertTokenizer"],
+    "models.mobilevit": ["MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileViTConfig"],
     "models.mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetTokenizer"],
     "models.mt5": ["MT5Config"],
     "models.mvp": ["MvpConfig", "MvpTokenizer"],
@@ -636,6 +637,7 @@ else:
     _import_structure["models.layoutlmv3"].append("LayoutLMv3FeatureExtractor")
     _import_structure["models.levit"].append("LevitFeatureExtractor")
     _import_structure["models.maskformer"].append("MaskFormerFeatureExtractor")
+    _import_structure["models.mobilevit"].append("MobileViTFeatureExtractor")
     _import_structure["models.perceiver"].append("PerceiverFeatureExtractor")
     _import_structure["models.poolformer"].append("PoolFormerFeatureExtractor")
     _import_structure["models.segformer"].append("SegformerFeatureExtractor")
@@ -1430,6 +1432,15 @@ else:
             "MobileBertModel",
             "MobileBertPreTrainedModel",
             "load_tf_weights_in_mobilebert",
+        ]
+    )
+    _import_structure["models.mobilevit"].extend(
+        [
+            "MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MobileViTForImageClassification",
+            "MobileViTForSemanticSegmentation",
+            "MobileViTModel",
+            "MobileViTPreTrainedModel",
         ]
     )
     _import_structure["models.mpnet"].extend(
@@ -2693,7 +2704,7 @@ else:
             "FlaxMBartPreTrainedModel",
         ]
     )
-    _import_structure["models.mt5"].extend(["FlaxMT5ForConditionalGeneration", "FlaxMT5Model"])
+    _import_structure["models.mt5"].extend(["FlaxMT5EncoderModel", "FlaxMT5ForConditionalGeneration", "FlaxMT5Model"])
     _import_structure["models.opt"].extend(
         [
             "FlaxOPTForCausalLM",
@@ -2732,7 +2743,9 @@ else:
         ]
     )
     _import_structure["models.speech_encoder_decoder"].append("FlaxSpeechEncoderDecoderModel")
-    _import_structure["models.t5"].extend(["FlaxT5ForConditionalGeneration", "FlaxT5Model", "FlaxT5PreTrainedModel"])
+    _import_structure["models.t5"].extend(
+        ["FlaxT5EncoderModel", "FlaxT5ForConditionalGeneration", "FlaxT5Model", "FlaxT5PreTrainedModel"]
+    )
     _import_structure["models.vision_encoder_decoder"].append("FlaxVisionEncoderDecoderModel")
     _import_structure["models.vision_text_dual_encoder"].extend(["FlaxVisionTextDualEncoderModel"])
     _import_structure["models.vit"].extend(["FlaxViTForImageClassification", "FlaxViTModel", "FlaxViTPreTrainedModel"])
@@ -2959,6 +2972,7 @@ if TYPE_CHECKING:
     from .models.megatron_bert import MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MegatronBertConfig
     from .models.mmbt import MMBTConfig
     from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer
+    from .models.mobilevit import MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileViTConfig
     from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
     from .models.mt5 import MT5Config
     from .models.mvp import MvpConfig, MvpTokenizer
@@ -3279,6 +3293,7 @@ if TYPE_CHECKING:
         from .models.layoutlmv3 import LayoutLMv3FeatureExtractor
         from .models.levit import LevitFeatureExtractor
         from .models.maskformer import MaskFormerFeatureExtractor
+        from .models.mobilevit import MobileViTFeatureExtractor
         from .models.perceiver import PerceiverFeatureExtractor
         from .models.poolformer import PoolFormerFeatureExtractor
         from .models.segformer import SegformerFeatureExtractor
@@ -3927,6 +3942,13 @@ if TYPE_CHECKING:
             MobileBertModel,
             MobileBertPreTrainedModel,
             load_tf_weights_in_mobilebert,
+        )
+        from .models.mobilevit import (
+            MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MobileViTForImageClassification,
+            MobileViTForSemanticSegmentation,
+            MobileViTModel,
+            MobileViTPreTrainedModel,
         )
         from .models.mpnet import (
             MPNET_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -4954,7 +4976,7 @@ if TYPE_CHECKING:
             FlaxMBartModel,
             FlaxMBartPreTrainedModel,
         )
-        from .models.mt5 import FlaxMT5ForConditionalGeneration, FlaxMT5Model
+        from .models.mt5 import FlaxMT5EncoderModel, FlaxMT5ForConditionalGeneration, FlaxMT5Model
         from .models.opt import FlaxOPTForCausalLM, FlaxOPTModel, FlaxOPTPreTrainedModel
         from .models.pegasus import FlaxPegasusForConditionalGeneration, FlaxPegasusModel, FlaxPegasusPreTrainedModel
         from .models.roberta import (
@@ -4977,7 +4999,7 @@ if TYPE_CHECKING:
             FlaxRoFormerPreTrainedModel,
         )
         from .models.speech_encoder_decoder import FlaxSpeechEncoderDecoderModel
-        from .models.t5 import FlaxT5ForConditionalGeneration, FlaxT5Model, FlaxT5PreTrainedModel
+        from .models.t5 import FlaxT5EncoderModel, FlaxT5ForConditionalGeneration, FlaxT5Model, FlaxT5PreTrainedModel
         from .models.vision_encoder_decoder import FlaxVisionEncoderDecoderModel
         from .models.vision_text_dual_encoder import FlaxVisionTextDualEncoderModel
         from .models.vit import FlaxViTForImageClassification, FlaxViTModel, FlaxViTPreTrainedModel
