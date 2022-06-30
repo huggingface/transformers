@@ -1765,7 +1765,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # fp16 has accuracy accuracy degradation
         self.assertLess(np.max(np.abs(t1 - t2)), 1e-3)
 
-
     @require_torch_non_multi_gpu
     @require_torchdynamo
     @require_torch_tensorrt_fx
