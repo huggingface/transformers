@@ -280,8 +280,8 @@ class PTtoTFCommand(BaseTransformersCLICommand):
 
         # Confirms that cross loading PT weights into TF worked.
         crossload_differences = self.find_pt_tf_differences(pt_outputs, tf_from_pt_outputs)
-        output_differences = {k: v for k, v in crossload_differences.items() if not k.startswith("hidden_states")}
-        hidden_differences = {k: v for k, v in crossload_differences.items() if k.startswith("hidden_states")}
+        output_differences = {k: v for k, v in crossload_differences.items() if "hidden" not in k}
+        hidden_differences = {k: v for k, v in crossload_differences.items() if "hidden" in k}
         max_crossload_output_diff = max(output_differences.values())
         max_crossload_hidden_diff = max(hidden_differences.values())
         if max_crossload_output_diff > MAX_ERROR or max_crossload_hidden_diff > self._max_hidden_error:
@@ -304,8 +304,8 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         tf_outputs = tf_model(**tf_input, output_hidden_states=True)
 
         conversion_differences = self.find_pt_tf_differences(pt_outputs, tf_outputs)
-        output_differences = {k: v for k, v in conversion_differences.items() if not k.startswith("hidden_states")}
-        hidden_differences = {k: v for k, v in conversion_differences.items() if k.startswith("hidden_states")}
+        output_differences = {k: v for k, v in conversion_differences.items() if "hidden" not in k}
+        hidden_differences = {k: v for k, v in conversion_differences.items() if "hidden" in k}
         max_conversion_output_diff = max(output_differences.values())
         max_conversion_hidden_diff = max(hidden_differences.values())
         if max_conversion_output_diff > MAX_ERROR or max_conversion_hidden_diff > self._max_hidden_error:
