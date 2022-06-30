@@ -1201,17 +1201,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             raise TypeError("Dataset argument should be a datasets.Dataset!")
         model_inputs = list(dict(inspect.signature(self.call).parameters).keys())
         model_labels = find_labels(self.__class__)
-        unwanted_columns = [
-            feature
-            for feature in dataset.features
-            if feature not in model_inputs and feature not in ("label_ids", "label")
-        ]
-        dataset = dataset.remove_columns(unwanted_columns)
         output_signature, _ = dataset._get_output_signature(
             dataset,
             batch_size=None,
             collate_fn=collate_fn,
             collate_fn_args=collate_fn_args,
+            cols_to_retain=model_inputs
         )
         output_columns = list(output_signature.keys())
         feature_cols = [col for col in output_columns if col in model_inputs and col not in model_labels]
