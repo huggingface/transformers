@@ -364,7 +364,6 @@ class TFSegformerEncoder(tf.keras.layers.Layer):
                 )
             )
         self.embeddings = embeddings
-        # self.patch_embeddings = nn.ModuleList(embeddings)
 
         # Transformer blocks
         blocks = []
@@ -388,7 +387,6 @@ class TFSegformerEncoder(tf.keras.layers.Layer):
                 )
             blocks.append(layers)
 
-        # self.block = nn.ModuleList(blocks)
         self.block = blocks
 
         # Layer norms
