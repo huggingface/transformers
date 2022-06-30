@@ -137,6 +137,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "PerceiverForMultimodalAutoencoding",
     "PerceiverForOpticalFlow",
     "SegformerDecodeHead",
+    "TFSegformerDecodeHead",
     "FlaxBeitForMaskedImageModeling",
     "PLBartEncoder",
     "PLBartDecoder",
