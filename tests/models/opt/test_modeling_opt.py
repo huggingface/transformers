@@ -22,7 +22,7 @@ import unittest
 import timeout_decorator  # noqa
 
 from transformers import OPTConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
 
 from ...generation.test_generation_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -428,3 +428,25 @@ class OPTGenerationTest(unittest.TestCase):
             predicted_outputs += generated_string
 
         self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)
+
+    @require_torch_gpu
+    def test_batched_nan_fp16(self):
+        # a bug manifested starting at models facebook/opt-1.3 and larger when running batched generations,
+        # therefore not using a tiny model, but the smallest model the problem was seen with which is opt-1.3b.
+        # please refer to this github thread: https://github.com/huggingface/transformers/pull/17437 for more details
+        model_name = "facebook/opt-1.3b"
+        tokenizer = GPT2Tokenizer.from_pretrained(model_name, use_fast=False, padding_side="left")
+
+        model = OPTForCausalLM.from_pretrained(model_name, torch_dtype=torch.float16, use_cache=True).cuda()
+        model = model.eval()
+
+        batch = tokenizer(["Who are you?", "Joe Biden is the president of"], padding=True, return_tensors="pt")
+
+        input_ids = batch["input_ids"].cuda()
+        attention_mask = batch["attention_mask"].cuda()
+
+        with torch.no_grad():
+            outputs = model(input_ids, attention_mask=attention_mask)
+            self.assertFalse(
+                torch.isnan(outputs.logits[0]).any().item()
+            )  # the first logits could contain NaNs if it fails

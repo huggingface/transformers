@@ -1033,6 +1033,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "MBart50Tokenizer": MBart50Converter,
     "MPNetTokenizer": MPNetConverter,
     "MobileBertTokenizer": BertConverter,
+    "MvpTokenizer": RobertaConverter,
     "OpenAIGPTTokenizer": OpenAIGPTConverter,
     "PegasusTokenizer": PegasusConverter,
     "RealmTokenizer": BertConverter,

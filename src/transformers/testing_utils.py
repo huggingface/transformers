@@ -467,7 +467,7 @@ def require_torch_tpu(test_case):
     """
     Decorator marking a test that requires a TPU (in PyTorch).
     """
-    return unittest.skipUnless(is_torch_tpu_available(), "test requires PyTorch TPU")(test_case)
+    return unittest.skipUnless(is_torch_tpu_available(check_device=False), "test requires PyTorch TPU")(test_case)
 
 
 if is_torch_available():

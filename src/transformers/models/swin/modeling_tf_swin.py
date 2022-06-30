@@ -1224,45 +1224,19 @@ class TFSwinModel(TFSwinPreTrainedModel):
         return swin_outputs
 
 
-class PixelShuffle(tf.keras.layers.Layer):
+class TFSwinPixelShuffle(tf.keras.layers.Layer):
     """TF layer implementation of torch.nn.PixelShuffle"""
 
-    def __init__(
-        self,
-        upscale_factor: int,
-        data_format: str = "NHWC",
-        trainable: bool = True,
-        name: str = None,
-        dtype=None,
-        dynamic: bool = False,
-        **kwargs
-    ) -> None:
-        super().__init__(trainable, name, dtype, dynamic, **kwargs)
-        if upscale_factor < 2:
-            raise ValueError("upscale_factor must be an integer value >= 2")
-        self.upscale_factor = upscale_factor
-        self.data_format = data_format
-
-    def call(self, x: tf.Tensor) -> tf.Tensor:
-        return tf.nn.depth_to_space(x, block_size=self.upscale_factor, data_format=self.data_format)
-
-
-class TFSwinDecoder(tf.keras.layers.Layer):
-    def __init__(self, config: SwinConfig, **kwargs):
+    def __init__(self, upscale_factor: int, **kwargs) -> None:
         super().__init__(**kwargs)
-        self.conv2d = tf.keras.layers.Conv2D(
-            filters=config.encoder_stride**2 * config.num_channels, kernel_size=1, strides=1, name="0"
-        )
-        self._block_size = config.encoder_stride
-        self.pixel_shuffle = PixelShuffle(self._block_size, name="1")
+        if not isinstance(upscale_factor, int) or upscale_factor < 2:
+            raise ValueError(f"upscale_factor must be an integer value >= 2 got {upscale_factor}")
+        self.upscale_factor = upscale_factor
 
     def call(self, x: tf.Tensor) -> tf.Tensor:
         hidden_states = x
-        # B,C,H,W -> B,H,W,C
-        hidden_states = tf.transpose(hidden_states, (0, 2, 3, 1))
-        hidden_states = self.conv2d(hidden_states)
         batch_size, _, _, num_input_channels = shape_list(hidden_states)
-        block_size_squared = self._block_size**2
+        block_size_squared = self.upscale_factor**2
         output_depth = int(num_input_channels / block_size_squared)
         # When the number of output channels >= 2, PyTorch's PixelShuffle and
         # TF's depth_to_space differ in their output as the order of channels selected for combining
@@ -1272,6 +1246,23 @@ class TFSwinDecoder(tf.keras.layers.Layer):
             [[i + j * block_size_squared for i in range(block_size_squared) for j in range(output_depth)]]
         )
         hidden_states = tf.gather(params=hidden_states, indices=tf.tile(permutation, [batch_size, 1]), batch_dims=-1)
+        hidden_states = tf.nn.depth_to_space(hidden_states, block_size=self.upscale_factor, data_format="NHWC")
+        return hidden_states
+
+
+class TFSwinDecoder(tf.keras.layers.Layer):
+    def __init__(self, config: SwinConfig, **kwargs):
+        super().__init__(**kwargs)
+        self.conv2d = tf.keras.layers.Conv2D(
+            filters=config.encoder_stride**2 * config.num_channels, kernel_size=1, strides=1, name="0"
+        )
+        self.pixel_shuffle = TFSwinPixelShuffle(config.encoder_stride, name="1")
+
+    def call(self, x: tf.Tensor) -> tf.Tensor:
+        hidden_states = x
+        # B,C,H,W -> B,H,W,C
+        hidden_states = tf.transpose(hidden_states, (0, 2, 3, 1))
+        hidden_states = self.conv2d(hidden_states)
         hidden_states = self.pixel_shuffle(hidden_states)
         # B,H,W,C -> B,C,H,W
         hidden_states = tf.transpose(hidden_states, (0, 3, 1, 2))
