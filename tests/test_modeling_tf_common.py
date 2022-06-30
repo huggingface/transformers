@@ -23,6 +23,7 @@ import tempfile
 import unittest
 import unittest.mock as mock
 from importlib import import_module
+from math import isnan
 from typing import List, Tuple
 
 from datasets import Dataset
@@ -47,7 +48,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import logging
 from transformers.utils.generic import ModelOutput
-from math import isnan
+
 
 logger = logging.get_logger(__name__)
 
