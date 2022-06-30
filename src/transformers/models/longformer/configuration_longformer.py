@@ -16,12 +16,9 @@
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, List, Mapping, Optional, Union
 
-import torch
-from torch import TensorType
-
 from ... import PreTrainedTokenizer
 from ...onnx import OnnxConfig
-from ...utils import logging
+from ...utils import TensorType, logging
 from ..roberta.configuration_roberta import RobertaConfig
 
 
@@ -142,7 +139,9 @@ class LongformerOnnxConfig(OnnxConfig):
         inputs = super().generate_dummy_inputs(
             preprocessor=tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
         )
-        # make every second token global
+        import torch
+
         inputs["global_attention_mask"] = torch.zeros_like(inputs["input_ids"])
+        # make every second token global
         inputs["global_attention_mask"][:, ::2] = 1
         return inputs
