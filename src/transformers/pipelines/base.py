@@ -341,7 +341,9 @@ def get_framework(model, revision: Optional[str] = None):
     return framework
 
 
-def get_default_model(targeted_task: Dict, framework: Optional[str], task_options: Optional[Any]) -> str:
+def get_default_model_and_revision(
+    targeted_task: Dict, framework: Optional[str], task_options: Optional[Any]
+) -> Union[str, Tuple[str, str]]:
     """
     Select a default model to use for a given task. Defaults to pytorch if ambiguous.
 
