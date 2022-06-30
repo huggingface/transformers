@@ -175,8 +175,8 @@ TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         # Model for Image-classsification
         ("convnext", "TFConvNextForImageClassification"),
         ("data2vec-vision", "TFData2VecVisionForImageClassification"),
-        ("segformer", "TFSegformerForImageClassification"),
         ("regnet", "TFRegNetForImageClassification"),
+        ("segformer", "TFSegformerForImageClassification"),
         ("swin", "TFSwinForImageClassification"),
         ("vit", "TFViTForImageClassification"),
     ]
