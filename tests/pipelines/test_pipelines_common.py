@@ -37,7 +37,15 @@ from transformers import (
 )
 from transformers.pipelines import get_task
 from transformers.pipelines.base import _pad
-from transformers.testing_utils import is_pipeline_test, nested_simplify, require_tf, require_torch, slow
+from transformers.testing_utils import (
+    is_pipeline_test,
+    nested_simplify,
+    require_scatter,
+    require_tensorflow_probability,
+    require_tf,
+    require_torch,
+    slow,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -610,74 +618,6 @@ class PipelineUtilsTest(unittest.TestCase):
         outputs = [item for item in dataset]
         self.assertEqual(outputs, [[{"id": 2}, {"id": 3}, {"id": 4}, {"id": 5}]])
 
-    @slow
-    @require_torch
-    def test_load_default_pipelines_pt(self):
-        self.check_default_pipeline("pt")
-
-    @slow
-    @require_tf
-    def test_load_default_pipelines_tf(self):
-        self.check_default_pipeline("tf")
-
-    def check_default_pipeline(self, framework):
-        from transformers.pipelines import SUPPORTED_TASKS, pipeline
-
-        if framework == "pt":
-            import torch
-
-            set_seed = lambda: torch.manual_seed(0)  # noqa: E731
-            check_models_equal_fn = self.check_models_equal_pt
-        elif framework == "tf":
-            import tf
-
-            set_seed = lambda: tf.random.seed(0)  # noqa: E731
-            check_models_equal_fn = self.check_models_equal_tf
-
-        for task, task_dict in SUPPORTED_TASKS.items():
-            # test to compare pipeline to manually loading the respective model
-            model = None
-
-            relevant_auto_classes = task_dict[framework]
-
-            if len(relevant_auto_classes) == 0:
-                # task has no default
-                continue
-
-            # only first class is used by default for auto models
-            auto_model_cls = relevant_auto_classes[0]
-
-            # special case for translation pipeline which has multiple languages
-            if task == "translation":
-                for translation_pair in task_dict["default"].keys():
-                    model_id, revision = task_dict["default"][translation_pair]["model"][framework]
-
-                    # load default model
-                    set_seed()
-                    model = auto_model_cls.from_pretrained(model_id, revision=revision)
-                    # load default pipeline
-                    set_seed()
-                    default_pipeline = pipeline(task + f"_{'_to_'.join(translation_pair)}", framework=framework)
-
-                    # compare pipeline model with default model
-                    models_are_equal = check_models_equal_fn(default_pipeline.model, model)
-
-                    self.assertTrue(models_are_equal, f"{task} model doesn't match pipeline.")
-            else:
-                # normal case - non-translation pipeline
-                model_id, revision = task_dict["default"]["model"][framework]
-
-                # load default model
-                set_seed()
-                model = auto_model_cls.from_pretrained(model_id, revision=revision)
-                # load default pipeline
-                set_seed()
-                default_pipeline = pipeline(task, framework=framework)
-
-                # compare pipeline model with default model
-                models_are_equal = check_models_equal_fn(default_pipeline.model, model)
-                self.assertTrue(models_are_equal, f"{task} model doesn't match pipeline.")
-
     def check_models_equal_pt(self, model1, model2):
         models_are_equal = True
         for model1_p, model2_p in zip(model1.parameters(), model2.parameters()):
@@ -693,3 +633,109 @@ class PipelineUtilsTest(unittest.TestCase):
                 models_are_equal = False
 
         return models_are_equal
+
+    @slow
+    @require_torch
+    def test_load_default_pipelines_pt(self):
+        import torch
+
+        from transformers.pipelines import SUPPORTED_TASKS
+
+        set_seed_fn = lambda: torch.manual_seed(0)  # noqa: E731
+        for task in SUPPORTED_TASKS.keys():
+            if task == "table-question-answering":
+                # test table in seperate test due to more dependencies
+                continue
+
+            self.check_default_pipeline(task, "pt", set_seed_fn, self.check_models_equal_pt)
+
+    @slow
+    @require_tf
+    def test_load_default_pipelines_tf(self):
+        import tensorflow as tf
+
+        from transformers.pipelines import SUPPORTED_TASKS
+
+        set_seed_fn = lambda: tf.random.set_seed(0)  # noqa: E731
+        for task in SUPPORTED_TASKS.keys():
+            if task == "table-question-answering":
+                # test table in seperate test due to more dependencies
+                continue
+
+            self.check_default_pipeline(task, "tf", set_seed_fn, self.check_models_equal_tf)
+
+    @slow
+    @require_torch
+    @require_scatter
+    def test_load_default_pipelines_pt_table_qa(self):
+        import torch
+
+        set_seed_fn = lambda: torch.manual_seed(0)  # noqa: E731
+        self.check_default_pipeline("table-question-answering", "pt", set_seed_fn, self.check_models_equal_pt)
+
+    @slow
+    @require_tf
+    @require_tensorflow_probability
+    def test_load_default_pipelines_tf_table_qa(self):
+        import tensorflow as tf
+
+        set_seed_fn = lambda: tf.random.set_seed(0)  # noqa: E731
+        self.check_default_pipeline("table-question-answering", "tf", set_seed_fn, self.check_models_equal_tf)
+
+    def check_default_pipeline(self, task, framework, set_seed_fn, check_models_equal_fn):
+        from transformers.pipelines import SUPPORTED_TASKS, pipeline
+
+        task_dict = SUPPORTED_TASKS[task]
+        # test to compare pipeline to manually loading the respective model
+        model = None
+        relevant_auto_classes = task_dict[framework]
+
+        if len(relevant_auto_classes) == 0:
+            # task has no default
+            logger.debug(f"{task} in {framework} has no default")
+            return
+
+        # by default use first class
+        auto_model_cls = relevant_auto_classes[0]
+
+        # retrieve correct model ids
+        if task == "translation":
+            # special case for translation pipeline which has multiple languages
+            model_ids = []
+            revisions = []
+            tasks = []
+            for translation_pair in task_dict["default"].keys():
+                model_id, revision = task_dict["default"][translation_pair]["model"][framework]
+
+                model_ids.append(model_id)
+                revisions.append(revision)
+                tasks.append(task + f"_{'_to_'.join(translation_pair)}")
+        else:
+            # normal case - non-translation pipeline
+            model_id, revision = task_dict["default"]["model"][framework]
+
+            model_ids = [model_id]
+            revisions = [revision]
+            tasks = [task]
+
+        # check for equality
+        for model_id, revision, task in zip(model_ids, revisions, tasks):
+            # load default model
+            try:
+                set_seed_fn()
+                model = auto_model_cls.from_pretrained(model_id, revision=revision)
+            except ValueError:
+                # first auto class is possible not compatible with model, go to next model class
+                auto_model_cls = relevant_auto_classes[1]
+                set_seed_fn()
+                model = auto_model_cls.from_pretrained(model_id, revision=revision)
+
+            # load default pipeline
+            set_seed_fn()
+            default_pipeline = pipeline(task, framework=framework)
+
+            # compare pipeline model with default model
+            models_are_equal = check_models_equal_fn(default_pipeline.model, model)
+            self.assertTrue(models_are_equal, f"{task} model doesn't match pipeline.")
+
+            logger.debug(f"{task} in {framework} succeeded with {model_id}.")

@@ -30,7 +30,7 @@ from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, Aut
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
 from ..tokenization_utils_fast import PreTrainedTokenizerFast
-from ..utils import http_get, is_tf_available, is_torch_available, logging
+from ..utils import HUGGINGFACE_CO_RESOLVE_ENDPOINT, http_get, is_tf_available, is_torch_available, logging
 from .audio_classification import AudioClassificationPipeline
 from .automatic_speech_recognition import AutomaticSpeechRecognitionPipeline
 from .base import (
@@ -201,11 +201,7 @@ SUPPORTED_TASKS = {
         "pt": (AutoModelForVisualQuestionAnswering,) if is_torch_available() else (),
         "tf": (),
         "default": {
-            "model": {
-                "pt": "dandelin/vilt-b32-finetuned-vqa",
-                "tokenizer": "dandelin/vilt-b32-finetuned-vqa",
-                "feature_extractor": "dandelin/vilt-b32-finetuned-vqa",
-            },
+            "model": {"pt": ("dandelin/vilt-b32-finetuned-vqa", "4355f59")},
         },
         "type": "multimodal",
     },
@@ -220,7 +216,7 @@ SUPPORTED_TASKS = {
         "impl": SummarizationPipeline,
         "tf": (TFAutoModelForSeq2SeqLM,) if is_tf_available() else (),
         "pt": (AutoModelForSeq2SeqLM,) if is_torch_available() else (),
-        "default": {"model": {"pt": ("sshleifer/distilbart-cnn-12-6", "a4f8f3e"), "tf": ("t5-small", "a4f8f3e")}},
+        "default": {"model": {"pt": ("sshleifer/distilbart-cnn-12-6", "a4f8f3e"), "tf": ("t5-small", "d769bba")}},
         "type": "text",
     },
     # This task is a special case as it's parametrized by SRC, TGT languages.
@@ -556,7 +552,8 @@ def pipeline(
         model, default_revision = get_default_model_and_revision(targeted_task, framework, task_options)
         revision = revision if revision is not None else default_revision
         logger.warning(
-            f"No model was supplied, defaulted to {model} and revision {revision} (https://huggingface.co/{model})"
+            f"No model was supplied, defaulted to {model} and revision"
+            f" {revision} ({HUGGINGFACE_CO_RESOLVE_ENDPOINT}/{model})"
         )
 
     # Retrieve use_auth_token and add it to model_kwargs to be used in .from_pretrained
