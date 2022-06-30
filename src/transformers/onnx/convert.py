@@ -40,6 +40,7 @@ if is_tf_available():
 
 if TYPE_CHECKING:
     from ..feature_extraction_utils import FeatureExtractionMixin
+    from ..processing_utils import ProcessorMixin
     from ..tokenization_utils import PreTrainedTokenizer
 
 
@@ -80,7 +81,7 @@ def check_onnxruntime_requirements(minimum_version: Version):
 
 
 def export_pytorch(
-    preprocessor: Union["PreTrainedTokenizer", "FeatureExtractionMixin"],
+    preprocessor: Union["PreTrainedTokenizer", "FeatureExtractionMixin", "ProcessorMixin"],
     model: "PreTrainedModel",
     config: OnnxConfig,
     opset: int,
@@ -92,7 +93,7 @@ def export_pytorch(
     Export a PyTorch model to an ONNX Intermediate Representation (IR)
 
     Args:
-        preprocessor: ([`PreTrainedTokenizer`] or [`FeatureExtractionMixin`]):
+        preprocessor: ([`PreTrainedTokenizer`], [`FeatureExtractionMixin`] or [`ProcessorMixin`]):
             The preprocessor used for encoding the data.
         model ([`PreTrainedModel`]):
             The model to export.
@@ -269,7 +270,7 @@ def export_tensorflow(
 
 
 def export(
-    preprocessor: Union["PreTrainedTokenizer", "FeatureExtractionMixin"],
+    preprocessor: Union["PreTrainedTokenizer", "FeatureExtractionMixin", "ProcessorMixin"],
     model: Union["PreTrainedModel", "TFPreTrainedModel"],
     config: OnnxConfig,
     opset: int,
@@ -281,7 +282,7 @@ def export(
     Export a Pytorch or TensorFlow model to an ONNX Intermediate Representation (IR)
 
     Args:
-        preprocessor: ([`PreTrainedTokenizer`] or [`FeatureExtractionMixin`]):
+        preprocessor: ([`PreTrainedTokenizer`], [`FeatureExtractionMixin`] or [`ProcessorMixin`]):
             The preprocessor used for encoding the data.
         model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
             The model to export.
@@ -339,7 +340,7 @@ def export(
 
 def validate_model_outputs(
     config: OnnxConfig,
-    preprocessor: Union["PreTrainedTokenizer", "FeatureExtractionMixin"],
+    preprocessor: Union["PreTrainedTokenizer", "FeatureExtractionMixin", "ProcessorMixin"],
     reference_model: Union["PreTrainedModel", "TFPreTrainedModel"],
     onnx_model: Path,
     onnx_named_outputs: List[str],
