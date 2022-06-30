@@ -21,6 +21,7 @@ import jax
 import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen import combine_masks, make_causal_mask
+from flax.linen import partitioning as nn_partitioning
 from flax.linen.attention import dot_product_attention_weights
 from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
@@ -46,6 +47,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "roberta-base"
 _CONFIG_FOR_DOC = "RobertaConfig"
 _TOKENIZER_FOR_DOC = "RobertaTokenizer"
+
+remat = nn_partitioning.remat
 
 
 def create_position_ids_from_input_ids(input_ids, padding_idx):
@@ -733,10 +736,19 @@ class FlaxRobertaPreTrainedModel(FlaxPreTrainedModel):
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
+        gradient_checkpointing: bool = False,
         **kwargs
     ):
-        module = self.module_class(config=config, dtype=dtype, **kwargs)
+        module = self.module_class(config=config, dtype=dtype, gradient_checkpointing=gradient_checkpointing, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
+
+    # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertPreTrainedModel.enable_gradient_checkpointing
+    def enable_gradient_checkpointing(self):
+        self._module = self.module_class(
+            config=self.config,
+            dtype=self.dtype,
+            gradient_checkpointing=True,
+        )
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
@@ -986,9 +998,15 @@ append_call_sample_docstring(
 class FlaxRobertaForMaskedLMModule(nn.Module):
     config: RobertaConfig
     dtype: jnp.dtype = jnp.float32
+    gradient_checkpointing: bool = False
 
     def setup(self):
-        self.roberta = FlaxRobertaModule(config=self.config, add_pooling_layer=False, dtype=self.dtype)
+        self.roberta = FlaxRobertaModule(
+            config=self.config,
+            add_pooling_layer=False,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
+        )
         self.lm_head = FlaxRobertaLMHead(config=self.config, dtype=self.dtype)
 
     def __call__(
@@ -1053,9 +1071,15 @@ append_call_sample_docstring(
 class FlaxRobertaForSequenceClassificationModule(nn.Module):
     config: RobertaConfig
     dtype: jnp.dtype = jnp.float32
+    gradient_checkpointing: bool = False
 
     def setup(self):
-        self.roberta = FlaxRobertaModule(config=self.config, dtype=self.dtype, add_pooling_layer=False)
+        self.roberta = FlaxRobertaModule(
+            config=self.config,
+            dtype=self.dtype,
+            add_pooling_layer=False,
+            gradient_checkpointing=self.gradient_checkpointing,
+        )
         self.classifier = FlaxRobertaClassificationHead(config=self.config, dtype=self.dtype)
 
     def __call__(
@@ -1362,9 +1386,15 @@ append_call_sample_docstring(
 class FlaxRobertaForCausalLMModule(nn.Module):
     config: RobertaConfig
     dtype: jnp.dtype = jnp.float32
+    gradient_checkpointing: bool = False
 
     def setup(self):
-        self.roberta = FlaxRobertaModule(config=self.config, add_pooling_layer=False, dtype=self.dtype)
+        self.roberta = FlaxRobertaModule(
+            config=self.config,
+            add_pooling_layer=False,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
+        )
         self.lm_head = FlaxRobertaLMHead(config=self.config, dtype=self.dtype)
 
     def __call__(
