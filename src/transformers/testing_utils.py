@@ -63,6 +63,7 @@ from .utils import (
     is_soundfile_availble,
     is_spacy_available,
     is_tensorflow_probability_available,
+    is_tensorflow_text_available,
     is_tf2onnx_available,
     is_tf_available,
     is_timm_available,
@@ -361,6 +362,14 @@ def require_tokenizers(test_case):
     return unittest.skipUnless(is_tokenizers_available(), "test requires tokenizers")(test_case)
 
 
+def require_tensorflow_text(test_case):
+    """
+    Decorator marking a test that requires tensorflow_text. These tests are skipped when tensroflow_text isn't
+    installed.
+    """
+    return unittest.skipUnless(is_tensorflow_text_available(), "test requires tensorflow_text")(test_case)
+
+
 def require_pandas(test_case):
     """
     Decorator marking a test that requires pandas. These tests are skipped when pandas isn't installed.
@@ -458,7 +467,7 @@ def require_torch_tpu(test_case):
     """
     Decorator marking a test that requires a TPU (in PyTorch).
     """
-    return unittest.skipUnless(is_torch_tpu_available(), "test requires PyTorch TPU")(test_case)
+    return unittest.skipUnless(is_torch_tpu_available(check_device=False), "test requires PyTorch TPU")(test_case)
 
 
 if is_torch_available():
