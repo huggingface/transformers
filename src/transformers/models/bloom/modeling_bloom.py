@@ -78,17 +78,14 @@ def split_tensor_along_last_dim(tensor, num_partitions, contiguous_split_chunks=
 
 
 def attention_mask_func(attention_scores, attention_mask, causal_mask):
-    if attention_mask.dtype == torch.bool:
-        attention_mask_bool = ~attention_mask
-    else:
-        attention_mask_bool = (1 - attention_mask).bool()
+    attention_mask_bool = 1 - attention_mask.int()
 
     query_length, key_length, n_heads = attention_scores.size(2), attention_scores.size(3), attention_scores.size(1)
-    padded_causal_mask = (
-        attention_mask_bool[:, None, key_length - query_length : key_length, None]
-        + ~causal_mask[:, :, key_length - query_length : key_length, :key_length]
-    ).bool()
-    padded_causal_mask = padded_causal_mask + attention_mask_bool[:, None, None, :key_length].bool()
+    padded_causal_mask = attention_mask_bool[:, None, key_length - query_length : key_length, None] + (
+        1 - causal_mask[:, :, key_length - query_length : key_length, :key_length].int()
+    )
+    padded_causal_mask = padded_causal_mask + attention_mask_bool[:, None, None, :key_length]
+    padded_causal_mask = padded_causal_mask.bool()
     # Make use of floats
     return (
         attention_scores.masked_fill_(padded_causal_mask.expand(-1, n_heads, -1, -1), -10000.0),
@@ -296,8 +293,9 @@ class BloomScaledSoftmax(nn.Module):
             mask = torch.ones(input.shape[0], max_positions, dtype=torch.bool, device=input.device)
 
         mask = mask.to(input.device)
+        seq_ids = torch.arange(max_positions, device=input.device)
         causal_mask = (
-            torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool))
+            (seq_ids[None, None, :] <= seq_ids[None, :, None])
             .view(1, 1, max_positions, max_positions)
             .to(input.device)
         )
