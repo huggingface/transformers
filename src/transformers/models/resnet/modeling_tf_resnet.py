@@ -148,8 +148,8 @@ class TFResNetBasicLayer(tf.keras.layers.Layer):
     ) -> None:
         super().__init__(**kwargs)
         should_apply_shortcut = in_channels != out_channels or stride != 1
-        self.conv1 = TFResNetConvLayer(out_channels, stride=stride)
-        self.conv2 = TFResNetConvLayer(out_channels, activation=None)
+        self.conv1 = TFResNetConvLayer(out_channels, stride=stride, name="layer.0")
+        self.conv2 = TFResNetConvLayer(out_channels, activation=None, name="layer.1")
         self.shortcut = (
             TFResNetShortCut(out_channels, stride=stride, name="shortcut")
             if should_apply_shortcut
