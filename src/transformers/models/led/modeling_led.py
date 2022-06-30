@@ -440,10 +440,14 @@ class LEDEncoderSelfAttention(nn.Module):
         ending_mask = beginning_mask.flip(dims=(1, 3))
         beginning_input = input_tensor[:, :affected_seq_len, :, : affected_seq_len + 1]
         beginning_mask = beginning_mask.expand(beginning_input.size())
-        beginning_input = torch.full_like(beginning_input, -float("inf")).where(beginning_mask.bool(), beginning_input)
+        input_tensor[:, :affected_seq_len, :, : affected_seq_len + 1] = torch.full_like(
+            beginning_input, -float("inf")
+        ).where(beginning_mask.bool(), beginning_input)
         ending_input = input_tensor[:, -affected_seq_len:, :, -(affected_seq_len + 1) :]
         ending_mask = ending_mask.expand(ending_input.size())
-        ending_input = torch.full_like(ending_input, -float("inf")).where(ending_mask.bool(), ending_input)
+        input_tensor[:, -affected_seq_len:, :, -(affected_seq_len + 1) :] = torch.full_like(
+            ending_input, -float("inf")
+        ).where(ending_mask.bool(), ending_input)
 
     def _sliding_chunks_query_key_matmul(self, query: torch.Tensor, key: torch.Tensor, window_overlap: int):
         """
