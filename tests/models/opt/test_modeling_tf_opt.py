@@ -330,10 +330,10 @@ class TFOPTGenerationTest(unittest.TestCase):
         model_id = "facebook/opt-125m"
 
         EXPECTED_OUTPUTS = [
-            "Today is a beautiful day and I want everyone",
-            "In the city of Rome Canaver Canaver Canaver Canaver",
-            "Paris is the capital of France and Parisdylib",
-            "Computers and mobile phones have taken precedence over",
+            "Today is a beautiful day and I want to",
+            "In the city of New York, the city",
+            "Paris is the capital of France and the capital",
+            "Computers and mobile phones have taken over the",
         ]
 
         predicted_outputs = []

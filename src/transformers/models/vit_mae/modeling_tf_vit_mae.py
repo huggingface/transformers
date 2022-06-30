@@ -84,7 +84,7 @@ class TFViTMAEDecoderOutput(ModelOutput):
     Class for TFViTMAEDecoder's outputs, with potential hidden states and attentions.
 
     Args:
-        logits (`tf.Tensor` of shape `(batch_size, patch_size ** 2 * num_channels)`):
+        logits (`tf.Tensor` of shape `(batch_size, sequence_length, patch_size ** 2 * num_channels)`):
             Pixel reconstruction logits.
         hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of shape
@@ -109,7 +109,7 @@ class TFViTMAEForPreTrainingOutput(ModelOutput):
     Args:
         loss (`tf.Tensor` of shape `(1,)`):
             Pixel reconstruction loss.
-        logits (`tf.Tensor` of shape `(batch_size, patch_size ** 2 * num_channels)`):
+        logits (`tf.Tensor` of shape `(batch_size, sequence_length, patch_size ** 2 * num_channels)`):
             Pixel reconstruction logits.
         mask (`tf.Tensor` of shape `(batch_size, sequence_length)`):
             Tensor indicating which patches are masked (1) and which are not (0).
@@ -131,13 +131,6 @@ class TFViTMAEForPreTrainingOutput(ModelOutput):
     ids_restore: tf.Tensor = None
     hidden_states: Optional[Tuple[tf.Tensor]] = None
     attentions: Optional[Tuple[tf.Tensor]] = None
-
-
-# copied from transformers.models.vit.modeling_tf_vit.to_2tuple
-def to_2tuple(x):
-    if isinstance(x, collections.abc.Iterable):
-        return x
-    return (x, x)
 
 
 def get_2d_sincos_pos_embed(embed_dim, grid_size, add_cls_token=False):
@@ -212,7 +205,7 @@ class TFViTMAEEmbeddings(tf.keras.layers.Layer):
     def __init__(self, config: ViTMAEConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.patch_embeddings = TFPatchEmbeddings(config, name="patch_embeddings")
+        self.patch_embeddings = TFViTMAEPatchEmbeddings(config, name="patch_embeddings")
         self.num_patches = self.patch_embeddings.num_patches
 
         self.config = config
@@ -297,30 +290,30 @@ class TFViTMAEEmbeddings(tf.keras.layers.Layer):
         return embeddings, mask, ids_restore
 
 
-# Based on timm implementation, which can be found here:
-# https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
-class TFPatchEmbeddings(tf.keras.layers.Layer):
+class TFViTMAEPatchEmbeddings(tf.keras.layers.Layer):
     """
-    Image to Patch Embedding.
-
+    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
+    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
+    Transformer.
     """
 
     def __init__(self, config: ViTMAEConfig, **kwargs):
         super().__init__(**kwargs)
-        image_size = to_2tuple(config.image_size)
-        patch_size = to_2tuple(config.patch_size)
+        image_size, patch_size = config.image_size, config.patch_size
+        num_channels, hidden_size = config.num_channels, config.hidden_size
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_patches = num_patches
-        self.num_channels = config.num_channels
-        self.embed_dim = config.hidden_size
+        self.num_channels = num_channels
         self.config = config
 
         self.projection = tf.keras.layers.Conv2D(
-            filters=self.embed_dim,
-            kernel_size=self.patch_size,
-            strides=self.patch_size,
+            filters=hidden_size,
+            kernel_size=patch_size,
+            strides=patch_size,
             padding="valid",
             data_format="channels_last",
             kernel_initializer="glorot_uniform",  # following torch.nn.Linear
@@ -330,7 +323,12 @@ class TFPatchEmbeddings(tf.keras.layers.Layer):
 
     def call(self, pixel_values: tf.Tensor, training: bool = False) -> tf.Tensor:
         batch_size, num_channels, height, width = shape_list(pixel_values)
-        if getattr(height, "numpy", None) and getattr(width, "numpy", None):
+        if tf.executing_eagerly():
+            if num_channels != self.num_channels:
+                raise ValueError(
+                    "Make sure that the channel dimension of the pixel values match with the one set in the"
+                    " configuration."
+                )
             if height != self.image_size[0] or width != self.image_size[1]:
                 raise ValueError(
                     f"Input image size ({height}*{width}) doesn't match model"
@@ -969,50 +967,110 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError
 
-    def patchify(self, imgs):
+    def patchify(self, pixel_values):
         """
-        imgs: (batch_size, height, width, 3) x: (batch_size, num_patches, patch_size**2 *3)
+        Args:
+            pixel_values (`tf.Tensor` of shape `(batch_size, height, width, num_channels)` or `(batch_size, num_channels, height, width)`):
+                Pixel values.
+
+        Returns:
+            `tf.Tensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`:
+                Patchified pixel values.
         """
-        imgs = tf.cond(
-            tf.math.equal(shape_list(imgs)[1], 3), lambda: tf.transpose(imgs, perm=(0, 2, 3, 1)), lambda: imgs
+        patch_size, num_channels = self.config.patch_size, self.config.num_channels
+        # make sure channels are last
+        pixel_values = tf.cond(
+            tf.math.equal(shape_list(pixel_values)[1], num_channels),
+            lambda: tf.transpose(pixel_values, perm=(0, 2, 3, 1)),
+            lambda: pixel_values,
         )
 
-        p = self.vit.embeddings.patch_embeddings.patch_size[0]
-        tf.debugging.assert_equal(shape_list(imgs)[1], shape_list(imgs)[2])
-        tf.debugging.assert_equal(shape_list(imgs)[1] % p, 0)
+        # sanity checks
+        tf.debugging.assert_equal(
+            shape_list(pixel_values)[1],
+            shape_list(pixel_values)[2],
+            message="Make sure the pixel values have a squared size",
+        )
+        tf.debugging.assert_equal(
+            shape_list(pixel_values)[1] % patch_size,
+            0,
+            message="Make sure the pixel values have a size that is divisible by the patch size",
+        )
+        tf.debugging.assert_equal(
+            shape_list(pixel_values)[3],
+            num_channels,
+            message=(
+                "Make sure the number of channels of the pixel values is equal to the one set in the configuration"
+            ),
+        )
 
-        h = w = shape_list(imgs)[2] // p
-        x = tf.reshape(imgs, (shape_list(imgs)[0], h, p, w, p, 3))
-        x = tf.einsum("nhpwqc->nhwpqc", x)
-        x = tf.reshape(x, (shape_list(imgs)[0], h * w, p**2 * 3))
-        return x
+        # patchify
+        batch_size = shape_list(pixel_values)[0]
+        num_patches_one_direction = shape_list(pixel_values)[2] // patch_size
+        patchified_pixel_values = tf.reshape(
+            pixel_values,
+            (batch_size, num_patches_one_direction, patch_size, num_patches_one_direction, patch_size, num_channels),
+        )
+        patchified_pixel_values = tf.einsum("nhpwqc->nhwpqc", patchified_pixel_values)
+        patchified_pixel_values = tf.reshape(
+            patchified_pixel_values,
+            (batch_size, num_patches_one_direction * num_patches_one_direction, patch_size**2 * num_channels),
+        )
+        return patchified_pixel_values
 
-    def unpatchify(self, x):
+    def unpatchify(self, patchified_pixel_values):
         """
-        x: (batch_size, num_patches, patch_size**2 *3) imgs: (batch_size, height, width, 3)
-        """
-        p = self.vit.embeddings.patch_embeddings.patch_size[0]
-        h = w = int(shape_list(x)[1] ** 0.5)
-        tf.debugging.assert_equal(h * w, shape_list(x)[1])
+        Args:
+            patchified_pixel_values (`tf.Tensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`:
+                Patchified pixel values.
 
-        x = tf.reshape(x, (shape_list(x)[0], h, w, p, p, 3))
-        x = tf.einsum("nhwpqc->nhpwqc", x)
-        imgs = tf.reshape(x, (shape_list(x)[0], h * p, h * p, 3))
-        return imgs
+        Returns:
+            `tf.Tensor` of shape `(batch_size, height, width, num_channels)`:
+                Pixel values.
+        """
+        patch_size, num_channels = self.config.patch_size, self.config.num_channels
+        num_patches_one_direction = int(shape_list(patchified_pixel_values)[1] ** 0.5)
+        # sanity check
+        tf.debugging.assert_equal(
+            num_patches_one_direction * num_patches_one_direction,
+            shape_list(patchified_pixel_values)[1],
+            message="Make sure that the number of patches can be squared",
+        )
 
-    def forward_loss(self, imgs, pred, mask):
+        # unpatchify
+        batch_size = shape_list(patchified_pixel_values)[0]
+        patchified_pixel_values = tf.reshape(
+            patchified_pixel_values,
+            (batch_size, num_patches_one_direction, num_patches_one_direction, patch_size, patch_size, num_channels),
+        )
+        patchified_pixel_values = tf.einsum("nhwpqc->nhpwqc", patchified_pixel_values)
+        pixel_values = tf.reshape(
+            patchified_pixel_values,
+            (batch_size, num_patches_one_direction * patch_size, num_patches_one_direction * patch_size, num_channels),
+        )
+        return pixel_values
+
+    def forward_loss(self, pixel_values, pred, mask):
         """
-        imgs: [batch_size, height, width, 3] pred: [batch_size, num_patches, patch_size**2*3] mask: [N, L], 0 is keep,
-        1 is remove,
+        Args:
+            pixel_values (`tf.Tensor` of shape `(batch_size, height, width, num_channels)`):
+                Pixel values.
+            pred (`tf.Tensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`:
+                Predicted pixel values.
+            mask (`tf.Tensor` of shape `(batch_size, sequence_length)`):
+                Tensor indicating which patches are masked (1) and which are not (0).
+
+        Returns:
+            `tf.Tensor`: Pixel reconstruction loss.
         """
-        target = self.patchify(imgs)
+        target = self.patchify(pixel_values)
         if self.config.norm_pix_loss:
             mean = tf.reduce_mean(target, axis=-1, keepdims=True)
             var = tf.math.reduce_variance(target, axis=-1, keepdims=True)
             target = (target - mean) / (var + 1.0e-6) ** 0.5
 
         loss = (pred - target) ** 2
-        loss = tf.reduce_mean(loss, axis=-1)  # [N, L], mean loss per patch
+        loss = tf.reduce_mean(loss, axis=-1)  # [batch_size, num_patches], mean loss per patch
 
         loss = tf.reduce_sum(loss * mask) / tf.reduce_sum(mask)  # mean loss on removed patches
         return loss
