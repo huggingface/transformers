@@ -41,9 +41,8 @@ from .base import (
     Pipeline,
     PipelineDataFormat,
     PipelineException,
-    get_default_model_and_revision,
     PipelineRegistry,
-    get_default_model,
+    get_default_model_and_revision,
     infer_framework_load_model,
 )
 from .conversational import Conversation, ConversationalPipeline
@@ -203,11 +202,7 @@ SUPPORTED_TASKS = {
         "pt": (AutoModelForVisualQuestionAnswering,) if is_torch_available() else (),
         "tf": (),
         "default": {
-            "model": {
-                "pt": "dandelin/vilt-b32-finetuned-vqa",
-                "tokenizer": "dandelin/vilt-b32-finetuned-vqa",
-                "feature_extractor": "dandelin/vilt-b32-finetuned-vqa",
-            },
+            "model": {"pt": ("dandelin/vilt-b32-finetuned-vqa", "4355f59")},
         },
         "type": "multimodal",
     },
