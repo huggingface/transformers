@@ -30,6 +30,7 @@ from ...utils import (
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     SequenceClassifierOutput,
+    CausalLMOutput
 )
 from ...modeling_utils import (
     PreTrainedModel,
@@ -821,8 +822,8 @@ class GLMModel(GLMPreTrainedModel):
             #     logits)
             logits = F.linear(logits, self.word_embeddings.weight)
 
-        return BaseModelOutputWithPastAndCrossAttentions(
-            last_hidden_state=logits,
+        return CausalLMOutput(
+            logits=logits,
             hidden_states=hidden_layers,
         )
 

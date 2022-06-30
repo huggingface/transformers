@@ -372,6 +372,8 @@ class GLMTokenizer(PreTrainedTokenizer):
             loss_masks.extend([0] * padding_length)
         if masked_lm:
             position_ids = [position_ids]
+        else:
+            position_ids = [position_ids, block_position_ids]
         return ids, types, paddings, position_ids, sep, target_ids, loss_masks
 
 
