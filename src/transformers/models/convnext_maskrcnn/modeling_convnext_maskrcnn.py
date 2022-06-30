@@ -17,7 +17,6 @@
 """ PyTorch ConvNextMaskRCNN model."""
 
 
-from asyncio.constants import LOG_THRESHOLD_FOR_CONNLOST_WRITES
 import copy
 import warnings
 from dataclasses import dataclass
@@ -2798,6 +2797,7 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
     def __init__(self, config):
         super().__init__()
 
+        self.train_cfg = config.rcnn_train_cfg
         self.test_cfg = config.rcnn_test_cfg
         self.bbox_roi_extractor = ConvNextMaskRCNNSingleRoIExtractor(
             roi_layer=config.bbox_roi_extractor_roi_layer,
@@ -2813,6 +2813,32 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         )
         self.mask_head = ConvNextMaskRCNNFCNMaskHead(config)
 
+        # assigner
+        self.bbox_assigner = ConvNextMaskRCNNMaxIoUAssigner(
+            pos_iou_thr=config.rcnn_assigner_pos_iou_thr,
+            neg_iou_thr=config.rcnn_assigner_neg_iou_thr,
+            min_pos_iou=config.rcnn_assigner_min_pos_iou,
+            match_low_quality=config.rcnn_assigner_match_low_quality,
+            ignore_iof_thr=config.rcnn_assigner_ignore_iof_thr,
+        )
+        # sampler
+        self.bbox_sampler = ConvNextMaskRCNNRandomSampler(
+            num=config.rcnn_sampler_num,
+            pos_fraction=config.rcnn_sampler_pos_fraction,
+            neg_pos_ub=config.rcnn_sampler_neg_pos_ub,
+            add_gt_as_proposals=config.rcnn_sampler_add_gt_as_proposals,
+        )
+
+    @property
+    def with_bbox(self):
+        """bool: whether the RoI head contains a `bbox_head`"""
+        return hasattr(self, "bbox_head") and self.bbox_head is not None
+
+    @property
+    def with_mask(self):
+        """bool: whether the RoI head contains a `mask_head`"""
+        return hasattr(self, "mask_head") and self.mask_head is not None
+
     def _bbox_forward(self, x, rois):
         """Box head forward function used in both training and testing."""
         # TODO: a more flexible way to decide which feature maps to use
@@ -2822,6 +2848,17 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         cls_score, bbox_pred = self.bbox_head(bbox_feats)
 
         bbox_results = dict(cls_score=cls_score, bbox_pred=bbox_pred, bbox_feats=bbox_feats)
+        return bbox_results
+
+    def _bbox_forward_train(self, x, sampling_results, gt_bboxes, gt_labels, img_metas):
+        """Run forward function and calculate loss for box head in training."""
+        rois = bbox2roi([res.bboxes for res in sampling_results])
+        bbox_results = self._bbox_forward(x, rois)
+
+        bbox_targets = self.bbox_head.get_targets(sampling_results, gt_bboxes, gt_labels, self.train_cfg)
+        loss_bbox = self.bbox_head.loss(bbox_results["cls_score"], bbox_results["bbox_pred"], rois, *bbox_targets)
+
+        bbox_results.update(loss_bbox=loss_bbox)
         return bbox_results
 
     def simple_test_bboxes(self, x, img_metas, proposals, rcnn_test_cfg, rescale=False):
@@ -2917,6 +2954,29 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         mask_results = dict(mask_pred=mask_pred, mask_feats=mask_feats)
         return mask_results
 
+    def _mask_forward_train(self, x, sampling_results, bbox_feats, gt_masks, img_metas):
+        """Run forward function and calculate loss for mask head in
+        training."""
+        if not self.share_roi_extractor:
+            pos_rois = bbox2roi([res.pos_bboxes for res in sampling_results])
+            mask_results = self._mask_forward(x, pos_rois)
+        else:
+            pos_inds = []
+            device = bbox_feats.device
+            for res in sampling_results:
+                pos_inds.append(torch.ones(res.pos_bboxes.shape[0], device=device, dtype=torch.uint8))
+                pos_inds.append(torch.zeros(res.neg_bboxes.shape[0], device=device, dtype=torch.uint8))
+            pos_inds = torch.cat(pos_inds)
+
+            mask_results = self._mask_forward(x, pos_inds=pos_inds, bbox_feats=bbox_feats)
+
+        mask_targets = self.mask_head.get_targets(sampling_results, gt_masks, self.train_cfg)
+        pos_labels = torch.cat([res.pos_gt_labels for res in sampling_results])
+        loss_mask = self.mask_head.loss(mask_results["mask_pred"], mask_targets, pos_labels)
+
+        mask_results.update(loss_mask=loss_mask, mask_targets=mask_targets)
+        return mask_results
+
     def simple_test_mask(self, x, img_metas, det_bboxes, det_labels, rescale=False):
         """Simple test for mask head without augmentation."""
         # image shapes of images in the batch
@@ -2971,6 +3031,61 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
                     )
                     segm_results.append(segm_result)
         return segm_results
+
+    def forward_train(
+        self, x, img_metas, proposal_list, gt_bboxes, gt_labels, gt_bboxes_ignore=None, gt_masks=None, **kwargs
+    ):
+        """
+        Args:
+            x (list[Tensor]): list of multi-level img features.
+            img_metas (list[dict]): list of image info dict where each dict
+                has: 'img_shape', 'scale_factor', 'flip', and may also contain 'filename', 'ori_shape', 'pad_shape',
+                and 'img_norm_cfg'. For details on the values of these keys see
+                `mmdet/datasets/pipelines/formatting.py:Collect`.
+            proposals (list[Tensors]): list of region proposals.
+            gt_bboxes (list[Tensor]): Ground truth bboxes for each image with
+                shape (num_gts, 4) in [tl_x, tl_y, br_x, br_y] format.
+            gt_labels (list[Tensor]): class indices corresponding to each box
+            gt_bboxes_ignore (None | list[Tensor]): specify which bounding
+                boxes can be ignored when computing the loss.
+            gt_masks (None | Tensor) : true segmentation masks for each box
+                used if the architecture supports a segmentation task.
+        Returns:
+            dict[str, Tensor]: a dictionary of loss components
+        """
+        # assign gts and sample proposals
+        if self.with_bbox or self.with_mask:
+            num_imgs = len(img_metas)
+            if gt_bboxes_ignore is None:
+                gt_bboxes_ignore = [None for _ in range(num_imgs)]
+            sampling_results = []
+            for i in range(num_imgs):
+                assign_result = self.bbox_assigner.assign(
+                    proposal_list[i], gt_bboxes[i], gt_bboxes_ignore[i], gt_labels[i]
+                )
+                sampling_result = self.bbox_sampler.sample(
+                    assign_result,
+                    proposal_list[i],
+                    gt_bboxes[i],
+                    gt_labels[i],
+                    feats=[lvl_feat[i][None] for lvl_feat in x],
+                )
+                sampling_results.append(sampling_result)
+
+        losses = dict()
+        # bbox head forward and loss
+        if self.with_bbox:
+            bbox_results = self._bbox_forward_train(x, sampling_results, gt_bboxes, gt_labels, img_metas)
+            losses.update(bbox_results["loss_bbox"])
+
+        # mask head forward and loss
+        if self.with_mask:
+            mask_results = self._mask_forward_train(
+                x, sampling_results, bbox_results["bbox_feats"], gt_masks, img_metas
+            )
+            losses.update(mask_results["loss_mask"])
+
+        return losses
 
     def forward_test(self, hidden_states, proposal_list, img_metas, rescale=True):
         """Test without augmentation (originally called `simple_test`).
@@ -3136,8 +3251,8 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
     ) -> Union[Tuple, MaskRCNNModelOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        print("First values of img:", pixel_values[0,0,:3,:3])
-        
+        print("First values of img:", pixel_values[0, 0, :3, :3])
+
         # we need the intermediate hidden states
         outputs = self.convnext(pixel_values, output_hidden_states=True, return_dict=return_dict)
 
@@ -3152,7 +3267,7 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
         # the FPN outputs feature maps at 5 different scales
         hidden_states = self.neck(hidden_states)
 
-        print("Features:", hidden_states[-1][0,0,:3,:3])
+        print("Features:", hidden_states[-1][0, 0, :3, :3])
 
         # next, RPN computes a tuple of (class, bounding box) features for each of the 5 feature maps
         # rpn_outs[0] are the class features for each of the feature maps
@@ -3168,8 +3283,9 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
                     ori_shape=(480, 640, 3),
                 )
             ]
+        losses = dict()
         if labels is not None:
-            losses, proposal_list = self.rpn_head.forward_train(
+            rpn_losses, proposal_list = self.rpn_head.forward_train(
                 hidden_states,
                 img_metas,
                 gt_bboxes=labels["gt_bboxes"],
@@ -3177,8 +3293,21 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
                 gt_bboxes_ignore=None,
                 proposal_cfg=self.config.rpn_proposal,
             )
+            losses.update(rpn_losses)
+            # TODO: check for kwargs forwarded here
+            roi_losses = self.roi_head.forward_train(
+                hidden_states,
+                img_metas,
+                proposal_list,
+                labels["gt_bboxes"],
+                labels["gt_labels"],
+                labels["gt_bboxes_ignore"],
+                labels["gt_masks"],
+            )
+            losses.update(roi_losses)
         else:
             proposal_list = self.rpn_head.forward_test(hidden_states, img_metas)
+            results = self.roi_head.forward_test(hidden_states, proposal_list, img_metas=img_metas)
 
         # TODO: remove this check
         if labels is None:
@@ -3186,9 +3315,6 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
                 [[0.0000, 58.6872, 685.7259], [360.0827, 6.2272, 1045.1245], [37.4163, 113.3484, 535.2910]]
             )
             assert torch.allclose(proposal_list[0][:3, :3], expected_slice)
-
-        # TODO: support training of RoI heads
-        results = self.roi_head.forward_test(hidden_states, proposal_list, img_metas=img_metas)
 
         loss = None
         if not return_dict:
