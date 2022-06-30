@@ -471,8 +471,8 @@ class PipelinePadTest(unittest.TestCase):
 
 
 @is_pipeline_test
-@require_torch
 class PipelineUtilsTest(unittest.TestCase):
+    @require_torch
     def test_pipeline_dataset(self):
         from transformers.pipelines.pt_utils import PipelineDataset
 
@@ -486,6 +486,7 @@ class PipelineUtilsTest(unittest.TestCase):
         outputs = [dataset[i] for i in range(4)]
         self.assertEqual(outputs, [2, 3, 4, 5])
 
+    @require_torch
     def test_pipeline_iterator(self):
         from transformers.pipelines.pt_utils import PipelineIterator
 
@@ -500,6 +501,7 @@ class PipelineUtilsTest(unittest.TestCase):
         outputs = [item for item in dataset]
         self.assertEqual(outputs, [2, 3, 4, 5])
 
+    @require_torch
     def test_pipeline_iterator_no_len(self):
         from transformers.pipelines.pt_utils import PipelineIterator
 
@@ -517,6 +519,7 @@ class PipelineUtilsTest(unittest.TestCase):
         outputs = [item for item in dataset]
         self.assertEqual(outputs, [2, 3, 4, 5])
 
+    @require_torch
     def test_pipeline_batch_unbatch_iterator(self):
         from transformers.pipelines.pt_utils import PipelineIterator
 
@@ -530,6 +533,7 @@ class PipelineUtilsTest(unittest.TestCase):
         outputs = [item for item in dataset]
         self.assertEqual(outputs, [{"id": 2}, {"id": 3}, {"id": 4}, {"id": 5}])
 
+    @require_torch
     def test_pipeline_batch_unbatch_iterator_tensors(self):
         import torch
 
@@ -547,6 +551,7 @@ class PipelineUtilsTest(unittest.TestCase):
             nested_simplify(outputs), [{"id": [[12, 22]]}, {"id": [[2, 3]]}, {"id": [[2, 4]]}, {"id": [[5]]}]
         )
 
+    @require_torch
     def test_pipeline_chunk_iterator(self):
         from transformers.pipelines.pt_utils import PipelineChunkIterator
 
@@ -562,6 +567,7 @@ class PipelineUtilsTest(unittest.TestCase):
 
         self.assertEqual(outputs, [0, 1, 0, 1, 2])
 
+    @require_torch
     def test_pipeline_pack_iterator(self):
         from transformers.pipelines.pt_utils import PipelinePackIterator
 
@@ -594,6 +600,7 @@ class PipelineUtilsTest(unittest.TestCase):
             ],
         )
 
+    @require_torch
     def test_pipeline_pack_unbatch_iterator(self):
         from transformers.pipelines.pt_utils import PipelinePackIterator
 
@@ -617,22 +624,6 @@ class PipelineUtilsTest(unittest.TestCase):
 
         outputs = [item for item in dataset]
         self.assertEqual(outputs, [[{"id": 2}, {"id": 3}, {"id": 4}, {"id": 5}]])
-
-    def check_models_equal_pt(self, model1, model2):
-        models_are_equal = True
-        for model1_p, model2_p in zip(model1.parameters(), model2.parameters()):
-            if model1_p.data.ne(model2_p.data).sum() > 0:
-                models_are_equal = False
-
-        return models_are_equal
-
-    def check_models_equal_tf(self, model1, model2):
-        models_are_equal = True
-        for model1_p, model2_p in zip(model1.weights, model2.weights):
-            if np.abs(model1_p.numpy() - model2_p.numpy()).sum() > 1e-5:
-                models_are_equal = False
-
-        return models_are_equal
 
     @slow
     @require_torch
@@ -739,3 +730,19 @@ class PipelineUtilsTest(unittest.TestCase):
             self.assertTrue(models_are_equal, f"{task} model doesn't match pipeline.")
 
             logger.debug(f"{task} in {framework} succeeded with {model_id}.")
+
+    def check_models_equal_pt(self, model1, model2):
+        models_are_equal = True
+        for model1_p, model2_p in zip(model1.parameters(), model2.parameters()):
+            if model1_p.data.ne(model2_p.data).sum() > 0:
+                models_are_equal = False
+
+        return models_are_equal
+
+    def check_models_equal_tf(self, model1, model2):
+        models_are_equal = True
+        for model1_p, model2_p in zip(model1.weights, model2.weights):
+            if np.abs(model1_p.numpy() - model2_p.numpy()).sum() > 1e-5:
+                models_are_equal = False
+
+        return models_are_equal
