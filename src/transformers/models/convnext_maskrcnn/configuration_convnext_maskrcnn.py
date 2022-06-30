@@ -140,6 +140,7 @@ class ConvNextMaskRCNNConfig(PretrainedConfig):
         rpn_sampler_pos_fraction=0.5,
         rpn_sampler_neg_pos_ub=-1,
         rpn_sampler_add_gt_as_proposals=False,
+        rpn_proposal=dict(nms_pre=2000, max_per_img=1000, nms=dict(type="nms", iou_threshold=0.7), min_bbox_size=0),
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -193,6 +194,7 @@ class ConvNextMaskRCNNConfig(PretrainedConfig):
         self.rpn_sampler_pos_fraction = rpn_sampler_pos_fraction
         self.rpn_sampler_neg_pos_ub = rpn_sampler_neg_pos_ub
         self.rpn_sampler_add_gt_as_proposals = rpn_sampler_add_gt_as_proposals
+        self.rpn_proposal = rpn_proposal
 
 
 class ConvNextMaskRCNNOnnxConfig(OnnxConfig):

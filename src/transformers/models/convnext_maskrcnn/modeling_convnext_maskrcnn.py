@@ -17,6 +17,7 @@
 """ PyTorch ConvNextMaskRCNN model."""
 
 
+from asyncio.constants import LOG_THRESHOLD_FOR_CONNLOST_WRITES
 import copy
 import warnings
 from dataclasses import dataclass
@@ -1742,10 +1743,9 @@ class ConvNextMaskRCNNRandomSampler:
 
 class ConvNextMaskRCNNRPN(nn.Module):
     """
-    Anchor-based Region Proposal Network (RPN). The RPN learns to convert anchors into region proposals, by
-
-    1) classifying anchors as either positive/negative/neutral (based on IoU overlap with ground-truth boxes) 2) for
-    the anchors classified as positive/negative, regressing the anchor box to the ground-truth box.
+    Anchor-based Region Proposal Network (RPN). The RPN learns to convert anchors into region proposals, by 1)
+    classifying anchors as either positive/negative/neutral (based on IoU overlap with ground-truth boxes) 2) for the
+    anchors classified as positive/negative, regressing the anchor box to the ground-truth box.
 
     RPN was originally proposed in [Faster R-CNN: Towards Real-Time Object Detection with Region Proposal
     Networks](https://arxiv.org/abs/1506.01497).
@@ -1829,24 +1829,30 @@ class ConvNextMaskRCNNRPN(nn.Module):
         """
         return multi_apply(self.forward_single, hidden_states)
 
-    def forward_train(self, hidden_states, img_metas, gt_bboxes, gt_labels=None, gt_bboxes_ignore=None):
-        rpn_outs = self(hidden_states)
+    def forward_train(
+        self, hidden_states, img_metas, gt_bboxes, gt_labels=None, gt_bboxes_ignore=None, proposal_cfg=None, **kwargs
+    ):
+        outs = self(hidden_states)
 
         if gt_labels is None:
-            loss_inputs = rpn_outs + (gt_bboxes, img_metas)
+            loss_inputs = outs + (gt_bboxes, img_metas)
         else:
-            loss_inputs = rpn_outs + (gt_bboxes, gt_labels, img_metas)
+            loss_inputs = outs + (gt_bboxes, gt_labels, img_metas)
 
         losses = self.loss(*loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)
 
-        proposal_list = self.get_bboxes(*rpn_outs, img_metas=img_metas)
+        print("Losses:", losses)
 
-        return losses, proposal_list
+        if proposal_cfg is None:
+            return losses
+        else:
+            proposal_list = self.get_bboxes(*outs, img_metas=img_metas, cfg=proposal_cfg)
+            return losses, proposal_list
 
     def forward_test(self, hidden_states, img_metas):
-        rpn_outs = self(hidden_states)
+        outs = self(hidden_states)
 
-        proposal_list = self.get_bboxes(*rpn_outs, img_metas=img_metas)
+        proposal_list = self.get_bboxes(*outs, img_metas=img_metas)
 
         return proposal_list
 
@@ -2108,7 +2114,7 @@ class ConvNextMaskRCNNRPN(nn.Module):
         loss_bbox = self.loss_bbox(bbox_pred, bbox_targets, bbox_weights, avg_factor=num_total_samples)
         return loss_cls, loss_bbox
 
-    def loss(self, cls_scores, bbox_preds, gt_bboxes, gt_labels, img_metas, gt_bboxes_ignore=None):
+    def loss(self, cls_scores, bbox_preds, gt_bboxes, img_metas, gt_bboxes_ignore=None):
         """Compute losses of the head.
 
         Args:
@@ -2535,9 +2541,6 @@ class ConvNextMaskRCNNSingleRoIExtractor(nn.Module):
                 # included in the computation graph to avoid runtime bugs.
                 roi_feats += sum(x.view(-1)[0] for x in self.parameters()) * 0.0 + feats[i].sum() * 0.0
 
-        print("Roi feats:", roi_feats.shape)
-        print(roi_feats[0, 0, :3, :3])
-
         return roi_feats
 
 
@@ -2670,12 +2673,10 @@ class ConvNextMaskRCNNFCNMaskHead(nn.Module):
         self.conv_logits = nn.Conv2d(conv_out_channels, self.num_classes, 1)
 
     def forward(self, x):
-        print("Hidden states before convs:", x[0, 0, :3, :3])
         for conv, activation in zip(self.convs, self.activations):
             x = conv(x)
             x = activation(x)
 
-        print("Hidden states after convs:", x[0, 0, :3, :3])
         x = self.upsample(x)
         x = self.relu(x)
         mask_pred = self.conv_logits(x)
@@ -2911,11 +2912,7 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
             assert bbox_feats is not None
             mask_feats = bbox_feats[pos_inds]
 
-        print("Mask_feats:", mask_feats[0, 0, :3, :3])
-
         mask_pred = self.mask_head(mask_feats)
-
-        print("Mask pred:", mask_pred[0, 0, :3, :3])
 
         mask_results = dict(mask_pred=mask_pred, mask_feats=mask_feats)
         return mask_results
@@ -3119,6 +3116,8 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
+        self.config = config
+
         self.convnext = ConvNextMaskRCNNModel(config)
         self.neck = ConvNextMaskRCNNFPN(config)
         self.rpn_head = ConvNextMaskRCNNRPN(config)
@@ -3137,6 +3136,8 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
     ) -> Union[Tuple, MaskRCNNModelOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        print("First values of img:", pixel_values[0,0,:3,:3])
+        
         # we need the intermediate hidden states
         outputs = self.convnext(pixel_values, output_hidden_states=True, return_dict=return_dict)
 
@@ -3150,6 +3151,8 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
 
         # the FPN outputs feature maps at 5 different scales
         hidden_states = self.neck(hidden_states)
+
+        print("Features:", hidden_states[-1][0,0,:3,:3])
 
         # next, RPN computes a tuple of (class, bounding box) features for each of the 5 feature maps
         # rpn_outs[0] are the class features for each of the feature maps
@@ -3170,8 +3173,9 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
                 hidden_states,
                 img_metas,
                 gt_bboxes=labels["gt_bboxes"],
-                gt_labels=labels["gt_labels"],
+                gt_labels=None,  # one explicitly sets them to None in TwoStageDetector
                 gt_bboxes_ignore=None,
+                proposal_cfg=self.config.rpn_proposal,
             )
         else:
             proposal_list = self.rpn_head.forward_test(hidden_states, img_metas)
