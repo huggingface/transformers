@@ -117,10 +117,17 @@ def load_pytorch_checkpoint_in_tf2_model(
         )
         raise
 
-    pt_path = os.path.abspath(pytorch_checkpoint_path)
-    logger.info(f"Loading PyTorch weights from {pt_path}")
+    # Treats a single file as a collection of shards with 1 shard.
+    if isinstance(pytorch_checkpoint_path, str):
+        pytorch_checkpoint_path = [pytorch_checkpoint_path]
 
-    pt_state_dict = torch.load(pt_path, map_location="cpu")
+    # Loads all shards into a single state dictionary
+    pt_state_dict = {}
+    for path in pytorch_checkpoint_path:
+        pt_path = os.path.abspath(path)
+        logger.info(f"Loading PyTorch weights from {pt_path}")
+        pt_state_dict.update(torch.load(pt_path, map_location="cpu"))
+
     logger.info(f"PyTorch checkpoint contains {sum(t.numel() for t in pt_state_dict.values()):,} parameters")
 
     return load_pytorch_weights_in_tf2_model(
