@@ -15,15 +15,25 @@
 """
 Image/Text processor class for OwlViT
 """
+from typing import List
+
+import numpy as np
+import jax.numpy as jnp
+
+from .utils import is_torch_available
+from .utils.generic import _is_torch
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 
 
+def is_torch_tensor(obj):
+    return _is_torch(obj) if is_torch_available() else False
+
 class OwlViTProcessor(ProcessorMixin):
     r"""
-    Constructs a CLIP processor which wraps a CLIP feature extractor and a CLIP tokenizer into a single processor.
-    [`CLIPProcessor`] offers all the functionalities of [`CLIPFeatureExtractor`] and [`CLIPTokenizerFast`]. See the
-    [`~CLIPProcessor.__call__`] and [`~CLIPProcessor.decode`] for more information.
+    Constructs a OwlViT processor which wraps a CLIP feature extractor and a CLIP tokenizer into a single processor.
+    [`OwlViTProcessor`] offers all the functionalities of [`CLIPFeatureExtractor`] and [`CLIPTokenizerFast`]. See the
+    [`~OwlViTProcessor.__call__`] and [`~OwlViTProcessor.decode`] for more information.
     Args:
         feature_extractor ([`CLIPFeatureExtractor`]):
             The feature extractor is a required input.
@@ -71,8 +81,39 @@ class OwlViTProcessor(ProcessorMixin):
         if text is None and images is None:
             raise ValueError("You have to specify either text or images. Both cannot be none.")
 
-        if text is not None:
-            encoding = self.tokenizer(text, return_tensors=return_tensors, **kwargs)
+        if isinstance(text, str):
+            encodings = [self.tokenizer(text, return_tensors=return_tensors, **kwargs)]
+
+        if isintance(text, List) and not isintance(text[0], List):
+            encodings = [self.tokenizer(text, return_tensors=return_tensors, **kwargs)]
+
+        if isintance(text, List) and isintance(text[0], List):
+            encodings = []
+            max_num_queries = max([len(t) for t in texts])
+
+            # Pad all batch samples to max number of text queries
+            for t in text:
+                if len(t) != max_num_queries:
+                    t.extend([""]*(max_num_q - len(t)))
+                    encoding = self.tokenizer(t, return_tensors=return_tensors, **kwargs)
+                    encodings.append(encoding)
+
+        if isinstance(encodings[0], np.ndarray):
+            encodings = [np.expand_dims(encoding, axis=0) for encoding in encodings]
+            encoding = np.concatenate(encodings)
+
+        elif isinstance(encodings[0], jnp.ndarray):
+            encodings = [jnp.expand_dims(encoding, axis=0) for encoding in encodings]
+            encoding = jnp.concatenate(encodings)
+
+        elif is_torch_tensor(encodings[0]):
+            import torch
+            encodings = [encoding.unsqueeze(0) for encoding in encodings]
+            encoding = torch.cat(encodings)
+        else:
+            import tensorflow as tf
+            encodings = [tf.expand_dims(encoding, axis=0) for encoding in encodings]
+            encoding = tf.concat(encodings, axis=0)
 
         if images is not None:
             image_features = self.feature_extractor(images, return_tensors=return_tensors, **kwargs)
