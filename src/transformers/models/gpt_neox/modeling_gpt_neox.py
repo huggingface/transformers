@@ -195,7 +195,7 @@ class GPTNeoXAttention(nn.Module):
 
         query = query.view(batch_size * num_attention_heads, query_length, attn_head_size)
         key = key.view(batch_size * num_attention_heads, key_length, attn_head_size)
-        attn_scores = torch.empty(
+        attn_scores = torch.zeros(
             batch_size * num_attention_heads,
             query_length,
             key_length,
@@ -206,7 +206,7 @@ class GPTNeoXAttention(nn.Module):
             attn_scores,
             query,
             key.transpose(1, 2),
-            beta=0.0,
+            beta=1.0,
             alpha=(1.0 / self.norm_factor),
         )
         attn_scores = attn_scores.view(batch_size, num_attention_heads, query_length, key_length)
