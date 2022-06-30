@@ -15,7 +15,6 @@
 #
 
 import math
-from tkinter import TRUE
 import unittest
 
 from transformers import BloomConfig, is_torch_available
