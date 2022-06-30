@@ -2334,6 +2334,8 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
         self.final_logits_bias = self.add_weight(
             name="final_logits_bias", shape=[1, config.vocab_size], initializer="zeros", trainable=False
         )
+        # TODO (Joao): investigate why LED has numerical issues in XLA generate
+        self.supports_xla_generation = False
 
     def get_decoder(self):
         return self.led.decoder

@@ -200,6 +200,8 @@
       title: CamemBERT
     - local: model_doc/canine
       title: CANINE
+    - local: model_doc/codegen
+      title: CodeGen
     - local: model_doc/convnext
       title: ConvNeXT
     - local: model_doc/clip
@@ -302,16 +304,32 @@
       title: mLUKE
     - local: model_doc/mobilebert
       title: MobileBERT
+    - local: model_doc/mobilevit
+      title: MobileViT
     - local: model_doc/mpnet
       title: MPNet
     - local: model_doc/mt5
       title: MT5
+    - local: model_doc/mvp
+      title: MVP
+    - local: model_doc/nezha
+      title: NEZHA
     - local: model_doc/nystromformer
       title: Nyströmformer
     - local: model_doc/openai-gpt
       title: OpenAI GPT
     - local: model_doc/gpt2
       title: OpenAI GPT2
+    - local: model_doc/gptj
+      title: GPT-J
+    - local: model_doc/gpt_neo
+      title: GPT Neo
+    - local: model_doc/gpt_neox
+      title: GPT NeoX
+    - local: model_doc/groupvit
+      title: GroupViT
+    - local: model_doc/hubert
+      title: Hubert
     - local: model_doc/opt
       title: OPT
     - local: model_doc/pegasus
