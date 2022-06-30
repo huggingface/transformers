@@ -26,6 +26,7 @@ from tokenizers import normalizers
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
+import torch
 
 logger = logging.get_logger(__name__)
 
@@ -45,21 +46,24 @@ PRETRAINED_LYRIC_TOKENS_SIZES = {
 
 
 def get_relevant_lyric_tokens(full_tokens, max_n_lyric_tokens, total_length, offset, duration):
-    """Extract only the relevant tokens based on the character position. A total of
+    """
+    Extract only the relevant tokens based on the character position. A total of
     `max_n_lyric_tokens` tokens will be returned. If the provided token sequence is smaller, it will be padded,
     othewise, only characters ranging from the midpoint - `max_n_lyric_tokens//2` to the midpoint +
     `max_n_lyric_tokens//2` will be returned. This *focuses* on the most relevant tokens (in time) for the
     sequence.
 
     Args: # TODO : args to prettify
-        full_tokens (`_type_`):
-            _description_
-        total_length (`_type_`):
-            _description_
-        offset (`_type_`):
-            _description_
-        duration (`_type_`):
-            _description_
+        full_tokens (`List[int]`):
+            List containing the ids of the entire lyrics. 
+        total_length (`int`):
+            Total expected length of the music (not all of it is generated, see duration), in samples. 
+        offset (`int`):
+            Starting sample in the music. If the offset is greater than 0, the lyrics will be shifted 
+            take that into account
+        duration (`int`):
+            Expected duration of the generated music, in seconds. The duration has to be smaller than the 
+            total lenght, which represent the overall length of the signal, 
     """
     if len(full_tokens) < max_n_lyric_tokens:
         tokens = [0] * (max_n_lyric_tokens - len(full_tokens)) + full_tokens
@@ -121,10 +125,10 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         vocab_file (`str`):
             Path to the vocabulary file which should contain a dictionnary where the keys are 'artist', 'genre' and
             'lyrics' and the values are their corresponding vocabulary files.
-        max_n_lyric_tokens (`int`, `optional`, defaults to 512):
-            Maximum number of lyric tokens to keep.
         n_genres (`int`, `optional`, defaults to 1):
             Maximum number of genres to use for composition.
+        max_n_lyric_tokens (`int`, `optional`, defaults to 512):
+            Maximum number of lyric tokens to keep.
         unk_token (`str`, *optional*, defaults to `<|endoftext|>`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
@@ -272,12 +276,12 @@ class JukeboxTokenizer(PreTrainedTokenizer):
     def _convert_id_to_token(self, artists_index, genres_index, lyric_index):
         """Converts an index (integer) in a token (str) using the vocab.
         Args:
-            artists_index (`_type_`):
-                _description_
-            genres_index (`_type_`):
-                _description_
-            lyric_index (`_type_`):
-                _description_
+            artists_index (`int`):
+                Index of the artist in its corresponding dictionnary. 
+            genres_index (`Union[List[int], int]`):
+               Index of the genre in its corresponding dictionnary. 
+            lyric_index (`List[int]`):
+                List of character indices, which each correspond to a character. 
         """
         artist = self.artists_decoder.get(artists_index)
         genres = [self.genres_decoder.get(genre) for genre in genres_index]
@@ -289,25 +293,26 @@ class JukeboxTokenizer(PreTrainedTokenizer):
 
     # TODO : should add_token be implemeted for artists, genres and lyrics? Should it have
     # a type argument to add an artist token with self.getattr('artist') ?
-    # TODO : is a call function required ?
 
-    def __call__(self, artist, genres, lyrics, total_length, sample_length, offset):
-        """Convert the raw string to token ids
+    def __call__(self, artist, genres, lyrics, total_length, sample_length, offset, return_tensor = "pt"):
+        """
+        Convert the raw string to token ids
 
         Args:
-            artist (`_type_`):
+            artist (`str`):
                 _description_
-            genre (`_type_`):
+            genre (`str`):
                 _description_
-            lyrics (`_type_`):
+            lyrics (`srt`):
                 _description_
-            total_length (`_type_`):
+            total_length (`int`):
                 _description_
-            sample_length (`_type_`):
+            sample_length (`int`):
                 _description_
-            offset (`_type_`):
+            offset (`int`):
                 _description_
             max_n_lyric_tokens (`int`): 
+                _description_
         """
         input_ids = [total_length, offset, sample_length]
         artists_tokens, genres_tokens, lyrics_tokens = self.tokenize(artist, genres, lyrics)
@@ -316,7 +321,9 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         )
         input_ids += [artists_id] + genres_ids + relevant_tokens
         attention_masks = [-INFINITY] * (len(full_tokens) - len(relevant_tokens)) + [0] * len(relevant_tokens)
-        return {"input_ids": {'y': input_ids, 'full_tokens':full_tokens}, "attention_masks": attention_masks}
+        # TODO properly handle the return pt tensor option
+        if return_tensor == "pt":
+            return {"input_ids": {'y': torch.tensor([input_ids]), 'full_tokens':full_tokens}, "attention_masks":torch.tensor( attention_masks)}
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         """
