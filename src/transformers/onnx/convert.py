@@ -351,7 +351,7 @@ def validate_model_outputs(
     logger.info("Validating ONNX model...")
 
     if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
-        raise ValueError("You cannot provide both a tokenizer and a preprocessor to validatethe model outputs.")
+        raise ValueError("You cannot provide both a tokenizer and a preprocessor to validate the model outputs.")
     if tokenizer is not None:
         warnings.warn(
             "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use"

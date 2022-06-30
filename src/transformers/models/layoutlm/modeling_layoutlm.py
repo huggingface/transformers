@@ -805,7 +805,7 @@ class LayoutLMModel(LayoutLMPreTrainedModel):
         extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
 
         extended_attention_mask = extended_attention_mask.to(dtype=self.dtype)
-        extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
+        extended_attention_mask = (1.0 - extended_attention_mask) * torch.finfo(self.dtype).min
 
         if head_mask is not None:
             if head_mask.dim() == 1:

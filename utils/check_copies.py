@@ -485,7 +485,6 @@ MODELS_NOT_IN_README = [
     "Speech2Text2",
     "Vision Encoder decoder",
     "VisionTextDualEncoder",
-    "Wav2Vec2-Conformer",
 ]
 
 
