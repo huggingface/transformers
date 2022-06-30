@@ -16,6 +16,7 @@
 
 import inspect
 import unittest
+from typing import List, Tuple
 
 import numpy as np
 
@@ -114,6 +115,7 @@ class TFSegformerModelTester:
             hidden_dropout_prob=self.hidden_dropout_prob,
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             initializer_range=self.initializer_range,
+            num_labels=self.num_labels,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -140,6 +142,15 @@ class TFSegformerModelTester:
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values, labels = config_and_inputs
         inputs_dict = {"pixel_values": pixel_values}
+        return config, inputs_dict
+
+    def prepare_config_and_inputs_for_keras_fit(self, for_segmentation: bool = False):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, pixel_values, seg_labels = config_and_inputs
+        if for_segmentation:
+            inputs_dict = {"pixel_values": pixel_values, "labels": seg_labels}
+        else:
+            inputs_dict = {"pixel_values": pixel_values, "labels": tf.zeros((self.batch_size))}
         return config, inputs_dict
 
 
@@ -281,106 +292,188 @@ class TFSegformerModelTest(TFModelTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    # Overriding this method since the base method won't be compatible with Segformer.
+    def test_model_outputs_equivalence(self):
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
+            tuple_output = model(tuple_inputs, return_dict=False, **additional_kwargs)
+            dict_output = model(dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
+
+            def recursive_check(tuple_object, dict_object):
+                if isinstance(tuple_object, (List, Tuple)):
+                    for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
+                        recursive_check(tuple_iterable_value, dict_iterable_value)
+                elif tuple_object is None:
+                    return
+                else:
+                    self.assertTrue(
+                        all(tf.equal(tuple_object, dict_object)),
+                        msg=(
+                            "Tuple and dict output are not equal. Difference:"
+                            f" {tf.math.reduce_max(tf.abs(tuple_object - dict_object))}"
+                        ),
+                    )
+
+                recursive_check(tuple_output, dict_output)
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
+            check_equivalence(model, tuple_inputs, dict_inputs)
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
+            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
+
+            if self.has_attentions:
+                tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
+                dict_inputs = self._prepare_for_class(inputs_dict, model_class)
+                check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
+
+            # todo: incorporate label support for semantic segmentation in `test_modeling_tf_common.py`.
+
+    def test_dataset_conversion(self):
+        gpus = tf.config.list_physical_devices("GPU")
+        # Grouped convs aren't supported on CPUs for backprop.
+        if len(gpus) >= 1:
+            super().test_dataset_conversion()
+
     def test_keras_fit(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        gpus = tf.config.list_physical_devices("GPU")
+
+        def apply(model):
+            if getattr(model, "hf_compute_loss", None):
+                model_weights = model.get_weights()
+
+                # Test that model correctly compute the loss with kwargs
+                for_segmentation = True if model_class.__name__ == "TFSegformerForSemanticSegmentation" else False
+                _, prepared_for_class = self.model_tester.prepare_config_and_inputs_for_keras_fit(
+                    for_segmentation=for_segmentation
+                )
+
+                label_names = {"labels"}
+                self.assertGreater(len(label_names), 0, msg="No matching label names found!")
+                labels = {key: val for key, val in prepared_for_class.items() if key in label_names}
+                inputs_minus_labels = {key: val for key, val in prepared_for_class.items() if key not in label_names}
+                self.assertGreater(len(inputs_minus_labels), 0)
+                model.compile(optimizer=tf.keras.optimizers.SGD(0.0), run_eagerly=True)
+
+                # Make sure the model fits without crashing regardless of where we pass the labels
+                history1 = model.fit(
+                    prepared_for_class,
+                    validation_data=prepared_for_class,
+                    steps_per_epoch=1,
+                    validation_steps=1,
+                    shuffle=False,
+                )
+                val_loss1 = history1.history["val_loss"][0]
+
+                # We reinitialize the model here even though our learning rate was zero
+                # because BatchNorm updates weights by means other than gradient descent.
+                model.set_weights(model_weights)
+                history2 = model.fit(
+                    inputs_minus_labels,
+                    labels,
+                    validation_data=(inputs_minus_labels, labels),
+                    steps_per_epoch=1,
+                    validation_steps=1,
+                    shuffle=False,
+                )
+                val_loss2 = history2.history["val_loss"][0]
+                self.assertTrue(np.allclose(val_loss1, val_loss2, atol=1e-2, rtol=1e-3))
+
         for model_class in self.all_model_classes:
             # Since `TFSegformerModel` cannot operate with the default `fit()` method.
             if model_class.__name__ != "TFSegformerModel":
+                # Grouped convs and backprop with them isn't supported on CPUs.
                 model = model_class(config)
-                if getattr(model, "hf_compute_loss", None):
-                    # Test that model correctly compute the loss with kwargs
-                    _, prepared_for_class = self.model_tester.prepare_config_and_inputs_for_keras_fit()
+                if len(gpus) > 1:
+                    apply(model)
 
-                    label_names = {"labels"}
-                    self.assertGreater(len(label_names), 0, msg="No matching label names found!")
-                    labels = {key: val for key, val in prepared_for_class.items() if key in label_names}
-                    inputs_minus_labels = {
-                        key: val for key, val in prepared_for_class.items() if key not in label_names
-                    }
-                    self.assertGreater(len(inputs_minus_labels), 0)
-                    model.compile(optimizer=tf.keras.optimizers.SGD(0.0), run_eagerly=True)
-
-                    # Make sure the model fits without crashing regardless of where we pass the labels
-                    history1 = model.fit(
-                        prepared_for_class,
-                        validation_data=prepared_for_class,
-                        steps_per_epoch=1,
-                        validation_steps=1,
-                        shuffle=False,
-                    )
-                    val_loss1 = history1.history["val_loss"][0]
-                    history2 = model.fit(
-                        inputs_minus_labels,
-                        labels,
-                        validation_data=(inputs_minus_labels, labels),
-                        steps_per_epoch=1,
-                        validation_steps=1,
-                        shuffle=False,
-                    )
-                    val_loss2 = history2.history["val_loss"][0]
-                    self.assertTrue(np.allclose(val_loss1, val_loss2, atol=1e-2, rtol=1e-3))
-
-    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=2e-4, name="outputs", attributes=None):
-        # We override with a slightly higher tol value, as semseg models tend to diverge a bit more
-        super().check_pt_tf_outputs(tf_outputs, pt_outputs, model_class, tol, name, attributes)
-
-    # Overriding this method since the base method won't be compatible with Segformer.
     def test_loss_computation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        def apply(model):
+            for_segmentation = True if model_class.__name__ == "TFSegformerForSemanticSegmentation" else False
+            # The number of elements in the loss should be the same as the number of elements in the label
+            _, prepared_for_class = self.model_tester.prepare_config_and_inputs_for_keras_fit(
+                for_segmentation=for_segmentation
+            )
+            added_label = prepared_for_class[
+                sorted(list(prepared_for_class.keys() - inputs_dict.keys()), reverse=True)[0]
+            ]
+            loss_size = tf.size(added_label)
+
+            # Test that model correctly compute the loss with kwargs
+            possible_input_names = {"input_ids", "pixel_values", "input_features"}
+            input_name = possible_input_names.intersection(set(prepared_for_class)).pop()
+            model_input = prepared_for_class.pop(input_name)
+
+            loss = model(model_input, **prepared_for_class)[0]
+
+            if model_class.__name__ == "TFSegformerForSemanticSegmentation":
+                # Segmentation loss is non-reduced. This means if the labels array
+                # has a shape of (batch_size, height, width) then the loss will
+                # also have the same shape. So, we compare the loss sizes directly.
+                self.assertEqual(tf.size(loss), loss_size)
+            else:
+                self.assertEqual(loss.shape, [loss_size])
+
+            # Test that model correctly compute the loss with a dict
+            _, prepared_for_class = self.model_tester.prepare_config_and_inputs_for_keras_fit(
+                for_segmentation=for_segmentation
+            )
+            loss = model(**prepared_for_class)[0]
+
+            if model_class.__name__ == "TFSegformerForSemanticSegmentation":
+                self.assertEqual(tf.size(loss), loss_size)
+            else:
+                self.assertEqual(loss.shape, [loss_size])
+
+            # Test that model correctly compute the loss with a tuple
+            label_keys = prepared_for_class.keys() - inputs_dict.keys()
+            signature = inspect.signature(model.call).parameters
+            signature_names = list(signature.keys())
+
+            # Create a dictionary holding the location of the tensors in the tuple
+            tuple_index_mapping = {0: input_name}
+            for label_key in label_keys:
+                label_key_index = signature_names.index(label_key)
+                tuple_index_mapping[label_key_index] = label_key
+            sorted_tuple_index_mapping = sorted(tuple_index_mapping.items())
+            # Initialize a list with their default values, update the values and convert to a tuple
+            list_input = []
+
+            for name in signature_names:
+                if name != "kwargs":
+                    list_input.append(signature[name].default)
+
+            for index, value in sorted_tuple_index_mapping:
+                list_input[index] = prepared_for_class[value]
+
+            tuple_input = tuple(list_input)
+
+            # Send to model
+            loss = model(tuple_input[:-1])[0]
+            if model_class.__name__ == "TFSegformerForSemanticSegmentation":
+                self.assertEqual(tf.size(loss), loss_size)
+            else:
+                self.assertEqual(loss.shape, [loss_size])
+
         for model_class in self.all_model_classes:
             # Since `TFSegformerModel` won't have labels against which we
             # could compute loss.
             if model_class.__name__ != "TFSegformerModel":
                 model = model_class(config)
-                if getattr(model, "hf_compute_loss", None):
-                    # The number of elements in the loss should be the same as the number of elements in the label
-                    _, prepared_for_class = self.model_tester.prepare_config_and_inputs_for_keras_fit()
-                    added_label = prepared_for_class[
-                        sorted(list(prepared_for_class.keys() - inputs_dict.keys()), reverse=True)[0]
-                    ]
-                    loss_size = tf.size(added_label)
+                apply(model)
 
-                    # Test that model correctly compute the loss with kwargs
-                    possible_input_names = {"input_ids", "pixel_values", "input_features"}
-                    input_name = possible_input_names.intersection(set(prepared_for_class)).pop()
-                    model_input = prepared_for_class.pop(input_name)
-
-                    loss = model(model_input, **prepared_for_class)[0]
-                    self.assertEqual(loss.shape, [loss_size])
-
-                    # Test that model correctly compute the loss with a dict
-                    _, prepared_for_class = self.model_tester.prepare_config_and_inputs_for_keras_fit()
-                    loss = model(**prepared_for_class)[0]
-                    self.assertEqual(loss.shape, [loss_size])
-
-                    # Test that model correctly compute the loss with a tuple
-                    label_keys = prepared_for_class.keys() - inputs_dict.keys()
-                    signature = inspect.signature(model.call).parameters
-                    signature_names = list(signature.keys())
-
-                    # Create a dictionary holding the location of the tensors in the tuple
-                    tuple_index_mapping = {0: input_name}
-                    for label_key in label_keys:
-                        label_key_index = signature_names.index(label_key)
-                        tuple_index_mapping[label_key_index] = label_key
-                    sorted_tuple_index_mapping = sorted(tuple_index_mapping.items())
-                    # Initialize a list with their default values, update the values and convert to a tuple
-                    list_input = []
-
-                    for name in signature_names:
-                        if name != "kwargs":
-                            list_input.append(signature[name].default)
-
-                    for index, value in sorted_tuple_index_mapping:
-                        list_input[index] = prepared_for_class[value]
-
-                    tuple_input = tuple(list_input)
-
-                    # Send to model
-                    loss = model(tuple_input[:-1])[0]
-
-                    self.assertEqual(loss.shape, [loss_size])
+    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=2e-4, name="outputs", attributes=None):
+        # We override with a slightly higher tol value, as semseg models tend to diverge a bit more
+        super().check_pt_tf_outputs(tf_outputs, pt_outputs, model_class, tol, name, attributes)
 
     @slow
     def test_model_from_pretrained(self):

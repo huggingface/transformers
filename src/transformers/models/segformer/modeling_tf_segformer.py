@@ -27,7 +27,7 @@ from ...file_utils import (
     replace_return_docstrings,
 )
 from ...modeling_tf_outputs import TFBaseModelOutput, TFSemanticSegmenterOutput, TFSequenceClassifierOutput
-from ...modeling_tf_utils import TFPreTrainedModel, keras_serializable, unpack_inputs
+from ...modeling_tf_utils import TFPreTrainedModel, TFSequenceClassificationLoss, keras_serializable, unpack_inputs
 from ...tf_utils import shape_list, stable_softmax
 from ...utils import logging
 from .configuration_segformer import SegformerConfig
@@ -249,8 +249,8 @@ class TFSegformerDWConv(tf.keras.layers.Layer):
 
         new_height = shape_list(hidden_states)[1]
         new_width = shape_list(hidden_states)[2]
-        hidden_states = tf.reshape(hidden_states, (batch_size, new_height * new_width, -1))
-
+        num_channels = shape_list(hidden_states)[3]
+        hidden_states = tf.reshape(hidden_states, (batch_size, new_height * new_width, num_channels))
         return hidden_states
 
 
@@ -333,7 +333,6 @@ class TFSegformerLayer(tf.keras.layers.Layer):
         # first residual connection (with stochastic depth)
         attention_output = self.drop_path(attention_output, training=training)
         hidden_states = attention_output + hidden_states
-
         mlp_output = self.mlp(self.layer_norm_2(hidden_states), height, width)
 
         # second residual connection (with stochastic depth)
@@ -413,7 +412,7 @@ class TFSegformerEncoder(tf.keras.layers.Layer):
 
         hidden_states = pixel_values
         for idx, x in enumerate(zip(self.embeddings, self.block, self.layer_norms)):
-            embedding_layer, block_layer, norm_layer = x  # all of these are lists
+            embedding_layer, block_layer, norm_layer = x
             # first, obtain patch embeddings
             hidden_states, height, width = embedding_layer(hidden_states)
 
@@ -436,7 +435,8 @@ class TFSegformerEncoder(tf.keras.layers.Layer):
 
             # fourth, optionally reshape back to (batch_size, height, width, num_channels)
             if idx != len(self.embeddings) - 1 or (idx == len(self.embeddings) - 1 and self.config.reshape_last_stage):
-                hidden_states = tf.reshape(hidden_states, (batch_size, height, width, -1))
+                num_channels = shape_list(hidden_states)[-1]
+                hidden_states = tf.reshape(hidden_states, (batch_size, height, width, num_channels))
 
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -497,7 +497,11 @@ class TFSegformerMainLayer(tf.keras.layers.Layer):
             hidden_states = tuple([tf.transpose(h, perm=(0, 3, 1, 2)) for h in encoder_outputs[1]])
 
         if not return_dict:
-            return (sequence_output,) + encoder_outputs[1:]
+            if tf.greater(len(encoder_outputs[1:]), 0):
+                transposed_encoder_outputs = tuple(tf.transpose(v, perm=[0, 3, 1, 2]) for v in encoder_outputs[1:][0])
+                return (sequence_output,) + (transposed_encoder_outputs,)
+            else:
+                return (sequence_output,) + encoder_outputs[1:]
 
         return TFBaseModelOutput(
             last_hidden_state=sequence_output,
@@ -524,7 +528,8 @@ class TFSegformerPreTrainedModel(TFPreTrainedModel):
         Returns:
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
-        VISION_DUMMY_INPUTS = tf.random.uniform(shape=(3, self.config.num_channels, 512, 512), dtype=tf.float32)
+        # todo: change the batch size back to 3 (sayakpaul).
+        VISION_DUMMY_INPUTS = tf.random.uniform(shape=(1, self.config.num_channels, 512, 512), dtype=tf.float32)
         return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
 
     @tf.function(
@@ -634,7 +639,7 @@ class TFSegformerModel(TFSegformerPreTrainedModel):
     """,
     SEGFORMER_START_DOCSTRING,
 )
-class TFSegformerForImageClassification(TFSegformerPreTrainedModel):
+class TFSegformerForImageClassification(TFSegformerPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config: SegformerConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -701,9 +706,9 @@ class TFSegformerMLP(tf.keras.layers.Layer):
         self.proj = tf.keras.layers.Dense(config.decoder_hidden_size, name="proj")
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
-        hidden_dim = shape_list(hidden_states)[-1]
         height = shape_list(hidden_states)[1]
         width = shape_list(hidden_states)[2]
+        hidden_dim = shape_list(hidden_states)[-1]
         hidden_states = tf.reshape(hidden_states, (-1, height * width, hidden_dim))
         hidden_states = self.proj(hidden_states)
         return hidden_states
@@ -715,7 +720,7 @@ class TFSegformerDecodeHead(TFSegformerPreTrainedModel):
         # linear layers which will unify the channel dimension of each of the encoder blocks to the same config.decoder_hidden_size
         mlps = []
         for i in range(config.num_encoder_blocks):
-            mlp = TFSegformerMLP(config, input_dim=config.hidden_sizes[i], name=f"linear_c.{i}")
+            mlp = TFSegformerMLP(config, name=f"linear_c.{i}")
             mlps.append(mlp)
         self.mlps = mlps
 
@@ -750,9 +755,8 @@ class TFSegformerDecodeHead(TFSegformerPreTrainedModel):
 
             # upsample
             temp_state = tf.transpose(encoder_hidden_states[0], perm=[0, 2, 3, 1])
-            encoder_hidden_state = tf.image.resize(
-                encoder_hidden_state, size=shape_list(temp_state)[1:-1], method="bilinear"
-            )
+            upsample_resolution = shape_list(temp_state)[1:-1]
+            encoder_hidden_state = tf.image.resize(encoder_hidden_state, size=upsample_resolution, method="bilinear")
             all_hidden_states += (encoder_hidden_state,)
 
         hidden_states = self.linear_fuse(tf.concat(all_hidden_states[::-1], axis=-1))
@@ -776,7 +780,7 @@ class TFSegformerForSemanticSegmentation(TFSegformerPreTrainedModel):
         self.segformer = TFSegformerMainLayer(config, name="segformer")
         self.decode_head = TFSegformerDecodeHead(config, name="decode_head")
 
-    def compute_loss(self, logits, labels):
+    def hf_compute_loss(self, logits, labels):
         # upsample logits to the images' original size
         if len(shape_list(labels)) > 3:
             label_interp_shape = shape_list(labels)[1:-1]
@@ -787,15 +791,14 @@ class TFSegformerForSemanticSegmentation(TFSegformerPreTrainedModel):
         # compute weighted loss
         loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction="none")
 
-        # Taken from https://www.tensorflow.org/text/tutorials/transformer#loss_and_metrics.
+        # Adapted from https://www.tensorflow.org/text/tutorials/transformer#loss_and_metrics.
         # Utility to mask the index to ignore during computing the loss.
         def masked_loss(real, pred):
             mask = tf.math.logical_not(tf.math.equal(real, self.config.semantic_loss_ignore_index))
             loss_ = loss_fct(real, pred)
             mask = tf.cast(mask, dtype=loss_.dtype)
             loss_ *= mask
-
-            return tf.reduce_sum(loss_) / tf.reduce_sum(mask)
+            return loss_  # No reduction since other HF losses don't do it.
 
         return masked_loss(labels, upsampled_logits)
 
@@ -813,7 +816,8 @@ class TFSegformerForSemanticSegmentation(TFSegformerPreTrainedModel):
         r"""
         labels (`tf.Tensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
+            config.num_labels - 1]`. If `config.num_labels > 1`, a (per-pixel) classification loss is computed
+            (Cross-Entropy).
 
         Returns:
 
@@ -856,7 +860,7 @@ class TFSegformerForSemanticSegmentation(TFSegformerPreTrainedModel):
             if self.config.num_labels == 1:
                 raise ValueError("The number of labels should be greater than one")
             else:
-                loss = self.compute_loss(logits, labels)
+                loss = self.hf_compute_loss(logits, labels)
 
         if not return_dict:
             if output_hidden_states:
