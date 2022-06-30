@@ -65,5 +65,7 @@ labels["gt_bboxes"] = [
     torch.tensor([[252.8191, 29.9796, 301.3282, 163.3882], [0.0000, 23.2408, 54.6913, 79.8369]]),
     torch.tensor([[348.0057, 109.9930, 402.2309, 259.2000], [623.7056, 102.4561, 810.5126, 165.7544]]),
 ]
+labels["gt_bboxes_ignore"] = None
+labels["gt_masks"] = None
 
 outputs = model(pixel_values=img, img_metas=img_metas, labels=labels)
