@@ -28,7 +28,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_deberta": ["DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaConfig"],
+    "configuration_deberta": ["DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaConfig", "DebertaOnnxConfig"],
     "tokenization_deberta": ["DebertaTokenizer"],
 }
 
@@ -74,7 +74,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig
+    from .configuration_deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig, DebertaOnnxConfig
     from .tokenization_deberta import DebertaTokenizer
 
     try:

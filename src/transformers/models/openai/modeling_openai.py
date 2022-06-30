@@ -479,7 +479,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
             # Since we are adding it to the raw scores before the softmax, this is
             # effectively the same as removing these entirely.
             attention_mask = attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
-            attention_mask = (1.0 - attention_mask) * -10000.0
+            attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
 
         # Prepare head mask if needed
         head_mask = self.get_head_mask(head_mask, self.config.n_layer)

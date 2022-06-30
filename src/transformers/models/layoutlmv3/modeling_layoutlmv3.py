@@ -886,7 +886,9 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
                 position_ids = position_ids.expand_as(input_ids)
                 final_position_ids = position_ids
 
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, None, device)
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
+            attention_mask, None, device, dtype=embedding_output.dtype
+        )
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head

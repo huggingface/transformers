@@ -171,7 +171,7 @@ if version.parse(torch.__version__) >= version.parse("1.10"):
 if is_datasets_available():
     import datasets
 
-if is_torch_tpu_available():
+if is_torch_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
     import torch_xla.debug.metrics as met
     import torch_xla.distributed.parallel_loader as pl
@@ -558,6 +558,18 @@ class Trainer:
                     )
                 self.use_apex = True
 
+        # FP16 + model parallelism in SageMaker: gradient clipping does not work for now so we raise a helpful error.
+        if (
+            is_sagemaker_mp_enabled()
+            and self.use_cuda_amp
+            and args.max_grad_norm is not None
+            and args.max_grad_norm > 0
+        ):
+            raise ValueError(
+                "SageMaker Model Parallelism in mixed precision mode does not support gradient clipping yet. Pass "
+                "along 'max_grad_norm': 0 in your hyperparameters."
+            )
+
         # Label smoothing
         if self.args.label_smoothing_factor != 0:
             self.label_smoother = LabelSmoother(epsilon=self.args.label_smoothing_factor)
@@ -927,6 +939,7 @@ class Trainer:
             batch_size=self.args.eval_batch_size,
             collate_fn=data_collator,
             drop_last=self.args.dataloader_drop_last,
+            num_workers=self.args.dataloader_num_workers,
             pin_memory=self.args.dataloader_pin_memory,
         )
 
@@ -1075,6 +1088,10 @@ class Trainer:
         dataloader.dataset does not exist or has no length, estimates as best it can
         """
         try:
+            dataset = dataloader.dataset
+            # Special case for IterableDatasetShard, we need to dig deeper
+            if isinstance(dataset, IterableDatasetShard):
+                return len(dataloader.dataset.dataset)
             return len(dataloader.dataset)
         except (NameError, AttributeError, TypeError):  # no dataset or length, estimate by length of dataloader
             return len(dataloader) * self.args.per_device_train_batch_size
@@ -1167,6 +1184,29 @@ class Trainer:
 
         return model
 
+    def torch_jit_model_eval(self, model, dataloader, training=False):
+        if not training:
+            if dataloader is None:
+                logger.warning("failed to use PyTorch jit mode due to current dataloader is none.")
+                return model
+            jit_inputs = []
+            example_batch = next(iter(dataloader))
+            for key in example_batch:
+                example_tensor = torch.ones_like(example_batch[key])
+                jit_inputs.append(example_tensor)
+            jit_inputs = tuple(jit_inputs)
+            try:
+                jit_model = model.eval()
+                with ContextManagers([self.autocast_smart_context_manager(), torch.no_grad()]):
+                    jit_model = torch.jit.trace(jit_model, jit_inputs, strict=False)
+                jit_model = torch.jit.freeze(jit_model)
+                jit_model(**example_batch)
+                model = jit_model
+            except (RuntimeError, TypeError) as e:
+                logger.warning(f"failed to use PyTorch jit mode due to: {e}.")
+
+        return model
+
     def ipex_optimize_model(self, model, training=False, dtype=torch.float32):
         if not is_ipex_available():
             raise ImportError(
@@ -1186,10 +1226,13 @@ class Trainer:
 
         return model
 
-    def _wrap_model(self, model, training=True):
+    def _wrap_model(self, model, training=True, dataloader=None):
         if self.args.use_ipex:
             dtype = torch.bfloat16 if self.use_cpu_amp else torch.float32
             model = self.ipex_optimize_model(model, training, dtype=dtype)
+
+        if self.args.jit_mode_eval:
+            model = self.torch_jit_model_eval(model, dataloader, training)
 
         if is_sagemaker_mp_enabled():
             # Wrapping the base model twice in a DistributedModel will raise an error.
@@ -1883,12 +1926,12 @@ class Trainer:
         if checkpoint is None:
             return
 
-        local_rank = xm.get_local_ordinal() if is_torch_tpu_available() else self.args.local_rank
-        if local_rank != -1:
-            rng_file = os.path.join(checkpoint, f"rng_state_{local_rank}.pth")
+        if self.args.world_size > 1:
+            process_index = self.args.process_index
+            rng_file = os.path.join(checkpoint, f"rng_state_{process_index}.pth")
             if not os.path.isfile(rng_file):
                 logger.info(
-                    f"Didn't find an RNG file for process {local_rank}, if you are resuming a training that "
+                    f"Didn't find an RNG file for process {process_index}, if you are resuming a training that "
                     "wasn't launched in a distributed fashion, reproducibility is not guaranteed."
                 )
                 return
@@ -2028,11 +2071,10 @@ class Trainer:
         # not yet exist.
         os.makedirs(output_dir, exist_ok=True)
 
-        local_rank = xm.get_local_ordinal() if is_torch_tpu_available() else self.args.local_rank
-        if local_rank == -1:
+        if self.args.world_size <= 1:
             torch.save(rng_states, os.path.join(output_dir, "rng_state.pth"))
         else:
-            torch.save(rng_states, os.path.join(output_dir, f"rng_state_{local_rank}.pth"))
+            torch.save(rng_states, os.path.join(output_dir, f"rng_state_{self.args.process_index}.pth"))
 
         if self.args.push_to_hub:
             self._push_from_checkpoint(output_dir)
@@ -2705,7 +2747,7 @@ class Trainer:
             self.model_wrapped = deepspeed_engine
             self.deepspeed = deepspeed_engine
 
-        model = self._wrap_model(self.model, training=False)
+        model = self._wrap_model(self.model, training=False, dataloader=dataloader)
 
         # if full fp16 or bf16 eval is wanted and this ``evaluation`` or ``predict`` isn't called
         # while ``train`` is running, cast it to the right dtype first and then put on device
@@ -3266,7 +3308,7 @@ class Trainer:
             deepspeed_engine.optimizer.optimizer = None
             deepspeed_engine.lr_scheduler = None
 
-        model = self._wrap_model(self.model, training=False)
+        model = self._wrap_model(self.model, training=False, dataloader=dataloader)
 
         # if full fp16 or bf16 eval is wanted and this ``evaluation`` or ``predict`` isn't called
         # while ``train`` is running, cast it to the right dtype first and then put on device
