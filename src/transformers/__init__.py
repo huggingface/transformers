@@ -218,6 +218,12 @@ _import_structure = {
     "models.gpt_neo": ["GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoConfig"],
     "models.gpt_neox": ["GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXConfig"],
     "models.gptj": ["GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTJConfig"],
+    "models.groupvit": [
+        "GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "GroupViTConfig",
+        "GroupViTTextConfig",
+        "GroupViTVisionConfig",
+    ],
     "models.herbert": ["HerbertTokenizer"],
     "models.hubert": ["HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "HubertConfig"],
     "models.ibert": ["IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IBertConfig"],
@@ -255,8 +261,10 @@ _import_structure = {
     "models.mluke": [],
     "models.mmbt": ["MMBTConfig"],
     "models.mobilebert": ["MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileBertConfig", "MobileBertTokenizer"],
+    "models.mobilevit": ["MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileViTConfig"],
     "models.mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetTokenizer"],
     "models.mt5": ["MT5Config"],
+    "models.mvp": ["MvpConfig", "MvpTokenizer"],
     "models.nezha": ["NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP", "NezhaConfig"],
     "models.nystromformer": [
         "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -534,6 +542,7 @@ else:
     _import_structure["models.mobilebert"].append("MobileBertTokenizerFast")
     _import_structure["models.mpnet"].append("MPNetTokenizerFast")
     _import_structure["models.mt5"].append("MT5TokenizerFast")
+    _import_structure["models.mvp"].append("MvpTokenizerFast")
     _import_structure["models.openai"].append("OpenAIGPTTokenizerFast")
     _import_structure["models.pegasus"].append("PegasusTokenizerFast")
     _import_structure["models.realm"].append("RealmTokenizerFast")
@@ -628,6 +637,7 @@ else:
     _import_structure["models.layoutlmv3"].append("LayoutLMv3FeatureExtractor")
     _import_structure["models.levit"].append("LevitFeatureExtractor")
     _import_structure["models.maskformer"].append("MaskFormerFeatureExtractor")
+    _import_structure["models.mobilevit"].append("MobileViTFeatureExtractor")
     _import_structure["models.perceiver"].append("PerceiverFeatureExtractor")
     _import_structure["models.poolformer"].append("PoolFormerFeatureExtractor")
     _import_structure["models.segformer"].append("SegformerFeatureExtractor")
@@ -818,6 +828,17 @@ else:
             "BartModel",
             "BartPretrainedModel",
             "PretrainedBartModel",
+        ]
+    )
+    _import_structure["models.mvp"].extend(
+        [
+            "MVP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MvpForCausalLM",
+            "MvpForConditionalGeneration",
+            "MvpForQuestionAnswering",
+            "MvpForSequenceClassification",
+            "MvpModel",
+            "MvpPreTrainedModel",
         ]
     )
     _import_structure["models.beit"].extend(
@@ -1205,6 +1226,15 @@ else:
             "GPTJPreTrainedModel",
         ]
     )
+    _import_structure["models.groupvit"].extend(
+        [
+            "GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GroupViTModel",
+            "GroupViTPreTrainedModel",
+            "GroupViTTextModel",
+            "GroupViTVisionModel",
+        ]
+    )
     _import_structure["models.codegen"].extend(
         [
             "CODEGEN_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1402,6 +1432,15 @@ else:
             "MobileBertModel",
             "MobileBertPreTrainedModel",
             "load_tf_weights_in_mobilebert",
+        ]
+    )
+    _import_structure["models.mobilevit"].extend(
+        [
+            "MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MobileViTForImageClassification",
+            "MobileViTForSemanticSegmentation",
+            "MobileViTModel",
+            "MobileViTPreTrainedModel",
         ]
     )
     _import_structure["models.mpnet"].extend(
@@ -2319,6 +2358,14 @@ else:
             "TFRagTokenForGeneration",
         ]
     )
+    _import_structure["models.regnet"].extend(
+        [
+            "TF_REGNET_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFRegNetForImageClassification",
+            "TFRegNetModel",
+            "TFRegNetPreTrainedModel",
+        ]
+    )
     _import_structure["models.rembert"].extend(
         [
             "TF_REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2667,7 +2714,7 @@ else:
             "FlaxMBartPreTrainedModel",
         ]
     )
-    _import_structure["models.mt5"].extend(["FlaxMT5ForConditionalGeneration", "FlaxMT5Model"])
+    _import_structure["models.mt5"].extend(["FlaxMT5EncoderModel", "FlaxMT5ForConditionalGeneration", "FlaxMT5Model"])
     _import_structure["models.opt"].extend(
         [
             "FlaxOPTForCausalLM",
@@ -2706,7 +2753,9 @@ else:
         ]
     )
     _import_structure["models.speech_encoder_decoder"].append("FlaxSpeechEncoderDecoderModel")
-    _import_structure["models.t5"].extend(["FlaxT5ForConditionalGeneration", "FlaxT5Model", "FlaxT5PreTrainedModel"])
+    _import_structure["models.t5"].extend(
+        ["FlaxT5EncoderModel", "FlaxT5ForConditionalGeneration", "FlaxT5Model", "FlaxT5PreTrainedModel"]
+    )
     _import_structure["models.vision_encoder_decoder"].append("FlaxVisionEncoderDecoderModel")
     _import_structure["models.vision_text_dual_encoder"].extend(["FlaxVisionTextDualEncoderModel"])
     _import_structure["models.vit"].extend(["FlaxViTForImageClassification", "FlaxViTModel", "FlaxViTPreTrainedModel"])
@@ -2893,6 +2942,12 @@ if TYPE_CHECKING:
     from .models.gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
     from .models.gpt_neox import GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXConfig
     from .models.gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig
+    from .models.groupvit import (
+        GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        GroupViTConfig,
+        GroupViTTextConfig,
+        GroupViTVisionConfig,
+    )
     from .models.herbert import HerbertTokenizer
     from .models.hubert import HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, HubertConfig
     from .models.ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
@@ -2927,8 +2982,10 @@ if TYPE_CHECKING:
     from .models.megatron_bert import MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MegatronBertConfig
     from .models.mmbt import MMBTConfig
     from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer
+    from .models.mobilevit import MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileViTConfig
     from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
     from .models.mt5 import MT5Config
+    from .models.mvp import MvpConfig, MvpTokenizer
     from .models.nezha import NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP, NezhaConfig
     from .models.nystromformer import NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, NystromformerConfig
     from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
@@ -3176,6 +3233,7 @@ if TYPE_CHECKING:
         from .models.mobilebert import MobileBertTokenizerFast
         from .models.mpnet import MPNetTokenizerFast
         from .models.mt5 import MT5TokenizerFast
+        from .models.mvp import MvpTokenizerFast
         from .models.openai import OpenAIGPTTokenizerFast
         from .models.pegasus import PegasusTokenizerFast
         from .models.realm import RealmTokenizerFast
@@ -3245,6 +3303,7 @@ if TYPE_CHECKING:
         from .models.layoutlmv3 import LayoutLMv3FeatureExtractor
         from .models.levit import LevitFeatureExtractor
         from .models.maskformer import MaskFormerFeatureExtractor
+        from .models.mobilevit import MobileViTFeatureExtractor
         from .models.perceiver import PerceiverFeatureExtractor
         from .models.poolformer import PoolFormerFeatureExtractor
         from .models.segformer import SegformerFeatureExtractor
@@ -3737,6 +3796,13 @@ if TYPE_CHECKING:
             GPTJModel,
             GPTJPreTrainedModel,
         )
+        from .models.groupvit import (
+            GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GroupViTModel,
+            GroupViTPreTrainedModel,
+            GroupViTTextModel,
+            GroupViTVisionModel,
+        )
         from .models.hubert import (
             HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             HubertForCTC,
@@ -3887,6 +3953,13 @@ if TYPE_CHECKING:
             MobileBertPreTrainedModel,
             load_tf_weights_in_mobilebert,
         )
+        from .models.mobilevit import (
+            MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MobileViTForImageClassification,
+            MobileViTForSemanticSegmentation,
+            MobileViTModel,
+            MobileViTPreTrainedModel,
+        )
         from .models.mpnet import (
             MPNET_PRETRAINED_MODEL_ARCHIVE_LIST,
             MPNetForMaskedLM,
@@ -3899,6 +3972,15 @@ if TYPE_CHECKING:
             MPNetPreTrainedModel,
         )
         from .models.mt5 import MT5EncoderModel, MT5ForConditionalGeneration, MT5Model
+        from .models.mvp import (
+            MVP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MvpForCausalLM,
+            MvpForConditionalGeneration,
+            MvpForQuestionAnswering,
+            MvpForSequenceClassification,
+            MvpModel,
+            MvpPreTrainedModel,
+        )
         from .models.nezha import (
             NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST,
             NezhaForMaskedLM,
@@ -4631,6 +4713,12 @@ if TYPE_CHECKING:
         from .models.opt import TFOPTForCausalLM, TFOPTModel, TFOPTPreTrainedModel
         from .models.pegasus import TFPegasusForConditionalGeneration, TFPegasusModel, TFPegasusPreTrainedModel
         from .models.rag import TFRagModel, TFRagPreTrainedModel, TFRagSequenceForGeneration, TFRagTokenForGeneration
+        from .models.regnet import (
+            TF_REGNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFRegNetForImageClassification,
+            TFRegNetModel,
+            TFRegNetPreTrainedModel,
+        )
         from .models.rembert import (
             TF_REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFRemBertForCausalLM,
@@ -4906,7 +4994,7 @@ if TYPE_CHECKING:
             FlaxMBartModel,
             FlaxMBartPreTrainedModel,
         )
-        from .models.mt5 import FlaxMT5ForConditionalGeneration, FlaxMT5Model
+        from .models.mt5 import FlaxMT5EncoderModel, FlaxMT5ForConditionalGeneration, FlaxMT5Model
         from .models.opt import FlaxOPTForCausalLM, FlaxOPTModel, FlaxOPTPreTrainedModel
         from .models.pegasus import FlaxPegasusForConditionalGeneration, FlaxPegasusModel, FlaxPegasusPreTrainedModel
         from .models.roberta import (
@@ -4929,7 +5017,7 @@ if TYPE_CHECKING:
             FlaxRoFormerPreTrainedModel,
         )
         from .models.speech_encoder_decoder import FlaxSpeechEncoderDecoderModel
-        from .models.t5 import FlaxT5ForConditionalGeneration, FlaxT5Model, FlaxT5PreTrainedModel
+        from .models.t5 import FlaxT5EncoderModel, FlaxT5ForConditionalGeneration, FlaxT5Model, FlaxT5PreTrainedModel
         from .models.vision_encoder_decoder import FlaxVisionEncoderDecoderModel
         from .models.vision_text_dual_encoder import FlaxVisionTextDualEncoderModel
         from .models.vit import FlaxViTForImageClassification, FlaxViTModel, FlaxViTPreTrainedModel
