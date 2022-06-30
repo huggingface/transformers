@@ -1408,12 +1408,12 @@ class FlaxBigBirdLayerCollection(nn.Module):
             layer_outputs = layer(
                 hidden_states,
                 attention_mask,
-                layer_head_mask=head_mask[i] if head_mask is not None else None,
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=encoder_attention_mask,
-                init_cache=init_cache,
-                deterministic=deterministic,
-                output_attentions=output_attentions,
+                head_mask[i] if head_mask is not None else None,
+                encoder_hidden_states,
+                encoder_attention_mask,
+                init_cache,
+                deterministic,
+                output_attentions,
             )
 
             hidden_states = layer_outputs[0]
@@ -1444,9 +1444,14 @@ class FlaxBigBirdLayerCollection(nn.Module):
 class FlaxBigBirdEncoder(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    gradient_checkpointing: bool = False
 
     def setup(self):
-        self.layer = FlaxBigBirdLayerCollection(self.config, dtype=self.dtype)
+        self.layer = FlaxBigBirdLayerCollection(
+            self.config,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
+        )
 
     def __call__(
         self,
@@ -1812,9 +1817,14 @@ append_call_sample_docstring(
 class FlaxBigBirdForPreTrainingModule(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32
+    gradient_checkpointing: bool = False
 
     def setup(self):
-        self.bert = FlaxBigBirdModule(config=self.config, dtype=self.dtype)
+        self.bert = FlaxBigBirdModule(
+            config=self.config,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
+        )
         self.cls = FlaxBigBirdPreTrainingHeads(config=self.config, dtype=self.dtype)
 
     def __call__(
@@ -1910,9 +1920,15 @@ append_replace_return_docstrings(
 class FlaxBigBirdForMaskedLMModule(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32
+    gradient_checkpointing: bool = False
 
     def setup(self):
-        self.bert = FlaxBigBirdModule(config=self.config, add_pooling_layer=False, dtype=self.dtype)
+        self.bert = FlaxBigBirdModule(
+            config=self.config,
+            add_pooling_layer=False,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
+        )
         self.cls = FlaxBigBirdOnlyMLMHead(config=self.config, dtype=self.dtype)
 
     def __call__(
@@ -2067,9 +2083,14 @@ append_call_sample_docstring(
 class FlaxBigBirdForMultipleChoiceModule(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32
+    gradient_checkpointing: bool = False
 
     def setup(self):
-        self.bert = FlaxBigBirdModule(config=self.config, dtype=self.dtype)
+        self.bert = FlaxBigBirdModule(
+            config=self.config,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
+        )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
         self.classifier = nn.Dense(1, dtype=self.dtype)
 
@@ -2162,9 +2183,15 @@ append_call_sample_docstring(
 class FlaxBigBirdForTokenClassificationModule(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32
+    gradient_checkpointing: bool = False
 
     def setup(self):
-        self.bert = FlaxBigBirdModule(config=self.config, dtype=self.dtype, add_pooling_layer=False)
+        self.bert = FlaxBigBirdModule(
+            config=self.config,
+            dtype=self.dtype,
+            add_pooling_layer=False,
+            gradient_checkpointing=self.gradient_checkpointing,
+        )
         classifier_dropout = (
             self.config.classifier_dropout
             if self.config.classifier_dropout is not None
@@ -2414,9 +2441,15 @@ append_call_sample_docstring(
 class FlaxBigBirdForCausalLMModule(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32
+    gradient_checkpointing: bool = False
 
     def setup(self):
-        self.bert = FlaxBigBirdModule(config=self.config, add_pooling_layer=False, dtype=self.dtype)
+        self.bert = FlaxBigBirdModule(
+            config=self.config,
+            add_pooling_layer=False,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
+        )
         self.cls = FlaxBigBirdOnlyMLMHead(config=self.config, dtype=self.dtype)
 
     def __call__(
