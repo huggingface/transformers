@@ -1918,34 +1918,24 @@ class TFRoFormerPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
-TF_SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
-class TFSpeech2TextForConditionalGeneration(metaclass=DummyObject):
-    _backends = ["tf"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
-
-
-class TFSpeech2TextModel(metaclass=DummyObject):
-    _backends = ["tf"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
-
-
-class TFSpeech2TextPreTrainedModel(metaclass=DummyObject):
-    _backends = ["tf"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
-
-
 TF_SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class TFSegformerDecodeHead(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 class TFSegformerForImageClassification(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFSegformerForSemanticSegmentation(metaclass=DummyObject):
     _backends = ["tf"]
 
     def __init__(self, *args, **kwargs):
@@ -1966,7 +1956,24 @@ class TFSegformerPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
-class TFSegformerForSemanticSegmentation(metaclass=DummyObject):
+TF_SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFSpeech2TextForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFSpeech2TextModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFSpeech2TextPreTrainedModel(metaclass=DummyObject):
     _backends = ["tf"]
 
     def __init__(self, *args, **kwargs):
