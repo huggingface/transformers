@@ -1327,6 +1327,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         if not self._using_dummy_loss:
             data = data_adapter.expand_1d(data)
         x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
+        # If the inputs are mutable dictionaries, make a shallow copy of them because we will modify
+        # them during input/label pre-processing. This avoids surprising the user by wrecking their data.
+        # In addition, modifying mutable Python inputs makes XLA compilation impossible.
+        if isinstance(x, dict):
+            x = x.copy()
+        if isinstance(y, dict):
+            y = y.copy()
 
         # When using a dummy loss, we ensure that separate labels are copied to the correct model arguments,
         # if those keys are not already present in the input dict
@@ -1424,6 +1431,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         if not self._using_dummy_loss:
             data = data_adapter.expand_1d(data)
         x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
+        # If the inputs are mutable dictionaries, make a shallow copy of them because we will modify
+        # them during input/label pre-processing. This avoids surprising the user by wrecking their data.
+        # In addition, modifying mutable Python inputs makes XLA compilation impossible.
+        if isinstance(x, dict):
+            x = x.copy()
+        if isinstance(y, dict):
+            y = y.copy()
 
         # When using a dummy loss, we ensure that separate labels are copied to the correct model arguments,
         # if those keys are not already present in the input dict
