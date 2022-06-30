@@ -41,6 +41,7 @@ from .base import (
     Pipeline,
     PipelineDataFormat,
     PipelineException,
+    PipelineRegistry,
     get_default_model_and_revision,
     infer_framework_load_model,
 )
@@ -309,14 +310,14 @@ for task, values in SUPPORTED_TASKS.items():
     elif values["type"] != "multimodal":
         raise ValueError(f"SUPPORTED_TASK {task} contains invalid type {values['type']}")
 
+PIPELINE_REGISTRY = PipelineRegistry(supported_tasks=SUPPORTED_TASKS, task_aliases=TASK_ALIASES)
+
 
 def get_supported_tasks() -> List[str]:
     """
     Returns a list of supported task strings.
     """
-    supported_tasks = list(SUPPORTED_TASKS.keys()) + list(TASK_ALIASES.keys())
-    supported_tasks.sort()
-    return supported_tasks
+    return PIPELINE_REGISTRY.get_supported_tasks()
 
 
 def get_task(model: str, use_auth_token: Optional[str] = None) -> str:
@@ -375,20 +376,7 @@ def check_task(task: str) -> Tuple[Dict, Any]:
 
 
     """
-    if task in TASK_ALIASES:
-        task = TASK_ALIASES[task]
-    if task in SUPPORTED_TASKS:
-        targeted_task = SUPPORTED_TASKS[task]
-        return targeted_task, None
-
-    if task.startswith("translation"):
-        tokens = task.split("_")
-        if len(tokens) == 4 and tokens[0] == "translation" and tokens[2] == "to":
-            targeted_task = SUPPORTED_TASKS["translation"]
-            return targeted_task, (tokens[1], tokens[3])
-        raise KeyError(f"Invalid translation task {task}, use 'translation_XX_to_YY' format")
-
-    raise KeyError(f"Unknown task {task}, available tasks are {get_supported_tasks() + ['translation_XX_to_YY']}")
+    return PIPELINE_REGISTRY.check_task(task)
 
 
 def pipeline(
