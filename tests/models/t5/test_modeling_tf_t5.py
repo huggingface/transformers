@@ -599,7 +599,7 @@ class TFT5GenerationIntegrationTests(unittest.TestCase):
         output_strings_xla = tokenizer.batch_decode(output_ids_xla, skip_special_tokens=True)
 
         expected_output_string = [
-            "Aujourd'hui, c'est une belle journée.",
+            "Aujourd'hui est une belle journée.",
             "J'ai quatre chats, trois chiens, deux oiseaux et un cheval.",
         ]
 

@@ -390,12 +390,12 @@ class TFT5Attention(tf.keras.layers.Layer):
                 if not self.has_relative_attention_bias:
                     position_bias = position_bias[:, :, -seq_length:, :]
                 else:
-                    # we might have a padded past structure, in which case we want to fetch the position bias slice for
-                    # the most recently populated index
+                    # we might have a padded past structure, in which case we want to fetch the position bias slice
+                    # right after the most recently filled past index
                     most_recently_filled_past_index = tf.reduce_max(tf.where(past_key_value[0][0, 0, :, 0] != 0.0))
                     position_bias = dynamic_slice(
                         position_bias,
-                        (0, 0, most_recently_filled_past_index, 0),
+                        (0, 0, most_recently_filled_past_index + 1, 0),
                         (1, self.n_heads, seq_length, real_seq_length),
                     )
 
