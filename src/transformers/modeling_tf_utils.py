@@ -1206,7 +1206,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             batch_size=None,
             collate_fn=collate_fn,
             collate_fn_args=collate_fn_args,
-            cols_to_retain=model_inputs
+            cols_to_retain=model_inputs,
         )
         output_columns = list(output_signature.keys())
         feature_cols = [col for col in output_columns if col in model_inputs and col not in model_labels]
