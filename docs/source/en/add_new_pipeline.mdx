@@ -111,8 +111,35 @@ of arguments for ease of use (audio files, can be filenames, URLs or pure bytes)
 
 ## Adding it to the list of supported tasks
 
-Go to `src/transformers/pipelines/__init__.py` and fill in `SUPPORTED_TASKS` with your newly created pipeline.
-If possible it should provide a default model.
+To register your `new-task` to the list of supported tasks, provide the
+following task template:
+
+```python
+my_new_task = {
+    "impl": MyPipeline,
+    "tf": (),
+    "pt": (AutoModelForAudioClassification,) if is_torch_available() else (),
+    "default": {"model": {"pt": "user/awesome_model"}},
+    "type": "audio",  # current support type: text, audio, image, multimodal
+}
+```
+
+<Tip>
+
+Take a look at the `src/transformers/pipelines/__init__.py` and the dictionary `SUPPORTED_TASKS` to see how a task is defined.
+If possible your custom task should provide a default model.
+
+</Tip>
+
+Then add your custom task to the list of supported tasks via
+`PIPELINE_REGISTRY.register_pipeline()`:
+
+```python
+from transformers.pipelines import PIPELINE_REGISTRY
+
+PIPELINE_REGISTRY.register_pipeline("new-task", my_new_task)
+```
+
 
 ## Adding tests
 
