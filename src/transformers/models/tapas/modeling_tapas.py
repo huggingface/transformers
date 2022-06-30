@@ -22,6 +22,8 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import torch
+
+# torch.autograd.set_detect_anomaly(True)
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
@@ -34,26 +36,13 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_scatter_available,
     logging,
     replace_return_docstrings,
-    requires_backends,
 )
 from .configuration_tapas import TapasConfig
 
 
 logger = logging.get_logger(__name__)
-
-# soft dependency
-if is_scatter_available():
-    try:
-        from torch_scatter import scatter
-    except OSError:
-        logger.error(
-            "TAPAS models are not usable since `torch_scatter` can't be loaded. "
-            "It seems you have `torch_scatter` installed with the wrong CUDA version. "
-            "Please try to reinstall it following the instructions here: https://github.com/rusty1s/pytorch_scatter."
-        )
 
 _CONFIG_FOR_DOC = "TapasConfig"
 _TOKENIZER_FOR_DOC = "TapasTokenizer"
@@ -862,7 +851,6 @@ class TapasModel(TapasPreTrainedModel):
     """
 
     def __init__(self, config, add_pooling_layer=True):
-        requires_backends(self, "scatter")
         super().__init__(config)
         self.config = config
 
@@ -1797,12 +1785,22 @@ def _segment_reduce(values, index, segment_reduce_fn, name):
     # changed "view" by "reshape" in the following line
     flat_values = values.reshape(flattened_shape.tolist())
 
-    segment_means = scatter(
-        src=flat_values,
-        index=flat_index.indices.long(),
-        dim=0,
-        dim_size=int(flat_index.num_segments),
-        reduce=segment_reduce_fn,
+    src = flat_values
+    index = flat_index.indices.long()
+    dim = 0
+    dim_size = int(flat_index.num_segments)
+
+    if segment_reduce_fn == "sum":
+        size = list(src.size())
+        if dim_size is not None:
+            size[dim] = dim_size
+        out = torch.zeros(size, dtype=src.dtype, device=src.device)
+    elif segment_reduce_fn:
+        pass
+
+    out = torch.zeros(int(flat_index.num_segments), dtype=flat_values.dtype)
+    segment_means = out.scatter_reduce(
+        dim=0, index=flat_index.indices.long(), src=flat_values, reduce=segment_reduce_fn, include_self=False
     )
 
     # Unflatten the values.
@@ -1900,7 +1898,7 @@ def reduce_max(values, index, name="segmented_reduce_max"):
         output_values (`torch.Tensor`of shape [B1, B2, ..., Bn, num_segments, V1, V2, ..]): Tensor containing the
         output values. output_index (`IndexMap`): IndexMap with shape [B1, B2, ..., Bn, num_segments].
     """
-    return _segment_reduce(values, index, "max", name)
+    return _segment_reduce(values, index, "amax", name)
 
 
 def reduce_min(values, index, name="segmented_reduce_min"):
@@ -1927,7 +1925,7 @@ def reduce_min(values, index, name="segmented_reduce_min"):
         output_values (`torch.Tensor`of shape [B1, B2, ..., Bn, num_segments, V1, V2, ..]): Tensor containing the
         output values. output_index (`IndexMap`): IndexMap with shape [B1, B2, ..., Bn, num_segments].
     """
-    return _segment_reduce(values, index, "min", name)
+    return _segment_reduce(values, index, "amin", name)
 
 
 # End of everything related to segmented tensors

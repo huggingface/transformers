@@ -32,13 +32,7 @@ from transformers import (
     is_torch_available,
 )
 from transformers.models.auto import get_values
-from transformers.testing_utils import (
-    require_scatter,
-    require_tensorflow_probability,
-    require_torch,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import require_tensorflow_probability, require_torch, slow, torch_device
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
@@ -414,7 +408,6 @@ class TapasModelTester:
 
 
 @require_torch
-@require_scatter
 class TapasModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
@@ -553,7 +546,6 @@ def prepare_tapas_batch_inputs_for_training():
 
 
 @require_torch
-@require_scatter
 class TapasModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_tokenizer(self):
@@ -907,7 +899,6 @@ class TapasModelIntegrationTest(unittest.TestCase):
 # Below: tests for Tapas utilities which are defined in modeling_tapas.py.
 # These are based on segmented_tensor_test.py of the original implementation.
 # URL: https://github.com/google-research/tapas/blob/master/tapas/models/segmented_tensor_test.py
-@require_scatter
 class TapasUtilitiesTest(unittest.TestCase):
     def _prepare_tables(self):
         """Prepares two tables, both with three distinct rows.
