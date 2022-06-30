@@ -137,10 +137,7 @@ class MobileNetV2ModelTester:
         )
         self.parent.assertEqual(
             result.pooler_output.shape,
-            (
-                self.batch_size,
-                self.last_hidden_size,
-            ),
+            (self.batch_size, self.last_hidden_size),
         )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels, pixel_labels):
