@@ -141,6 +141,7 @@ from .utils import (
     is_sagemaker_mp_enabled,
     is_torch_tpu_available,
     is_torchdynamo_available,
+    is_torch_tensorrt_fx_available,
     logging,
 )
 from .utils.generic import ContextManagers
@@ -2291,7 +2292,7 @@ class Trainer:
         A helper wrapper that creates an appropriate context manager for `torchdynamo`.
         """
         ctx_manager = contextlib.nullcontext()
-        if is_torchdynamo_available():
+        if is_torchdynamo_available() and is_torch_tensorrt_fx_available():
             import torchdynamo
             from torchdynamo.optimizations import backends
             from torchdynamo.optimizations.training import aot_autograd_speedup_strategy
