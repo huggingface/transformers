@@ -196,10 +196,13 @@ class TFCausalLanguageModelingLoss:
             from_logits=True, reduction=tf.keras.losses.Reduction.NONE
         )
         # make sure only labels that are not equal to -100 affect the loss
-        active_loss = tf.not_equal(tf.reshape(labels, (-1,)), -100)
-        reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
-        labels = tf.boolean_mask(tf.reshape(labels, (-1,)), active_loss)
-        return loss_fn(labels, reduced_logits)
+        unmasked_loss = loss_fn(labels, logits)
+        loss_mask = tf.cast(labels != -100, dtype=unmasked_loss.dtype)
+        loss_denominator = tf.reduce_sum(loss_mask, axis=1)
+        # Masked positions will have a loss of NaN because -100 is not a valid label
+        masked_loss = tf.math.multiply_no_nan(unmasked_loss, loss_mask)
+        reduced_masked_loss = tf.reduce_sum(masked_loss, axis=1) / loss_denominator
+        return reduced_masked_loss
 
 
 class TFQuestionAnsweringLoss:
@@ -232,17 +235,18 @@ class TFTokenClassificationLoss:
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction=tf.keras.losses.Reduction.NONE
         )
-        # make sure only labels that are not equal to -100
+        if tf.executing_eagerly():  # Data-dependent conditionals are forbidden in XLA
+            if tf.math.reduce_any(labels == -1):
+                tf.print("Using `-1` to mask the loss for the token is deprecated. Please use `-100` instead.")
+        unmasked_loss = loss_fn(labels, logits)
+        # make sure only labels that are not equal to -100 or -1
         # are taken into account as loss
-        if tf.math.reduce_any(labels == -1):
-            tf.print("Using `-1` to mask the loss for the token is deprecated. Please use `-100` instead.")
-            active_loss = tf.reshape(labels, (-1,)) != -1
-        else:
-            active_loss = tf.reshape(labels, (-1,)) != -100
-        reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
-        labels = tf.boolean_mask(tf.reshape(labels, (-1,)), active_loss)
-
-        return loss_fn(labels, reduced_logits)
+        loss_mask = tf.cast(labels >= 0, dtype=unmasked_loss.dtype)
+        loss_denominator = tf.reduce_sum(loss_mask, axis=1)
+        # Masked positions will have a loss of NaN because -100 and -1 are not valid labels
+        masked_loss = tf.math.multiply_no_nan(unmasked_loss, loss_mask)
+        reduced_masked_loss = tf.reduce_sum(masked_loss, axis=1) / loss_denominator
+        return reduced_masked_loss
 
 
 class TFSequenceClassificationLoss:
@@ -251,7 +255,7 @@ class TFSequenceClassificationLoss:
     """
 
     def hf_compute_loss(self, labels, logits):
-        if len(shape_list(logits)) == 1 or shape_list(logits)[1] == 1:
+        if logits.shape.rank == 1 or logits.shape[1] == 1:
             loss_fn = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
         else:
             loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
@@ -300,11 +304,13 @@ class TFNextSentencePredictionLoss:
         )
         # make sure only labels that are not equal to -100
         # are taken into account as loss
-        next_sentence_active_loss = tf.not_equal(tf.reshape(labels, (-1,)), -100)
-        next_sentence_reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, 2)), next_sentence_active_loss)
-        next_sentence_label = tf.boolean_mask(tf.reshape(labels, (-1,)), next_sentence_active_loss)
 
-        return loss_fn(next_sentence_label, next_sentence_reduced_logits)
+        unmasked_ns_loss = loss_fn(y_true=labels, y_pred=logits)
+        ns_loss_mask = tf.cast(labels != -100, dtype=unmasked_ns_loss.dtype)
+        # Just zero out samples where label is -100, no reduction
+        masked_ns_loss = tf.math.multiply_no_nan(unmasked_ns_loss, ns_loss_mask)
+
+        return masked_ns_loss
 
 
 def booleans_processing(config, **kwargs):

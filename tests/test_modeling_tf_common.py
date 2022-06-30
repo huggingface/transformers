@@ -47,7 +47,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import logging
 from transformers.utils.generic import ModelOutput
-
+from math import isnan
 
 logger = logging.get_logger(__name__)
 
@@ -1397,6 +1397,7 @@ class TFModelTesterMixin:
                     shuffle=False,
                 )
                 val_loss1 = history1.history["val_loss"][0]
+                self.assertTrue(not isnan(val_loss1))
                 accuracy1 = {key: val[0] for key, val in history1.history.items() if key.endswith("accuracy")}
 
                 # We reinitialize the model here even though our learning rate was zero
@@ -1412,6 +1413,7 @@ class TFModelTesterMixin:
                     shuffle=False,
                 )
                 val_loss2 = history2.history["val_loss"][0]
+                self.assertTrue(not isnan(val_loss2))
                 accuracy2 = {key: val[0] for key, val in history2.history.items() if key.endswith("accuracy")}
                 self.assertTrue(np.allclose(val_loss1, val_loss2, atol=1e-2, rtol=1e-3))
                 self.assertEqual(history1.history.keys(), history2.history.keys())
@@ -1437,6 +1439,7 @@ class TFModelTesterMixin:
                     shuffle=False,
                 )
                 val_loss3 = history3.history["val_loss"][0]
+                self.assertTrue(not isnan(val_loss3))
                 accuracy3 = {key: val[0] for key, val in history3.history.items() if key.endswith("accuracy")}
                 self.assertTrue(np.allclose(val_loss1, val_loss3, atol=1e-2, rtol=1e-3))
                 self.assertEqual(history1.history.keys(), history3.history.keys())
