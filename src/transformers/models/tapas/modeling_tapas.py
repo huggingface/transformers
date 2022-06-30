@@ -1785,19 +1785,6 @@ def _segment_reduce(values, index, segment_reduce_fn, name):
     # changed "view" by "reshape" in the following line
     flat_values = values.reshape(flattened_shape.tolist())
 
-    src = flat_values
-    index = flat_index.indices.long()
-    dim = 0
-    dim_size = int(flat_index.num_segments)
-
-    if segment_reduce_fn == "sum":
-        size = list(src.size())
-        if dim_size is not None:
-            size[dim] = dim_size
-        out = torch.zeros(size, dtype=src.dtype, device=src.device)
-    elif segment_reduce_fn:
-        pass
-
     out = torch.zeros(int(flat_index.num_segments), dtype=flat_values.dtype)
     segment_means = out.scatter_reduce(
         dim=0, index=flat_index.indices.long(), src=flat_values, reduce=segment_reduce_fn, include_self=False
