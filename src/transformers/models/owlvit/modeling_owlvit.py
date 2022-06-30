@@ -88,11 +88,11 @@ class OwlViTOutput(ModelOutput):
         logits_per_text:(`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
             The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
             similarity scores.
-        text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        text_embeds(`torch.FloatTensor` of shape `(batch_size * num_max_text_queries, output_dim`):
             The text embeddings obtained by applying the projection layer to the pooled output of [`OwlViTTextModel`].
         image_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The image embeddings obtained by applying the projection layer to the pooled output of [`OwlViTVisionModel`].
-        text_model_output(`BaseModelOutputWithPooling`):
+        text_model_output(Tuple[`BaseModelOutputWithPooling`]):
             The output of the [`OwlViTTextModel`].
         vision_model_output(`BaseModelOutputWithPooling`):
             The output of the [`OwlViTVisionModel`].
@@ -131,7 +131,7 @@ class OwlViTObjectDetectionOutput(ModelOutput):
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
             possible padding). You can use [`~OwlViTFeatureExtractor.post_process`] to retrieve the unnormalized bounding
             boxes.
-        text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        text_embeds(`torch.FloatTensor` of shape `(batch_size, num_max_text_queries, output_dim`):
             The text embeddings obtained by applying the projection layer to the pooled output of [`OwlViTTextModel`].
         image_embeds(`torch.FloatTensor` of shape `(batch_size, patch_size, patch_size, output_dim`):
             Pooled output of [`OwlViTVisionModel`].
@@ -161,8 +161,7 @@ class OwlViTVisionEmbeddings(nn.Module):
         self.patch_embedding = nn.Conv2d(
             in_channels=3, out_channels=self.embed_dim, kernel_size=self.patch_size, stride=self.patch_size, bias=False
         )
-
-        self.num_positions = (self.embed_dim // self.patch_size) ** 2 + 1
+        self.num_positions = (self.image_size // self.patch_size) ** 2 + 1
         self.position_embedding = nn.Parameter(torch.rand(self.num_positions, self.embed_dim))
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
@@ -442,7 +441,7 @@ OWLVIT_START_DOCSTRING = r"""
 
 OWLVIT_TEXT_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+        input_ids (`torch.LongTensor` of shape `(batch_size, num_max_text_queries, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
@@ -450,18 +449,13 @@ OWLVIT_TEXT_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        attention_mask (`torch.Tensor` of shape `(batch_size, num_max_text_queries, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -489,7 +483,7 @@ OWLVIT_VISION_INPUTS_DOCSTRING = r"""
 
 OWLVIT_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+        input_ids (`torch.LongTensor` of shape `(batch_size, num_max_text_queries, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
@@ -497,18 +491,13 @@ OWLVIT_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        attention_mask (`torch.Tensor` of shape `(batch_size, num_max_text_queries, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
             [`CLIPFeatureExtractor`]. See [`CLIPFeatureExtractor.__call__`] for details.
@@ -529,7 +518,7 @@ OWLVIT_OBJ_DETECTION_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
             [`CLIPFeatureExtractor`]. See [`CLIPFeatureExtractor.__call__`] for details.
-        input_ids (`torch.LongTensor` of shape `(batch_size, num_text_queries, sequence_length)`):
+        input_ids (`torch.LongTensor` of shape `(batch_size, num_max_text_queries, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
@@ -537,7 +526,7 @@ OWLVIT_OBJ_DETECTION_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        attention_mask (`torch.Tensor` of shape `(batch_size, num_max_text_queries, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
@@ -684,7 +673,6 @@ class OwlViTTextTransformer(nn.Module):
 
         input_shape = input_ids.size()
         input_ids = input_ids.view(-1, input_shape[-1])
-
         hidden_states = self.embeddings(input_ids=input_ids)
 
         bsz, seq_len = input_shape
@@ -756,7 +744,7 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[Tuple[Tuple], Tuple[BaseModelOutputWithPooling]]:
         r"""
         Returns:
 
@@ -766,21 +754,27 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
         >>> from transformers import CLIPTokenizer, OwlViTTextModel
 
         >>> model = OwlViTTextModel.from_pretrained("google/owlvit-base")
-        >>> tokenizer = CLIPTokenizer.from_pretrained("google/owlvit-base")
+        >>> tokenizer = OwlViTTokenizer.from_pretrained("google/owlvit-base")
 
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
+        >>> inputs = tokenizer([["a photo of a cat", "a photo of a dog"]], padding=True, return_tensors="pt")
 
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
         >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
         ```"""
-        return self.text_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
+        batch_size = input_ids.shape[0]
+
+        # Get embeddings for all text queries in all batch samples
+        output = tuple([
+            self.text_model(
+                input_ids=input_ids[idx],
+                attention_mask=attention_mask[idx],
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict
+            ) for idx in range(batch_size)
+        ])
+        return output
 
 
 class OwlViTVisionTransformer(nn.Module):
@@ -875,10 +869,10 @@ class OwlViTVisionModel(OwlViTPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPProcessor, OwlViTVisionModel
+        >>> from transformers import OwlViTProcessor, OwlViTVisionModel
 
         >>> model = OwlViTVisionModel.from_pretrained("google/owlvit-base")
-        >>> processor = CLIPProcessor.from_pretrained("google/owlvit-base")
+        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -965,16 +959,25 @@ class OwlViTModel(OwlViTPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        text_outputs = self.text_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
+        batch_size = input_ids.shape[0]
 
-        pooled_output = text_outputs[1]
-        text_features = self.text_projection(pooled_output)
+        # Get embeddings for all text queries in all batch samples
+        text_outputs = tuple([
+            self.text_model(
+                input_ids=input_ids[idx],
+                attention_mask=attention_mask[idx],
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict
+            ) for idx in range(batch_size)
+        ])
+
+        pooled_outputs = [text_output[1] for text_output in text_outputs]
+
+        text_features = [
+            self.text_projection(pooled_outputs[i]).unsqueeze(0) for i in range(batch_size)
+        ]
+        text_features = torch.cat(text_features)
 
         return text_features
 
@@ -997,10 +1000,10 @@ class OwlViTModel(OwlViTPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPProcessor, OwlViTModel
+        >>> from transformers import OwlViTProcessor, OwlViTModel
 
         >>> model = OwlViTModel.from_pretrained("google/owlvit-base")
-        >>> processor = CLIPProcessor.from_pretrained("google/owlvit-base")
+        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1044,6 +1047,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         normalize: Optional[bool] = True,
+        train: Optional[bool] = False,
     ) -> Union[Tuple, OwlViTOutput]:
         r"""
         Returns:
@@ -1053,16 +1057,16 @@ class OwlViTModel(OwlViTPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPProcessor, OwlViTModel
+        >>> from transformers import OwlViTProcessor, OwlViTModel
 
         >>> model = OwlViTModel.from_pretrained("google/owlvit-base")
-        >>> processor = CLIPProcessor.from_pretrained("google/owlvit-base")
+        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> inputs = processor(
-        ...     text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True
+        ...     text=[["a photo of a cat", "a photo of a dog"]], images=image, return_tensors="pt", padding=True
         ... )
 
         >>> outputs = model(**inputs)
@@ -1081,21 +1085,30 @@ class OwlViTModel(OwlViTPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            train=True,
         )
 
-        text_outputs = self.text_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
+        # Get embeddings for all text queries in all batch samples
+        batch_size = input_ids.shape[0]
+
+        text_outputs = tuple([
+            self.text_model(
+                input_ids=input_ids[idx],
+                attention_mask=attention_mask[idx],
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict
+            ) for idx in range(batch_size)
+        ])
 
         image_embeds = vision_outputs[1]
         image_embeds = self.visual_projection(image_embeds)
 
-        text_embeds = text_outputs[1]
-        text_embeds = self.text_projection(text_embeds)
+        text_embeds = [text_output[1] for text_output in text_outputs]
+        text_embeds = [
+            self.text_projection(text_embeds[i]) for i in range(batch_size)
+        ]
+        text_embeds = torch.cat(text_embeds)
 
         # normalized features
         if normalize:
@@ -1209,7 +1222,6 @@ class OwlViTImageTextEmbedder(nn.Module):
         # Encode text
         if input_ids is not None:
             text_embeds = self.clip.get_text_features(input_ids=input_ids, attention_mask=attention_mask)
-            text_embeds = text_embeds.unsqueeze(0)
 
         # Encode image 
         if pixel_values is not None:
@@ -1343,7 +1355,30 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor,
     ) -> OwlViTObjectDetectionOutput:
+        r"""
+        Returns:
 
+        Examples:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import OwlViTProcessor, OwlViTForObjectDetection
+
+        >>> model = OwlViTModel.from_pretrained("google/owlvit-base-patch32")
+        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(
+        ...     text=[["a photo of a cat", "a photo of a dog"]], images=image, return_tensors="pt", padding=True
+        ... )
+
+        >>> outputs = model(**inputs)
+        >>> pred_boxes = outputs.pred_boxes 
+        >>> pred_logits = outputs.logits
+        ```"""
         # Embed images
         feature_map = self.image_embedder(pixel_values)
         b, h, w, d = feature_map.shape
@@ -1353,7 +1388,6 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         query_embeds = self.text_embedder(input_ids, attention_mask)
 
         # If first token is 0, then this is a padded query [batch_size, num_queries].
-        input_ids = input_ids.unsqueeze(0)
         query_mask = (input_ids[..., 0] > 0)
 
         # Predict object classes [batch_size, num_patches, num_queries+1]

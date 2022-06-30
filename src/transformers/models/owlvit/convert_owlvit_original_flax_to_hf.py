@@ -44,6 +44,7 @@ CONFIGS = {
                     transformer_width=768,
                     transformer_heads=12,
                     transformer_layers=12),
+
 }
 
 
@@ -326,6 +327,9 @@ if __name__ == "__main__":
         "--owlvit_checkpoint", default=None, type=str, required=True, help="Path to flax model checkpoint."
     )
     parser.add_argument(
+        "--hf_config", default=None, type=str, required=True, help="Path to HF model config."
+    )
+    parser.add_argument(
         "--pytorch_dump_folder_path", default="hf_model", type=str, help="Path to the output PyTorch model."
     )
     args = parser.parse_args()
@@ -358,5 +362,5 @@ if __name__ == "__main__":
     pt_backbone_params, clip_pt, attn_params = convert_clip_backbone(flax_params, torch_config)
     clip_pt.eval()
 
-    convert_owlvit_checkpoint(clip_pt, flax_params, attn_params, args.pytorch_dump_folder_path)
+    convert_owlvit_checkpoint(clip_pt, flax_params, attn_params, args.pytorch_dump_folder_path, args.hf_config)
 

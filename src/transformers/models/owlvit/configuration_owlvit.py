@@ -25,7 +25,8 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/owlvit-base": "https://huggingface.co/google/owlvit-base/resolve/main/config.json",
+    "google/owlvit-base-patch32": "https://huggingface.co/google/owlvit-base-patch32/resolve/main/config.json",
+    "google/owlvit-base-patch16": "https://huggingface.co/google/owlvit-base-patch16/resolve/main/config.json",
 }
 
 
@@ -100,9 +101,9 @@ class OwlViTTextConfig(PretrainedConfig):
         attention_dropout=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
+        pad_token_id=0,
+        bos_token_id=49406,
+        eos_token_id=49407,
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
@@ -199,7 +200,7 @@ class OwlViTVisionConfig(PretrainedConfig):
         intermediate_size=3072,
         num_hidden_layers=12,
         num_attention_heads=12,
-        image_size=224,
+        image_size=768,
         patch_size=32,
         hidden_act="quick_gelu",
         layer_norm_eps=0.00001,
