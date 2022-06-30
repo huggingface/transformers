@@ -40,7 +40,7 @@ from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, logging
 from .configuration_jukebox import JukeboxConfig
-
+from .tokenization_jukebox import get_relevant_lyric_tokens
 
 logger = logging.get_logger(__name__)
 
@@ -705,9 +705,9 @@ class VQVAE(nn.Module):
         if not config.sample_length:
             downsamples = calculate_strides(config.vq_vae_strides_t, config.vq_vae_downs_t)
             top_raw_to_tokens = np.prod(downsamples)
-            config.sample_length = (
+            config.sample_length = ((
                 config.sample_length_in_seconds * config.sr // top_raw_to_tokens
-            ) * top_raw_to_tokens
+            ) * top_raw_to_tokens).astype(int)
 
         input_shape = (config.sample_length, 1)
         block_kwargs = dict(
@@ -2755,28 +2755,37 @@ class JukeboxPrior(nn.Module):
         )
 
     def get_y(self, labels, start, get_indices=False):
-        # labeler does not exist this should be removed
-        # if isinstance(self.labeller, EmptyLabeller):
-        #     return None
-
-        # y = labels["y"].clone()
-        y = labels.clone()
+        y = labels["y"].clone()
+        # y = labels.clone()
 
         # Set sample_length to match this level
         y[:, 2] = int(self.sample_length)
 
         # Set offset
         y[:, 1:2] = y[:, 1:2] + int(start * self.raw_to_tokens)
-        if get_indices:
-            indices = None
-            return y, indices  # here the indices should be the indices of the lyrics to take into account...
-        return y
-        # Set lyric tokens
         indices = self.labeller.set_y_lyric_tokens(y, labels)
         if get_indices:
             return y, indices
         else:
             return y
+
+    def set_y_lyric_tokens(self, ys, labels):
+        info = labels['info']
+        assert ys.shape[0] == len(info)
+        if self.n_tokens > 0:
+            # total_length, offset, duration):
+            tokens_list = []
+            indices_list = []  # whats the index of each current character in original array
+            for i in range(ys.shape[0]):
+                full_tokens = info[i]['full_tokens']
+                total_length, offset, duration = ys[i, 0], ys[i, 1], ys[i, 2]
+                tokens, indices = get_relevant_lyric_tokens(full_tokens, self.n_tokens, total_length, offset, duration)
+                tokens_list.append(tokens)
+                indices_list.append(indices)
+            ys[:, -self.n_tokens:] = t.tensor(tokens_list, dtype=t.long, device='cpu')
+            return indices_list
+        else:
+            return None
 
     def get_z_conds(self, zs, start, end):
         if self.level != self.levels - 1:

@@ -545,7 +545,7 @@ class JukeboxModelTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(zs[0][0][0:50], top_50_expected_zs.long(), atol=1e-4))
 
-    def test_gpu_sampling(self):
+    def test_1b_lyrics(self):
         model = JukeboxModel.from_pretrained("ArthurZ/jukebox-1b-lyrics").eval()  # .to("cuda")
 
         # model.priors[2].sample(1, y=torch.Tensor([[44100.0, 0, 44100.0] + 386 * [0]]).long().to("cuda"), chunk_size=32)
@@ -567,50 +567,120 @@ class JukeboxModelTest(unittest.TestCase):
         model.config.sr = 44100
         model.config.hop_fraction = [0.125, 0.5, 0.5]
         model.config.n_samples = 1
-        model.config.sample_length = 2645888  # 32768
 
-        model.config.sample_length_in_seconds = 60
+        model.config.sample_length_in_seconds = 20
+        model.config.sample_length = (int(model.config.sample_length_in_seconds*model.config.sr)//
+                                    model.priors[-1].raw_to_tokens)*model.priors[-1].raw_to_tokens
+
         model.config.total_sample_length_in_seconds = 180
 
         metas = dict(
             artist="Zac Brown Band",
             genres="Country",
-            total_length=2645888,
+            total_length=440960,
             offset=0,
             lyrics="""I met a traveller from an antique land,
-            Who said—“Two vast and trunkless legs of stone
-            Stand in the desert. . . . Near them, on the sand,
-            Half sunk a shattered visage lies, whose frown,
-            And wrinkled lip, and sneer of cold command,
-            Tell that its sculptor well those passions read
-            Which yet survive, stamped on these lifeless things,
-            The hand that mocked them, and the heart that fed;
-            And on the pedestal, these words appear:
-            My name is Ozymandias, King of Kings;
-            Look on my Works, ye Mighty, and despair!
-            Nothing beside remains. Round the decay
-            Of that colossal Wreck, boundless and bare
-            The lone and level sands stretch far away
-            """,
+Who said—“Two vast and trunkless legs of stone
+Stand in the desert. . . . Near them, on the sand,
+Half sunk a shattered visage lies, whose frown,
+And wrinkled lip, and sneer of cold command,
+Tell that its sculptor well those passions read
+Which yet survive, stamped on these lifeless things,
+The hand that mocked them, and the heart that fed;
+And on the pedestal, these words appear:
+My name is Ozymandias, King of Kings;
+Look on my Works, ye Mighty, and despair!
+Nothing beside remains. Round the decay
+Of that colossal Wreck, boundless and bare
+The lone and level sands stretch far away
+""",
             duration=2,
-            sample_length=2 * model.config.sr,
+            sample_length=786432,
         )
 
         tokens = tokenizer(**metas)
         inputs, _ = tokens["input_ids"], tokens["attention_masks"]
-        zs = [torch.zeros(1, 0) for _ in range(len(model.priors))]
-        labels = torch.tensor([[inputs]] * 3)
-        zs = model._sample(zs, labels, sampling_kwargs, [2], model.config)
+        
+        zs = [torch.zeros(1,0,dtype = torch.long).cpu() for _ in range(len(model.priors))] 
+        labels = torch.tensor([[inputs]]*3).cpu()
+        # model = model.cuda()
 
-        ys = np.array([[inputs]] * 3, dtype=np.int64)
-        ys = torch.stack([torch.from_numpy(y) for y in ys], dim=0).long()  # .to("cuda")
+        set_seed(0)
+        torch.backends.cuda.matmul.allow_tf32 = False
+        torch.backends.cudnn.enabled = False
+        zs = model._sample(zs,labels , sampling_kwargs, [2],model.config)
 
-        start = timeit.default_timer()
-        # import cProfile as profile
-        # profile.runctx('model.ancestral_sample(ys, sampling_kwargs, config)', globals(), locals())
-        model.ancestral_sample(ys, sampling_kwargs, model.config)
-        print(f"time to sample : {timeit.default_timer() - start}")
+        EXPECTED_OUTPUT = torch.tensor([1489, 1489,  324, 1489, 1599, 1072, 1357, 1489,  784, 1272])
 
+        labels[1] =torch.tensor([2645888,       0,  262144,    1069,      11 ] + [-1]*384 ).cpu()
+        zs[-1] = torch.cat((zs[-1], torch.zeros(1,1848).cpu()),dim=-1)
+        zs = model._sample(zs,labels , sampling_kwargs, [1],model.config)
+
+
+        
+    def test_5b_lyrics(self):
+        model = JukeboxModel.from_pretrained("ArthurZ/jukebox-5b-lyrics").eval()  # .to("cuda")
+        tokenizer = JukeboxTokenizer.from_pretrained("ArthurZ/jukebox", max_n_lyric_tokens=512)
+        set_seed(0)
+
+        sampling_temperature = 0.98
+        lower_batch_size = 16
+        max_batch_size = 16
+        lower_level_chunk_size = 32
+        chunk_size = 32
+        sampling_kwargs = [
+            dict(temp=0.99, fp16=False, max_batch_size=lower_batch_size, chunk_size=lower_level_chunk_size),
+            dict(temp=0.99, fp16=False, max_batch_size=lower_batch_size, chunk_size=lower_level_chunk_size),
+            dict(temp=sampling_temperature, fp16=False, max_batch_size=max_batch_size, chunk_size=chunk_size),
+        ]
+
+        model.config.sr = 44100
+        model.config.hop_fraction = [0.125, 0.5, 0.5]
+        model.config.n_samples = 1
+
+        model.config.sample_length_in_seconds = 20
+        model.config.sample_length = (int(model.config.sample_length_in_seconds*model.config.sr)//
+                                    model.priors[-1].raw_to_tokens)*model.priors[-1].raw_to_tokens
+
+        model.config.total_sample_length_in_seconds = 180
+
+        metas = dict(
+            artist="Zac Brown Band",
+            genres="Country",
+            total_length=440960,
+            offset=0,
+            lyrics="""I met a traveller from an antique land,
+Who said—“Two vast and trunkless legs of stone
+Stand in the desert. . . . Near them, on the sand,
+Half sunk a shattered visage lies, whose frown,
+And wrinkled lip, and sneer of cold command,
+Tell that its sculptor well those passions read
+Which yet survive, stamped on these lifeless things,
+The hand that mocked them, and the heart that fed;
+And on the pedestal, these words appear:
+My name is Ozymandias, King of Kings;
+Look on my Works, ye Mighty, and despair!
+Nothing beside remains. Round the decay
+Of that colossal Wreck, boundless and bare
+The lone and level sands stretch far away
+""",
+            duration=2,
+            sample_length=786432,
+        )
+
+        tokens = tokenizer(**metas)
+        inputs, _ = tokens["input_ids"], tokens["attention_masks"]
+        
+        zs = [torch.zeros(1,0,dtype = torch.long).cpu() for _ in range(len(model.priors))] 
+        labels = torch.tensor([[inputs]]*3).cpu()
+        # model = model.cuda()
+
+        set_seed(0)
+        torch.backends.cuda.matmul.allow_tf32 = False
+        torch.backends.cudnn.enabled = False
+        zs = model._sample(zs,labels , sampling_kwargs, [2],model.config)
+
+        EXPECTED_OUTPUT = []
 
 if __name__ == "__main__":
     tester = JukeboxModelTest()
