@@ -2086,12 +2086,14 @@ class JukeboxConditionalAutoregressive(nn.Module):
             if get_preds:
                 preds = []
             # for sample_t in get_range(range(0, sample_tokens)):
+            total = sample_tokens - len(xs)
+            task3 = progress.add_task("Sampling indivdual tokens ", total=total)
             for sample_t in range(0, sample_tokens):
 
                 x, cond = self.get_emb(sample_t, n_samples, x, x_cond, y_cond)
                 self.transformer.check_cache(n_samples, sample_t, fp16)
                 x = self.transformer(
-                    x, encoder_kv=encoder_kv, sample=True, fp16=True
+                    x, encoder_kv=encoder_kv, sample=True, fp16=fp16
                 )  # TODO put fp16 back # Transformer
                 if self.add_cond_after_transformer:
                     x = x + cond
@@ -2105,6 +2107,8 @@ class JukeboxConditionalAutoregressive(nn.Module):
                 x = torch.distributions.Categorical(logits=x).sample()  # Sample and replace x
                 assert x.shape == (n_samples, 1)
                 xs.append(x.clone())
+                progress.update(task3, advance=1)
+                progress.update(0, advance=1 / total)
 
             del x
             self.transformer.del_cache()
@@ -2763,26 +2767,25 @@ class JukeboxPrior(nn.Module):
 
         # Set offset
         y[:, 1:2] = y[:, 1:2] + int(start * self.raw_to_tokens)
-        indices = self.labeller.set_y_lyric_tokens(y, labels)
+        indices = self.set_y_lyric_tokens(y, labels)
         if get_indices:
             return y, indices
         else:
             return y
 
     def set_y_lyric_tokens(self, ys, labels):
-        info = labels['info']
-        assert ys.shape[0] == len(info)
+        # assert ys.shape[0] == len(labels)
         if self.n_tokens > 0:
             # total_length, offset, duration):
             tokens_list = []
             indices_list = []  # whats the index of each current character in original array
             for i in range(ys.shape[0]):
-                full_tokens = info[i]['full_tokens']
+                full_tokens = labels['full_tokens']
                 total_length, offset, duration = ys[i, 0], ys[i, 1], ys[i, 2]
                 tokens, indices = get_relevant_lyric_tokens(full_tokens, self.n_tokens, total_length, offset, duration)
                 tokens_list.append(tokens)
                 indices_list.append(indices)
-            ys[:, -self.n_tokens:] = t.tensor(tokens_list, dtype=t.long, device='cpu')
+            ys[:, -self.n_tokens:] = torch.tensor(tokens_list, dtype=torch.long, device='cpu')
             return indices_list
         else:
             return None

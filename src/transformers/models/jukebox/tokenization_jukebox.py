@@ -77,7 +77,7 @@ def get_relevant_lyric_tokens(full_tokens, max_n_lyric_tokens, total_length, off
         len(indices) == max_n_lyric_tokens
     ), f"Expected length {max_n_lyric_tokens}, got {len(indices)}"
     assert tokens == [full_tokens[index] if index != -1 else 0 for index in indices]
-    return tokens
+    return tokens, indices
 
 class JukeboxTokenizer(PreTrainedTokenizer):
     """
@@ -135,14 +135,14 @@ class JukeboxTokenizer(PreTrainedTokenizer):
     max_lyric_input_size = PRETRAINED_LYRIC_TOKENS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
-    def __init__(self, vocab_file, n_genres=5, unk_token="<|endoftext|>", **kwargs):
+    def __init__(self, vocab_file, n_genres=5, max_n_lyric_tokens = 512, unk_token="<|endoftext|>", **kwargs):
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
         super().__init__(
             unk_token=unk_token,
             **kwargs,
         )
         self.n_genres = n_genres
-
+        self.max_n_lyric_tokens = max_n_lyric_tokens
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             vocabulary = json.load(vocab_handle)
             self.artists_encoder = vocabulary["artists"]
@@ -183,8 +183,9 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         """
         artists_id = self.artists_encoder.get(artist)
         genres_ids = [self.genres_encoder.get(genre) for genre in genres]
+        genres_ids = genres_ids + [-1] * (self.n_genres - len(genres_ids))
         lyric_ids = [self.lyrics_encoder.get(character) for character in lyrics]
-        y = self.get_relevant_lyric_tokens(lyric_ids, total_length, offset, duration)
+        y,_ = get_relevant_lyric_tokens(lyric_ids, self.max_n_lyric_tokens,total_length, offset, duration)
         return artists_id, genres_ids, y, lyric_ids
 
     def _tokenize(self, lyrics):
@@ -306,13 +307,14 @@ class JukeboxTokenizer(PreTrainedTokenizer):
                 _description_
             offset (`_type_`):
                 _description_
+            max_n_lyric_tokens (`int`): 
         """
         input_ids = [total_length, offset, sample_length]
         artists_tokens, genres_tokens, lyrics_tokens = self.tokenize(artist, genres, lyrics)
         artists_id, genres_ids, relevant_tokens, full_tokens = self._convert_token_to_id(
-            artists_tokens, genres_tokens, relevant_tokens, total_length, offset, sample_length
+            artists_tokens, genres_tokens, lyrics_tokens, total_length, offset, sample_length
         )
-        input_ids += [artists_id] + genres_ids + y
+        input_ids += [artists_id] + genres_ids + relevant_tokens
         attention_masks = [-INFINITY] * (len(full_tokens) - len(relevant_tokens)) + [0] * len(relevant_tokens)
         return {"input_ids": {'y': input_ids, 'full_tokens':full_tokens}, "attention_masks": attention_masks}
 
