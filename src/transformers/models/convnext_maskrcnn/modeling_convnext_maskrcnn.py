@@ -32,6 +32,7 @@ from torch.nn.modules.utils import _pair
 
 from ...activations import ACT2FN
 from ...assign_result import AssignResult
+from ...losses import CrossEntropyLoss, L1Loss
 from ...modeling_outputs import BaseModelOutputWithNoAttention, BaseModelOutputWithPoolingAndNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...sampling_result import SamplingResult
@@ -1750,7 +1751,7 @@ class ConvNextMaskRCNNRPN(nn.Module):
     Networks](https://arxiv.org/abs/1506.01497).
     """
 
-    def __init__(self, config, num_classes=1):
+    def __init__(self, config, num_classes=1, reg_decoded_bbox=False):
         super().__init__()
 
         # anchor generator
@@ -1764,6 +1765,7 @@ class ConvNextMaskRCNNRPN(nn.Module):
         # layers
         self.use_sigmoid_cls = config.rpn_loss_cls.get("use_sigmoid", False)
         # TODO: fix num_classes
+        self.num_classes = num_classes
         if self.use_sigmoid_cls:
             self.cls_out_channels = num_classes
         else:
@@ -1794,6 +1796,16 @@ class ConvNextMaskRCNNRPN(nn.Module):
             neg_pos_ub=config.rpn_sampler_neg_pos_ub,
             add_gt_as_proposals=config.rpn_sampler_add_gt_as_proposals,
         )
+        # TODO remove these hardcoded variables
+        self.sampling = True
+        self.reg_decoded_bbox = reg_decoded_bbox
+
+        # losses
+        # based on config:
+        self.loss_cls = CrossEntropyLoss(
+            use_sigmoid=True
+        )  # this corresponds to dict(type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0))
+        self.loss_bbox = L1Loss()  # this corresponds to dict(type='L1Loss', loss_weight=1.0)
 
     def forward_single(self, hidden_state):
         """Forward feature map of a single scale level."""
@@ -1827,7 +1839,7 @@ class ConvNextMaskRCNNRPN(nn.Module):
 
         losses = self.loss(*loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)
 
-        proposal_list = self.rpn_head.get_bboxes(*rpn_outs, img_metas=img_metas)
+        proposal_list = self.get_bboxes(*rpn_outs, img_metas=img_metas)
 
         return losses, proposal_list
 
@@ -3118,6 +3130,7 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor = None,
+        img_metas: Optional[List] = None,
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -3144,23 +3157,31 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
 
         # TODO: remove img_metas, compute `img_shape`` based on pixel_values
         # and figure out where `scale_factor` and `ori_shape` come from (probably test_pipeline)
-        img_metas = [
-            dict(
-                img_shape=(800, 1067, 3),
-                scale_factor=np.array([1.6671875, 1.6666666, 1.6671875, 1.6666666], dtype=np.float32),
-                ori_shape=(480, 640, 3),
-            )
-        ]
+        if img_metas is None:
+            img_metas = [
+                dict(
+                    img_shape=(800, 1067, 3),
+                    scale_factor=np.array([1.6671875, 1.6666666, 1.6671875, 1.6666666], dtype=np.float32),
+                    ori_shape=(480, 640, 3),
+                )
+            ]
         if labels is not None:
-            losses, proposal_list = self.rpn_head.forward_train(hidden_states, img_metas)
+            losses, proposal_list = self.rpn_head.forward_train(
+                hidden_states,
+                img_metas,
+                gt_bboxes=labels["gt_bboxes"],
+                gt_labels=labels["gt_labels"],
+                gt_bboxes_ignore=None,
+            )
         else:
             proposal_list = self.rpn_head.forward_test(hidden_states, img_metas)
 
         # TODO: remove this check
-        expected_slice = torch.tensor(
-            [[0.0000, 58.6872, 685.7259], [360.0827, 6.2272, 1045.1245], [37.4163, 113.3484, 535.2910]]
-        )
-        assert torch.allclose(proposal_list[0][:3, :3], expected_slice)
+        if labels is None:
+            expected_slice = torch.tensor(
+                [[0.0000, 58.6872, 685.7259], [360.0827, 6.2272, 1045.1245], [37.4163, 113.3484, 535.2910]]
+            )
+            assert torch.allclose(proposal_list[0][:3, :3], expected_slice)
 
         # TODO: support training of RoI heads
         results = self.roi_head.forward_test(hidden_states, proposal_list, img_metas=img_metas)
