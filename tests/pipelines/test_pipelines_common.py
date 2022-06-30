@@ -22,6 +22,8 @@ from abc import abstractmethod
 from functools import lru_cache
 from unittest import skipIf
 
+import numpy as np
+
 from transformers import (
     FEATURE_EXTRACTOR_MAPPING,
     TOKENIZER_MAPPING,
@@ -35,7 +37,7 @@ from transformers import (
 )
 from transformers.pipelines import get_task
 from transformers.pipelines.base import _pad
-from transformers.testing_utils import is_pipeline_test, nested_simplify, require_tf, require_torch
+from transformers.testing_utils import is_pipeline_test, nested_simplify, require_tf, require_torch, slow
 
 
 logger = logging.getLogger(__name__)
@@ -607,3 +609,87 @@ class PipelineUtilsTest(unittest.TestCase):
 
         outputs = [item for item in dataset]
         self.assertEqual(outputs, [[{"id": 2}, {"id": 3}, {"id": 4}, {"id": 5}]])
+
+    @slow
+    @require_torch
+    def test_load_default_pipelines_pt(self):
+        self.check_default_pipeline("pt")
+
+    @slow
+    @require_tf
+    def test_load_default_pipelines_tf(self):
+        self.check_default_pipeline("tf")
+
+    def check_default_pipeline(self, framework):
+        from transformers.pipelines import SUPPORTED_TASKS, pipeline
+
+        if framework == "pt":
+            import torch
+
+            set_seed = lambda: torch.manual_seed(0)  # noqa: E731
+            check_models_equal_fn = self.check_models_equal_pt
+        elif framework == "tf":
+            import tf
+
+            set_seed = lambda: tf.random.seed(0)  # noqa: E731
+            check_models_equal_fn = self.check_models_equal_tf
+
+        for task, task_dict in SUPPORTED_TASKS.items():
+            # test to compare pipeline to manually loading the respective model
+            model = None
+
+            relevant_auto_classes = task_dict[framework]
+
+            if len(relevant_auto_classes) == 0:
+                # task has no default
+                continue
+
+            # only first class is used by default for auto models
+            auto_model_cls = relevant_auto_classes[0]
+
+            # special case for translation pipeline which has multiple languages
+            if task == "translation":
+                for translation_pair in task_dict["default"].keys():
+                    model_id, revision = task_dict["default"][translation_pair]["model"][framework]
+
+                    # load default model
+                    set_seed()
+                    model = auto_model_cls.from_pretrained(model_id, revision=revision)
+                    # load default pipeline
+                    set_seed()
+                    default_pipeline = pipeline(task + f"_{'_to_'.join(translation_pair)}", framework=framework)
+
+                    # compare pipeline model with default model
+                    models_are_equal = check_models_equal_fn(default_pipeline.model, model)
+
+                    self.assertTrue(models_are_equal, f"{task} model doesn't match pipeline.")
+            else:
+                # normal case - non-translation pipeline
+                model_id, revision = task_dict["default"]["model"][framework]
+
+                # load default model
+                set_seed()
+                model = auto_model_cls.from_pretrained(model_id, revision=revision)
+                # load default pipeline
+                set_seed()
+                default_pipeline = pipeline(task, framework=framework)
+
+                # compare pipeline model with default model
+                models_are_equal = check_models_equal_fn(default_pipeline.model, model)
+                self.assertTrue(models_are_equal, f"{task} model doesn't match pipeline.")
+
+    def check_models_equal_pt(self, model1, model2):
+        models_are_equal = True
+        for model1_p, model2_p in zip(model1.parameters(), model2.parameters()):
+            if model1_p.data.ne(model2_p.data).sum() > 0:
+                models_are_equal = False
+
+        return models_are_equal
+
+    def check_models_equal_tf(self, model1, model2):
+        models_are_equal = True
+        for model1_p, model2_p in zip(model1.weights, model2.weights):
+            if np.abs(model1_p.numpy() - model2_p.numpy()).sum() > 1e-5:
+                models_are_equal = False
+
+        return models_are_equal

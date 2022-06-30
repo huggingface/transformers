@@ -173,7 +173,10 @@ SUPPORTED_TASKS = {
         "tf": (TFAutoModelForQuestionAnswering,) if is_tf_available() else (),
         "pt": (AutoModelForQuestionAnswering,) if is_torch_available() else (),
         "default": {
-            "model": {"pt": ("distilbert-base-cased-distilled-squad", "626af31"), "tf": ("distilbert-base-cased-distilled-squad", "626af31")},
+            "model": {
+                "pt": ("distilbert-base-cased-distilled-squad", "626af31"),
+                "tf": ("distilbert-base-cased-distilled-squad", "626af31"),
+            },
         },
         "type": "text",
     },
@@ -184,7 +187,6 @@ SUPPORTED_TASKS = {
         "default": {
             "model": {
                 "pt": ("google/tapas-base-finetuned-wtq", "69ceee2"),
-                "tokenizer": ("google/tapas-base-finetuned-wtq", "69ceee2"),
                 "tf": ("google/tapas-base-finetuned-wtq", "69ceee2"),
             },
         },
@@ -194,14 +196,14 @@ SUPPORTED_TASKS = {
         "impl": FillMaskPipeline,
         "tf": (TFAutoModelForMaskedLM,) if is_tf_available() else (),
         "pt": (AutoModelForMaskedLM,) if is_torch_available() else (),
-        "default": {"model": {"pt": "distilroberta-base", "tf": "distilroberta-base"}},
+        "default": {"model": {"pt": ("distilroberta-base", "ec58a5b"), "tf": ("distilroberta-base", "ec58a5b")}},
         "type": "text",
     },
     "summarization": {
         "impl": SummarizationPipeline,
         "tf": (TFAutoModelForSeq2SeqLM,) if is_tf_available() else (),
         "pt": (AutoModelForSeq2SeqLM,) if is_torch_available() else (),
-        "default": {"model": {"pt": "sshleifer/distilbart-cnn-12-6", "tf": "t5-small"}},
+        "default": {"model": {"pt": ("sshleifer/distilbart-cnn-12-6", "a4f8f3e"), "tf": ("t5-small", "a4f8f3e")}},
         "type": "text",
     },
     # This task is a special case as it's parametrized by SRC, TGT languages.
@@ -210,9 +212,9 @@ SUPPORTED_TASKS = {
         "tf": (TFAutoModelForSeq2SeqLM,) if is_tf_available() else (),
         "pt": (AutoModelForSeq2SeqLM,) if is_torch_available() else (),
         "default": {
-            ("en", "fr"): {"model": {"pt": "t5-base", "tf": "t5-base"}},
-            ("en", "de"): {"model": {"pt": "t5-base", "tf": "t5-base"}},
-            ("en", "ro"): {"model": {"pt": "t5-base", "tf": "t5-base"}},
+            ("en", "fr"): {"model": {"pt": ("t5-base", "686f1db"), "tf": ("t5-base", "686f1db")}},
+            ("en", "de"): {"model": {"pt": ("t5-base", "686f1db"), "tf": ("t5-base", "686f1db")}},
+            ("en", "ro"): {"model": {"pt": ("t5-base", "686f1db"), "tf": ("t5-base", "686f1db")}},
         },
         "type": "text",
     },
@@ -220,14 +222,14 @@ SUPPORTED_TASKS = {
         "impl": Text2TextGenerationPipeline,
         "tf": (TFAutoModelForSeq2SeqLM,) if is_tf_available() else (),
         "pt": (AutoModelForSeq2SeqLM,) if is_torch_available() else (),
-        "default": {"model": {"pt": "t5-base", "tf": "t5-base"}},
+        "default": {"model": {"pt": ("t5-base", "686f1db"), "tf": ("t5-base", "686f1db")}},
         "type": "text",
     },
     "text-generation": {
         "impl": TextGenerationPipeline,
         "tf": (TFAutoModelForCausalLM,) if is_tf_available() else (),
         "pt": (AutoModelForCausalLM,) if is_torch_available() else (),
-        "default": {"model": {"pt": "gpt2", "tf": "gpt2"}},
+        "default": {"model": {"pt": ("gpt2", "6c0e608"), "tf": ("gpt2", "6c0e608")}},
         "type": "text",
     },
     "zero-shot-classification": {
@@ -235,9 +237,8 @@ SUPPORTED_TASKS = {
         "tf": (TFAutoModelForSequenceClassification,) if is_tf_available() else (),
         "pt": (AutoModelForSequenceClassification,) if is_torch_available() else (),
         "default": {
-            "model": {"pt": "facebook/bart-large-mnli", "tf": "roberta-large-mnli"},
-            "config": {"pt": "facebook/bart-large-mnli", "tf": "roberta-large-mnli"},
-            "tokenizer": {"pt": "facebook/bart-large-mnli", "tf": "roberta-large-mnli"},
+            "model": {"pt": ("facebook/bart-large-mnli", "c626438"), "tf": ("roberta-large-mnli", "130fb28")},
+            "config": {"pt": ("facebook/bart-large-mnli", "c626438"), "tf": ("roberta-large-mnli", "130fb28")},
         },
         "type": "text",
     },
@@ -245,35 +246,42 @@ SUPPORTED_TASKS = {
         "impl": ZeroShotImageClassificationPipeline,
         "tf": (TFAutoModel,) if is_tf_available() else (),
         "pt": (AutoModel,) if is_torch_available() else (),
-        "default": {"model": {"pt": "openai/clip-vit-base-patch32", "tf": "openai/clip-vit-base-patch32"}},
+        "default": {
+            "model": {
+                "pt": ("openai/clip-vit-base-patch32", "f4881ba"),
+                "tf": ("openai/clip-vit-base-patch32", "f4881ba"),
+            }
+        },
         "type": "multimodal",
     },
     "conversational": {
         "impl": ConversationalPipeline,
         "tf": (TFAutoModelForSeq2SeqLM, TFAutoModelForCausalLM) if is_tf_available() else (),
         "pt": (AutoModelForSeq2SeqLM, AutoModelForCausalLM) if is_torch_available() else (),
-        "default": {"model": {"pt": "microsoft/DialoGPT-medium", "tf": "microsoft/DialoGPT-medium"}},
+        "default": {
+            "model": {"pt": ("microsoft/DialoGPT-medium", "8bada3b"), "tf": ("microsoft/DialoGPT-medium", "8bada3b")}
+        },
         "type": "text",
     },
     "image-classification": {
         "impl": ImageClassificationPipeline,
         "tf": (),
         "pt": (AutoModelForImageClassification,) if is_torch_available() else (),
-        "default": {"model": {"pt": "google/vit-base-patch16-224"}},
+        "default": {"model": {"pt": ("google/vit-base-patch16-224", "5dca96d")}},
         "type": "image",
     },
     "image-segmentation": {
         "impl": ImageSegmentationPipeline,
         "tf": (),
         "pt": (AutoModelForImageSegmentation, AutoModelForSemanticSegmentation) if is_torch_available() else (),
-        "default": {"model": {"pt": "facebook/detr-resnet-50-panoptic"}},
+        "default": {"model": {"pt": ("facebook/detr-resnet-50-panoptic", "fc15262")}},
         "type": "image",
     },
     "object-detection": {
         "impl": ObjectDetectionPipeline,
         "tf": (),
         "pt": (AutoModelForObjectDetection,) if is_torch_available() else (),
-        "default": {"model": {"pt": "facebook/detr-resnet-50"}},
+        "default": {"model": {"pt": ("facebook/detr-resnet-50", "2729413")}},
         "type": "image",
     },
 }
