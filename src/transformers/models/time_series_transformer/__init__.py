@@ -2,7 +2,7 @@
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
-# Copyright 2022 The HuggingFace Team. All rights reserved.
+# Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,3 +15,78 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from typing import TYPE_CHECKING
+
+# rely on isort to merge the imports
+from ...utils import  _LazyModule, OptionalDependencyNotAvailable, is_tokenizers_available
+from ...utils import is_torch_available
+
+
+
+
+_import_structure = {
+    "configuration_time_series_transformer": ["TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TimeSeriesTransformerConfig"],
+    "tokenization_time_series_transformer": ["TimeSeriesTransformerTokenizer"],
+}
+
+try:
+    if not is_tokenizers_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["tokenization_time_series_transformer_fast"] = ["TimeSeriesTransformerTokenizerFast"]
+
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["modeling_time_series_transformer"] = [
+        "TIME_SERIES_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TimeSeriesTransformerForConditionalGeneration",
+        "TimeSeriesTransformerForQuestionAnswering",
+        "TimeSeriesTransformerForSequenceClassification",
+        "TimeSeriesTransformerForCausalLM",
+        "TimeSeriesTransformerModel",
+        "TimeSeriesTransformerPreTrainedModel",
+    ]
+
+
+
+
+if TYPE_CHECKING:
+    from .configuration_time_series_transformer import TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, TimeSeriesTransformerConfig
+    from .tokenization_time_series_transformer import TimeSeriesTransformerTokenizer
+
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .tokenization_time_series_transformer_fast import TimeSeriesTransformerTokenizerFast
+
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .modeling_time_series_transformer import (
+            TIME_SERIES_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TimeSeriesTransformerForConditionalGeneration,
+            TimeSeriesTransformerForCausalLM,
+            TimeSeriesTransformerForQuestionAnswering,
+            TimeSeriesTransformerForSequenceClassification,
+            TimeSeriesTransformerModel,
+            TimeSeriesTransformerPreTrainedModel,
+        )
+
+
+
+else:
+    import sys
+
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)

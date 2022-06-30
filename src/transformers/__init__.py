@@ -308,6 +308,7 @@ _import_structure = {
     "models.t5": ["T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "T5Config"],
     "models.tapas": ["TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP", "TapasConfig", "TapasTokenizer"],
     "models.tapex": ["TapexTokenizer"],
+    "models.time_series_transformer": ["TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TimeSeriesTransformerConfig", "TimeSeriesTransformerTokenizer"],
     "models.trajectory_transformer": [
         "TRAJECTORY_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TrajectoryTransformerConfig",
@@ -505,6 +506,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     # Fast tokenizers structure
+    _import_structure["models.time_series_transformer"].append("TimeSeriesTransformerTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
@@ -750,6 +752,18 @@ else:
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
+
+    _import_structure["models.time_series_transformer"].extend(
+        [
+            "TIME_SERIES_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TimeSeriesTransformerForCausalLM",
+            "TimeSeriesTransformerForConditionalGeneration",
+            "TimeSeriesTransformerForQuestionAnswering",
+            "TimeSeriesTransformerForSequenceClassification",
+            "TimeSeriesTransformerModel",
+            "TimeSeriesTransformerPreTrainedModel",
+        ]
+    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3013,6 +3027,11 @@ if TYPE_CHECKING:
     from .models.t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
     from .models.tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig, TapasTokenizer
     from .models.tapex import TapexTokenizer
+    from .models.time_series_transformer import (
+        TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        TimeSeriesTransformerConfig,
+        TimeSeriesTransformerTokenizer,
+    )
     from .models.trajectory_transformer import (
         TRAJECTORY_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TrajectoryTransformerConfig,
@@ -3235,6 +3254,7 @@ if TYPE_CHECKING:
         from .models.splinter import SplinterTokenizerFast
         from .models.squeezebert import SqueezeBertTokenizerFast
         from .models.t5 import T5TokenizerFast
+        from .models.time_series_transformer import TimeSeriesTransformerTokenizerFast
         from .models.xglm import XGLMTokenizerFast
         from .models.xlm_roberta import XLMRobertaTokenizerFast
         from .models.xlnet import XLNetTokenizerFast
@@ -3385,8 +3405,6 @@ if TYPE_CHECKING:
         )
         from .generation_utils import top_k_top_p_filtering
         from .modeling_utils import PreTrainedModel
-
-        # PyTorch model imports
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlbertForMaskedLM,
@@ -4197,6 +4215,17 @@ if TYPE_CHECKING:
             T5Model,
             T5PreTrainedModel,
             load_tf_weights_in_t5,
+        )
+
+        # PyTorch model imports
+        from .models.time_series_transformer import (
+            TIME_SERIES_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TimeSeriesTransformerForCausalLM,
+            TimeSeriesTransformerForConditionalGeneration,
+            TimeSeriesTransformerForQuestionAnswering,
+            TimeSeriesTransformerForSequenceClassification,
+            TimeSeriesTransformerModel,
+            TimeSeriesTransformerPreTrainedModel,
         )
         from .models.trajectory_transformer import (
             TRAJECTORY_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
