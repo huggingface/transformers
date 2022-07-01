@@ -26,8 +26,6 @@
   - local: create_a_model
     title: Crea una arquitectura personalizada
   - sections:
-    - local: tasks/token_classification
-      title: Clasificación de tokens
     - local: tasks/language_modeling
       title: Modelado de lenguaje
     - local: tasks/image_classification
