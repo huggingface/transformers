@@ -277,6 +277,7 @@ _import_structure = {
         "OwlViTConfig",
         "OwlViTTextConfig",
         "OwlViTVisionConfig",
+        "OwlViTProcessor",
     ],
     "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
     "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
@@ -3001,6 +3002,7 @@ if TYPE_CHECKING:
         OwlViTConfig,
         OwlViTTextConfig,
         OwlViTVisionConfig,
+        OwlViTProcessor,
     )
     from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
     from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
@@ -3316,7 +3318,6 @@ if TYPE_CHECKING:
         from .models.levit import LevitFeatureExtractor
         from .models.maskformer import MaskFormerFeatureExtractor
         from .models.mobilevit import MobileViTFeatureExtractor
-        from .models.owlvit import OwlViTProcessor
         from .models.perceiver import PerceiverFeatureExtractor
         from .models.poolformer import PoolFormerFeatureExtractor
         from .models.segformer import SegformerFeatureExtractor

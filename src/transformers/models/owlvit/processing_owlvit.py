@@ -20,8 +20,8 @@ from typing import List
 import numpy as np
 import jax.numpy as jnp
 
-from ..utils import is_torch_available
-from ..utils.generic import _is_torch
+from ...utils import is_torch_available
+from ...utils.generic import _is_torch
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 
@@ -81,39 +81,60 @@ class OwlViTProcessor(ProcessorMixin):
         if text is None and images is None:
             raise ValueError("You have to specify either text or images. Both cannot be none.")
 
-        if isinstance(text, str):
-            encodings = [self.tokenizer(text, return_tensors=return_tensors, **kwargs)]
+        if text is not None:
+            if isinstance(text, str):
+                encodings = [self.tokenizer(text, return_tensors=return_tensors, **kwargs)]
 
-        if isintance(text, List) and not isintance(text[0], List):
-            encodings = [self.tokenizer(text, return_tensors=return_tensors, **kwargs)]
+            if isinstance(text, List) and not isinstance(text[0], List):
+                encodings = [self.tokenizer(text, return_tensors=return_tensors, **kwargs)]
 
-        if isintance(text, List) and isintance(text[0], List):
-            encodings = []
-            max_num_queries = max([len(t) for t in texts])
+            if isinstance(text, List) and isinstance(text[0], List):
+                encodings = []
 
-            # Pad all batch samples to max number of text queries
-            for t in text:
-                if len(t) != max_num_queries:
-                    t.extend([""]*(max_num_q - len(t)))
-                    encoding = self.tokenizer(t, return_tensors=return_tensors, **kwargs)
-                    encodings.append(encoding)
+                # Maximum number of queries across batch
+                max_num_queries = max([len(t) for t in text])
 
-        if isinstance(encodings[0], np.ndarray):
-            encodings = [np.expand_dims(encoding, axis=0) for encoding in encodings]
-            encoding = np.concatenate(encodings)
+                # Pad all batch samples to max number of text queries
+                for t in text:
+                    if len(t) != max_num_queries:
+                        t.extend([""]*(max_num_queries - len(t)))
 
-        elif isinstance(encodings[0], jnp.ndarray):
-            encodings = [jnp.expand_dims(encoding, axis=0) for encoding in encodings]
-            encoding = jnp.concatenate(encodings)
+                        encoding = self.tokenizer(t, return_tensors=return_tensors, **kwargs)
+                        encodings.append(encoding)
 
-        elif is_torch_tensor(encodings[0]):
-            import torch
-            encodings = [encoding.unsqueeze(0) for encoding in encodings]
-            encoding = torch.cat(encodings)
-        else:
-            import tensorflow as tf
-            encodings = [tf.expand_dims(encoding, axis=0) for encoding in encodings]
-            encoding = tf.concat(encodings, axis=0)
+            encoding = encodings[0]
+
+            if isinstance(encodings[0], np.ndarray):
+                input_ids = [np.expand_dims(encoding["input_ids"], axis=0) for encoding in encodings]
+                input_ids = np.concatenate(input_ids)
+
+                attention_mask = [np.expand_dims(encoding["attention_mask"], axis=0) for encoding in encodings]
+                attention_mask = np.concatenate(attention_mask)
+
+            elif isinstance(encodings[0], jnp.ndarray):
+                input_ids = [jnp.expand_dims(encoding["input_ids"], axis=0) for encoding in encodings]
+                input_ids = jnp.concatenate(input_ids)
+
+                attention_mask = [jnp.expand_dims(encoding["attention_mask"], axis=0) for encoding in encodings]
+                attention_mask = jnp.concatenate(attention_mask)
+
+            elif is_torch_tensor(encodings[0]):
+                import torch
+                input_ids= [encoding["input_ids"].unsqueeze(0) for encoding in encodings]
+                input_ids = torch.cat(input_ids)
+
+                attention_mask= [encoding["attention_mask"].unsqueeze(0) for encoding in encodings]
+                attention_mask = torch.cat(attention_mask)
+            else:
+                import tensorflow as tf
+                input_ids = [tf.expand_dims(encoding["input_ids"], axis=0) for encoding in encodings]
+                input_ids = tf.concat(input_ids, axis=0)
+
+                attention_mask = [tf.expand_dims(encoding["attention_mask"], axis=0) for encoding in encodings]
+                attention_mask = tf.concat(attention_mask, axis=0)
+
+            encoding["input_ids"] = input_ids
+            encoding["attention_mask"] = attention_mask
 
         if images is not None:
             image_features = self.feature_extractor(images, return_tensors=return_tensors, **kwargs)
