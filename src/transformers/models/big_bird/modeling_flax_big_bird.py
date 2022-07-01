@@ -1368,7 +1368,6 @@ class FlaxBigBirdLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertLayerCollection with Bert->BigBird
 class FlaxBigBirdLayerCollection(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -1378,15 +1377,16 @@ class FlaxBigBirdLayerCollection(nn.Module):
         if self.gradient_checkpointing:
             FlaxBigBirdCheckpointLayer = remat(FlaxBigBirdLayer, static_argnums=(5, 6, 7))
             self.layers = [
-                FlaxBigBirdCheckpointLayer(self.config, name=str(i), dtype=self.dtype)
+                FlaxBigBirdCheckpointLayer(self.config, layer_id=i, name=str(i), dtype=self.dtype)
                 for i in range(self.config.num_hidden_layers)
             ]
         else:
             self.layers = [
-                FlaxBigBirdLayer(self.config, name=str(i), dtype=self.dtype)
+                FlaxBigBirdLayer(self.config, layer_id=i, name=str(i), dtype=self.dtype)
                 for i in range(self.config.num_hidden_layers)
             ]
 
+    # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertLayerCollection.__call__ with Bert->BigBird
     def __call__(
         self,
         hidden_states,
