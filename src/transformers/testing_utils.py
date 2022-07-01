@@ -71,11 +71,11 @@ from .utils import (
     is_torch_available,
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
+    is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
     is_torchaudio_available,
     is_torchdynamo_available,
-    is_torch_tensorrt_fx_available,
     is_vision_available,
 )
 

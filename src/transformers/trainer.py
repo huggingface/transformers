@@ -139,9 +139,9 @@ from .utils import (
     is_ipex_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
+    is_torch_tensorrt_fx_available,
     is_torch_tpu_available,
     is_torchdynamo_available,
-    is_torch_tensorrt_fx_available,
     logging,
 )
 from .utils.generic import ContextManagers
