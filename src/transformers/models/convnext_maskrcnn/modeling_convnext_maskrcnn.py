@@ -2816,7 +2816,9 @@ class ConvNextMaskRNNShared2FCBBoxHead(nn.Module):
 
 
 class ConvNextMaskRCNNFCNMaskHead(nn.Module):
-    """ """
+    """
+    Mask head.
+    """
 
     def __init__(
         self, config, num_convs=4, in_channels=256, conv_out_channels=256, conv_kernel_size=3, scale_factor=2
@@ -2842,6 +2844,8 @@ class ConvNextMaskRCNNFCNMaskHead(nn.Module):
         )
         self.relu = nn.ReLU(inplace=True)
         self.conv_logits = nn.Conv2d(conv_out_channels, self.num_classes, 1)
+
+        self.loss_mask = CrossEntropyLoss(use_mask=True, loss_weight=1.0)
 
     def forward(self, x):
         for conv, activation in zip(self.convs, self.activations):
@@ -3290,12 +3294,13 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
             print("Bbox loss:", bbox_results["loss_bbox"])
             losses.update(bbox_results["loss_bbox"])
 
-        # TODO mask head forward and loss
-        # if self.with_mask:
-        #     mask_results = self._mask_forward_train(
-        #         x, sampling_results, bbox_results["bbox_feats"], gt_masks, img_metas
-        #     )
-        #     losses.update(mask_results["loss_mask"])
+        # TODO verify mask head loss computation
+        if self.with_mask:
+            mask_results = self._mask_forward_train(
+                x, sampling_results, bbox_results["bbox_feats"], gt_masks, img_metas
+            )
+            losses.update(mask_results["loss_mask"])
+            print("Mask loss:", mask_results["loss_mask"])
 
         return losses
 
