@@ -2385,7 +2385,7 @@ class Trainer:
             self._past = outputs[self.args.past_index]
 
         if labels is not None:
-            if model._get_name() in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
+            if unwrap_model(model)._get_name() in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
                 loss = self.label_smoother(outputs, labels, shift_labels=True)
             else:
                 loss = self.label_smoother(outputs, labels)
