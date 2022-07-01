@@ -235,6 +235,9 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> Dict:
         raise NotImplementedError(f"init method has to be implemented for {self}")
 
+    def enable_gradient_checkpointing(self):
+        raise NotImplementedError(f"gradient checkpointing method has to be implemented for {self}")
+
     @classmethod
     def _from_config(cls, config, **kwargs):
         """
