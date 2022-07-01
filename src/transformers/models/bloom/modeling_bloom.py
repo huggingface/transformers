@@ -78,14 +78,14 @@ def split_tensor_along_last_dim(tensor, num_partitions, contiguous_split_chunks=
 
 
 def attention_mask_func(attention_scores, attention_mask, causal_mask):
-    attention_mask_bool = 1 - attention_mask.int()
+    attention_mask_bool = ~attention_mask.bool()
 
     query_length, key_length, n_heads = attention_scores.size(2), attention_scores.size(3), attention_scores.size(1)
-    padded_causal_mask = attention_mask_bool[:, None, key_length - query_length : key_length, None] + (
-        1 - causal_mask[:, :, key_length - query_length : key_length, :key_length].int()
+    padded_causal_mask = torch.logical_or(
+        attention_mask_bool[:, None, key_length - query_length : key_length, None],
+        ~causal_mask[:, :, key_length - query_length : key_length, :key_length].bool(),
     )
-    padded_causal_mask = padded_causal_mask + attention_mask_bool[:, None, None, :key_length]
-    padded_causal_mask = padded_causal_mask.bool()
+    padded_causal_mask = torch.logical_or(padded_causal_mask, attention_mask_bool[:, None, None, :key_length])
     # Make use of floats
     return (
         attention_scores.masked_fill_(padded_causal_mask.expand(-1, n_heads, -1, -1), -10000.0),
