@@ -138,11 +138,13 @@ class TFSegformerEfficientSelfAttention(tf.keras.layers.Layer):
             self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-05, name="layer_norm")
 
     def transpose_for_scores(self, tensor: tf.Tensor) -> tf.Tensor:
-        # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
+        # Reshape from [batch_size, seq_length, all_head_size]
+        # to [batch_size, seq_length, num_attention_heads, attention_head_size]
         batch_size = shape_list(tensor)[0]
         tensor = tf.reshape(tensor=tensor, shape=(batch_size, -1, self.num_attention_heads, self.attention_head_size))
 
-        # Transpose the tensor from [batch_size, seq_length, num_attention_heads, attention_head_size] to [batch_size, num_attention_heads, seq_length, attention_head_size]
+        # Transpose the tensor from [batch_size, seq_length, num_attention_heads, attention_head_size]
+        # to [batch_size, num_attention_heads, seq_length, attention_head_size]
         return tf.transpose(tensor, perm=[0, 2, 1, 3])
 
     def call(
@@ -442,9 +444,7 @@ class TFSegformerEncoder(tf.keras.layers.Layer):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return TFBaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_self_attentions
         )
 
 
@@ -829,7 +829,7 @@ class TFSegformerForSemanticSegmentation(TFSegformerPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
+        >>> feature_extractor = SegformerFeatureExtractor.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
         >>> model = TFSegformerForSemanticSegmentation.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
 
         >>> inputs = feature_extractor(images=image, return_tensors="tf")
