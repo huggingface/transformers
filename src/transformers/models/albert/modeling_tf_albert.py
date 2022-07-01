@@ -86,6 +86,32 @@ class TFAlbertPreTrainingLoss:
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction=tf.keras.losses.Reduction.NONE
         )
+        if self.config.get("tf_legacy_loss", False):
+            # make sure only labels that are not equal to -100
+            # are taken into account as loss
+            masked_lm_active_loss = tf.not_equal(tf.reshape(tensor=labels["labels"], shape=(-1,)), -100)
+            masked_lm_reduced_logits = tf.boolean_mask(
+                tensor=tf.reshape(tensor=logits[0], shape=(-1, shape_list(logits[0])[2])),
+                mask=masked_lm_active_loss,
+            )
+            masked_lm_labels = tf.boolean_mask(
+                tensor=tf.reshape(tensor=labels["labels"], shape=(-1,)), mask=masked_lm_active_loss
+            )
+            sentence_order_active_loss = tf.not_equal(tf.reshape(tensor=labels["sentence_order_label"], shape=(-1,)),
+                                                      -100)
+            sentence_order_reduced_logits = tf.boolean_mask(
+                tensor=tf.reshape(tensor=logits[1], shape=(-1, 2)), mask=sentence_order_active_loss
+            )
+            sentence_order_label = tf.boolean_mask(
+                tensor=tf.reshape(tensor=labels["sentence_order_label"], shape=(-1,)), mask=sentence_order_active_loss
+            )
+            masked_lm_loss = loss_fn(y_true=masked_lm_labels, y_pred=masked_lm_reduced_logits)
+            sentence_order_loss = loss_fn(y_true=sentence_order_label, y_pred=sentence_order_reduced_logits)
+            masked_lm_loss = tf.reshape(tensor=masked_lm_loss, shape=(-1, shape_list(sentence_order_loss)[0]))
+            masked_lm_loss = tf.reduce_mean(input_tensor=masked_lm_loss, axis=0)
+
+            return masked_lm_loss + sentence_order_loss
+
         unmasked_lm_losses = loss_fn(y_true=labels["labels"], y_pred=logits[0])
         # make sure only labels that are not equal to -100
         # are taken into account for the loss computation
