@@ -182,6 +182,15 @@ class FeaturesManager:
             "seq2seq-lm-with-past",
             onnx_config_cls="models.blenderbot_small.BlenderbotSmallOnnxConfig",
         ),
+        "bloom": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "causal-lm",
+            "causal-lm-with-past",
+            "sequence-classification",
+            "token-classification",
+            onnx_config_cls="models.bloom.BloomOnnxConfig",
+        ),
         "camembert": supported_features_mapping(
             "default",
             "masked-lm",
@@ -317,6 +326,13 @@ class FeaturesManager:
             "token-classification",
             onnx_config_cls="models.layoutlm.LayoutLMOnnxConfig",
         ),
+        "layoutlmv3": supported_features_mapping(
+            "default",
+            "question-answering",
+            "sequence-classification",
+            "token-classification",
+            onnx_config_cls="models.layoutlmv3.LayoutLMv3OnnxConfig",
+        ),
         "longt5": supported_features_mapping(
             "default",
             "default-with-past",
@@ -352,6 +368,11 @@ class FeaturesManager:
             "token-classification",
             "question-answering",
             onnx_config_cls="models.mobilebert.MobileBertOnnxConfig",
+        ),
+        "mobilevit": supported_features_mapping(
+            "default",
+            "image-classification",
+            onnx_config_cls="models.mobilevit.MobileViTOnnxConfig",
         ),
         "m2m-100": supported_features_mapping(
             "default",

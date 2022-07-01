@@ -396,19 +396,22 @@ def is_ftfy_available():
     return _ftfy_available
 
 
-def is_torch_tpu_available():
+def is_torch_tpu_available(check_device=True):
+    "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
     if not _torch_available:
         return False
-    if importlib.util.find_spec("torch_xla") is None:
-        return False
-    import torch_xla.core.xla_model as xm
+    if importlib.util.find_spec("torch_xla") is not None:
+        if check_device:
+            # We need to check if `xla_device` can be found, will raise a RuntimeError if not
+            try:
+                import torch_xla.core.xla_model as xm
 
-    # We need to check if `xla_device` can be found, will raise a RuntimeError if not
-    try:
-        xm.xla_device()
+                _ = xm.xla_device()
+                return True
+            except RuntimeError:
+                return False
         return True
-    except RuntimeError:
-        return False
+    return False
 
 
 def is_torchdynamo_available():
@@ -503,7 +506,9 @@ def is_in_notebook():
             raise ImportError("console")
         if "VSCODE_PID" in os.environ:
             raise ImportError("vscode")
-        if "DATABRICKS_RUNTIME_VERSION" in os.environ:
+        if "DATABRICKS_RUNTIME_VERSION" in os.environ and os.environ["DATABRICKS_RUNTIME_VERSION"] < "11.0":
+            # Databricks Runtime 11.0 and above uses IPython kernel by default so it should be compatible with Jupyter notebook
+            # https://docs.microsoft.com/en-us/azure/databricks/notebooks/ipython-kernel
             raise ImportError("databricks")
 
         return importlib.util.find_spec("IPython") is not None
