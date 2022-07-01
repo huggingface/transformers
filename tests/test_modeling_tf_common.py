@@ -1296,6 +1296,16 @@ class TFModelTesterMixin:
                 loss = model(model_input, **prepared_for_class)[0]
                 self.assertEqual(loss.shape.as_list(), expected_loss_size)
 
+                # Test that model correctly compute the loss when we mask some positions
+                prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
+                possible_input_names = {"input_ids", "pixel_values", "input_features"}
+                input_name = possible_input_names.intersection(set(prepared_for_class)).pop()
+                model_input = prepared_for_class.pop(input_name)
+                if "labels" in prepared_for_class:
+                    prepared_for_class["labels"][0] = -100
+                loss = model(model_input, **prepared_for_class)[0]
+                self.assertEqual(loss.shape.as_list(), expected_loss_size)
+
                 # Test that model correctly compute the loss with a dict
                 prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
                 loss = model(prepared_for_class)[0]

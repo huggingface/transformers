@@ -206,7 +206,8 @@ class TFCausalLanguageModelingLoss:
         unmasked_loss = loss_fn(tf.nn.relu(labels), logits)
         # make sure only labels that are not equal to -100 affect the loss
         loss_mask = tf.cast(labels != -100, dtype=unmasked_loss.dtype)
-        loss_denominator = tf.reduce_sum(loss_mask, axis=1)
+        # Avoid division by zero later
+        loss_denominator = tf.math.maximum(1, tf.reduce_sum(loss_mask, axis=1))
         masked_loss = unmasked_loss * loss_mask
         reduced_masked_loss = tf.reduce_sum(masked_loss, axis=1) / loss_denominator
         return reduced_masked_loss
@@ -264,7 +265,8 @@ class TFTokenClassificationLoss:
         # make sure only labels that are not equal to -100 or -1
         # are taken into account as loss
         loss_mask = tf.cast(labels >= 0, dtype=unmasked_loss.dtype)
-        loss_denominator = tf.reduce_sum(loss_mask, axis=1)
+        # Avoid possible division by zero later
+        loss_denominator = tf.math.maximum(1, tf.reduce_sum(loss_mask, axis=1))
         # Masked positions will have a loss of NaN because -100 and -1 are not valid labels
         masked_loss = unmasked_loss * loss_mask
         reduced_masked_loss = tf.reduce_sum(masked_loss, axis=1) / loss_denominator
