@@ -1285,12 +1285,7 @@ class TFModelTesterMixin:
                 added_label = prepared_for_class[
                     sorted(list(prepared_for_class.keys() - inputs_dict.keys()), reverse=True)[0]
                 ]
-                loss_size = tf.size(added_label)
-
-                if model.__class__ in get_values(TF_MODEL_FOR_CAUSAL_LM_MAPPING):
-                    # if loss is causal lm loss, labels are shift, so that one label per batch
-                    # is cut
-                    loss_size = loss_size - self.model_tester.batch_size
+                expected_loss_size = added_label.shape.as_list()[:1]
 
                 # Test that model correctly compute the loss with kwargs
                 prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
@@ -1299,12 +1294,12 @@ class TFModelTesterMixin:
                 model_input = prepared_for_class.pop(input_name)
 
                 loss = model(model_input, **prepared_for_class)[0]
-                self.assertEqual(loss.shape, [loss_size])
+                self.assertEqual(loss.shape.as_list(), expected_loss_size)
 
                 # Test that model correctly compute the loss with a dict
                 prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
                 loss = model(prepared_for_class)[0]
-                self.assertEqual(loss.shape, [loss_size])
+                self.assertEqual(loss.shape.as_list(), expected_loss_size)
 
                 # Test that model correctly compute the loss with a tuple
                 prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
@@ -1335,7 +1330,7 @@ class TFModelTesterMixin:
                 # Send to model
                 loss = model(tuple_input[:-1])[0]
 
-                self.assertEqual(loss.shape, [loss_size])
+                self.assertEqual(loss.shape.as_list(), expected_loss_size)
 
     def test_keras_fit(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
