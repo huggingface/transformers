@@ -165,7 +165,7 @@ class BloomConfig(PretrainedConfig):
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
 
-# Copied from transformers.models.gpt2.configuration_gpt2.GPT2OnnxConfig
+# Copied from transformers.models.gpt2.configuration_gpt2.GPT2OnnxConfig with modified `generate_dummy_inputs`
 class BloomOnnxConfig(OnnxConfigWithPast):
     def __init__(
         self,
@@ -225,8 +225,8 @@ class BloomOnnxConfig(OnnxConfigWithPast):
                 past_key_values_length = seqlen + 2
                 past_shape = (
                     batch,
-                    self.num_attention_heads,
                     past_key_values_length,
+                    self.num_attention_heads,
                     self._config.hidden_size // self.num_attention_heads,
                 )
                 ordered_inputs["past_key_values"] = [
