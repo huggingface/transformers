@@ -20,8 +20,8 @@ from typing import List
 import numpy as np
 import jax.numpy as jnp
 
-from .utils import is_torch_available
-from .utils.generic import _is_torch
+from ..utils import is_torch_available
+from ..utils.generic import _is_torch
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 
