@@ -1712,11 +1712,17 @@ class FlaxLongT5PreTrainedModel(FlaxPreTrainedModel):
 
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
+        # breakpoint()
+
+        encoder_hidden_states=None
+        encoder_attention_mask=None
 
         random_params = self.module.init(
             rngs,
             input_ids,
             attention_mask,
+            encoder_hidden_states,
+            encoder_attention_mask,
             decoder_input_ids,
             decoder_attention_mask,
         )["params"]
@@ -2056,6 +2062,8 @@ class FlaxLongT5Module(nn.Module):
         self,
         input_ids=None,
         attention_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
         encoder_outputs=None,
@@ -2063,30 +2071,46 @@ class FlaxLongT5Module(nn.Module):
         output_hidden_states=None,
         return_dict=None,
         deterministic: bool = True,
+        init_cache: bool = False,
     ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         # breakpoint()
         # Encode if needed (training, first prediction pass)
         encoder_outputs = self.encoder(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            deterministic=deterministic,
+            input_ids,
+            attention_mask,
+            encoder_hidden_states,
+            encoder_attention_mask,
+            output_attentions,
+            output_hidden_states,
+            return_dict,
+            deterministic,
+            init_cache
         )
-
+        # breakpoint()
         # Decode
         decoder_outputs = self.decoder(
-            input_ids=decoder_input_ids,
-            attention_mask=decoder_attention_mask,
-            encoder_hidden_states=encoder_outputs[0],
-            encoder_attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            deterministic=deterministic,
+            decoder_input_ids,
+            decoder_attention_mask,
+            encoder_outputs[0],
+            attention_mask,
+            output_attentions,
+            output_hidden_states,
+            return_dict,
+            deterministic,
+            init_cache
         )
+
+        # decoder_outputs = self.decoder(
+        #     input_ids=decoder_input_ids,
+        #     attention_mask=decoder_attention_mask,
+        #     encoder_hidden_states=encoder_outputs[0],
+        #     encoder_attention_mask=attention_mask,
+        #     output_attentions=output_attentions,
+        #     output_hidden_states=output_hidden_states,
+        #     return_dict=return_dict,
+        #     deterministic=deterministic,
+        # )
 
         if not return_dict:
             return decoder_outputs + encoder_outputs
@@ -2184,6 +2208,8 @@ class FlaxLongT5ForConditionalGenerationModule(nn.Module):
         self,
         input_ids=None,
         attention_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
         encoder_outputs=None,
@@ -2191,19 +2217,22 @@ class FlaxLongT5ForConditionalGenerationModule(nn.Module):
         output_hidden_states=None,
         return_dict=None,
         deterministic: bool = True,
+        init_cache: bool = False,
     ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # Encode
-        breakpoint()
+        # breakpoint()
         encoder_outputs = self.encoder(
             input_ids,
-            hidden_states,
             attention_mask,
+            encoder_hidden_states,
+            encoder_attention_mask,
             output_attentions,
             output_hidden_states,
             return_dict,
             deterministic,
+            init_cache
         )
 
         hidden_states = encoder_outputs[0]
@@ -2218,6 +2247,7 @@ class FlaxLongT5ForConditionalGenerationModule(nn.Module):
             output_hidden_states,
             return_dict,
             deterministic,
+            init_cache
         )
 
         sequence_output = decoder_outputs[0]
