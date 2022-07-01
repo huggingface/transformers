@@ -24,6 +24,10 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from gluonts.torch.modules.scaler import MeanScaler, NOPScaler
+from gluonts.torch.modules.feature import FeatureEmbedder
+
+
 from ...activations import ACT2FN
 from ...utils import (
     add_code_sample_docstrings,
@@ -1091,6 +1095,16 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
     def __init__(self, config: TimeSeriesTransformerConfig):
         super().__init__(config)
 
+        if self.scaling:
+            self.scaler = MeanScaler(dim=1, keepdim=True)
+        else:
+            self.scaler = NOPScaler(dim=1, keepdim=True)
+
+        self.embedder = FeatureEmbedder(
+            cardinalities=self.cardinality,
+            embedding_dims=self.embedding_dimension,
+        )
+
         self.d_model = self.input_size * len(self.lags_seq) + self._number_of_features
 
         # transformer enc-decoder and mask initializer
@@ -1108,6 +1122,117 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @property
+    def _past_length(self) -> int:
+        return self.context_length + max(self.lags_seq)
+
+    def get_lagged_subsequences(
+        self, sequence: torch.Tensor, subsequences_length: int, shift: int = 0
+    ) -> torch.Tensor:
+        """
+        Returns lagged subsequences of a given sequence.
+        Parameters
+        ----------
+        sequence : Tensor
+            the sequence from which lagged subsequences should be extracted.
+            Shape: (N, T, C).
+        subsequences_length : int
+            length of the subsequences to be extracted.
+        shift: int
+            shift the lags by this amount back.
+        Returns
+        --------
+        lagged : Tensor
+            a tensor of shape (N, S, C, I), where S = subsequences_length and
+            I = len(indices), containing lagged subsequences. Specifically,
+            lagged[i, j, :, k] = sequence[i, -indices[k]-S+j, :].
+        """
+        sequence_length = sequence.shape[1]
+        indices = [lag - shift for lag in self.lags_seq]
+
+        assert max(indices) + subsequences_length <= sequence_length, (
+            f"lags cannot go further than history length, found lag {max(indices)} "
+            f"while history length is only {sequence_length}"
+        )
+
+        lagged_values = []
+        for lag_index in indices:
+            begin_index = -lag_index - subsequences_length
+            end_index = -lag_index if lag_index > 0 else None
+            lagged_values.append(sequence[:, begin_index:end_index, ...])
+        return torch.stack(lagged_values, dim=-1)
+
+    def create_network_inputs(
+        self,
+        feat_static_cat: torch.Tensor,
+        feat_static_real: torch.Tensor,
+        past_time_feat: torch.Tensor,
+        past_target: torch.Tensor,
+        past_observed_values: torch.Tensor,
+        future_time_feat: Optional[torch.Tensor] = None,
+        future_target: Optional[torch.Tensor] = None,
+    ):
+        # time feature
+        time_feat = (
+            torch.cat(
+                (
+                    past_time_feat[:, self._past_length - self.context_length :, ...],
+                    future_time_feat,
+                ),
+                dim=1,
+            )
+            if future_target is not None
+            else past_time_feat[:, self._past_length - self.context_length :, ...]
+        )
+
+        # target
+        context = past_target[:, -self.context_length :]
+        observed_context = past_observed_values[:, -self.context_length :]
+        _, scale = self.scaler(context, observed_context)
+
+        inputs = (
+            torch.cat((past_target, future_target), dim=1) / scale
+            if future_target is not None
+            else past_target / scale
+        )
+
+        inputs_length = self._past_length + self.prediction_length if future_target is not None else self._past_length
+        assert inputs.shape[1] == inputs_length
+
+        subsequences_length = (
+            self.context_length + self.prediction_length if future_target is not None else self.context_length
+        )
+
+        # embeddings
+        embedded_cat = self.embedder(feat_static_cat)
+        static_feat = torch.cat(
+            (embedded_cat, feat_static_real, scale.log()),
+            dim=1,
+        )
+        expanded_static_feat = static_feat.unsqueeze(1).expand(-1, time_feat.shape[1], -1)
+
+        features = torch.cat((expanded_static_feat, time_feat), dim=-1)
+
+        # sequence = torch.cat((prior_input, inputs), dim=1)
+        lagged_sequence = self.get_lagged_subsequences(
+            sequence=inputs,
+            subsequences_length=subsequences_length,
+        )
+
+        lags_shape = lagged_sequence.shape
+        reshaped_lagged_sequence = lagged_sequence.reshape(lags_shape[0], lags_shape[1], -1)
+
+        transformer_inputs = torch.cat((reshaped_lagged_sequence, features), dim=-1)
+
+        return transformer_inputs, scale, static_feat
+
+    def output_params(self, transformer_inputs):
+        enc_input = transformer_inputs[:, : self.context_length, ...]
+        dec_input = transformer_inputs[:, self.context_length :, ...]
+
+        enc_out = self.transformer.encoder(enc_input)
+        return self.transformer.decoder(dec_input, enc_out, tgt_mask=self.tgt_mask)
+
     def get_input_embeddings(self):
         return self.shared
 
@@ -1117,10 +1242,10 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         self.decoder.embed_tokens = self.shared
 
     def get_encoder(self):
-        return self.encoder
+        return self.transformer.encoder
 
     def get_decoder(self):
-        return self.decoder
+        return self.transformer.decoder
 
     @add_start_docstrings_to_model_forward(TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -1131,76 +1256,38 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        encoder_outputs=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        feat_static_cat: torch.Tensor,
+        feat_static_real: torch.Tensor,
+        past_time_feat: torch.Tensor,
+        past_target: torch.Tensor,
+        past_observed_values: torch.Tensor,
+        future_time_feat: Optional[torch.Tensor] = None,
+        future_target: Optional[torch.Tensor] = None,
+        future_observed_values: Optional[torch.Tensor] = None,
     ):
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        transformer_inputs, scale, _ = self.create_network_inputs(
+            feat_static_cat,
+            feat_static_real,
+            past_time_feat,
+            past_target,
+            past_observed_values,
+            future_time_feat,
+            future_target,
         )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        dec_output = self.output_params(transformer_inputs)
 
-        if encoder_outputs is None:
-            encoder_outputs = self.encoder(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                head_mask=head_mask,
-                inputs_embeds=inputs_embeds,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
-        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
-        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
-            encoder_outputs = BaseModelOutput(
-                last_hidden_state=encoder_outputs[0],
-                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
-                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
-            )
+        return dec_output
 
-        # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
-        decoder_outputs = self.decoder(
-            input_ids=decoder_input_ids,
-            attention_mask=decoder_attention_mask,
-            encoder_hidden_states=encoder_outputs[0],
-            encoder_attention_mask=attention_mask,
-            head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
-            past_key_values=past_key_values,
-            inputs_embeds=decoder_inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        if not return_dict:
-            return decoder_outputs + encoder_outputs
-
-        return Seq2SeqModelOutput(
-            last_hidden_state=decoder_outputs.last_hidden_state,
-            past_key_values=decoder_outputs.past_key_values,
-            decoder_hidden_states=decoder_outputs.hidden_states,
-            decoder_attentions=decoder_outputs.attentions,
-            cross_attentions=decoder_outputs.cross_attentions,
-            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
-            encoder_hidden_states=encoder_outputs.hidden_states,
-            encoder_attentions=encoder_outputs.attentions,
-        )
+        # return Seq2SeqModelOutput(
+        #     last_hidden_state=decoder_outputs.last_hidden_state,
+        #     past_key_values=decoder_outputs.past_key_values,
+        #     decoder_hidden_states=decoder_outputs.hidden_states,
+        #     decoder_attentions=decoder_outputs.attentions,
+        #     cross_attentions=decoder_outputs.cross_attentions,
+        #     encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+        #     encoder_hidden_states=encoder_outputs.hidden_states,
+        #     encoder_attentions=encoder_outputs.attentions,
+        # )
 
 
 @add_start_docstrings(

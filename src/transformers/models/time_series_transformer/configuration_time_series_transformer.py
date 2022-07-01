@@ -135,7 +135,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         self.num_feat_static_cat = num_feat_static_cat
         self.num_feat_static_real = num_feat_static_real
         self.cardinality = cardinality if cardinality and num_feat_static_cat > 0 else [1]
-        self.embedding_dimension = embedding_dimension
+        self.embedding_dimension = embedding_dimension or [min(50, (cat + 1) // 2) for cat in self.cardinality]
 
         # Transformer architecture parameters
         self.nhead = nhead
