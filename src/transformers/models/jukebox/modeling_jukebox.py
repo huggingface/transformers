@@ -410,10 +410,10 @@ class BottleneckBlock(nn.Module):
         self.k_elem = None
         # self.register_buffer('k',  torch.zeros(self.k_bins, self.emb_width).cuda())
 
-        if torch.cuda.is_available():
-            self.register_buffer("k", torch.zeros(self.k_bins, self.emb_width).to("cuda"))
-        else:
-            self.register_buffer("k", torch.zeros(self.k_bins, self.emb_width))
+        # if torch.cuda.is_available():
+        #     self.register_buffer("k", torch.zeros(self.k_bins, self.emb_width).to("cuda"))
+        # else:
+        self.register_buffer("k", torch.zeros(self.k_bins, self.emb_width))
 
     def _tile(self, x):
         d, ew = x.shape
@@ -827,7 +827,7 @@ class VQVAE(nn.Module):
         return zs
 
     def sample(self, n_samples):
-        zs = [torch.randint(0, self.l_bins, size=(n_samples, *z_shape), device="cuda") for z_shape in self.z_shapes]
+        zs = [torch.randint(0, self.l_bins, size=(n_samples, *z_shape), device="cpu") for z_shape in self.z_shapes]
         return self.decode(zs)
 
     def forward(self, x, hps, loss_fn="l1"):
@@ -2078,7 +2078,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
         else:
             assert x_cond is None
             x_cond = torch.zeros((N, 1, self.width), dtype=torch.float).to(
-                "cuda" if torch.cuda.is_available() else "cpu"
+                "cpu" if torch.cuda.is_available() else "cpu"
             )
 
         with torch.no_grad():
@@ -3336,7 +3336,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
                 )
                 for start in get_starts(total_length, prior.n_ctx, hop_length):
                     zs = self.sample_single_window(zs, labels, sampling_kwargs, level, start, hps)
-                    # progress.update(task1, advance=1)
+
         else:
             zs = self.sample_partial_window(zs, labels, sampling_kwargs, level, total_length, hps)
         return zs
