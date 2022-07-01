@@ -47,6 +47,7 @@ class TFGPTJModelTester:
         self.use_mc_token_ids = True
         self.vocab_size = 99
         self.hidden_size = 32
+        self.rotary_dim = 4
         self.num_hidden_layers = 5
         self.num_attention_heads = 4
         self.intermediate_size = 37
@@ -102,6 +103,7 @@ class TFGPTJModelTester:
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
+            rotary_dim=self.rotary_dim,
             return_dict=True,
         )
 
