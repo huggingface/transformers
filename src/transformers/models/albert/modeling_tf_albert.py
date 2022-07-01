@@ -113,20 +113,22 @@ class TFAlbertPreTrainingLoss:
 
             return masked_lm_loss + sentence_order_loss
 
-        unmasked_lm_losses = loss_fn(y_true=labels["labels"], y_pred=logits[0])
+        # Clip negative labels to zero here to avoid NaNs and errors - those positions will get masked later anyway
+        unmasked_lm_losses = loss_fn(y_true=tf.nn.relu(labels["labels"]), y_pred=logits[0])
         # make sure only labels that are not equal to -100
         # are taken into account for the loss computation
         lm_loss_mask = tf.cast(labels["labels"] != -100, dtype=unmasked_lm_losses.dtype)
         lm_loss_denominator = tf.reduce_sum(lm_loss_mask, axis=1)
-        masked_lm_losses = tf.math.multiply_no_nan(unmasked_lm_losses, lm_loss_mask)
+        masked_lm_losses = unmasked_lm_losses * lm_loss_mask
         reduced_masked_lm_loss = tf.reduce_sum(masked_lm_losses, axis=1) / lm_loss_denominator
 
         sop_logits = tf.reshape(logits[1], (-1, 2))
-        unmasked_sop_loss = loss_fn(y_true=labels["sentence_order_label"], y_pred=sop_logits)
+        # Clip negative labels to zero here to avoid NaNs and errors - those positions will get masked later anyway
+        unmasked_sop_loss = loss_fn(y_true=tf.nn.relu(labels["sentence_order_label"]), y_pred=sop_logits)
         sop_loss_mask = tf.cast(labels["sentence_order_label"] != -100, dtype=unmasked_sop_loss.dtype)
 
         # No reduction because this already has shape (num_samples,)
-        masked_sop_loss = tf.math.multiply_no_nan(unmasked_sop_loss, sop_loss_mask)
+        masked_sop_loss = unmasked_sop_loss * sop_loss_mask
 
         return reduced_masked_lm_loss + masked_sop_loss
 

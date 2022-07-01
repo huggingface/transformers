@@ -1364,12 +1364,13 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
             from_logits=from_logits,
             reduction=tf.keras.losses.Reduction.NONE,
         )
+
         unmasked_loss = loss_fn(labels, y_pred)
         loss_mask = labels != self.config.generator.pad_token_id
-        nll_loss = tf.reduce_sum(tf.math.multiply_no_nan(unmasked_loss, loss_mask))
+        nll_loss = tf.reduce_sum(unmasked_loss * loss_mask)
 
         # Matt: This makes no sense to me, but I'm just copying the old loss in XLA-compatible form
-        smooth_loss = -tf.reduce_sum(tf.math.multiply_no_nan(y_pred, tf.expand_dims(labels, -1)), axis=-1)
+        smooth_loss = -tf.reduce_sum(y_pred * tf.expand_dims(labels, -1), axis=-1)
         smooth_loss = tf.reduce_sum(smooth_loss)
         eps_i = smooth_epsilon / y_pred.shape[-1]
 

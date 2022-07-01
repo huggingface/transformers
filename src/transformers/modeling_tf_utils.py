@@ -202,12 +202,12 @@ class TFCausalLanguageModelingLoss:
             labels = tf.boolean_mask(tf.reshape(labels, (-1,)), active_loss)
             return loss_fn(labels, reduced_logits)
 
+        # Clip negative labels to zero here to avoid NaNs and errors - those positions will get masked later anyway
+        unmasked_loss = loss_fn(tf.nn.relu(labels), logits)
         # make sure only labels that are not equal to -100 affect the loss
-        unmasked_loss = loss_fn(labels, logits)
         loss_mask = tf.cast(labels != -100, dtype=unmasked_loss.dtype)
         loss_denominator = tf.reduce_sum(loss_mask, axis=1)
-        # Masked positions will have a loss of NaN because -100 is not a valid label
-        masked_loss = tf.math.multiply_no_nan(unmasked_loss, loss_mask)
+        masked_loss = unmasked_loss * loss_mask
         reduced_masked_loss = tf.reduce_sum(masked_loss, axis=1) / loss_denominator
         return reduced_masked_loss
 
@@ -259,13 +259,14 @@ class TFTokenClassificationLoss:
 
             return loss_fn(labels, reduced_logits)
 
-        unmasked_loss = loss_fn(labels, logits)
+        # Clip negative labels to zero here to avoid NaNs and errors - those positions will get masked later anyway
+        unmasked_loss = loss_fn(tf.nn.relu(labels), logits)
         # make sure only labels that are not equal to -100 or -1
         # are taken into account as loss
         loss_mask = tf.cast(labels >= 0, dtype=unmasked_loss.dtype)
         loss_denominator = tf.reduce_sum(loss_mask, axis=1)
         # Masked positions will have a loss of NaN because -100 and -1 are not valid labels
-        masked_loss = tf.math.multiply_no_nan(unmasked_loss, loss_mask)
+        masked_loss = unmasked_loss * loss_mask
         reduced_masked_loss = tf.reduce_sum(masked_loss, axis=1) / loss_denominator
         return reduced_masked_loss
 
@@ -335,10 +336,11 @@ class TFNextSentencePredictionLoss:
         # make sure only labels that are not equal to -100
         # are taken into account as loss
 
-        unmasked_ns_loss = loss_fn(y_true=labels, y_pred=logits)
+        # Clip negative labels to zero here to avoid NaNs and errors - those positions will get masked later anyway
+        unmasked_ns_loss = loss_fn(y_true=tf.nn.relu(labels), y_pred=logits)
         ns_loss_mask = tf.cast(labels != -100, dtype=unmasked_ns_loss.dtype)
         # Just zero out samples where label is -100, no reduction
-        masked_ns_loss = tf.math.multiply_no_nan(unmasked_ns_loss, ns_loss_mask)
+        masked_ns_loss = unmasked_ns_loss * ns_loss_mask
 
         return masked_ns_loss
 

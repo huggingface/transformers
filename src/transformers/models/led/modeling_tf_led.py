@@ -2514,11 +2514,11 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
             labels = tf.boolean_mask(melted_labels, active_loss)
             return loss_fn(labels, reduced_logits)
 
+        # Clip negative labels to zero here to avoid NaNs and errors - those positions will get masked later anyway
+        unmasked_loss = loss_fn(tf.nn.relu(labels), logits)
         # make sure only non-padding labels affect the loss
-        unmasked_loss = loss_fn(labels, logits)
         loss_mask = tf.cast(labels != self.config.pad_token_id, dtype=unmasked_loss.dtype)
         loss_denominator = tf.reduce_sum(loss_mask, axis=1)
-        # Masked positions will have a loss of NaN because -100 is not a valid label
-        masked_loss = tf.math.multiply_no_nan(unmasked_loss, loss_mask)
+        masked_loss = unmasked_loss * loss_mask
         reduced_masked_loss = tf.reduce_sum(masked_loss, axis=1) / loss_denominator
         return reduced_masked_loss
