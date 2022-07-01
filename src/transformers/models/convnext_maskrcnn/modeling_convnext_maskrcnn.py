@@ -31,8 +31,11 @@ from torch import nn
 from torch.nn.modules.utils import _pair
 
 from ...activations import ACT2FN
+
+# TODO maybe include these dependencies somewhere else
 from ...assign_result import AssignResult
-from ...losses import CrossEntropyLoss, L1Loss
+from ...losses import CrossEntropyLoss, L1Loss, accuracy
+from ...mask_target import mask_target
 from ...modeling_outputs import BaseModelOutputWithNoAttention, BaseModelOutputWithPoolingAndNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...sampling_result import SamplingResult
@@ -2551,7 +2554,16 @@ class ConvNextMaskRNNShared2FCBBoxHead(nn.Module):
     https://github.com/open-mmlab/mmdetection/blob/ca11860f4f3c3ca2ce8340e2686eeaec05b29111/mmdet/models/roi_heads/bbox_heads/convfc_bbox_head.py#L11.
     """
 
-    def __init__(self, config, roi_feat_size=7, fc_out_channels=1024, num_branch_fcs=2):
+    def __init__(
+        self,
+        config,
+        roi_feat_size=7,
+        fc_out_channels=1024,
+        num_branch_fcs=2,
+        reg_class_agnostic=False,
+        reg_decoded_bbox=False,
+        custom_activation=False,
+    ):
         super().__init__()
 
         # TODO make init attributes configurable
@@ -2579,6 +2591,18 @@ class ConvNextMaskRNNShared2FCBBoxHead(nn.Module):
         self.bbox_coder = ConvNextMaskRCNNDeltaXYWHBBoxCoder(
             target_means=config.bbox_head_bbox_coder_target_means, target_stds=config.bbox_head_bbox_coder_target_stds
         )
+
+        # TODO remove these hardcoded attributes
+        self.reg_class_agnostic = reg_class_agnostic
+        self.reg_decoded_bbox = reg_decoded_bbox
+        self.custom_activation = custom_activation
+
+        # losses
+        # based on config:
+        self.loss_cls = CrossEntropyLoss(
+            use_sigmoid=False
+        )  # this corresponds to dict(type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0))
+        self.loss_bbox = L1Loss()  # this corresponds to dict(type='L1Loss', loss_weight=1.0)
 
     def forward(self, hidden_states):
         # shared part
@@ -2642,6 +2666,154 @@ class ConvNextMaskRNNShared2FCBBoxHead(nn.Module):
 
             return det_bboxes, det_labels
 
+    def _get_target_single(self, pos_bboxes, neg_bboxes, pos_gt_bboxes, pos_gt_labels, cfg):
+        """Calculate the ground truth for proposals in the single image
+        Args:
+        according to the sampling results.
+            pos_bboxes (Tensor): Contains all the positive boxes,
+                has shape (num_pos, 4), the last dimension 4 represents [tl_x, tl_y, br_x, br_y].
+            neg_bboxes (Tensor): Contains all the negative boxes,
+                has shape (num_neg, 4), the last dimension 4 represents [tl_x, tl_y, br_x, br_y].
+            pos_gt_bboxes (Tensor): Contains gt_boxes for
+                all positive samples, has shape (num_pos, 4), the last dimension 4 represents [tl_x, tl_y, br_x, br_y].
+            pos_gt_labels (Tensor): Contains gt_labels for
+                all positive samples, has shape (num_pos, ).
+            cfg (obj:`ConfigDict`): `train_cfg` of R-CNN.
+        Returns:
+            Tuple[Tensor]: Ground truth for proposals in a single image. Containing the following Tensors:
+                - labels(Tensor): Gt_labels for all proposals, has shape (num_proposals,).
+                - label_weights(Tensor): Labels_weights for all proposals, has shape (num_proposals,).
+                - bbox_targets(Tensor):Regression target for all proposals, has shape (num_proposals, 4), the last
+                  dimension 4 represents [tl_x, tl_y, br_x, br_y].
+                - bbox_weights(Tensor):Regression weights for all proposals, has shape (num_proposals, 4).
+        """
+        num_pos = pos_bboxes.size(0)
+        num_neg = neg_bboxes.size(0)
+        num_samples = num_pos + num_neg
+
+        # original implementation uses new_zeros since BG are set to be 0
+        # now use empty & fill because BG cat_id = num_classes,
+        # FG cat_id = [0, num_classes-1]
+        labels = pos_bboxes.new_full((num_samples,), self.num_classes, dtype=torch.long)
+        label_weights = pos_bboxes.new_zeros(num_samples)
+        bbox_targets = pos_bboxes.new_zeros(num_samples, 4)
+        bbox_weights = pos_bboxes.new_zeros(num_samples, 4)
+        if num_pos > 0:
+            labels[:num_pos] = pos_gt_labels
+            pos_weight = 1.0 if cfg["pos_weight"] <= 0 else cfg["pos_weight"]
+            label_weights[:num_pos] = pos_weight
+            if not self.reg_decoded_bbox:
+                pos_bbox_targets = self.bbox_coder.encode(pos_bboxes, pos_gt_bboxes)
+            else:
+                # When the regression loss (e.g. `IouLoss`, `GIouLoss`)
+                # is applied directly on the decoded bounding boxes, both
+                # the predicted boxes and regression targets should be with
+                # absolute coordinate format.
+                pos_bbox_targets = pos_gt_bboxes
+            bbox_targets[:num_pos, :] = pos_bbox_targets
+            bbox_weights[:num_pos, :] = 1
+        if num_neg > 0:
+            label_weights[-num_neg:] = 1.0
+
+        return labels, label_weights, bbox_targets, bbox_weights
+
+    def get_targets(self, sampling_results, gt_bboxes, gt_labels, rcnn_train_cfg, concat=True):
+        """Calculate the ground truth for all samples in a batch according to the sampling_results. Almost the same as
+        the implementation in bbox_head, we passed additional parameters pos_inds_list and neg_inds_list to
+        `_get_target_single` function.
+
+        Args:
+            sampling_results (List[obj:SamplingResults]): Assign results of
+                all images in a batch after sampling.
+            gt_bboxes (list[Tensor]): Gt_bboxes of all images in a batch,
+                each tensor has shape (num_gt, 4), the last dimension 4 represents [tl_x, tl_y, br_x, br_y].
+            gt_labels (list[Tensor]): Gt_labels of all images in a batch,
+                each tensor has shape (num_gt,).
+            rcnn_train_cfg (obj:ConfigDict): `train_cfg` of RCNN. concat (bool): Whether to concatenate the results of
+            all
+                the images in a single batch.
+        Returns:
+            Tuple[Tensor]: Ground truth for proposals in a single image. Containing the following list of Tensors:
+                - labels (list[Tensor],Tensor): Gt_labels for all proposals in a batch, each tensor in list has shape
+                  (num_proposals,) when `concat=False`, otherwise just a single tensor has shape (num_all_proposals,).
+                - label_weights (list[Tensor]): Labels_weights for all proposals in a batch, each tensor in list has
+                  shape (num_proposals,) when `concat=False`, otherwise just a single tensor has shape
+                  (num_all_proposals,).
+                - bbox_targets (list[Tensor],Tensor): Regression target for all proposals in a batch, each tensor in
+                  list has shape (num_proposals, 4) when `concat=False`, otherwise just a single tensor has shape
+                  (num_all_proposals, 4), the last dimension 4 represents [tl_x, tl_y, br_x, br_y].
+                - bbox_weights (list[tensor],Tensor): Regression weights for all proposals in a batch, each tensor in
+                  list has shape (num_proposals, 4) when `concat=False`, otherwise just a single tensor has shape
+                  (num_all_proposals, 4).
+        """
+        pos_bboxes_list = [res.pos_bboxes for res in sampling_results]
+        neg_bboxes_list = [res.neg_bboxes for res in sampling_results]
+        pos_gt_bboxes_list = [res.pos_gt_bboxes for res in sampling_results]
+        pos_gt_labels_list = [res.pos_gt_labels for res in sampling_results]
+        labels, label_weights, bbox_targets, bbox_weights = multi_apply(
+            self._get_target_single,
+            pos_bboxes_list,
+            neg_bboxes_list,
+            pos_gt_bboxes_list,
+            pos_gt_labels_list,
+            cfg=rcnn_train_cfg,
+        )
+
+        if concat:
+            labels = torch.cat(labels, 0)
+            label_weights = torch.cat(label_weights, 0)
+            bbox_targets = torch.cat(bbox_targets, 0)
+            bbox_weights = torch.cat(bbox_weights, 0)
+        return labels, label_weights, bbox_targets, bbox_weights
+
+    def loss(
+        self, cls_score, bbox_pred, rois, labels, label_weights, bbox_targets, bbox_weights, reduction_override=None
+    ):
+        losses = dict()
+        if cls_score is not None:
+            avg_factor = max(torch.sum(label_weights > 0).float().item(), 1.0)
+            if cls_score.numel() > 0:
+                loss_cls_ = self.loss_cls(
+                    cls_score, labels, label_weights, avg_factor=avg_factor, reduction_override=reduction_override
+                )
+                if isinstance(loss_cls_, dict):
+                    losses.update(loss_cls_)
+                else:
+                    losses["loss_cls"] = loss_cls_
+                if self.custom_activation:
+                    acc_ = self.loss_cls.get_accuracy(cls_score, labels)
+                    losses.update(acc_)
+                else:
+                    losses["acc"] = accuracy(cls_score, labels)
+        if bbox_pred is not None:
+            bg_class_ind = self.num_classes
+            # 0~self.num_classes-1 are FG, self.num_classes is BG
+            pos_inds = (labels >= 0) & (labels < bg_class_ind)
+            # do not perform bounding box regression for BG anymore.
+            if pos_inds.any():
+                if self.reg_decoded_bbox:
+                    # When the regression loss (e.g. `IouLoss`,
+                    # `GIouLoss`, `DIouLoss`) is applied directly on
+                    # the decoded bounding boxes, it decodes the
+                    # already encoded coordinates to absolute format.
+                    bbox_pred = self.bbox_coder.decode(rois[:, 1:], bbox_pred)
+                if self.reg_class_agnostic:
+                    pos_bbox_pred = bbox_pred.view(bbox_pred.size(0), 4)[pos_inds.type(torch.bool)]
+                else:
+                    pos_bbox_pred = bbox_pred.view(bbox_pred.size(0), -1, 4)[
+                        pos_inds.type(torch.bool), labels[pos_inds.type(torch.bool)]
+                    ]
+                losses["loss_bbox"] = self.loss_bbox(
+                    pos_bbox_pred,
+                    bbox_targets[pos_inds.type(torch.bool)],
+                    bbox_weights[pos_inds.type(torch.bool)],
+                    avg_factor=bbox_targets.size(0),
+                    reduction_override=reduction_override,
+                )
+            else:
+                losses["loss_bbox"] = bbox_pred[pos_inds].sum()
+        return losses
+
 
 class ConvNextMaskRCNNFCNMaskHead(nn.Module):
     """ """
@@ -2680,6 +2852,34 @@ class ConvNextMaskRCNNFCNMaskHead(nn.Module):
         x = self.relu(x)
         mask_pred = self.conv_logits(x)
         return mask_pred
+
+    def get_targets(self, sampling_results, gt_masks, rcnn_train_cfg):
+        pos_proposals = [res.pos_bboxes for res in sampling_results]
+        pos_assigned_gt_inds = [res.pos_assigned_gt_inds for res in sampling_results]
+        mask_targets = mask_target(pos_proposals, pos_assigned_gt_inds, gt_masks, rcnn_train_cfg)
+        return mask_targets
+
+    def loss(self, mask_pred, mask_targets, labels):
+        """
+        Example:
+            >>> from mmdet.models.roi_heads.mask_heads.fcn_mask_head import * # NOQA >>> N = 7 # N = number of
+            extracted ROIs >>> C, H, W = 11, 32, 32 >>> # Create example instance of FCN Mask Head. >>> # There are
+            lots of variations depending on the configuration >>> self = FCNMaskHead(num_classes=C, num_convs=1) >>>
+            inputs = torch.rand(N, self.in_channels, H, W) >>> mask_pred = self.forward(inputs) >>> sf =
+            self.scale_factor >>> labels = torch.randint(0, C, size=(N,)) >>> # With the default properties the mask
+            targets should indicate >>> # a (potentially soft) single-class label >>> mask_targets = torch.rand(N, H *
+            sf, W * sf) >>> loss = self.loss(mask_pred, mask_targets, labels) >>> print('loss = {!r}'.format(loss))
+        """
+        loss = dict()
+        if mask_pred.size(0) == 0:
+            loss_mask = mask_pred.sum()
+        else:
+            if self.class_agnostic:
+                loss_mask = self.loss_mask(mask_pred, mask_targets, torch.zeros_like(labels))
+            else:
+                loss_mask = self.loss_mask(mask_pred, mask_targets, labels)
+        loss["loss_mask"] = loss_mask
+        return loss
 
     def get_seg_masks(self, mask_pred, det_bboxes, det_labels, rcnn_test_cfg, ori_shape, scale_factor, rescale):
         """Get segmentation masks from mask_pred and bboxes.
@@ -2829,6 +3029,9 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
             add_gt_as_proposals=config.rcnn_sampler_add_gt_as_proposals,
         )
 
+        # TODO remove this hardcoded variable
+        self.share_roi_extractor = False
+
     @property
     def with_bbox(self):
         """bool: whether the RoI head contains a `bbox_head`"""
@@ -2856,6 +3059,7 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         bbox_results = self._bbox_forward(x, rois)
 
         bbox_targets = self.bbox_head.get_targets(sampling_results, gt_bboxes, gt_labels, self.train_cfg)
+        print("Bbox_targets:", bbox_targets)
         loss_bbox = self.bbox_head.loss(bbox_results["cls_score"], bbox_results["bbox_pred"], rois, *bbox_targets)
 
         bbox_results.update(loss_bbox=loss_bbox)
@@ -3076,14 +3280,22 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         # bbox head forward and loss
         if self.with_bbox:
             bbox_results = self._bbox_forward_train(x, sampling_results, gt_bboxes, gt_labels, img_metas)
+
+            print("Cls_score:", bbox_results["cls_score"].shape)
+            print("Cls_score first values:", bbox_results["cls_score"][:3, :3])
+            print("Bbox_pred shape:", bbox_results["bbox_pred"].shape)
+            print("Bbox_pred first values:", bbox_results["bbox_pred"][:3, :3])
+            print("Bbox feats shape:", bbox_results["bbox_feats"].shape)
+            print("Bbox feats first values:", bbox_results["bbox_feats"][0, 0, :3, :3])
+            print("Bbox loss:", bbox_results["loss_bbox"])
             losses.update(bbox_results["loss_bbox"])
 
-        # mask head forward and loss
-        if self.with_mask:
-            mask_results = self._mask_forward_train(
-                x, sampling_results, bbox_results["bbox_feats"], gt_masks, img_metas
-            )
-            losses.update(mask_results["loss_mask"])
+        # TODO mask head forward and loss
+        # if self.with_mask:
+        #     mask_results = self._mask_forward_train(
+        #         x, sampling_results, bbox_results["bbox_feats"], gt_masks, img_metas
+        #     )
+        #     losses.update(mask_results["loss_mask"])
 
         return losses
 
@@ -3284,6 +3496,7 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
                 )
             ]
         losses = dict()
+        results = None
         if labels is not None:
             rpn_losses, proposal_list = self.rpn_head.forward_train(
                 hidden_states,
