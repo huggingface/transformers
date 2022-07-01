@@ -86,7 +86,7 @@ class TFAlbertPreTrainingLoss:
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction=tf.keras.losses.Reduction.NONE
         )
-        if self.config.get("tf_legacy_loss", False):
+        if self.config.tf_legacy_loss:
             # make sure only labels that are not equal to -100
             # are taken into account as loss
             masked_lm_active_loss = tf.not_equal(tf.reshape(tensor=labels["labels"], shape=(-1,)), -100)

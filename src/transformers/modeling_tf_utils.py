@@ -195,7 +195,7 @@ class TFCausalLanguageModelingLoss:
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction=tf.keras.losses.Reduction.NONE
         )
-        if self.config.get("tf_legacy_loss", False):
+        if self.config.tf_legacy_loss:
             # make sure only labels that are not equal to -100 affect the loss
             active_loss = tf.not_equal(tf.reshape(labels, (-1,)), -100)
             reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
@@ -246,7 +246,7 @@ class TFTokenClassificationLoss:
             if tf.math.reduce_any(labels == -1):
                 tf.print("Using `-1` to mask the loss for the token is deprecated. Please use `-100` instead.")
 
-        if self.config.get("tf_legacy_loss", False):
+        if self.config.tf_legacy_loss:
             # make sure only labels that are not equal to -100
             # are taken into account as loss
             if tf.math.reduce_any(labels == -1):
@@ -323,7 +323,7 @@ class TFNextSentencePredictionLoss:
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction=tf.keras.losses.Reduction.NONE
         )
-        if self.config.get("tf_legacy_loss", False):
+        if self.config.tf_legacy_loss:
             # make sure only labels that are not equal to -100
             # are taken into account as loss
             next_sentence_active_loss = tf.not_equal(tf.reshape(labels, (-1,)), -100)
