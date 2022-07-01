@@ -781,12 +781,13 @@ class PipelineRegistryTest(unittest.TestCase):
         # (otherwise the subsequential tests in `TextClassificationPipelineTests` will fail)
         original_task, original_task_options = PIPELINE_REGISTRY.check_task(alias)
 
-        with CaptureLogger(logger_) as cm:
-            PIPELINE_REGISTRY.register_pipeline(alias, {})
-        self.assertIn(f"{alias} is already registered", cm.out)
-
-        # restore
-        PIPELINE_REGISTRY.register_pipeline(alias, original_task)
+        try:
+            with CaptureLogger(logger_) as cm:
+                PIPELINE_REGISTRY.register_pipeline(alias, {})
+            self.assertIn(f"{alias} is already registered", cm.out)
+        finally:
+            # restore
+            PIPELINE_REGISTRY.register_pipeline(alias, original_task)
 
     @require_torch
     def test_register_pipeline(self):
