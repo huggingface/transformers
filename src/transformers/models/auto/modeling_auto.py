@@ -97,6 +97,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("nystromformer", "NystromformerModel"),
         ("openai-gpt", "OpenAIGPTModel"),
         ("opt", "OPTModel"),
+        ("owlvit", "OwlViTModel"),
         ("pegasus", "PegasusModel"),
         ("perceiver", "PerceiverModel"),
         ("plbart", "PLBartModel"),
@@ -428,6 +429,7 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
         # Model for Object Detection mapping
         ("detr", "DetrForObjectDetection"),
         ("yolos", "YolosForObjectDetection"),
+        ("owlvit", "OwlViTForObjectDetection"),
     ]
 )
 
