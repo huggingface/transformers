@@ -17,7 +17,7 @@
 import numpy as np
 
 from ...utils import logging
-from ..t5.modeling_flax_t5 import FlaxT5ForConditionalGeneration, FlaxT5Model
+from ..t5.modeling_flax_t5 import FlaxT5EncoderModel, FlaxT5ForConditionalGeneration, FlaxT5Model
 from .configuration_mt5 import MT5Config
 
 
@@ -61,6 +61,33 @@ class FlaxMT5Model(FlaxT5Model):
     ...     decoder_input_ids = tokenizer(summary, return_tensors="np").input_ids
 
     >>> outputs = model(input_ids=inputs["input_ids"], decoder_input_ids=decoder_input_ids)
+    >>> hidden_states = outputs.last_hidden_state
+    ```"""
+    model_type = "mt5"
+    config_class = MT5Config
+
+
+class FlaxMT5EncoderModel(FlaxT5EncoderModel):
+    r"""
+    This class overrides [`FlaxT5EncoderModel`]. Please check the superclass for the appropriate documentation
+    alongside usage examples.
+
+    Examples:
+
+    ```python
+    >>> from transformers import FlaxT5EncoderModel, T5Tokenizer
+
+    >>> model = FlaxT5EncoderModel.from_pretrained("google/mt5-small")
+    >>> tokenizer = T5Tokenizer.from_pretrained("google/mt5-small")
+
+    >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
+    >>> summary = "Weiter Verhandlung in Syrien."
+    >>> inputs = tokenizer(article, return_tensors="np")
+
+    >>> with tokenizer.as_target_tokenizer():
+    ...     decoder_input_ids = tokenizer(summary, return_tensors="np").input_ids
+
+    >>> outputs = model(input_ids=inputs["input_ids"])
     >>> hidden_states = outputs.last_hidden_state
     ```"""
     model_type = "mt5"

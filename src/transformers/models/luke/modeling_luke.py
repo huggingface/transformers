@@ -1076,7 +1076,7 @@ class LukeModel(LukePreTrainedModel):
             raise ValueError(f"Wrong shape for attention_mask (shape {attention_mask.shape})")
 
         extended_attention_mask = extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-        extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
+        extended_attention_mask = (1.0 - extended_attention_mask) * torch.finfo(self.dtype).min
         return extended_attention_mask
 
 

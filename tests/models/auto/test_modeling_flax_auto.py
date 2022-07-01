@@ -77,7 +77,6 @@ class FlaxAutoModelTest(unittest.TestCase):
 
             eval(**tokens).block_until_ready()
 
-    @unittest.skip("Temp bug in the Hub not returning RepoNotFound errors.")
     def test_repo_not_found(self):
         with self.assertRaisesRegex(
             EnvironmentError, "bert-base is not a local folder and is not a valid model identifier"

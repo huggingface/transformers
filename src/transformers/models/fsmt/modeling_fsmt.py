@@ -323,8 +323,8 @@ def _prepare_fsmt_decoder_inputs(
         decoder_padding_mask = make_padding_mask(decoder_input_ids, pad_token_id)
     else:
         decoder_padding_mask = invert_mask(decoder_padding_mask)
-    causal_mask = triu_onnx(fill_with_neg_inf(torch.zeros(tgt_len, tgt_len)), 1).to(
-        dtype=causal_mask_dtype, device=decoder_input_ids.device
+    causal_mask = triu_onnx(fill_with_neg_inf(torch.zeros(tgt_len, tgt_len, dtype=causal_mask_dtype)), 1).to(
+        device=decoder_input_ids.device
     )
     return decoder_input_ids, decoder_padding_mask, causal_mask
 
@@ -908,7 +908,7 @@ class Attention(nn.Module):
         if key_padding_mask is not None:  # don't attend to padding symbols
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
             reshaped = key_padding_mask.unsqueeze(1).unsqueeze(2)
-            attn_weights = attn_weights.masked_fill(reshaped, float("-inf"))
+            attn_weights = attn_weights.masked_fill(reshaped, torch.finfo(attn_weights.dtype).min)
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -975,7 +975,7 @@ class Attention(nn.Module):
 
 def fill_with_neg_inf(t):
     """FP16-compatible function that fills a input_ids with -inf."""
-    return t.float().fill_(float("-inf")).type_as(t)
+    return t.float().fill_(torch.finfo(t.dtype).min).type_as(t)
 
 
 # Public API

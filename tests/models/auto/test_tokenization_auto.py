@@ -142,7 +142,6 @@ class AutoTokenizerTest(unittest.TestCase):
 
             self.assertEqual(tokenizer.model_max_length, 512)
 
-    @unittest.skip("Temp bug in the Hub not returning RepoNotFound errors.")
     @require_tokenizers
     def test_tokenizer_identifier_non_existent(self):
         for tokenizer_class in [BertTokenizer, BertTokenizerFast, AutoTokenizer]:
@@ -330,7 +329,6 @@ class AutoTokenizerTest(unittest.TestCase):
         else:
             self.assertEqual(tokenizer.__class__.__name__, "NewTokenizer")
 
-    @unittest.skip("Temp bug in the Hub not returning RepoNotFound errors.")
     def test_repo_not_found(self):
         with self.assertRaisesRegex(
             EnvironmentError, "bert-base is not a local folder and is not a valid model identifier"

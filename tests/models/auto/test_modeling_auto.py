@@ -328,7 +328,6 @@ class AutoModelTest(unittest.TestCase):
                 if CustomConfig in mapping._extra_content:
                     del mapping._extra_content[CustomConfig]
 
-    @unittest.skip("Temp bug in the Hub not returning RepoNotFound errors.")
     def test_repo_not_found(self):
         with self.assertRaisesRegex(
             EnvironmentError, "bert-base is not a local folder and is not a valid model identifier"

@@ -19,7 +19,7 @@ permite utilizar modelos de última geração sem ter que treinar um novo desde 
 O 🤗 Transformers proporciona acesso a milhares de modelos pré-treinados numa ampla gama de tarefas.
 Quando utilizar um modelo pré-treinado, treine-o com um dataset específico para a sua tarefa.
 Isto é chamado de fine-tuning, uma técnica de treinamento incrivelmente poderosa. Neste tutorial faremos o fine-tuning
-a um modelo pré-treinado com um framework de Deep Learning de sua escolha:
+de um modelo pré-treinado com um framework de Deep Learning da sua escolha:
 
 * Fine-tuning de um modelo pré-treinado com o 🤗 Transformers [`Trainer`].
 * Fine-tuning de um modelo pré-treinado no TensorFlow com o Keras.
@@ -78,7 +78,7 @@ Se desejar, é possível criar um subconjunto menor do dataset completo para apl
 <Youtube id="nvBXf7s7vTI"/>
 
 O 🤗 Transformers proporciona uma classe [`Trainer`] otimizada para o treinamento de modelos de 🤗 Transformers,
-facilitando os primeiros passos do treinamento sem a necessidade de escrever manualmente seu próprio ciclo.
+facilitando os primeiros passos do treinamento sem a necessidade de escrever manualmente o seu próprio ciclo.
 A API do [`Trainer`] suporta um grande conjunto de opções de treinamento e funcionalidades, como o logging,
 o gradient accumulation e o mixed precision.
 
@@ -131,8 +131,8 @@ uma função de [`accuracy`](https://huggingface.co/metrics/accuracy) simples qu
 >>> metric = load_metric("accuracy")
 ```
 
-Defina a função `compute` dentro de `metric` para calcular a precisão de suas predições.
-Antes de passar suas predições ao `compute`, é necessário converter as predições à logits (lembre-se que
+Defina a função `compute` dentro de `metric` para calcular a precisão das suas predições.
+Antes de passar as suas predições ao `compute`, é necessário converter as predições à logits (lembre-se que
 todos os modelos de 🤗 Transformers retornam logits).
 
 ```py
@@ -142,8 +142,8 @@ todos os modelos de 🤗 Transformers retornam logits).
 ...     return metric.compute(predictions=predictions, references=labels)
 ```
 
-Se quiser controlar suas métricas de avaliação durante o fine-tuning, especifique o parâmetro `evaluation_strategy`
-em seus argumentos de treinamento para que o modelo leve em conta a métrica de avaliação ao final de cada época:
+Se quiser controlar as suas métricas de avaliação durante o fine-tuning, especifique o parâmetro `evaluation_strategy`
+nos seus argumentos de treinamento para que o modelo considere a métrica de avaliação ao final de cada época:
 
 ```py
 >>> from transformers import TrainingArguments
@@ -153,7 +153,7 @@ em seus argumentos de treinamento para que o modelo leve em conta a métrica de 
 
 ### Trainer
 
-Crie um objeto [`Trainer`] com seu modelo, argumentos de treinamento, conjuntos de dados de treinamento e de teste, e sua função de avaliação:
+Crie um objeto [`Trainer`] com o seu modelo, argumentos de treinamento, conjuntos de dados de treinamento e de teste, e a sua função de avaliação:
 
 ```py
 >>> trainer = Trainer(
@@ -251,7 +251,7 @@ faria com qualquer outro modelo do Keras:
 <Youtube id="Dh9CL8fyG80"/>
 
 O [`Trainer`] se encarrega do ciclo de treinamento e permite aplicar o fine-tuning a um modelo em uma linha de código apenas.
-Para os usuários que preferirem escrever seu próprio ciclo de treinamento, também é possível aplicar o fine-tuning a um
+Para os usuários que preferirem escrever o seu próprio ciclo de treinamento, também é possível aplicar o fine-tuning a um
 modelo de 🤗 Transformers em PyTorch nativo.
 
 Neste momento, talvez ocorra a necessidade de reinicar seu notebook ou executar a seguinte linha de código para liberar
@@ -293,7 +293,7 @@ Em sequência, crie um subconjunto menor do dataset, como foi mostrado anteriorm
 
 ### DataLoader
 
-Crie um `DataLoader` para seus datasets de treinamento e de teste para poder iterar sobre batches de dados:
+Crie um `DataLoader` para os seus datasets de treinamento e de teste para poder iterar sobre batches de dados:
 
 ```py
 >>> from torch.utils.data import DataLoader
@@ -352,7 +352,6 @@ em uma CPU pode acabar levando várias horas em vez de minutos.
 </Tip>
 
 Perfeito, agora estamos prontos para começar o treinamento! 🥳
-Genial, ¡ahora estamos listos entrenar! 🥳
 
 ### Ciclo de treinamento
 
