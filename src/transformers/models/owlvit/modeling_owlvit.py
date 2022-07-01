@@ -751,16 +751,17 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import CLIPTokenizer, OwlViTTextModel
+        >>> from transformers import OwlViTProcessor, OwlViTTextModel
 
-        >>> model = OwlViTTextModel.from_pretrained("google/owlvit-base")
-        >>> tokenizer = OwlViTTokenizer.from_pretrained("google/owlvit-base")
+        >>> model = OwlViTTextModel.from_pretrained("google/owlvit-base-patch32")
+        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
 
-        >>> inputs = tokenizer([["a photo of a cat", "a photo of a dog"]], padding=True, return_tensors="pt")
-
+        >>> inputs = processor(text=[["a photo of a cat", "a photo of a dog"], ["photo of a astranout"]], return_tensors="pt")
         >>> outputs = model(**inputs)
-        >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
+
+        >>> for output in outputs:  # loop over sets of text queries
+        >>>     last_hidden_state = output.last_hidden_state
+        >>>     pooled_output = output.pooler_output  # pooled (EOS token) states
         ```"""
         batch_size = input_ids.shape[0]
 
@@ -871,8 +872,8 @@ class OwlViTVisionModel(OwlViTPreTrainedModel):
         >>> import requests
         >>> from transformers import OwlViTProcessor, OwlViTVisionModel
 
-        >>> model = OwlViTVisionModel.from_pretrained("google/owlvit-base")
-        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base")
+        >>> model = OwlViTVisionModel.from_pretrained("google/owlvit-base-patch32")
+        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -944,12 +945,12 @@ class OwlViTModel(OwlViTPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import CLIPTokenizer, OwlViTModel
+        >>> from transformers import OwlViTProcessor, OwlViTModel
 
-        >>> model = OwlViTModel.from_pretrained("google/owlvit-base")
-        >>> tokenizer = CLIPTokenizer.from_pretrained("google/owlvit-base")
+        >>> model = OwlViTModel.from_pretrained("google/owlvit-base-patch32")
+        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
 
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
+        >>> inputs = processor(text=[["a photo of a cat", "a photo of a dog"], ["photo of a astranout"]], return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
         ```"""
         # Use OWLVIT model's config for some fields (if specified) instead of those of vision & text components.
@@ -1059,14 +1060,14 @@ class OwlViTModel(OwlViTPreTrainedModel):
         >>> import requests
         >>> from transformers import OwlViTProcessor, OwlViTModel
 
-        >>> model = OwlViTModel.from_pretrained("google/owlvit-base")
-        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base")
+        >>> model = OwlViTModel.from_pretrained("google/owlvit-base-patch32")
+        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> inputs = processor(
-        ...     text=[["a photo of a cat", "a photo of a dog"]], images=image, return_tensors="pt", padding=True
+        ...     text=[["a photo of a cat", "a photo of a dog"]], images=image, return_tensors="pt"
         ... )
 
         >>> outputs = model(**inputs)
@@ -1372,7 +1373,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> inputs = processor(
-        ...     text=[["a photo of a cat", "a photo of a dog"]], images=image, return_tensors="pt", padding=True
+        ...     text=[["a photo of a cat", "a photo of a dog"]], images=image, return_tensors="pt"
         ... )
 
         >>> outputs = model(**inputs)
