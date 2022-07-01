@@ -18,14 +18,15 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...utils import  _LazyModule, OptionalDependencyNotAvailable, is_tokenizers_available
+from ...utils import _LazyModule, OptionalDependencyNotAvailable, is_tokenizers_available
 from ...utils import is_torch_available
 
 
-
-
 _import_structure = {
-    "configuration_time_series_transformer": ["TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TimeSeriesTransformerConfig"],
+    "configuration_time_series_transformer": [
+        "TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "TimeSeriesTransformerConfig",
+    ],
     "tokenization_time_series_transformer": ["TimeSeriesTransformerTokenizer"],
 }
 
@@ -54,19 +55,11 @@ else:
     ]
 
 
-
-
 if TYPE_CHECKING:
-    from .configuration_time_series_transformer import TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, TimeSeriesTransformerConfig
-    from .tokenization_time_series_transformer import TimeSeriesTransformerTokenizer
-
-    try:
-        if not is_tokenizers_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tokenization_time_series_transformer_fast import TimeSeriesTransformerTokenizerFast
+    from .configuration_time_series_transformer import (
+        TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        TimeSeriesTransformerConfig,
+    )
 
     try:
         if not is_torch_available():
@@ -83,8 +76,6 @@ if TYPE_CHECKING:
             TimeSeriesTransformerModel,
             TimeSeriesTransformerPreTrainedModel,
         )
-
-
 
 else:
     import sys

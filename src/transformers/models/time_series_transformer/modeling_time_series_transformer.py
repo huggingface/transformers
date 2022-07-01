@@ -39,7 +39,7 @@ from ...modeling_outputs import (
     Seq2SeqModelOutput,
     Seq2SeqQuestionAnsweringModelOutput,
     Seq2SeqSequenceClassifierOutput,
-    CausalLMOutputWithCrossAttentions
+    CausalLMOutputWithCrossAttentions,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
@@ -89,9 +89,7 @@ def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
 
-def _expand_mask(
-    mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None
-):
+def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
@@ -141,7 +139,7 @@ class TimeSeriesTransformerAttention(nn.Module):
         assert (
             self.head_dim * num_heads == self.embed_dim
         ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads})."
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -313,7 +311,9 @@ class TimeSeriesTransformerEncoderLayer(nn.Module):
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
 
-        if hidden_states.dtype == torch.float16 and (torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any()):
+        if hidden_states.dtype == torch.float16 and (
+            torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any()
+        ):
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
@@ -480,7 +480,7 @@ class TimeSeriesTransformerPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-    
+
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, (TimeSeriesTransformerDecoder, TimeSeriesTransformerEncoder)):
             module.gradient_checkpointing = value
@@ -964,7 +964,9 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
-        attention_mask = self._prepare_decoder_attention_mask(attention_mask, input_shape, inputs_embeds, past_key_values_length)
+        attention_mask = self._prepare_decoder_attention_mask(
+            attention_mask, input_shape, inputs_embeds, past_key_values_length
+        )
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
@@ -1004,7 +1006,9 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
             if self.gradient_checkpointing and self.training:
 
                 if use_cache:
-                    logger.warning("`use_cache = True` is incompatible with gradient checkpointing`. Setting `use_cache = False`...")
+                    logger.warning(
+                        "`use_cache = True` is incompatible with gradient checkpointing`. Setting `use_cache = False`..."
+                    )
                     use_cache = False
 
                 def create_custom_forward(module):
@@ -1181,7 +1185,8 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The TimeSeriesTransformer Model with a language modeling head. Can be used for summarization.", TIME_SERIES_TRANSFORMER_START_DOCSTRING
+    "The TimeSeriesTransformer Model with a language modeling head. Can be used for summarization.",
+    TIME_SERIES_TRANSFORMER_START_DOCSTRING,
 )
 class TimeSeriesTransformerForConditionalGeneration(TimeSeriesTransformerPreTrainedModel):
     base_model_prefix = "model"
@@ -1272,8 +1277,7 @@ class TimeSeriesTransformerForConditionalGeneration(TimeSeriesTransformerPreTrai
         >>> values, predictions = probs.topk(5)
 
         >>> tokenizer.decode(predictions).split()
-        ```
-"""
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
@@ -1281,7 +1285,9 @@ class TimeSeriesTransformerForConditionalGeneration(TimeSeriesTransformerPreTrai
                 logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
             use_cache = False
             if decoder_input_ids is None:
-                decoder_input_ids = shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
+                decoder_input_ids = shift_tokens_right(
+                    labels, self.config.pad_token_id, self.config.decoder_start_token_id
+                )
 
         outputs = self.model(
             input_ids,
@@ -1591,6 +1597,7 @@ class TimeSeriesTransformerForQuestionAnswering(TimeSeriesTransformerPreTrainedM
             encoder_attentions=outputs.encoder_attentions,
         )
 
+
 class TimeSeriesTransformerDecoderWrapper(TimeSeriesTransformerPreTrainedModel):
     """
     This wrapper class is a helper class to correctly load pretrained checkpoints when the causal language model is
@@ -1728,8 +1735,7 @@ class TimeSeriesTransformerForCausalLM(TimeSeriesTransformerPreTrainedModel):
         >>> outputs = model(**inputs)
 
         >>> logits = outputs.logits
-        ```
-"""
+        ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
