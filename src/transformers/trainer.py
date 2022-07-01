@@ -384,13 +384,12 @@ class Trainer:
             if args.local_rank == -1:
                 raise ValueError("Using fsdp only works in distributed training.")
 
-            #  dep_version_check("torch>=1.12.0.dev20220418+cu113")
-            # Would have to update setup.py with torch>=1.12.0.dev20220418+cu113
-            # which isn't ideally given that it's a dev version
-            # and it will force people not using FSDP to also use torch>=1.12.0.dev20220418+cu113
+            # dep_version_check("torch>=1.12.0")
+            # Would have to update setup.py with torch>=1.12.0
+            # which isn't ideally given that it will force people not using FSDP to also use torch>=1.12.0
             # below is the current alternative.
-            if version.parse(torch.__version__) < version.parse("1.12.0.dev20220418+cu113"):
-                raise ValueError("FSDP requires PyTorch >= 1.12.0.dev20220418+cu113")
+            if version.parse(torch.__version__) < version.parse("1.12.0"):
+                raise ValueError("FSDP requires PyTorch >= 1.12.0")
 
             from torch.distributed.fsdp.fully_sharded_data_parallel import ShardingStrategy
 
@@ -1285,7 +1284,7 @@ class Trainer:
             # PyTorch FSDP!
             from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload
             from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
-            from torch.distributed.fsdp.wrap import default_auto_wrap_policy
+            from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy
 
             if FSDPOption.OFFLOAD in self.args.fsdp:
                 cpu_offload = CPUOffload(offload_params=True)
@@ -1296,7 +1295,7 @@ class Trainer:
             if FSDPOption.AUTO_WRAP in self.args.fsdp:
                 if self.args.fsdp_min_num_params > 0:
                     auto_wrap_policy = functools.partial(
-                        default_auto_wrap_policy, min_num_params=self.args.fsdp_min_num_params
+                        size_based_auto_wrap_policy, min_num_params=self.args.fsdp_min_num_params
                     )
 
             if type(model) != FSDP:
