@@ -122,6 +122,7 @@ from . import (
     speech_encoder_decoder,
     speech_to_text,
     speech_to_text_2,
+    speecht5,
     splinter,
     squeezebert,
     swin,

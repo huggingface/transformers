@@ -1942,6 +1942,30 @@ class TFSpeech2TextPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+TF_SPEECHT5_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFSpeecht5ForCTC(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFSpeecht5Model(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFSpeecht5PreTrainedModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 

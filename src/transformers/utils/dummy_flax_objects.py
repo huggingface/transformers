@@ -977,6 +977,34 @@ class FlaxSpeechEncoderDecoderModel(metaclass=DummyObject):
         requires_backends(self, ["flax"])
 
 
+class FlaxSpeecht5ForCTC(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxSpeecht5ForPreTraining(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxSpeecht5Model(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxSpeecht5PreTrainedModel(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
 class FlaxT5EncoderModel(metaclass=DummyObject):
     _backends = ["flax"]
 

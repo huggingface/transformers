@@ -114,6 +114,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("sew", "SEWModel"),
         ("sew-d", "SEWDModel"),
         ("speech_to_text", "Speech2TextModel"),
+        ("speecht5", "Speecht5Model"),
         ("splinter", "SplinterModel"),
         ("squeezebert", "SqueezeBertModel"),
         ("swin", "SwinModel"),
@@ -176,6 +177,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("openai-gpt", "OpenAIGPTLMHeadModel"),
         ("retribert", "RetriBertModel"),
         ("roberta", "RobertaForMaskedLM"),
+        ("speecht5", "Speecht5ForPreTraining"),
         ("splinter", "SplinterForPreTraining"),
         ("squeezebert", "SqueezeBertForMaskedLM"),
         ("t5", "T5ForConditionalGeneration"),
@@ -243,6 +245,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("roberta", "RobertaForMaskedLM"),
         ("roformer", "RoFormerForMaskedLM"),
         ("speech_to_text", "Speech2TextForConditionalGeneration"),
+        ("speecht5", "Speecht5ForMaskedLM"),
         ("squeezebert", "SqueezeBertForMaskedLM"),
         ("t5", "T5ForConditionalGeneration"),
         ("tapas", "TapasForMaskedLM"),
@@ -413,6 +416,7 @@ MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
         ("rembert", "RemBertForMaskedLM"),
         ("roberta", "RobertaForMaskedLM"),
         ("roformer", "RoFormerForMaskedLM"),
+        ("speecht5", "Speecht5ForMaskedLM"),
         ("squeezebert", "SqueezeBertForMaskedLM"),
         ("tapas", "TapasForMaskedLM"),
         ("wav2vec2", "Wav2Vec2ForMaskedLM"),
@@ -675,6 +679,7 @@ MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("hubert", "HubertForSequenceClassification"),
         ("sew", "SEWForSequenceClassification"),
         ("sew-d", "SEWDForSequenceClassification"),
+        ("speecht5", "Speecht5ForSequenceClassification"),
         ("unispeech", "UniSpeechForSequenceClassification"),
         ("unispeech-sat", "UniSpeechSatForSequenceClassification"),
         ("wav2vec2", "Wav2Vec2ForSequenceClassification"),
@@ -691,6 +696,7 @@ MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
         ("mctct", "MCTCTForCTC"),
         ("sew", "SEWForCTC"),
         ("sew-d", "SEWDForCTC"),
+        ("speecht5", "Speecht5ForCTC"),
         ("unispeech", "UniSpeechForCTC"),
         ("unispeech-sat", "UniSpeechSatForCTC"),
         ("wav2vec2", "Wav2Vec2ForCTC"),
@@ -703,6 +709,7 @@ MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Audio Classification mapping
         ("data2vec-audio", "Data2VecAudioForAudioFrameClassification"),
+        ("speecht5", "Speecht5ForAudioFrameClassification"),
         ("unispeech-sat", "UniSpeechSatForAudioFrameClassification"),
         ("wav2vec2", "Wav2Vec2ForAudioFrameClassification"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerForAudioFrameClassification"),
@@ -714,6 +721,7 @@ MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES = OrderedDict(
     [
         # Model for Audio Classification mapping
         ("data2vec-audio", "Data2VecAudioForXVector"),
+        ("speecht5", "Speecht5ForXVector"),
         ("unispeech-sat", "UniSpeechSatForXVector"),
         ("wav2vec2", "Wav2Vec2ForXVector"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerForXVector"),

@@ -225,6 +225,7 @@ else:
             ("roformer", ("RoFormerTokenizer", "RoFormerTokenizerFast" if is_tokenizers_available() else None)),
             ("speech_to_text", ("Speech2TextTokenizer" if is_sentencepiece_available() else None, None)),
             ("speech_to_text_2", ("Speech2Text2Tokenizer", None)),
+            ("speecht5", ("Wav2Vec2CTCTokenizer", None)),
             ("splinter", ("SplinterTokenizer", "SplinterTokenizerFast")),
             (
                 "squeezebert",

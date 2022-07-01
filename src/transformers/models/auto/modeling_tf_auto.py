@@ -67,6 +67,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("roberta", "TFRobertaModel"),
         ("roformer", "TFRoFormerModel"),
         ("speech_to_text", "TFSpeech2TextModel"),
+        ("speecht5", "TFSpeecht5Model"),
         ("swin", "TFSwinModel"),
         ("t5", "TFT5Model"),
         ("tapas", "TFTapasModel"),

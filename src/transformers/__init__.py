@@ -302,6 +302,11 @@ _import_structure = {
         "Speech2Text2Processor",
         "Speech2Text2Tokenizer",
     ],
+    "models.speecht5": [
+        "SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Speecht5Config",
+        "Speecht5Tokenizer",
+    ],
     "models.splinter": ["SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SplinterConfig", "SplinterTokenizer"],
     "models.squeezebert": ["SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "SqueezeBertConfig", "SqueezeBertTokenizer"],
     "models.swin": ["SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP", "SwinConfig"],
@@ -1847,6 +1852,19 @@ else:
             "Wav2Vec2PreTrainedModel",
         ]
     )
+    _import_structure["models.speecht5"].extend(
+        [
+            "SPEECHT5_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Speecht5ForAudioFrameClassification",
+            "Speecht5ForCTC",
+            "Speecht5ForMaskedLM",
+            "Speecht5ForPreTraining",
+            "Speecht5ForSequenceClassification",
+            "Speecht5ForXVector",
+            "Speecht5Model",
+            "Speecht5PreTrainedModel",
+        ]
+    )
     _import_structure["models.wav2vec2_conformer"].extend(
         [
             "WAV2VEC2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2478,6 +2496,14 @@ else:
             "TFWav2Vec2PreTrainedModel",
         ]
     )
+    _import_structure["models.speecht5"].extend(
+        [
+            "TF_SPEECHT5_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFSpeecht5ForCTC",
+            "TFSpeecht5Model",
+            "TFSpeecht5PreTrainedModel",
+        ]
+    )
     _import_structure["models.xlm"].extend(
         [
             "TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2752,6 +2778,9 @@ else:
     _import_structure["models.wav2vec2"].extend(
         ["FlaxWav2Vec2ForCTC", "FlaxWav2Vec2ForPreTraining", "FlaxWav2Vec2Model", "FlaxWav2Vec2PreTrainedModel"]
     )
+    _import_structure["models.speecht5"].extend(
+        ["FlaxSpeecht5ForCTC", "FlaxSpeecht5ForPreTraining", "FlaxSpeecht5Model", "FlaxSpeecht5PreTrainedModel"]
+    )
     _import_structure["models.xglm"].extend(
         [
             "FlaxXGLMForCausalLM",
@@ -3007,6 +3036,7 @@ if TYPE_CHECKING:
         Speech2Text2Processor,
         Speech2Text2Tokenizer,
     )
+    from .models.speecht5 import SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP, Speecht5Config, Speecht5Tokenizer
     from .models.splinter import SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP, SplinterConfig, SplinterTokenizer
     from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
     from .models.swin import SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP, SwinConfig
@@ -4164,6 +4194,17 @@ if TYPE_CHECKING:
             Speech2TextPreTrainedModel,
         )
         from .models.speech_to_text_2 import Speech2Text2ForCausalLM, Speech2Text2PreTrainedModel
+        from .models.speecht5 import (
+            SPEECHT5_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Speecht5ForAudioFrameClassification,
+            Speecht5ForCTC,
+            Speecht5ForMaskedLM,
+            Speecht5ForPreTraining,
+            Speecht5ForSequenceClassification,
+            Speecht5ForXVector,
+            Speecht5Model,
+            Speecht5PreTrainedModel,
+        )
         from .models.splinter import (
             SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST,
             SplinterForPreTraining,
@@ -4751,6 +4792,12 @@ if TYPE_CHECKING:
             TFSpeech2TextModel,
             TFSpeech2TextPreTrainedModel,
         )
+        from .models.speecht5 import (
+            TF_SPEECHT5_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFSpeecht5ForCTC,
+            TFSpeecht5Model,
+            TFSpeecht5PreTrainedModel,
+        )
         from .models.swin import (
             TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFSwinForImageClassification,
@@ -4999,6 +5046,12 @@ if TYPE_CHECKING:
             FlaxRoFormerPreTrainedModel,
         )
         from .models.speech_encoder_decoder import FlaxSpeechEncoderDecoderModel
+        from .models.speecht5 import (
+            FlaxSpeecht5ForCTC,
+            FlaxSpeecht5ForPreTraining,
+            FlaxSpeecht5Model,
+            FlaxSpeecht5PreTrainedModel,
+        )
         from .models.t5 import FlaxT5EncoderModel, FlaxT5ForConditionalGeneration, FlaxT5Model, FlaxT5PreTrainedModel
         from .models.vision_encoder_decoder import FlaxVisionEncoderDecoderModel
         from .models.vision_text_dual_encoder import FlaxVisionTextDualEncoderModel
