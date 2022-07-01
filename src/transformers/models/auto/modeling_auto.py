@@ -53,6 +53,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("deberta-v2", "DebertaV2Model"),
         ("decision_transformer", "DecisionTransformerModel"),
         ("decision_transformer_gpt2", "DecisionTransformerGPT2Model"),
+        ("deformable_detr", "DeformableDetrModel"),
         ("deit", "DeiTModel"),
         ("detr", "DetrModel"),
         ("distilbert", "DistilBertModel"),
@@ -451,6 +452,7 @@ MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Object Detection mapping
+        ("deformable_detr", "DeformableDetrForObjectDetection"),
         ("detr", "DetrForObjectDetection"),
         ("yolos", "YolosForObjectDetection"),
     ]
