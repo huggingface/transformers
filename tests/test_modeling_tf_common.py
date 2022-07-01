@@ -23,8 +23,8 @@ import tempfile
 import unittest
 import unittest.mock as mock
 from importlib import import_module
-from math import isnan
 from typing import List, Tuple
+from math import isnan
 
 from datasets import Dataset
 
@@ -1303,10 +1303,12 @@ class TFModelTesterMixin:
                 model_input = prepared_for_class.pop(input_name)
                 if "labels" in prepared_for_class:
                     labels = prepared_for_class["labels"].numpy()
-                    labels[0] = -100
-                    prepared_for_class["labels"] = tf.convert_to_tensor(labels)
-                    loss = model(model_input, **prepared_for_class)[0]
-                    self.assertEqual(loss.shape.as_list(), expected_loss_size)
+                    if len(labels.shape) > 1 and labels.shape[1] != 1:
+                        labels[0] = -100
+                        prepared_for_class["labels"] = tf.convert_to_tensor(labels)
+                        loss = model(model_input, **prepared_for_class)[0]
+                        self.assertEqual(loss.shape.as_list(), expected_loss_size)
+                        self.assertTrue(not np.any(np.isnan(loss.numpy())))
 
                 # Test that model correctly compute the loss with a dict
                 prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
