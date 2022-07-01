@@ -512,6 +512,10 @@ class TFRagTestMixin:
         inputs_dict["generator_n_docs"] = 2
         self.check_model_with_mismatch_n_docs_value(**inputs_dict)
 
+    @unittest.skip("Loss has not yet been rewritten to be XLA compatible.")
+    def test_loss_computation(self):
+        pass
+
 
 @require_tf
 @require_retrieval
