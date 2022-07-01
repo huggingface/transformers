@@ -31,16 +31,16 @@ def is_torch_tensor(obj):
 
 class OwlViTProcessor(ProcessorMixin):
     r"""
-    Constructs a OwlViT processor which wraps a CLIP feature extractor and a CLIP tokenizer into a single processor.
-    [`OwlViTProcessor`] offers all the functionalities of [`CLIPFeatureExtractor`] and [`CLIPTokenizerFast`]. See the
+    Constructs a OwlViT processor which wraps a OwlViT feature extractor and a CLIP tokenizer into a single processor.
+    [`OwlViTProcessor`] offers all the functionalities of [`OwlViTFeatureExtractor`] and [`CLIPTokenizerFast`]. See the
     [`~OwlViTProcessor.__call__`] and [`~OwlViTProcessor.decode`] for more information.
     Args:
-        feature_extractor ([`CLIPFeatureExtractor`]):
+        feature_extractor ([`OwlViTFeatureExtractor`]):
             The feature extractor is a required input.
         tokenizer ([`CLIPTokenizerFast`]):
             The tokenizer is a required input.
     """
-    feature_extractor_class = "CLIPFeatureExtractor"
+    feature_extractor_class = "OwlViTFeatureExtractor"
     tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
 
     def __init__(self, feature_extractor, tokenizer):
