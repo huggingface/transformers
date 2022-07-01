@@ -69,6 +69,7 @@ from .deepspeed import deepspeed_init, is_deepspeed_zero3_enabled
 from .dependency_versions_check import dep_version_check
 from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
+from .models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from .optimization import Adafactor, get_scheduler
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
@@ -2384,7 +2385,10 @@ class Trainer:
             self._past = outputs[self.args.past_index]
 
         if labels is not None:
-            loss = self.label_smoother(outputs, labels)
+            if unwrap_model(model)._get_name() in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
+                loss = self.label_smoother(outputs, labels, shift_labels=True)
+            else:
+                loss = self.label_smoother(outputs, labels)
         else:
             # We don't use .loss here since the model may return tuples instead of ModelOutput.
             loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
