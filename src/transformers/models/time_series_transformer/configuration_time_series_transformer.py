@@ -39,48 +39,34 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 50265):
-            Vocabulary size of the TimeSeriesTransformer model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`~TimeSeriesTransformerModel`] or
-            [`~TFTimeSeriesTransformerModel`].
-        d_model (`int`, *optional*, defaults to 1024):
-            Dimension of the layers and the pooler layer.
-        encoder_layers (`int`, *optional*, defaults to 12):
+        prediction_length (`int`):
+            The prediction horizon for the model.
+        context_length (`int`, *optional*, default to `None`):
+            The context length for the encoder. If  `None`, the context length will be the same as the prediction length.
+        distr_output (`DistributionOutput` default to `StudentTOutput()`):
+            The distribution emission head for the model.
+        scaling (`bool` default to `True`):
+            Whether to scale the input targets.
+        freq (`str`, *optional* default to `None`):
+            The frequency of the input time series. If `None`, the `lag_seq` and `time_features` must be provided.
+        lags_seq (`list` of `int`, *optional* default to `None`):
+            The lags of the input time series. Cannot be `None` if `freq` is `None`.
+        time_features (`list` of `TimeFeature`, *optional* default to `None`):
+            The time features transformations to apply to the input time series. Cannot be `None` if `freq` is `None`.
+        encoder_layers (`int`, *optional*, defaults to 2):
             Number of encoder layers.
-        decoder_layers (`int`, *optional*, defaults to 12):
+        decoder_layers (`int`, *optional*, defaults to 2):
             Number of decoder layers.
-        encoder_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        decoder_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        decoder_ffn_dim (`int`, *optional*, defaults to 4096):
-            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
-        encoder_ffn_dim (`int`, *optional*, defaults to 4096):
-            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
+        nhead (`int`, *optional*, defaults to 2):
+            Number of attention heads for each attention layer in the Transformer encoder and decoder.
+        ffn_dim (`int`, *optional*, defaults to 32):
+            Dimension of the "intermediate" (often named feed-forward) layer in encoder and decoder.
         activation_function (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string,
-            `"gelu"`, `"relu"`, `"silu"` and `"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and decoder. If string,
+            `"gelu"` and `"relu"` are supported.
         dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        activation_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for activations inside the fully connected layer.
-        classifier_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for classifier.
-        max_position_embeddings (`int`, *optional*, defaults to 1024):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        init_std (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        encoder_layerdrop: (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the encoder. See the [LayerDrop paper](see
-            https://arxiv.org/abs/1909.11556) for more details.
-        decoder_layerdrop: (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the decoder. See the [LayerDrop paper](see
-            https://arxiv.org/abs/1909.11556) for more details.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models).
+            The dropout probability for all fully connected layers in the encoder, and decoder.
+
         Example:
 
     ```python
@@ -97,32 +83,25 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
     ```
 """
     model_type = "time_series_transformer"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    # keys_to_ignore_at_inference = ["past_key_values"]
     
-    attribute_map = {
-        "num_attention_heads": "encoder_attention_heads",
-        "hidden_size": "d_model"
-    }
+    # attribute_map = {
+    #     "num_attention_heads": "encoder_attention_heads",
+    #     "hidden_size": "d_model"
+    # }
 
     def __init__(
         self,
-        vocab_size=50265,
-        max_position_embeddings=1024,
-        encoder_layers=12,
-        encoder_ffn_dim=4096,
-        encoder_attention_heads=16,
-        decoder_layers=12,
-        decoder_ffn_dim=4096,
-        decoder_attention_heads=16,
-        encoder_layerdrop=0.0,
-        decoder_layerdrop=0.0,
-        use_cache=True,
+        prediction_length,
+        context_length=None,
+        ffn_dim=32,
+        nhead=2,
+        freq=None,
+        encoder_layers=2,
+        decoder_layers=2,
         is_encoder_decoder=True,
         activation_function="gelu",
-        d_model=1024,
         dropout=0.1,
-        attention_dropout=0.0,
-        activation_dropout=0.0,
         init_std=0.02,
         decoder_start_token_id=2,
         classifier_dropout=0.0,
@@ -149,16 +128,11 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         self.encoder_layerdrop = encoder_layerdrop
         self.decoder_layerdrop = decoder_layerdrop
         self.classifier_dropout = classifier_dropout
-        self.use_cache = use_cache
         self.num_hidden_layers = encoder_layers
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
 
         super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
-            decoder_start_token_id=decoder_start_token_id,
             **kwargs
         )
 
