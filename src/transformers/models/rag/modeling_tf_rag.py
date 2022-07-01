@@ -1333,27 +1333,46 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
     # Adopted modeling_tf_bart + add smooth_loss to match with pytorch version
     def hf_compute_loss(self, labels, y_pred, smooth_epsilon=0.0, from_logits=True, reduce_loss=False):
         """CrossEntropyLoss that ignores pad tokens"""
+        if self.config.tf_legacy_loss:
+            loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
+                from_logits=True,
+                reduction=tf.keras.losses.Reduction.SUM,
+            )
+
+            if from_logits is False:  # convert to logits
+                eps = 1e-9
+                y_pred = tf.clip_by_value(y_pred, clip_value_min=eps, clip_value_max=1 - eps)
+                y_pred = tf.math.log(y_pred)
+
+            logits = y_pred
+            melted_labels = tf.reshape(labels, (-1,))
+            active_loss = tf.not_equal(melted_labels, self.config.generator.pad_token_id)
+
+            reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, logits.shape[2])), active_loss)
+            labels = tf.boolean_mask(melted_labels, active_loss)
+            nll_loss = loss_fn(labels, reduced_logits)
+
+            smooth_loss = -tf.reduce_sum(reduced_logits, axis=-1)
+            smooth_loss = tf.reduce_sum(smooth_loss)  # sum and squeeze like torch
+            eps_i = smooth_epsilon / reduced_logits.shape[-1]
+
+            loss = (1.0 - smooth_epsilon) * nll_loss + eps_i * smooth_loss
+
+            return loss
+
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
-            from_logits=True,
-            reduction=tf.keras.losses.Reduction.SUM,
+            from_logits=from_logits,
+            reduction=tf.keras.losses.Reduction.NONE,
         )
 
-        if from_logits is False:  # convert to logits
-            eps = 1e-9
-            y_pred = tf.clip_by_value(y_pred, clip_value_min=eps, clip_value_max=1 - eps)
-            y_pred = tf.math.log(y_pred)
+        unmasked_loss = loss_fn(labels, y_pred)
+        loss_mask = labels != self.config.generator.pad_token_id
+        nll_loss = tf.reduce_sum(unmasked_loss * loss_mask)
 
-        logits = y_pred
-        melted_labels = tf.reshape(labels, (-1,))
-        active_loss = tf.not_equal(melted_labels, self.config.generator.pad_token_id)
-
-        reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, logits.shape[2])), active_loss)
-        labels = tf.boolean_mask(melted_labels, active_loss)
-        nll_loss = loss_fn(labels, reduced_logits)
-
-        smooth_loss = -tf.reduce_sum(reduced_logits, axis=-1)
-        smooth_loss = tf.reduce_sum(smooth_loss)  # sum and squeeze like torch
-        eps_i = smooth_epsilon / reduced_logits.shape[-1]
+        # Matt: This makes no sense to me, but I'm just copying the old loss in XLA-compatible form
+        smooth_loss = -tf.reduce_sum(y_pred * tf.expand_dims(labels, -1), axis=-1)
+        smooth_loss = tf.reduce_sum(smooth_loss)
+        eps_i = smooth_epsilon / y_pred.shape[-1]
 
         loss = (1.0 - smooth_epsilon) * nll_loss + eps_i * smooth_loss
 
