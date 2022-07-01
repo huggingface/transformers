@@ -1378,7 +1378,6 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         return loss
 
 
-
 @add_start_docstrings_to_model_forward(
     """
     A TF RAG-sequence model implementation. It performs RAG-sequence specific marginalization in the forward pass.
