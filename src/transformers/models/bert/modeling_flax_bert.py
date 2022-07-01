@@ -775,6 +775,7 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
         gradient_checkpointing: bool = False,
         **kwargs
     ):
+        breakpoint()
         module = self.module_class(
             config=config,
             dtype=dtype,
