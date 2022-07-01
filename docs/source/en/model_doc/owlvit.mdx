@@ -14,20 +14,39 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The OwlViT model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The Owl-ViT model was proposed in [Simple Open-Vocabulary Object Detection with Vision Transformers](https://arxiv.org/pdf/2205.06230.pdf) by Matthias Minderer, Alexey Gritsenko, Austin Stone, Maxim Neumann, Dirk Weissenborn, Alexey Dosovitskiy, Aravindh Mahendran, Anurag Arnab, Mostafa Dehghani, Zhuoran Shen, Xiao Wang, Xiaohua Zhai, Thomas Kipf, and Neil Houlsby. Owl-ViT is an open-vocabulary object detection network trained on a variety of (image, text) pairs. It can be used to query an image with one or multiple text queries to search for and detect target objects described in text.
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+*Combining simple architectures with large-scale pre-training has led to massive improvements in image classification. For object detection, pre-training and scaling approaches are less well established, especially in the long-tailed and open-vocabulary setting, where training data is relatively scarce. In this paper, we propose a strong recipe for transferring image-text models to open-vocabulary object detection. We use a standard Vision Transformer architecture with minimal modifications, contrastive image-text pre-training, and end-to-end detection fine-tuning. Our analysis of the scaling properties of this setup shows that increasing image-level pre-training and model size yield consistent improvements on the downstream detection task. We provide the adaptation strategies and regularizations needed to attain very strong performance on zero-shot text-conditioned and one-shot image-conditioned object detection. Code and models are available on GitHub.*
 
-Tips:
+## Usage
 
-<INSERT TIPS ABOUT MODEL HERE>
+OwlViT is a zero-shot text-conditioned object detection model. OwlViT uses CLIP as its multi-modal backbone, with a ViT like transformer to get visual features and a causal language model to get the text features. To use CLIP for detection, OwlViT removes the final token pooling layer of the vision model and attaches a lightweight classification and box head to each transformer output token. Open-vocabulary classification is enabled by replacing the fixed classification layer weights with the class-name embeddings obtained from the text model. The authors first train CLIP from scratch and fine-tune it end-to-end with the classification and box heads on standard detection datasets using a bipartite matching loss. One or multiple text queries per image can be used to perform zero-shot text-conditioned object detection. 
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+The [`CLIPFeatureExtractor`] can be used to resize (or rescale) and normalize images for the model and the [`CLIPTokenizer`] is used to encode the text. The [`OwlViTProcessor`] wraps [`CLIPFeatureExtractor`] and [`CLIPTokenizer`] into a single instance to both encode the text and prepare the images. The following example shows how to perform object detection using [`OwlViTProcessor`] and [`OwlViTForObjectDetection`].
 
+
+```python
+>>> from PIL import Image
+>>> import requests
+
+>>> from transformers import OwlViTProcessor, OwlViTForObjectDetection
+
+>>> model = OwlViTForObjectDetection.from_pretrained("google/owlvit-base-patch32")
+>>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
+
+>>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+>>> image = Image.open(requests.get(url, stream=True).raw)
+
+>>> inputs = processor(text=[["a photo of a cat", "a photo of a dog"]], images=image, return_tensors="pt", padding=True)
+
+>>> outputs = model(**inputs)
+>>> logits = outputs.logits 
+>>> boxes = outputs.boxes # Object box boundaries
+```
+
+This model was contributed by [adirik](https://huggingface.co/adirik). The original code can be found [here](https://github.com/google-research/scenic/tree/a41d24676f64a2158bfcd7cb79b0a87673aa875b/scenic/projects/owl_vit).
 
 ## OwlViTConfig
 
@@ -41,6 +60,10 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 ## OwlViTVisionConfig
 
 [[autodoc]] OwlViTVisionConfig
+
+## OwlViTProcessor
+
+[[autodoc]] OwlViTProcessor
 
 ## OwlViTModel
 
@@ -57,4 +80,9 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 ## OwlViTVisionModel
 
 [[autodoc]] OwlViTVisionModel
+    - forward
+
+## OwlViTForObjectDetection
+
+[[autodoc]] OwlViTForObjectDetection
     - forward
