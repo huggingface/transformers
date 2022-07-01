@@ -123,7 +123,7 @@ class TFAlbertPreTrainingLoss:
 
         sop_logits = tf.reshape(logits[1], (-1, 2))
         unmasked_sop_loss = loss_fn(y_true=labels["sentence_order_label"], y_pred=sop_logits)
-        sop_loss_mask = labels["sentence_order_label"] != -100
+        sop_loss_mask = tf.cast(labels["sentence_order_label"] != -100, dtype=unmasked_sop_loss.dtype)
 
         # No reduction because this already has shape (num_samples,)
         masked_sop_loss = tf.math.multiply_no_nan(unmasked_sop_loss, sop_loss_mask)
