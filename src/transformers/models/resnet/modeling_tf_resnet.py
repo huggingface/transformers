@@ -50,16 +50,6 @@ TF_RESNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-class IdentityLayer(tf.keras.layers.Layer):
-    """Helper class to give identity a layer API."""
-
-    def __init__(self, **kwargs) -> None:
-        super().__init__(**kwargs)
-
-    def call(self, x: tf.Tensor, *args, **kwargs) -> tf.Tensor:
-        return x
-
-
 class TFResNetConvLayer(tf.keras.layers.Layer):
     def __init__(
         self, out_channels: int, kernel_size: int = 3, stride: int = 1, activation: str = "relu", **kwargs
@@ -71,7 +61,7 @@ class TFResNetConvLayer(tf.keras.layers.Layer):
         )
         # Use same default momentum and epsilon as PyTorch equivalent
         self.normalization = tf.keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.1, name="normalization")
-        self.activation = ACT2FN[activation] if activation is not None else IdentityLayer()
+        self.activation = ACT2FN[activation] if activation is not None else tf.keras.layers.Activation("linear")
 
     def convolution(self, hidden_state: tf.Tensor) -> tf.Tensor:
         # Pad to match that done in the PyTorch Conv2D model
@@ -153,7 +143,7 @@ class TFResNetBasicLayer(tf.keras.layers.Layer):
         self.shortcut = (
             TFResNetShortCut(out_channels, stride=stride, name="shortcut")
             if should_apply_shortcut
-            else IdentityLayer(name="shortcut")
+            else tf.keras.layers.Activation("linear", name="shortcut")
         )
         self.activation = ACT2FN[activation]
 
@@ -193,7 +183,7 @@ class TFResNetBottleNeckLayer(tf.keras.layers.Layer):
         self.shortcut = (
             TFResNetShortCut(out_channels, stride=stride, name="shortcut")
             if should_apply_shortcut
-            else IdentityLayer(name="shortcut")
+            else tf.keras.layers.Activation("linear", name="shortcut")
         )
         self.activation = ACT2FN[activation]
 
@@ -440,7 +430,7 @@ class TFResNetForImageClassification(TFResNetPreTrainedModel, TFSequenceClassifi
         self.classifier_layer = (
             tf.keras.layers.Dense(config.num_labels, name="classifier.1")
             if config.num_labels > 0
-            else IdentityLayer(name="classifier.1")
+            else tf.keras.layers.Activation("linear", name="classifier.1")
         )
 
     def classifier(self, x: tf.Tensor) -> tf.Tensor:

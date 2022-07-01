@@ -211,7 +211,7 @@ class ResNetModelTest(TFModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in TF_RESNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFResNetModel.from_pretrained(model_name, from_pt=True)
+            model = TFResNetModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
@@ -234,9 +234,7 @@ class ResNetModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head(self):
-        model = TFResNetForImageClassification.from_pretrained(
-            TF_RESNET_PRETRAINED_MODEL_ARCHIVE_LIST[0], from_pt=True
-        )
+        model = TFResNetForImageClassification.from_pretrained(TF_RESNET_PRETRAINED_MODEL_ARCHIVE_LIST[0])
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
