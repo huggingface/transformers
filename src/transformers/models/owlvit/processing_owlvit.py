@@ -27,7 +27,7 @@ from ...tokenization_utils_base import BatchEncoding
 
 
 def is_torch_tensor(obj):
-    return _is_torch(obj) if is_torch_available() else False
+    return _is_torch(obj)
 
 class OwlViTProcessor(ProcessorMixin):
     r"""
@@ -98,27 +98,29 @@ class OwlViTProcessor(ProcessorMixin):
                 for t in text:
                     if len(t) != max_num_queries:
                         t.extend([""]*(max_num_queries - len(t)))
-
                         encoding = self.tokenizer(t, return_tensors=return_tensors, **kwargs)
                         encodings.append(encoding)
+                    else:
+                        encoding = self.tokenizer(t, return_tensors=return_tensors, **kwargs)
+                        encodings.append(encoding)        
 
-            encoding = encodings[0]
+            output = encodings[0]
 
-            if isinstance(encodings[0], np.ndarray):
+            if return_tensors == "np":
                 input_ids = [np.expand_dims(encoding["input_ids"], axis=0) for encoding in encodings]
                 input_ids = np.concatenate(input_ids)
 
                 attention_mask = [np.expand_dims(encoding["attention_mask"], axis=0) for encoding in encodings]
                 attention_mask = np.concatenate(attention_mask)
 
-            elif isinstance(encodings[0], jnp.ndarray):
+            elif return_tensors == "jax":
                 input_ids = [jnp.expand_dims(encoding["input_ids"], axis=0) for encoding in encodings]
                 input_ids = jnp.concatenate(input_ids)
 
                 attention_mask = [jnp.expand_dims(encoding["attention_mask"], axis=0) for encoding in encodings]
                 attention_mask = jnp.concatenate(attention_mask)
 
-            elif is_torch_tensor(encodings[0]):
+            elif return_tensors == "pt":
                 import torch
                 input_ids= [encoding["input_ids"].unsqueeze(0) for encoding in encodings]
                 input_ids = torch.cat(input_ids)
@@ -133,17 +135,17 @@ class OwlViTProcessor(ProcessorMixin):
                 attention_mask = [tf.expand_dims(encoding["attention_mask"], axis=0) for encoding in encodings]
                 attention_mask = tf.concat(attention_mask, axis=0)
 
-            encoding["input_ids"] = input_ids
-            encoding["attention_mask"] = attention_mask
+            output["input_ids"] = input_ids
+            output["attention_mask"] = attention_mask
 
         if images is not None:
             image_features = self.feature_extractor(images, return_tensors=return_tensors, **kwargs)
 
         if text is not None and images is not None:
-            encoding["pixel_values"] = image_features.pixel_values
-            return encoding
+            output["pixel_values"] = image_features.pixel_values
+            return output
         elif text is not None:
-            return encoding
+            return output
         else:
             return BatchEncoding(data=dict(**image_features), tensor_type=return_tensors)
 

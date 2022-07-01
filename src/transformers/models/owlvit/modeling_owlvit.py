@@ -1381,6 +1381,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         >>> pred_logits = outputs.logits
         ```"""
         # Embed images
+        pixel_values = pixel_values.to(torch.float32)
         feature_map = self.image_embedder(pixel_values)
         b, h, w, d = feature_map.shape
         image_feats = torch.reshape(feature_map, (b, h*w, d))
