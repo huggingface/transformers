@@ -119,7 +119,7 @@ class TFAlbertPreTrainingLoss:
         # are taken into account for the loss computation
         lm_loss_mask = tf.cast(labels["labels"] != -100, dtype=unmasked_lm_losses.dtype)
         # Avoid division by zero later
-        lm_loss_denominator = tf.math.maximum(1, tf.reduce_sum(lm_loss_mask, axis=1))
+        lm_loss_denominator = tf.math.maximum(tf.cast(1, lm_loss_mask.dtype), tf.reduce_sum(lm_loss_mask, axis=1))
         masked_lm_losses = unmasked_lm_losses * lm_loss_mask
         reduced_masked_lm_loss = tf.reduce_sum(masked_lm_losses, axis=1) / lm_loss_denominator
 

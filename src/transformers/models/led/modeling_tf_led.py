@@ -2518,7 +2518,7 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
         unmasked_loss = loss_fn(tf.nn.relu(labels), logits)
         # make sure only non-padding labels affect the loss
         loss_mask = tf.cast(labels != self.config.pad_token_id, dtype=unmasked_loss.dtype)
-        loss_denominator = tf.math.maximum(1, tf.reduce_sum(loss_mask, axis=1))
+        loss_denominator = tf.math.maximum(tf.cast(1, loss_mask.dtype), tf.reduce_sum(loss_mask, axis=1))
         masked_loss = unmasked_loss * loss_mask
         reduced_masked_loss = tf.reduce_sum(masked_loss, axis=1) / loss_denominator
         return reduced_masked_loss
