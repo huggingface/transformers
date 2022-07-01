@@ -69,6 +69,7 @@ from .deepspeed import deepspeed_init, is_deepspeed_zero3_enabled
 from .dependency_versions_check import dep_version_check
 from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
+from .models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from .optimization import Adafactor, get_scheduler
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
@@ -127,7 +128,6 @@ from .trainer_utils import (
     speed_metrics,
 )
 from .training_args import OptimizerNames, ParallelMode, TrainingArguments
-from .models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from .utils import (
     CONFIG_NAME,
     WEIGHTS_INDEX_NAME,
