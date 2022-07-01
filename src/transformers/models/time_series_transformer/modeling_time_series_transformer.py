@@ -1077,14 +1077,33 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
     TIME_SERIES_TRANSFORMER_START_DOCSTRING,
 )
 class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
+    @property
+    def _number_of_features(self) -> int:
+        return (
+            sum(self.embedding_dimension)
+            + self.num_feat_dynamic_real
+            + 1
+            + len(self.time_features)
+            + max(1, self.num_feat_static_real)
+            + 1  # the log(scale)
+        )
+
     def __init__(self, config: TimeSeriesTransformerConfig):
         super().__init__(config)
 
-        padding_idx, vocab_size = config.pad_token_id, config.vocab_size
-        self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
+        self.d_model = self.input_size * len(self.lags_seq) + self._number_of_features
 
-        self.encoder = TimeSeriesTransformerEncoder(config, self.shared)
-        self.decoder = TimeSeriesTransformerDecoder(config, self.shared)
+        # transformer enc-decoder and mask initializer
+        self.transformer = nn.Transformer(
+            d_model=self.d_model,
+            nhead=self.nhead,
+            num_encoder_layers=self.encoder_layers,
+            num_decoder_layers=self.decoder_layers,
+            dim_feedforward=self.ffn_dim,
+            dropout=self.dropout,
+            activation=self.activation_function,
+            batch_first=True,
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
