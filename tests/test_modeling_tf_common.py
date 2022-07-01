@@ -23,8 +23,8 @@ import tempfile
 import unittest
 import unittest.mock as mock
 from importlib import import_module
-from typing import List, Tuple
 from math import isnan
+from typing import List, Tuple
 
 from datasets import Dataset
 
