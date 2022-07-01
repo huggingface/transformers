@@ -70,6 +70,14 @@ def fixed_pos_embedding(x: tf.Tensor, seq_dim: int = 1, seq_len: Optional[int] =
     return tf.cast(tf.sin(sinusoid_inp), dtype=x.dtype), tf.cast(tf.cos(sinusoid_inp), dtype=x.dtype)
 
 
+def create_sinusoidal_positions(num_pos: int, dim: int) -> tf.Tensor:
+    inv_freq = tf.cast(1.0 / (10000 ** (tf.range(0, dim, 2) / dim)), tf.float32)
+    sinusoid_inp = tf.cast(tf.einsum("i , j -> i j", tf.range(num_pos, dtype=tf.float32), inv_freq), tf.float32)
+    sin, cos = tf.sin(sinusoid_inp), tf.cos(sinusoid_inp)
+    out = tf.concat((sin, cos), axis=1)
+    return out
+
+
 def rotate_every_two(x: tf.Tensor) -> tf.Tensor:
     rotate_half_tensor = tf.stack((-x[:, :, :, 1::2], x[:, :, :, ::2]), axis=-1)
     new_shape = shape_list(rotate_half_tensor)[:-2] + [tf.math.reduce_prod(shape_list(rotate_half_tensor)[-2:])]
@@ -132,6 +140,8 @@ class TFGPTJAttention(tf.keras.layers.Layer):
             tf.cast(tf.experimental.numpy.tril(tf.ones((self.max_positions, self.max_positions))), tf.int8),
             (1, 1, self.max_positions, self.max_positions),
         )
+        pos_embd_dim = self.rotary_dim or self.embed_dim
+        self.embed_positions = create_sinusoidal_positions(self.max_positions, pos_embd_dim)
 
     def get_causal_mask(self, key_length, query_length) -> tf.Tensor:
         return tf.cast(self.lower_triangle_mask[:, :, key_length - query_length : key_length, :key_length], tf.bool)
@@ -207,8 +217,9 @@ class TFGPTJAttention(tf.keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        attention_mask: Optional[tf.Tensor] = None,
         layer_past: Optional[Tuple[tf.Tensor, tf.Tensor]] = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
         head_mask: Optional[tf.Tensor] = None,
         use_cache: bool = False,
         output_attentions: bool = False,
@@ -228,6 +239,9 @@ class TFGPTJAttention(tf.keras.layers.Layer):
             offset = shape_list(layer_past[0])[-2]
             seq_len += offset
 
+        breakpoint()
+        sincos = tf.gather(self.embed_positions, position_ids, axis=0)
+        sincos = tf.split(sincos, 2, axis=-1)
         if self.rotary_dim is not None:
             k_rot = key[:, :, :, : self.rotary_dim]
             k_pass = key[:, :, :, self.rotary_dim :]
@@ -235,14 +249,14 @@ class TFGPTJAttention(tf.keras.layers.Layer):
             q_rot = query[:, :, :, : self.rotary_dim]
             q_pass = query[:, :, :, self.rotary_dim :]
 
-            sincos = fixed_pos_embedding(k_rot, 1, seq_len=seq_len)
+            # sincos = fixed_pos_embedding(k_rot, 1, seq_len=seq_len)
             k_rot = apply_rotary_pos_emb(k_rot, sincos, offset=offset)
             q_rot = apply_rotary_pos_emb(q_rot, sincos, offset=offset)
 
             key = tf.concat((k_rot, k_pass), axis=-1)
             query = tf.concat((q_rot, q_pass), axis=-1)
         else:
-            sincos = fixed_pos_embedding(key, 1, seq_len=seq_len)
+            # sincos = fixed_pos_embedding(key, 1, seq_len=seq_len)
             key = apply_rotary_pos_emb(key, sincos, offset=offset)
             query = apply_rotary_pos_emb(query, sincos, offset=offset)
 
@@ -310,6 +324,7 @@ class TFGPTJBlock(tf.keras.layers.Layer):
         hidden_states: tf.Tensor,
         layer_past: Optional[tf.Tensor] = None,
         attention_mask: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
         head_mask: Optional[tf.Tensor] = None,
         use_cache: bool = False,
         output_attentions: bool = False,
@@ -317,9 +332,10 @@ class TFGPTJBlock(tf.keras.layers.Layer):
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
         attn_outputs = self.attn(
-            hidden_states,
+            hidden_states=hidden_states,
             layer_past=layer_past,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -466,12 +482,13 @@ class TFGPTJMainLayer(tf.keras.layers.Layer):
                 all_hidden_states = all_hidden_states + (tf.reshape(hidden_states, output_shape),)
 
             outputs = block(
-                hidden_states,
-                layer_past,
-                attention_mask,
-                head_mask[i],
-                use_cache,
-                output_attentions,
+                hidden_states=hidden_states,
+                layer_past=layer_past,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                head_mask=head_mask[i],
+                use_cache=use_cache,
+                output_attentions=output_attentions,
                 training=training,
             )
 
@@ -722,8 +739,6 @@ class TFGPTJForCausalLM(TFGPTJPreTrainedModel, TFCausalLanguageModelingLoss):
         self.lm_head = tf.keras.layers.Dense(
             config.vocab_size, kernel_initializer=get_initializer(config.initializer_range), name="lm_head"
         )
-        # TODO (Joao): investigate why GPTJ has numerical issues in XLA generate
-        self.supports_xla_generation = False
 
     def get_output_embeddings(self):
         return self.lm_head
@@ -731,25 +746,21 @@ class TFGPTJForCausalLM(TFGPTJPreTrainedModel, TFCausalLanguageModelingLoss):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    def prepare_inputs_for_generation(self, inputs, past=None, use_cache=None, use_xla=False, **kwargs):
-        # TODO: (Joao) after the TF generator is complete, update GPT2 TF generation to match PT's. NB -- some GPT2
-        # tests will need to be fixed after the change
-
+    def prepare_inputs_for_generation(self, inputs, past=None, use_cache=None, **kwargs):
+        token_type_ids = kwargs.get("token_type_ids", None)
         # only last token for inputs_ids if past is defined in kwargs
         if past:
             inputs = tf.expand_dims(inputs[:, -1], -1)
+            if token_type_ids is not None:
+                token_type_ids = tf.expand_dims(token_type_ids[:, -1], -1)
 
-        # TODO(pvp, Joao) - this `if use_xla` statement can be removed, but is left
-        # for a future PR to not change too many things for now.
-        # All statements in this if case apply for both xla and non-xla (as they already do in PyTorch)
-        position_ids = None
-        attention_mask = None
-        if use_xla:
-            attention_mask = kwargs.get("attention_mask", None)
-            if past is not None and attention_mask is not None:
-                position_ids = tf.reduce_sum(attention_mask, axis=1, keepdims=True) - 1
-            elif attention_mask is not None:
-                position_ids = tf.math.cumsum(attention_mask, axis=1, exclusive=True)
+        position_ids = kwargs.get("position_ids", None)
+        attention_mask = kwargs.get("attention_mask", None)
+
+        if attention_mask is not None and position_ids is None:
+            position_ids = tf.math.cumsum(attention_mask, axis=-1, exclusive=True)
+            if past:
+                position_ids = tf.expand_dims(position_ids[:, -1], -1)
 
         return {
             "input_ids": inputs,
@@ -757,6 +768,7 @@ class TFGPTJForCausalLM(TFGPTJPreTrainedModel, TFCausalLanguageModelingLoss):
             "position_ids": position_ids,
             "past": past,
             "use_cache": use_cache,
+            "token_type_ids": token_type_ids,
         }
 
     @unpack_inputs
