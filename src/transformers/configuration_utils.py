@@ -237,9 +237,9 @@ class PretrainedConfig(PushToHubMixin):
         use_bfloat16 (`bool`, *optional*, defaults to `False`):
             Whether or not the model should use BFloat16 scalars (only used by some TensorFlow models).
         tf_legacy_loss (`bool`, *optional*, defaults to `False`):
-            Whether the model should use legacy TensorFlow losses. Legacy losses have variable output
-            shapes and may not be XLA-compatible. This option is here for backward compatibility and will be
-            removed in Transformers v5.
+            Whether the model should use legacy TensorFlow losses. Legacy losses have variable output shapes and may
+            not be XLA-compatible. This option is here for backward compatibility and will be removed in Transformers
+            v5.
     """
     model_type: str = ""
     is_composition: bool = False
