@@ -97,8 +97,9 @@ class TFAlbertPreTrainingLoss:
             masked_lm_labels = tf.boolean_mask(
                 tensor=tf.reshape(tensor=labels["labels"], shape=(-1,)), mask=masked_lm_active_loss
             )
-            sentence_order_active_loss = tf.not_equal(tf.reshape(tensor=labels["sentence_order_label"], shape=(-1,)),
-                                                      -100)
+            sentence_order_active_loss = tf.not_equal(
+                tf.reshape(tensor=labels["sentence_order_label"], shape=(-1,)), -100
+            )
             sentence_order_reduced_logits = tf.boolean_mask(
                 tensor=tf.reshape(tensor=logits[1], shape=(-1, 2)), mask=sentence_order_active_loss
             )
