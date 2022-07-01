@@ -2505,11 +2505,13 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
     def hf_compute_loss(self, labels, logits):
         """CrossEntropyLoss that ignores pad tokens"""
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
-            from_logits=True,
-            reduction=tf.keras.losses.Reduction.NONE,
+            from_logits=True, reduction=tf.keras.losses.Reduction.NONE
         )
-        melted_labels = tf.reshape(labels, (-1,))
-        active_loss = tf.not_equal(melted_labels, self.config.pad_token_id)
-        reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
-        labels = tf.boolean_mask(melted_labels, active_loss)
-        return loss_fn(labels, reduced_logits)
+        # make sure only non-padding labels affect the loss
+        unmasked_loss = loss_fn(labels, logits)
+        loss_mask = tf.cast(labels != self.config.pad_token_id, dtype=unmasked_loss.dtype)
+        loss_denominator = tf.reduce_sum(loss_mask, axis=1)
+        # Masked positions will have a loss of NaN because -100 is not a valid label
+        masked_loss = tf.math.multiply_no_nan(unmasked_loss, loss_mask)
+        reduced_masked_loss = tf.reduce_sum(masked_loss, axis=1) / loss_denominator
+        return reduced_masked_loss
