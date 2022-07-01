@@ -229,8 +229,8 @@ class FlaxBigBirdEmbeddings(nn.Module):
         hidden_states = inputs_embeds + token_type_embeddings + position_embeds
 
         # Layer Norm
-        hidden_states = self.LayerNorm(hidden_states)
         hidden_states = self.dropout(hidden_states, deterministic=deterministic)
+        hidden_states = self.LayerNorm(hidden_states)
         return hidden_states
 
 
