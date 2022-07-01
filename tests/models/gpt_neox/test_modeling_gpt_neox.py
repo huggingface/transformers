@@ -224,3 +224,7 @@ class GPTNeoXModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_for_causal_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
+
+    @unittest.skip(reason="Feed forward chunking is not implemented")
+    def test_feed_forward_chunking(self):
+        pass
