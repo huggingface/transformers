@@ -127,6 +127,7 @@ from .trainer_utils import (
     speed_metrics,
 )
 from .training_args import OptimizerNames, ParallelMode, TrainingArguments
+from .models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from .utils import (
     CONFIG_NAME,
     WEIGHTS_INDEX_NAME,
@@ -2384,7 +2385,10 @@ class Trainer:
             self._past = outputs[self.args.past_index]
 
         if labels is not None:
-            loss = self.label_smoother(outputs, labels)
+            if model._get_name() in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
+                loss = self.label_smoother(outputs, labels, shift_labels=True)
+            else:
+                loss = self.label_smoother(outputs, labels)
         else:
             # We don't use .loss here since the model may return tuples instead of ModelOutput.
             loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
