@@ -18,7 +18,7 @@
 import unittest
 
 from transformers import GPTNeoXConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
@@ -28,7 +28,6 @@ if is_torch_available():
     import torch
 
     from transformers import GPTNeoXForCausalLM, GPTNeoXModel
-    from transformers.models.gpt_neox.modeling_gpt_neox import GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class GPTNeoXModelTester:
@@ -229,29 +228,3 @@ class GPTNeoXModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Feed forward chunking is not implemented")
     def test_feed_forward_chunking(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        for model_name in GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = GPTNeoXModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
-
-
-@require_torch
-class GPTNeoXModelIntegrationTest(unittest.TestCase):
-    @slow
-    def test_inference_masked_lm(self):
-        model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b")
-        input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
-        output = model(input_ids)[0]
-
-        vocab_size = model.config.vocab_size
-
-        expected_shape = torch.Size((1, 6, vocab_size))
-        self.assertEqual(output.shape, expected_shape)
-
-        expected_slice = torch.tensor(
-            [[[33.5938, 2.3789, 34.0312], [63.4688, 4.8164, 63.3438], [66.8750, 5.2422, 63.0625]]]
-        )
-
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
