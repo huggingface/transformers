@@ -14,9 +14,13 @@
 # limitations under the License.
 """ Bloom configuration"""
 from collections import OrderedDict
-from typing import Any, List, Mapping, Optional
+from typing import TYPE_CHECKING, Any, List, Mapping, Optional
 
-from transformers import PreTrainedTokenizer, TensorType, is_torch_available
+from transformers import is_torch_available
+
+
+if TYPE_CHECKING:
+    from transformers import PreTrainedTokenizer, TensorType
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfigWithPast, PatchingSpec
@@ -196,11 +200,11 @@ class BloomOnnxConfig(OnnxConfigWithPast):
 
     def generate_dummy_inputs(
         self,
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: "PreTrainedTokenizer",
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
-        framework: Optional[TensorType] = None,
+        framework: Optional["TensorType"] = None,
     ) -> Mapping[str, Any]:
         common_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
             tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
