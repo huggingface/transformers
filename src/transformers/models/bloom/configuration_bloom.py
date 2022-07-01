@@ -165,7 +165,6 @@ class BloomConfig(PretrainedConfig):
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
 
-# Taken from transformers.models.gpt2.configuration_gpt2.GPT2OnnxConfig with modified `generate_dummy_inputs`
 class BloomOnnxConfig(OnnxConfigWithPast):
     def __init__(
         self,
