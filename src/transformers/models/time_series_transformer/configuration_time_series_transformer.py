@@ -13,6 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ TimeSeriesTransformer model configuration """
+from typing import List, Optional
+
+from gluonts.time_feature import TimeFeature, time_features_from_frequency_str, get_lags_for_frequency
+from gluonts.torch.distributions import DistributionOutput, StudentTOutput
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -53,6 +57,16 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
             The lags of the input time series. Cannot be `None` if `freq` is `None`.
         time_features (`list` of `TimeFeature`, *optional* default to `None`):
             The time features transformations to apply to the input time series. Cannot be `None` if `freq` is `None`.
+        num_feat_dynamic_real (`int`, *optional* default to `0`):
+            The number of dynamic real valued features.
+        num_feat_static_cat (`int`, *optional* default to `0`):
+            The number of static categorical features.
+        num_feat_static_real (`int`, *optional* default to `0`):
+            The number of static real valued features.
+        cardinality (`list` of `int`, *optional* default to `None`):
+            The cardinality of the categorical features. Cannot be `None` if `num_feat_static_cat` is `> 0`.
+        embedding_dimension (`list` of `int`, *optional* default to `None`):
+            The dimension of the embedding for the categorical features. Cannot be `None` if `num_feat_static_cat` is `> 0`.
         encoder_layers (`int`, *optional*, defaults to 2):
             Number of encoder layers.
         decoder_layers (`int`, *optional*, defaults to 2):
@@ -80,60 +94,52 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```
-"""
+    ```"""
     model_type = "time_series_transformer"
-    # keys_to_ignore_at_inference = ["past_key_values"]
-    
-    # attribute_map = {
-    #     "num_attention_heads": "encoder_attention_heads",
-    #     "hidden_size": "d_model"
-    # }
 
     def __init__(
         self,
         prediction_length,
-        context_length=None,
-        ffn_dim=32,
-        nhead=2,
-        freq=None,
-        encoder_layers=2,
-        decoder_layers=2,
-        is_encoder_decoder=True,
-        activation_function="gelu",
-        dropout=0.1,
-        init_std=0.02,
-        decoder_start_token_id=2,
-        classifier_dropout=0.0,
-        scale_embedding=False,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
+        context_length: Optional[int] = None,
+        freq: Optional[str] = None,
+        distr_output: DistributionOutput = StudentTOutput(),
+        lags_seq: Optional[List[int]] = None,
+        time_features: Optional[List[TimeFeature]] = None,
+        scaling: bool = True,
+        num_feat_dynamic_real: int = 0,
+        num_feat_static_cat: int = 0,
+        num_feat_static_real: int = 0,
+        cardinality: Optional[List[int]] = None,
+        embedding_dimension: Optional[List[int]] = None,
+        ffn_dim: int = 32,
+        nhead: int = 2,
+        encoder_layers: int = 2,
+        decoder_layers: int = 2,
+        is_encoder_decoder: bool = True,
+        activation_function: str = "gelu",
+        dropout: float = 0.1,
+        init_std: float = 0.02,
         **kwargs
     ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.d_model = d_model
-        self.encoder_ffn_dim = encoder_ffn_dim
+        self.context_length = context_length or prediction_length
+        self.prediction_length = prediction_length
+        self.distr_output = distr_output
+        self.time_features = time_features or time_features_from_frequency_str(freq)
+        self.lags_seq = lags_seq or get_lags_for_frequency(freq_str=freq)
+        self.scaling = scaling
+        self.num_feat_dynamic_real = num_feat_dynamic_real
+        self.num_feat_static_cat = num_feat_static_cat
+        self.num_feat_static_real = num_feat_static_real
+        self.cardinality = cardinality if cardinality and num_feat_static_cat > 0 else [1]
+        self.embedding_dimension = embedding_dimension
+
+        # Transformer architecture parameters
+        self.nhead = nhead
         self.encoder_layers = encoder_layers
-        self.encoder_attention_heads = encoder_attention_heads
-        self.decoder_ffn_dim = decoder_ffn_dim
         self.decoder_layers = decoder_layers
-        self.decoder_attention_heads = decoder_attention_heads
+        self.ffn_dim = ffn_dim
         self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.activation_dropout = activation_dropout
         self.activation_function = activation_function
         self.init_std = init_std
-        self.encoder_layerdrop = encoder_layerdrop
-        self.decoder_layerdrop = decoder_layerdrop
-        self.classifier_dropout = classifier_dropout
-        self.num_hidden_layers = encoder_layers
-        self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
 
-        super().__init__(
-            is_encoder_decoder=is_encoder_decoder,
-            **kwargs
-        )
-
-    
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
