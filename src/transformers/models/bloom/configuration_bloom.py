@@ -198,6 +198,10 @@ class BloomOnnxConfig(OnnxConfigWithPast):
     def num_attention_heads(self) -> int:
         return self._config.n_head
 
+    @property
+    def atol_for_validation(self) -> float:
+        return 1e-3
+
     def generate_dummy_inputs(
         self,
         tokenizer: "PreTrainedTokenizer",

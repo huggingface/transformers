@@ -294,11 +294,7 @@ class BloomScaledSoftmax(nn.Module):
 
         mask = mask.to(input.device)
         seq_ids = torch.arange(max_positions, device=input.device)
-        causal_mask = (
-            (seq_ids[None, None, :] <= seq_ids[None, :, None])
-            .view(1, 1, max_positions, max_positions)
-            .to(input.device)
-        )
+        causal_mask = (seq_ids[None, :] <= seq_ids[:, None]).view(1, 1, max_positions, max_positions).to(input.device)
         mask_output, padded_causal_mask = self.mask_func(input, mask, causal_mask)
         probs = nn.functional.softmax(mask_output, dim=-1, dtype=softmax_dtype) * (~padded_causal_mask)
 
