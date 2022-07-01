@@ -60,16 +60,6 @@ GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-def fixed_pos_embedding(x: tf.Tensor, seq_dim: int = 1, seq_len: Optional[int] = None) -> Tuple[tf.Tensor, tf.Tensor]:
-    dim = shape_list(x)[-1]
-    if seq_len is None:
-        seq_len = shape_list(x)[seq_dim]
-    inv_freq = tf.cast(1.0 / (10000 ** (tf.range(0, dim, 2) / dim)), tf.float32)
-    seq_len_range = tf.cast(tf.range(seq_len), tf.float32)
-    sinusoid_inp = tf.cast(tf.einsum("i , j -> i j", seq_len_range, inv_freq), tf.float32)
-    return tf.cast(tf.sin(sinusoid_inp), dtype=x.dtype), tf.cast(tf.cos(sinusoid_inp), dtype=x.dtype)
-
-
 def create_sinusoidal_positions(num_pos: int, dim: int) -> tf.Tensor:
     inv_freq = tf.cast(1.0 / (10000 ** (tf.range(0, dim, 2) / dim)), tf.float32)
     sinusoid_inp = tf.cast(tf.einsum("i , j -> i j", tf.range(num_pos, dtype=tf.float32), inv_freq), tf.float32)
@@ -85,11 +75,11 @@ def rotate_every_two(x: tf.Tensor) -> tf.Tensor:
     return rotate_half_tensor
 
 
-def apply_rotary_pos_emb(x: tf.Tensor, sincos: tf.Tensor, offset: int = 0) -> tf.Tensor:
+def apply_rotary_pos_emb(tensor: tf.Tensor, sincos: tf.Tensor) -> tf.Tensor:
     sin_pos, cos_pos = sincos
-    sin_pos = tf.repeat(sin_pos[None, offset : shape_list(x)[1] + offset, None, :], 2, 3)
-    cos_pos = tf.repeat(cos_pos[None, offset : shape_list(x)[1] + offset, None, :], 2, 3)
-    return (x * cos_pos) + (rotate_every_two(x) * sin_pos)
+    sin_pos = tf.repeat(sin_pos[:, :, None, :], 2, 3)
+    cos_pos = tf.repeat(cos_pos[:, :, None, :], 2, 3)
+    return (tensor * cos_pos) + (rotate_every_two(tensor) * sin_pos)
 
 
 class TFGPTJAttention(tf.keras.layers.Layer):
@@ -232,14 +222,6 @@ class TFGPTJAttention(tf.keras.layers.Layer):
         key = self._split_heads(key, True)
         value = self._split_heads(value, False)
 
-        seq_len = shape_list(key)[1]
-        offset = 0
-
-        if layer_past is not None:
-            offset = shape_list(layer_past[0])[-2]
-            seq_len += offset
-
-        breakpoint()
         sincos = tf.gather(self.embed_positions, position_ids, axis=0)
         sincos = tf.split(sincos, 2, axis=-1)
         if self.rotary_dim is not None:
@@ -249,16 +231,14 @@ class TFGPTJAttention(tf.keras.layers.Layer):
             q_rot = query[:, :, :, : self.rotary_dim]
             q_pass = query[:, :, :, self.rotary_dim :]
 
-            # sincos = fixed_pos_embedding(k_rot, 1, seq_len=seq_len)
-            k_rot = apply_rotary_pos_emb(k_rot, sincos, offset=offset)
-            q_rot = apply_rotary_pos_emb(q_rot, sincos, offset=offset)
+            k_rot = apply_rotary_pos_emb(k_rot, sincos)
+            q_rot = apply_rotary_pos_emb(q_rot, sincos)
 
             key = tf.concat((k_rot, k_pass), axis=-1)
             query = tf.concat((q_rot, q_pass), axis=-1)
         else:
-            # sincos = fixed_pos_embedding(key, 1, seq_len=seq_len)
-            key = apply_rotary_pos_emb(key, sincos, offset=offset)
-            query = apply_rotary_pos_emb(query, sincos, offset=offset)
+            key = apply_rotary_pos_emb(key, sincos)
+            query = apply_rotary_pos_emb(query, sincos)
 
         key = tf.transpose(key, (0, 2, 1, 3))
         query = tf.transpose(query, (0, 2, 1, 3))

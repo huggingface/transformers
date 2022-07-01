@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import datetime
 import unittest
 
 from transformers import AutoTokenizer, GPTJConfig, is_tf_available
@@ -359,10 +358,9 @@ class TFGPTJModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
 
 
 @require_tf
-# @tooslow
+@tooslow
 # Marked as @tooslow due to GPU OOM -- but still useful to run locally. Requires ~39GB of RAM.
 class TFGPTJModelLanguageGenerationTest(unittest.TestCase):
-
     def test_lm_generate_gptj(self):
         model = TFGPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", from_pt=True)
         input_ids = tf.convert_to_tensor([[464, 3290]], dtype=tf.int32)  # The dog
@@ -424,10 +422,13 @@ class TFGPTJModelLanguageGenerationTest(unittest.TestCase):
         inputs_non_padded = tokenizer(sentences[0], return_tensors="tf")
         output_non_padded = model.generate(**inputs_non_padded, do_sample=False, num_beams=2)
         num_paddings = (
-            shape_list(inputs_non_padded["input_ids"])[-1] - tf.reduce_sum(tf.cast(inputs["attention_mask"][-1], tf.int64)).numpy()
+            shape_list(inputs_non_padded["input_ids"])[-1]
+            - tf.reduce_sum(tf.cast(inputs["attention_mask"][-1], tf.int64)).numpy()
         )
         inputs_padded = tokenizer(sentences[1], return_tensors="tf")
-        output_padded = model.generate(**inputs_padded, do_sample=False, num_beams=2, max_length=model.config.max_length - num_paddings)
+        output_padded = model.generate(
+            **inputs_padded, do_sample=False, num_beams=2, max_length=model.config.max_length - num_paddings
+        )
         non_padded_sentence = tokenizer.decode(output_non_padded[0], skip_special_tokens=True)
         padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
         self.assertListEqual(expected_output_sentences, [non_padded_sentence, padded_sentence])
