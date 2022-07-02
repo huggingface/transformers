@@ -66,7 +66,8 @@ Tips:
   used by [`SegformerForSemanticSegmentation`]). However, other datasets use the 0 index as
   background class and include this class as part of all labels. In that case, `reduce_labels` should be set to
   `False`, as loss should also be computed for the background class.
-- As most models, SegFormer comes in different sizes, the details of which can be found in the table below.
+- As most models, SegFormer comes in different sizes, the details of which can be found in the table below
+  (taken from Table 7 of the [original paper](https://arxiv.org/abs/2105.15203)).
 
 | **Model variant** | **Depths**    | **Hidden sizes**    | **Decoder hidden size** | **Params (M)** | **ImageNet-1k Top 1** |
 | :---------------: | ------------- | ------------------- | :---------------------: | :------------: | :-------------------: |
@@ -76,6 +77,10 @@ Tips:
 | MiT-b3            | [3, 4, 18, 3] | [64, 128, 320, 512] | 768                     | 45.2           | 83.1                  |
 | MiT-b4            | [3, 8, 27, 3] | [64, 128, 320, 512] | 768                     | 62.6           | 83.6                  |
 | MiT-b5            | [3, 6, 40, 3] | [64, 128, 320, 512] | 768                     | 82.0           | 83.8                  |
+
+Note that MiT in the above table refers to the Mix Transformer encoder backbone introduced in SegFormer. For
+SegFormer's results on the segmentation datasets like ADE20k, refer to the [paper](https://arxiv.org/abs/2105.15203).
+
 
 ## SegformerConfig
 
