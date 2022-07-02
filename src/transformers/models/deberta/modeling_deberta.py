@@ -1016,9 +1016,12 @@ class DebertaForMaskedLM(DebertaPreTrainedModel):
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint="lsanochkin/deberta-large-feedback",
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
+        mask="[MASK]",
+        expected_output="' Paris'",
+        expected_loss=0.54,
     )
     def forward(
         self,
@@ -1157,9 +1160,11 @@ class DebertaForSequenceClassification(DebertaPreTrainedModel):
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint="hf-internal-testing/tiny-random-deberta",
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output="'LABEL_0'",
+        expected_loss=0.69,
     )
     def forward(
         self,
@@ -1265,9 +1270,14 @@ class DebertaForTokenClassification(DebertaPreTrainedModel):
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint="dbsamu/deberta-base-finetuned-ner",
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=(
+            "['LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0',"
+            " 'LABEL_0', 'LABEL_0', 'LABEL_0']"
+        ),
+        expected_loss=0.04,
     )
     def forward(
         self,
@@ -1340,9 +1350,11 @@ class DebertaForQuestionAnswering(DebertaPreTrainedModel):
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint="Palak/microsoft_deberta-large_squad",
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output="' a nice puppet'",
+        expected_loss=2.84,
     )
     def forward(
         self,
