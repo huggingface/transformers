@@ -416,10 +416,10 @@ class TFSegformerModelTest(TFModelTesterMixin, unittest.TestCase):
             loss = model(model_input, **prepared_for_class)[0]
 
             if model_class.__name__ == "TFSegformerForSemanticSegmentation":
-                # Segmentation loss is non-reduced. This means if the labels array
-                # has a shape of (batch_size, height, width) then the loss will
-                # also have the same shape. So, we compare the loss sizes directly.
-                self.assertEqual(tf.size(loss), loss_size)
+                # Segmentation segmentation labels have a shape of (batch_size, height, width).
+                # But the loss is reutned per-sample wise having a shape of (batch_size).
+                # So, we perform the assertion accordingly.
+                self.assertEqual(loss.shape[0], added_label.shape[0])
             else:
                 self.assertEqual(loss.shape, [loss_size])
 
@@ -430,7 +430,7 @@ class TFSegformerModelTest(TFModelTesterMixin, unittest.TestCase):
             loss = model(**prepared_for_class)[0]
 
             if model_class.__name__ == "TFSegformerForSemanticSegmentation":
-                self.assertEqual(tf.size(loss), loss_size)
+                self.assertEqual(loss.shape[0], prepared_for_class["labels"].shape[0])
             else:
                 self.assertEqual(loss.shape, [loss_size])
 
@@ -460,7 +460,7 @@ class TFSegformerModelTest(TFModelTesterMixin, unittest.TestCase):
             # Send to model
             loss = model(tuple_input[:-1])[0]
             if model_class.__name__ == "TFSegformerForSemanticSegmentation":
-                self.assertEqual(tf.size(loss), loss_size)
+                self.assertEqual(loss.shape[0], tuple_input[1].shape[0])
             else:
                 self.assertEqual(loss.shape, [loss_size])
 

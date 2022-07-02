@@ -796,7 +796,10 @@ class TFSegformerForSemanticSegmentation(TFSegformerPreTrainedModel):
             loss_ = loss_fct(real, pred)
             mask = tf.cast(mask, dtype=loss_.dtype)
             loss_ *= mask
-            return loss_  # No reduction since other HF losses don't do it.
+            # We return loss per-sample.
+            # Initially the loss is of shape - (batch_size, height, width), then
+            # it is reduced across the spatial resolutions per-sample.
+            return tf.reduce_sum(loss_, axis=(1, 2)) / tf.reduce_sum(mask, axis=(1, 2))
 
         return masked_loss(labels, upsampled_logits)
 
@@ -858,7 +861,7 @@ class TFSegformerForSemanticSegmentation(TFSegformerPreTrainedModel):
             if self.config.num_labels == 1:
                 raise ValueError("The number of labels should be greater than one")
             else:
-                loss = self.hf_compute_loss(logits, labels)
+                loss = self.hf_compute_loss(logits=logits, labels=labels)
 
         if not return_dict:
             if output_hidden_states:
