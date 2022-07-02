@@ -213,6 +213,7 @@ PYTORCH_EXPORT_MODELS = {
     ("perceiver", "deepmind/language-perceiver", ("masked-lm", "sequence-classification")),
     ("perceiver", "deepmind/vision-perceiver-conv", ("image-classification",)),
     ("yolos", "hustvl/yolos-tiny"),
+    ("segformer", "nvidia/segformer-b0-finetuned-ade-512-512"),
 }
 
 PYTORCH_EXPORT_WITH_PAST_MODELS = {
