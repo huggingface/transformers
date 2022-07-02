@@ -79,7 +79,12 @@ def get_dtype_size(dtype):
 
 
 def convert_bloom_checkpoint_to_pytorch(
-    bloom_checkpoint_path, bloom_config_file, pytorch_dump_folder_path, shard_model, pretraining_tp
+    bloom_checkpoint_path, 
+    bloom_config_file, 
+    pytorch_dump_folder_path, 
+    shard_model, 
+    pretraining_tp,
+    cast_to_fp16=False,
 ):
     # Construct model
     if bloom_config_file == "":
@@ -204,6 +209,9 @@ def convert_bloom_checkpoint_to_pytorch(
         pytorch_weights_dump_path = pytorch_dump_folder_path + "/" + WEIGHTS_NAME
         pytorch_config_dump_path = pytorch_dump_folder_path + "/" + CONFIG_NAME
         print(f"Save PyTorch model to {pytorch_weights_dump_path}")
+        if cast_to_fp16:
+            print("Casting to FP16")
+            model = model.half()
         torch.save(model.state_dict(), pytorch_weights_dump_path)
         print(f"Save configuration file to {pytorch_config_dump_path}")
         with open(pytorch_config_dump_path, "w", encoding="utf-8") as f:
@@ -243,6 +251,11 @@ if __name__ == "__main__":
         type=int,
         help="Pretraining TP rank that has been used when training the model in Megatron-LM \n",
     )
+    parser.add_argument(
+        "--fp16",
+        action="store_true",
+        help="Save the checkpoint in fp16",
+    )
     args = parser.parse_args()
     convert_bloom_checkpoint_to_pytorch(
         args.bloom_checkpoint_path,
@@ -250,4 +263,5 @@ if __name__ == "__main__":
         args.pytorch_dump_folder_path,
         args.shard_model,
         args.pretraining_tp,
+        cast_to_fp16=args.fp16,
     )
