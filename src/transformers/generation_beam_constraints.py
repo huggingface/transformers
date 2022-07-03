@@ -2,7 +2,7 @@ import collections
 import copy
 import itertools
 from abc import ABC, abstractmethod
-from typing import Iterable, Iterator, List, Optional, Union
+from typing import Iterable, List, Optional, Union
 
 
 class Constraint(ABC):
@@ -209,26 +209,27 @@ class DisjointSet(object):
     A helper class that maintains a disjoint-set.
     """
 
-    def __init__(self, length: int):
-        self.roots = list(range(length))
+    def __init__(self):
+        self.root = {}
+        self.roots = set()
+        self.set = {}
+        self.count = {}
 
     def __getitem__(self, node: int) -> int:
-        if self.roots[node] != self.roots[self.roots[node]]:
-            self.roots[node] = self[self.roots[node]]
-        return self.roots[node]
+        if self.root[node] != self.root[self.root[node]]:
+            self.root[node] = self[self.root[node]]
+        return self.root[node]
 
     def __ior__(self, nodes: Iterable[int]):
         roots = {self[node] for node in nodes}
         if 1 < len(roots):
-            min_root = min(roots)
-            roots.remove(min_root)
+            new_root = roots.pop()
             for root in roots:
-                self.roots[root] = min_root
+                self.root[root] = new_root
+                self.roots.remove(root)
+                self.set[new_root] |= self.set[root]
+                self.count[new_root] += self.count[root]
         return self
-
-    def __iter__(self) -> Iterator[int]:
-        for index in range(len(self.roots)):
-            yield self[index]
 
 
 class ACAutomaton(object):
@@ -238,7 +239,9 @@ class ACAutomaton(object):
     handle the edge cases where disjuncitve constraints share words.
     """
 
-    def __init__(self, force_words_ids: Iterable[Union[Iterable[int], Iterable[Iterable[int]]]]):
+    def __init__(
+        self, force_words_ids: Iterable[Union[Iterable[int], Iterable[Iterable[int]]]], no_subsets: bool = True
+    ):
         self.current_node = 0
         self.unfulfilled = 0
 
@@ -259,6 +262,18 @@ class ACAutomaton(object):
             word_ids = itertools.chain((word_id,), word_ids)
             if isinstance(word_id, int):
                 word_ids = (word_ids,)
+            elif not no_subsets:
+                word_ids, ac_automaton = [], ACAutomaton(word_ids)
+
+                nodes = [(0,)]
+                while nodes:
+                    *token_ids, root = nodes.pop()
+
+                    if ac_automaton.output[root] or ac_automaton.conj_count[root]:
+                        word_ids.append(token_ids)
+                    else:
+                        for token_id, node in ac_automaton.trie[root].items():
+                            nodes.append((*token_ids, token_id, node))
 
             nodes = set(map(self.insert_leaf, word_ids))
             nodes.discard(0)
@@ -267,7 +282,7 @@ class ACAutomaton(object):
                 (node,) = nodes
                 self.conj_count[node] += 1
                 self.unfulfilled += self.height[node]
-            else:
+            elif nodes:
                 for node in nodes:
                     self.disj_set[node].add(len(self.disj_constraints))
                 self.disj_constraints.append(nodes)
@@ -275,25 +290,21 @@ class ACAutomaton(object):
                 self.disj_max_height.append(max_height)
                 self.unfulfilled += max_height
 
-        if self.disj_constraints:
-            self.disj_group = DisjointSet(len(self.disj_constraints))
-            for node in set.union(*self.disj_constraints):
-                self.disj_group |= self.disj_set[node]
-            self.disj_group_count = dict(collections.Counter(self.disj_group))
+        self.disj_group = DisjointSet()
 
         self.suffix = [0] * len(self.trie)
         self.output = [0] * len(self.trie)
 
-        queue = collections.deque(self.trie[0].values())
-        while queue:
-            root = queue.popleft()
+        nodes = collections.deque(self.trie[0].values())
+        while nodes:
+            root = nodes.popleft()
 
             suffix = self.suffix[root]
             self.output[root] = suffix if self.conj_count[suffix] or self.disj_set[suffix] else self.output[suffix]
 
             for token_id, node in self.trie[root].items():
                 self.suffix[node] = self.does_advance(suffix, token_id)
-                queue.append(node)
+                nodes.append(node)
 
     def insert_leaf(self, token_ids: Iterable[int]) -> int:
         node = 0
@@ -316,65 +327,6 @@ class ACAutomaton(object):
             node, token_id = self.parent[node]
             del self.trie[node][token_id]
 
-    def try_decrease_disj_group_count(self, group: int, decrease: int):
-        if 0 < decrease:
-            self.disj_group_count[group] -= decrease
-
-            if self.disj_group_count[group] == 0:
-                disj_group = [index for index, root in enumerate(self.disj_group) if root == group]
-                self.unfulfilled -= sum(self.disj_max_height[index] for index in disj_group)
-
-                for node in {node for index in disj_group for node in self.disj_constraints[index]}:
-                    self.disj_set[node].clear()
-
-                    if self.conj_count[node] <= 0:
-                        self.unfulfilled -= self.conj_count[node] * self.height[node]
-                        self.conj_count[node] = 0
-                        self.delete_from_trie(node)
-
-    def try_delete_disj_leaf(self, node: int):
-        if self.conj_count[node] < 0 and self.conj_count[node] + len(self.disj_set[node]) == 0:
-            group = self.disj_group[next(iter(self.disj_set[node]))]
-            disj_group = {index for index, root in enumerate(self.disj_group) if root == group}
-
-            leaves_to_delete = [node]
-            while leaves_to_delete:
-                leaf = leaves_to_delete.pop()
-
-                self.unfulfilled -= self.conj_count[leaf] * self.height[leaf]
-                self.conj_count[leaf] = 0
-
-                disj_group -= self.disj_set[leaf]
-                self.unfulfilled -= sum(self.disj_max_height[index] for index in self.disj_set[leaf])
-
-                for node in {
-                    node for index in self.disj_set[leaf] for node in self.disj_constraints[index] if node != leaf
-                }:
-                    self.disj_set[node] -= self.disj_set[leaf]
-
-                    if self.conj_count[node] + len(self.disj_set[node]) == 0:
-                        leaves_to_delete.append(node)
-
-                while self.disj_set[leaf]:
-                    index = self.disj_set[leaf].pop()
-                    self.disj_group.roots[index] = index
-
-                self.delete_from_trie(leaf)
-
-            nodes = {node for index in disj_group for node in self.disj_constraints[index]}
-
-            for i in disj_group:
-                self.disj_group.roots[i] = i
-            for node in nodes:
-                self.disj_group |= self.disj_set[node]
-
-            self.disj_group_count.update(collections.Counter(self.disj_group[index] for index in disj_group))
-            for node in nodes:
-                if self.conj_count[node] < 0:
-                    self.try_decrease_disj_group_count(
-                        self.disj_group[next(iter(self.disj_set[node]))], -self.conj_count[node]
-                    )
-
     def try_delete_leaf(self, node: int):
         if 0 < self.conj_count[node] + len(self.disj_set[node]):
             self.conj_count[node] -= 1
@@ -383,8 +335,62 @@ class ACAutomaton(object):
             if self.conj_count[node] == 0 and not self.disj_set[node]:
                 self.delete_from_trie(node)
             elif self.conj_count[node] < 0:
-                self.try_decrease_disj_group_count(self.disj_group[next(iter(self.disj_set[node]))], 1)
-                self.try_delete_disj_leaf(node)
+                if node in self.disj_group.root:
+                    node = self.disj_group[node]
+                    self.disj_group.count[node] += 1
+                else:
+                    self.disj_group.root[node] = node
+                    self.disj_group.roots.add(node)
+                    self.disj_group.count[node] = 1
+                    self.disj_group.set[node] = set(self.disj_set[node])
+
+                while True:
+                    for root in self.disj_group.roots:
+                        if (
+                            root != node
+                            and len(self.disj_group.set[root] - self.disj_group.set[node])
+                            <= self.disj_group.count[root]
+                            and len(self.disj_group.set[node] - self.disj_group.set[root])
+                            <= self.disj_group.count[node]
+                        ):
+                            self.disj_group |= (root, node)
+                            node = self.disj_group[node]
+                            break
+                    else:
+                        break
+
+                if len(self.disj_group.set[node]) == self.disj_group.count[node]:
+                    self.unfulfilled -= sum(self.disj_max_height[index] for index in self.disj_group.set[node])
+
+                    for leaf in set.union(*map(self.disj_constraints.__getitem__, self.disj_group.set[node])):
+                        self.disj_set[leaf] -= self.disj_group.set[node]
+
+                        if self.conj_count[leaf] <= 0 and not self.disj_set[leaf]:
+                            self.unfulfilled -= self.conj_count[leaf] * self.height[leaf]
+                            self.conj_count[leaf] = 0
+                            self.delete_from_trie(leaf)
+
+                    self.disj_group.roots.remove(node)
+
+                    for root in self.disj_group.roots:
+                        self.disj_group.set[root] -= self.disj_group.set[node]
+
+    def try_delete(self, node: int, min_height: int):
+        while node and min_height <= self.height[node]:
+            if 0 < self.conj_count[node] + len(self.disj_set[node]):
+                output = node
+            else:
+                while self.is_invalid(self.output[node]):
+                    self.output[node] = self.output[self.output[node]]
+                output = self.output[node]
+
+            node = self.parent[node][0]
+
+            if self.height[output] < min_height:
+                min_height -= 1
+            else:
+                self.try_delete_leaf(output)
+                min_height = self.height[output]
 
     def does_advance(self, node: int, token_id: int) -> int:
         while node and token_id not in self.trie[node]:
@@ -396,16 +402,15 @@ class ACAutomaton(object):
     def update(self, token_id: int):
         node = self.current_node
 
-        output = node = self.does_advance(node, token_id)
-        while output:
-            self.try_delete_leaf(output)
+        root = node
+        node = self.does_advance(node, token_id)
+        self.try_delete(root, self.height[node])
 
-            while self.is_invalid(self.output[output]):
-                self.output[output] = self.output[self.output[output]]
-            output = self.output[output]
-
+        root = node
         while node and not self.trie[node]:
             node = self.suffix[node]
+        if root != node:
+            self.try_delete(root, self.height[node])
 
         self.current_node = node
 
@@ -444,13 +449,9 @@ class DisjunctiveConstraint(Constraint):
         self.current_seq = []
 
         for node in range(len(self.ac_automaton.trie)):
-            if self.ac_automaton.trie[node] and (
-                self.ac_automaton.output[node]
-                or self.ac_automaton.conj_count[node]
-                or self.ac_automaton.disj_set[node]
-            ):
+            if self.ac_automaton.trie[node] and (self.ac_automaton.output[node] or self.ac_automaton.disj_set[node]):
                 raise ValueError(
-                    "Each list in `nested_token_ids` can't be a complete subset of another list, but is"
+                    "Each list in `nested_token_ids` can't be a non-suffix complete subset of another list, but is"
                     f" {nested_token_ids}."
                 )
 
