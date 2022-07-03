@@ -278,6 +278,8 @@ extras["flax-speech"] = extras["audio"]
 extras["vision"] = deps_list("Pillow")
 extras["timm"] = deps_list("timm")
 extras["codecarbon"] = deps_list("codecarbon")
+extras["glutons"] = deps_list("glutons")
+
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
@@ -320,6 +322,7 @@ extras["all"] = (
     + extras["timm"]
     + extras["codecarbon"]
     + extras["accelerate"]
+    + extras["glutons"]
 )
 
 # Might need to add doc-builder and some specific deps in the future
@@ -344,6 +347,7 @@ extras["dev-torch"] = (
     + extras["sklearn"]
     + extras["modelcreation"]
     + extras["onnxruntime"]
+    + extras["gluonts"]
 )
 extras["dev-tensorflow"] = (
     extras["testing"]
