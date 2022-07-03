@@ -708,6 +708,7 @@ else:
         "Constraint",
         "ConstraintListState",
         "DisjunctiveConstraint",
+        "ConjunctiveDisjunctiveConstraint",
         "PhrasalConstraint",
     ]
     _import_structure["generation_beam_search"] = ["BeamScorer", "BeamSearchScorer", "ConstrainedBeamSearchScorer"]
@@ -3294,6 +3295,7 @@ if TYPE_CHECKING:
             TextDatasetForNextSentencePrediction,
         )
         from .generation_beam_constraints import (
+            ConjunctiveDisjunctiveConstraint,
             Constraint,
             ConstraintListState,
             DisjunctiveConstraint,

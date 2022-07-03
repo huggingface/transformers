@@ -498,6 +498,57 @@ class DisjunctiveConstraint(Constraint):
         return copy.deepcopy(self) if stateful else type(self)(self.token_ids)
 
 
+class ConjunctiveDisjunctiveConstraint(Constraint):
+    r"""
+    A special [`Constraint`] that is fulfilled by fulfilling a series of conjunctive and disjunctive constraints. It
+    handles multiple constraints simultaneously, even for edge cases.
+    - allow [1,2,3] fulfill [[1,2],[2,3]], where words overlap
+    - allow [1,2,3,2,3,1] fulfill [[1],[2,3],[1,2,3]], where longest fulfills first
+    - allow [1,2]/[1,3] fulfill [[[1],[2]],[[1],[3]]], where condition is ambiguous
+    - allow [1,2]/[2] fulfill [[[1, 2, 3], [1, 2], [2]]], where redundant suffix shrinks
+
+    Args:
+        force_words_ids (`Iterable[Union[Iterable[int], Iterable[Iterable[int]]]]`):
+            List of constraints to be fulfilled. If given `Iterable[int]`, this is treated as a positive constraint. If
+            given `Iterable[Iterable[int]]`, this is treated as a disjunctive positive constraint where one can allow
+            different forms of each word.
+    """
+
+    def __init__(self, force_words_ids: Iterable[Union[Iterable[int], Iterable[Iterable[int]]]]):
+        super(Constraint, self).__init__()
+
+        self.force_words_ids = force_words_ids
+        self.ac_automaton = ACAutomaton(self.force_words_ids, False)
+        self.seqlen = self.remaining()
+
+    def advance(self) -> Optional[List[int]]:
+        return list(self.ac_automaton.trie[self.ac_automaton.current_node]) or None
+
+    def does_advance(self, token_id: int) -> bool:
+        return self.ac_automaton.does_advance(self.ac_automaton.current_node, token_id) != 0
+
+    def update(self, token_id: int):
+        self.ac_automaton.update(token_id)
+
+        stepped = self.remaining() < self.seqlen
+        completed = self.remaining() == 0
+        reset = self.remaining() == self.seqlen
+
+        return stepped, completed, reset
+
+    def reset(self):
+        if self.ac_automaton.unfulfilled == self.seqlen:
+            self.ac_automaton.current_node = 0
+        else:
+            self.ac_automaton = ACAutomaton(self.force_words_ids, False)
+
+    def remaining(self) -> int:
+        return self.ac_automaton.remaining()
+
+    def copy(self, stateful: bool = False):
+        return copy.deepcopy(self) if stateful else type(self)(self.force_words_ids)
+
+
 class ConstraintListState:
     r"""
     A class for beam scorers to track its progress through a list of constraints.
