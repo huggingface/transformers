@@ -684,8 +684,8 @@ class Swinv2Layer(nn.Module):
         shortcut = hidden_states
 
         # pad hidden_states to multiples of window size
-        hidden_states, pad_values = self.maybe_pad(hidden_states, height, width)
         hidden_states = hidden_states.view(batch_size, height, width, channels)
+        hidden_states, pad_values = self.maybe_pad(hidden_states, height, width)
         _, height_pad, width_pad, _ = hidden_states.shape
         # cyclic shift
         if self.shift_size > 0:
