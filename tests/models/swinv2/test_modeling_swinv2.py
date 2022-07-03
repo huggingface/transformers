@@ -374,7 +374,7 @@ class Swinv2ModelTest(ModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
-                if "embeddings" not in name and param.requires_grad:
+                if "embeddings" not in name and "logit_scale" not in name and param.requires_grad:
                     self.assertIn(
                         ((param.data.mean() * 1e9).round() / 1e9).item(),
                         [0.0, 1.0],
@@ -410,5 +410,5 @@ class Swinv2ModelIntegrationTest(unittest.TestCase):
         # verify the logits
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
-        expected_slice = torch.tensor([-0.0948, -0.6454, -0.0921]).to(torch_device)
+        expected_slice = torch.tensor([-0.3947, -0.4306, 0.0026]).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
