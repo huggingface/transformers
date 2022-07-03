@@ -23,11 +23,12 @@ import tempfile
 import unittest
 import unittest.mock as mock
 from importlib import import_module
+from math import isnan
 from typing import List, Tuple
 
 from datasets import Dataset
 
-from huggingface_hub import HfFolder, delete_repo, set_access_token
+from huggingface_hub import HfFolder, Repository, delete_repo, set_access_token
 from requests.exceptions import HTTPError
 from transformers import is_tf_available, is_torch_available
 from transformers.configuration_utils import PretrainedConfig
@@ -1284,12 +1285,7 @@ class TFModelTesterMixin:
                 added_label = prepared_for_class[
                     sorted(list(prepared_for_class.keys() - inputs_dict.keys()), reverse=True)[0]
                 ]
-                loss_size = tf.size(added_label)
-
-                if model.__class__ in get_values(TF_MODEL_FOR_CAUSAL_LM_MAPPING):
-                    # if loss is causal lm loss, labels are shift, so that one label per batch
-                    # is cut
-                    loss_size = loss_size - self.model_tester.batch_size
+                expected_loss_size = added_label.shape.as_list()[:1]
 
                 # Test that model correctly compute the loss with kwargs
                 prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
@@ -1298,12 +1294,26 @@ class TFModelTesterMixin:
                 model_input = prepared_for_class.pop(input_name)
 
                 loss = model(model_input, **prepared_for_class)[0]
-                self.assertEqual(loss.shape, [loss_size])
+                self.assertEqual(loss.shape.as_list(), expected_loss_size)
+
+                # Test that model correctly compute the loss when we mask some positions
+                prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
+                possible_input_names = {"input_ids", "pixel_values", "input_features"}
+                input_name = possible_input_names.intersection(set(prepared_for_class)).pop()
+                model_input = prepared_for_class.pop(input_name)
+                if "labels" in prepared_for_class:
+                    labels = prepared_for_class["labels"].numpy()
+                    if len(labels.shape) > 1 and labels.shape[1] != 1:
+                        labels[0] = -100
+                        prepared_for_class["labels"] = tf.convert_to_tensor(labels)
+                        loss = model(model_input, **prepared_for_class)[0]
+                        self.assertEqual(loss.shape.as_list(), expected_loss_size)
+                        self.assertTrue(not np.any(np.isnan(loss.numpy())))
 
                 # Test that model correctly compute the loss with a dict
                 prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
                 loss = model(prepared_for_class)[0]
-                self.assertEqual(loss.shape, [loss_size])
+                self.assertEqual(loss.shape.as_list(), expected_loss_size)
 
                 # Test that model correctly compute the loss with a tuple
                 prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
@@ -1334,7 +1344,7 @@ class TFModelTesterMixin:
                 # Send to model
                 loss = model(tuple_input[:-1])[0]
 
-                self.assertEqual(loss.shape, [loss_size])
+                self.assertEqual(loss.shape.as_list(), expected_loss_size)
 
     def test_keras_fit(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1397,6 +1407,7 @@ class TFModelTesterMixin:
                     shuffle=False,
                 )
                 val_loss1 = history1.history["val_loss"][0]
+                self.assertTrue(not isnan(val_loss1))
                 accuracy1 = {key: val[0] for key, val in history1.history.items() if key.endswith("accuracy")}
 
                 # We reinitialize the model here even though our learning rate was zero
@@ -1412,6 +1423,7 @@ class TFModelTesterMixin:
                     shuffle=False,
                 )
                 val_loss2 = history2.history["val_loss"][0]
+                self.assertTrue(not isnan(val_loss2))
                 accuracy2 = {key: val[0] for key, val in history2.history.items() if key.endswith("accuracy")}
                 self.assertTrue(np.allclose(val_loss1, val_loss2, atol=1e-2, rtol=1e-3))
                 self.assertEqual(history1.history.keys(), history2.history.keys())
@@ -1437,6 +1449,7 @@ class TFModelTesterMixin:
                     shuffle=False,
                 )
                 val_loss3 = history3.history["val_loss"][0]
+                self.assertTrue(not isnan(val_loss3))
                 accuracy3 = {key: val[0] for key, val in history3.history.items() if key.endswith("accuracy")}
                 self.assertTrue(np.allclose(val_loss1, val_loss3, atol=1e-2, rtol=1e-3))
                 self.assertEqual(history1.history.keys(), history3.history.keys())
@@ -1965,6 +1978,16 @@ class UtilsFunctionsTest(unittest.TestCase):
         ref_model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
         for p1, p2 in zip(model.weights, ref_model.weights):
             assert np.allclose(p1.numpy(), p2.numpy())
+
+    @is_pt_tf_cross_test
+    def test_checkpoint_sharding_local_from_pt(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            _ = Repository(local_dir=tmp_dir, clone_from="hf-internal-testing/tiny-random-bert-sharded")
+            model = TFBertModel.from_pretrained(tmp_dir, from_pt=True)
+            # the model above is the same as the model below, just a sharded pytorch version.
+            ref_model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+            for p1, p2 in zip(model.weights, ref_model.weights):
+                assert np.allclose(p1.numpy(), p2.numpy())
 
     def test_shard_checkpoint(self):
         # This is the model we will use, total size 340,000 bytes.

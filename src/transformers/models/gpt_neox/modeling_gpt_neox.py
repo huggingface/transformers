@@ -195,7 +195,20 @@ class GPTNeoXAttention(nn.Module):
 
         query = query.view(batch_size * num_attention_heads, query_length, attn_head_size)
         key = key.view(batch_size * num_attention_heads, key_length, attn_head_size)
-        attn_scores = torch.einsum("bik,bjk->bij", query, key) / self.norm_factor
+        attn_scores = torch.zeros(
+            batch_size * num_attention_heads,
+            query_length,
+            key_length,
+            dtype=query.dtype,
+            device=key.device,
+        )
+        attn_scores = torch.baddbmm(
+            attn_scores,
+            query,
+            key.transpose(1, 2),
+            beta=1.0,
+            alpha=(1.0 / self.norm_factor),
+        )
         attn_scores = attn_scores.view(batch_size, num_attention_heads, query_length, key_length)
 
         mask_value = torch.finfo(attn_scores.dtype).min
@@ -637,7 +650,7 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel):
             attention_mask = input_ids.new_ones(input_shape)
 
         # cut decoder_input_ids if past is used
-        if past is not None:
+        if past and past[0] is not None:
             input_ids = input_ids[:, -1:]
 
         return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past}
