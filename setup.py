@@ -278,7 +278,7 @@ extras["flax-speech"] = extras["audio"]
 extras["vision"] = deps_list("Pillow")
 extras["timm"] = deps_list("timm")
 extras["codecarbon"] = deps_list("codecarbon")
-extras["glutons"] = deps_list("glutons")
+extras["gluonts"] = deps_list("gluonts")
 
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
@@ -322,7 +322,7 @@ extras["all"] = (
     + extras["timm"]
     + extras["codecarbon"]
     + extras["accelerate"]
-    + extras["glutons"]
+    + extras["gluonts"]
 )
 
 # Might need to add doc-builder and some specific deps in the future
