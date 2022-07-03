@@ -15,14 +15,15 @@ def get_swinv2_config(swinv2_name):
     name_split = swinv2_name.split("_")
 
     model_size = name_split[1]
-    if "to" in name_split[4]:
-        img_size = int(name_split[4][-3:])
-    else:
-        img_size = int(name_split[4])
     if "to" in name_split[3]:
-        window_size = int(name_split[3][-2:])
+        img_size = int(name_split[3][-3:])
     else:
-        window_size = int(name_split[3][6:])
+        img_size = int(name_split[3])
+    if "to" in name_split[2]:
+        window_size = int(name_split[2][-2:])
+    else:
+        window_size = int(name_split[2][6:])
+
     if model_size == "tiny":
         embed_dim = 96
         depths = (2, 2, 6, 2)
