@@ -378,7 +378,9 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     @require_torch_gpu
     def test_simple_generation(self):
         path_350m = "bigscience/bloom-350m"
-        model = BloomForCausalLM.from_pretrained(path_350m, torch_dtype=torch.float32, use_cache=False).cuda()
+        model = BloomForCausalLM.from_pretrained(
+            path_350m, torch_dtype=torch.float32, use_cache=False, revision="gs555750"
+        ).cuda()
         model = model.eval()
         tokenizer = BloomTokenizerFast.from_pretrained(path_350m)
 
@@ -393,7 +395,9 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     @require_torch_gpu
     def test_batch_generation(self):
         path_350m = "bigscience/bloom-350m"
-        model = BloomForCausalLM.from_pretrained(path_350m, torch_dtype="auto", use_cache=True).cuda()
+        model = BloomForCausalLM.from_pretrained(
+            path_350m, torch_dtype="auto", use_cache=True, revision="gs555750"
+        ).cuda()
         model = model.eval()
         tokenizer = BloomTokenizerFast.from_pretrained(path_350m, padding_side="left")
 
@@ -413,7 +417,9 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     @require_torch_gpu
     def test_batch_generation_padd(self):
         path_350m = "bigscience/bloom-350m"
-        model = BloomForCausalLM.from_pretrained(path_350m, torch_dtype=torch.float32, use_cache=True).cuda()
+        model = BloomForCausalLM.from_pretrained(
+            path_350m, torch_dtype=torch.float32, use_cache=True, revision="gs555750"
+        ).cuda()
         model = model.eval()
         tokenizer = BloomTokenizerFast.from_pretrained(path_350m, padding_side="left")
 
@@ -424,7 +430,10 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         input_ids_without_pad = tokenizer.encode(input_sentence_without_pad, return_tensors="pt")
 
         greedy_output = model.generate(
-            input_ids["input_ids"].cuda(), attention_mask=input_ids["attention_mask"], max_length=50, do_sample=False
+            input_ids["input_ids"].cuda(),
+            attention_mask=input_ids["attention_mask"].cuda(),
+            max_length=50,
+            do_sample=False,
         )
         greedy_output_without_pad = model.generate(input_ids_without_pad.cuda(), max_length=50, do_sample=False)
 
