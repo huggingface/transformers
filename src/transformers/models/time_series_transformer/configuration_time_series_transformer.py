@@ -101,7 +101,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        prediction_length,
+        prediction_length: int,
         context_length: Optional[int] = None,
         freq: Optional[str] = None,
         input_size: int = 1,
@@ -124,8 +124,8 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         init_std: float = 0.02,
         **kwargs
     ):
-        self.context_length = context_length or prediction_length
         self.prediction_length = prediction_length
+        self.context_length = context_length or prediction_length
         self.distr_output = distr_output
         self.input_size = input_size
         self.time_features = time_features or time_features_from_frequency_str(freq)
