@@ -18,7 +18,7 @@
 import collections.abc
 import math
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 import tensorflow as tf
 
