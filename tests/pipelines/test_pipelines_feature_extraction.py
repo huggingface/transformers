@@ -83,7 +83,7 @@ class FeatureExtractionPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
                 For now ignore those.
                 """
             )
-        elif model.__name__ == "DeformableDetrModel":
+        elif model.__class__.__name__ == "DeformableDetrModel":
             self.skipTest(
                 """Deformable DETR requires a custom CUDA kernel.
                 """
