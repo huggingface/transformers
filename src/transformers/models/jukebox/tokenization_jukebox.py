@@ -152,8 +152,13 @@ class JukeboxTokenizer(PreTrainedTokenizer):
             self.artists_encoder = vocabulary["artists"]
             self.genres_encoder = vocabulary["genres"]
             self.lyrics_encoder = vocabulary["lyrics"]
-
-        self.out_of_vocab = re.compile("[^A-Za-z0-9.,:;!?\-+'\"()\[\] \t\n]+")  # FIXME: should be an argument?
+        
+        oov = "[^A-Za-z0-9.,:;!?\-+'\"()\[\] \t\n]"
+        # In v2, we had a n_vocab=80 and in v3 we missed + and so n_vocab=79 of characters.
+        if len(self.lyrics_encoder)== 79:
+            oov += "+" 
+            
+        self.out_of_vocab = re.compile(oov)  # FIXME: should be an argument?
 
         self.artists_decoder = {v: k for k, v in self.artists_encoder.items()}
         self.genres_decoder = {v: k for k, v in self.genres_encoder.items()}
@@ -262,12 +267,14 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         """
         import re
 
-        accepted = frozenset(
-            [chr(i) for i in range(ord("a"), ord("z") + 1)]
-            + [chr(i) for i in range(ord("A"), ord("Z") + 1)]
+        accepted = [chr(i) for i in range(ord("a"), ord("z") + 1)] \
+            + [chr(i) for i in range(ord("A"), ord("Z") + 1)] \
             + [chr(i) for i in range(ord("0"), ord("9") + 1)]
-        )
 
+        # In v2, " " is not accepted while it is for v3 
+        if len(self.lyrics_encoder)== 79:
+            accepted += [" "]
+        accepted = frozenset(accepted) 
         rex = re.compile(r"_+")
         text = "".join([c if c in accepted else "_" for c in text.lower()])
         text = rex.sub("_", text).strip("_")
