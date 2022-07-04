@@ -58,8 +58,6 @@ class JukeboxModelTest(unittest.TestCase):
     Of that colossal Wreck, boundless and bare
     The lone and level sands stretch far away
     """,
-        duration=2,
-        sample_length=786432,
     )
     # @slow
     def test_model(self):
@@ -573,39 +571,43 @@ class JukeboxModelTest(unittest.TestCase):
         # x,x_conds and y_conds should be the same  before calling the sampling
         # start and end embeding
         # expected conditioning to match
-
-    def test_1b_lyrics(self):
-        model = JukeboxModel.from_pretrained("ArthurZ/jukebox-1b-lyrics").eval()  # .to("cuda")
-
-        # model.priors[2].sample(1, y=torch.Tensor([[44100.0, 0, 44100.0] + 386 * [0]]).long().to("cuda"), chunk_size=32)
-
-        tokenizer = JukeboxTokenizer.from_pretrained("ArthurZ/jukebox", max_n_lyric_tokens=384)
-
+    def prepare_inputs(self,model_id, sample_length, chunk_size =32):
+        tokenizer = JukeboxTokenizer.from_pretrained(model_id, max_n_lyric_tokens=384)
+         # create sampling parameters
         sampling_temperature = 0.98
         lower_batch_size = 16
         max_batch_size = 16
         lower_level_chunk_size = 32
-        chunk_size = 32
         sampling_kwargs = [
-            dict(temp=0.99, fp16=False, max_batch_size=lower_batch_size, chunk_size=lower_level_chunk_size),
-            dict(temp=0.99, fp16=False, max_batch_size=lower_batch_size, chunk_size=lower_level_chunk_size),
-            dict(temp=sampling_temperature, fp16=False, max_batch_size=max_batch_size, chunk_size=chunk_size),
+            dict(temp=0.99, fp16=False, max_batch_size=lower_batch_size, chunk_size=lower_level_chunk_size, sample_tokens=30),
+            dict(temp=0.99, fp16=False, max_batch_size=lower_batch_size, chunk_size=lower_level_chunk_size, sample_tokens=30),
+            dict(temp=sampling_temperature, fp16=False, max_batch_size=max_batch_size, chunk_size=chunk_size, sample_tokens=30),
         ]
 
-        self.metas.sample_length = model.priors[-1].sample_length
 
-        tokens = tokenizer(**self.metas)
+        tokens = tokenizer(**self.metas, sample_length = sample_length )
         inputs, _ = tokens["input_ids"], tokens["attention_masks"]
 
-        zs = [torch.zeros(1, 0, dtype=torch.long).cpu() for _ in range(len(model.priors))]
-        labels = [{}, {}, inputs]
+       
+        labels = [inputs*3]
+        labels[1]["y"] = inputs["y"][:, :9]
+        labels[0]["y"] = inputs["y"][:, :9]
 
+        return labels, sampling_kwargs
+
+    # @slow 
+    def test_1b_lyrics(self):
         set_seed(0)
         torch.backends.cuda.matmul.allow_tf32 = False
         torch.backends.cudnn.enabled = False
-        zs = model._sample(zs, labels, sampling_kwargs, [2], model.config)
 
-        EXPECTED_OUTPUT = torch.tensor([1489, 1489, 324, 1489, 1599, 1072, 1357, 1489, 784, 1272])
+        model_id = "ArthurZ/jukebox-1b-lyrics"
+        model = JukeboxModel.from_pretrained(model_id).eval() 
+        
+        labels, sampling_kwargs = self.prepare_inputs(model_id, model.priors[-1].sample_length)
+
+        zs = [torch.zeros(1, 0, dtype=torch.long).cpu() for _ in range(3)]
+        zs = model._sample(zs, labels, sampling_kwargs, [2], model.config)
 
         # TODO generate the original outputs
         EXPECTED_OUTPUT = torch.tensor(
@@ -644,9 +646,6 @@ class JukeboxModelTest(unittest.TestCase):
         )
         assert torch.allclose(zs[-1][0, :30], EXPECTED_OUTPUT)
 
-        labels[1]["y"] = inputs["y"][:, :9]
-        labels[0]["y"] = inputs["y"][:, :9]
-
         zs[-1] = torch.cat((zs[-1], torch.zeros(1, 2048 - zs[-1].shape[-1]).cpu()), dim=-1)
         zs = model._sample(zs, labels, sampling_kwargs, [1], model.config)
         # TODO find the expected outputs
@@ -686,7 +685,7 @@ class JukeboxModelTest(unittest.TestCase):
         )
         assert torch.allclose(zs[-2][0, :30], EXPECTED_OUTPUT)
 
-        zs[-2] = torch.cat((zs[-2], torch.zeros(1, 2048 - zs[-1].shape[-1]).cpu()), dim=-1)
+        zs[-2] = torch.cat((zs[-2], torch.zeros(1, 4096 - zs[-2].shape[-1]).cpu()), dim=-1)
         zs = model._sample(zs, labels, sampling_kwargs, [0], model.config)
         # TODO find the expected outputs
         EXPECTED_OUTPUT = torch.tensor(
@@ -725,52 +724,18 @@ class JukeboxModelTest(unittest.TestCase):
         )
         assert torch.allclose(zs[0][0, :30], EXPECTED_OUTPUT)
 
-    def test_5b_lyrics(self):
-        model = JukeboxModel.from_pretrained("ArthurZ/jukebox-5b-lyrics").eval()
-        tokenizer = JukeboxTokenizer.from_pretrained("ArthurZ/jukebox-5b-lyrics")
-        set_seed(0)
-
-        sampling_temperature = 0.98
-        lower_batch_size = 16
-        max_batch_size = 16
-        lower_level_chunk_size = 32
-        chunk_size = 32
-        sampling_kwargs = [
-            dict(
-                temp=0.99,
-                fp16=False,
-                max_batch_size=lower_batch_size,
-                chunk_size=lower_level_chunk_size,
-                sample_tokens=30,
-            ),
-            dict(
-                temp=0.99,
-                fp16=False,
-                max_batch_size=lower_batch_size,
-                chunk_size=lower_level_chunk_size,
-                sample_tokens=30,
-            ),
-            dict(
-                temp=sampling_temperature,
-                fp16=False,
-                max_batch_size=max_batch_size,
-                chunk_size=chunk_size,
-                sample_tokens=30,
-            ),
-        ]
-
-        tokens = tokenizer(**self.metas)
-        inputs, _ = tokens["input_ids"], tokens["attention_masks"]
-
-        zs = [torch.zeros(1, 0, dtype=torch.long).cpu() for _ in range(len(model.priors))]
-        labels = [{}, {}, inputs]
-        # model = model.cuda()
-
+    def test_5b_lyrics(self):        
         set_seed(0)
         torch.backends.cuda.matmul.allow_tf32 = False
         torch.backends.cudnn.enabled = False
-        zs = model._sample(zs, labels, sampling_kwargs, [2], model.config)
 
+        model_id = "ArthurZ/jukebox-5b-lyrics"
+        model = JukeboxModel.from_pretrained(model_id).eval() 
+        
+        labels, sampling_kwargs = self.prepare_inputs(model_id, model.priors[-1].sample_length, chunk_size = 16)
+
+        zs = [torch.zeros(1, 0, dtype=torch.long).cpu() for _ in range(len(model.priors))]
+        zs = model._sample(zs, labels, sampling_kwargs, [2], model.config)
         EXPECTED_OUTPUT = torch.tensor(
             [
                 1489,
@@ -807,8 +772,6 @@ class JukeboxModelTest(unittest.TestCase):
         )
         assert torch.allclose(zs[-1][0, :30], EXPECTED_OUTPUT)
 
-        labels[1]["y"] = inputs["y"][:, :9]
-        labels[0]["y"] = inputs["y"][:, :9]
 
         zs[-1] = torch.cat((zs[-1], torch.zeros(1, 2048 - zs[-1].shape[-1]).cpu()), dim=-1)
         zs = model._sample(zs, labels, sampling_kwargs, [1], model.config)
@@ -849,7 +812,7 @@ class JukeboxModelTest(unittest.TestCase):
         )
         assert torch.allclose(zs[-2][0, :30], EXPECTED_OUTPUT)
 
-        zs[-2] = torch.cat((zs[-2], torch.zeros(1, 2048 - zs[-1].shape[-1]).cpu()), dim=-1)
+        zs[-2] = torch.cat((zs[-2], torch.zeros(1, 4096 - zs[-2].shape[-1]).cpu()), dim=-1)
         zs = model._sample(zs, labels, sampling_kwargs, [0], model.config)
         # TODO find the expected outputs
         EXPECTED_OUTPUT = torch.tensor(
