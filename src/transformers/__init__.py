@@ -4309,11 +4309,7 @@ if TYPE_CHECKING:
             ViTMAEModel,
             ViTMAEPreTrainedModel,
         )
-        from .models.vqgan import (
-            VQGAN_PRETRAINED_MODEL_ARCHIVE_LIST,
-            VQGANModel,
-            VQGANPreTrainedModel,
-        )
+        from .models.vqgan import VQGAN_PRETRAINED_MODEL_ARCHIVE_LIST, VQGANModel, VQGANPreTrainedModel
         from .models.wav2vec2 import (
             WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
             Wav2Vec2ForAudioFrameClassification,
@@ -5057,10 +5053,7 @@ if TYPE_CHECKING:
         from .models.vision_encoder_decoder import FlaxVisionEncoderDecoderModel
         from .models.vision_text_dual_encoder import FlaxVisionTextDualEncoderModel
         from .models.vit import FlaxViTForImageClassification, FlaxViTModel, FlaxViTPreTrainedModel
-        from .models.vqgan import (
-            FlaxVQGANModel,
-            FlaxVQGANPreTrainedModel,
-        )
+        from .models.vqgan import FlaxVQGANModel, FlaxVQGANPreTrainedModel
         from .models.wav2vec2 import (
             FlaxWav2Vec2ForCTC,
             FlaxWav2Vec2ForPreTraining,
