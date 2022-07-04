@@ -38,6 +38,29 @@ if is_torch_available():
 class JukeboxModelTest(unittest.TestCase):
     all_model_classes = (JukeboxModel,) if is_torch_available() else ()
 
+    metas = dict(
+            artist="Zac Brown Band",
+            genres="Country",
+            total_length=440960,
+            offset=0,
+            lyrics="""I met a traveller from an antique land,
+    Who said—“Two vast and trunkless legs of stone
+    Stand in the desert. . . . Near them, on the sand,
+    Half sunk a shattered visage lies, whose frown,
+    And wrinkled lip, and sneer of cold command,
+    Tell that its sculptor well those passions read
+    Which yet survive, stamped on these lifeless things,
+    The hand that mocked them, and the heart that fed;
+    And on the pedestal, these words appear:
+    My name is Ozymandias, King of Kings;
+    Look on my Works, ye Mighty, and despair!
+    Nothing beside remains. Round the decay
+    Of that colossal Wreck, boundless and bare
+    The lone and level sands stretch far away
+    """,
+            duration=2,
+            sample_length=786432,
+        )
     # @slow
     def test_model(self):
         set_seed(0)
@@ -545,13 +568,19 @@ class JukeboxModelTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(zs[0][0][0:50], top_50_expected_zs.long(), atol=1e-4))
 
+    def test_conditioning(self):
+        pass
+        # x,x_conds and y_conds should be the same  before calling the sampling
+        # start and end embeding 
+        # expected conditioning to match
+
     def test_1b_lyrics(self):
         model = JukeboxModel.from_pretrained("ArthurZ/jukebox-1b-lyrics").eval()  # .to("cuda")
 
         # model.priors[2].sample(1, y=torch.Tensor([[44100.0, 0, 44100.0] + 386 * [0]]).long().to("cuda"), chunk_size=32)
 
         tokenizer = JukeboxTokenizer.from_pretrained("ArthurZ/jukebox", max_n_lyric_tokens=384)
-        set_seed(0)
+
 
         sampling_temperature = 0.98
         lower_batch_size = 16
@@ -564,46 +593,15 @@ class JukeboxModelTest(unittest.TestCase):
             dict(temp=sampling_temperature, fp16=False, max_batch_size=max_batch_size, chunk_size=chunk_size),
         ]
 
-        model.config.sr = 44100
-        model.config.hop_fraction = [0.125, 0.5, 0.5]
-        model.config.n_samples = 1
 
-        model.config.sample_length_in_seconds = 20
-        model.config.sample_length = (int(model.config.sample_length_in_seconds*model.config.sr)//
-                                    model.priors[-1].raw_to_tokens)*model.priors[-1].raw_to_tokens
+        self.metas.sample_length=model.priors[-1].sample_length
 
-        model.config.total_sample_length_in_seconds = 180
-
-        metas = dict(
-            artist="Zac Brown Band",
-            genres="Country",
-            total_length=440960,
-            offset=0,
-            lyrics="""I met a traveller from an antique land,
-Who said—“Two vast and trunkless legs of stone
-Stand in the desert. . . . Near them, on the sand,
-Half sunk a shattered visage lies, whose frown,
-And wrinkled lip, and sneer of cold command,
-Tell that its sculptor well those passions read
-Which yet survive, stamped on these lifeless things,
-The hand that mocked them, and the heart that fed;
-And on the pedestal, these words appear:
-My name is Ozymandias, King of Kings;
-Look on my Works, ye Mighty, and despair!
-Nothing beside remains. Round the decay
-Of that colossal Wreck, boundless and bare
-The lone and level sands stretch far away
-""",
-            duration=2,
-            sample_length=786432,
-        )
-
-        tokens = tokenizer(**metas)
+        tokens = tokenizer(**self.metas)
         inputs, _ = tokens["input_ids"], tokens["attention_masks"]
         
         zs = [torch.zeros(1,0,dtype = torch.long).cpu() for _ in range(len(model.priors))] 
-        labels = torch.tensor([[inputs]]*3).cpu()
-        # model = model.cuda()
+        labels = [{},{}, inputs]
+
 
         set_seed(0)
         torch.backends.cuda.matmul.allow_tf32 = False
@@ -611,16 +609,38 @@ The lone and level sands stretch far away
         zs = model._sample(zs,labels , sampling_kwargs, [2],model.config)
 
         EXPECTED_OUTPUT = torch.tensor([1489, 1489,  324, 1489, 1599, 1072, 1357, 1489,  784, 1272])
+        
+        # TODO generate the original outputs 
+        EXPECTED_OUTPUT = torch.tensor([1489,  653,  653,  653,  653,  653,  653,  653,  653,  653,  653,  653,
+         653,  653,  653,  653,  653,  653,  653,  653, 1434, 1434,  653, 1357,
+         653, 1434, 1434, 1536, 1599,  710])
+        assert torch.allclose(zs[-1][0,:30],EXPECTED_OUTPUT)
 
-        labels[1] =torch.tensor([2645888,       0,  262144,    1069,      11 ] + [-1]*384 ).cpu()
-        zs[-1] = torch.cat((zs[-1], torch.zeros(1,1848).cpu()),dim=-1)
+
+        labels[1]['y']= inputs['y'][:,:9]
+        labels[0]['y']= inputs['y'][:,:9]
+
+        zs[-1] = torch.cat((zs[-1], torch.zeros(1,2048-zs[-1].shape[-1]).cpu()),dim=-1)
         zs = model._sample(zs,labels , sampling_kwargs, [1],model.config)
+        # TODO find the expected outputs 
+        EXPECTED_OUTPUT = torch.tensor([1489,  653,  653,  653,  653,  653,  653,  653,  653,  653,  653,  653,
+         653,  653,  653,  653,  653,  653,  653,  653, 1434, 1434,  653, 1357,
+         653, 1434, 1434, 1536, 1599,  710])
+        assert torch.allclose(zs[-2][0,:30],EXPECTED_OUTPUT)
+
+        zs[-2] = torch.cat((zs[-2], torch.zeros(1,2048-zs[-1].shape[-1]).cpu()),dim=-1)
+        zs = model._sample(zs,labels , sampling_kwargs, [0],model.config)
+        # TODO find the expected outputs 
+        EXPECTED_OUTPUT = torch.tensor([1489,  653,  653,  653,  653,  653,  653,  653,  653,  653,  653,  653,
+         653,  653,  653,  653,  653,  653,  653,  653, 1434, 1434,  653, 1357,
+         653, 1434, 1434, 1536, 1599,  710])
+        assert torch.allclose(zs[0][0,:30],EXPECTED_OUTPUT)
 
 
         
     def test_5b_lyrics(self):
-        model = JukeboxModel.from_pretrained("ArthurZ/jukebox-5b-lyrics").eval()  # .to("cuda")
-        tokenizer = JukeboxTokenizer.from_pretrained("ArthurZ/jukebox", max_n_lyric_tokens=512)
+        model = JukeboxModel.from_pretrained("ArthurZ/jukebox-5b-lyrics").eval() 
+        tokenizer = JukeboxTokenizer.from_pretrained("ArthurZ/jukebox-5b-lyrics")
         set_seed(0)
 
         sampling_temperature = 0.98
@@ -629,50 +649,16 @@ The lone and level sands stretch far away
         lower_level_chunk_size = 32
         chunk_size = 32
         sampling_kwargs = [
-            dict(temp=0.99, fp16=False, max_batch_size=lower_batch_size, chunk_size=lower_level_chunk_size),
-            dict(temp=0.99, fp16=False, max_batch_size=lower_batch_size, chunk_size=lower_level_chunk_size),
-            dict(temp=sampling_temperature, fp16=False, max_batch_size=max_batch_size, chunk_size=chunk_size),
+            dict(temp=0.99, fp16=False, max_batch_size=lower_batch_size, chunk_size=lower_level_chunk_size, sample_tokens=30),
+            dict(temp=0.99, fp16=False, max_batch_size=lower_batch_size, chunk_size=lower_level_chunk_size, sample_tokens=30),
+            dict(temp=sampling_temperature, fp16=False, max_batch_size=max_batch_size, chunk_size=chunk_size, sample_tokens=30),
         ]
 
-        model.config.sr = 44100
-        model.config.hop_fraction = [0.125, 0.5, 0.5]
-        model.config.n_samples = 1
-
-        model.config.sample_length_in_seconds = 20
-        model.config.sample_length = (int(model.config.sample_length_in_seconds*model.config.sr)//
-                                    model.priors[-1].raw_to_tokens)*model.priors[-1].raw_to_tokens
-
-        model.config.total_sample_length_in_seconds = 180
-
-        metas = dict(
-            artist="Zac Brown Band",
-            genres="Country",
-            total_length=440960,
-            offset=0,
-            lyrics="""I met a traveller from an antique land,
-Who said—“Two vast and trunkless legs of stone
-Stand in the desert. . . . Near them, on the sand,
-Half sunk a shattered visage lies, whose frown,
-And wrinkled lip, and sneer of cold command,
-Tell that its sculptor well those passions read
-Which yet survive, stamped on these lifeless things,
-The hand that mocked them, and the heart that fed;
-And on the pedestal, these words appear:
-My name is Ozymandias, King of Kings;
-Look on my Works, ye Mighty, and despair!
-Nothing beside remains. Round the decay
-Of that colossal Wreck, boundless and bare
-The lone and level sands stretch far away
-""",
-            duration=2,
-            sample_length=786432,
-        )
-
-        tokens = tokenizer(**metas)
+        tokens = tokenizer(**self.metas)
         inputs, _ = tokens["input_ids"], tokens["attention_masks"]
         
         zs = [torch.zeros(1,0,dtype = torch.long).cpu() for _ in range(len(model.priors))] 
-        labels = torch.tensor([[inputs]]*3).cpu()
+        labels = [{}, {}, inputs]
         # model = model.cuda()
 
         set_seed(0)
@@ -680,7 +666,32 @@ The lone and level sands stretch far away
         torch.backends.cudnn.enabled = False
         zs = model._sample(zs,labels , sampling_kwargs, [2],model.config)
 
-        EXPECTED_OUTPUT = []
+        EXPECTED_OUTPUT = torch.tensor([1489,  653,  653,  653,  653,  653,  653,  653,  653,  653,  653,  653,
+         653,  653,  653,  653,  653,  653,  653,  653, 1434, 1434,  653, 1357,
+         653, 1434, 1434, 1536, 1599,  710])
+        assert torch.allclose(zs[-1][0,:30],EXPECTED_OUTPUT)
+
+
+        labels[1]['y']= inputs['y'][:,:9]
+        labels[0]['y']= inputs['y'][:,:9]
+
+        zs[-1] = torch.cat((zs[-1], torch.zeros(1,2048-zs[-1].shape[-1]).cpu()),dim=-1)
+        zs = model._sample(zs,labels , sampling_kwargs, [1],model.config)
+        # TODO find the expected outputs 
+        EXPECTED_OUTPUT = torch.tensor([1489,  653,  653,  653,  653,  653,  653,  653,  653,  653,  653,  653,
+         653,  653,  653,  653,  653,  653,  653,  653, 1434, 1434,  653, 1357,
+         653, 1434, 1434, 1536, 1599,  710])
+        assert torch.allclose(zs[-2][0,:30],EXPECTED_OUTPUT)
+
+        zs[-2] = torch.cat((zs[-2], torch.zeros(1,2048-zs[-1].shape[-1]).cpu()),dim=-1)
+        zs = model._sample(zs,labels , sampling_kwargs, [0],model.config)
+        # TODO find the expected outputs 
+        EXPECTED_OUTPUT = torch.tensor([1489,  653,  653,  653,  653,  653,  653,  653,  653,  653,  653,  653,
+         653,  653,  653,  653,  653,  653,  653,  653, 1434, 1434,  653, 1357,
+         653, 1434, 1434, 1536, 1599,  710])
+        assert torch.allclose(zs[0][0,:30],EXPECTED_OUTPUT)
+
+
 
 if __name__ == "__main__":
     tester = JukeboxModelTest()
@@ -1168,245 +1179,8 @@ if __name__ == "__main__":
 #         self.model_tester.create_and_check_jukebox_weight_initialization(*config_and_inputs)
 
 #     @slow
-#     def test_batch_generation(self):
-#         model = JukeboxLMHeadModel.from_pretrained("jukebox")
-#         model.to(torch_device)
-#         tokenizer = JukeboxTokenizer.from_pretrained("jukebox")
-
-#         tokenizer.padding_side = "left"
-
-#         # Define PAD Token = EOS Token = 50256
-#         tokenizer.pad_token = tokenizer.eos_token
-#         model.config.pad_token_id = model.config.eos_token_id
-
-#         # use different length sentences to test batching
-#         sentences = [
-#             "Hello, my dog is a little",
-#             "Today, I",
-#         ]
-
-#         inputs = tokenizer(sentences, return_tensors="pt", padding=True)
-#         input_ids = inputs["input_ids"].to(torch_device)
-#         token_type_ids = torch.cat(
-#             [
-#                 input_ids.new_full((input_ids.shape[0], input_ids.shape[1] - 1), 0),
-#                 input_ids.new_full((input_ids.shape[0], 1), 500),
-#             ],
-#             dim=-1,
-#         )
-
-#         outputs = model.generate(
-#             input_ids=input_ids,
-#             attention_mask=inputs["attention_mask"].to(torch_device),
-#         )
-
-#         outputs_tt = model.generate(
-#             input_ids=input_ids,
-#             attention_mask=inputs["attention_mask"].to(torch_device),
-#             token_type_ids=token_type_ids,
-#         )
-
-#         inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
-#         output_non_padded = model.generate(input_ids=inputs_non_padded)
-
-#         num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().cpu().item()
-#         inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
-#         output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
-
-#         batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-#         batch_out_sentence_tt = tokenizer.batch_decode(outputs_tt, skip_special_tokens=True)
-#         non_padded_sentence = tokenizer.decode(output_non_padded[0], skip_special_tokens=True)
-#         padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
-
-#         expected_output_sentence = [
-#             "Hello, my dog is a little bit of a mess. I'm not sure if he's going",
-#             "Today, I'm going to be doing a lot of research on this. I",
-#         ]
-#         self.assertListEqual(expected_output_sentence, batch_out_sentence)
-#         self.assertTrue(batch_out_sentence_tt != batch_out_sentence)  # token_type_ids should change output
-#         self.assertListEqual(expected_output_sentence, [non_padded_sentence, padded_sentence])
-
-#     @slow
-#     def test_batch_generation_2heads(self):
-#         model = JukeboxDoubleHeadsModel.from_pretrained("jukebox")
-#         model.to(torch_device)
-#         tokenizer = JukeboxTokenizer.from_pretrained("jukebox")
-
-#         tokenizer.padding_side = "left"
-
-#         # This tokenizer has no pad token, so we have to set it in some way
-#         # Define PAD Token = EOS Token = 50256
-#         tokenizer.pad_token = tokenizer.eos_token
-#         model.config.pad_token_id = model.config.eos_token_id
-
-#         # use different length sentences to test batching
-#         sentences = [
-#             "Hello, my dog is a little",
-#             "Today, I",
-#         ]
-
-#         inputs = tokenizer(sentences, return_tensors="pt", padding=True)
-#         input_ids = inputs["input_ids"].to(torch_device)
-#         token_type_ids = torch.cat(
-#             [
-#                 input_ids.new_full((input_ids.shape[0], input_ids.shape[1] - 1), 0),
-#                 input_ids.new_full((input_ids.shape[0], 1), 500),
-#             ],
-#             dim=-1,
-#         )
-
-#         outputs = model.generate(
-#             input_ids=input_ids,
-#             attention_mask=inputs["attention_mask"].to(torch_device),
-#         )
-
-#         outputs_tt = model.generate(
-#             input_ids=input_ids,
-#             attention_mask=inputs["attention_mask"].to(torch_device),
-#             token_type_ids=token_type_ids,
-#         )
-
-#         inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
-#         output_non_padded = model.generate(input_ids=inputs_non_padded)
-
-#         num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().cpu().item()
-#         inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
-#         output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
-
-#         batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-#         batch_out_sentence_tt = tokenizer.batch_decode(outputs_tt, skip_special_tokens=True)
-#         non_padded_sentence = tokenizer.decode(output_non_padded[0], skip_special_tokens=True)
-#         padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
-
-#         expected_output_sentence = [
-#             "Hello, my dog is a little bit of a mess. I'm not sure if he's going",
-#             "Today, I'm going to be doing a lot of research on this. I",
-#         ]
-#         self.assertListEqual(expected_output_sentence, batch_out_sentence)
-#         self.assertTrue(batch_out_sentence_tt != batch_out_sentence)  # token_type_ids should change output
-#         self.assertListEqual(expected_output_sentence, [non_padded_sentence, padded_sentence])
-
-#     @slow
 #     def test_model_from_pretrained(self):
 #         for model_name in JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
 #             model = JukeboxModel.from_pretrained(model_name)
 #             self.assertIsNotNone(model)
 
-
-# @require_torch
-# class JukeboxModelLanguageGenerationTest(unittest.TestCase):
-#     def _test_lm_generate_jukebox_helper(
-#         self,
-#         gradient_checkpointing=False,
-#         reorder_and_upcast_attn=False,
-#         scale_attn_by_inverse_layer_idx=False,
-#         verify_outputs=True,
-#     ):
-#         model = JukeboxLMHeadModel.from_pretrained(
-#             "jukebox",
-#             reorder_and_upcast_attn=reorder_and_upcast_attn,
-#             scale_attn_by_inverse_layer_idx=scale_attn_by_inverse_layer_idx,
-#         )
-#         if gradient_checkpointing:
-#             model.gradient_checkpointing_enable()
-#         else:
-#             model.gradient_checkpointing_disable()
-#         model.to(torch_device)
-
-#         # The dog
-#         input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)
-
-#         # The dog was found in a field near the intersection of West and West Streets.\n\nThe dog
-#         # fmt: off
-#         expected_output_ids = [
-#             464, 3290, 373, 1043, 287, 257, 2214, 1474, 262, 16246, 286, 2688, 290, 2688, 27262, 13, 198, 198, 464, 3290,
-#         ]
-#         # fmt: on
-#         output_ids = model.generate(input_ids, do_sample=False)
-#         if verify_outputs:
-#             self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
-
-#     @slow
-#     def test_lm_generate_jukebox(self):
-#         self._test_lm_generate_jukebox_helper()
-
-#     @slow
-#     def test_lm_generate_jukebox_with_gradient_checkpointing(self):
-#         self._test_lm_generate_jukebox_helper(gradient_checkpointing=True)
-
-#     @slow
-#     def test_lm_generate_jukebox_with_reorder_and_upcast_attn(self):
-#         self._test_lm_generate_jukebox_helper(reorder_and_upcast_attn=True)
-
-#     @slow
-#     def test_lm_generate_jukebox_with_scale_attn_by_inverse_layer_idx(self):
-#         self._test_lm_generate_jukebox_helper(scale_attn_by_inverse_layer_idx=True, verify_outputs=False)
-
-#     @slow
-#     def test_jukebox_sample(self):
-#         tokenizer = JukeboxTokenizer.from_pretrained("jukebox")
-#         model = JukeboxLMHeadModel.from_pretrained("jukebox")
-#         model.to(torch_device)
-
-#         torch.manual_seed(0)
-#         tokenized = tokenizer("Today is a nice day and", return_tensors="pt", return_token_type_ids=True)
-#         input_ids = tokenized.input_ids.to(torch_device)
-#         output_ids = model.generate(input_ids, do_sample=True)
-#         output_str = tokenizer.decode(output_ids[0], skip_special_tokens=True)
-
-#         token_type_ids = tokenized.token_type_ids.to(torch_device)
-#         output_seq = model.generate(input_ids=input_ids, do_sample=True, num_return_sequences=5)
-#         output_seq_tt = model.generate(
-#             input_ids=input_ids, token_type_ids=token_type_ids, do_sample=True, num_return_sequences=5
-#         )
-#         output_seq_strs = tokenizer.batch_decode(output_seq, skip_special_tokens=True)
-#         output_seq_tt_strs = tokenizer.batch_decode(output_seq_tt, skip_special_tokens=True)
-
-#         EXPECTED_OUTPUT_STR = (
-#             "Today is a nice day and if you don't know anything about the state of play during your holiday"
-#         )
-#         self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
-#         self.assertTrue(
-#             all([output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs))])
-#         )  # token_type_ids should change output
-
-#     @slow
-#     def test_jukebox_sample_max_time(self):
-#         tokenizer = JukeboxTokenizer.from_pretrained("jukebox")
-#         model = JukeboxLMHeadModel.from_pretrained("jukebox")
-#         model.to(torch_device)
-
-#         torch.manual_seed(0)
-#         tokenized = tokenizer("Today is a nice day and", return_tensors="pt", return_token_type_ids=True)
-#         input_ids = tokenized.input_ids.to(torch_device)
-
-#         MAX_TIME = 0.5
-
-#         start = datetime.datetime.now()
-#         model.generate(input_ids, do_sample=True, max_time=MAX_TIME, max_length=256)
-#         duration = datetime.datetime.now() - start
-#         self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-#         self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-#         start = datetime.datetime.now()
-#         model.generate(input_ids, do_sample=False, max_time=MAX_TIME, max_length=256)
-#         duration = datetime.datetime.now() - start
-#         self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-#         self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-#         start = datetime.datetime.now()
-#         model.generate(input_ids, do_sample=False, num_beams=2, max_time=MAX_TIME, max_length=256)
-#         duration = datetime.datetime.now() - start
-#         self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-#         self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-#         start = datetime.datetime.now()
-#         model.generate(input_ids, do_sample=True, num_beams=2, max_time=MAX_TIME, max_length=256)
-#         duration = datetime.datetime.now() - start
-#         self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-#         self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-#         start = datetime.datetime.now()
-#         model.generate(input_ids, do_sample=False, max_time=None, max_length=256)
-#         duration = datetime.datetime.now() - start
-#         self.assertGreater(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
