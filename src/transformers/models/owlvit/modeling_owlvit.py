@@ -16,7 +16,7 @@
 
 
 from dataclasses import dataclass
-from typing import Dict, Any, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -44,7 +44,6 @@ OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "google/owlvit-base",
     # See all OwlViT models at https://huggingface.co/models?filter=owlvit
 ]
-
 
 
 # Copied from transformers.models.bart.modeling_bart._expand_mask
@@ -766,15 +765,18 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
         batch_size = input_ids.shape[0]
 
         # Get embeddings for all text queries in all batch samples
-        output = tuple([
-            self.text_model(
-                input_ids=input_ids[idx],
-                attention_mask=attention_mask[idx],
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict
-            ) for idx in range(batch_size)
-        ])
+        output = tuple(
+            [
+                self.text_model(
+                    input_ids=input_ids[idx],
+                    attention_mask=attention_mask[idx],
+                    output_attentions=output_attentions,
+                    output_hidden_states=output_hidden_states,
+                    return_dict=return_dict,
+                )
+                for idx in range(batch_size)
+            ]
+        )
         return output
 
 
@@ -963,21 +965,22 @@ class OwlViTModel(OwlViTPreTrainedModel):
         batch_size = input_ids.shape[0]
 
         # Get embeddings for all text queries in all batch samples
-        text_outputs = tuple([
-            self.text_model(
-                input_ids=input_ids[idx],
-                attention_mask=attention_mask[idx],
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict
-            ) for idx in range(batch_size)
-        ])
+        text_outputs = tuple(
+            [
+                self.text_model(
+                    input_ids=input_ids[idx],
+                    attention_mask=attention_mask[idx],
+                    output_attentions=output_attentions,
+                    output_hidden_states=output_hidden_states,
+                    return_dict=return_dict,
+                )
+                for idx in range(batch_size)
+            ]
+        )
 
         pooled_outputs = [text_output[1] for text_output in text_outputs]
 
-        text_features = [
-            self.text_projection(pooled_outputs[i]).unsqueeze(0) for i in range(batch_size)
-        ]
+        text_features = [self.text_projection(pooled_outputs[i]).unsqueeze(0) for i in range(batch_size)]
         text_features = torch.cat(text_features)
 
         return text_features
@@ -1092,23 +1095,24 @@ class OwlViTModel(OwlViTPreTrainedModel):
         # Get embeddings for all text queries in all batch samples
         batch_size = input_ids.shape[0]
 
-        text_outputs = tuple([
-            self.text_model(
-                input_ids=input_ids[idx],
-                attention_mask=attention_mask[idx],
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict
-            ) for idx in range(batch_size)
-        ])
+        text_outputs = tuple(
+            [
+                self.text_model(
+                    input_ids=input_ids[idx],
+                    attention_mask=attention_mask[idx],
+                    output_attentions=output_attentions,
+                    output_hidden_states=output_hidden_states,
+                    return_dict=return_dict,
+                )
+                for idx in range(batch_size)
+            ]
+        )
 
         image_embeds = vision_outputs[1]
         image_embeds = self.visual_projection(image_embeds)
 
         text_embeds = [text_output[1] for text_output in text_outputs]
-        text_embeds = [
-            self.text_projection(text_embeds[i]) for i in range(batch_size)
-        ]
+        text_embeds = [self.text_projection(text_embeds[i]) for i in range(batch_size)]
         text_embeds = torch.cat(text_embeds)
 
         # normalized features
@@ -1173,9 +1177,9 @@ class OwlViTClassPredictionHead(nn.Module):
         self.elu = nn.ELU()
 
     def forward(
-        self, 
-        image_embeds: torch.FloatTensor, 
-        query_embeds: torch.FloatTensor, 
+        self,
+        image_embeds: torch.FloatTensor,
+        query_embeds: torch.FloatTensor,
         query_mask: torch.Tensor,
     ) -> Tuple[torch.FloatTensor]:
 
@@ -1186,7 +1190,7 @@ class OwlViTClassPredictionHead(nn.Module):
         query_embeds /= torch.linalg.norm(query_embeds, dim=-1, keepdim=True) + 1e-6
 
         # Get class predictions
-        pred_logits = torch.einsum('...pd,...qd->...pq', image_class_embeds, query_embeds)
+        pred_logits = torch.einsum("...pd,...qd->...pq", image_class_embeds, query_embeds)
 
         # Apply a learnable shift and scale to logits
         logit_shift = self.logit_shift(image_embeds)
@@ -1197,9 +1201,9 @@ class OwlViTClassPredictionHead(nn.Module):
         if query_mask is not None:
             if query_mask.ndim > 1:
                 query_mask = torch.unsqueeze(query_mask, dim=-2)
-   
+
             pred_logits = pred_logits.to(torch.float64)
-            pred_logits = torch.where(query_mask==0, -1e6, pred_logits)
+            pred_logits = torch.where(query_mask == 0, -1e6, pred_logits)
 
         return (pred_logits, image_class_embeds)
 
@@ -1212,8 +1216,8 @@ class OwlViTImageTextEmbedder(nn.Module):
         self.layer_norm = nn.LayerNorm(config.vision_config.hidden_size)
 
     def forward(
-        self, 
-        pixel_values: Optional[torch.FloatTensor] = None, 
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
@@ -1224,7 +1228,7 @@ class OwlViTImageTextEmbedder(nn.Module):
         if input_ids is not None:
             text_embeds = self.clip.get_text_features(input_ids=input_ids, attention_mask=attention_mask)
 
-        # Encode image 
+        # Encode image
         if pixel_values is not None:
             image_embeds = self.clip.get_image_features(pixel_values, train=False)
 
@@ -1233,7 +1237,7 @@ class OwlViTImageTextEmbedder(nn.Module):
             class_token_out = torch.broadcast_to(image_embeds[:, :1, :], new_size)
 
             # Merge image embedding with class tokens
-            image_embeds = image_embeds[:, 1:, :] * class_token_out  
+            image_embeds = image_embeds[:, 1:, :] * class_token_out
             image_embeds = self.layer_norm(image_embeds)
 
         return (image_embeds, text_embeds)
@@ -1254,13 +1258,13 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         assert feature_map.ndim == 4  # [B, H, W, C]
         h, w = feature_map.shape[1:3]
 
-        xy = np.stack(np.meshgrid(np.arange(1, w+1), np.arange(1, h+1)), axis=-1).astype(np.float32)
+        xy = np.stack(np.meshgrid(np.arange(1, w + 1), np.arange(1, h + 1)), axis=-1).astype(np.float32)
         xy /= np.array([w, h], np.float32)
 
         # Flatten h, w dimensions
         xy = xy.reshape(*(xy.shape[:-3] + (-1, 2)))
         xy = torch.from_numpy(xy)
-      
+
         return xy
 
     def compute_box_bias(self, feature_map: torch.FloatTensor) -> torch.FloatTensor:
@@ -1269,7 +1273,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         xy = self.normalize_grid_corner_coordinates(feature_map)
         xy = torch.clip(xy, 0.0, 1.0)
 
-        # Unnormalize xy 
+        # Unnormalize xy
         xy_bias = torch.log(xy + 1e-4) - torch.log1p(-xy + 1e-4)
 
         # The box size is biased to the patch size
@@ -1281,42 +1285,42 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         return box_bias
 
     def box_predictor(
-        self, 
-        image_feats: torch.FloatTensor, 
+        self,
+        image_feats: torch.FloatTensor,
         feature_map: torch.FloatTensor,
     ) -> torch.FloatTensor:
         """
         Args:
-            image_feats: 
+            image_feats:
                 Features extracted from the image, returned by the`embedder` function.
-            feature_map: 
+            feature_map:
                 A spatial re-arrangement of image_features, also returned by the `embedder` function.
 
         Returns:
-            pred_boxes: 
+            pred_boxes:
                 List of predicted boxes (cxcywh normalized to 0, 1) nested within a dictionary.
         """
         # Bounding box detection head [batch_size, num_boxes, 4].
         pred_boxes = self._box_head(image_feats)
- 
+
         # Compute the location of each token on the grid and use it to compute a bias for the bbox prediction
         pred_boxes += self.compute_box_bias(feature_map)
         pred_boxes = self.sigmoid(pred_boxes)
         return pred_boxes
 
     def class_predictor(
-        self, 
-        image_feats: torch.FloatTensor, 
-        query_embeds: torch.FloatTensor, 
+        self,
+        image_feats: torch.FloatTensor,
+        query_embeds: torch.FloatTensor,
         query_mask: torch.Tensor,
     ) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
         """
         Args:
-            image_feats: 
+            image_feats:
                 Features extracted from the image embedder.
-            query_embeds: 
+            query_embeds:
                 Text query embeddings.
-            query_mask: 
+            query_mask:
                 Must be provided with query_embeddings. A mask indicating which query embeddings are valid.
         """
         (pred_logits, image_class_embeds) = self._class_head(image_feats, query_embeds, query_mask)
@@ -1325,21 +1329,21 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
     def image_embedder(self, pixel_values: torch.FloatTensor) -> torch.FloatTensor:
         # Returns a 2D map of image features.
-        (image_embeds, _ ) = self._embedder(pixel_values=pixel_values)
+        (image_embeds, _) = self._embedder(pixel_values=pixel_values)
 
         # Resize to [batch_size, num_patches, num_patches, hidden_size]
         new_size = (
-            image_embeds.shape[0], 
-            int(np.sqrt(image_embeds.shape[1])), 
-            int(np.sqrt(image_embeds.shape[1])),  
-            image_embeds.shape[-1]
+            image_embeds.shape[0],
+            int(np.sqrt(image_embeds.shape[1])),
+            int(np.sqrt(image_embeds.shape[1])),
+            image_embeds.shape[-1],
         )
         image_embeds = image_embeds.reshape(new_size)
 
         return image_embeds
 
     def text_embedder(
-        self, 
+        self,
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor,
     ) -> torch.FloatTensor:
@@ -1351,8 +1355,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(OWLVIT_OBJ_DETECTION_INPUTS_DOCSTRING)
     def forward(
-        self, 
-        pixel_values: torch.FloatTensor, 
+        self,
+        pixel_values: torch.FloatTensor,
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor,
     ) -> OwlViTObjectDetectionOutput:
@@ -1377,20 +1381,20 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         ... )
 
         >>> outputs = model(**inputs)
-        >>> pred_boxes = outputs.pred_boxes 
+        >>> pred_boxes = outputs.pred_boxes
         >>> pred_logits = outputs.logits
         ```"""
         # Embed images
         pixel_values = pixel_values.to(torch.float32)
         feature_map = self.image_embedder(pixel_values)
         b, h, w, d = feature_map.shape
-        image_feats = torch.reshape(feature_map, (b, h*w, d))
+        image_feats = torch.reshape(feature_map, (b, h * w, d))
 
         # Embed text queries
         query_embeds = self.text_embedder(input_ids, attention_mask)
 
         # If first token is 0, then this is a padded query [batch_size, num_queries].
-        query_mask = (input_ids[..., 0] > 0)
+        query_mask = input_ids[..., 0] > 0
 
         # Predict object classes [batch_size, num_patches, num_queries+1]
         (pred_logits, class_embeds) = self.class_predictor(image_feats, query_embeds, query_mask)

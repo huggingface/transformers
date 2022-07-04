@@ -56,7 +56,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import CLIPProcessor
+    from transformers import OwlViTProcessor
 
 
 if is_flax_available():
@@ -159,7 +159,9 @@ class OwlViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = OwlViTVisionModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=OwlViTVisionConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=OwlViTVisionConfig, has_text_modality=False, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -655,11 +657,11 @@ class OwlViTModelIntegrationTest(unittest.TestCase):
 
         image = prepare_img()
         inputs = processor(
-            text=[["a photo of a cat", "a photo of a dog"]], 
-            images=image, 
-            max_length=16, 
-            padding="max_length", 
-            return_tensors="pt"
+            text=[["a photo of a cat", "a photo of a dog"]],
+            images=image,
+            max_length=16,
+            padding="max_length",
+            return_tensors="pt",
         ).to(torch_device)
 
         # forward pass
@@ -676,5 +678,5 @@ class OwlViTModelIntegrationTest(unittest.TestCase):
             torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
 
-        #expected_logits = torch.tensor([[24.5701, 19.3049]], device=torch_device)
-        #self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))
+        # expected_logits = torch.tensor([[24.5701, 19.3049]], device=torch_device)
+        # self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))

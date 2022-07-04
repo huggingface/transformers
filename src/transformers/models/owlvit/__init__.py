@@ -29,7 +29,12 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_owlvit": ["OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OwlViTConfig", "OwlViTTextConfig", "OwlViTVisionConfig"],
+    "configuration_owlvit": [
+        "OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "OwlViTConfig",
+        "OwlViTTextConfig",
+        "OwlViTVisionConfig",
+    ],
 }
 
 
@@ -54,11 +59,16 @@ else:
         "OwlViTPreTrainedModel",
         "OwlViTTextModel",
         "OwlViTVisionModel",
-        "OwlViTForObjectDetection"
+        "OwlViTForObjectDetection",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_owlvit import OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, OwlViTConfig, OwlViTTextConfig, OwlViTVisionConfig
+    from .configuration_owlvit import (
+        OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        OwlViTConfig,
+        OwlViTTextConfig,
+        OwlViTVisionConfig,
+    )
 
     try:
         if not is_vision_available():
@@ -78,10 +88,10 @@ if TYPE_CHECKING:
         from .modeling_owlvit import (
             OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             OwlViTModel,
+            OwlVitObjectDetection,
             OwlViTPreTrainedModel,
             OwlViTTextModel,
             OwlViTVisionModel,
-            OwlVitObjectDetection,
         )
 
 else:

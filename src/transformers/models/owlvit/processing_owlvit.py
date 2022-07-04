@@ -18,16 +18,17 @@ Image/Text processor class for OwlViT
 from typing import List
 
 import numpy as np
+
 import jax.numpy as jnp
 
-from ...utils import is_torch_available
-from ...utils.generic import _is_torch
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
+from ...utils.generic import _is_torch
 
 
 def is_torch_tensor(obj):
     return _is_torch(obj)
+
 
 class OwlViTProcessor(ProcessorMixin):
     r"""
@@ -97,12 +98,12 @@ class OwlViTProcessor(ProcessorMixin):
                 # Pad all batch samples to max number of text queries
                 for t in text:
                     if len(t) != max_num_queries:
-                        t.extend([""]*(max_num_queries - len(t)))
+                        t.extend([""] * (max_num_queries - len(t)))
                         encoding = self.tokenizer(t, return_tensors=return_tensors, **kwargs)
                         encodings.append(encoding)
                     else:
                         encoding = self.tokenizer(t, return_tensors=return_tensors, **kwargs)
-                        encodings.append(encoding)        
+                        encodings.append(encoding)
 
             output = encodings[0]
 
@@ -122,13 +123,15 @@ class OwlViTProcessor(ProcessorMixin):
 
             elif return_tensors == "pt":
                 import torch
-                input_ids= [encoding["input_ids"].unsqueeze(0) for encoding in encodings]
+
+                input_ids = [encoding["input_ids"].unsqueeze(0) for encoding in encodings]
                 input_ids = torch.cat(input_ids)
 
-                attention_mask= [encoding["attention_mask"].unsqueeze(0) for encoding in encodings]
+                attention_mask = [encoding["attention_mask"].unsqueeze(0) for encoding in encodings]
                 attention_mask = torch.cat(attention_mask)
             else:
                 import tensorflow as tf
+
                 input_ids = [tf.expand_dims(encoding["input_ids"], axis=0) for encoding in encodings]
                 input_ids = tf.concat(input_ids, axis=0)
 

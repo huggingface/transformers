@@ -31,7 +31,6 @@ OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class OwlViTTextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`OwlViTModel`]. It is used to instantiate an OwlViT

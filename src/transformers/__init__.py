@@ -3001,9 +3001,9 @@ if TYPE_CHECKING:
     from .models.owlvit import (
         OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         OwlViTConfig,
+        OwlViTProcessor,
         OwlViTTextConfig,
         OwlViTVisionConfig,
-        OwlViTProcessor,
     )
     from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
     from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
