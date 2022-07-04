@@ -285,6 +285,9 @@ class BloomScaledSoftmax(nn.Module):
             raise ValueError("softmax should be in fp32 when scaled")
 
     def forward(self, input, mask, max_positions, prefix_length=None):
+        print(input.shape)
+        import sys
+        sys.exit()
         input_dtype = input.dtype
         input_in_16bit = input_dtype in [torch.float16, torch.bfloat16]
         softmax_dtype = torch.float32 if self.softmax_in_fp32 else input_dtype
