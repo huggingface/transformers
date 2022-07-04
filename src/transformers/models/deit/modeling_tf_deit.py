@@ -836,16 +836,6 @@ class TFDeiTForMaskedImageModeling(TFDeiTPreTrainedModel):
         )
 
 
-class TFIdentityLayer(tf.keras.layers.Layer):
-    """Helper class that provides a Layer API for identity"""
-
-    def __init__(self, **kwargs) -> None:
-        super().__init__(**kwargs)
-
-    def call(self, inputs: Any) -> Any:
-        return tf.identity(inputs)
-
-
 @add_start_docstrings(
     """
     DeiT Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
@@ -864,7 +854,7 @@ class TFDeiTForImageClassification(TFDeiTPreTrainedModel, TFSequenceClassificati
         self.classifier = (
             tf.keras.layers.Dense(config.num_labels, name="classifier")
             if config.num_labels > 0
-            else tf.identity(name="classifier")
+            else tf.keras.layers.Activation("linear", name="classifier")
         )
 
     @unpack_inputs
@@ -999,12 +989,12 @@ class TFDeiTForImageClassificationWithTeacher(TFDeiTPreTrainedModel):
         self.cls_classifier = (
             tf.keras.layers.Dense(config.num_labels, name="cls_classifier")
             if config.num_labels > 0
-            else TFIdentityLayer(name="cls_classifier")
+            else tf.keras.layers.Activation("linear", name="cls_classifier")
         )
         self.distillation_classifier = (
             tf.keras.layers.Dense(config.num_labels, name="distillation_classifier")
             if config.num_labels > 0
-            else TFIdentityLayer(name="distillation_classifier")
+            else tf.keras.layers.Activation("linear", name="distillation_classifier")
         )
 
     @unpack_inputs
