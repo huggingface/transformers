@@ -1456,7 +1456,7 @@ class GenerationMixin:
                 raise ValueError("`max_length` needs to be a stopping_criteria for now.")
 
             if num_beams <= 1:
-                raise ValueError("`num_beams` needs to be greater than 1 for constrained genertation.")
+                raise ValueError("`num_beams` needs to be greater than 1 for constrained generation.")
 
             if do_sample:
                 raise ValueError("`do_sample` needs to be false for constrained generation.")
