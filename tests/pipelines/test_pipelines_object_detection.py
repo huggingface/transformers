@@ -53,7 +53,7 @@ class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
     model_mapping = MODEL_FOR_OBJECT_DETECTION_MAPPING
 
     def get_test_pipeline(self, model, tokenizer, feature_extractor):
-        if model.__name__ == "DeformableDetrForObjectDetection":
+        if model.__class__.__name__ == "DeformableDetrForObjectDetection":
             self.skipTest(
                 """Deformable DETR requires a custom CUDA kernel.
                 """
