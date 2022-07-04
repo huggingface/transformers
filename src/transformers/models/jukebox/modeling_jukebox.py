@@ -42,6 +42,7 @@ from ...utils import add_start_docstrings, logging
 from .configuration_jukebox import JukeboxConfig
 from .tokenization_jukebox import get_relevant_lyric_tokens
 
+
 logger = logging.get_logger(__name__)
 
 # _CHECKPOINT_FOR_DOC = "ArthurZ/jukebox-dummy"
@@ -705,9 +706,9 @@ class VQVAE(nn.Module):
         if not config.sample_length:
             downsamples = calculate_strides(config.vq_vae_strides_t, config.vq_vae_downs_t)
             top_raw_to_tokens = np.prod(downsamples)
-            config.sample_length = ((
-                config.sample_length_in_seconds * config.sr // top_raw_to_tokens
-            ) * top_raw_to_tokens).astype(int)
+            config.sample_length = (
+                (config.sample_length_in_seconds * config.sr // top_raw_to_tokens) * top_raw_to_tokens
+            ).astype(int)
 
         input_shape = (config.sample_length, 1)
         block_kwargs = dict(
@@ -2780,12 +2781,12 @@ class JukeboxPrior(nn.Module):
             tokens_list = []
             indices_list = []  # whats the index of each current character in original array
             for i in range(ys.shape[0]):
-                full_tokens = labels['full_tokens']
+                full_tokens = labels["full_tokens"]
                 total_length, offset, duration = ys[i, 0], ys[i, 1], ys[i, 2]
                 tokens, indices = get_relevant_lyric_tokens(full_tokens, self.n_tokens, total_length, offset, duration)
                 tokens_list.append(tokens)
                 indices_list.append(indices)
-            ys[:, -self.n_tokens:] = torch.tensor(tokens_list, dtype=torch.long, device='cpu')
+            ys[:, -self.n_tokens :] = torch.tensor(tokens_list, dtype=torch.long, device="cpu")
             return indices_list
         else:
             return None

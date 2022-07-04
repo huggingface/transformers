@@ -39,11 +39,11 @@ class JukeboxModelTest(unittest.TestCase):
     all_model_classes = (JukeboxModel,) if is_torch_available() else ()
 
     metas = dict(
-            artist="Zac Brown Band",
-            genres="Country",
-            total_length=440960,
-            offset=0,
-            lyrics="""I met a traveller from an antique land,
+        artist="Zac Brown Band",
+        genres="Country",
+        total_length=440960,
+        offset=0,
+        lyrics="""I met a traveller from an antique land,
     Who said—“Two vast and trunkless legs of stone
     Stand in the desert. . . . Near them, on the sand,
     Half sunk a shattered visage lies, whose frown,
@@ -58,9 +58,9 @@ class JukeboxModelTest(unittest.TestCase):
     Of that colossal Wreck, boundless and bare
     The lone and level sands stretch far away
     """,
-            duration=2,
-            sample_length=786432,
-        )
+        duration=2,
+        sample_length=786432,
+    )
     # @slow
     def test_model(self):
         set_seed(0)
@@ -571,7 +571,7 @@ class JukeboxModelTest(unittest.TestCase):
     def test_conditioning(self):
         pass
         # x,x_conds and y_conds should be the same  before calling the sampling
-        # start and end embeding 
+        # start and end embeding
         # expected conditioning to match
 
     def test_1b_lyrics(self):
@@ -580,7 +580,6 @@ class JukeboxModelTest(unittest.TestCase):
         # model.priors[2].sample(1, y=torch.Tensor([[44100.0, 0, 44100.0] + 386 * [0]]).long().to("cuda"), chunk_size=32)
 
         tokenizer = JukeboxTokenizer.from_pretrained("ArthurZ/jukebox", max_n_lyric_tokens=384)
-
 
         sampling_temperature = 0.98
         lower_batch_size = 16
@@ -593,53 +592,141 @@ class JukeboxModelTest(unittest.TestCase):
             dict(temp=sampling_temperature, fp16=False, max_batch_size=max_batch_size, chunk_size=chunk_size),
         ]
 
-
-        self.metas.sample_length=model.priors[-1].sample_length
+        self.metas.sample_length = model.priors[-1].sample_length
 
         tokens = tokenizer(**self.metas)
         inputs, _ = tokens["input_ids"], tokens["attention_masks"]
-        
-        zs = [torch.zeros(1,0,dtype = torch.long).cpu() for _ in range(len(model.priors))] 
-        labels = [{},{}, inputs]
 
+        zs = [torch.zeros(1, 0, dtype=torch.long).cpu() for _ in range(len(model.priors))]
+        labels = [{}, {}, inputs]
 
         set_seed(0)
         torch.backends.cuda.matmul.allow_tf32 = False
         torch.backends.cudnn.enabled = False
-        zs = model._sample(zs,labels , sampling_kwargs, [2],model.config)
+        zs = model._sample(zs, labels, sampling_kwargs, [2], model.config)
 
-        EXPECTED_OUTPUT = torch.tensor([1489, 1489,  324, 1489, 1599, 1072, 1357, 1489,  784, 1272])
-        
-        # TODO generate the original outputs 
-        EXPECTED_OUTPUT = torch.tensor([1489,  653,  653,  653,  653,  653,  653,  653,  653,  653,  653,  653,
-         653,  653,  653,  653,  653,  653,  653,  653, 1434, 1434,  653, 1357,
-         653, 1434, 1434, 1536, 1599,  710])
-        assert torch.allclose(zs[-1][0,:30],EXPECTED_OUTPUT)
+        EXPECTED_OUTPUT = torch.tensor([1489, 1489, 324, 1489, 1599, 1072, 1357, 1489, 784, 1272])
 
+        # TODO generate the original outputs
+        EXPECTED_OUTPUT = torch.tensor(
+            [
+                1489,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                1434,
+                1434,
+                653,
+                1357,
+                653,
+                1434,
+                1434,
+                1536,
+                1599,
+                710,
+            ]
+        )
+        assert torch.allclose(zs[-1][0, :30], EXPECTED_OUTPUT)
 
-        labels[1]['y']= inputs['y'][:,:9]
-        labels[0]['y']= inputs['y'][:,:9]
+        labels[1]["y"] = inputs["y"][:, :9]
+        labels[0]["y"] = inputs["y"][:, :9]
 
-        zs[-1] = torch.cat((zs[-1], torch.zeros(1,2048-zs[-1].shape[-1]).cpu()),dim=-1)
-        zs = model._sample(zs,labels , sampling_kwargs, [1],model.config)
-        # TODO find the expected outputs 
-        EXPECTED_OUTPUT = torch.tensor([1489,  653,  653,  653,  653,  653,  653,  653,  653,  653,  653,  653,
-         653,  653,  653,  653,  653,  653,  653,  653, 1434, 1434,  653, 1357,
-         653, 1434, 1434, 1536, 1599,  710])
-        assert torch.allclose(zs[-2][0,:30],EXPECTED_OUTPUT)
+        zs[-1] = torch.cat((zs[-1], torch.zeros(1, 2048 - zs[-1].shape[-1]).cpu()), dim=-1)
+        zs = model._sample(zs, labels, sampling_kwargs, [1], model.config)
+        # TODO find the expected outputs
+        EXPECTED_OUTPUT = torch.tensor(
+            [
+                1489,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                1434,
+                1434,
+                653,
+                1357,
+                653,
+                1434,
+                1434,
+                1536,
+                1599,
+                710,
+            ]
+        )
+        assert torch.allclose(zs[-2][0, :30], EXPECTED_OUTPUT)
 
-        zs[-2] = torch.cat((zs[-2], torch.zeros(1,2048-zs[-1].shape[-1]).cpu()),dim=-1)
-        zs = model._sample(zs,labels , sampling_kwargs, [0],model.config)
-        # TODO find the expected outputs 
-        EXPECTED_OUTPUT = torch.tensor([1489,  653,  653,  653,  653,  653,  653,  653,  653,  653,  653,  653,
-         653,  653,  653,  653,  653,  653,  653,  653, 1434, 1434,  653, 1357,
-         653, 1434, 1434, 1536, 1599,  710])
-        assert torch.allclose(zs[0][0,:30],EXPECTED_OUTPUT)
+        zs[-2] = torch.cat((zs[-2], torch.zeros(1, 2048 - zs[-1].shape[-1]).cpu()), dim=-1)
+        zs = model._sample(zs, labels, sampling_kwargs, [0], model.config)
+        # TODO find the expected outputs
+        EXPECTED_OUTPUT = torch.tensor(
+            [
+                1489,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                1434,
+                1434,
+                653,
+                1357,
+                653,
+                1434,
+                1434,
+                1536,
+                1599,
+                710,
+            ]
+        )
+        assert torch.allclose(zs[0][0, :30], EXPECTED_OUTPUT)
 
-
-        
     def test_5b_lyrics(self):
-        model = JukeboxModel.from_pretrained("ArthurZ/jukebox-5b-lyrics").eval() 
+        model = JukeboxModel.from_pretrained("ArthurZ/jukebox-5b-lyrics").eval()
         tokenizer = JukeboxTokenizer.from_pretrained("ArthurZ/jukebox-5b-lyrics")
         set_seed(0)
 
@@ -649,48 +736,157 @@ class JukeboxModelTest(unittest.TestCase):
         lower_level_chunk_size = 32
         chunk_size = 32
         sampling_kwargs = [
-            dict(temp=0.99, fp16=False, max_batch_size=lower_batch_size, chunk_size=lower_level_chunk_size, sample_tokens=30),
-            dict(temp=0.99, fp16=False, max_batch_size=lower_batch_size, chunk_size=lower_level_chunk_size, sample_tokens=30),
-            dict(temp=sampling_temperature, fp16=False, max_batch_size=max_batch_size, chunk_size=chunk_size, sample_tokens=30),
+            dict(
+                temp=0.99,
+                fp16=False,
+                max_batch_size=lower_batch_size,
+                chunk_size=lower_level_chunk_size,
+                sample_tokens=30,
+            ),
+            dict(
+                temp=0.99,
+                fp16=False,
+                max_batch_size=lower_batch_size,
+                chunk_size=lower_level_chunk_size,
+                sample_tokens=30,
+            ),
+            dict(
+                temp=sampling_temperature,
+                fp16=False,
+                max_batch_size=max_batch_size,
+                chunk_size=chunk_size,
+                sample_tokens=30,
+            ),
         ]
 
         tokens = tokenizer(**self.metas)
         inputs, _ = tokens["input_ids"], tokens["attention_masks"]
-        
-        zs = [torch.zeros(1,0,dtype = torch.long).cpu() for _ in range(len(model.priors))] 
+
+        zs = [torch.zeros(1, 0, dtype=torch.long).cpu() for _ in range(len(model.priors))]
         labels = [{}, {}, inputs]
         # model = model.cuda()
 
         set_seed(0)
         torch.backends.cuda.matmul.allow_tf32 = False
         torch.backends.cudnn.enabled = False
-        zs = model._sample(zs,labels , sampling_kwargs, [2],model.config)
+        zs = model._sample(zs, labels, sampling_kwargs, [2], model.config)
 
-        EXPECTED_OUTPUT = torch.tensor([1489,  653,  653,  653,  653,  653,  653,  653,  653,  653,  653,  653,
-         653,  653,  653,  653,  653,  653,  653,  653, 1434, 1434,  653, 1357,
-         653, 1434, 1434, 1536, 1599,  710])
-        assert torch.allclose(zs[-1][0,:30],EXPECTED_OUTPUT)
+        EXPECTED_OUTPUT = torch.tensor(
+            [
+                1489,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                1434,
+                1434,
+                653,
+                1357,
+                653,
+                1434,
+                1434,
+                1536,
+                1599,
+                710,
+            ]
+        )
+        assert torch.allclose(zs[-1][0, :30], EXPECTED_OUTPUT)
 
+        labels[1]["y"] = inputs["y"][:, :9]
+        labels[0]["y"] = inputs["y"][:, :9]
 
-        labels[1]['y']= inputs['y'][:,:9]
-        labels[0]['y']= inputs['y'][:,:9]
+        zs[-1] = torch.cat((zs[-1], torch.zeros(1, 2048 - zs[-1].shape[-1]).cpu()), dim=-1)
+        zs = model._sample(zs, labels, sampling_kwargs, [1], model.config)
+        # TODO find the expected outputs
+        EXPECTED_OUTPUT = torch.tensor(
+            [
+                1489,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                1434,
+                1434,
+                653,
+                1357,
+                653,
+                1434,
+                1434,
+                1536,
+                1599,
+                710,
+            ]
+        )
+        assert torch.allclose(zs[-2][0, :30], EXPECTED_OUTPUT)
 
-        zs[-1] = torch.cat((zs[-1], torch.zeros(1,2048-zs[-1].shape[-1]).cpu()),dim=-1)
-        zs = model._sample(zs,labels , sampling_kwargs, [1],model.config)
-        # TODO find the expected outputs 
-        EXPECTED_OUTPUT = torch.tensor([1489,  653,  653,  653,  653,  653,  653,  653,  653,  653,  653,  653,
-         653,  653,  653,  653,  653,  653,  653,  653, 1434, 1434,  653, 1357,
-         653, 1434, 1434, 1536, 1599,  710])
-        assert torch.allclose(zs[-2][0,:30],EXPECTED_OUTPUT)
-
-        zs[-2] = torch.cat((zs[-2], torch.zeros(1,2048-zs[-1].shape[-1]).cpu()),dim=-1)
-        zs = model._sample(zs,labels , sampling_kwargs, [0],model.config)
-        # TODO find the expected outputs 
-        EXPECTED_OUTPUT = torch.tensor([1489,  653,  653,  653,  653,  653,  653,  653,  653,  653,  653,  653,
-         653,  653,  653,  653,  653,  653,  653,  653, 1434, 1434,  653, 1357,
-         653, 1434, 1434, 1536, 1599,  710])
-        assert torch.allclose(zs[0][0,:30],EXPECTED_OUTPUT)
-
+        zs[-2] = torch.cat((zs[-2], torch.zeros(1, 2048 - zs[-1].shape[-1]).cpu()), dim=-1)
+        zs = model._sample(zs, labels, sampling_kwargs, [0], model.config)
+        # TODO find the expected outputs
+        EXPECTED_OUTPUT = torch.tensor(
+            [
+                1489,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                653,
+                1434,
+                1434,
+                653,
+                1357,
+                653,
+                1434,
+                1434,
+                1536,
+                1599,
+                710,
+            ]
+        )
+        assert torch.allclose(zs[0][0, :30], EXPECTED_OUTPUT)
 
 
 if __name__ == "__main__":
@@ -1183,4 +1379,3 @@ if __name__ == "__main__":
 #         for model_name in JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
 #             model = JukeboxModel.from_pretrained(model_name)
 #             self.assertIsNotNone(model)
-
