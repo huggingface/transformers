@@ -77,7 +77,7 @@ class MaskRCNNModelOutput(ModelOutput):
     Base class for models that leverage the Mask R-CNN framework.
 
     Args:
-        loss (...)
+        losses (...)
             ...
         results (...)
             ...
@@ -93,7 +93,7 @@ class MaskRCNNModelOutput(ModelOutput):
             the self-attention heads.
     """
 
-    loss: torch.FloatTensor = None
+    losses: torch.FloatTensor = None
     results: List[List[np.ndarray]] = None
     last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
@@ -1843,8 +1843,6 @@ class ConvNextMaskRCNNRPN(nn.Module):
 
         losses = self.loss(*loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)
 
-        print("Losses:", losses)
-
         if proposal_cfg is None:
             return losses
         else:
@@ -3063,7 +3061,6 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         bbox_results = self._bbox_forward(x, rois)
 
         bbox_targets = self.bbox_head.get_targets(sampling_results, gt_bboxes, gt_labels, self.train_cfg)
-        print("Bbox_targets:", bbox_targets)
         loss_bbox = self.bbox_head.loss(bbox_results["cls_score"], bbox_results["bbox_pred"], rois, *bbox_targets)
 
         bbox_results.update(loss_bbox=loss_bbox)
@@ -3285,13 +3282,13 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         if self.with_bbox:
             bbox_results = self._bbox_forward_train(x, sampling_results, gt_bboxes, gt_labels, img_metas)
 
-            print("Cls_score:", bbox_results["cls_score"].shape)
-            print("Cls_score first values:", bbox_results["cls_score"][:3, :3])
-            print("Bbox_pred shape:", bbox_results["bbox_pred"].shape)
-            print("Bbox_pred first values:", bbox_results["bbox_pred"][:3, :3])
-            print("Bbox feats shape:", bbox_results["bbox_feats"].shape)
-            print("Bbox feats first values:", bbox_results["bbox_feats"][0, 0, :3, :3])
-            print("Bbox loss:", bbox_results["loss_bbox"])
+            # print("Cls_score:", bbox_results["cls_score"].shape)
+            # print("Cls_score first values:", bbox_results["cls_score"][:3, :3])
+            # print("Bbox_pred shape:", bbox_results["bbox_pred"].shape)
+            # print("Bbox_pred first values:", bbox_results["bbox_pred"][:3, :3])
+            # print("Bbox feats shape:", bbox_results["bbox_feats"].shape)
+            # print("Bbox feats first values:", bbox_results["bbox_feats"][0, 0, :3, :3])
+            # print("Bbox loss:", bbox_results["loss_bbox"])
             losses.update(bbox_results["loss_bbox"])
 
         # TODO verify mask head loss computation
@@ -3300,7 +3297,7 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
                 x, sampling_results, bbox_results["bbox_feats"], gt_masks, img_metas
             )
             losses.update(mask_results["loss_mask"])
-            print("Mask loss:", mask_results["loss_mask"])
+            # print("Mask loss:", mask_results["loss_mask"])
 
         return losses
 
@@ -3468,8 +3465,6 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
     ) -> Union[Tuple, MaskRCNNModelOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        print("First values of img:", pixel_values[0, 0, :3, :3])
-
         # we need the intermediate hidden states
         outputs = self.convnext(pixel_values, output_hidden_states=True, return_dict=return_dict)
 
@@ -3484,7 +3479,7 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
         # the FPN outputs feature maps at 5 different scales
         hidden_states = self.neck(hidden_states)
 
-        print("Features:", hidden_states[-1][0, 0, :3, :3])
+        # print("Features:", hidden_states[-1][0, 0, :3, :3])
 
         # next, RPN computes a tuple of (class, bounding box) features for each of the 5 feature maps
         # rpn_outs[0] are the class features for each of the feature maps
@@ -3508,7 +3503,7 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
                 img_metas,
                 gt_bboxes=labels["gt_bboxes"],
                 gt_labels=None,  # one explicitly sets them to None in TwoStageDetector
-                gt_bboxes_ignore=None,
+                gt_bboxes_ignore=labels["gt_bboxes_ignore"],
                 proposal_cfg=self.config.rpn_proposal,
             )
             losses.update(rpn_losses)
@@ -3534,13 +3529,12 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
             )
             assert torch.allclose(proposal_list[0][:3, :3], expected_slice)
 
-        loss = None
         if not return_dict:
             output = (results,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
+            return ((losses,) + output) if losses is not None else output
 
         return MaskRCNNModelOutput(
-            loss=loss,
+            losses=losses,
             results=results,
             hidden_states=outputs.hidden_states,
         )
