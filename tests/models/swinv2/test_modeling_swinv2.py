@@ -381,6 +381,9 @@ class Swinv2ModelTest(ModelTesterMixin, unittest.TestCase):
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
+    def test_pt_tf_model_equivalence(self):
+        pass
+
 
 @require_vision
 @require_torch
