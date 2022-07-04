@@ -209,7 +209,6 @@ class Swinv2ImageClassifierOutput(ModelOutput):
     reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
-# Copied from transformers.models.vit.modeling_vit.to_2tuple
 def to_2tuple(x):
     if isinstance(x, collections.abc.Iterable):
         return x
@@ -261,12 +260,7 @@ class Swinv2Embeddings(nn.Module):
     def __init__(self, config, use_mask_token=False):
         super().__init__()
 
-        self.patch_embeddings = Swinv2PatchEmbeddings(
-            image_size=config.image_size,
-            patch_size=config.patch_size,
-            num_channels=config.num_channels,
-            embed_dim=config.embed_dim,
-        )
+        self.patch_embeddings = Swinv2PatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
         self.patch_grid = self.patch_embeddings.grid_size
         self.mask_token = nn.Parameter(torch.zeros(1, 1, config.embed_dim)) if use_mask_token else None
@@ -305,17 +299,20 @@ class Swinv2PatchEmbeddings(nn.Module):
     Image to Patch Embedding.
     """
 
-    def __init__(self, image_size=224, patch_size=16, num_channels=3, embed_dim=768):
+    def __init__(self, config):
         super().__init__()
-        image_size = to_2tuple(image_size)
-        patch_size = to_2tuple(patch_size)
+        image_size, patch_size = config.image_size, config.patch_size
+        num_channels, hidden_size = config.num_channels, config.embed_dim
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         self.image_size = image_size
         self.patch_size = patch_size
+        self.num_channels = num_channels
         self.num_patches = num_patches
         self.grid_size = (image_size[0] // patch_size[0], image_size[1] // patch_size[1])
 
-        self.projection = nn.Conv2d(num_channels, embed_dim, kernel_size=patch_size, stride=patch_size)
+        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
 
     def maybe_pad(self, pixel_values, height, width):
         if width % self.patch_size[1] != 0:
@@ -396,13 +393,15 @@ class Swinv2PatchMerging(nn.Module):
 class Swinv2DropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob=None, scale_by_keep=True):
-        super(Swinv2DropPath, self).__init__()
+    def __init__(self, drop_prob: Optional[float] = None) -> None:
+        super().__init__()
         self.drop_prob = drop_prob
-        self.scale_by_keep = scale_by_keep
 
-    def forward(self, input):
-        return drop_path(input, self.drop_prob, self.training, self.scale_by_keep)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return drop_path(x, self.drop_prob, self.training)
+
+    def extra_repr(self) -> str:
+        return "p={}".format(self.drop_prob)
 
 
 class Swinv2SelfAttention(nn.Module):
