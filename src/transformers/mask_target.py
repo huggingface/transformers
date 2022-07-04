@@ -119,7 +119,7 @@ def mask_target_single(pos_proposals, pos_assigned_gt_inds, gt_masks, cfg):
         pos_assigned_gt_inds = pos_assigned_gt_inds.cpu().numpy()
 
         mask_targets = crop_and_resize(
-            gt_masks.numpy(), proposals_np, mask_size, device=device, inds=pos_assigned_gt_inds, binarize=binarize
+            gt_masks.cpu().numpy(), proposals_np, mask_size, device=device, inds=pos_assigned_gt_inds, binarize=binarize
         )
 
         mask_targets = torch.from_numpy(mask_targets).float().to(device)
