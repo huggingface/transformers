@@ -124,18 +124,22 @@ class TFBertPreTrainingLoss:
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction=tf.keras.losses.Reduction.NONE
         )
-        unmasked_lm_losses = loss_fn(y_true=labels["labels"], y_pred=logits[0])
+
+        # Clip negative labels to zero here to avoid NaNs and errors - those positions will get masked later anyway
+        unmasked_lm_losses = loss_fn(y_true=tf.nn.relu(labels["labels"]), y_pred=logits[0])
         # make sure only labels that are not equal to -100
         # are taken into account for the loss computation
         lm_loss_mask = tf.cast(labels["labels"] != -100, dtype=unmasked_lm_losses.dtype)
-        lm_loss_denominator = tf.reduce_sum(lm_loss_mask, axis=1)
-        masked_lm_losses = tf.math.multiply_no_nan(unmasked_lm_losses, lm_loss_mask)
+        # Avoid potential division by zero later
+        lm_loss_denominator = tf.math.maximum(tf.cast(1, lm_loss_mask.dtype), tf.reduce_sum(lm_loss_mask, axis=1))
+        masked_lm_losses = unmasked_lm_losses * lm_loss_mask
         reduced_masked_lm_loss = tf.reduce_sum(masked_lm_losses, axis=1) / lm_loss_denominator
 
-        unmasked_ns_loss = loss_fn(y_true=labels["next_sentence_label"], y_pred=logits[1])
+        # Clip negative labels to zero here to avoid NaNs and errors - those positions will get masked later anyway
+        unmasked_ns_loss = loss_fn(y_true=tf.nn.relu(labels["next_sentence_label"]), y_pred=logits[1])
         ns_loss_mask = tf.cast(labels["next_sentence_label"] != -100, dtype=unmasked_ns_loss.dtype)
         # Just zero out samples where label is -100, no reduction
-        masked_ns_loss = tf.math.multiply_no_nan(unmasked_ns_loss, ns_loss_mask)
+        masked_ns_loss = unmasked_ns_loss * ns_loss_mask
 
         return reduced_masked_lm_loss + masked_ns_loss
 
