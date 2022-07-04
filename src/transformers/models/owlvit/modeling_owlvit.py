@@ -166,7 +166,7 @@ class OwlViTVisionEmbeddings(nn.Module):
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
 
-        patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
+        patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, num_channels, height, width]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
 
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
@@ -468,8 +468,7 @@ OWLVIT_TEXT_INPUTS_DOCSTRING = r"""
 OWLVIT_VISION_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`OwlViTFeatureExtractor`]. See [`OwlViTFeatureExtractor.__call__`] for details.
+            Pixel values. 
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -498,8 +497,7 @@ OWLVIT_INPUTS_DOCSTRING = r"""
 
             [What are attention masks?](../glossary#attention-mask)
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`OwlViTFeatureExtractor`]. See [`OwlViTFeatureExtractor.__call__`] for details.
+            Pixel values. 
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
         output_attentions (`bool`, *optional*):
@@ -515,8 +513,7 @@ OWLVIT_INPUTS_DOCSTRING = r"""
 OWLVIT_OBJ_DETECTION_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`OwlViTFeatureExtractor`]. See [`OwlViTFeatureExtractor.__call__`] for details.
+            Pixel values. 
         input_ids (`torch.LongTensor` of shape `(batch_size, num_max_text_queries, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.

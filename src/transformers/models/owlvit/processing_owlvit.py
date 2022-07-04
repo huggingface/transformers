@@ -105,7 +105,7 @@ class OwlViTProcessor(ProcessorMixin):
                         encoding = self.tokenizer(t, return_tensors=return_tensors, **kwargs)
                         encodings.append(encoding)
 
-            output = encodings[0]
+            encoding = BatchEncoding()
 
             if return_tensors == "np":
                 input_ids = [np.expand_dims(encoding["input_ids"], axis=0) for encoding in encodings]
@@ -138,14 +138,14 @@ class OwlViTProcessor(ProcessorMixin):
                 attention_mask = [tf.expand_dims(encoding["attention_mask"], axis=0) for encoding in encodings]
                 attention_mask = tf.concat(attention_mask, axis=0)
 
-            output["input_ids"] = input_ids
-            output["attention_mask"] = attention_mask
+            encoding["input_ids"] = input_ids
+            encoding["attention_mask"] = attention_mask
 
         if images is not None:
             image_features = self.feature_extractor(images, return_tensors=return_tensors, **kwargs)
 
         if text is not None and images is not None:
-            output["pixel_values"] = image_features.pixel_values
+            encoding["pixel_values"] = image_features.pixel_values
             return output
         elif text is not None:
             return output

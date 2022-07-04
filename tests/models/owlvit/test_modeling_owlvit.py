@@ -49,7 +49,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import OwlViTModel, OwlViTTextModel, OwlViTVisionModel
+    from transformers import OwlViTModel, OwlViTTextModel, OwlViTVisionModel, OwlViTForObjectDetection
     from transformers.models.owlvit.modeling_owlvit import OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -57,14 +57,6 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import OwlViTProcessor
-
-
-if is_flax_available():
-    import jax.numpy as jnp
-    from transformers.modeling_flax_pytorch_utils import (
-        convert_pytorch_state_dict_to_flax,
-        load_flax_weights_in_pytorch_model,
-    )
 
 
 class OwlViTVisionModelTester:

@@ -7,7 +7,6 @@ import torch.nn as nn
 import jax
 import jax.numpy as jnp
 from clip_model import CLIP
-from configs import clip_b16, clip_b32, clip_l14
 from flax.training import checkpoints
 from transformers import OwlViTConfig, OwlViTForObjectDetection, OwlViTModel
 
@@ -336,17 +335,6 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path", default="hf_model", type=str, help="Path to the output PyTorch model."
     )
     args = parser.parse_args()
-
-    # Load flax model and print parameters
-    model_name = args.owlvit_version
-    if model_name == "clip_b16":
-        config = clip_b16.get_config()
-    elif model_name == "clip_b32":
-        config = clip_b32.get_config()
-    elif model_name == "clip_l14":
-        config = clip_l14.get_config()
-    else:
-        raise Exception("Model not supported")
 
     # Initialize PyToch clip model
     if model_name == "clip_b16":
