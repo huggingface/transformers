@@ -62,7 +62,7 @@ def get_relevant_lyric_tokens(full_tokens, max_n_lyric_tokens, total_length, off
             Starting sample in the music. If the offset is greater than 0, the lyrics will be shifted take that into
             account
         duration (`int`):
-            Expected duration of the generated music, in seconds. The duration has to be smaller than the total lenght,
+            Expected duration of the generated music, in samples. The duration has to be smaller than the total lenght,
             which represent the overall length of the signal,
     """
     if len(full_tokens) < max_n_lyric_tokens:
@@ -140,6 +140,8 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
         super().__init__(
             unk_token=unk_token,
+            n_genres=n_genres, 
+            max_n_lyric_tokens=max_n_lyric_tokens,
             **kwargs,
         )
         self.n_genres = n_genres
@@ -150,13 +152,12 @@ class JukeboxTokenizer(PreTrainedTokenizer):
             self.genres_encoder = vocabulary["genres"]
             self.lyrics_encoder = vocabulary["lyrics"]
 
-        oov = "[^A-Za-z0-9.,:;!?\-+'\"()\[\] \t\n]"
+        oov = '[^A-Za-z0-9.,:;!?\-\'\"()\[\] \t\n]+'
         # In v2, we had a n_vocab=80 and in v3 we missed + and so n_vocab=79 of characters.
         if len(self.lyrics_encoder) == 79:
-            oov += "+"
+            oov = oov.replace("\-\'","\-+\'")
 
-        self.out_of_vocab = re.compile(oov)  # FIXME: should be an argument?
-
+        self.out_of_vocab = re.compile(oov) 
         self.artists_decoder = {v: k for k, v in self.artists_encoder.items()}
         self.genres_decoder = {v: k for k, v in self.genres_encoder.items()}
         self.lyrics_decoder = {v: k for k, v in self.lyrics_encoder.items()}
