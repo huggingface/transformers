@@ -1104,7 +1104,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
             embedding_dims=self.config.embedding_dimension,
         )
 
-        self.d_model = self.input_size * len(self.lags_seq) + self._number_of_features
+        self.d_model = self.config.input_size * len(self.config.lags_seq) + self._number_of_features
 
         # transformer enc-decoder and mask initializer
         self.transformer = nn.Transformer(
