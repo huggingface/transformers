@@ -2380,6 +2380,14 @@ else:
             "TFRemBertPreTrainedModel",
         ]
     )
+    _import_structure["models.resnet"].extend(
+        [
+            "TF_RESNET_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFResNetForImageClassification",
+            "TFResNetModel",
+            "TFResNetPreTrainedModel",
+        ]
+    )
     _import_structure["models.roberta"].extend(
         [
             "TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -4720,6 +4728,12 @@ if TYPE_CHECKING:
             TFRemBertLayer,
             TFRemBertModel,
             TFRemBertPreTrainedModel,
+        )
+        from .models.resnet import (
+            TF_RESNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFResNetForImageClassification,
+            TFResNetModel,
+            TFResNetPreTrainedModel,
         )
         from .models.roberta import (
             TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
