@@ -4,6 +4,7 @@ import torchvision.transforms as T
 from PIL import Image
 
 import requests
+from huggingface_hub import hf_hub_download
 from transformers import ConvNextMaskRCNNForObjectDetection
 
 
@@ -67,5 +68,21 @@ labels["gt_bboxes"] = [
 ]
 labels["gt_bboxes_ignore"] = None
 labels["gt_masks"] = [torch.randn(2, 608, 832), torch.randn(2, 640, 864)]
+
+# START: alternative (using example from huggingface_hub)
+local_path = hf_hub_download(repo_id="nielsr/init-files", filename="pixel_values.pt")
+img = torch.load(local_path).unsqueeze(0)
+
+labels = dict()
+local_path = hf_hub_download(repo_id="nielsr/init-files", filename="boxes.pt")
+labels["gt_bboxes"] = [torch.load(local_path)]
+local_path = hf_hub_download(repo_id="nielsr/init-files", filename="labels.pt")
+labels["gt_labels"] = [torch.load(local_path)]
+local_path = hf_hub_download(repo_id="nielsr/init-files", filename="masks.pt")
+labels["gt_masks"] = [torch.load(local_path)]
+labels["gt_bboxes_ignore"] = None
+img_metas = [{"pad_shape": img.shape[::-1], "img_shape": img.shape[::-1]}]
+
+# END: alternative
 
 outputs = model(pixel_values=img, img_metas=img_metas, labels=labels)
