@@ -121,7 +121,8 @@ def _make_3block_relative_position_ids(block_len: int) -> jnp.ndarray:
 
 
 def _mask_local_attention_mask(local_attention_mask: np.ndarray, block_len: int) -> jnp.ndarray:
-    """Mask local attention mask to enforce that tokens are not allowed to attend tokens farther than ``local_radius."""
+    """Mask local attention mask to enforce that tokens are not allowed to attend tokens farther than ``local_radius.
+    """
     relative_position_ids = _make_3block_relative_position_ids(block_len)
     locality_mask = jnp.abs(relative_position_ids) < block_len
     locality_mask = locality_mask[None, None, :, :]
@@ -423,7 +424,6 @@ class FlaxLongT5Attention(nn.Module):
         return values
 
     def _split_heads(self, hidden_states):
-        # breakpoint()
         return hidden_states.reshape(hidden_states.shape[:2] + (self.n_heads, self.key_value_proj_dim))
 
     def _merge_heads(self, hidden_states):
@@ -509,9 +509,9 @@ class FlaxLongT5Attention(nn.Module):
 
         # reshape to (batch_size, seq_length, n_heads, head_dim)
         query_states = self._split_heads(query_states)
-        # breakpoint()
         key_states = self._split_heads(key_states)
         value_states = self._split_heads(value_states)
+
         # counter-act scaling in dot_product_attention_weights function
         query_states *= jnp.sqrt(query_states.shape[-1])
 
@@ -1303,7 +1303,6 @@ class FlaxLongT5Block(nn.Module):
         deterministic=True,
         init_cache=False,
     ):
-        # breakpoint()
         self_attention_outputs = self.layer[0](
             hidden_states,
             attention_mask=attention_mask,
@@ -1317,7 +1316,6 @@ class FlaxLongT5Block(nn.Module):
 
         do_cross_attention = self.causal and encoder_hidden_states is not None
         if do_cross_attention:
-            # breakpoint()
             cross_attention_outputs = self.layer[1](
                 hidden_states,
                 key_value_states=encoder_hidden_states,
@@ -1348,23 +1346,11 @@ class FlaxLongT5LayerCollection(nn.Module):
     config: LongT5Config
     has_relative_attention_bias: bool
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-    gradient_checkpointing: bool = False
 
     def setup(self):
         self.layer = FlaxLongT5Block(
             self.config, has_relative_attention_bias=self.has_relative_attention_bias, dtype=self.dtype
         )
-
-        if self.gradient_checkpointing:
-             FlaxLongT5CheckpointLayer = remat(FlaxLongT5Block, static_argnums=(5, 6, 7))
-             self.layers = [
-                 FlaxLongT5CheckpointLayer(self.config, name=str(i), dtype=self.dtype)
-                 for i in range(self.config.num_hidden_layers)
-             ]
-        else:
-            self.layers = [
-                FlaxLongT5Block(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.num_hidden_layers)
-            ]
 
     def __call__(
         self,
@@ -1379,18 +1365,16 @@ class FlaxLongT5LayerCollection(nn.Module):
         deterministic=True,
         init_cache=False,
     ):
-        # breakpoint()
         return self.layer(
             hidden_states,
-            attention_mask,
-            position_bias,
-            encoder_hidden_states,
-            encoder_attention_mask,
-            encoder_decoder_position_bias,
-            output_attentions,
-            return_dict,
-            deterministic,
-            init_cache,
+            attention_mask=attention_mask,
+            position_bias=position_bias,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            encoder_decoder_position_bias=encoder_decoder_position_bias,
+            output_attentions=output_attentions,
+            deterministic=deterministic,
+            init_cache=init_cache,
         )
 
 
@@ -1398,12 +1382,11 @@ class FlaxLongT5LayerCollection(nn.Module):
 class FlaxLongT5BlockCollection(nn.Module):
     config: LongT5Config
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-    gradient_checkpointing: bool = False
 
     def setup(self):
         self.causal = self.config.causal
         self.blocks = [
-            FlaxLongT5LayerCollection(self.config, has_relative_attention_bias=(i == 0), dtype=self.dtype, name=str(i), gradient_checkpointing=self.gradient_checkpointing)
+            FlaxLongT5LayerCollection(self.config, has_relative_attention_bias=(i == 0), dtype=self.dtype, name=str(i))
             for i in range(self.config.num_layers)
         ]
 
@@ -1424,23 +1407,21 @@ class FlaxLongT5BlockCollection(nn.Module):
         all_cross_attentions = () if (output_attentions and self.causal) else None
         position_bias = None
         encoder_decoder_position_bias = None
-        return_dict = True
 
         for i, layer_module in enumerate(self.blocks):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
-            # breakpoint()
+
             layer_outputs = layer_module(
                 hidden_states,
-                attention_mask,
-                position_bias,
-                encoder_hidden_states,
-                encoder_attention_mask,
-                encoder_decoder_position_bias,
-                output_attentions,
-                return_dict,
-                deterministic,
-                init_cache,
+                attention_mask=attention_mask,
+                position_bias=position_bias,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+                encoder_decoder_position_bias=encoder_decoder_position_bias,
+                output_attentions=output_attentions,
+                deterministic=deterministic,
+                init_cache=init_cache,
             )
 
             hidden_states = layer_outputs[0]
@@ -1471,12 +1452,11 @@ class FlaxLongT5Stack(nn.Module):
     config: LongT5Config
     embed_tokens: nn.Embed
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-    gradient_checkpointing: bool = False
 
     def setup(self):
         self.causal = self.config.causal
 
-        self.block = FlaxLongT5BlockCollection(self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing)
+        self.block = FlaxLongT5BlockCollection(self.config, dtype=self.dtype)
         self.final_layer_norm = FlaxLongT5LayerNorm(
             self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype
         )
@@ -1496,16 +1476,16 @@ class FlaxLongT5Stack(nn.Module):
     ):
         hidden_states = self.embed_tokens(input_ids)
         hidden_states = self.dropout(hidden_states, deterministic=deterministic)
-        # breakpoint()
+
         outputs = self.block(
             hidden_states,
-            attention_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
-            output_attentions,
-            output_hidden_states,
-            deterministic,
-            init_cache,
+            attention_mask=attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            deterministic=deterministic,
+            init_cache=init_cache,
         )
 
         hidden_states = outputs[0]
@@ -1714,8 +1694,8 @@ class FlaxLongT5PreTrainedModel(FlaxPreTrainedModel):
         rngs = {"params": params_rng, "dropout": dropout_rng}
         # breakpoint()
 
-        encoder_hidden_states=None
-        encoder_attention_mask=None
+        encoder_hidden_states = None
+        encoder_attention_mask = None
 
         random_params = self.module.init(
             rngs,
@@ -2034,7 +2014,6 @@ LONGT5_START_DOCSTRING = r"""
 class FlaxLongT5Module(nn.Module):
     config: LongT5Config
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-    gradient_checkpointing: bool = False
 
     def _get_encoder_module(self):
         return self.encoder
@@ -2051,19 +2030,17 @@ class FlaxLongT5Module(nn.Module):
 
         encoder_config = copy.deepcopy(self.config)
         encoder_config.causal = False
-        self.encoder = FlaxLongT5Stack(encoder_config, embed_tokens=self.shared, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing)
+        self.encoder = FlaxLongT5Stack(encoder_config, embed_tokens=self.shared, dtype=self.dtype)
 
         decoder_config = copy.deepcopy(self.config)
         decoder_config.causal = True
         decoder_config.num_layers = self.config.num_decoder_layers
-        self.decoder = FlaxLongT5Stack(decoder_config, embed_tokens=self.shared, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing)
+        self.decoder = FlaxLongT5Stack(decoder_config, embed_tokens=self.shared, dtype=self.dtype)
 
     def __call__(
         self,
         input_ids=None,
         attention_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
         encoder_outputs=None,
@@ -2071,46 +2048,30 @@ class FlaxLongT5Module(nn.Module):
         output_hidden_states=None,
         return_dict=None,
         deterministic: bool = True,
-        init_cache: bool = False,
     ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        # breakpoint()
+
         # Encode if needed (training, first prediction pass)
         encoder_outputs = self.encoder(
-            input_ids,
-            attention_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
-            output_attentions,
-            output_hidden_states,
-            return_dict,
-            deterministic,
-            init_cache
-        )
-        # breakpoint()
-        # Decode
-        decoder_outputs = self.decoder(
-            decoder_input_ids,
-            decoder_attention_mask,
-            encoder_outputs[0],
-            attention_mask,
-            output_attentions,
-            output_hidden_states,
-            return_dict,
-            deterministic,
-            init_cache
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            deterministic=deterministic,
         )
 
-        # decoder_outputs = self.decoder(
-        #     input_ids=decoder_input_ids,
-        #     attention_mask=decoder_attention_mask,
-        #     encoder_hidden_states=encoder_outputs[0],
-        #     encoder_attention_mask=attention_mask,
-        #     output_attentions=output_attentions,
-        #     output_hidden_states=output_hidden_states,
-        #     return_dict=return_dict,
-        #     deterministic=deterministic,
-        # )
+        # Decode
+        decoder_outputs = self.decoder(
+            input_ids=decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            encoder_hidden_states=encoder_outputs[0],
+            encoder_attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            deterministic=deterministic,
+        )
 
         if not return_dict:
             return decoder_outputs + encoder_outputs
@@ -2168,7 +2129,6 @@ append_replace_return_docstrings(FlaxLongT5Model, output_type=FlaxSeq2SeqLMOutpu
 class FlaxLongT5ForConditionalGenerationModule(nn.Module):
     config: LongT5Config
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-    gradient_checkpointing: bool = False
 
     def _get_encoder_module(self):
         return self.encoder
@@ -2189,13 +2149,13 @@ class FlaxLongT5ForConditionalGenerationModule(nn.Module):
         encoder_config.causal = False
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
-        self.encoder = FlaxLongT5Stack(encoder_config, self.shared, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing)
+        self.encoder = FlaxLongT5Stack(encoder_config, self.shared, dtype=self.dtype)
 
         decoder_config = copy.deepcopy(self.config)
         decoder_config.causal = True
         decoder_config.is_encoder_decoder = False
         decoder_config.num_layers = self.config.num_decoder_layers
-        self.decoder = FlaxLongT5Stack(decoder_config, self.shared, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing)
+        self.decoder = FlaxLongT5Stack(decoder_config, self.shared, dtype=self.dtype)
 
         self.lm_head = nn.Dense(
             self.config.vocab_size,
@@ -2208,8 +2168,6 @@ class FlaxLongT5ForConditionalGenerationModule(nn.Module):
         self,
         input_ids=None,
         attention_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
         encoder_outputs=None,
@@ -2217,37 +2175,31 @@ class FlaxLongT5ForConditionalGenerationModule(nn.Module):
         output_hidden_states=None,
         return_dict=None,
         deterministic: bool = True,
-        init_cache: bool = False,
     ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # Encode
-        # breakpoint()
         encoder_outputs = self.encoder(
-            input_ids,
-            attention_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
-            output_attentions,
-            output_hidden_states,
-            return_dict,
-            deterministic,
-            init_cache
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            deterministic=deterministic,
         )
 
         hidden_states = encoder_outputs[0]
 
         # Decode
         decoder_outputs = self.decoder(
-            decoder_input_ids,
-            decoder_attention_mask,
-            hidden_states,
-            attention_mask,
-            output_attentions,
-            output_hidden_states,
-            return_dict,
-            deterministic,
-            init_cache
+            input_ids=decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            encoder_hidden_states=hidden_states,
+            encoder_attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            deterministic=deterministic,
         )
 
         sequence_output = decoder_outputs[0]
