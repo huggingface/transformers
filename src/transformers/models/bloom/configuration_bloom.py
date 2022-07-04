@@ -81,7 +81,7 @@ class BloomConfig(PretrainedConfig):
             Dropout rate applied to the attention probs
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        dtype (`str`, *optional*, defaults to `"bfloat16"`):
+        torch_dtype (`str`, *optional*, defaults to `"bfloat16"`):
             Precision that has been used for the model's training in Megatron. Please load the model in the correct
             precision by doing `model = BloomModel.from_pretrained(model_name, torch_dtype="auto")`.`
         pretraining_tp (`int`, *optional*, defaults to `1`):
@@ -117,9 +117,7 @@ class BloomConfig(PretrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_hidden_layers": "n_layer",
-        "n_head": "num_attention_heads",
-        "hidden_size": "n_embed",
-        "dtype": "torch_dtype",
+        "num_attention_heads": "n_head",
     }
 
     def __init__(
@@ -139,7 +137,7 @@ class BloomConfig(PretrainedConfig):
         attention_dropout=0.0,
         attention_softmax_in_fp32=True,
         pretraining_tp=1,  # TP rank used when training with megatron
-        dtype="bfloat16",
+        torch_dtype="bfloat16",
         slow_but_exact=False,
         **kwargs,
     ):
@@ -159,10 +157,15 @@ class BloomConfig(PretrainedConfig):
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
-        self.dtype = dtype
+        self.torch_dtype = torch_dtype
         self.slow_but_exact = slow_but_exact
 
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(
+            bos_token_id=bos_token_id, 
+            eos_token_id=eos_token_id, 
+            torch_dtype=torch_dtype, 
+            **kwargs
+        )
 
 
 class BloomOnnxConfig(OnnxConfigWithPast):
