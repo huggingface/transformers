@@ -200,16 +200,18 @@ class AttnBlock(nn.Module):
 
         # compute attentions
         batch, channels, height, width = query.shape
-        query = query.reshape((batch, height * width, channels))
-        key = key.reshape((batch, height * width, channels))
+        query = query.reshape((batch, channels, height * width))
+        query = query.permute(0, 2, 1) # (b, hw, c)
+        key = key.reshape((batch, channels, height * width))
 
-        attn_weights = torch.einsum("...qc,...kc->...qk", query, key)
+        attn_weights = torch.bmm(query, key)  # b,hw,hw 
         attn_weights = attn_weights * (int(channels) ** -0.5)
         attn_weights = nn.functional.softmax(attn_weights, dim=2)
 
         ## attend to values
-        value = value.reshape((batch, height * width, channels))
-        hidden_states = torch.einsum("...kc,...qk->...qc", value, attn_weights)
+        value = value.reshape((batch, channels, height * width))
+        attn_weights = attn_weights.permute(0, 2, 1)
+        hidden_states = torch.bmm(value, attn_weights)
         hidden_states = hidden_states.reshape((batch, channels, height, width))
 
         hidden_states = self.proj_out(hidden_states)
@@ -248,10 +250,10 @@ class UpsamplingBlock(nn.Module):
             self.upsample = Upsample(block_in, self.config.resamp_with_conv)
 
     def forward(self, hidden_states):
-        for res_block in self.block:
+        for i, res_block in enumerate(self.block):
             hidden_states = res_block(hidden_states)
-            for attn_block in self.attn:
-                hidden_states = attn_block(hidden_states)
+            if len(self.attn) > 1:
+                hidden_states = self.attn[i](hidden_states)
 
         if self.upsample is not None:
             hidden_states = self.upsample(hidden_states)
@@ -287,10 +289,10 @@ class DownsamplingBlock(nn.Module):
             self.downsample = Downsample(block_in, self.config.resamp_with_conv)
 
     def forward(self, hidden_states):
-        for res_block in self.block:
+        for i, res_block in enumerate(self.block):
             hidden_states = res_block(hidden_states)
-            for attn_block in self.attn:
-                hidden_states = attn_block(hidden_states)
+            if len(self.attn) > 1:
+                hidden_states = self.attn[i](hidden_states)
 
         if self.downsample is not None:
             hidden_states = self.downsample(hidden_states)
@@ -485,8 +487,8 @@ class VectorQuantizer(nn.Module):
             - 2 * torch.matmul(hidden_states_flattended, emb_weights.T)
         )
 
-        min_encoding_indices = torch.argmin(distance, axis=1)
-        min_encodings = torch.zeros(min_encoding_indices.shape[0], self.n_e).to(hidden_states)
+        min_encoding_indices = torch.argmin(distance, axis=1).unsqueeze(1)
+        min_encodings = torch.zeros(min_encoding_indices.shape[0], self.config.n_embed).to(hidden_states)
         min_encodings.scatter_(1, min_encoding_indices, 1)
 
         # get quantized latent vectors
@@ -559,12 +561,10 @@ class VQGANModel(VQGANPreTrainedModel):
 
     def decode_code(self, code_b):
         hidden_states = self.quantize.get_codebook_entry(code_b)
-        print(hidden_states.shape)
         hidden_states = self.decode(hidden_states)
         return hidden_states
 
     def forward(self, pixel_values):
         quant_states, indices = self.encode(pixel_values)
-        # import ipdb; ipdb.set_trace()
         hidden_states = self.decode(quant_states)
         return hidden_states, indices
