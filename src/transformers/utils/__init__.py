@@ -119,6 +119,7 @@ from .import_utils import (
     is_spacy_available,
     is_speech_available,
     is_tensorflow_probability_available,
+    is_tensorflow_text_available,
     is_tf2onnx_available,
     is_tf_available,
     is_timm_available,

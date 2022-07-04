@@ -180,9 +180,11 @@ PYTORCH_EXPORT_MODELS = {
     ("ibert", "kssteven/ibert-roberta-base"),
     ("camembert", "camembert-base"),
     ("convbert", "YituTech/conv-bert-base"),
+    ("codegen", "Salesforce/codegen-350M-multi"),
     ("deberta", "microsoft/deberta-base"),
     ("deberta-v2", "microsoft/deberta-v2-xlarge"),
     ("convnext", "facebook/convnext-tiny-224"),
+    ("detr", "facebook/detr-resnet-50"),
     ("distilbert", "distilbert-base-cased"),
     ("electra", "google/electra-base-generator"),
     ("resnet", "microsoft/resnet-50"),
@@ -193,6 +195,7 @@ PYTORCH_EXPORT_MODELS = {
     ("xlm", "xlm-clm-ende-1024"),
     ("xlm-roberta", "xlm-roberta-base"),
     ("layoutlm", "microsoft/layoutlm-base-uncased"),
+    ("layoutlmv3", "microsoft/layoutlmv3-base"),
     ("vit", "google/vit-base-patch16-224"),
     ("deit", "facebook/deit-small-patch16-224"),
     ("beit", "microsoft/beit-base-patch16-224"),
@@ -202,6 +205,7 @@ PYTORCH_EXPORT_MODELS = {
 }
 
 PYTORCH_EXPORT_WITH_PAST_MODELS = {
+    ("bloom", "bigscience/bloom-350m"),
     ("gpt2", "gpt2"),
     ("gpt-neo", "EleutherAI/gpt-neo-125M"),
 }

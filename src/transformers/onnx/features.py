@@ -1,11 +1,15 @@
 from functools import partial, reduce
-from typing import Callable, Dict, Optional, Tuple, Type, Union
+from typing import TYPE_CHECKING, Callable, Dict, Optional, Tuple, Type, Union
 
 import transformers
 
-from .. import PretrainedConfig, PreTrainedModel, TFPreTrainedModel, is_tf_available, is_torch_available
+from .. import PretrainedConfig, is_tf_available, is_torch_available
 from ..utils import logging
 from .config import OnnxConfig
+
+
+if TYPE_CHECKING:
+    from transformers import PreTrainedModel, TFPreTrainedModel
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -15,9 +19,11 @@ if is_torch_available():
         AutoModel,
         AutoModelForCausalLM,
         AutoModelForImageClassification,
+        AutoModelForImageSegmentation,
         AutoModelForMaskedImageModeling,
         AutoModelForMaskedLM,
         AutoModelForMultipleChoice,
+        AutoModelForObjectDetection,
         AutoModelForQuestionAnswering,
         AutoModelForSeq2SeqLM,
         AutoModelForSequenceClassification,
@@ -83,8 +89,10 @@ class FeaturesManager:
             "sequence-classification": AutoModelForSequenceClassification,
             "token-classification": AutoModelForTokenClassification,
             "multiple-choice": AutoModelForMultipleChoice,
+            "object-detection": AutoModelForObjectDetection,
             "question-answering": AutoModelForQuestionAnswering,
             "image-classification": AutoModelForImageClassification,
+            "image-segmentation": AutoModelForImageSegmentation,
             "masked-im": AutoModelForMaskedImageModeling,
         }
     if is_tf_available():
@@ -174,6 +182,15 @@ class FeaturesManager:
             "seq2seq-lm-with-past",
             onnx_config_cls="models.blenderbot_small.BlenderbotSmallOnnxConfig",
         ),
+        "bloom": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "causal-lm",
+            "causal-lm-with-past",
+            "sequence-classification",
+            "token-classification",
+            onnx_config_cls="models.bloom.BloomOnnxConfig",
+        ),
         "camembert": supported_features_mapping(
             "default",
             "masked-lm",
@@ -183,6 +200,11 @@ class FeaturesManager:
             "token-classification",
             "question-answering",
             onnx_config_cls="models.camembert.CamembertOnnxConfig",
+        ),
+        "codegen": supported_features_mapping(
+            "default",
+            "causal-lm",
+            onnx_config_cls="models.codegen.CodeGenOnnxConfig",
         ),
         "convbert": supported_features_mapping(
             "default",
@@ -226,6 +248,12 @@ class FeaturesManager:
         ),
         "deit": supported_features_mapping(
             "default", "image-classification", "masked-im", onnx_config_cls="models.deit.DeiTOnnxConfig"
+        ),
+        "detr": supported_features_mapping(
+            "default",
+            "object-detection",
+            "image-segmentation",
+            onnx_config_cls="models.detr.DetrOnnxConfig",
         ),
         "distilbert": supported_features_mapping(
             "default",
@@ -298,6 +326,13 @@ class FeaturesManager:
             "token-classification",
             onnx_config_cls="models.layoutlm.LayoutLMOnnxConfig",
         ),
+        "layoutlmv3": supported_features_mapping(
+            "default",
+            "question-answering",
+            "sequence-classification",
+            "token-classification",
+            onnx_config_cls="models.layoutlmv3.LayoutLMv3OnnxConfig",
+        ),
         "longt5": supported_features_mapping(
             "default",
             "default-with-past",
@@ -333,6 +368,11 @@ class FeaturesManager:
             "token-classification",
             "question-answering",
             onnx_config_cls="models.mobilebert.MobileBertOnnxConfig",
+        ),
+        "mobilevit": supported_features_mapping(
+            "default",
+            "image-classification",
+            onnx_config_cls="models.mobilevit.MobileViTOnnxConfig",
         ),
         "m2m-100": supported_features_mapping(
             "default",
@@ -490,7 +530,7 @@ class FeaturesManager:
     @staticmethod
     def get_model_from_feature(
         feature: str, model: str, framework: str = "pt", cache_dir: str = None
-    ) -> Union[PreTrainedModel, TFPreTrainedModel]:
+    ) -> Union["PreTrainedModel", "TFPreTrainedModel"]:
         """
         Attempts to retrieve a model from a model's name and the feature to be enabled.
 
@@ -518,7 +558,7 @@ class FeaturesManager:
 
     @staticmethod
     def check_supported_model_or_raise(
-        model: Union[PreTrainedModel, TFPreTrainedModel], feature: str = "default"
+        model: Union["PreTrainedModel", "TFPreTrainedModel"], feature: str = "default"
     ) -> Tuple[str, Callable]:
         """
         Check whether or not the model has the requested features.

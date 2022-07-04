@@ -8,6 +8,7 @@ docs/source/en/model_doc/t5.mdx
 docs/source/en/model_doc/t5v1.1.mdx
 docs/source/en/model_doc/byt5.mdx
 docs/source/en/model_doc/tapex.mdx
+docs/source/en/model_doc/encoder-decoder.mdx
 src/transformers/generation_utils.py
 src/transformers/models/albert/modeling_albert.py
 src/transformers/models/albert/modeling_tf_albert.py
@@ -42,6 +43,7 @@ src/transformers/models/marian/modeling_marian.py
 src/transformers/models/mbart/modeling_mbart.py
 src/transformers/models/mobilebert/modeling_mobilebert.py
 src/transformers/models/mobilebert/modeling_tf_mobilebert.py
+src/transformers/models/mobilevit/modeling_mobilevit.py
 src/transformers/models/opt/modeling_opt.py
 src/transformers/models/opt/modeling_tf_opt.py
 src/transformers/models/opt/modeling_flax_opt.py
@@ -49,7 +51,10 @@ src/transformers/models/pegasus/modeling_pegasus.py
 src/transformers/models/plbart/modeling_plbart.py
 src/transformers/models/poolformer/modeling_poolformer.py
 src/transformers/models/reformer/modeling_reformer.py
+src/transformers/models/regnet/modeling_regnet.py
+src/transformers/models/regnet/modeling_tf_regnet.py
 src/transformers/models/resnet/modeling_resnet.py
+src/transformers/models/resnet/modeling_tf_resnet.py
 src/transformers/models/roberta/modeling_roberta.py
 src/transformers/models/roberta/modeling_tf_roberta.py
 src/transformers/models/segformer/modeling_segformer.py
@@ -72,5 +77,5 @@ src/transformers/models/wav2vec2/modeling_wav2vec2.py
 src/transformers/models/wav2vec2/tokenization_wav2vec2.py
 src/transformers/models/wav2vec2_conformer/modeling_wav2vec2_conformer.py
 src/transformers/models/wav2vec2_with_lm/processing_wav2vec2_with_lm.py
-src/transformers/models/wavlm/modeling_wavlm.py	
+src/transformers/models/wavlm/modeling_wavlm.py
 src/transformers/models/yolos/modeling_yolos.py
