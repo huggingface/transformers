@@ -1094,14 +1094,14 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
     def __init__(self, config: TimeSeriesTransformerConfig):
         super().__init__(config)
 
-        if self.scaling:
+        if self.config.scaling:
             self.scaler = MeanScaler(dim=1, keepdim=True)
         else:
             self.scaler = NOPScaler(dim=1, keepdim=True)
 
         self.embedder = FeatureEmbedder(
-            cardinalities=self.cardinality,
-            embedding_dims=self.embedding_dimension,
+            cardinalities=self.config.cardinality,
+            embedding_dims=self.config.embedding_dimension,
         )
 
         self.d_model = self.input_size * len(self.lags_seq) + self._number_of_features
@@ -1109,12 +1109,12 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         # transformer enc-decoder and mask initializer
         self.transformer = nn.Transformer(
             d_model=self.d_model,
-            nhead=self.nhead,
-            num_encoder_layers=self.encoder_layers,
-            num_decoder_layers=self.decoder_layers,
-            dim_feedforward=self.ffn_dim,
-            dropout=self.dropout,
-            activation=self.activation_function,
+            nhead=self.config.nhead,
+            num_encoder_layers=self.config.encoder_layers,
+            num_decoder_layers=self.config.decoder_layers,
+            dim_feedforward=self.config.ffn_dim,
+            dropout=self.config.config.dropout,
+            activation=self.config.activation_function,
             batch_first=True,
         )
 
@@ -1123,7 +1123,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
 
     @property
     def _past_length(self) -> int:
-        return self.context_length + max(self.lags_seq)
+        return self.config.context_length + max(self.config.lags_seq)
 
     def get_lagged_subsequences(
         self, sequence: torch.Tensor, subsequences_length: int, shift: int = 0
@@ -1147,7 +1147,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
             lagged[i, j, :, k] = sequence[i, -indices[k]-S+j, :].
         """
         sequence_length = sequence.shape[1]
-        indices = [lag - shift for lag in self.lags_seq]
+        indices = [lag - shift for lag in self.config.lags_seq]
 
         assert max(indices) + subsequences_length <= sequence_length, (
             f"lags cannot go further than history length, found lag {max(indices)} "
@@ -1175,18 +1175,18 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         time_feat = (
             torch.cat(
                 (
-                    past_time_feat[:, self._past_length - self.context_length :, ...],
+                    past_time_feat[:, self._past_length - self.config.context_length :, ...],
                     future_time_feat,
                 ),
                 dim=1,
             )
             if future_target is not None
-            else past_time_feat[:, self._past_length - self.context_length :, ...]
+            else past_time_feat[:, self._past_length - self.config.context_length :, ...]
         )
 
         # target
-        context = past_target[:, -self.context_length :]
-        observed_context = past_observed_values[:, -self.context_length :]
+        context = past_target[:, -self.config.context_length :]
+        observed_context = past_observed_values[:, -self.config.context_length :]
         _, scale = self.scaler(context, observed_context)
 
         inputs = (
@@ -1195,11 +1195,15 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
             else past_target / scale
         )
 
-        inputs_length = self._past_length + self.prediction_length if future_target is not None else self._past_length
+        inputs_length = (
+            self._past_length + self.config.prediction_length if future_target is not None else self._past_length
+        )
         assert inputs.shape[1] == inputs_length
 
         subsequences_length = (
-            self.context_length + self.prediction_length if future_target is not None else self.context_length
+            self.config.context_length + self.confiug.prediction_length
+            if future_target is not None
+            else self.config.context_length
         )
 
         # embeddings
@@ -1226,8 +1230,8 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         return transformer_inputs, scale, static_feat
 
     def output_params(self, transformer_inputs):
-        enc_input = transformer_inputs[:, : self.context_length, ...]
-        dec_input = transformer_inputs[:, self.context_length :, ...]
+        enc_input = transformer_inputs[:, : self.config.context_length, ...]
+        dec_input = transformer_inputs[:, self.config.context_length :, ...]
 
         enc_out = self.transformer.encoder(enc_input)
         return self.transformer.decoder(dec_input, enc_out, tgt_mask=self.tgt_mask)
