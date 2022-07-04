@@ -44,13 +44,14 @@ def mask_target(pos_proposals_list, pos_assigned_gt_inds_list, gt_masks_list, cf
     """Compute mask target for positive proposals in multiple images.
 
     Args:
-        pos_proposals_list (list[Tensor]): Positive proposals in multiple
-            images.
-        pos_assigned_gt_inds_list (list[Tensor]): Assigned GT indices for each
-            positive proposals.
-        gt_masks_list (list[`BaseInstanceMasks`]): Ground truth masks of
-            each image.
-        cfg (dict): Config dict that specifies the mask size.
+        pos_proposals_list (list[Tensor]):
+            Positive proposals in multiple images.
+        pos_assigned_gt_inds_list (list[Tensor]):
+            Assigned GT indices for each positive proposals.
+        gt_masks_list (list[`BaseInstanceMasks`]):
+            Ground truth masks of each image.
+        cfg (dict):
+            Config dict that specifies the mask size.
 
     Returns:
         list[Tensor]: Mask target of each image.
@@ -80,11 +81,14 @@ def mask_target_single(pos_proposals, pos_assigned_gt_inds, gt_masks, cfg):
     """Compute mask target for each positive proposal in the image.
 
     Args:
-        pos_proposals (Tensor): Positive proposals.
-        pos_assigned_gt_inds (Tensor): Assigned GT inds of positive proposals.
-        gt_masks (`BaseInstanceMasks`): GT masks in the format of Bitmap
-            or Polygon.
-        cfg (dict): Config dict that indicate the mask size.
+        pos_proposals (Tensor):
+            Positive proposals.
+        pos_assigned_gt_inds (Tensor):
+            Assigned GT inds of positive proposals.
+        gt_masks (`BaseInstanceMasks`):
+            GT masks in the format of Bitmap or Polygon.
+        cfg (dict):
+            Config dict that indicate the mask size.
 
     Returns:
         Tensor: Mask target of each positive proposals in the image.
