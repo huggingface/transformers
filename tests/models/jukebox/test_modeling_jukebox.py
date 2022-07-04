@@ -42,8 +42,9 @@ class JukeboxModelTest(unittest.TestCase):
         artist="Zac Brown Band",
         genres="Country",
         offset=0,
-        lyrics="""I met a traveller from an antique land,
-    Who said—“Two vast and trunkless legs of stone
+        lyrics=
+    """I met a traveller from an antique land,
+    Who said "Two vast and trunkless legs of stone
     Stand in the desert. . . . Near them, on the sand,
     Half sunk a shattered visage lies, whose frown,
     And wrinkled lip, and sneer of cold command,
@@ -571,16 +572,15 @@ class JukeboxModelTest(unittest.TestCase):
         # start and end embeding
         # expected conditioning to match
 
-    def prepare_inputs(self,model, model_id, chunk_size =32):
+    def prepare_inputs(self,model, model_id, chunk_size = 32):
         tokenizer = JukeboxTokenizer.from_pretrained(model_id)
          # create sampling parameters
         sampling_temperature = 0.98
         lower_batch_size = 16
         max_batch_size = 16
-        lower_level_chunk_size = 32
         sampling_kwargs = [
-            dict(temp=0.99, fp16=False, max_batch_size=lower_batch_size, chunk_size=lower_level_chunk_size, sample_tokens=10),
-            dict(temp=0.99, fp16=False, max_batch_size=lower_batch_size, chunk_size=lower_level_chunk_size, sample_tokens=10),
+            dict(temp=0.99, fp16=False, max_batch_size=lower_batch_size, chunk_size=chunk_size, sample_tokens=10),
+            dict(temp=0.99, fp16=False, max_batch_size=lower_batch_size, chunk_size=chunk_size, sample_tokens=10),
             dict(temp=sampling_temperature, fp16=False, max_batch_size=max_batch_size, chunk_size=chunk_size, sample_tokens=10),
         ]
 
@@ -592,14 +592,13 @@ class JukeboxModelTest(unittest.TestCase):
 
        
         labels = [inputs.copy() for i in range(3)]
-        labels[1]["y"] = labels[1]["y"][:, :9]
-        labels[0]["y"] = labels[0]["y"][:, :9]
+        labels[1]["y"] = labels[1]["y"][:, :(4+tokenizer.n_genres)]
+        labels[0]["y"] = labels[0]["y"][:, :(4+tokenizer.n_genres)]
 
         return labels, sampling_kwargs
 
     # @slow 
     def test_1b_lyrics(self):
-        set_seed(0)
         torch.backends.cuda.matmul.allow_tf32 = False
         torch.backends.cudnn.enabled = False
 
@@ -608,123 +607,34 @@ class JukeboxModelTest(unittest.TestCase):
         
         labels, sampling_kwargs = self.prepare_inputs(model,model_id)
 
+        set_seed(0)
         zs = [torch.zeros(1, 0, dtype=torch.long).cpu() for _ in range(3)]
         zs = model._sample(zs, labels, sampling_kwargs, [2], model.config)
 
         # TODO generate the original outputs
-        EXPECTED_OUTPUT = torch.tensor(
-            [
-                1489,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                1434,
-                1434,
-                653,
-                1357,
-                653,
-                1434,
-                1434,
-                1536,
-                1599,
-                710,
-            ]
-        )
-        assert torch.allclose(zs[-1][0, :30], EXPECTED_OUTPUT)
+        EXPECTED_OUTPUT = torch.tensor([1864, 1536, 1213, 1869, 1321, 1597,  519,  947, 1177,  789, 1434,  653,
+          653,  653,  653,  653,  653,  653,  653,  653, 1007, 1472,  255, 1228,
+          555, 1272, 1379, 1423, 1673,  427, 1683, 1321,  475,  416, 1177, 1827,
+         1106, 1127, 1494,  812])
+        assert torch.allclose(zs[-1][0], EXPECTED_OUTPUT)
 
-        zs[-1] = torch.cat((zs[-1], torch.zeros(1, 2048 - zs[-1].shape[-1]).cpu()), dim=-1)
+        zs[-1] = torch.cat((zs[-1], torch.zeros(1, 1000000 - zs[-1].shape[-1]).cpu()), dim=-1)
         zs = model._sample(zs, labels, sampling_kwargs, [1], model.config)
         # TODO find the expected outputs
-        EXPECTED_OUTPUT = torch.tensor(
-            [
-                1489,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                1434,
-                1434,
-                653,
-                1357,
-                653,
-                1434,
-                1434,
-                1536,
-                1599,
-                710,
-            ]
-        )
-        assert torch.allclose(zs[-2][0, :30], EXPECTED_OUTPUT)
+        EXPECTED_OUTPUT = torch.tensor([904, 2037,  343, 1372,  135,  717,  506,  157,  307, 1419, 1751,  343,
+          899, 1803,  573,   94, 1046, 1014,  684,  869, 2037, 1125, 1004, 1658,
+         1181,   37, 1749, 2047, 1426, 1348, 2037, 1125, 1004, 1544,  573,  885,
+         1749, 1803, 1426, 1348])
+        assert torch.allclose(zs[-2][0,:40], EXPECTED_OUTPUT)
 
-        zs[-2] = torch.cat((zs[-2], torch.zeros(1, 4096 - zs[-2].shape[-1]).cpu()), dim=-1)
+        zs[-2] = torch.cat((zs[-2], torch.zeros(1, 1000000 - zs[-2].shape[-1]).cpu()), dim=-1)
         zs = model._sample(zs, labels, sampling_kwargs, [0], model.config)
         # TODO find the expected outputs
-        EXPECTED_OUTPUT = torch.tensor(
-            [
-                1489,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                653,
-                1434,
-                1434,
-                653,
-                1357,
-                653,
-                1434,
-                1434,
-                1536,
-                1599,
-                710,
-            ]
-        )
-        assert torch.allclose(zs[0][0, :30], EXPECTED_OUTPUT)
+        EXPECTED_OUTPUT = torch.tensor([904, 2037,  343, 1372,  135,  717,  506,  157,  307, 1419, 1751,  343,
+          899, 1803,  573,   94, 1046, 1014,  684,  869, 2037, 1125, 1004, 1658,
+         1181,   37, 1749, 2047, 1426, 1348, 2037, 1125, 1004, 1544,  573,  885,
+         1749, 1803, 1426, 1348])
+        assert torch.allclose(zs[0][0, :40], EXPECTED_OUTPUT)
 
     def test_5b_lyrics(self):        
         set_seed(0)
