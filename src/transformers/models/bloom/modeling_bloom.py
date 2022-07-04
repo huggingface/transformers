@@ -1026,14 +1026,10 @@ class BloomForPrefixLM(BloomPreTrainedModel):
         else:
             position_ids = None
 
-        # # generate a prefix-LM mask, if none is provided.
-        # # store this in the model class so that it can be reused for a whole generation call. Will be erased on next `generate()` call.
-        # if prefix_length is None and past is None:
-        #     prefix_length = torch.ones(input_ids.shape[0], 1, input_ids.shape[1], input_ids.shape[1], dtype=torch.bool, device=input_ids.device)
-        #     self.prefix_length = prefix_length
-        # else:
-        #     prefix_length = self.prefix_length
-        prefix_length = self.prefix_length
+        # generate a prefix-LM mask, if none is provided.
+        # store this in the model class so that it can be reused for a whole generation call. Will be erased on next `generate()` call.
+        if prefix_length is None:
+            prefix_length = input_ids.shape[1]
 
         return {
             "input_ids": input_ids,
