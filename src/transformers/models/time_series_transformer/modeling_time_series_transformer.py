@@ -1084,10 +1084,10 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
     @property
     def _number_of_features(self) -> int:
         return (
-            sum(self.embedding_dimension)
-            + self.num_feat_dynamic_real
-            + self.num_time_features
-            + max(1, self.num_feat_static_real)
+            sum(self.config.embedding_dimension)
+            + self.config.num_feat_dynamic_real
+            + self.config.num_time_features
+            + self.config.num_feat_static_real
             + 1  # the log(scale)
         )
 
@@ -1113,7 +1113,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
             num_encoder_layers=self.config.encoder_layers,
             num_decoder_layers=self.config.decoder_layers,
             dim_feedforward=self.config.ffn_dim,
-            dropout=self.config.config.dropout,
+            dropout=self.config.dropout,
             activation=self.config.activation_function,
             batch_first=True,
         )
