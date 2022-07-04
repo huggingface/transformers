@@ -1086,8 +1086,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         return (
             sum(self.embedding_dimension)
             + self.num_feat_dynamic_real
-            + 1
-            + len(self.time_features)
+            + self.num_time_features
             + max(1, self.num_feat_static_real)
             + 1  # the log(scale)
         )

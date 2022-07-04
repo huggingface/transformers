@@ -15,8 +15,7 @@
 """ TimeSeriesTransformer model configuration """
 from typing import List, Optional
 
-from gluonts.time_feature import TimeFeature, time_features_from_frequency_str, get_lags_for_frequency
-from gluonts.torch.distributions import DistributionOutput, StudentTOutput
+from gluonts.time_feature import get_lags_for_frequency
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -57,8 +56,8 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
             The frequency of the input time series. If `None`, the `lag_seq` and `time_features` must be provided.
         lags_seq (`list` of `int`, *optional* default to `None`):
             The lags of the input time series. Cannot be `None` if `freq` is `None`.
-        time_features (`list` of `TimeFeature`, *optional* default to `None`):
-            The time features transformations to apply to the input time series. Cannot be `None` if `freq` is `None`.
+        num_time_features (`int` default to 1):
+            The number of time features.
         num_feat_dynamic_real (`int`, *optional* default to `0`):
             The number of dynamic real valued features.
         num_feat_static_cat (`int`, *optional* default to `0`):
@@ -101,13 +100,13 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        prediction_length: int,
-        context_length: Optional[int] = None,
-        freq: Optional[str] = None,
+        prediction_length: Optional[int] = 24,
+        freq: Optional[str] = "1D",
         input_size: int = 1,
-        distr_output: DistributionOutput = StudentTOutput(),
+        context_length: Optional[int] = None,
+        # distr_output: DistributionOutput = StudentTOutput(),
         lags_seq: Optional[List[int]] = None,
-        time_features: Optional[List[TimeFeature]] = None,
+        num_time_features: int = 1,
         scaling: bool = True,
         num_feat_dynamic_real: int = 0,
         num_feat_static_cat: int = 0,
@@ -124,15 +123,15 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         init_std: float = 0.02,
         **kwargs
     ):
+        # time series specific parameters
         self.prediction_length = prediction_length
         self.context_length = context_length or prediction_length
-        self.distr_output = distr_output
+        # self.distr_output = distr_output
         self.input_size = input_size
-        self.time_features = time_features or time_features_from_frequency_str(freq)
+        self.num_time_features = num_time_features
         self.lags_seq = lags_seq or get_lags_for_frequency(freq_str=freq)
         self.scaling = scaling
         self.num_feat_dynamic_real = num_feat_dynamic_real
-        self.num_feat_static_cat = num_feat_static_cat
         self.num_feat_static_real = num_feat_static_real
         self.cardinality = cardinality if cardinality and num_feat_static_cat > 0 else [1]
         self.embedding_dimension = embedding_dimension or [min(50, (cat + 1) // 2) for cat in self.cardinality]
