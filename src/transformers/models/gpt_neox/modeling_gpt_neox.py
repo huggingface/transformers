@@ -207,7 +207,8 @@ class GPTNeoXAttention(nn.Module):
             query,
             key.transpose(1, 2),
             beta=1.0,
-            alpha=(1.0 / self.norm_factor),
+            alpha=(torch.tensor(1.0, dtype=self.norm_factor.dtype, device=self.norm_factor.device) / self.norm_factor),
+            # alpha=(1.0 / self.norm_factor),
         )
         attn_scores = attn_scores.view(batch_size, num_attention_heads, query_length, key_length)
 
