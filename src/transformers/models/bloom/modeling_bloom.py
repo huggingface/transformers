@@ -285,9 +285,6 @@ class BloomScaledSoftmax(nn.Module):
             raise ValueError("softmax should be in fp32 when scaled")
 
     def forward(self, input, mask, max_positions, prefix_length=None):
-        print(input.shape)
-        import sys
-        sys.exit()
         input_dtype = input.dtype
         input_in_16bit = input_dtype in [torch.float16, torch.bfloat16]
         softmax_dtype = torch.float32 if self.softmax_in_fp32 else input_dtype
@@ -306,12 +303,15 @@ class BloomScaledSoftmax(nn.Module):
         )
 
         if prefix_length is not None:
-            prefix_mask = (
-                torch.ones(prefix_length, prefix_length, dtype=torch.bool)
-                .view(1, 1, prefix_length, prefix_length)
-                .to(input.device)
+            prefix_mask = torch.zeros(
+                (prefix_length.shape[-1], 1, max_positions, max_positions),
+                dtype=torch.bool
             )
-            causal_mask[:, :, :prefix_length, :prefix_length] = prefix_mask
+            for idx in range(prefix_length.shape[-1]):
+                prefix_mask_length = int(prefix_length[idx])
+                prefix_mask[idx, :, :prefix_mask_length, :prefix_mask_length] = 1
+            prefix_mask = prefix_mask.to(input.device)
+            causal_mask = (causal_mask+prefix_mask).bool()
 
         mask_output, padded_causal_mask = self.mask_func(input, mask, causal_mask)
         probs = nn.functional.softmax(mask_output, dim=-1, dtype=softmax_dtype) * (~padded_causal_mask)
@@ -1032,7 +1032,10 @@ class BloomForPrefixLM(BloomPreTrainedModel):
         # generate a prefix-LM mask, if none is provided.
         # store this in the model class so that it can be reused for a whole generation call. Will be erased on next `generate()` call.
         if prefix_length is None:
-            prefix_length = input_ids.shape[1]
+            if attention_mask is not None:
+                prefix_length = attention_mask.sum(1)
+            else:
+                prefix_length = torch.LongTensor([input_ids.shape[-1]])
 
         return {
             "input_ids": input_ids,
