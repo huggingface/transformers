@@ -3522,13 +3522,6 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
             proposal_list = self.rpn_head.forward_test(hidden_states, img_metas)
             results = self.roi_head.forward_test(hidden_states, proposal_list, img_metas=img_metas)
 
-        # TODO: remove this check
-        if labels is None:
-            expected_slice = torch.tensor(
-                [[0.0000, 58.6872, 685.7259], [360.0827, 6.2272, 1045.1245], [37.4163, 113.3484, 535.2910]]
-            )
-            assert torch.allclose(proposal_list[0][:3, :3], expected_slice)
-
         if not return_dict:
             output = (results,) + outputs[2:]
             return ((losses,) + output) if losses is not None else output
