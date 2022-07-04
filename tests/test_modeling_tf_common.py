@@ -1307,7 +1307,7 @@ class TFModelTesterMixin:
                         labels[0] = -100
                         prepared_for_class["labels"] = tf.convert_to_tensor(labels)
                         loss = model(model_input, **prepared_for_class)[0]
-                        self.assertEqual(loss.shape.as_list(), expected_loss_size)
+                        self.assertTrue(loss.shape.as_list() == expected_loss_size or loss.shape.as_list() == [1])
                         self.assertTrue(not np.any(np.isnan(loss.numpy())))
 
                 # Test that model correctly compute the loss with a dict
