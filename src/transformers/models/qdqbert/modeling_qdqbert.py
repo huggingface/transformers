@@ -199,7 +199,7 @@ class QDQBertEmbeddings(nn.Module):
             if hasattr(self, "token_type_ids"):
                 buffered_token_type_ids = self.token_type_ids[:, :seq_length]
                 buffered_token_type_ids_expanded = buffered_token_type_ids.expand(input_shape[0], seq_length)
-                token_type_ids = buffered_token_type_ids_expanded
+                token_type_ids = buffered_token_type_ids_expanded.clone()
             else:
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
 
@@ -954,7 +954,7 @@ class QDQBertModel(QDQBertPreTrainedModel):
             if hasattr(self.embeddings, "token_type_ids"):
                 buffered_token_type_ids = self.embeddings.token_type_ids[:, :seq_length]
                 buffered_token_type_ids_expanded = buffered_token_type_ids.expand(batch_size, seq_length)
-                token_type_ids = buffered_token_type_ids_expanded
+                token_type_ids = buffered_token_type_ids_expanded.clone()
             else:
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
