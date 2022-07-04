@@ -1201,7 +1201,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         assert inputs.shape[1] == inputs_length
 
         subsequences_length = (
-            self.config.context_length + self.confiug.prediction_length
+            self.config.context_length + self.config.prediction_length
             if future_target is not None
             else self.config.context_length
         )
