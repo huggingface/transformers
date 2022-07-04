@@ -208,7 +208,7 @@ class TFCausalLanguageModelingLoss:
         loss_mask = tf.cast(labels != -100, dtype=unmasked_loss.dtype)
         masked_loss = unmasked_loss * loss_mask
         reduced_masked_loss = tf.reduce_sum(masked_loss) / tf.reduce_sum(loss_mask)
-        return reduced_masked_loss
+        return tf.reshape(reduced_masked_loss, (1,))
 
 
 class TFQuestionAnsweringLoss:
@@ -267,7 +267,7 @@ class TFTokenClassificationLoss:
         # Masked positions will have a loss of NaN because -100 and -1 are not valid labels
         masked_loss = unmasked_loss * loss_mask
         reduced_masked_loss = tf.reduce_sum(masked_loss) / tf.reduce_sum(loss_mask)
-        return reduced_masked_loss
+        return tf.reshape(reduced_masked_loss, (1,))
 
 
 class TFSequenceClassificationLoss:

@@ -140,7 +140,7 @@ class TFBertPreTrainingLoss:
 
         reduced_masked_ns_loss = tf.reduce_sum(masked_ns_loss) / tf.reduce_sum(ns_loss_mask)
 
-        return reduced_masked_lm_loss + reduced_masked_ns_loss
+        return tf.reshape(reduced_masked_lm_loss + reduced_masked_ns_loss, (1,))
 
 
 class TFBertEmbeddings(tf.keras.layers.Layer):

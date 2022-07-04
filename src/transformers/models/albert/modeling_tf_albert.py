@@ -129,7 +129,7 @@ class TFAlbertPreTrainingLoss:
         masked_sop_loss = unmasked_sop_loss * sop_loss_mask
         reduced_masked_sop_loss = tf.reduce_sum(masked_sop_loss) / tf.reduce_sum(sop_loss_mask)
 
-        return reduced_masked_lm_loss + reduced_masked_sop_loss
+        return tf.reshape(reduced_masked_lm_loss + reduced_masked_sop_loss, (1,))
 
 
 class TFAlbertEmbeddings(tf.keras.layers.Layer):
