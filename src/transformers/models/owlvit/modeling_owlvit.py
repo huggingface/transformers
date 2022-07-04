@@ -38,10 +38,10 @@ from .configuration_owlvit import OwlViTConfig, OwlViTTextConfig, OwlViTVisionCo
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "google/owlvit-base"
+_CHECKPOINT_FOR_DOC = "google/owlvit-base-patch32"
 
 OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/owlvit-base",
+    "google/owlvit-base-patch32",
     # See all OwlViT models at https://huggingface.co/models?filter=owlvit
 ]
 
@@ -762,18 +762,32 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
         batch_size = input_ids.shape[0]
 
         # Get embeddings for all text queries in all batch samples
-        output = tuple(
-            [
-                self.text_model(
-                    input_ids=input_ids[idx],
-                    attention_mask=attention_mask[idx],
-                    output_attentions=output_attentions,
-                    output_hidden_states=output_hidden_states,
-                    return_dict=return_dict,
-                )
-                for idx in range(batch_size)
-            ]
-        )
+        if attention_mask is not None:
+            output = tuple(
+                [
+                    self.text_model(
+                        input_ids=input_ids[idx],
+                        attention_mask=attention_mask[idx],
+                        output_attentions=output_attentions,
+                        output_hidden_states=output_hidden_states,
+                        return_dict=return_dict,
+                    )
+                    for idx in range(batch_size)
+                ]
+            )
+        else:
+            output = tuple(
+                [
+                    self.text_model(
+                        input_ids=input_ids[idx],
+                        attention_mask=None,
+                        output_attentions=output_attentions,
+                        output_hidden_states=output_hidden_states,
+                        return_dict=return_dict,
+                    )
+                    for idx in range(batch_size)
+                ]
+            )
         return output
 
 
@@ -811,6 +825,7 @@ class OwlViTVisionTransformer(nn.Module):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
+        pixel_values = pixel_values.to(torch.float32)
         hidden_states = self.embeddings(pixel_values)
         hidden_states = self.pre_layrnorm(hidden_states)
         encoder_outputs = self.encoder(

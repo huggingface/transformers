@@ -146,9 +146,9 @@ class OwlViTProcessor(ProcessorMixin):
 
         if text is not None and images is not None:
             encoding["pixel_values"] = image_features.pixel_values
-            return output
+            return encoding
         elif text is not None:
-            return output
+            return encoding
         else:
             return BatchEncoding(data=dict(**image_features), tensor_type=return_tensors)
 
