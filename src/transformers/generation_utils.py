@@ -70,8 +70,8 @@ class GreedySearchDecoderOnlyOutput(ModelOutput):
             if all batches finished early due to the `eos_token_id`.
         scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. `(max_length-input_ids.shape[-1],)`-shaped tuple of `torch.FloatTensor` with each
-            tensor of shape `(batch_size, config.vocab_size)`).
+            at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
+            each generated token), with each tensor of shape `(batch_size, config.vocab_size)`.
         attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
@@ -100,8 +100,8 @@ class GreedySearchEncoderDecoderOutput(ModelOutput):
             if all batches finished early due to the `eos_token_id`.
         scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. `(max_length-1,)`-shaped tuple of `torch.FloatTensor` with each tensor of shape
-            `(batch_size, config.vocab_size)`).
+            at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
+            each generated token), with each tensor of shape `(batch_size, config.vocab_size)`.
         encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer of the decoder) of shape `(batch_size, num_heads,
             sequence_length, sequence_length)`.
@@ -140,8 +140,8 @@ class SampleDecoderOnlyOutput(ModelOutput):
             if all batches finished early due to the `eos_token_id`.
         scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. `(max_length-input_ids.shape[-1],)`-shaped tuple of `torch.FloatTensor` with each
-            tensor of shape `(batch_size*num_return_sequences, config.vocab_size)`).
+            at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
+            each generated token), with each tensor of shape `(batch_size*num_return_sequences, config.vocab_size)`.
         attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(num_return_sequences*batch_size, num_heads, generated_length,
@@ -171,8 +171,8 @@ class SampleEncoderDecoderOutput(ModelOutput):
             if all batches finished early due to the `eos_token_id`.
         scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. `(max_length-1,)`-shaped tuple of `torch.FloatTensor` with each tensor of shape
-            `(batch_size*num_return_sequences, config.vocab_size)`).
+            at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
+            each generated token), with each tensor of shape `(batch_size*num_return_sequences, config.vocab_size)`.
         encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer of the decoder) of shape
             `(batch_size*num_return_sequences, num_heads, sequence_length, sequence_length)`.
@@ -214,8 +214,8 @@ class BeamSearchDecoderOnlyOutput(ModelOutput):
         scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Beam transition scores for each vocabulary token at each generation step. Beam transition scores consisting
             of log probabilities of tokens conditioned on log softmax of previously generated tokens in this beam.
-            `(max_length-input_ids.shape[-1],)`-shaped tuple of `torch.FloatTensor` with each tensor of shape
-            `(batch_size*num_beams*num_return_sequences, config.vocab_size)`).
+            Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for each generated token),
+            with each tensor of shape `(batch_size*num_beams*num_return_sequences, config.vocab_size)`.
         beam_indices (`tuple(tuple(torch.LongTensor))`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Beam indices of generated token id at each generation step. `torch.LongTensor` of shape
             `(batch_size*num_return_sequences, input_ids.shape[-1])`.
@@ -251,8 +251,8 @@ class BeamSearchEncoderDecoderOutput(ModelOutput):
         scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Beam transition scores for each vocabulary token at each generation step. Beam transition scores consisting
             of log probabilities of tokens conditioned on log softmax of previously generated tokens in this beam.
-            `(max_length-1,)`-shaped tuple of `torch.FloatTensor` with each tensor of shape `(batch_size*num_beams,
-            config.vocab_size)`).
+            Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for each generated token),
+            with each tensor of shape `(batch_size*num_beams, config.vocab_size)`.
         beam_indices (`tuple(tuple(torch.LongTensor))`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Beam indices of generated token id at each generation step. `torch.LongTensor` of shape
             `(batch_size*num_return_sequences, max_length-1)`.
@@ -300,8 +300,8 @@ class BeamSampleDecoderOnlyOutput(ModelOutput):
         scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Beam transition scores for each vocabulary token at each generation step. Beam transition scores consisting
             of log probabilities of tokens conditioned on log softmax of previously generated tokens in this beam.
-            `(max_length-input_ids.shape[-1],)`-shaped tuple of `torch.FloatTensor` with each tensor of shape
-            `(batch_size*num_beams*num_return_sequences, config.vocab_size)`).
+            Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for each generated token),
+            with each tensor of shape `(batch_size*num_beams*num_return_sequences, config.vocab_size)`.
         beam_indices (`tuple(tuple(torch.LongTensor))`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Beam indices of generated token id at each generation step. `torch.LongTensor` of shape
             `(batch_size*num_return_sequences, input_ids.shape[-1])`.
@@ -337,8 +337,8 @@ class BeamSampleEncoderDecoderOutput(ModelOutput):
         scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Beam transition scores for each vocabulary token at each generation step. Beam transition scores consisting
             of log probabilities of tokens conditioned on log softmax of previously generated tokens in this beam.
-            `(max_length-1,)`-shaped tuple of `torch.FloatTensor` with each tensor of shape `(batch_size*num_beams,
-            config.vocab_size)`).
+            Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for each generated token),
+            with each tensor of shape `(batch_size*num_beams, config.vocab_size)`).
         beam_indices (`torch.LongTensor`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Beam indices of generated token id at each generation step. `torch.LongTensor` of shape
             `(batch_size*num_return_sequences, max_length-1)`.
@@ -923,10 +923,9 @@ class GenerationMixin:
                 should of in the format of `input_ids`. For encoder-decoder models *inputs* can represent any of
                 `input_ids`, `input_values`, `input_features`, or `pixel_values`.
             max_length (`int`, *optional*, defaults to `model.config.max_length`):
-                The maximum length of the sequence to be generated.
+                **DEPRECATED** The maximum length of the sequence to be generated. Prefer the use of `max_new_tokens`.
             max_new_tokens (`int`, *optional*, defaults to None):
-                The maximum numbers of tokens to generate, ignore the current number of tokens. Use either
-                `max_new_tokens` or `max_length` but not both, they serve the same purpose.
+                The maximum numbers of tokens to generate, ignoring the current number of tokens.
             min_length (`int`, *optional*, defaults to 10):
                 The minimum length of the sequence to be generated.
             do_sample (`bool`, *optional*, defaults to `False`):
@@ -1195,10 +1194,14 @@ class GenerationMixin:
             # if decoder-only then inputs_tensor has to be `input_ids`
             input_ids = inputs_tensor
 
-        input_ids_seq_length = input_ids.shape[-1]
-
         # 5. Prepare `max_length` depending on other stopping criteria
         # if `max_new_tokens` is passed, but not `max_length` -> set `max_length = max_new_tokens`
+        input_ids_seq_length = input_ids.shape[-1]
+        if max_length is not None:
+            warnings.warn(
+                "The `max_length` argument is deprecated and will be removed in v5. Use `max_new_tokens` instead.",
+                FutureWarning,
+            )
         if max_length is None and max_new_tokens is not None:
             max_length = max_new_tokens + input_ids_seq_length
         elif max_length is not None and max_new_tokens is not None:
@@ -1222,8 +1225,8 @@ class GenerationMixin:
             input_ids_string = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
             logger.warning(
                 f"Input length of {input_ids_string} is {input_ids_seq_length}, but ``max_length`` is set to"
-                f" {max_length}. This can lead to unexpected behavior. You should consider increasing"
-                " ``config.max_length`` or ``max_length``."
+                f" {max_length}. This can lead to unexpected behavior. You should consider increasing "
+                "``max_new_tokens``."
             )
 
         # 6. determine generation mode
