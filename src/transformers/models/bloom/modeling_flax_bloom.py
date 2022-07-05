@@ -433,7 +433,8 @@ class FlaxBloomMLP(nn.Module):
         hidden_states = self.act(hidden_states)
 
         # TODO: this code block is from the pytorch implementation. needs changing to work.
-        if self.pretraining_tp > 1 and self.slow_but_exact:
+#        if self.pretraining_tp > 1 and self.slow_but_exact:
+        if False:
             intermediate_output = jnp.zeros_like(residual)
             slices = self.dense_4h_to_h.weight.shape[-1] / self.pretraining_tp
             for i in range(self.pretraining_tp):
@@ -636,6 +637,7 @@ class FlaxBloomPreTrainedModel(FlaxPreTrainedModel):
         # else:
         #     mutable = False
         mutable = False
+#        import ipdb; ipdb.set_trace()
         outputs = self.module.apply(
             inputs,
             jnp.array(input_ids, dtype="i4"),
@@ -759,7 +761,6 @@ class FlaxBloomModule(nn.Module):
         input_ids=None,
         attention_mask=None,
         past_key_values=None,
-        position_ids=None,
         head_mask=None,
         inputs_embeds=None,
         use_cache=None,
@@ -845,17 +846,16 @@ class FlaxBloomForCausalLMModule(nn.Module):
         self,
         input_ids,
         attention_mask,
-        position_ids,
         deterministic: bool = True,
         init_cache: bool = False,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
+#        import ipdb; ipdb.set_trace()
         outputs = self.transformer(
             input_ids,
             attention_mask=attention_mask,
-            position_ids=position_ids,
             deterministic=deterministic,
             init_cache=init_cache,
             output_attentions=output_attentions,
