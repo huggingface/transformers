@@ -534,7 +534,7 @@ def prepare_img():
 class OwlViTModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
-        model_name = "google/owlvit-base-patch32"
+        model_name = "adirik/owlvit-base-patch32"
         model = OwlViTModel.from_pretrained(model_name).to(torch_device)
         processor = OwlViTProcessor.from_pretrained(model_name)
 
@@ -573,7 +573,7 @@ class OwlViTModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_object_detection(self):
-        model_name = "google/owlvit-base-patch32"
+        model_name = "adirik/owlvit-base-patch32"
         model = OwlViTForObjectDetection.from_pretrained(model_name).to(torch_device)
 
         processor = OwlViTProcessor.from_pretrained(model_name)
