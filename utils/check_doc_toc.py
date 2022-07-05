@@ -14,8 +14,10 @@
 # limitations under the License.
 
 import argparse
-import yaml
 from collections import defaultdict
+
+import yaml
+
 
 PATH_TO_TOC = "docs/source/en/_toctree.yml"
 
@@ -28,7 +30,7 @@ def clean_model_doc_toc(model_doc):
     for doc in model_doc:
         counts[doc["local"]] += 1
     duplicates = [key for key, value in counts.items() if value > 1]
-    
+
     new_doc = []
     for duplicate_key in duplicates:
         titles = list(set(doc["title"] for doc in model_doc if doc["local"] == duplicate_key))
@@ -40,10 +42,10 @@ def clean_model_doc_toc(model_doc):
             )
         # Only add this once
         new_doc.append({"local": duplicate_key, "title": titles[0]})
-    
+
     # Add none duplicate-keys
     new_doc.extend([doc for doc in model_doc if counts[doc["local"]] == 1])
-    
+
     # Sort
     return sorted(new_doc, key=lambda s: s["title"].lower())
 
@@ -51,21 +53,21 @@ def clean_model_doc_toc(model_doc):
 def check_model_doc(overwrite=False):
     with open(PATH_TO_TOC, encoding="utf-8") as f:
         content = yaml.safe_load(f.read())
-    
+
     # Get to the API doc
     api_idx = 0
     while content[api_idx]["title"] != "API":
         api_idx += 1
     api_doc = content[api_idx]["sections"]
-    
+
     # Then to the model doc
     model_idx = 0
     while api_doc[model_idx]["title"] != "Models":
         model_idx += 1
-    
+
     old_model_doc = api_doc[model_idx]["sections"]
     new_model_doc = clean_model_doc_toc(old_model_doc)
-    
+
     if old_model_doc != new_model_doc:
         if overwrite:
             api_doc[model_idx]["sections"] = new_model_doc
