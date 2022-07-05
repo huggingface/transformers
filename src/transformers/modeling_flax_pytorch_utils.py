@@ -30,7 +30,6 @@ from flax.traverse_util import flatten_dict, unflatten_dict
 from .utils import logging
 
 
-
 logger = logging.get_logger(__name__)
 
 
