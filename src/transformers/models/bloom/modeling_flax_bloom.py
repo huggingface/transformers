@@ -690,12 +690,19 @@ class FlaxBloomBlockCollection(nn.Module):
                 FlaxBloomBlock,
                 variable_axes={"params": 0, "cache": 0},
                 split_rngs={"params": True, "dropout": True},
-                in_axes=(nn.broadcast, 0),
+                in_axes=(nn.broadcast, nn.broadcast, nn.broadcast, nn.broadcast, nn.broadcast, nn.broadcast, nn.broadcast, nn.broadcast, 0),
                 length=self.config.num_hidden_layers,
             )(self.config, dtype=self.dtype, use_scan=True, name="FlaxBloomBlockLayers")(
                 hidden_states,
                 alibi,
-                layer_number=jnp.arange(0, self.config.num_hidden_layers)
+                None,  # kwargs not supported by scan
+                None,
+                None,
+                deterministic,
+                init_cache,
+                output_attentions,
+                False,
+                layer_number=jnp.arange(self.config.num_hidden_layers),
             )
             hidden_states = hidden_states[0]
 
