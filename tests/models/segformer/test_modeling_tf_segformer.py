@@ -20,6 +20,7 @@ from typing import List, Tuple
 
 import numpy as np
 
+from transformers import SegformerConfig
 from transformers.file_utils import is_tf_available, is_vision_available
 from transformers.testing_utils import require_tf, slow
 
@@ -30,12 +31,7 @@ from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_te
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import (
-        SegformerConfig,
-        TFSegformerForImageClassification,
-        TFSegformerForSemanticSegmentation,
-        TFSegformerModel,
-    )
+    from transformers import TFSegformerForImageClassification, TFSegformerForSemanticSegmentation, TFSegformerModel
     from transformers.models.segformer.modeling_tf_segformer import TF_SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
