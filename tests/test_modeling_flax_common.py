@@ -1102,7 +1102,7 @@ class FlaxModelTesterMixin:
     @is_pt_flax_cross_test
     def test_from_sharded_pt(self):
         model = FlaxBertModel.from_pretrained("hf-internal-testing/tiny-random-bert-sharded", from_pt=True)
-        ref_model = FlaxBertModel.from_pretrained("hf-internal-testing/tiny-bert-flax-only")
+        ref_model = FlaxBertModel.from_pretrained("ArthurZ/tiny-random-bert-flax-only")
         for p1, p2 in zip(flatten_dict(model.params).values(), flatten_dict(ref_model.params).values()):
             assert np.allclose(np.array(p1), np.array(p2))
 
