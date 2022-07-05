@@ -471,13 +471,13 @@ class FlaxBloomBlock(nn.Module):
         hidden_states,
         alibi,
         attention_mask=None,
+        layer_number: int = None,
         layer_past=None,
         head_mask=None,
         deterministic: bool = True,
         init_cache: bool = False,
         output_attentions: bool = False,
         use_cache: bool = False,
-        layer_number: int = None,
     ):
         if self.use_scan:
             hidden_states = hidden_states[0]
@@ -666,6 +666,7 @@ class FlaxBloomBlockCollection(nn.Module):
     dtype: jnp.dtype = jnp.float32
     use_scan: bool = False
 
+    # TODO (SG): re-write as a `setup` to conform to Transformers JAX/Flax conventions -> awaiting CG response on G Chat
     @nn.compact
     def __call__(
         self,
@@ -690,19 +691,13 @@ class FlaxBloomBlockCollection(nn.Module):
                 FlaxBloomBlock,
                 variable_axes={"params": 0, "cache": 0},
                 split_rngs={"params": True, "dropout": True},
-                in_axes=(nn.broadcast, nn.broadcast, nn.broadcast, nn.broadcast, nn.broadcast, nn.broadcast, nn.broadcast, nn.broadcast, 0),
+                in_axes=(nn.broadcast, nn.broadcast, 0),
                 length=self.config.num_hidden_layers,
             )(self.config, dtype=self.dtype, use_scan=True, name="FlaxBloomBlockLayers")(
                 hidden_states,
                 alibi,
-                None,  # kwargs not supported by scan
-                None,
-                None,
-                deterministic,
-                init_cache,
-                output_attentions,
-                False,
-                layer_number=jnp.arange(self.config.num_hidden_layers),
+                attention_mask,  # kwargs not supported by scan
+                jnp.arange(self.config.num_hidden_layers),
             )
             hidden_states = hidden_states[0]
 
