@@ -43,7 +43,7 @@ from .utils import is_sagemaker_mp_enabled, is_torch_tpu_available, is_training_
 if is_training_run_on_sagemaker():
     logging.add_handler(StreamHandler(sys.stdout))
 
-if is_torch_tpu_available():
+if is_torch_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
 
 # this is used to suppress an undesired warning emitted by pytorch versions 1.4.2-1.7.0
@@ -466,8 +466,12 @@ class LabelSmoother:
     epsilon: float = 0.1
     ignore_index: int = -100
 
-    def __call__(self, model_output, labels):
+    def __call__(self, model_output, labels, shift_labels=False):
         logits = model_output["logits"] if isinstance(model_output, dict) else model_output[0]
+        if shift_labels:
+            logits = logits[..., :-1, :].contiguous()
+            labels = labels[..., 1:].contiguous()
+
         log_probs = -nn.functional.log_softmax(logits, dim=-1)
         if labels.dim() == log_probs.dim() - 1:
             labels = labels.unsqueeze(-1)

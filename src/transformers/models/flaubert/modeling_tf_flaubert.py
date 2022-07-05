@@ -761,6 +761,8 @@ class TFFlaubertWithLMHeadModel(TFFlaubertPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFFlaubertMainLayer(config, name="transformer")
         self.pred_layer = TFFlaubertPredLayer(config, self.transformer.embeddings, name="pred_layer_._proj")
+        # Flaubert does not have past caching features
+        self.supports_xla_generation = False
 
     def get_lm_head(self):
         return self.pred_layer
