@@ -70,8 +70,6 @@ class BloomConfig(PretrainedConfig):
             If enabled, use the layer norm of the hidden states as the residual in the transformer blocks
         skip_bias_add (`bool`, *optional*, defaults to `True`):
             If set to `True`, it will skip bias add for each linear layer in the transformer blocks
-        skip_bias_add_qkv (`bool`, *optional*, defaults to `False`):
-            If set to `True`, it will skip bias add for the first linear layer in the transformer blocks
         attention_softmax_in_fp32 (`bool`, *optional*, defaults to `True`):
             If set to `True` and the `dtype` is set to `float16` it will scale the input of the Softmax function to
             `fp32`
