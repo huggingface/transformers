@@ -17,22 +17,21 @@
 # TODO: check correctness against pytorch implementation
 # TODO: add unit tests
 # TODO: add documentation / check that documentation is correct
-    # TODO: BLOOM_INPUTS_DOCSTRING might be wrong still (position_ids)
+# TODO: BLOOM_INPUTS_DOCSTRING might be wrong still (position_ids)
 # TODO: check that code is jit-able
 
-from functools import partial
-from typing import Any, Callable, Optional, Tuple
 import math
+from functools import partial
+from typing import Callable, Optional, Tuple
 
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen import combine_masks, make_causal_mask
-from flax.linen.attention import dot_product_attention_weights
+from flax.linen.activation import tanh
 from flax.linen.partitioning import scan_with_axes
 from flax.traverse_util import flatten_dict, unflatten_dict
-from flax.linen.activation import tanh
 from jax import lax
 
 from ...modeling_flax_outputs import (
@@ -40,7 +39,7 @@ from ...modeling_flax_outputs import (
     FlaxBaseModelOutputWithPastAndCrossAttentions,
     FlaxCausalLMOutput,
 )
-from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring
+from ...modeling_flax_utils import FlaxPreTrainedModel, append_call_sample_docstring
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_bloom import BloomConfig
 
@@ -51,9 +50,33 @@ _CHECKPOINT_FOR_DOC = "bigscience/bloom"
 _CONFIG_FOR_DOC = "BloomConfig"
 _TOKENIZER_FOR_DOC = "BloomTokenizer"
 
-def attention_mask_func(args):
-    # TODO: implement this helper fn. see pytorch impl. for reference
-    raise NotImplementedError
+
+def masked_fill(mask, a, fill):
+    return jax.lax.select(mask, a, jax.lax.broadcast(fill, a.shape))
+
+
+def attention_mask_func(attention_scores, attention_mask, causal_mask):
+    attention_mask_bool = ~(attention_mask)
+
+    query_length, key_length, n_heads = attention_scores.shape[2], attention_scores.shape[3], attention_scores.shape[1]
+    padded_causal_mask = jnp.logical_or(
+        attention_mask_bool[:, None, key_length - query_length : key_length, None],
+        ~(causal_mask[:, :, key_length - query_length : key_length, :key_length] == 1),
+    )
+    padded_causal_mask = jnp.logical_or(padded_causal_mask, attention_mask_bool[:, None, None, :key_length])
+    # Make use of floats
+    return (
+        masked_fill(
+            jnp.broadcast_to(
+                ~padded_causal_mask,
+                (padded_causal_mask.shape[0], n_heads, padded_causal_mask.shape[2], padded_causal_mask.shape[3]),
+            ),
+            attention_scores,
+            -1e4,
+        ),
+        ~padded_causal_mask,
+    )
+
 
 BLOOM_START_DOCSTRING = r"""
 
@@ -122,8 +145,10 @@ BLOOM_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+
 def flax_unsqueeze(x, axis):
     return jnp.expand_dims(x, axis)
+
 
 def build_alibi_tensor_flax(max_seq_len, n_head, dtype):
     def get_slopes(n):
@@ -140,6 +165,7 @@ def build_alibi_tensor_flax(max_seq_len, n_head, dtype):
                 get_slopes_power_of_2(closest_power_of_2)
                 + get_slopes(2 * closest_power_of_2)[0::2][: n - closest_power_of_2]
             )
+
     slopes = jnp.array(get_slopes(n_head))
     slopes = flax_unsqueeze(flax_unsqueeze(slopes, 1), 1)
     arange_tensor = flax_unsqueeze(flax_unsqueeze(jnp.arange(max_seq_len, dtype=dtype), 0), 0)
@@ -147,11 +173,11 @@ def build_alibi_tensor_flax(max_seq_len, n_head, dtype):
     alibi = slopes * jnp.broadcast_to(arange_tensor, (n_head, 1, arange_tensor.shape[-1]))
     return alibi
 
+
 class FlaxBloomScaledSoftmax(nn.Module):
     config: BloomConfig
     mask_func: Callable
     softmax_in_fp32: bool
-    scale: float = None
     """
     Scaled Softmax module. Also performs masking.
     Args:
@@ -164,28 +190,26 @@ class FlaxBloomScaledSoftmax(nn.Module):
     """
 
     def setup(self):
-        if not (self.scale is None or self.softmax_in_fp32):
-            raise ValueError("softmax should be in fp32 if scale is not `None`")
+        pass
 
-    def __call__(self, input, mask, causal_mask):
+    def __call__(self, input, mask, causal_mask, scale):
         input_dtype = input.dtype
+        input_in_16bit = input_dtype in [jnp.float16, jnp.bfloat16]
         softmax_dtype = jnp.float32 if self.softmax_in_fp32 else input_dtype
 
-        if self.scale is not None:
-            input = input * self.scale
-        
-        if mask is not None:
-            mask_output, padded_causal_mask = self.mask_func(input, mask, causal_mask)
-            # TODO: ideally we could pass a dtype argument to nn.softmax like in PyTorch (see discussion on PR #17474 about fp32 softmax)
-            mask_output.astype(softmax_dtype)
-            probs = nn.softmax(mask_output, axis=-1) * (~padded_causal_mask)
-        else:
-            input.astype(softmax_dtype)
-            probs = nn.softmax(input, axis=-1)
-        
+        if scale is not None:
+            input = input * scale
+
+        if mask is None:
+            mask = jnp.ones((input.shape[0], input.shape[1]), dtype=bool)
+
+        mask_output, padded_causal_mask = self.mask_func(input, mask, causal_mask)
+        mask_output.astype(softmax_dtype)
+        probs = nn.softmax(mask_output, axis=-1) * (padded_causal_mask)
+
         if input_dtype != softmax_dtype:
             probs = probs.astype(input_dtype)
-        
+
         return probs
 
 
@@ -216,7 +240,6 @@ class FlaxBloomAttention(nn.Module):
 
         # Layer-wise attention scaling
         self.norm_factor = jnp.sqrt(self.head_dim).astype(self.dtype) * self.layer_number
-        
 
         self.attn_dropout = nn.Dropout(self.config.attention_dropout)
 
@@ -224,7 +247,6 @@ class FlaxBloomAttention(nn.Module):
             self.config,
             attention_mask_func,
             self.attention_softmax_in_fp32,
-            self.layer_number,
         )
 
         dense = partial(
@@ -233,7 +255,6 @@ class FlaxBloomAttention(nn.Module):
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
         )
 
-        
         self.query_key_value = dense(self.hidden_size * 3)
         self.dense = dense(self.hidden_size)
         self.attention_dropout = nn.Dropout(self.config.attention_dropout)
@@ -299,9 +320,7 @@ class FlaxBloomAttention(nn.Module):
         query_length, key_length = query.shape[1], key.shape[1]
 
         # TODO: check size of hidden_states to confirm this is the right dim for causal mask to use
-        causal_mask = make_causal_mask(
-                jnp.ones((1, hidden_states.shape[1]), dtype="bool"), dtype="bool"
-            )
+        causal_mask = make_causal_mask(jnp.ones((1, hidden_states.shape[1]), dtype="bool"), dtype="bool")
 
         if self.has_variable("cache", "cached_key"):
             mask_shift = self.variables["cache"]["cache_index"]
@@ -315,7 +334,6 @@ class FlaxBloomAttention(nn.Module):
         batch_size = hidden_states.shape[0]
         causal_mask = jnp.broadcast_to(causal_mask, (batch_size,) + causal_mask.shape[1:])
 
-        # TODO: fix this
         if attention_mask is not None:
             attention_mask = jnp.broadcast_to(jnp.expand_dims(attention_mask, axis=(-3, -2)), causal_mask.shape)
             attention_mask = combine_masks(attention_mask, causal_mask)
@@ -337,10 +355,10 @@ class FlaxBloomAttention(nn.Module):
                 jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
                 jnp.full(attention_mask.shape, -1e9).astype(self.dtype),
             )
-            
+
         # Reshape input tensors
         output_size = (query.shape[0], query.shape[2], query.shape[1], key.shape[1])
-        
+
         # [batch_size, q_length, num_heads, head_dim] -> [q_length, batch_size * num_heads, head_dim]
         query = jnp.transpose(query, (1, 0, 2, 3)).reshape(output_size[2], output_size[0] * output_size[1], -1)
 
@@ -349,30 +367,48 @@ class FlaxBloomAttention(nn.Module):
 
         # Reshape according to batch size
         query = jnp.transpose(query, (1, 0, 2))
-        key = jnp.transpose(key, (1, 2, 0)) 
+        key = jnp.transpose(key, (1, 2, 0))
 
         # scaling factors
-        alpha = (1.0 / self.norm_factor)
+        alpha = 1.0 / self.norm_factor
         beta = 1.0 / self.layer_number
 
         # usual dot product attention
         attn_weights = beta * alibi + alpha * jnp.matmul(query, key)
+        attn_weights = attn_weights.reshape(output_size)
 
         # TODO: apply softmax to attention weights
-        
+        att_probs = self.scale_mask_softmax(attn_weights, attention_mask, causal_mask, self.layer_number)
+        if head_mask is not None:
+            attention_probs = attention_probs * head_mask
 
-        attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value)
-        attn_output = self._merge_heads(attn_output)
-        attn_output = self.dense(attn_output)
+        output_size = (value.shape[0], value.shape[2], query.shape[1], value.shape[3])
+
+        value = jnp.transpose(value, (1, 0, 2, 3)).reshape(value.shape[1], output_size[0] * output_size[1], -1)
+        attention_probs_reshaped = jnp.reshape(att_probs, (output_size[0] * output_size[1], output_size[2], -1))
+
+        context = jnp.matmul(attention_probs_reshaped, jnp.transpose(value, (1, 0, 2)))
+        context = context.reshape(output_size)
+        context = jnp.transpose(context, (2, 0, 1, 3))
+
+        # [q_length, batch_size, num_heads, head_dim] --> [q_length, batch_size, hidden_size]
+        new_context_layer_shape = context.shape[:-2] + (self.hidden_size,)
+        context = context.reshape(new_context_layer_shape)
+
+        attn_output = self.dense(context)
+        attn_output = jnp.transpose(attn_output, (1, 0, 2)) + residual
 
         outputs = (attn_output, attn_weights) if output_attentions else (attn_output,)
-        return outputs        
+        return outputs
+
 
 class BloomGELU(nn.Module):
     def setup(self):
         self.dtype = jnp.float32
+
     def __call__(self, x):
         return x * 0.5 * (1.0 + tanh(0.79788456 * x * (1 + 0.044715 * x * x)))
+
 
 class FlaxBloomMLP(nn.Module):
     config: BloomConfig
@@ -407,6 +443,7 @@ class FlaxBloomMLP(nn.Module):
         else:
             intermediate_output = self.dense_4h_to_h(hidden_states)
 
+        intermediate_output = intermediate_output + residual
         hidden_states = self.hidden_dropout(intermediate_output, deterministic=deterministic)
 
         return hidden_states
@@ -450,7 +487,7 @@ class FlaxBloomBlock(nn.Module):
             residual = layernorm_output
         else:
             residual = hidden_states
-        
+
         # self-attention
         attn_outputs = self.self_attention(
             layernorm_output,
@@ -468,8 +505,6 @@ class FlaxBloomBlock(nn.Module):
 
         outputs = attn_outputs[1:]
 
-        attention_output = attention_output + residual
-
         post_layernorm = self.post_attention_layernorm(attention_output)
 
         # set residual based on config
@@ -477,11 +512,9 @@ class FlaxBloomBlock(nn.Module):
             residual = post_layernorm
         else:
             residual = attention_output
-        
+
         output = self.mlp(post_layernorm, residual, deterministic=deterministic)
 
-        output = output + residual
-        
         if use_cache:
             outputs = (output,) + outputs
         else:
@@ -491,6 +524,7 @@ class FlaxBloomBlock(nn.Module):
             outputs = (outputs, None)
 
         return outputs
+
 
 # TODO: does this still require position_ids?
 # TODO: gradient checkpointing
@@ -557,6 +591,7 @@ class FlaxBloomPreTrainedModel(FlaxPreTrainedModel):
             jax.random.PRNGKey(0), input_ids, attention_mask, position_ids, return_dict=False, init_cache=True
         )
         return unfreeze(init_variables["cache"])
+
     # TODO: check whether this is correct (position ids might not be required)
     @add_start_docstrings_to_model_forward(BLOOM_INPUTS_DOCSTRING)
     def __call__(
@@ -580,7 +615,6 @@ class FlaxBloomPreTrainedModel(FlaxPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         batch_size, sequence_length = input_ids.shape
-
 
         if attention_mask is None:
             attention_mask = jnp.ones((batch_size, sequence_length))
@@ -623,6 +657,7 @@ class FlaxBloomPreTrainedModel(FlaxPreTrainedModel):
             outputs = outputs[:1] + (unfreeze(past_key_values["cache"]),) + outputs[1:]
 
         return outputs
+
 
 # TODO: haven't modified this block yet, remove if remains unused
 class FlaxBloomBlockCollection(nn.Module):
@@ -681,8 +716,8 @@ class FlaxBloomBlockCollection(nn.Module):
 
                 layer_outputs = block(
                     hidden_states,
-                    attention_mask,
                     alibi,
+                    attention_mask,
                     deterministic=deterministic,
                     init_cache=init_cache,
                     output_attentions=output_attentions,
@@ -696,6 +731,7 @@ class FlaxBloomBlockCollection(nn.Module):
         outputs = (hidden_states, all_hidden_states, all_attentions)
 
         return outputs
+
 
 class FlaxBloomModule(nn.Module):
     config: BloomConfig
@@ -716,10 +752,10 @@ class FlaxBloomModule(nn.Module):
         )
         # post-embedding layernorm
         self.word_embeddings_layernorm = nn.LayerNorm(epsilon=self.config.layer_norm_epsilon)
-        
+
         # transformer layers
         self.h = FlaxBloomBlockCollection(self.config, dtype=self.dtype, use_scan=self.use_scan)
-        
+
         # final layernorm
         self.ln_f = nn.LayerNorm(epsilon=self.config.layer_norm_epsilon, dtype=self.dtype)
         # TODO: change how gradient checkpointing is done
@@ -748,7 +784,7 @@ class FlaxBloomModule(nn.Module):
         curr_seq_len = hidden_states.shape[1]
         alibi = build_alibi_tensor_flax(curr_seq_len, self.config.n_head, hidden_states.dtype)
 
-        past_key_values = () if use_cache else None # TODO: come back to this line
+        past_key_values = () if use_cache else None  # TODO: come back to this line
         # TODO: how to handle alibi? build alibi tensor here?
 
         # TODO: fix inputs to this (and args to submodules in general)
@@ -775,7 +811,7 @@ class FlaxBloomModule(nn.Module):
 
         if not return_dict:
             # TODO: don't think this return value / ordering is correct
-            return tuple(v for v in [outputs[0], past_key_values, outputs[-1]]  if v is not None)
+            return tuple(v for v in [outputs[0], past_key_values, outputs[-1]] if v is not None)
 
         return FlaxBaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
@@ -803,7 +839,7 @@ append_call_sample_docstring(
 class FlaxBloomForCausalLMModule(nn.Module):
     config: BloomConfig
     dtype: jnp.dtype = jnp.float32
-    use_scan: bool = self.use_scan
+    use_scan: bool = False
 
     def setup(self):
         self.transformer = FlaxBloomModule(self.config, dtype=self.dtype, use_scan=self.use_scan)
