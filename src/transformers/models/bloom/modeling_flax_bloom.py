@@ -299,7 +299,9 @@ class FlaxBloomAttention(nn.Module):
         query_length, key_length = query.shape[1], key.shape[1]
 
         # TODO: check size of hidden_states to confirm this is the right dim for causal mask to use
-        causal_mask = make_causal_mask(jnp.ones((1, hidden_states.shape[0]), dtype="bool"), dtype="bool")
+        causal_mask = make_causal_mask(
+                jnp.ones((1, hidden_states.shape[1]), dtype="bool"), dtype="bool"
+            )
 
         if self.has_variable("cache", "cached_key"):
             mask_shift = self.variables["cache"]["cache_index"]
@@ -313,6 +315,7 @@ class FlaxBloomAttention(nn.Module):
         batch_size = hidden_states.shape[0]
         causal_mask = jnp.broadcast_to(causal_mask, (batch_size,) + causal_mask.shape[1:])
 
+        # TODO: fix this
         if attention_mask is not None:
             attention_mask = jnp.broadcast_to(jnp.expand_dims(attention_mask, axis=(-3, -2)), causal_mask.shape)
             attention_mask = combine_masks(attention_mask, causal_mask)
@@ -327,7 +330,6 @@ class FlaxBloomAttention(nn.Module):
             key, value, attention_mask = self._concatenate_to_cache(key, value, query, attention_mask)
 
         attention_bias = None
-
         # transform boolean mask into float mask
         if attention_mask is not None:
             attention_bias = lax.select(
@@ -336,18 +338,24 @@ class FlaxBloomAttention(nn.Module):
                 jnp.full(attention_mask.shape, -1e9).astype(self.dtype),
             )
             
+        # Reshape input tensors
+        output_size = (query.shape[0], query.shape[2], query.shape[1], key.shape[1])
+        
+        # [batch_size, q_length, num_heads, head_dim] -> [q_length, batch_size * num_heads, head_dim]
+        query = jnp.transpose(query, (1, 0, 2, 3)).reshape(output_size[2], output_size[0] * output_size[1], -1)
 
+        # [batch_size, k_length, num_heads, head_dim] -> [k_length, batch_size * num_heads, head_dim]
+        key = jnp.transpose(key, (1, 0, 2, 3)).reshape(output_size[3], output_size[0] * output_size[1], -1)
+
+        # Reshape according to batch size
+        query = jnp.transpose(query, (1, 0, 2))
+        key = jnp.transpose(key, (1, 2, 0)) 
         # usual dot product attention
-        attn_weights = dot_product_attention_weights(
-            query,
-            key,
-            bias=attention_bias,
-            dropout_rng=dropout_rng,
-            dropout_rate=self.config.attention_dropout,
-            deterministic=deterministic,
-            dtype=self.dtype,
-            precision=None,
-        )
+        alpha = (1.0 / self.norm_factor)
+        attn_weights = alibi + jnp.matmul(query, key)*alpha
+
+        # TODO: apply softmax to attention weights
+        
 
         attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value)
         attn_output = self._merge_heads(attn_output)
@@ -442,8 +450,8 @@ class FlaxBloomBlock(nn.Module):
         # self-attention
         attn_outputs = self.self_attention(
             layernorm_output,
-            residual,
-            alibi,
+            residual=residual,
+            alibi=alibi,
             layer_past=layer_past,
             attention_mask=attention_mask,
             head_mask=head_mask,
@@ -654,8 +662,8 @@ class FlaxBloomBlockCollection(nn.Module):
                 length=self.config.num_hidden_layers,
             )(self.config, dtype=self.dtype, use_scan=True, name="FlaxBloomBlockLayers")(
                 hidden_states,
-                attention_mask,
-                alibi,
+                alibi=alibi,
+                attention_mask=attention_mask,
                 deterministic=deterministic,
                 init_cache=init_cache,
                 output_attentions=output_attentions,
@@ -716,8 +724,8 @@ class FlaxBloomModule(nn.Module):
     def __call__(
         self,
         input_ids=None,
-        past_key_values=None,
         attention_mask=None,
+        past_key_values=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
@@ -815,8 +823,8 @@ class FlaxBloomForCausalLMModule(nn.Module):
     ):
         outputs = self.transformer(
             input_ids,
-            attention_mask,
-            position_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
             deterministic=deterministic,
             init_cache=init_cache,
             output_attentions=output_attentions,
