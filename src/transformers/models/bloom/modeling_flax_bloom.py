@@ -60,10 +60,10 @@ def attention_mask_func(attention_scores, attention_mask, causal_mask):
 
     query_length, key_length, n_heads = attention_scores.shape[2], attention_scores.shape[3], attention_scores.shape[1]
     padded_causal_mask = jnp.logical_or(
-        attention_mask_bool[:, None, key_length - query_length : key_length, None],
+        attention_mask_bool[:, :, key_length - query_length : key_length, :],
         ~(causal_mask[:, :, key_length - query_length : key_length, :key_length] == 1),
     )
-    padded_causal_mask = jnp.logical_or(padded_causal_mask, attention_mask_bool[:, None, None, :key_length])
+    padded_causal_mask = jnp.logical_or(padded_causal_mask, attention_mask_bool[:, :, :, :key_length])
     # Make use of floats
     return (
         masked_fill(
@@ -202,6 +202,8 @@ class FlaxBloomScaledSoftmax(nn.Module):
 
         if mask is None:
             mask = jnp.ones((input.shape[0], input.shape[1]), dtype=bool)
+        else:
+            mask = mask.astype(bool)
 
         mask_output, padded_causal_mask = self.mask_func(input, mask, causal_mask)
         mask_output.astype(softmax_dtype)
@@ -306,7 +308,7 @@ class FlaxBloomAttention(nn.Module):
         output_attentions: bool = False,
         layer_number: int = None,
     ):
-        # TODO: this module __call__ needs checking for correctness of implementation.
+        alibi = jnp.repeat(alibi, hidden_states.shape[0], axis=0)
         fused_qkv = self.query_key_value(hidden_states)
 
         new_tensor_shape = fused_qkv.shape[:-1] + (self.num_heads, 3 * self.head_dim)
@@ -316,7 +318,6 @@ class FlaxBloomAttention(nn.Module):
 
         query_length, key_length = query.shape[1], key.shape[1]
 
-        # TODO: check size of hidden_states to confirm this is the right dim for causal mask to use
         causal_mask = make_causal_mask(jnp.ones((1, hidden_states.shape[1]), dtype="bool"), dtype="bool")
 
         if self.has_variable("cache", "cached_key"):
@@ -469,8 +470,8 @@ class FlaxBloomBlock(nn.Module):
         self,
         hidden_states,
         alibi,
-        layer_past=None,
         attention_mask=None,
+        layer_past=None,
         head_mask=None,
         deterministic: bool = True,
         init_cache: bool = False,
@@ -598,8 +599,8 @@ class FlaxBloomPreTrainedModel(FlaxPreTrainedModel):
     def __call__(
         self,
         input_ids,
-        past_key_values: dict = None,
         attention_mask=None,
+        past_key_values: dict = None,
         head_mask=None,
         inputs_embeds=None,
         params: dict = None,
@@ -628,13 +629,13 @@ class FlaxBloomPreTrainedModel(FlaxPreTrainedModel):
         inputs = {"params": params or self.params}
 
         # if past_key_values are passed then cache is already initialized a private flag init_cache has to be passed down to ensure cache is used. It has to be made sure that cache is marked as mutable so that it can be changed by FlaxBloomAttention module
-        if past_key_values:
-            inputs["cache"] = past_key_values
-            mutable = ["cache"]
-        else:
-            mutable = False
-        # TODO: build alibi here?
-        # TODO: check the inputs and their order to this
+        # TODO: check with patrick
+        # if isinstance(past_key_values, jnp.ndarray):
+        #     inputs["cache"] = past_key_values
+        #     mutable = ["cache"]
+        # else:
+        #     mutable = False
+        mutable = False
         outputs = self.module.apply(
             inputs,
             jnp.array(input_ids, dtype="i4"),
@@ -675,7 +676,6 @@ class FlaxBloomBlockCollection(nn.Module):
         init_cache: bool = False,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-        return_dict: bool = True,
     ):
         all_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
@@ -713,8 +713,8 @@ class FlaxBloomBlockCollection(nn.Module):
 
                 layer_outputs = FlaxBloomBlock(self.config, name=str(layer_number), dtype=self.dtype, use_scan=False)(
                     hidden_states,
-                    alibi,
-                    attention_mask,
+                    alibi=alibi,
+                    attention_mask=attention_mask,
                     deterministic=deterministic,
                     init_cache=init_cache,
                     output_attentions=output_attentions,
@@ -774,8 +774,7 @@ class FlaxBloomModule(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
-        if inputs_embeds is None:
-            inputs_embeds = self.word_embeddings(input_ids.astype("i4"))
+        inputs_embeds = self.word_embeddings(input_ids.astype("i4"))
         # do post-embedding layernorm
         hidden_states = self.word_embeddings_layernorm(inputs_embeds)
 
@@ -793,9 +792,8 @@ class FlaxBloomModule(nn.Module):
             attention_mask=attention_mask,
             deterministic=deterministic,
             init_cache=init_cache,
-            output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            output_attentions=output_attentions,
         )
 
         hidden_states = outputs[0]
@@ -905,20 +903,15 @@ class FlaxBloomForCausalLM(FlaxBloomPreTrainedModel):
         # Thus we can create a single static attention_mask here, which is more efficient for compilation
         extended_attention_mask = jnp.ones((batch_size, max_length), dtype="i4")
         if attention_mask is not None:
-            position_ids = attention_mask.cumsum(axis=-1) - 1
             extended_attention_mask = lax.dynamic_update_slice(extended_attention_mask, attention_mask, (0, 0))
-        else:
-            position_ids = jnp.broadcast_to(jnp.arange(seq_length, dtype="i4")[None, :], (batch_size, seq_length))
 
         return {
             "past_key_values": past_key_values,
             "attention_mask": extended_attention_mask,
-            "position_ids": position_ids,
         }
 
     def update_inputs_for_generation(self, model_outputs, model_kwargs):
         model_kwargs["past_key_values"] = model_outputs.past_key_values
-        model_kwargs["position_ids"] = model_kwargs["position_ids"][:, -1:] + 1
         return model_kwargs
 
 
