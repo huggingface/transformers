@@ -304,10 +304,10 @@ class BloomScaledSoftmax(nn.Module):
 
         if prefix_length is not None:
             prefix_mask = torch.zeros(
-                (prefix_length.shape[-1], 1, max_positions, max_positions),
+                (prefix_length.shape[0], 1, max_positions, max_positions),
                 dtype=torch.bool
             )
-            for idx in range(prefix_length.shape[-1]):
+            for idx in range(prefix_length.shape[0]):
                 prefix_mask_length = int(prefix_length[idx])
                 prefix_mask[idx, :, :prefix_mask_length, :prefix_mask_length] = 1
             prefix_mask = prefix_mask.to(input.device)
