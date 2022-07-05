@@ -32,6 +32,7 @@ from torch import Tensor, device, nn
 from torch.nn import CrossEntropyLoss
 
 from requests import HTTPError
+from transformers.utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
 
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
@@ -132,11 +133,14 @@ def get_parameter_device(parameter: Union[nn.Module, GenerationMixin, "ModuleUti
         return first_tuple[1].device
 
 
-def get_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtilsMixin"]):
+def get_first_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtilsMixin"]):
+    """
+    Returns the first parameter dtype (can be non-floating) or asserts if none were found.
+    """
     try:
         return next(parameter.parameters()).dtype
     except StopIteration:
-        # For nn.DataParallel compatibility in PyTorch 1.5
+        # For nn.DataParallel compatibility in PyTorch > 1.5
 
         def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
             tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
@@ -147,38 +151,59 @@ def get_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtil
         return first_tuple[1].dtype
 
 
-def convert_file_size_to_int(size: Union[int, str]):
+def get_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtilsMixin"]):
     """
-    Converts a size expressed as a string with digits an unit (like `"5MB"`) to an integer (in bytes).
-
-    Args:
-        size (`int` or `str`): The size to convert. Will be directly returned if an `int`.
-
-    Example:
-
-    ```py
-    >>> convert_file_size_to_int("1MiB")
-    1048576
-    ```
+    Returns the first found floating dtype in parameters if there is one, otherwise returns the last dtype it found.
     """
-    if isinstance(size, int):
-        return size
-    if size.upper().endswith("GIB"):
-        return int(size[:-3]) * (2**30)
-    if size.upper().endswith("MIB"):
-        return int(size[:-3]) * (2**20)
-    if size.upper().endswith("KIB"):
-        return int(size[:-3]) * (2**10)
-    if size.upper().endswith("GB"):
-        int_size = int(size[:-2]) * (10**9)
-        return int_size // 8 if size.endswith("b") else int_size
-    if size.upper().endswith("MB"):
-        int_size = int(size[:-2]) * (10**6)
-        return int_size // 8 if size.endswith("b") else int_size
-    if size.upper().endswith("KB"):
-        int_size = int(size[:-2]) * (10**3)
-        return int_size // 8 if size.endswith("b") else int_size
-    raise ValueError("`size` is not in a valid format. Use an integer followed by the unit, e.g., '5GB'.")
+    last_dtype = None
+    for t in parameter.parameters():
+        last_dtype = t.dtype
+        if t.is_floating_point():
+            return t.dtype
+
+    if last_dtype is not None:
+        # if no floating dtype was found return whatever the first dtype is
+        return last_dtype
+
+    else:
+        # For nn.DataParallel compatibility in PyTorch > 1.5
+        def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
+            tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
+            return tuples
+
+        gen = parameter._named_members(get_members_fn=find_tensor_attributes)
+        last_tuple = None
+        for tuple in gen:
+            last_tuple = tuple
+            if tuple[1].is_floating_point():
+                return tuple[1].dtype
+
+        # fallback to the last dtype
+        return last_tuple[1].dtype
+
+
+def get_state_dict_float_dtype(state_dict):
+    """
+    Returns the first found floating dtype in `state_dict` or asserts if none were found.
+    """
+    for t in state_dict.values():
+        if t.is_floating_point():
+            return t.dtype
+
+    raise ValueError("couldn't find any floating point dtypes in state_dict")
+
+
+def get_state_dict_dtype(state_dict):
+    """
+    Returns the first found floating dtype in `state_dict` if there is one, otherwise returns the first dtype.
+    """
+    for t in state_dict.values():
+        if t.is_floating_point():
+            return t.dtype
+
+    # if no floating dtype was found return whatever the first dtype is
+    else:
+        return next(state_dict.values()).dtype
 
 
 def dtype_byte_size(dtype):
@@ -194,7 +219,7 @@ def dtype_byte_size(dtype):
     """
     if dtype == torch.bool:
         return 1 / 8
-    bit_search = re.search("[^\d](\d+)$", str(dtype))
+    bit_search = re.search(r"[^\d](\d+)$", str(dtype))
     if bit_search is None:
         raise ValueError(f"`dtype` is not a valid dtype: {dtype}.")
     bit_size = int(bit_search.groups()[0])
@@ -264,78 +289,6 @@ def shard_checkpoint(state_dict: Dict[str, torch.Tensor], max_shard_size: Union[
     metadata = {"total_size": total_size}
     index = {"metadata": metadata, "weight_map": weight_map}
     return shards, index
-
-
-def get_checkpoint_shard_files(
-    pretrained_model_name_or_path,
-    index_filename,
-    cache_dir=None,
-    force_download=False,
-    proxies=None,
-    resume_download=False,
-    local_files_only=False,
-    use_auth_token=None,
-    user_agent=None,
-    revision=None,
-    mirror=None,
-):
-    """
-    For a given model:
-
-    - download and cache all the shards of a sharded checkpoint if `pretrained_model_name_or_path` is a model ID on the
-      Hub
-    - returns the list of paths to all the shards, as well as some metadata.
-
-    For the description of each arg, see [`PreTrainedModel.from_pretrained`]. `index_filename` is the full path to the
-    index (downloaded and cached if `pretrained_model_name_or_path` is a model ID on the Hub).
-    """
-    with open(index_filename, "r") as f:
-        index = json.loads(f.read())
-
-    shard_filenames = sorted(list(set(index["weight_map"].values())))
-    sharded_metadata = index["metadata"]
-    sharded_metadata["all_checkpoint_keys"] = list(index["weight_map"].keys())
-
-    # First, let's deal with local folder.
-    if os.path.isdir(pretrained_model_name_or_path):
-        shard_filenames = [os.path.join(pretrained_model_name_or_path, f) for f in shard_filenames]
-        return shard_filenames, sharded_metadata
-
-    # At this stage pretrained_model_name_or_path is a model identifier on the Hub
-    cached_filenames = []
-    for shard_filename in shard_filenames:
-        shard_url = hf_bucket_url(
-            pretrained_model_name_or_path, filename=shard_filename, revision=revision, mirror=mirror
-        )
-
-        try:
-            # Load from URL
-            cached_filename = cached_path(
-                shard_url,
-                cache_dir=cache_dir,
-                force_download=force_download,
-                proxies=proxies,
-                resume_download=resume_download,
-                local_files_only=local_files_only,
-                use_auth_token=use_auth_token,
-                user_agent=user_agent,
-            )
-        # We have already dealt with RepositoryNotFoundError and RevisionNotFoundError when getting the index, so
-        # we don't have to catch them here.
-        except EntryNotFoundError:
-            raise EnvironmentError(
-                f"{pretrained_model_name_or_path} does not appear to have a file named {shard_filename} which is "
-                "required according to the checkpoint index."
-            )
-        except HTTPError:
-            raise EnvironmentError(
-                f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load {shard_filename}. You should try"
-                " again after checking your internet connection."
-            )
-
-        cached_filenames.append(cached_filename)
-
-    return cached_filenames, sharded_metadata
 
 
 def load_sharded_checkpoint(model, folder, strict=True):
@@ -574,7 +527,6 @@ def _load_state_dict_into_meta_model(
     for param_name, param in state_dict.items():
         # First part of the test is always true as load_state_dict_keys always contains state_dict keys.
         if param_name not in loaded_state_dict_keys or param_name not in expected_keys:
-            print(param_name)
             continue
 
         if param_name.startswith(start_prefix):
@@ -597,11 +549,12 @@ def _load_state_dict_into_meta_model(
                 raise ValueError(f"{param_name} doesn't have any device set.")
             param_device = device_map[module_name]
 
-        set_module_tensor_to_device(model, param_name, param_device, value=param)
         if param_device == "disk":
             offload_index = offload_weight(param, param_name, offload_folder, offload_index)
         elif param_device == "cpu" and state_dict_index is not None:
             state_dict_index = offload_weight(param, param_name, state_dict_folder, state_dict_index)
+        else:
+            set_module_tensor_to_device(model, param_name, param_device, value=param)
 
     return error_msgs, offload_index, state_dict_index
 
@@ -693,15 +646,7 @@ class ModuleUtilsMixin:
         # encoder_extended_attention_mask = (encoder_extended_attention_mask ==
         # encoder_extended_attention_mask.transpose(-1, -2))
         encoder_extended_attention_mask = encoder_extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-
-        if self.dtype == torch.float16:
-            encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e4
-        elif self.dtype in [torch.bfloat16, torch.float32]:
-            encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e9
-        else:
-            raise ValueError(
-                f"{self.dtype} not recognized. `dtype` should be set to either `torch.float32` or `torch.float16`"
-            )
+        encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * torch.finfo(self.dtype).min
 
         return encoder_extended_attention_mask
 
@@ -734,7 +679,7 @@ class ModuleUtilsMixin:
         return extended_attention_mask
 
     def get_extended_attention_mask(
-        self, attention_mask: Tensor, input_shape: Tuple[int], device: device = None
+        self, attention_mask: Tensor, input_shape: Tuple[int], device: device = None, dtype: torch.float = None
     ) -> Tensor:
         """
         Makes broadcastable attention and causal masks so that future and masked tokens are ignored.
@@ -748,6 +693,9 @@ class ModuleUtilsMixin:
         Returns:
             `torch.Tensor` The extended attention mask, with a the same dtype as `attention_mask.dtype`.
         """
+        if dtype is None:
+            dtype = self.dtype
+
         if not (attention_mask.dim() == 2 and self.config.is_decoder):
             # show warning only if it won't be shown in `create_extended_attention_mask_for_decoder`
             if device is not None:
@@ -778,8 +726,8 @@ class ModuleUtilsMixin:
         # positions we want to attend and -10000.0 for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
-        extended_attention_mask = extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-        extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
+        extended_attention_mask = extended_attention_mask.to(dtype=dtype)  # fp16 compatibility
+        extended_attention_mask = (1.0 - extended_attention_mask) * torch.finfo(dtype).min
         return extended_attention_mask
 
     def get_head_mask(
@@ -1883,6 +1831,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         is_sharded = False
         sharded_metadata = None
         # Load model
+        loading_info = None
+
         if pretrained_model_name_or_path is not None:
             pretrained_model_name_or_path = str(pretrained_model_name_or_path)
             if os.path.isdir(pretrained_model_name_or_path):
@@ -2076,7 +2026,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # set dtype to instantiate the model under:
             # 1. If torch_dtype is not None, we use that dtype
             # 2. If torch_dtype is "auto", we auto-detect dtype from the loaded state_dict, by checking its first
-            #    weights entry - we assume all weights are of the same dtype
+            #    weights entry that is of a floating type - we assume all floating dtype weights are of the same dtype
             # we also may have config.torch_dtype available, but we won't rely on it till v5
             dtype_orig = None
             if torch_dtype is not None:
@@ -2085,10 +2035,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         if is_sharded and "dtype" in sharded_metadata:
                             torch_dtype = sharded_metadata["dtype"]
                         elif not is_sharded:
-                            torch_dtype = next(iter(state_dict.values())).dtype
+                            torch_dtype = get_state_dict_dtype(state_dict)
                         else:
                             one_state_dict = load_state_dict(resolved_archive_file)
-                            torch_dtype = next(iter(one_state_dict.values())).dtype
+                            torch_dtype = get_state_dict_dtype(one_state_dict)
                             del one_state_dict  # free CPU memory
                     else:
                         raise ValueError(
@@ -2123,6 +2073,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if model._no_split_modules is None:
                 raise ValueError(f"{model.__class__.__name__} does not support `device_map='auto'` yet.")
             no_split_modules = model._no_split_modules
+            # Make sure tied weights are tied before creating the device map.
+            model.tie_weights()
             device_map = infer_auto_device_map(
                 model, no_split_module_classes=no_split_modules, dtype=torch_dtype, max_memory=max_memory
             )
@@ -2136,7 +2088,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 try:
                     from .modeling_tf_pytorch_utils import load_tf2_checkpoint_in_pytorch_model
 
-                    model = load_tf2_checkpoint_in_pytorch_model(model, resolved_archive_file, allow_missing_keys=True)
+                    model, loading_info = load_tf2_checkpoint_in_pytorch_model(
+                        model, resolved_archive_file, allow_missing_keys=True, output_loading_info=True
+                    )
                 except ImportError:
                     logger.error(
                         "Loading a TensorFlow model in PyTorch, requires both PyTorch and TensorFlow to be installed."
@@ -2189,12 +2143,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             dispatch_model(model, device_map=device_map, offload_dir=offload_folder)
 
         if output_loading_info:
-            loading_info = {
-                "missing_keys": missing_keys,
-                "unexpected_keys": unexpected_keys,
-                "mismatched_keys": mismatched_keys,
-                "error_msgs": error_msgs,
-            }
+            if loading_info is None:
+                loading_info = {
+                    "missing_keys": missing_keys,
+                    "unexpected_keys": unexpected_keys,
+                    "mismatched_keys": mismatched_keys,
+                    "error_msgs": error_msgs,
+                }
             return model, loading_info
 
         return model
@@ -2216,6 +2171,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         offload_state_dict=False,
         dtype=None,
     ):
+        if device_map is not None and "disk" in device_map.values():
+            if offload_folder is None:
+                raise ValueError(
+                    "The current `device_map` had weights offloaded to the disk. Please provide an `offload_folder`"
+                    " for them."
+                )
+            os.makedirs(offload_folder, exist_ok=True)
         # Retrieve missing & unexpected_keys
         model_state_dict = model.state_dict()
         expected_keys = list(model_state_dict.keys())
@@ -2388,11 +2350,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 del state_dict
                 gc.collect()
 
-            save_offload_index(offload_index, offload_folder)
+            if offload_index is not None and len(offload_index) > 0:
+                if model != model_to_load:
+                    # We need to add the prefix of the base model
+                    prefix = cls.base_model_prefix
+                    for weight_name in offload_index:
+                        shutil.move(
+                            os.path.join(offload_folder, f"{weight_name}.dat"),
+                            os.path.join(offload_folder, f"{prefix}.{weight_name}.dat"),
+                        )
+                    offload_index = {f"{prefix}.{key}": value for key, value in offload_index.items()}
+                save_offload_index(offload_index, offload_folder)
 
             if offload_state_dict:
                 # Load back temporarily offloaded state dict
-                load_offloaded_weights(model, state_dict_index, state_dict_folder)
+                load_offloaded_weights(model_to_load, state_dict_index, state_dict_folder)
                 shutil.rmtree(state_dict_folder)
 
         if len(error_msgs) > 0:

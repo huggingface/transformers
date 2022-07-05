@@ -240,7 +240,7 @@ class ModelOutput(OrderedDict):
         return tuple(self[k] for k in self.keys())
 
 
-class ExplicitEnum(Enum):
+class ExplicitEnum(str, Enum):
     """
     Enum with more explicit error message for missing values.
     """

@@ -490,8 +490,8 @@ class GenerationMixin:
     def _prepare_attention_mask_for_generation(
         self,
         inputs: torch.Tensor,
-        pad_token_id: int,
-        eos_token_id: int,
+        pad_token_id: Optional[int],
+        eos_token_id: Optional[int],
     ) -> torch.LongTensor:
         is_input_ids = len(inputs.shape) == 2 and inputs.dtype in [torch.int, torch.long]
         is_pad_token_in_inputs = (pad_token_id is not None) and (pad_token_id in inputs)
@@ -1137,7 +1137,11 @@ class GenerationMixin:
             eos_token_id = self.config.decoder.eos_token_id
 
         if pad_token_id is None and eos_token_id is not None:
-            # special case if pad_token_id is not defined
+            if model_kwargs.get("attention_mask", None) is None:
+                logger.warning(
+                    "The attention mask and the pad token id were not set. As a consequence, you may observe "
+                    "unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results."
+                )
             logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
             pad_token_id = eos_token_id
 
@@ -1452,7 +1456,7 @@ class GenerationMixin:
                 raise ValueError("`max_length` needs to be a stopping_criteria for now.")
 
             if num_beams <= 1:
-                raise ValueError("`num_beams` needs to be greater than 1 for constrained genertation.")
+                raise ValueError("`num_beams` needs to be greater than 1 for constrained generation.")
 
             if do_sample:
                 raise ValueError("`do_sample` needs to be false for constrained generation.")
@@ -1689,10 +1693,13 @@ class GenerationMixin:
 
             next_token_logits = outputs.logits[:, -1, :]
 
+            # pre-process distribution
+            next_tokens_scores = logits_processor(input_ids, next_token_logits)
+
             # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
                 if output_scores:
-                    scores += (next_token_logits,)
+                    scores += (next_tokens_scores,)
                 if output_attentions:
                     decoder_attentions += (
                         (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
@@ -1706,9 +1713,6 @@ class GenerationMixin:
                         if self.config.is_encoder_decoder
                         else (outputs.hidden_states,)
                     )
-
-            # pre-process distribution
-            next_tokens_scores = logits_processor(input_ids, next_token_logits)
 
             # argmax
             next_tokens = torch.argmax(next_tokens_scores, dim=-1)
@@ -3216,9 +3220,9 @@ class GenerationMixin:
 
             next_token_scores_processed = logits_processor(input_ids, next_token_scores)
 
-            scores_for_all_vocab = next_token_scores_processed.clone()
-
             next_token_scores = next_token_scores_processed + beam_scores[:, None].expand_as(next_token_scores)
+
+            scores_for_all_vocab = next_token_scores.clone()
 
             # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
@@ -3343,6 +3347,8 @@ def top_k_top_p_filtering(
         )
 
     if 0 <= top_p <= 1.0:
-        logits = TopPLogitsWarper(top_p=top_p, min_tokens_to_keep=min_tokens_to_keep)(None, logits)
+        logits = TopPLogitsWarper(top_p=top_p, filter_value=filter_value, min_tokens_to_keep=min_tokens_to_keep)(
+            None, logits
+        )
 
     return logits

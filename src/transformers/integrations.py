@@ -54,7 +54,7 @@ def is_wandb_available():
     # any value of WANDB_DISABLED disables wandb
     if os.getenv("WANDB_DISABLED", "").upper() in ENV_VARS_TRUE_VALUES:
         logger.warning(
-            "Using the `WAND_DISABLED` environment variable is deprecated and will be removed in v5. Use the "
+            "Using the `WANDB_DISABLED` environment variable is deprecated and will be removed in v5. Use the "
             "--report_to flag to control the integrations used for logging result (for instance --report_to none)."
         )
         return False
@@ -297,7 +297,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
         num_samples=n_trials,
         **kwargs,
     )
-    best_trial = analysis.get_best_trial(metric="objective", mode=direction[:3])
+    best_trial = analysis.get_best_trial(metric="objective", mode=direction[:3], scope=trainer.args.ray_scope)
     best_run = BestRun(best_trial.trial_id, best_trial.last_result["objective"], best_trial.config)
     if _tb_writer is not None:
         trainer.add_callback(_tb_writer)
@@ -787,7 +787,7 @@ class MLflowCallback(TrainerCallback):
         Environment:
             HF_MLFLOW_LOG_ARTIFACTS (`str`, *optional*):
                 Whether to use MLflow .log_artifact() facility to log artifacts. This only makes sense if logging to a
-                remote server, e.g. s3 or GCS. If set to `True` or *1*, will copy whatever is in
+                remote server, e.g. s3 or GCS. If set to `True` or *1*, will copy each saved checkpoint on each save in
                 [`TrainingArguments`]'s `output_dir` to the local or remote artifact storage. Using it without a remote
                 storage will just copy the files to your artifact location.
             MLFLOW_EXPERIMENT_NAME (`str`, *optional*):
@@ -872,11 +872,19 @@ class MLflowCallback(TrainerCallback):
 
     def on_train_end(self, args, state, control, **kwargs):
         if self._initialized and state.is_world_process_zero:
-            if self._log_artifacts:
-                logger.info("Logging artifacts. This may take time.")
-                self._ml_flow.log_artifacts(args.output_dir)
             if self._auto_end_run and self._ml_flow.active_run():
                 self._ml_flow.end_run()
+
+    def on_save(self, args, state, control, **kwargs):
+        if self._initialized and state.is_world_process_zero and self._log_artifacts:
+            ckpt_dir = f"checkpoint-{state.global_step}"
+            artifact_path = os.path.join(args.output_dir, ckpt_dir)
+            logger.info(f"Logging checkpoint artifacts in {ckpt_dir}. This may take time.")
+            self._ml_flow.pyfunc.log_model(
+                ckpt_dir,
+                artifacts={"model_path": artifact_path},
+                python_model=self._ml_flow.pyfunc.PythonModel(),
+            )
 
     def __del__(self):
         # if the previous run is not terminated correctly, the fluent API will

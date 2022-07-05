@@ -20,6 +20,8 @@ from typing import Dict, Optional, Tuple, Union
 import numpy as np
 import tensorflow as tf
 
+from transformers import shape_list
+
 from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPooling, TFSequenceClassifierOutput
 from ...modeling_tf_utils import (
@@ -77,10 +79,17 @@ class TFConvNextEmbeddings(tf.keras.layers.Layer):
             bias_initializer="zeros",
         )
         self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="layernorm")
+        self.num_channels = config.num_channels
 
     def call(self, pixel_values):
         if isinstance(pixel_values, dict):
             pixel_values = pixel_values["pixel_values"]
+
+        num_channels = shape_list(pixel_values)[1]
+        if tf.executing_eagerly() and num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
 
         # When running on CPU, `tf.keras.layers.Conv2D` doesn't support `NCHW` format.
         # So change the input format from `NCHW` to `NHWC`.

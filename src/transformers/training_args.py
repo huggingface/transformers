@@ -20,7 +20,7 @@ import warnings
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from .debug_utils import DebugOption
 from .trainer_utils import (
@@ -35,10 +35,12 @@ from .utils import (
     ExplicitEnum,
     cached_property,
     get_full_repo_name,
+    is_accelerate_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_torch_available,
-    is_torch_bf16_available,
+    is_torch_bf16_cpu_available,
+    is_torch_bf16_gpu_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
     logging,
@@ -50,7 +52,7 @@ if is_torch_available():
     import torch
     import torch.distributed as dist
 
-if is_torch_tpu_available():
+if is_torch_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
 
 
@@ -74,6 +76,15 @@ def default_logdir() -> str:
 
     current_time = datetime.now().strftime("%b%d_%H-%M-%S")
     return os.path.join("runs", current_time + "_" + socket.gethostname())
+
+
+def get_int_from_env(env_keys, default):
+    """Returns the first positive env value found in the `env_keys` list or the default."""
+    for e in env_keys:
+        val = int(os.environ.get(e, -1))
+        if val >= 0:
+            return val
+    return default
 
 
 class OptimizerNames(ExplicitEnum):
@@ -236,9 +247,14 @@ class TrainingArguments:
             Random seed to be used with data samplers. If not set, random generators for data sampling will use the
             same seed as `seed`. This can be used to ensure reproducibility of data sampling, independent of the model
             seed.
+        jit_mode_eval (`bool`, *optional*, defaults to `False`):
+            Whether or not to use PyTorch jit trace for inference.
+        use_ipex (`bool`, *optional*, defaults to `False`):
+            Use Intel extension for PyTorch when it is available. [IPEX
+            installation](https://github.com/intel/intel-extension-for-pytorch).
         bf16 (`bool`, *optional*, defaults to `False`):
             Whether to use bf16 16-bit (mixed) precision training instead of 32-bit training. Requires Ampere or higher
-            NVIDIA architecture. This is an experimental API and it may change.
+            NVIDIA architecture or using CPU (no_cuda). This is an experimental API and it may change.
         fp16 (`bool`, *optional*, defaults to `False`):
             Whether to use fp16 16-bit (mixed) precision training instead of 32-bit training.
         fp16_opt_level (`str`, *optional*, defaults to 'O1'):
@@ -247,9 +263,9 @@ class TrainingArguments:
         fp16_backend (`str`, *optional*, defaults to `"auto"`):
             This argument is deprecated. Use `half_precision_backend` instead.
         half_precision_backend (`str`, *optional*, defaults to `"auto"`):
-            The backend to use for mixed precision training. Must be one of `"auto"`, `"amp"` or `"apex"`. `"auto"`
-            will use AMP or APEX depending on the PyTorch version detected, while the other choices will force the
-            requested backend.
+            The backend to use for mixed precision training. Must be one of `"auto", "cuda_amp", "apex", "cpu_amp"`.
+            `"auto"` will use CPU/CUDA AMP or APEX depending on the PyTorch version detected, while the other choices
+            will force the requested backend.
         bf16_full_eval (`bool`, *optional*, defaults to `False`):
             Whether to use full bfloat16 evaluation instead of 32-bit. This will be faster and save memory but can harm
             metric values. This is an experimental API and it may change.
@@ -302,8 +318,8 @@ class TrainingArguments:
 
             <Tip>
 
-            When set to `True`, the parameters `save_strategy` needs to be the same as `eval_strategy`, and in the case
-            it is "steps", `save_steps` must be a round multiple of `eval_steps`.
+            When set to `True`, the parameters `save_strategy` needs to be the same as `evaluation_strategy`, and in
+            the case it is "steps", `save_steps` must be a round multiple of `eval_steps`.
 
             </Tip>
 
@@ -453,6 +469,12 @@ class TrainingArguments:
         torchdynamo (`str`, *optional*):
             The token that is used to set the backend compiler for TorchDynamo. Possible choices are ["eager",
             "nvfuser]. This is an experimental API and subject to change.
+        ray_scope (`str`, *optional*, defaults to `"last"`):
+            The scope to use when doing hyperparameter search with Ray. By default, `"last"` will be used. Ray will
+            then use the last checkpoint of all trials, compare those, and select the best one. However, other options
+            are also available. See the [Ray documentation](
+            https://docs.ray.io/en/latest/tune/api_docs/analysis.html#ray.tune.ExperimentAnalysis.get_best_trial) for
+            more options.
     """
 
     output_dir: str = field(
@@ -471,7 +493,7 @@ class TrainingArguments:
     do_train: bool = field(default=False, metadata={"help": "Whether to run training."})
     do_eval: bool = field(default=False, metadata={"help": "Whether to run eval on the dev set."})
     do_predict: bool = field(default=False, metadata={"help": "Whether to run predictions on the test set."})
-    evaluation_strategy: IntervalStrategy = field(
+    evaluation_strategy: Union[IntervalStrategy, str] = field(
         default="no",
         metadata={"help": "The evaluation strategy to use."},
     )
@@ -537,7 +559,7 @@ class TrainingArguments:
         default=-1,
         metadata={"help": "If > 0: set total number of training steps to perform. Override num_train_epochs."},
     )
-    lr_scheduler_type: SchedulerType = field(
+    lr_scheduler_type: Union[SchedulerType, str] = field(
         default="linear",
         metadata={"help": "The scheduler type to use."},
     )
@@ -574,14 +596,14 @@ class TrainingArguments:
         },
     )
     logging_dir: Optional[str] = field(default=None, metadata={"help": "Tensorboard log dir."})
-    logging_strategy: IntervalStrategy = field(
+    logging_strategy: Union[IntervalStrategy, str] = field(
         default="steps",
         metadata={"help": "The logging strategy to use."},
     )
     logging_first_step: bool = field(default=False, metadata={"help": "Log the first global_step"})
     logging_steps: int = field(default=500, metadata={"help": "Log every X updates steps."})
     logging_nan_inf_filter: bool = field(default=True, metadata={"help": "Filter nan and inf losses for logging."})
-    save_strategy: IntervalStrategy = field(
+    save_strategy: Union[IntervalStrategy, str] = field(
         default="steps",
         metadata={"help": "The checkpoint save strategy to use."},
     )
@@ -607,12 +629,24 @@ class TrainingArguments:
     no_cuda: bool = field(default=False, metadata={"help": "Do not use CUDA even when it is available"})
     seed: int = field(default=42, metadata={"help": "Random seed that will be set at the beginning of training."})
     data_seed: Optional[int] = field(default=None, metadata={"help": "Random seed to be used with data samplers."})
+    jit_mode_eval: bool = field(
+        default=False, metadata={"help": "Whether or not to use PyTorch jit trace for inference"}
+    )
+    use_ipex: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Use Intel extension for PyTorch when it is available, installation:"
+                " 'https://github.com/intel/intel-extension-for-pytorch'"
+            )
+        },
+    )
     bf16: bool = field(
         default=False,
         metadata={
             "help": (
                 "Whether to use bf16 (mixed) precision instead of 32-bit. Requires Ampere or higher NVIDIA"
-                " architecture. This is an experimental API and it may change."
+                " architecture or using CPU (no_cuda). This is an experimental API and it may change."
             )
         },
     )
@@ -631,7 +665,10 @@ class TrainingArguments:
     )
     half_precision_backend: str = field(
         default="auto",
-        metadata={"help": "The backend to be used for half precision.", "choices": ["auto", "amp", "apex"]},
+        metadata={
+            "help": "The backend to be used for half precision.",
+            "choices": ["auto", "cuda_amp", "apex", "cpu_amp"],
+        },
     )
     bf16_full_eval: bool = field(
         default=False,
@@ -778,7 +815,7 @@ class TrainingArguments:
     label_smoothing_factor: float = field(
         default=0.0, metadata={"help": "The label smoothing epsilon to apply (zero means no label smoothing)."}
     )
-    optim: OptimizerNames = field(
+    optim: Union[OptimizerNames, str] = field(
         default="adamw_hf",
         metadata={"help": "The optimizer to use."},
     )
@@ -831,7 +868,7 @@ class TrainingArguments:
     hub_model_id: Optional[str] = field(
         default=None, metadata={"help": "The name of the repository to keep in sync with the local `output_dir`."}
     )
-    hub_strategy: HubStrategy = field(
+    hub_strategy: Union[HubStrategy, str] = field(
         default="every_save",
         metadata={"help": "The hub strategy to use when `--push_to_hub` is activated."},
     )
@@ -849,7 +886,10 @@ class TrainingArguments:
     # Deprecated arguments
     fp16_backend: str = field(
         default="auto",
-        metadata={"help": "Deprecated. Use half_precision_backend instead", "choices": ["auto", "amp", "apex"]},
+        metadata={
+            "help": "Deprecated. Use half_precision_backend instead",
+            "choices": ["auto", "cuda_amp", "apex", "cpu_amp"],
+        },
     )
     push_to_hub_model_id: Optional[str] = field(
         default=None, metadata={"help": "The name of the repository to which push the `Trainer`."}
@@ -896,6 +936,19 @@ class TrainingArguments:
                 " nvfuser path uses AOT Autograd and nvfuser compiler to optimize the models."
             ),
             "choices": ["eager", "nvfuser"],
+        },
+    )
+    ray_scope: Optional[str] = field(
+        default="last",
+        metadata={
+            "help": (
+                'The scope to use when doing hyperparameter search with Ray. By default, `"last"` will be used. Ray'
+                " will then use the last checkpoint of all trials, compare those, and select the best one. However,"
+                " other options are also available. See the Ray documentation"
+                " (https://docs.ray.io/en/latest/tune/api_docs/analysis.html"
+                "#ray.tune.ExperimentAnalysis.get_best_trial)"
+                " for more options."
+            )
         },
     )
 
@@ -984,16 +1037,28 @@ class TrainingArguments:
             )
             self.half_precision_backend = self.fp16_backend
 
-        if (self.bf16 or self.bf16_full_eval) and not is_torch_bf16_available():
-            raise ValueError("Your setup doesn't support bf16. You need Ampere GPU, torch>=1.10, cuda>=11.0")
+        if self.bf16 or self.bf16_full_eval:
+
+            if self.no_cuda and not is_torch_bf16_cpu_available():
+                # cpu
+                raise ValueError("Your setup doesn't support bf16/cpu. You need torch>=1.10")
+            elif not self.no_cuda and not is_torch_bf16_gpu_available():
+                # gpu
+                raise ValueError(
+                    "Your setup doesn't support bf16/gpu. You need torch>=1.10, using Ampere GPU with cuda>=11.0"
+                )
 
         if self.fp16 and self.bf16:
             raise ValueError("At most one of fp16 and bf16 can be True, but not both")
+
+        if self.fp16_full_eval and self.bf16_full_eval:
+            raise ValueError("At most one of fp16 and bf16 can be True for full eval, but not both")
+
         if self.bf16:
             if self.half_precision_backend == "apex":
                 raise ValueError(
-                    " `--half_precision_backend apex`: bf16 is not supported by apex. Use `--half_precision_backend"
-                    " amp` instead"
+                    " `--half_precision_backend apex`: GPU bf16 is not supported by apex. Use"
+                    " `--half_precision_backend cuda_amp` instead"
                 )
             if not (self.sharded_ddp == "" or not self.sharded_ddp):
                 raise ValueError("sharded_ddp is not supported with bf16")
@@ -1011,11 +1076,23 @@ class TrainingArguments:
             is_torch_available()
             and (self.device.type != "cuda")
             and not (self.device.type == "xla" and "GPU_NUM_DEVICES" in os.environ)
-            and (self.fp16 or self.fp16_full_eval or self.bf16 or self.bf16_full_eval)
+            and (self.fp16 or self.fp16_full_eval)
         ):
             raise ValueError(
-                "Mixed precision training with AMP or APEX (`--fp16` or `--bf16`) and half precision evaluation"
-                " (`--fp16_full_eval` or `--bf16_full_eval`) can only be used on CUDA devices."
+                "FP16 Mixed precision training with AMP or APEX (`--fp16`) and FP16 half precision evaluation"
+                " (`--fp16_full_eval`) can only be used on CUDA devices."
+            )
+
+        if (
+            is_torch_available()
+            and (self.device.type != "cuda")
+            and not (self.device.type == "xla" and "GPU_NUM_DEVICES" in os.environ)
+            and (self.device.type != "cpu")
+            and (self.bf16 or self.bf16_full_eval)
+        ):
+            raise ValueError(
+                "BF16 Mixed precision training with AMP (`--bf16`) and BF16 half precision evaluation"
+                " (`--bf16_full_eval`) can only be used on CUDA or CPU devices."
             )
 
         if is_torch_available() and self.tf32 is not None:
@@ -1097,6 +1174,8 @@ class TrainingArguments:
         if self.deepspeed:
             # - must be run very last in arg parsing, since it will use a lot of these settings.
             # - must be run before the model is created.
+            if not is_accelerate_available():
+                raise ValueError("--deepspeed requires Accelerate to be installed: `pip install accelerate`.")
             from transformers.deepspeed import HfTrainerDeepSpeedConfig
 
             # will be used later by the Trainer
@@ -1194,6 +1273,10 @@ class TrainingArguments:
         if self.no_cuda:
             device = torch.device("cpu")
             self._n_gpu = 0
+            self.local_rank = get_int_from_env(
+                ["LOCAL_RANK", "MPI_LOCALRANKID", "OMPI_COMM_WORLD_LOCAL_RANK", "MV2_COMM_WORLD_LOCAL_RANK"],
+                self.local_rank,
+            )
             if self.local_rank != -1 and not torch.distributed.is_initialized():
                 # Initializes distributed backend for cpu
                 if self.xpu_backend not in ("mpi", "ccl"):
@@ -1201,7 +1284,30 @@ class TrainingArguments:
                         "CPU distributed training backend is not properly set. "
                         "Please set '--xpu_backend' to either 'mpi' or 'ccl'."
                     )
-                torch.distributed.init_process_group(backend=self.xpu_backend)
+                if self.xpu_backend == "ccl" and int(os.environ.get("CCL_WORKER_COUNT", 0)) < 1:
+                    raise ValueError(
+                        "CPU distributed training backend is ccl. but CCL_WORKER_COUNT is not correctly set. "
+                        "Please use like 'export CCL_WORKER_COUNT = 1' to set."
+                    )
+
+                # Try to get launch configuration from environment variables set by MPI launcher - works for Intel MPI, OpenMPI and MVAPICH
+                rank = get_int_from_env(["RANK", "PMI_RANK", "OMPI_COMM_WORLD_RANK", "MV2_COMM_WORLD_RANK"], 0)
+                size = get_int_from_env(["WORLD_SIZE", "PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE"], 1)
+                local_size = get_int_from_env(
+                    ["MPI_LOCALNRANKS", "OMPI_COMM_WORLD_LOCAL_SIZE", "MV2_COMM_WORLD_LOCAL_SIZE"], 1
+                )
+                os.environ["RANK"] = str(rank)
+                os.environ["WORLD_SIZE"] = str(size)
+                os.environ["LOCAL_RANK"] = str(self.local_rank)
+                if not os.environ.get("MASTER_PORT", None):
+                    os.environ["MASTER_PORT"] = "29500"
+                if not os.environ.get("MASTER_ADDR", None):
+                    if local_size != size or self.xpu_backend != "mpi":
+                        raise ValueError(
+                            "Looks like distributed multinode run but MASTER_ADDR env not set, "
+                            "please try exporting rank 0's hostname as MASTER_ADDR"
+                        )
+                torch.distributed.init_process_group(backend=self.xpu_backend, rank=rank, world_size=size)
         elif is_torch_tpu_available():
             device = xm.xla_device()
             self._n_gpu = 0

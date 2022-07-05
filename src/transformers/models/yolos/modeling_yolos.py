@@ -111,13 +111,6 @@ class YolosObjectDetectionOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-# Copied from transformers.models.vit.modeling_vit.to_2tuple
-def to_2tuple(x):
-    if isinstance(x, collections.abc.Iterable):
-        return x
-    return (x, x)
-
-
 class YolosEmbeddings(nn.Module):
     """
     Construct the CLS token, detection tokens, position and patch embeddings.
@@ -129,12 +122,7 @@ class YolosEmbeddings(nn.Module):
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.detection_tokens = nn.Parameter(torch.zeros(1, config.num_detection_tokens, config.hidden_size))
-        self.patch_embeddings = PatchEmbeddings(
-            image_size=config.image_size,
-            patch_size=config.patch_size,
-            num_channels=config.num_channels,
-            embed_dim=config.hidden_size,
-        )
+        self.patch_embeddings = YolosPatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = nn.Parameter(
             torch.zeros(1, num_patches + config.num_detection_tokens + 1, config.hidden_size)
@@ -228,32 +216,35 @@ class InterpolateMidPositionEmbeddings(nn.Module):
         return scale_pos_embed
 
 
-# Based on timm implementation, which can be found here:
-# https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
-class PatchEmbeddings(nn.Module):
+class YolosPatchEmbeddings(nn.Module):
     """
-    Image to Patch Embedding.
-
+    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
+    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
+    Transformer.
     """
 
-    def __init__(
-        self,
-        image_size: int = 224,
-        patch_size: Union[int, Tuple[int, int]] = 16,
-        num_channels: int = 3,
-        embed_dim: int = 768,
-    ):
+    def __init__(self, config):
         super().__init__()
-        image_size = to_2tuple(image_size)
-        patch_size = to_2tuple(patch_size)
+        image_size, patch_size = config.image_size, config.patch_size
+        num_channels, hidden_size = config.num_channels, config.hidden_size
+
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         self.image_size = image_size
         self.patch_size = patch_size
+        self.num_channels = num_channels
         self.num_patches = num_patches
 
-        self.projection = nn.Conv2d(num_channels, embed_dim, kernel_size=patch_size, stride=patch_size)
+        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        batch_size, num_channels, height, width = pixel_values.shape
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
+
         embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
         return embeddings
 
@@ -620,7 +611,7 @@ class YolosModel(YolosPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self) -> PatchEmbeddings:
+    def get_input_embeddings(self) -> YolosPatchEmbeddings:
         return self.embeddings.patch_embeddings
 
     def _prune_heads(self, heads_to_prune: Dict[int, List[int]]) -> None:

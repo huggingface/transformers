@@ -152,7 +152,7 @@ class CLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (CLIPVisionModel,) if is_torch_available() else ()
-
+    fx_compatible = True
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
@@ -303,6 +303,7 @@ class CLIPTextModelTester:
 class CLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (CLIPTextModel,) if is_torch_available() else ()
+    fx_compatible = True
     test_pruning = False
     test_head_masking = False
 
@@ -388,6 +389,7 @@ class CLIPModelTester:
 @require_torch
 class CLIPModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (CLIPModel,) if is_torch_available() else ()
+    fx_compatible = True
     test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False

@@ -86,7 +86,8 @@ def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: i
     """
     Make causal mask used for bi-directional self-attention.
     """
-    bsz, tgt_len = input_ids_shape
+    bsz = input_ids_shape[0]
+    tgt_len = input_ids_shape[1]
     mask = tf.ones((tgt_len, tgt_len)) * LARGE_NEGATIVE
     mask_cond = tf.range(shape_list(mask)[-1])
 
@@ -99,7 +100,7 @@ def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: i
 
 
 # Copied from transformers.models.bart.modeling_tf_bart._expand_mask
-def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values_length: int = 0):
+def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
@@ -124,12 +125,19 @@ class TFMBartLearnedPositionalEmbedding(TFSharedEmbeddings):
         self.offset = 2
         super().__init__(num_embeddings + self.offset, embedding_dim, **kwargs)
 
-    def call(self, input_shape: tf.TensorShape, past_key_values_length: int = 0):
+    def call(
+        self,
+        input_shape: Optional[tf.TensorShape] = None,
+        past_key_values_length: int = 0,
+        position_ids: Optional[tf.Tensor] = None,
+    ):
         """Input is expected to be of size [bsz x seqlen]."""
-        bsz, seq_len = input_shape[:2]
+        if position_ids is None:
+            seq_len = input_shape[1]
+            position_ids = tf.range(seq_len, delta=1, name="range")
+            position_ids += past_key_values_length
 
-        positions = tf.range(past_key_values_length, seq_len + past_key_values_length, delta=1, name="range")
-        return super().call(positions + self.offset)
+        return super().call(position_ids + self.offset)
 
 
 # Copied from transformers.models.bart.modeling_tf_bart.TFBartAttention with Bart->MBart
@@ -569,6 +577,9 @@ MBART_INPUTS_DOCSTRING = r"""
             for denoising pre-training following the paper.
         decoder_attention_mask (`tf.Tensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             will be made by default and ignore pad tokens. It is not recommended to set this for most use cases.
+        decoder_position_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the
+            range `[0, config.max_position_embeddings - 1]`.
         head_mask (`tf.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
 
@@ -853,6 +864,7 @@ class TFMBartDecoder(tf.keras.layers.Layer):
         input_ids: TFModelInputType = None,
         inputs_embeds: Optional[tf.Tensor] = None,
         attention_mask: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
         encoder_hidden_states: Optional[tf.Tensor] = None,
         encoder_attention_mask: Optional[tf.Tensor] = None,
         head_mask: Optional[tf.Tensor] = None,
@@ -883,6 +895,9 @@ class TFMBartDecoder(tf.keras.layers.Layer):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
+            position_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the
+                range `[0, config.max_position_embeddings - 1]`.
             encoder_hidden_states (`tf.Tensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
                 of the decoder.
@@ -945,7 +960,10 @@ class TFMBartDecoder(tf.keras.layers.Layer):
         past_key_values_length = shape_list(past_key_values[0][0])[2] if past_key_values is not None else 0
 
         # embed positions
-        positions = self.embed_positions(input_shape, past_key_values_length)
+        if position_ids is None:
+            positions = self.embed_positions(input_shape, past_key_values_length)
+        else:
+            positions = self.embed_positions(input_shape, position_ids=position_ids)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
@@ -1079,6 +1097,7 @@ class TFMBartMainLayer(tf.keras.layers.Layer):
         attention_mask: Optional[tf.Tensor] = None,
         decoder_input_ids: Optional[tf.Tensor] = None,
         decoder_attention_mask: Optional[tf.Tensor] = None,
+        decoder_position_ids: Optional[tf.Tensor] = None,
         head_mask: Optional[tf.Tensor] = None,
         decoder_head_mask: Optional[tf.Tensor] = None,
         cross_attn_head_mask: Optional[tf.Tensor] = None,
@@ -1129,6 +1148,7 @@ class TFMBartMainLayer(tf.keras.layers.Layer):
         decoder_outputs = self.decoder(
             decoder_input_ids,
             attention_mask=decoder_attention_mask,
+            position_ids=decoder_position_ids,
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=attention_mask,
             head_mask=decoder_head_mask,
@@ -1187,6 +1207,7 @@ class TFMBartModel(TFMBartPreTrainedModel):
         attention_mask: Optional[tf.Tensor] = None,
         decoder_input_ids: Optional[tf.Tensor] = None,
         decoder_attention_mask: Optional[tf.Tensor] = None,
+        decoder_position_ids: Optional[tf.Tensor] = None,
         head_mask: Optional[tf.Tensor] = None,
         decoder_head_mask: Optional[tf.Tensor] = None,
         cross_attn_head_mask: Optional[tf.Tensor] = None,
@@ -1207,6 +1228,7 @@ class TFMBartModel(TFMBartPreTrainedModel):
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
+            decoder_position_ids=decoder_position_ids,
             head_mask=head_mask,
             decoder_head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
@@ -1291,6 +1313,7 @@ class TFMBartForConditionalGeneration(TFMBartPreTrainedModel, TFCausalLanguageMo
         attention_mask: Optional[tf.Tensor] = None,
         decoder_input_ids: Optional[tf.Tensor] = None,
         decoder_attention_mask: Optional[tf.Tensor] = None,
+        decoder_position_ids: Optional[tf.Tensor] = None,
         head_mask: Optional[tf.Tensor] = None,
         decoder_head_mask: Optional[tf.Tensor] = None,
         cross_attn_head_mask: Optional[tf.Tensor] = None,
@@ -1331,6 +1354,7 @@ class TFMBartForConditionalGeneration(TFMBartPreTrainedModel, TFCausalLanguageMo
             decoder_input_ids=decoder_input_ids,
             encoder_outputs=encoder_outputs,
             decoder_attention_mask=decoder_attention_mask,
+            decoder_position_ids=decoder_position_ids,
             head_mask=head_mask,
             decoder_head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
@@ -1388,6 +1412,7 @@ class TFMBartForConditionalGeneration(TFMBartPreTrainedModel, TFCausalLanguageMo
         decoder_input_ids,
         past=None,
         attention_mask=None,
+        decoder_attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
         cross_attn_head_mask=None,
@@ -1395,9 +1420,17 @@ class TFMBartForConditionalGeneration(TFMBartPreTrainedModel, TFCausalLanguageMo
         encoder_outputs=None,
         **kwargs
     ):
+
         # cut decoder_input_ids if past is used
         if past is not None:
             decoder_input_ids = decoder_input_ids[:, -1:]
+
+        if decoder_attention_mask is not None:  # xla
+            decoder_position_ids = tf.math.cumsum(decoder_attention_mask, axis=-1, exclusive=True)[:, -1:]
+        elif past is not None:  # no xla + past
+            decoder_position_ids = past[0][0].shape[2]
+        else:  # no xla + no past
+            decoder_position_ids = tf.range(decoder_input_ids.shape[1])
 
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
@@ -1405,6 +1438,8 @@ class TFMBartForConditionalGeneration(TFMBartPreTrainedModel, TFCausalLanguageMo
             "past_key_values": past,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
+            "decoder_attention_mask": decoder_attention_mask,
+            "decoder_position_ids": decoder_position_ids,
             "head_mask": head_mask,
             "decoder_head_mask": decoder_head_mask,
             "cross_attn_head_mask": cross_attn_head_mask,

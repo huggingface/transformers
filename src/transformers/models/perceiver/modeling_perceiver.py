@@ -2735,7 +2735,9 @@ def _check_or_build_spatial_positions(pos, index_dims, batch_size):
     """
     if pos is None:
         pos = build_linear_positions(index_dims)
-        pos = torch.broadcast_to(pos[None], (batch_size,) + pos.shape)
+        # equivalent to `torch.broadcast_to(pos[None], (batch_size,) + pos.shape)`
+        # but `torch.broadcast_to` cannot be converted to ONNX
+        pos = pos[None].expand((batch_size,) + pos.shape)
         pos = torch.reshape(pos, [batch_size, np.prod(index_dims), -1])
     else:
         # Just a warning label: you probably don't want your spatial features to
@@ -2840,7 +2842,8 @@ class PerceiverEmbeddingDecoder(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor, embedding_layer: torch.Tensor) -> torch.Tensor:
         batch_size, seq_len, d_model = hidden_states.shape
-        output = torch.matmul(hidden_states.reshape([-1, d_model]), embedding_layer.weight.T)  # Flatten batch dim
+        # Flatten batch dim
+        output = torch.matmul(hidden_states.reshape([-1, d_model]), embedding_layer.weight.transpose(0, 1))
         output = output + self.bias
 
         return output.reshape([batch_size, seq_len, self.vocab_size])
@@ -3166,9 +3169,9 @@ class PerceiverImagePreprocessor(AbstractPreprocessor):
         if self.prep_type != "patches":
             # move channels to last dimension, as the _build_network_inputs method below expects this
             if inputs.ndim == 4:
-                inputs = torch.moveaxis(inputs, 1, -1)
+                inputs = torch.permute(inputs, (0, 2, 3, 1))
             elif inputs.ndim == 5:
-                inputs = torch.moveaxis(inputs, 2, -1)
+                inputs = torch.permute(inputs, (0, 1, 3, 4, 2))
             else:
                 raise ValueError("Unsupported data format for conv1x1.")
 
