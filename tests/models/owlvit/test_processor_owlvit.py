@@ -149,12 +149,12 @@ class OwlViTProcessorTest(unittest.TestCase):
 
         input_str = "lower newer"
 
-        encoded_processor = processor(text=input_str)
+        encoded_processor = processor(text=input_str, return_tensors="np")
 
-        encoded_tok = tokenizer(input_str)
+        encoded_tok = tokenizer(input_str, return_tensors="np")
 
         for key in encoded_tok.keys():
-            self.assertListEqual(encoded_tok[key], encoded_processor[key][0])
+            self.assertListEqual(encoded_tok[key][0].tolist(), encoded_processor[key][0][0].tolist())
 
     def test_processor(self):
         feature_extractor = self.get_feature_extractor()
