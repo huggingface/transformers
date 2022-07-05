@@ -42,6 +42,7 @@ from .utils import (
     FLAX_WEIGHTS_INDEX_NAME,
     FLAX_WEIGHTS_NAME,
     HUGGINGFACE_CO_RESOLVE_ENDPOINT,
+    WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     EntryNotFoundError,
     PushToHubMixin,
@@ -58,7 +59,7 @@ from .utils import (
     logging,
     replace_return_docstrings,
 )
-from .utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
+from .utils.hub import convert_file_size_to_int, get_checkpoint_shard_files, hf_url_exists
 
 
 logger = logging.get_logger(__name__)
@@ -639,6 +640,10 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 if from_pt and os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)):
                     # Load from a PyTorch checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)
+                elif from_pt and os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_INDEX_NAME)):
+                    # Load from a sharded pytorch checkpoint
+                    archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_INDEX_NAME)
+                    is_sharded = True
                 elif os.path.isfile(os.path.join(pretrained_model_name_or_path, FLAX_WEIGHTS_NAME)):
                     # Load from a Flax checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, FLAX_WEIGHTS_NAME)
@@ -660,6 +665,14 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                     )
             elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
                 archive_file = pretrained_model_name_or_path
+            # check if an index file exists
+            elif hf_url_exists(pretrained_model_name_or_path, WEIGHTS_INDEX_NAME):
+                archive_file = hf_bucket_url(
+                    pretrained_model_name_or_path,
+                    filename=WEIGHTS_INDEX_NAME,
+                    revision=revision,
+                )
+                is_sharded = True
             else:
                 filename = WEIGHTS_NAME if from_pt else FLAX_WEIGHTS_NAME
                 archive_file = hf_bucket_url(
@@ -780,7 +793,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         model = cls(config, *model_args, _do_init=_do_init, **model_kwargs)
 
         if from_pt:
-            state = load_pytorch_checkpoint_in_flax_state_dict(model, resolved_archive_file)
+            state = load_pytorch_checkpoint_in_flax_state_dict(model, resolved_archive_file, is_sharded)
         else:
 
             if is_sharded:

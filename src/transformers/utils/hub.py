@@ -118,6 +118,11 @@ def is_remote_url(url_or_filename):
     return parsed.scheme in ("http", "https")
 
 
+def hf_url_exists(path, file):
+    r = requests.head(os.path.join("https://huggingface.co/", path, "raw/main/", file))
+    return r.status_code == requests.codes.ok
+
+
 def hf_bucket_url(
     model_id: str, filename: str, subfolder: Optional[str] = None, revision: Optional[str] = None, mirror=None
 ) -> str:
