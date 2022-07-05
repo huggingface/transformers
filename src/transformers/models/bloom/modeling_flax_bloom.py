@@ -20,6 +20,7 @@
     # TODO: BLOOM_INPUTS_DOCSTRING might be wrong still (position_ids)
 # TODO: check that code is jit-able
 
+from distutils.command.config import config
 from functools import partial
 from typing import Any, Callable, Optional, Tuple
 
@@ -28,6 +29,7 @@ import jax
 import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen import combine_masks, make_causal_mask
+from flax.linen import partitioning as nn_partitioning
 from flax.linen.attention import dot_product_attention_weights
 from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
@@ -47,6 +49,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "bigscience/bloom"
 _CONFIG_FOR_DOC = "BloomConfig"
 _TOKENIZER_FOR_DOC = "BloomTokenizer"
+
+remat = nn_partitioning.remat
 
 def attention_mask_func(args):
     # TODO: implement this helper fn. see pytorch impl. for reference
@@ -175,7 +179,6 @@ class FlaxBloomAttention(nn.Module):
         self.num_heads = self.config.n_head
         self.head_dim = self.hidden_size // self.num_heads
         self.split_size = self.hidden_size
-        # TODO: deal with softmax
         self.attention_softmax_in_fp32 = self.config.attention_softmax_in_fp32
         # TODO: deal with hidden dropout
         self.hidden_dropout = self.config.hidden_dropout
@@ -256,6 +259,7 @@ class FlaxBloomAttention(nn.Module):
         attention_mask=None,
         alibi=None,
         head_mask=None,
+        use_cache=False,
         deterministic: bool = True,
         init_cache: bool = False,
         output_attentions: bool = False,
@@ -388,8 +392,9 @@ class FlaxBloomBlock(nn.Module):
         hidden_states,
         layer_past=None,
         attention_mask=None,
-        head_mask=None,
         alibi=None,
+        head_mask=None,
+        use_cache=False,
         deterministic: bool = True,
         init_cache: bool = False,
         output_attentions: bool = False,
@@ -409,6 +414,7 @@ class FlaxBloomBlock(nn.Module):
             attention_mask=attention_mask,
             alibi=alibi,
             head_mask=head_mask,
+            use_cache=use_cache,
             deterministic=deterministic,
             init_cache=init_cache,
             output_attentions=output_attentions,
@@ -440,8 +446,6 @@ class FlaxBloomBlock(nn.Module):
         return outputs
 
 # TODO: does this still require position_ids?
-# TODO: gradient checkpointing
-# TODO: _no_split_modules?
 # TODO: check initialization
 class FlaxBloomPreTrainedModel(FlaxPreTrainedModel):
     """
@@ -460,10 +464,26 @@ class FlaxBloomPreTrainedModel(FlaxPreTrainedModel):
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
+        gradient_checkpointing: bool = False,
+        remat_policy: Callable[..., bool] = (None,),
         **kwargs,
     ):
-        module = self.module_class(config=config, dtype=dtype, **kwargs)
+        module = self.module_class(
+            config=config, 
+            dtype=dtype, 
+            gradient_checkpointing=gradient_checkpointing,
+            remat_policy=remat_policy,
+            **kwargs,
+        )
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
+
+    def enable_gradient_checkpointing(self, remat_policy=None):
+        self._module = self.module_class(
+            config=self.config, 
+            dtype=self.dtype, 
+            gradient_checkpointing=True, 
+            remat_policy=remat_policy,
+        )
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
@@ -570,15 +590,21 @@ class FlaxBloomPreTrainedModel(FlaxPreTrainedModel):
 
         return outputs
 
-# TODO: haven't modified this block yet, remove if remains unused
+# TODO: return_dict is unused
 class FlaxBloomBlockCollection(nn.Module):
     config: BloomConfig
     dtype: jnp.dtype = jnp.float32
+    gradient_checkpointing: bool = False
+    remat_policy: Callable[..., bool] = (None,) # gradient checkpointing policy
 
     def setup(self):
+        if self.gradient_checkpointing:
+            FlaxBloomCheckpointBlock = remat(FlaxBloomBlock, static_argnums=(5,6,7), policy=self.remat_policy)
+        else: 
+            FlaxBloomCheckpointBlock = FlaxBloomBlock
         # layer_number matters for attn scaling and should not be 0. see `FlaxBloomAttention` for its use.
         self.blocks = [
-            FlaxBloomBlock(self.config, layer_number=max(1, i), name=str(i), dtype=self.dtype)
+            FlaxBloomCheckpointBlock(self.config, layer_number=max(1, i), name=str(i), dtype=self.dtype)
             for i in range(self.config.num_hidden_layers)
         ]
 
@@ -619,6 +645,8 @@ class FlaxBloomBlockCollection(nn.Module):
 class FlaxBloomModule(nn.Module):
     config: BloomConfig
     dtype: jnp.dtype = jnp.float32
+    gradient_checkpointing: bool = False
+    remat_policy: Callable[..., bool] = (None,) # gradient checkpointing policy
 
     def setup(self):
         # TODO: check initialization correctness
@@ -626,7 +654,7 @@ class FlaxBloomModule(nn.Module):
 
         embedding_init = jax.nn.initializers.normal(stddev=self.config.initializer_range)
 
-        # word embeddings (no positional embedding layer) TODO: confirm this statement correct
+        # word embeddings (no positional embedding layer)
         self.word_embeddings = nn.Embed(
             self.config.vocab_size,
             self.embed_dim,
@@ -636,12 +664,15 @@ class FlaxBloomModule(nn.Module):
         self.word_embeddings_layernorm = nn.LayerNorm(epsilon=self.config.layer_norm_epsilon)
         
         # transformer layers
-        self.h = FlaxBloomBlockCollection(self.config, dtype=self.dtype)
+        self.h = FlaxBloomBlockCollection(
+            self.config, 
+            dtype=self.dtype,
+            gradient_checkpointing=self.config.gradient_checkpointing,
+            remat_policy=self.remat_policy,
+        )
         
         # final layernorm
         self.ln_f = nn.LayerNorm(epsilon=self.config.layer_norm_epsilon, dtype=self.dtype)
-        # TODO: change how gradient checkpointing is done
-        self.gradient_checkpointing = False
 
     def __call__(
         self,
@@ -667,7 +698,6 @@ class FlaxBloomModule(nn.Module):
         # TODO: how to handle alibi? build alibi tensor here?
 
         # TODO: fix inputs to this (and args to submodules in general)
-        # TODO: gradient checkpointing
         outputs = self.h(
             hidden_states,
             attention_mask,
@@ -717,9 +747,16 @@ append_call_sample_docstring(
 class FlaxBloomForCausalLMModule(nn.Module):
     config: BloomConfig
     dtype: jnp.dtype = jnp.float32
+    gradient_checkpointing: bool = False
+    remat_policy: Callable[..., bool] = (None,) # gradient checkpointing policy
 
     def setup(self):
-        self.transformer = FlaxBloomModule(self.config, dtype=self.dtype)
+        self.transformer = FlaxBloomModule(
+            self.config, 
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
+            remat_policy=self.remat_policy,
+        )
         self.lm_head = nn.Dense(
             self.config.vocab_size,
             use_bias=False,
