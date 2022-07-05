@@ -104,6 +104,8 @@ past_versions_testing = {
         "2.4": {
             "tensorflow": "2.4.4",
             "install": "python3 -m pip install --no-cache-dir -U tensorflow==2.4.4",
+            # This should be specified as a docker build argument.
+            # We keep the information here for reference only.
             "base_docker": "nvidia/cuda:11.0.3-cudnn8-devel-ubuntu20.04",
         },
     },
@@ -120,3 +122,9 @@ if __name__ == "__main__":
 
     os.system(f'echo "export INSTALL_CMD=\'{info["install"]}\'" >> ~/.profile')
     print(f'echo "export INSTALL_CMD=\'{info["install"]}\'" >> ~/.profile')
+
+    cuda = ""
+    if args.framework == "pytorch":
+        cuda = info["cuda"]
+    os.system(f'echo "export CUDA=\'{cuda}\'" >> ~/.profile')
+    print(f'echo "export CUDA=\'{cuda}\'" >> ~/.profile')

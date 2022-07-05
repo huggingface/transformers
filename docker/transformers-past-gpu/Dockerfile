@@ -34,7 +34,8 @@ RUN python3 ./transformers/utils/past_ci_versions.py --framework $FRAMEWORK --ve
 RUN echo "INSTALL_CMD = $INSTALL_CMD"
 RUN $INSTALL_CMD
 
-# Use installed torch version for `torch-scatter`
-RUN python3 -m pip install --no-cache-dir torch-scatter -f https://data.pyg.org/whl/torch-$(python3 -c "from torch import version; print(version.__version__.split('+')[0])")+$CUDA.html
+# Use installed torch version for `torch-scatter`.
+# (The env. variable $CUDA is defined in `past_ci_versions.py`)
+RUN [ "$FRAMEWORK" == "pytorch" ] && python3 -m pip install --no-cache-dir torch-scatter -f https://data.pyg.org/whl/torch-$(python3 -c "from torch import version; print(version.__version__.split('+')[0])")+$CUDA.html
 
 RUN python3 -m pip install -U "itsdangerous<2.1.0"
