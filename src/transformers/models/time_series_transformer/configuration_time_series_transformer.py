@@ -53,11 +53,11 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         scaling (`bool` default to `True`):
             Whether to scale the input targets.
         freq (`str`, *optional* default to `None`):
-            The frequency of the input time series. If `None`, the `lag_seq` and `time_features` must be provided.
+            The frequency of the input time series. If `None`, the `lags_seq` and `time_features` must be provided.
         lags_seq (`list` of `int`, *optional* default to `None`):
             The lags of the input time series. Cannot be `None` if `freq` is `None`.
-        num_time_features (`int` default to 1):
-            The number of time features.
+        num_time_features (`int` default to 7):
+            The number of time features which is 7 when no `freq` is specified.
         num_feat_dynamic_real (`int`, *optional* default to `0`):
             The number of dynamic real valued features.
         num_feat_static_cat (`int`, *optional* default to `0`):
@@ -100,13 +100,13 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        prediction_length: Optional[int] = 24,
-        freq: Optional[str] = "1D",
         input_size: int = 1,
+        freq: Optional[str] = None,
+        prediction_length: Optional[int] = None,
         context_length: Optional[int] = None,
         # distr_output: DistributionOutput = StudentTOutput(),
         lags_seq: Optional[List[int]] = None,
-        num_time_features: int = 1,
+        num_time_features: int = 7,
         scaling: bool = True,
         num_feat_dynamic_real: int = 0,
         num_feat_static_cat: int = 0,
@@ -126,13 +126,15 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         # time series specific parameters
         self.prediction_length = prediction_length
         self.context_length = context_length or prediction_length
+        self.freq = freq
         # self.distr_output = distr_output
         self.input_size = input_size
         self.num_time_features = num_time_features
-        self.lags_seq = lags_seq or get_lags_for_frequency(freq_str=freq)
+        self.lags_seq = lags_seq or get_lags_for_frequency(freq_str=freq or "1S")
         self.scaling = scaling
         self.num_feat_dynamic_real = num_feat_dynamic_real
         self.num_feat_static_real = num_feat_static_real
+        self.num_feat_static_cat = num_feat_static_cat
         self.cardinality = cardinality if cardinality and num_feat_static_cat > 0 else [1]
         self.embedding_dimension = embedding_dimension or [min(50, (cat + 1) // 2) for cat in self.cardinality]
 
