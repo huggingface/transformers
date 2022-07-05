@@ -21,6 +21,7 @@
 # TODO: check that code is jit-able
 
 import math
+import numpy as np
 from functools import partial
 from typing import Callable, Optional, Tuple
 
@@ -308,7 +309,10 @@ class FlaxBloomAttention(nn.Module):
         output_attentions: bool = False,
         layer_number: int = None,
     ):
-        alibi = jnp.repeat(alibi, hidden_states.shape[0], axis=0)
+        batch_size, sequence, hidden_size = hidden_states.shape
+
+        alibi = jnp.broadcast_to(alibi[None, :], (batch_size,) + alibi.shape).reshape((-1,) + alibi.shape[1:])
+
         fused_qkv = self.query_key_value(hidden_states)
 
         new_tensor_shape = fused_qkv.shape[:-1] + (self.num_heads, 3 * self.head_dim)
@@ -379,25 +383,18 @@ class FlaxBloomAttention(nn.Module):
         attn_weights = attn_weights.reshape(output_size)
 
         # TODO: apply softmax to attention weights
-        att_probs = self.scale_mask_softmax(attn_weights, attention_mask, causal_mask, layer_number)
+        attention_probs = self.scale_mask_softmax(attn_weights, attention_mask, causal_mask, layer_number)
+
         if head_mask is not None:
             attention_probs = attention_probs * head_mask
 
         output_size = (value.shape[0], value.shape[2], query.shape[1], value.shape[3])
 
-        value = jnp.transpose(value, (1, 0, 2, 3)).reshape(value.shape[1], output_size[0] * output_size[1], -1)
-        attention_probs_reshaped = jnp.reshape(att_probs, (output_size[0] * output_size[1], output_size[2], -1))
+        attn_output = jnp.einsum("...hqk,...khd->...qhd", attention_probs, value)
+        attn_output = self._merge_heads(attn_output)
+        attn_output = self.dense(attn_output )
 
-        context = jnp.matmul(attention_probs_reshaped, jnp.transpose(value, (1, 0, 2)))
-        context = context.reshape(output_size)
-        context = jnp.transpose(context, (2, 0, 1, 3))
-
-        # [q_length, batch_size, num_heads, head_dim] --> [q_length, batch_size, hidden_size]
-        new_context_layer_shape = context.shape[:-2] + (self.hidden_size,)
-        context = context.reshape(new_context_layer_shape)
-
-        attn_output = self.dense(context)
-        attn_output = jnp.transpose(attn_output, (1, 0, 2)) + residual
+        attn_output = attn_output + residual
 
         outputs = (attn_output, attn_weights) if output_attentions else (attn_output,)
         return outputs
@@ -637,7 +634,6 @@ class FlaxBloomPreTrainedModel(FlaxPreTrainedModel):
         # else:
         #     mutable = False
         mutable = False
-#        import ipdb; ipdb.set_trace()
         outputs = self.module.apply(
             inputs,
             jnp.array(input_ids, dtype="i4"),
@@ -708,6 +704,7 @@ class FlaxBloomBlockCollection(nn.Module):
                 if output_hidden_states:
                     all_hidden_states += (hidden_states,)
 
+                
                 layer_outputs = FlaxBloomBlock(self.config, name=str(layer_number), dtype=self.dtype, use_scan=False)(
                     hidden_states,
                     alibi=alibi,
@@ -852,7 +849,6 @@ class FlaxBloomForCausalLMModule(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
-#        import ipdb; ipdb.set_trace()
         outputs = self.transformer(
             input_ids,
             attention_mask=attention_mask,
