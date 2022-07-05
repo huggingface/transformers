@@ -22,6 +22,7 @@
 
 from functools import partial
 from typing import Any, Callable, Optional, Tuple
+import math
 
 import flax.linen as nn
 import jax
@@ -119,6 +120,31 @@ BLOOM_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
+
+def flax_unsqueeze(x, axis):
+    return jnp.expand_dims(x, axis)
+
+def build_alibi_tensor_flax(max_seq_len, n_head, dtype):
+    def get_slopes(n):
+        def get_slopes_power_of_2(n):
+            start = 2 ** (-(2 ** -(math.log2(n) - 3)))
+            ratio = start
+            return [start * ratio**i for i in range(n)]
+
+        if math.log2(n).is_integer():
+            return get_slopes_power_of_2(n)
+        else:
+            closest_power_of_2 = 2 ** math.floor(math.log2(n))
+            return (
+                get_slopes_power_of_2(closest_power_of_2)
+                + get_slopes(2 * closest_power_of_2)[0::2][: n - closest_power_of_2]
+            )
+    slopes = jnp.array(get_slopes(n_head))
+    slopes = flax_unsqueeze(flax_unsqueeze(slopes, 1), 1)
+    arange_tensor = flax_unsqueeze(flax_unsqueeze(jnp.arange(max_seq_len, dtype=dtype), 0), 0)
+
+    alibi = slopes * jnp.broadcast_to(arange_tensor, (n_head, 1, arange_tensor.shape[-1]))
+    return alibi
 
 class FlaxBloomScaledSoftmax(nn.Module):
     config: BloomConfig
@@ -253,9 +279,9 @@ class FlaxBloomAttention(nn.Module):
         self,
         hidden_states,
         residual,
+        alibi,
         layer_past=None,
         attention_mask=None,
-        alibi=None,
         head_mask=None,
         deterministic: bool = True,
         init_cache: bool = False,
@@ -264,11 +290,10 @@ class FlaxBloomAttention(nn.Module):
         # TODO: this module __call__ needs checking for correctness of implementation.
         fused_qkv = self.query_key_value(hidden_states)
 
-        query, key, value = jnp.split(fused_qkv, 3, axis=-1)
+        new_tensor_shape = fused_qkv.shape[:-1] + (self.num_heads, 3 * self.head_dim)
+        fused_qkv = fused_qkv.reshape(new_tensor_shape)
 
-        query = self._split_heads(query)
-        key = self._split_heads(key)
-        value = self._split_heads(value)
+        query, key, value = jnp.split(fused_qkv, 3, axis=-1)
 
         query_length, key_length = query.shape[1], key.shape[1]
 
@@ -395,10 +420,10 @@ class FlaxBloomBlock(nn.Module):
     def __call__(
         self,
         hidden_states,
+        alibi,
         layer_past=None,
         attention_mask=None,
         head_mask=None,
-        alibi=None,
         deterministic: bool = True,
         init_cache: bool = False,
         output_attentions: bool = False,
@@ -413,11 +438,11 @@ class FlaxBloomBlock(nn.Module):
         
         # self-attention
         attn_outputs = self.self_attention(
-            hidden_states,
+            layernorm_output,
             residual,
+            alibi,
             layer_past=layer_past,
             attention_mask=attention_mask,
-            alibi=alibi,
             head_mask=head_mask,
             deterministic=deterministic,
             init_cache=init_cache,
@@ -595,6 +620,7 @@ class FlaxBloomBlockCollection(nn.Module):
     def __call__(
         self,
         hidden_states,
+        alibi,
         attention_mask=None,
         deterministic: bool = True,
         init_cache: bool = False,
@@ -612,6 +638,7 @@ class FlaxBloomBlockCollection(nn.Module):
             layer_outputs = block(
                 hidden_states,
                 attention_mask,
+                alibi,
                 deterministic=deterministic,
                 init_cache=init_cache,
                 output_attentions=output_attentions,
@@ -673,6 +700,9 @@ class FlaxBloomModule(nn.Module):
         # do post-embedding layernorm
         hidden_states = self.word_embeddings_layernorm(inputs_embeds)
 
+        curr_seq_len = hidden_states.shape[1]
+        alibi = build_alibi_tensor_flax(curr_seq_len, self.config.n_head, hidden_states.dtype)
+
         past_key_values = () if use_cache else None # TODO: come back to this line
         # TODO: how to handle alibi? build alibi tensor here?
 
@@ -680,7 +710,8 @@ class FlaxBloomModule(nn.Module):
         # TODO: gradient checkpointing
         outputs = self.h(
             hidden_states,
-            attention_mask,
+            alibi=alibi,
+            attention_mask=attention_mask,
             deterministic=deterministic,
             init_cache=init_cache,
             output_attentions=output_attentions,
