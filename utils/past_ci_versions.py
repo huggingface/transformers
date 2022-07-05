@@ -82,16 +82,6 @@ past_versions_testing = {
                 " --extra-index-url https://download.pytorch.org/whl/cu100"
             ),
         },
-        # need python 3.7
-        # "1.3": {
-        #     "torch": "1.3.1",
-        #     "torchvision": "0.4.2",
-        #     "torchaudio": None,
-        #     "python": 3.7,
-        #     "cuda": "cu100",
-        #     "docker-base": "10.0-cudnn7-devel-ubuntu18.04",
-        #     "install": "python3 -m pip install --no-cache-dir -U torch==1.3.1 torchvision==0.4.2 torchaudio==0.4.0 --extra-index-url https://download.pytorch.org/whl/cu100",
-        # },
     },
     # Should we include `tensorflow_probability`?
     "tensorflow": {
@@ -117,10 +107,11 @@ past_versions_testing = {
             "install": "python3 -m pip install --no-cache-dir -U tensorflow==2.4.4",
             "base_docker": "nvidia/cuda:11.0.3-cudnn8-devel-ubuntu20.04",
         },
-        # "2.3": {
-        #     "tensorflow": "2.3.4",
-        #     "install": "python3 -m pip install --no-cache-dir -U tensorflow==2.3.4",
-        # },
+        "2.3": {
+            "tensorflow": "2.3.4",
+            "install": "python3 -m pip install --no-cache-dir -U tensorflow==2.3.4",
+            "base_docker": "nvidia/cuda:10.1-cudnn7-devel-ubuntu18.04",
+        },
     },
 }
 
