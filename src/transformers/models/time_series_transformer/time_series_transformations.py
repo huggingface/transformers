@@ -14,7 +14,8 @@
 # limitations under the License.
 """Transformations for Time Series Transformers."""
 
-from typing import Optional, Tuple, List, Union
+from typing import Optional, List
+from functools import lru_cache
 
 import pandas as pd
 
