@@ -30,13 +30,21 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {
-    "vocab_file": "vocab.json",
+    "artists_file": "artists.json",
+    "lyrics_file": "lyrics.json",
+    "genres_file": "genres.json",
 }
 
 PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "jukebox": "https://huggingface.co/ArthurZ/jukebox/blob/main/vocab.json",
-    }
+    "artists_file": {
+        "jukebox": "https://huggingface.co/ArthurZ/jukebox/blob/main/artists.json",
+    },
+    "genres_file": {
+        "jukebox": "https://huggingface.co/ArthurZ/jukebox/blob/main/genres.json",
+    },
+    "lyrics_file": {
+        "jukebox": "https://huggingface.co/ArthurZ/jukebox/blob/main/lyrics.json",
+    },
 }
 
 PRETRAINED_LYRIC_TOKENS_SIZES = {
@@ -100,19 +108,36 @@ class JukeboxTokenizer(PreTrainedTokenizer):
     max_lyric_input_size = PRETRAINED_LYRIC_TOKENS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
-    def __init__(self, vocab_file, max_n_lyric_tokens=512, n_genres=5, unk_token="<|endoftext|>", **kwargs):
+    def __init__(
+        self,
+        artists_file,
+        genres_file,
+        lyrics_file,
+        version = ["v2","v3","v3"],
+        max_n_lyric_tokens=512,
+        n_genres=5,
+        unk_token="<|endoftext|>",
+        **kwargs
+    ):
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
         super().__init__(
             unk_token=unk_token,
             **kwargs,
         )
+        self.version = version
         self.max_n_lyric_tokens = max_n_lyric_tokens
         self.n_genres = n_genres
 
-        with open(vocab_file, encoding="utf-8") as vocab_handle:
+        with open(artists_file, encoding="utf-8") as vocab_handle:
             vocabulary = json.load(vocab_handle)
             self.artists_encoder = vocabulary["artists"]
+
+        with open(genres_file, encoding="utf-8") as vocab_handle:
+            vocabulary = json.load(vocab_handle)
             self.genres_encoder = vocabulary["genres"]
+
+        with open(lyrics_file, encoding="utf-8") as vocab_handle:
+            vocabulary = json.load(vocab_handle)
             self.lyrics_encoder = vocabulary["lyrics"]
 
         self.out_of_vocab = re.compile("[^A-Za-z0-9.,:;!?\-+'\"()\[\] \t\n]+")  # FIXME: should be an argument?
@@ -185,7 +210,6 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         artists_id = self.artists_encoder.get(artist)
         genres_ids = [self.genres_encoder.get(genre) for genre in genres]
         lyric_ids = [self.lyrics_encoder.get(character) for character in lyrics]
-        lyric_ids = self.get_relevant_lyric_tokens(lyric_ids, total_length, offset, duration)
         return artists_id, genres_ids, lyric_ids
 
     def _tokenize(self, lyrics):
@@ -241,6 +265,15 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         Returns:
             `Tuple[str, str, str, Dict[str, Any]]`: The prepared text and the unused kwargs.
         """
+        for idx,version in enumerate(self.version): 
+            if version == "v1":
+                artist = artist.lower()
+                genres = genres.lower()
+                lyrics = lyrics.lower()
+            else: 
+                artist[idx] = self._normalize(artist)
+                
+                
         artist = self._normalize(artist)
         genres = self._normalize(genres).split("_")  # split is for the full dictionnary with combined genres
 
@@ -291,8 +324,8 @@ class JukeboxTokenizer(PreTrainedTokenizer):
     # a type argument to add an artist token with self.getattr('artist') ?
     # TODO : is a call function required ?
 
-    def __call__(self, artist, genres, lyrics, total_length, sample_length, offset):
-        """Convert the raw string to token ids
+    def __call__(self, artist, genres, lyrics, total_length, offset):
+        """Convert the raw string to a list of token ids
 
         Args:
             artist (`_type_`):
@@ -303,15 +336,17 @@ class JukeboxTokenizer(PreTrainedTokenizer):
                 _description_
             total_length (`_type_`):
                 _description_
-            sample_length (`_type_`):
-                _description_
             offset (`_type_`):
                 _description_
         """
-        input_ids = [total_length, offset, sample_length]
+        input_ids = [total_length, offset, None]
+        artist = artist*len(self.version)
+        genres = genres*len(self.version)
+        lyrics = lyrics*len(self.version)
+        
         artists_tokens, genres_tokens, lyrics_tokens = self.tokenize(artist, genres, lyrics)
         artists_id, genres_ids, lyric_ids = self._convert_token_to_id(
-            artists_tokens, genres_tokens, lyrics_tokens, total_length, offset, sample_length
+            artists_tokens, genres_tokens, lyrics_tokens, total_length, offset
         )
         input_ids += [artists_id] + genres_ids + lyric_ids
         attention_masks = [-INFINITY] * (self.max_n_lyric_tokens - len(lyrics_tokens)) + [0] * len(lyrics_tokens)
@@ -330,15 +365,23 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
-        vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
-        )
-        with open(vocab_file, "w", encoding="utf-8") as f:
-            f.write(
-                json.dumps(
-                    {"artists": self.artists_encoder, "genres": self.genres_encoder, "lyrics": self.lyrics_encoder},
-                    ensure_ascii=False,
-                )
-            )
 
-        return (vocab_file,)
+        artists_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["artists_file"]
+        )
+        with open(artists_file, "w", encoding="utf-8") as f:
+            f.write(json.dumps(self.artists_encoder, ensure_ascii=False))
+
+        genres_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["genres_file"]
+        )
+        with open(genres_file, "w", encoding="utf-8") as f:
+            f.write(json.dumps(self.genres_encoder, ensure_ascii=False))
+
+        lyrics_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["lyrics_file"]
+        )
+        with open(lyrics_file, "w", encoding="utf-8") as f:
+            f.write(json.dumps(self.lyrics_encoder, ensure_ascii=False))
+
+        return (artists_file, genres_file, lyrics_file)
