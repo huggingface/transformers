@@ -126,5 +126,5 @@ if __name__ == "__main__":
     cuda = ""
     if args.framework == "pytorch":
         cuda = info["cuda"]
-    os.system(f'echo "export CUDA=\'{cuda}\'" >> ~/.profile')
-    print(f'echo "export CUDA=\'{cuda}\'" >> ~/.profile')
+    os.system(f"echo \"export CUDA='{cuda}'\" >> ~/.profile")
+    print(f"echo \"export CUDA='{cuda}'\" >> ~/.profile")
