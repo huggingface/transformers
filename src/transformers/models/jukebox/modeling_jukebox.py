@@ -40,6 +40,7 @@ from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, logging
 from .configuration_jukebox import JukeboxConfig
+from .tokenization_jukebox import get_relevant_lyric_tokens
 
 
 logger = logging.get_logger(__name__)
@@ -410,10 +411,10 @@ class BottleneckBlock(nn.Module):
         self.k_elem = None
         # self.register_buffer('k',  torch.zeros(self.k_bins, self.emb_width).cuda())
 
-        if torch.cuda.is_available():
-            self.register_buffer("k", torch.zeros(self.k_bins, self.emb_width).to("cuda"))
-        else:
-            self.register_buffer("k", torch.zeros(self.k_bins, self.emb_width))
+        # if torch.cuda.is_available():
+        #     self.register_buffer("k", torch.zeros(self.k_bins, self.emb_width).to("cuda"))
+        # else:
+        self.register_buffer("k", torch.zeros(self.k_bins, self.emb_width))
 
     def _tile(self, x):
         d, ew = x.shape
@@ -706,8 +707,8 @@ class VQVAE(nn.Module):
             downsamples = calculate_strides(config.vq_vae_strides_t, config.vq_vae_downs_t)
             top_raw_to_tokens = np.prod(downsamples)
             config.sample_length = (
-                config.sample_length_in_seconds * config.sr // top_raw_to_tokens
-            ) * top_raw_to_tokens
+                (config.sample_length_in_seconds * config.sr // top_raw_to_tokens) * top_raw_to_tokens
+            ).astype(int)
 
         input_shape = (config.sample_length, 1)
         block_kwargs = dict(
@@ -827,7 +828,7 @@ class VQVAE(nn.Module):
         return zs
 
     def sample(self, n_samples):
-        zs = [torch.randint(0, self.l_bins, size=(n_samples, *z_shape), device="cuda") for z_shape in self.z_shapes]
+        zs = [torch.randint(0, self.l_bins, size=(n_samples, *z_shape), device="cpu") for z_shape in self.z_shapes]
         return self.decode(zs)
 
     def forward(self, x, hps, loss_fn="l1"):
@@ -2078,7 +2079,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
         else:
             assert x_cond is None
             x_cond = torch.zeros((N, 1, self.width), dtype=torch.float).to(
-                "cuda" if torch.cuda.is_available() else "cpu"
+                "cpu" if torch.cuda.is_available() else "cpu"
             )
 
         with torch.no_grad():
@@ -2086,12 +2087,14 @@ class JukeboxConditionalAutoregressive(nn.Module):
             if get_preds:
                 preds = []
             # for sample_t in get_range(range(0, sample_tokens)):
+            total = sample_tokens - len(xs)
+            task3 = progress.add_task("Sampling indivdual tokens ", total=total)
             for sample_t in range(0, sample_tokens):
 
                 x, cond = self.get_emb(sample_t, n_samples, x, x_cond, y_cond)
                 self.transformer.check_cache(n_samples, sample_t, fp16)
                 x = self.transformer(
-                    x, encoder_kv=encoder_kv, sample=True, fp16=True
+                    x, encoder_kv=encoder_kv, sample=True, fp16=fp16
                 )  # TODO put fp16 back # Transformer
                 if self.add_cond_after_transformer:
                     x = x + cond
@@ -2105,6 +2108,8 @@ class JukeboxConditionalAutoregressive(nn.Module):
                 x = torch.distributions.Categorical(logits=x).sample()  # Sample and replace x
                 assert x.shape == (n_samples, 1)
                 xs.append(x.clone())
+                progress.update(task3, advance=1)
+                progress.update(0, advance=1 / total)
 
             del x
             self.transformer.del_cache()
@@ -2755,28 +2760,36 @@ class JukeboxPrior(nn.Module):
         )
 
     def get_y(self, labels, start, get_indices=False):
-        # labeler does not exist this should be removed
-        # if isinstance(self.labeller, EmptyLabeller):
-        #     return None
-
-        # y = labels["y"].clone()
-        y = labels.clone()
+        y = labels["y"].clone()
+        # y = labels.clone()
 
         # Set sample_length to match this level
         y[:, 2] = int(self.sample_length)
 
         # Set offset
         y[:, 1:2] = y[:, 1:2] + int(start * self.raw_to_tokens)
-        if get_indices:
-            indices = None
-            return y, indices  # here the indices should be the indices of the lyrics to take into account...
-        return y
-        # Set lyric tokens
-        indices = self.labeller.set_y_lyric_tokens(y, labels)
+        indices = self.set_y_lyric_tokens(y, labels)
         if get_indices:
             return y, indices
         else:
             return y
+
+    def set_y_lyric_tokens(self, ys, labels):
+        # assert ys.shape[0] == len(labels)
+        if self.n_tokens > 0:
+            # total_length, offset, duration):
+            tokens_list = []
+            indices_list = []  # whats the index of each current character in original array
+            for i in range(ys.shape[0]):
+                full_tokens = labels["full_tokens"]
+                total_length, offset, duration = ys[i, 0], ys[i, 1], ys[i, 2]
+                tokens, indices = get_relevant_lyric_tokens(full_tokens, self.n_tokens, total_length, offset, duration)
+                tokens_list.append(tokens)
+                indices_list.append(indices)
+            ys[:, -self.n_tokens :] = torch.tensor(tokens_list, dtype=torch.long, device="cpu")
+            return indices_list
+        else:
+            return None
 
     def get_z_conds(self, zs, start, end):
         if self.level != self.levels - 1:
@@ -3324,7 +3337,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
                 )
                 for start in get_starts(total_length, prior.n_ctx, hop_length):
                     zs = self.sample_single_window(zs, labels, sampling_kwargs, level, start, hps)
-                    # progress.update(task1, advance=1)
+
         else:
             zs = self.sample_partial_window(zs, labels, sampling_kwargs, level, total_length, hps)
         return zs

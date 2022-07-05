@@ -20,6 +20,8 @@ import os
 from json.encoder import INFINITY
 from typing import Any, Dict, List, Optional, Tuple
 
+import torch
+
 import regex as re
 from tokenizers import normalizers
 
@@ -50,6 +52,40 @@ PRETRAINED_VOCAB_FILES_MAP = {
 PRETRAINED_LYRIC_TOKENS_SIZES = {
     "jukebox": 512,  # corresonds to the dummy-model ?
 }
+
+
+def get_relevant_lyric_tokens(full_tokens, max_n_lyric_tokens, total_length, offset, duration):
+    """
+    Extract only the relevant tokens based on the character position. A total of `max_n_lyric_tokens` tokens will be
+    returned. If the provided token sequence is smaller, it will be padded, othewise, only characters ranging from the
+    midpoint - `max_n_lyric_tokens//2` to the midpoint + `max_n_lyric_tokens//2` will be returned. This *focuses* on
+    the most relevant tokens (in time) for the sequence.
+
+    Args: # TODO : args to prettify
+        full_tokens (`List[int]`):
+            List containing the ids of the entire lyrics.
+        total_length (`int`):
+            Total expected length of the music (not all of it is generated, see duration), in samples.
+        offset (`int`):
+            Starting sample in the music. If the offset is greater than 0, the lyrics will be shifted take that into
+            account
+        duration (`int`):
+            Expected duration of the generated music, in samples. The duration has to be smaller than the total lenght,
+            which represent the overall length of the signal,
+    """
+    if len(full_tokens) < max_n_lyric_tokens:
+        tokens = [0] * (max_n_lyric_tokens - len(full_tokens)) + full_tokens
+        indices = [-1] * (max_n_lyric_tokens - len(full_tokens)) + list(range(0, len(full_tokens)))
+    else:
+        assert 0 <= offset < total_length
+        midpoint = int(len(full_tokens) * (offset + duration / 2.0) / total_length)
+        midpoint = min(max(midpoint, max_n_lyric_tokens // 2), len(full_tokens) - max_n_lyric_tokens // 2)
+        tokens = full_tokens[midpoint - max_n_lyric_tokens // 2 : midpoint + max_n_lyric_tokens // 2]
+        indices = list(range(midpoint - max_n_lyric_tokens // 2, midpoint + max_n_lyric_tokens // 2))
+    assert len(tokens) == max_n_lyric_tokens, f"Expected length {max_n_lyric_tokens}, got {len(tokens)}"
+    assert len(indices) == max_n_lyric_tokens, f"Expected length {max_n_lyric_tokens}, got {len(indices)}"
+    assert tokens == [full_tokens[index] if index != -1 else 0 for index in indices]
+    return tokens, indices
 
 
 class JukeboxTokenizer(PreTrainedTokenizer):
@@ -94,10 +130,10 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         vocab_file (`str`):
             Path to the vocabulary file which should contain a dictionnary where the keys are 'artist', 'genre' and
             'lyrics' and the values are their corresponding vocabulary files.
-        max_n_lyric_tokens (`int`, `optional`, defaults to 512):
-            Maximum number of lyric tokens to keep.
         n_genres (`int`, `optional`, defaults to 1):
             Maximum number of genres to use for composition.
+        max_n_lyric_tokens (`int`, `optional`, defaults to 512):
+            Maximum number of lyric tokens to keep.
         unk_token (`str`, *optional*, defaults to `<|endoftext|>`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
@@ -122,6 +158,8 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
         super().__init__(
             unk_token=unk_token,
+            n_genres=n_genres, 
+            max_n_lyric_tokens=max_n_lyric_tokens,
             **kwargs,
         )
         self.version = version
@@ -140,8 +178,12 @@ class JukeboxTokenizer(PreTrainedTokenizer):
             vocabulary = json.load(vocab_handle)
             self.lyrics_encoder = vocabulary["lyrics"]
 
-        self.out_of_vocab = re.compile("[^A-Za-z0-9.,:;!?\-+'\"()\[\] \t\n]+")  # FIXME: should be an argument?
+        oov = '[^A-Za-z0-9.,:;!?\-\'\"()\[\] \t\n]+'
+        # In v2, we had a n_vocab=80 and in v3 we missed + and so n_vocab=79 of characters.
+        if len(self.lyrics_encoder) == 79:
+            oov = oov.replace("\-\'","\-+\'")
 
+        self.out_of_vocab = re.compile(oov) 
         self.artists_decoder = {v: k for k, v in self.artists_encoder.items()}
         self.genres_decoder = {v: k for k, v in self.genres_encoder.items()}
         self.lyrics_decoder = {v: k for k, v in self.lyrics_encoder.items()}
@@ -152,41 +194,6 @@ class JukeboxTokenizer(PreTrainedTokenizer):
 
     def get_vocab(self):
         return dict(self.artists_encoder, self.genres_encoder, self.lyrics_encoder)
-
-    def get_relevant_lyric_tokens(self, full_tokens, total_length, offset, duration):
-        """Extract only the relevant tokens based on the character position. A total of
-        `max_n_lyric_tokens` tokens will be returned. If the provided token sequence is smaller, it will be padded,
-        othewise, only characters ranging from the midpoint - `max_n_lyric_tokens//2` to the midpoint +
-        `max_n_lyric_tokens//2` will be returned. This *focuses* on the most relevant tokens (in time) for the
-        sequence.
-
-        Args: # TODO : args to prettify
-            full_tokens (`_type_`):
-                _description_
-            total_length (`_type_`):
-                _description_
-            offset (`_type_`):
-                _description_
-            duration (`_type_`):
-                _description_
-        """
-        if len(full_tokens) < self.max_n_lyric_tokens:
-            tokens = [0] * (self.max_n_lyric_tokens - len(full_tokens)) + full_tokens
-            indices = [-1] * (self.max_n_lyric_tokens - len(full_tokens)) + list(range(0, len(full_tokens)))
-        else:
-            assert 0 <= offset < total_length
-            midpoint = int(len(full_tokens) * (offset + duration / 2.0) / total_length)
-            midpoint = min(
-                max(midpoint, self.max_n_lyric_tokens // 2), len(full_tokens) - self.max_n_lyric_tokens // 2
-            )
-            tokens = full_tokens[midpoint - self.max_n_lyric_tokens // 2 : midpoint + self.max_n_lyric_tokens // 2]
-            indices = list(range(midpoint - self.max_n_lyric_tokens // 2, midpoint + self.max_n_lyric_tokens // 2))
-        assert len(tokens) == self.max_n_lyric_tokens, f"Expected length {self.max_n_lyric_tokens}, got {len(tokens)}"
-        assert (
-            len(indices) == self.max_n_lyric_tokens
-        ), f"Expected length {self.max_n_lyric_tokens}, got {len(indices)}"
-        assert tokens == [full_tokens[index] if index != -1 else 0 for index in indices]
-        return tokens
 
     def _convert_token_to_id(self, artist, genres, lyrics, total_length, offset, duration):
         """Converts the artist, genre and lyrics tokens to their index using the vocabulary.
@@ -209,6 +216,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         """
         artists_id = self.artists_encoder.get(artist)
         genres_ids = [self.genres_encoder.get(genre) for genre in genres]
+        genres_ids = genres_ids + [-1] * (self.n_genres - len(genres_ids))
         lyric_ids = [self.lyrics_encoder.get(character) for character in lyrics]
         return artists_id, genres_ids, lyric_ids
 
@@ -276,8 +284,8 @@ class JukeboxTokenizer(PreTrainedTokenizer):
                 
         artist = self._normalize(artist)
         genres = self._normalize(genres).split("_")  # split is for the full dictionnary with combined genres
-
-        lyrics = normalizers.BertNormalizer().normalize_str(lyrics)
+        normalizer = normalizers.Sequence([normalizers.NFD(), normalizers.StripAccents()])
+        lyrics = normalizer.normalize_str(lyrics)
         lyrics = lyrics.replace("\\", "\n")
         lyrics = self.out_of_vocab.sub("", lyrics)
         return artist, genres, lyrics, kwargs
@@ -291,12 +299,16 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         """
         import re
 
-        accepted = frozenset(
+        accepted = (
             [chr(i) for i in range(ord("a"), ord("z") + 1)]
             + [chr(i) for i in range(ord("A"), ord("Z") + 1)]
             + [chr(i) for i in range(ord("0"), ord("9") + 1)]
         )
 
+        # In v2, " " is not accepted while it is for v3
+        if len(self.lyrics_encoder) == 79:
+            accepted += [" "]
+        accepted = frozenset(accepted)
         rex = re.compile(r"_+")
         text = "".join([c if c in accepted else "_" for c in text.lower()])
         text = rex.sub("_", text).strip("_")
@@ -305,12 +317,12 @@ class JukeboxTokenizer(PreTrainedTokenizer):
     def _convert_id_to_token(self, artists_index, genres_index, lyric_index):
         """Converts an index (integer) in a token (str) using the vocab.
         Args:
-            artists_index (`_type_`):
-                _description_
-            genres_index (`_type_`):
-                _description_
-            lyric_index (`_type_`):
-                _description_
+            artists_index (`int`):
+                Index of the artist in its corresponding dictionnary.
+            genres_index (`Union[List[int], int]`):
+               Index of the genre in its corresponding dictionnary.
+            lyric_index (`List[int]`):
+                List of character indices, which each correspond to a character.
         """
         artist = self.artists_decoder.get(artists_index)
         genres = [self.genres_decoder.get(genre) for genre in genres_index]
@@ -322,19 +334,18 @@ class JukeboxTokenizer(PreTrainedTokenizer):
 
     # TODO : should add_token be implemeted for artists, genres and lyrics? Should it have
     # a type argument to add an artist token with self.getattr('artist') ?
-    # TODO : is a call function required ?
 
     def __call__(self, artist, genres, lyrics, total_length, offset):
         """Convert the raw string to a list of token ids
 
         Args:
-            artist (`_type_`):
+            artist (`str`):
                 _description_
-            genre (`_type_`):
+            genre (`str`):
                 _description_
-            lyrics (`_type_`):
+            lyrics (`srt`):
                 _description_
-            total_length (`_type_`):
+            total_length (`int`):
                 _description_
             offset (`_type_`):
                 _description_
@@ -348,9 +359,14 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         artists_id, genres_ids, lyric_ids = self._convert_token_to_id(
             artists_tokens, genres_tokens, lyrics_tokens, total_length, offset
         )
-        input_ids += [artists_id] + genres_ids + lyric_ids
-        attention_masks = [-INFINITY] * (self.max_n_lyric_tokens - len(lyrics_tokens)) + [0] * len(lyrics_tokens)
-        return {"input_ids": input_ids, "attention_masks": attention_masks}
+        input_ids += [artists_id] + genres_ids + relevant_tokens
+        attention_masks = [-INFINITY] * (len(full_tokens) - len(relevant_tokens)) + [0] * len(relevant_tokens)
+        # TODO properly handle the return pt tensor option
+        if return_tensor == "pt":
+            return {
+                "input_ids": {"y": torch.tensor([input_ids]), "full_tokens": full_tokens},
+                "attention_masks": torch.tensor(attention_masks),
+            }
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         """
