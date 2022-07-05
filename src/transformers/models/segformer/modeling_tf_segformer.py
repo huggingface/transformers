@@ -796,10 +796,10 @@ class TFSegformerForSemanticSegmentation(TFSegformerPreTrainedModel):
             loss_ = loss_fct(real, pred)
             mask = tf.cast(mask, dtype=loss_.dtype)
             loss_ *= mask
-            # We return loss per-sample.
-            # Initially the loss is of shape - (batch_size, height, width), then
-            # it is reduced across the spatial resolutions per-sample.
-            return tf.reduce_sum(loss_, axis=(1, 2)) / tf.reduce_sum(mask, axis=(1, 2))
+            # Reduction strategy in the similar spirit with
+            # https://github.com/huggingface/transformers/blob/main/src/transformers/modeling_tf_utils.py#L210
+            reduced_masked_loss = tf.reduce_sum(loss_) / tf.reduce_sum(mask)
+            return tf.reshape(reduced_masked_loss, (1,))
 
         return masked_loss(labels, upsampled_logits)
 
