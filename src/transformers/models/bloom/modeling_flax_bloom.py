@@ -30,6 +30,7 @@ import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen import combine_masks, make_causal_mask
 from flax.linen.attention import dot_product_attention_weights
+from flax.linen.partitioning import scan_with_axes
 from flax.traverse_util import flatten_dict, unflatten_dict
 from flax.linen.activation import tanh
 from jax import lax
@@ -403,10 +404,9 @@ class FlaxBloomBlock(nn.Module):
     config: BloomConfig
     layer_number: int = None
     dtype: jnp.dtype = jnp.float32
+    use_scan: bool = False
 
     def setup(self):
-        hidden_size = self.config.hidden_size
-        
         self.input_layernorm = nn.LayerNorm(epsilon=self.config.layer_norm_epsilon, dtype=self.dtype)
 
         self.self_attention = FlaxBloomAttention(self.config, layer_number=self.layer_number, dtype=self.dtype)
@@ -429,6 +429,9 @@ class FlaxBloomBlock(nn.Module):
         output_attentions: bool = False,
         use_cache: bool = False,
     ):
+        if self.use_scan:
+            hidden_states = hidden_states[0]
+
         layernorm_output = self.input_layernorm(hidden_states)
         # layer norm before saving residual if config calls for it
         if self.apply_residual_connection_post_layernorm:
@@ -472,6 +475,9 @@ class FlaxBloomBlock(nn.Module):
         else:
             outputs = (output,) + outputs[1:]
 
+        if self.use_scan:
+            outputs = (outputs, None)
+
         return outputs
 
 # TODO: does this still require position_ids?
@@ -495,9 +501,10 @@ class FlaxBloomPreTrainedModel(FlaxPreTrainedModel):
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
+        use_scan: bool = False,
         **kwargs,
     ):
-        module = self.module_class(config=config, dtype=dtype, **kwargs)
+        module = self.module_class(config=config, dtype=dtype, use_scan=use_scan, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
@@ -609,11 +616,12 @@ class FlaxBloomPreTrainedModel(FlaxPreTrainedModel):
 class FlaxBloomBlockCollection(nn.Module):
     config: BloomConfig
     dtype: jnp.dtype = jnp.float32
+    use_scan: bool = False
 
     def setup(self):
         # layer_number matters for attn scaling and should not be 0. see `FlaxBloomAttention` for its use.
         self.blocks = [
-            FlaxBloomBlock(self.config, layer_number=max(1, i), name=str(i), dtype=self.dtype)
+            FlaxBloomBlock(self.config, layer_number=max(1, i), name=str(i), dtype=self.dtype, use_scan=False)
             for i in range(self.config.num_hidden_layers)
         ]
 
@@ -631,11 +639,20 @@ class FlaxBloomBlockCollection(nn.Module):
         all_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
 
-        for block in self.blocks:
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
+        if self.use_scan:
+            # since all decoder layers are the same, we use nn.scan directly
+            assert not output_attentions, "cannot use `scan` with `output_attentions` set to `True`"
+            assert not output_hidden_states, "cannot use `scan` with `output_hidden_states` set to `True`"
+            hidden_states = (hidden_states,)
 
-            layer_outputs = block(
+            # TODO: add layerdrop in (possibly checkpointed) scan (note: default value for layerdrop in config is zero)
+            hidden_states, _ = scan_with_axes(
+                FlaxBloomBlock,
+                variable_axes={"params": 0, "cache": 0},
+                split_rngs={"params": True, "dropout": True},
+                in_axes=(nn.broadcast, nn.broadcast, nn.broadcast, nn.broadcast, nn.broadcast, nn.broadcast),
+                length=self.config.num_hidden_layers,
+            )(self.config, dtype=self.dtype, use_scan=True, name="FlaxBloomBlockLayers")(
                 hidden_states,
                 attention_mask,
                 alibi,
@@ -643,10 +660,25 @@ class FlaxBloomBlockCollection(nn.Module):
                 init_cache=init_cache,
                 output_attentions=output_attentions,
             )
-            hidden_states = layer_outputs[0]
+            hidden_states = hidden_states[0]
 
-            if output_attentions:
-                all_attentions += (layer_outputs[1],)
+        else:
+            for block in self.blocks:
+                if output_hidden_states:
+                    all_hidden_states += (hidden_states,)
+
+                layer_outputs = block(
+                    hidden_states,
+                    attention_mask,
+                    alibi,
+                    deterministic=deterministic,
+                    init_cache=init_cache,
+                    output_attentions=output_attentions,
+                )
+                hidden_states = layer_outputs[0]
+
+                if output_attentions:
+                    all_attentions += (layer_outputs[1],)
 
         # this contains possible `None` values - `FlaxBloomModule` will filter them out
         outputs = (hidden_states, all_hidden_states, all_attentions)
@@ -656,6 +688,7 @@ class FlaxBloomBlockCollection(nn.Module):
 class FlaxBloomModule(nn.Module):
     config: BloomConfig
     dtype: jnp.dtype = jnp.float32
+    use_scan: bool = False
 
     def setup(self):
         # TODO: check initialization correctness
@@ -673,7 +706,7 @@ class FlaxBloomModule(nn.Module):
         self.word_embeddings_layernorm = nn.LayerNorm(epsilon=self.config.layer_norm_epsilon)
         
         # transformer layers
-        self.h = FlaxBloomBlockCollection(self.config, dtype=self.dtype)
+        self.h = FlaxBloomBlockCollection(self.config, dtype=self.dtype, use_scan=self.use_scan)
         
         # final layernorm
         self.ln_f = nn.LayerNorm(epsilon=self.config.layer_norm_epsilon, dtype=self.dtype)
@@ -758,9 +791,10 @@ append_call_sample_docstring(
 class FlaxBloomForCausalLMModule(nn.Module):
     config: BloomConfig
     dtype: jnp.dtype = jnp.float32
+    use_scan: bool = self.use_scan
 
     def setup(self):
-        self.transformer = FlaxBloomModule(self.config, dtype=self.dtype)
+        self.transformer = FlaxBloomModule(self.config, dtype=self.dtype, use_scan=self.use_scan)
         self.lm_head = nn.Dense(
             self.config.vocab_size,
             use_bias=False,
