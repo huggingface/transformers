@@ -19,15 +19,10 @@ from typing import List
 
 import numpy as np
 
-import jax.numpy as jnp
-
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
-from ...utils.generic import _is_torch
+from transformers import is_flax_available, is_torch_available, is_tf_available
 
-
-def is_torch_tensor(obj):
-    return _is_torch(obj)
 
 
 class OwlViTProcessor(ProcessorMixin):
@@ -108,35 +103,26 @@ class OwlViTProcessor(ProcessorMixin):
             encoding = BatchEncoding()
 
             if return_tensors == "np":
-                input_ids = [np.expand_dims(encoding["input_ids"], axis=0) for encoding in encodings]
-                input_ids = np.concatenate(input_ids)
+                input_ids = np.stack([encoding["input_ids"] for encoding in encodings])
+                attention_mask = np.stack([encoding["attention_mask"] for encoding in encodings])
 
-                attention_mask = [np.expand_dims(encoding["attention_mask"], axis=0) for encoding in encodings]
-                attention_mask = np.concatenate(attention_mask)
+            elif return_tensors == "jax" and is_flax_available():
+                import jax.numpy as jnp
+                input_ids = jnp.stack([encoding["input_ids"] for encoding in encodings])
+                attention_mask = jnp.stack([encoding["attention_mask"] for encoding in encodings])
 
-            elif return_tensors == "jax":
-                input_ids = [jnp.expand_dims(encoding["input_ids"], axis=0) for encoding in encodings]
-                input_ids = jnp.concatenate(input_ids)
-
-                attention_mask = [jnp.expand_dims(encoding["attention_mask"], axis=0) for encoding in encodings]
-                attention_mask = jnp.concatenate(attention_mask)
-
-            elif return_tensors == "pt":
+            elif return_tensors == "pt" and is_torch_available():
                 import torch
+                input_ids = torch.stack([encoding["input_ids"] for encoding in encodings])
+                attention_mask = torch.stack([encoding["attention_mask"] for encoding in encodings])
 
-                input_ids = [encoding["input_ids"].unsqueeze(0) for encoding in encodings]
-                input_ids = torch.cat(input_ids)
-
-                attention_mask = [encoding["attention_mask"].unsqueeze(0) for encoding in encodings]
-                attention_mask = torch.cat(attention_mask)
-            else:
+            elif return_tensors == "tf" and is_tf_available():
                 import tensorflow as tf
+                input_ids = tf.stack([encoding["input_ids"] for encoding in encodings])
+                attention_mask = tf.stack([encoding["attention_mask"] for encoding in encodings])
 
-                input_ids = [tf.expand_dims(encoding["input_ids"], axis=0) for encoding in encodings]
-                input_ids = tf.concat(input_ids, axis=0)
-
-                attention_mask = [tf.expand_dims(encoding["attention_mask"], axis=0) for encoding in encodings]
-                attention_mask = tf.concat(attention_mask, axis=0)
+            else:
+                raise Exception("Target return tensor type could not be returned")
 
             encoding["input_ids"] = input_ids
             encoding["attention_mask"] = attention_mask
