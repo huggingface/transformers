@@ -1472,25 +1472,23 @@ class ViltForTokenClassification(ViltPreTrainedModel):
 
         sequence_output = outputs[0]
 
-        sequence_output = self.dropout(sequence_output)
-        logits = self.classifier(sequence_output)
-
         text_input_size = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
-        logits_text = logits[:, :text_input_size].contiguous()
+        sequence_output = self.dropout(sequence_output)
+        logits = self.classifier(sequence_output[:, :text_input_size])
 
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits_text.view(-1, self.num_labels), labels.view(-1))
+            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
-            output = (logits_text,) + outputs[2:]
+            output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
             loss=loss,
-            logits=logits_text,
+            logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
