@@ -269,28 +269,40 @@ class OwlViTConfig(PretrainedConfig):
 
     def __init__(
         self,
-        text_config_dict=None,
-        vision_config_dict=None,
+        text_config=None,
+        vision_config=None,
         projection_dim=512,
         logit_scale_init_value=2.6592,
         **kwargs
     ):
-        super().__init__(text_config_dict=text_config_dict, vision_config_dict=vision_config_dict, **kwargs)
+        super().__init__(text_config=text_config, vision_config=vision_config, **kwargs)
 
-        if text_config_dict is None:
-            text_config_dict = {}
+        if text_config is None:
+            text_config= {}
             logger.info("text_config_dict is None. Initializing the OwlViTTextConfig with default values.")
 
-        if vision_config_dict is None:
-            vision_config_dict = {}
+        if vision_config is None:
+            vision_config = {}
             logger.info("vision_config_dict is None. initializing the OwlViTVisionConfig with default values.")
 
-        self.text_config = OwlViTTextConfig(**text_config_dict)
-        self.vision_config = OwlViTVisionConfig(**vision_config_dict)
+        self.text_config = OwlViTTextConfig(**text_config)
+        self.vision_config = OwlViTVisionConfig(**vision_config)
 
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
         self.initializer_factor = 1.0
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
+
+        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
+            logger.warning(
+                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
+                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
+            )
+     
+        return cls.from_dict(config_dict, **kwargs)
 
     @classmethod
     def from_text_vision_configs(cls, text_config: OwlViTTextConfig, vision_config: OwlViTVisionConfig, **kwargs):

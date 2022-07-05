@@ -40,9 +40,11 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "adirik/owlvit-base-patch32"
 
+ # See all OwlViT models at https://huggingface.co/models?filter=owlvit
 OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "adirik/owlvit-base-patch32",
-    # See all OwlViT models at https://huggingface.co/models?filter=owlvit
+    "adirik/owlvit-base-patch16",
+    "adirik/owlvit-large-patch14",
 ]
 
 
