@@ -304,7 +304,7 @@ class FlaxBloomAttention(nn.Module):
         deterministic: bool = True,
         init_cache: bool = False,
         output_attentions: bool = False,
-        layer_number: int = None
+        layer_number: int = None,
     ):
         # TODO: this module __call__ needs checking for correctness of implementation.
         fused_qkv = self.query_key_value(hidden_states)
@@ -660,18 +660,12 @@ class FlaxBloomPreTrainedModel(FlaxPreTrainedModel):
         return outputs
 
 
-# TODO: haven't modified this block yet, remove if remains unused
 class FlaxBloomBlockCollection(nn.Module):
     config: BloomConfig
     dtype: jnp.dtype = jnp.float32
     use_scan: bool = False
 
-    def setup(self):
-        self.blocks = [
-            FlaxBloomBlock(self.config, name=str(i), dtype=self.dtype, use_scan=False)
-            for i in range(self.config.num_hidden_layers)
-        ]
-
+    @nn.compact
     def __call__(
         self,
         hidden_states,
@@ -688,33 +682,29 @@ class FlaxBloomBlockCollection(nn.Module):
 
         if self.use_scan:
             # since all decoder layers are the same, we use nn.scan directly
-            assert not output_attentions, "cannot use `scan` with `output_attentions` set to `True`"
-            assert not output_hidden_states, "cannot use `scan` with `output_hidden_states` set to `True`"
+            # assert not output_attentions, "cannot use `scan` with `output_attentions` set to `True`"
+            # assert not output_hidden_states, "cannot use `scan` with `output_hidden_states` set to `True`"
             hidden_states = (hidden_states,)
 
-            # TODO: add layerdrop in (possibly checkpointed) scan (note: default value for layerdrop in config is zero)
             hidden_states, _ = scan_with_axes(
                 FlaxBloomBlock,
                 variable_axes={"params": 0, "cache": 0},
                 split_rngs={"params": True, "dropout": True},
-                in_axes=(nn.broadcast, nn.broadcast, nn.broadcast, nn.broadcast, nn.broadcast, nn.broadcast),
+                in_axes=(nn.broadcast, 0),
                 length=self.config.num_hidden_layers,
             )(self.config, dtype=self.dtype, use_scan=True, name="FlaxBloomBlockLayers")(
                 hidden_states,
-                alibi=alibi,
-                attention_mask=attention_mask,
-                deterministic=deterministic,
-                init_cache=init_cache,
-                output_attentions=output_attentions,
+                alibi,
+                layer_number=jnp.arange(0, self.config.num_hidden_layers)
             )
             hidden_states = hidden_states[0]
 
         else:
-            for layer_number, block in enumerate(self.blocks):
+            for layer_number in range(self.config.num_hidden_layers):
                 if output_hidden_states:
                     all_hidden_states += (hidden_states,)
 
-                layer_outputs = block(
+                layer_outputs = FlaxBloomBlock(self.config, name=str(layer_number), dtype=self.dtype, use_scan=False)(
                     hidden_states,
                     alibi,
                     attention_mask,
