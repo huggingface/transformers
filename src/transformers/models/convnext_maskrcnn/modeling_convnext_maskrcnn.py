@@ -3292,12 +3292,12 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
             losses.update(bbox_results["loss_bbox"])
 
         # TODO verify mask head loss computation
-        # if self.with_mask:
-        #     mask_results = self._mask_forward_train(
-        #         x, sampling_results, bbox_results["bbox_feats"], gt_masks, img_metas
-        #     )
-        #     losses.update(mask_results["loss_mask"])
-        #     # print("Mask loss:", mask_results["loss_mask"])
+        if self.with_mask:
+            mask_results = self._mask_forward_train(
+                x, sampling_results, bbox_results["bbox_feats"], gt_masks, img_metas
+            )
+            losses.update(mask_results["loss_mask"])
+            # print("Mask loss:", mask_results["loss_mask"])
 
         return losses
 
