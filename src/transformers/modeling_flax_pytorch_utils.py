@@ -27,8 +27,8 @@ import transformers
 from flax.serialization import from_bytes
 from flax.traverse_util import flatten_dict, unflatten_dict
 
-from .utils import FLAX_WEIGHTS_NAME, WEIGHTS_INDEX_NAME, logging
-from .utils.hub import get_checkpoint_shard_files
+from .utils import logging
+
 
 
 logger = logging.get_logger(__name__)
