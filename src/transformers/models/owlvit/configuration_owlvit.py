@@ -79,7 +79,7 @@ class OwlViTTextConfig(PretrainedConfig):
     >>> # Initializing a OwlViTTextModel with adirik/owlvit-base-patch32 style configuration
     >>> configuration = OwlViTTextConfig()
 
-    >>> # Initializing a OwlViTTextConfig from the dirik/owlvit-base-patch32 style configuration
+    >>> # Initializing a OwlViTTextConfig from the adirik/owlvit-base-patch32 style configuration
     >>> model = OwlViTTextModel(configuration)
 
     >>> # Accessing the model configuration
@@ -144,7 +144,7 @@ class OwlViTVisionConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`OwlViTModel`]. It is used to instantiate an OwlViT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the OwlViT
-    [dirik/owlvit-base-patch32](https://huggingface.co/dirik/owlvit-base-patch32) architecture.
+    [adirik/owlvit-base-patch32](https://huggingface.co/adirik/owlvit-base-patch32) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -185,7 +185,7 @@ class OwlViTVisionConfig(PretrainedConfig):
     >>> # Initializing a OwlViTVisionModel with adirik/owlvit-base-patch32 style configuration
     >>> configuration = OwlViTVisionConfig()
 
-    >>> # Initializing a OwlViTVisionModel model from the dirik/owlvit-base-patch32 style configuration
+    >>> # Initializing a OwlViTVisionModel model from the adirik/owlvit-base-patch32 style configuration
     >>> model = OwlViTVisionModel(configuration)
 
     >>> # Accessing the model configuration
