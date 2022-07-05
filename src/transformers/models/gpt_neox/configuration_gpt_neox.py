@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "eleutherai/gpt-neox-20b": "https://huggingface.co/eleutherai/gpt-neox-20b/resolve/main/config.json",
+    "EleutherAI/gpt-neox-20b": "https://huggingface.co/EleutherAI/gpt-neox-20b/resolve/main/config.json",
     # See all GPTNeoX models at https://huggingface.co/models?filter=gpt_neox
 }
 
@@ -31,39 +31,35 @@ class GPTNeoXConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`GPTNeoXModel`]. It is used to instantiate an
     GPTNeoX model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the GPTNeoX
-    [eleutherai/gpt-neox-20b](https://huggingface.co/eleutherai/gpt-neox-20b) architecture.
+    [EleutherAI/gpt-neox-20b](https://huggingface.co/EleutherAI/gpt-neox-20b) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 30522):
+        vocab_size (`int`, *optional*, defaults to 50432):
             Vocabulary size of the GPTNeoX model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`GPTNeoXModel`].
-        hidden_size (`int`, *optional*, defaults to 768):
+        hidden_size (`int`, *optional*, defaults to 6144):
             Dimension of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
+        num_hidden_layers (`int`, *optional*, defaults to 44):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
+        num_attention_heads (`int`, *optional*, defaults to 64):
             Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 3072):
+        intermediate_size (`int`, *optional*, defaults to 24576):
             Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the attention probabilities.
         rotary_pct (`float`, *optional*, defaults to 0.25):
             percentage of hidden dimensions to allocate to rotary embeddings
         rotary_emb_base (`int`, *optional*, defaults to 10000)
             base for computing rotary embeddings frequency
-        max_position_embeddings (`int`, *optional*, defaults to 512):
+        max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        initializer_range (`float`, *optional*, defaults to 0.02):
+        initializer_range (`float`, *optional*, defaults to 1e-5):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
@@ -94,8 +90,6 @@ class GPTNeoXConfig(PretrainedConfig):
         num_attention_heads=64,
         intermediate_size=24576,
         hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
         rotary_pct=0.25,
         rotary_emb_base=10000,
         max_position_embeddings=2048,
@@ -115,8 +109,6 @@ class GPTNeoXConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.rotary_pct = rotary_pct
         self.rotary_emb_base = rotary_emb_base
         self.initializer_range = initializer_range

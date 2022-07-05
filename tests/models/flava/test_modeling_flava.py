@@ -695,6 +695,10 @@ class FlavaImageCodebookTest(ModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
+    @unittest.skip(reason="Flava does not output attentions")
+    def test_attention_outputs(self):
+        pass
+
     def test_model_common_attributes(self):
         # No embedding in multimodal model
         pass

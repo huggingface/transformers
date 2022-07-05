@@ -336,7 +336,7 @@ class LxmertAttention(nn.Module):
             self.num_attention_heads,
             self.attention_head_size,
         )
-        x = x.view(*new_x_shape)
+        x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
     def forward(self, hidden_states, context, attention_mask=None, output_attentions=False):
@@ -365,7 +365,7 @@ class LxmertAttention(nn.Module):
         context_layer = torch.matmul(attention_probs, value_layer)
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.head_size,)
-        context_layer = context_layer.view(*new_context_layer_shape)
+        context_layer = context_layer.view(new_context_layer_shape)
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
         return outputs
@@ -959,13 +959,13 @@ class LxmertModel(LxmertPreTrainedModel):
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
         extended_attention_mask = extended_attention_mask.to(dtype=self.dtype)
-        extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
+        extended_attention_mask = (1.0 - extended_attention_mask) * torch.finfo(self.dtype).min
 
         # Process the visual attention mask
         if visual_attention_mask is not None:
             extended_visual_attention_mask = visual_attention_mask.unsqueeze(1).unsqueeze(2)
             extended_visual_attention_mask = extended_visual_attention_mask.to(dtype=self.dtype)
-            extended_visual_attention_mask = (1.0 - extended_visual_attention_mask) * -10000.0
+            extended_visual_attention_mask = (1.0 - extended_visual_attention_mask) * torch.finfo(self.dtype).min
         else:
             extended_visual_attention_mask = None
 
@@ -1253,7 +1253,7 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
                 visual_prediction_scores = visual_prediction_scores_dict[key]
                 visual_loss = visual_loss_fct(
                     visual_prediction_scores.view(-1, output_dim),
-                    label.view(*label_shape),
+                    label.view(label_shape),
                 )
                 if visual_loss.dim() > 1:  # Regression Losses
                     visual_loss = visual_loss.mean(1)

@@ -604,14 +604,14 @@ class TFDebertaV2DisentangledSelfAttention(tf.keras.layers.Layer):
 
             if not self.share_att_key:
                 if "c2p" in self.pos_att_type:
-                    self.pos_proj = tf.keras.layers.Dense(
+                    self.pos_key_proj = tf.keras.layers.Dense(
                         self.all_head_size,
                         kernel_initializer=get_initializer(config.initializer_range),
                         name="pos_proj",
                         use_bias=True,
                     )
                 if "p2c" in self.pos_att_type:
-                    self.pos_q_proj = tf.keras.layers.Dense(
+                    self.pos_query_proj = tf.keras.layers.Dense(
                         self.all_head_size,
                         kernel_initializer=get_initializer(config.initializer_range),
                         name="pos_q_proj",
@@ -620,11 +620,15 @@ class TFDebertaV2DisentangledSelfAttention(tf.keras.layers.Layer):
         self.dropout = TFDebertaV2StableDropout(config.attention_probs_dropout_prob, name="dropout")
 
     def transpose_for_scores(self, tensor: tf.Tensor, attention_heads: int) -> tf.Tensor:
-        shape = shape_list(tensor)[:-1] + [attention_heads, -1]
+        tensor_shape = shape_list(tensor)
+        # In graph mode mode, we can't reshape with -1 as the final dimension if the first dimension (batch size) is None
+        shape = tensor_shape[:-1] + [attention_heads, tensor_shape[-1] // attention_heads]
         # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
         tensor = tf.reshape(tensor=tensor, shape=shape)
+        tensor = tf.transpose(tensor, perm=[0, 2, 1, 3])
         x_shape = shape_list(tensor)
-        return tf.reshape(tf.transpose(tensor, perm=[0, 2, 1, 3]), shape=[-1, x_shape[1], x_shape[-1]])
+        tensor = tf.reshape(tensor, shape=[-1, x_shape[-2], x_shape[-1]])
+        return tensor
 
     def call(
         self,
@@ -686,7 +690,6 @@ class TFDebertaV2DisentangledSelfAttention(tf.keras.layers.Layer):
 
         if rel_att is not None:
             attention_scores = attention_scores + rel_att
-        attention_scores = attention_scores
         attention_scores = tf.reshape(
             attention_scores,
             (-1, self.num_attention_heads, shape_list(attention_scores)[-2], shape_list(attention_scores)[-1]),
@@ -706,9 +709,12 @@ class TFDebertaV2DisentangledSelfAttention(tf.keras.layers.Layer):
             ),
             [0, 2, 1, 3],
         )
-        new_context_layer_shape = shape_list(context_layer)[:-2] + [
-            -1,
-        ]
+        # Set the final dimension here explicitly.
+        # Calling tf.reshape(context_layer, (*context_layer_shape[:-2], -1)) raises an error when executing
+        # the model in graph mode as context_layer is reshaped to (None, 7, None) and Dense layer in TFDebertaV2SelfOutput
+        # requires final input dimension to be defined
+        context_layer_shape = shape_list(context_layer)
+        new_context_layer_shape = context_layer_shape[:-2] + [context_layer_shape[-2] * context_layer_shape[-1]]
         context_layer = tf.reshape(context_layer, new_context_layer_shape)
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
         return outputs
@@ -821,7 +827,7 @@ class TFDebertaV2Embeddings(tf.keras.layers.Layer):
         self.position_biased_input = getattr(config, "position_biased_input", True)
         self.initializer_range = config.initializer_range
         if self.embedding_size != config.hidden_size:
-            self.embed_proj = tf.keras.layers.Dense(config.hidden_size, bias=False)
+            self.embed_proj = tf.keras.layers.Dense(config.hidden_size, use_bias=False)
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = TFDebertaV2StableDropout(config.hidden_dropout_prob, name="dropout")
 
@@ -870,7 +876,8 @@ class TFDebertaV2Embeddings(tf.keras.layers.Layer):
         Returns:
             final_embeddings (`tf.Tensor`): output embedding tensor.
         """
-        assert not (input_ids is None and inputs_embeds is None)
+        if input_ids is None and inputs_embeds is None:
+            raise ValueError("Need to provide either `input_ids` or `input_embeds`.")
 
         if input_ids is not None:
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)

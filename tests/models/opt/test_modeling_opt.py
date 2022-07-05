@@ -22,7 +22,7 @@ import unittest
 import timeout_decorator  # noqa
 
 from transformers import OPTConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
 
 from ...generation.test_generation_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -63,7 +63,7 @@ class OPTModelTester:
         use_labels=False,
         vocab_size=99,
         hidden_size=16,
-        num_hidden_layers=2,
+        num_hidden_layers=5,
         num_attention_heads=4,
         intermediate_size=4,
         hidden_act="gelu",
@@ -178,6 +178,7 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (OPTModel, OPTForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (OPTForCausalLM,) if is_torch_available() else ()
     is_encoder_decoder = False
+    fx_compatible = True
     test_pruning = False
     test_missing_keys = False
 
@@ -333,7 +334,7 @@ class OPTGenerationTest(unittest.TestCase):
     @property
     def prompts(self):
         return [
-            "Today is a beautiful day and I want to",
+            "Today is a beautiful day and I want",
             "In the city of",
             "Paris is the capital of France and",
             "Computers and mobile phones have taken",
@@ -343,10 +344,10 @@ class OPTGenerationTest(unittest.TestCase):
         model_id = "facebook/opt-125m"
 
         EXPECTED_OUTPUTS = [
-            "Today is a beautiful day and I want to thank",
-            "In the city of Rome Canaver Canaver Canaver Canaver",
-            "Paris is the capital of France and Parisdylib",
-            "Computers and mobile phones have taken precedence over",
+            "Today is a beautiful day and I want to",
+            "In the city of New York, the city",
+            "Paris is the capital of France and the capital",
+            "Computers and mobile phones have taken over the",
         ]
 
         predicted_outputs = []
@@ -408,7 +409,7 @@ class OPTGenerationTest(unittest.TestCase):
         model_id = "facebook/opt-350m"
 
         EXPECTED_OUTPUTS = [
-            "Today is a beautiful day and I want to share",
+            "Today is a beautiful day and I want to",
             "In the city of San Francisco, the city",
             "Paris is the capital of France and the capital",
             "Computers and mobile phones have taken over the",
@@ -427,3 +428,25 @@ class OPTGenerationTest(unittest.TestCase):
             predicted_outputs += generated_string
 
         self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)
+
+    @require_torch_gpu
+    def test_batched_nan_fp16(self):
+        # a bug manifested starting at models facebook/opt-1.3 and larger when running batched generations,
+        # therefore not using a tiny model, but the smallest model the problem was seen with which is opt-1.3b.
+        # please refer to this github thread: https://github.com/huggingface/transformers/pull/17437 for more details
+        model_name = "facebook/opt-1.3b"
+        tokenizer = GPT2Tokenizer.from_pretrained(model_name, use_fast=False, padding_side="left")
+
+        model = OPTForCausalLM.from_pretrained(model_name, torch_dtype=torch.float16, use_cache=True).cuda()
+        model = model.eval()
+
+        batch = tokenizer(["Who are you?", "Joe Biden is the president of"], padding=True, return_tensors="pt")
+
+        input_ids = batch["input_ids"].cuda()
+        attention_mask = batch["attention_mask"].cuda()
+
+        with torch.no_grad():
+            outputs = model(input_ids, attention_mask=attention_mask)
+            self.assertFalse(
+                torch.isnan(outputs.logits[0]).any().item()
+            )  # the first logits could contain NaNs if it fails

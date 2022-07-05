@@ -215,6 +215,7 @@ class LayoutLMModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else None
     )
+    fx_compatible = True
 
     def setUp(self):
         self.model_tester = LayoutLMModelTester(self)

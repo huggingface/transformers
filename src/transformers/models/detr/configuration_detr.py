@@ -14,7 +14,13 @@
 # limitations under the License.
 """ DETR model configuration"""
 
+from collections import OrderedDict
+from typing import Mapping
+
+from packaging import version
+
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -82,6 +88,8 @@ class DetrConfig(PretrainedConfig):
             Name of convolutional backbone to use. Supports any convolutional backbone from the timm package. For a
             list of all available models, see [this
             page](https://rwightman.github.io/pytorch-image-models/#load-a-pretrained-model).
+        use_pretrained_backbone (`bool`, *optional*, defaults to `True`):
+            Whether to use pretrained weights for the backbone.
         dilation (`bool`, *optional*, defaults to `False`):
             Whether to replace stride with dilation in the last convolutional block (DC5).
         class_cost (`float`, *optional*, defaults to 1):
@@ -147,6 +155,7 @@ class DetrConfig(PretrainedConfig):
         auxiliary_loss=False,
         position_embedding_type="sine",
         backbone="resnet50",
+        use_pretrained_backbone=True,
         dilation=False,
         class_cost=1,
         bbox_cost=5,
@@ -180,6 +189,7 @@ class DetrConfig(PretrainedConfig):
         self.auxiliary_loss = auxiliary_loss
         self.position_embedding_type = position_embedding_type
         self.backbone = backbone
+        self.use_pretrained_backbone = use_pretrained_backbone
         self.dilation = dilation
         # Hungarian matcher
         self.class_cost = class_cost
@@ -200,3 +210,25 @@ class DetrConfig(PretrainedConfig):
     @property
     def hidden_size(self) -> int:
         return self.d_model
+
+
+class DetrOnnxConfig(OnnxConfig):
+
+    torch_onnx_minimum_version = version.parse("1.11")
+
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        return OrderedDict(
+            [
+                ("pixel_values", {0: "batch", 1: "sequence"}),
+                ("pixel_mask", {0: "batch", 1: "sequence"}),
+            ]
+        )
+
+    @property
+    def atol_for_validation(self) -> float:
+        return 1e-5
+
+    @property
+    def default_onnx_opset(self) -> int:
+        return 12

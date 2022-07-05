@@ -25,7 +25,13 @@ import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import TFBaseModelOutput, TFCausalLMOutput
-from ...modeling_tf_utils import TFPreTrainedModel, booleans_processing, get_initializer, keras_serializable
+from ...modeling_tf_utils import (
+    TFPreTrainedModel,
+    booleans_processing,
+    get_initializer,
+    keras_serializable,
+    unpack_inputs,
+)
 from ...tf_utils import shape_list, stable_softmax
 from ...utils import (
     ModelOutput,
@@ -297,7 +303,8 @@ def _compute_mask_indices(
     return spec_aug_mask
 
 
-def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values_length: int = 0):
+# Copied from transformers.models.bart.modeling_tf_bart._expand_mask
+def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
@@ -1579,6 +1586,7 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
         """
         self.wav2vec2.feature_extractor.trainable = False
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFCausalLMOutput, config_class=_CONFIG_FOR_DOC)
     def call(
@@ -1701,6 +1709,8 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
                 loss = tf.reduce_sum(loss)
             if self.config.ctc_loss_reduction == "mean":
                 loss = tf.reduce_mean(loss)
+
+            loss = tf.reshape(loss, (1,))
         else:
             loss = None
 

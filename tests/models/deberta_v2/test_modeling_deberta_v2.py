@@ -241,6 +241,7 @@ class DebertaV2ModelTest(ModelTesterMixin, unittest.TestCase):
         else ()
     )
 
+    fx_compatible = True
     test_torchscript = False
     test_pruning = False
     test_head_masking = False
