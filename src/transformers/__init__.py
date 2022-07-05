@@ -4956,11 +4956,7 @@ if TYPE_CHECKING:
             FlaxBlenderbotSmallModel,
             FlaxBlenderbotSmallPreTrainedModel,
         )
-        from .models.bloom import (
-            FlaxBloomForCausalLM,
-            FlaxBloomModel,
-            FlaxBloomPreTrainedModel,
-        )
+        from .models.bloom import FlaxBloomForCausalLM, FlaxBloomModel, FlaxBloomPreTrainedModel
         from .models.clip import (
             FlaxCLIPModel,
             FlaxCLIPPreTrainedModel,
