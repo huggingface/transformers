@@ -134,8 +134,20 @@ def rename_key_and_reshape_tensor(
 
 
 def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
+    try:
+        import torch  # noqa: F401
+    except ImportError:
+        logger.error(
+            "Loading a PyTorch model in Flax, requires both PyTorch and Flax to be installed. Please see"
+            " https://pytorch.org/ and https://flax.readthedocs.io/en/latest/installation.html for installation"
+            " instructions."
+        )
+        raise
+
     # convert pytorch tensor to numpy
-    pt_state_dict = {k: v.numpy() for k, v in pt_state_dict.items()}
+    # numpy currently does not support bfloat16, need to go over float32 in this case to not loose precision
+    is_bfloat_16 = all(v.dtype == torch.bfloat16 for v in pt_state_dict.values())
+    pt_state_dict = {k: v.numpy() if not is_bfloat_16 else v.float().numpy() for k, v in pt_state_dict.items()}
 
     model_prefix = flax_model.base_model_prefix
 
@@ -278,11 +290,11 @@ def convert_pytorch_sharded_state_dict_to_flax(shard_filenames, flax_model):
                     continue
 
                 # also add unexpected weight so that warning is thrown
-                flax_state_dict[("params",) + flax_key] = jnp.asarray(flax_tensor)
+                flax_state_dict[("params",) + flax_key] = jnp.asarray(flax_tensor) if not is_bfloat_16 else jnp.asarray(flax_tensor, dtype=jnp.bfloat16)
 
             else:
                 # also add unexpected weight so that warning is thrown
-                flax_state_dict[flax_key] = jnp.asarray(flax_tensor)
+                flax_state_dict[flax_key] = jnp.asarray(flax_tensor) if not is_bfloat_16 else jnp.asarray(flax_tensor, dtype=jnp.bfloat16)
     return unflatten_dict(flax_state_dict)
 
 
@@ -323,7 +335,7 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
         raise
 
     # check if we have bf16 weights
-    is_type_bf16 = flatten_dict(jax.tree_util.tree_map(lambda x: x.dtype == jnp.bfloat16, flax_state)).values()
+    is_type_bf16 = flatten_dict(jax.tree_map(lambda x: x.dtype == jnp.bfloat16, flax_state)).values()
     if any(is_type_bf16):
         # convert all weights to fp32 if the are bf16 since torch.from_numpy can-not handle bf16
         # and bf16 is not fully supported in PT yet.
@@ -331,7 +343,7 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
             "Found ``bfloat16`` weights in Flax model. Casting all ``bfloat16`` weights to ``float32`` "
             "before loading those in PyTorch model."
         )
-        flax_state = jax.tree_util.tree_map(
+        flax_state = jax.tree_map(
             lambda params: params.astype(np.float32) if params.dtype == jnp.bfloat16 else params, flax_state
         )
 
@@ -339,10 +351,10 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
     pt_model_dict = pt_model.state_dict()
 
     load_model_with_head_into_base_model = (pt_model.base_model_prefix in flax_state) and (
-        pt_model.base_model_prefix not in {k.split(".")[0] for k in pt_model_dict.keys()}
+        pt_model.base_model_prefix not in set([k.split(".")[0] for k in pt_model_dict.keys()])
     )
     load_base_model_into_model_with_head = (pt_model.base_model_prefix not in flax_state) and (
-        pt_model.base_model_prefix in {k.split(".")[0] for k in pt_model_dict.keys()}
+        pt_model.base_model_prefix in set([k.split(".")[0] for k in pt_model_dict.keys()])
     )
 
     # keep track of unexpected & missing keys
@@ -371,34 +383,7 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
         elif flax_key_tuple[-1] in ["scale", "embedding"]:
             flax_key_tuple = flax_key_tuple[:-1] + ("weight",)
 
-        # adding batch stats from flax batch norm to pt
-        elif "mean" in flax_key_tuple[-1]:
-            flax_key_tuple = flax_key_tuple[:-1] + ("running_mean",)
-        elif "var" in flax_key_tuple[-1]:
-            flax_key_tuple = flax_key_tuple[:-1] + ("running_var",)
-
-        if "batch_stats" in flax_state:
-            flax_key = ".".join(flax_key_tuple[1:])  # Remove the params/batch_stats header
-        else:
-            flax_key = ".".join(flax_key_tuple)
-
-        # We also need to look at `pt_model_dict` and see if there are keys requiring further transformation.
-        special_pt_names = {}
-        # New `weight_norm` from https://github.com/huggingface/transformers/pull/24030
-        for key in pt_model_dict:
-            key_components = key.split(".")
-            name = None
-            if key_components[-3::2] == ["parametrizations", "original0"]:
-                name = key_components[-2] + "_g"
-            elif key_components[-3::2] == ["parametrizations", "original1"]:
-                name = key_components[-2] + "_v"
-            if name is not None:
-                key_components = key_components[:-3] + [name]
-                key_to_check = ".".join(key_components)
-                special_pt_names[key_to_check] = key
-
-        if flax_key in special_pt_names:
-            flax_key = special_pt_names[flax_key]
+        flax_key = ".".join(flax_key_tuple)
 
         if flax_key in pt_model_dict:
             if flax_tensor.shape != pt_model_dict[flax_key].shape:
