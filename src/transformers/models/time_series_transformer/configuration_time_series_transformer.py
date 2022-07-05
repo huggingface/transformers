@@ -15,7 +15,7 @@
 """ TimeSeriesTransformer model configuration """
 from typing import List, Optional
 
-from gluonts.time_feature import get_lags_for_frequency
+from gluonts.time_feature import get_lags_for_frequency, time_features_from_frequency_str
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -53,11 +53,9 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         scaling (`bool` default to `True`):
             Whether to scale the input targets.
         freq (`str`, *optional* default to `None`):
-            The frequency of the input time series. If `None`, the `lags_seq` and `time_features` must be provided.
+            The frequency of the input time series. If `None`, the `lags_seq` and `num_time_features` are set at the finest temporal resolution of 1 Second.
         lags_seq (`list` of `int`, *optional* default to `None`):
-            The lags of the input time series. Cannot be `None` if `freq` is `None`.
-        num_time_features (`int` default to 7):
-            The number of time features which is 7 when no `freq` is specified.
+            The lags of the input time series. If `None`, the `freq` is used to determine the lags.
         num_feat_dynamic_real (`int`, *optional* default to `0`):
             The number of dynamic real valued features.
         num_feat_static_cat (`int`, *optional* default to `0`):
@@ -104,9 +102,8 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         freq: Optional[str] = None,
         prediction_length: Optional[int] = None,
         context_length: Optional[int] = None,
-        # distr_output: DistributionOutput = StudentTOutput(),
+        # TODO distr_output: DistributionOutput = StudentTOutput(),
         lags_seq: Optional[List[int]] = None,
-        num_time_features: int = 7,
         scaling: bool = True,
         num_feat_dynamic_real: int = 0,
         num_feat_static_cat: int = 0,
@@ -126,15 +123,17 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         # time series specific parameters
         self.prediction_length = prediction_length
         self.context_length = context_length or prediction_length
-        self.freq = freq
+        self.freq = freq or "1S"
         # self.distr_output = distr_output
         self.input_size = input_size
-        self.num_time_features = num_time_features
-        self.lags_seq = lags_seq or get_lags_for_frequency(freq_str=freq or "1S")
+        self.num_time_features = (
+            len(time_features_from_frequency_str(freq_str=self.freq)) + 1
+        )  # +1 for the Age feature
+        self.lags_seq = lags_seq or get_lags_for_frequency(freq_str=self.freq)
         self.scaling = scaling
         self.num_feat_dynamic_real = num_feat_dynamic_real
-        self.num_feat_static_real = num_feat_static_real
-        self.num_feat_static_cat = num_feat_static_cat
+        self.num_feat_static_real = max(1, num_feat_static_real)
+        self.num_feat_static_cat = max(1, num_feat_static_cat)
         self.cardinality = cardinality if cardinality and num_feat_static_cat > 0 else [1]
         self.embedding_dimension = embedding_dimension or [min(50, (cat + 1) // 2) for cat in self.cardinality]
 
