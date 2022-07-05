@@ -8,7 +8,9 @@ import jax
 import jax.numpy as jnp
 from clip_model import CLIP
 from flax.training import checkpoints
-from transformers import OwlViTConfig, OwlViTForObjectDetection, OwlViTModel
+from transformers import OwlViTConfig, OwlViTModel, OwlViTForObjectDetection
+from transformers import CLIPTokenizer, OwlViTFeatureExtractor, OwlViTProcessor
+from huggingface_hub import Repository
 
 
 CONFIGS = {
@@ -298,9 +300,10 @@ def convert_clip_backbone(flax_params, torch_config):
 
 @torch.no_grad()
 def convert_owlvit_checkpoint(pt_backbone, flax_params, attn_params, pytorch_dump_folder_path, config_path=None):
-    """
-    Copy/paste/tweak model's weights to transformers design.
-    """
+
+    repo = Repository(pytorch_dump_folder_path, clone_from=f"adirik/{pytorch_dump_folder_path}")
+    repo.git_pull()
+
     if config_path is not None:
         config = OwlViTConfig.from_pretrained(config_path)
     else:
@@ -318,7 +321,24 @@ def convert_owlvit_checkpoint(pt_backbone, flax_params, attn_params, pytorch_dum
     copy_class_merge_token(hf_model, flax_params)
     copy_class_box_heads(hf_model, flax_params)
 
-    hf_model.save_pretrained(pytorch_dump_folder_path)
+    # Save model
+    hf_model.save_pretrained(repo.local_dir)
+
+    # Initialize feature extractor
+    feature_extractor = OwlViTFeatureExtractor(
+        size=config.vision_config.image_size, 
+        crop_size=config.vision_config.image_size
+    )
+    # Initialize tokenizer
+    tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32", pad_token='!', model_max_length=16)
+
+    # Initialize processor
+    processor = OwlViTProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer, return_tensors="pt", padding="max_length")
+    processor.save_pretrained(repo.local_dir)
+
+    repo.git_add()
+    repo.git_commit("Added model and processor")
+    repo.git_push()
 
 
 if __name__ == "__main__":
