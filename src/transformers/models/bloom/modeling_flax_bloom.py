@@ -30,6 +30,7 @@ from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen import combine_masks, make_causal_mask
 from flax.linen.attention import dot_product_attention_weights
 from flax.traverse_util import flatten_dict, unflatten_dict
+from flax.linen.activation import tanh
 from jax import lax
 
 from ...modeling_flax_outputs import (
@@ -329,6 +330,11 @@ class FlaxBloomAttention(nn.Module):
         outputs = (attn_output, attn_weights) if output_attentions else (attn_output,)
         return outputs        
 
+class BloomGELU(nn.Module):
+    def setup(self):
+        self.dtype = jnp.float32
+    def __call__(self, x):
+        return x * 0.5 * (1.0 + tanh(0.79788456 * x * (1 + 0.044715 * x * x)))
 
 class FlaxBloomMLP(nn.Module):
     config: BloomConfig
@@ -345,7 +351,7 @@ class FlaxBloomMLP(nn.Module):
         self.dense_h_to_4h = nn.Dense(4 * hidden_size, dtype=self.dtype, kernel_init=kernel_init)
         self.dense_4h_to_h = nn.Dense(hidden_size, dtype=self.dtype, kernel_init=kernel_init)
         self.hidden_dropout = nn.Dropout(self.config.hidden_dropout)
-        self.act = ACT2FN[self.config.activation_function]
+        self.act = BloomGELU()
 
     def __call__(self, hidden_states, residual, deterministic: bool = True):
         hidden_states = self.dense_h_to_4h(hidden_states)
@@ -363,7 +369,7 @@ class FlaxBloomMLP(nn.Module):
         else:
             intermediate_output = self.dense_4h_to_h(hidden_states)
 
-        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
+        hidden_states = self.hidden_dropout(intermediate_output, deterministic=deterministic)
 
         return hidden_states
 
@@ -396,6 +402,7 @@ class FlaxBloomBlock(nn.Module):
         deterministic: bool = True,
         init_cache: bool = False,
         output_attentions: bool = False,
+        use_cache: bool = False,
     ):
         layernorm_output = self.input_layernorm(hidden_states)
         # layer norm before saving residual if config calls for it
@@ -755,7 +762,7 @@ class FlaxBloomForCausalLMModule(nn.Module):
         hidden_states = outputs[0]
 
         if self.config.tie_word_embeddings:
-            shared_kernel = self.transformer.variables["params"]["wte"]["embedding"].T
+            shared_kernel = self.transformer.variables["params"]["word_embeddings"]["embedding"].T
             lm_logits = self.lm_head.apply({"params": {"kernel": shared_kernel}}, hidden_states)
         else:
             lm_logits = self.lm_head(hidden_states)
