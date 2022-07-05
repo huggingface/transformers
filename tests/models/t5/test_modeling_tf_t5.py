@@ -659,9 +659,9 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
         labels = tokenizer("Hi I am", return_tensors="tf").input_ids
 
         loss = model(input_ids, labels=labels).loss
-        mtf_score = -tf.math.reduce_sum(loss).numpy()
+        mtf_score = -tf.math.reduce_mean(loss).numpy()
 
-        EXPECTED_SCORE = -19.0845
+        EXPECTED_SCORE = -4.7710114
         self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
 
     @slow
@@ -685,9 +685,9 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
         labels = tokenizer("Hi I am", return_tensors="tf").input_ids
 
         loss = model(input_ids, labels=labels).loss
-        mtf_score = -tf.math.reduce_sum(loss).numpy()
+        mtf_score = -tf.math.reduce_mean(loss).numpy()
 
-        EXPECTED_SCORE = -59.0293
+        EXPECTED_SCORE = -14.759922
         self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
 
     @slow
@@ -709,9 +709,9 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
         labels = tokenizer("Hi I am", return_tensors="tf").input_ids
 
         loss = model(input_ids, labels=labels).loss
-        mtf_score = -tf.math.reduce_sum(loss).numpy()
+        mtf_score = -tf.math.reduce_mean(loss).numpy()
 
-        EXPECTED_SCORE = -60.7397
+        EXPECTED_SCORE = -7.594554
         self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
 
     @slow
