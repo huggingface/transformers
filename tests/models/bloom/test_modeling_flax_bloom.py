@@ -17,7 +17,7 @@ import numpy as np
 import timeout_decorator  # noqa
 
 from transformers import BloomConfig, is_flax_available
-from transformers.testing_utils import require_flax, require_sentencepiece, slow
+from transformers.testing_utils import require_flax, slow
 
 from ...generation.test_generation_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
@@ -33,7 +33,7 @@ if is_flax_available():
 
     import jax
     import jax.numpy as jnp
-    from transformers import FlaxBloomForCausalLM, FlaxBloomModel, BloomTokenizerFast
+    from transformers import FlaxBloomForCausalLM, FlaxBloomModel
 
 
 def prepare_opt_inputs_dict(config, input_ids, attention_mask=None, head_mask=None):
@@ -74,7 +74,7 @@ class FlaxBloomModelTester:
         self.use_labels = use_labels
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
-        self.n_layer = n_layer
+        self.num_hidden_layers = n_layer
         self.n_head = n_head
         self.hidden_act = hidden_act
         self.hidden_dropout = hidden_dropout
@@ -93,7 +93,7 @@ class FlaxBloomModelTester:
         config = BloomConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
-            n_layer=self.n_layer,
+            n_layer=self.num_hidden_layers,
             n_head=self.n_head,
             hidden_dropout=self.hidden_dropout,
             attention_dropout=self.attention_probs_dropout_prob,
@@ -120,23 +120,16 @@ class FlaxBloomModelTester:
         past_key_values = model.init_cache(input_ids.shape[0], max_length)
         attention_mask = jnp.ones((input_ids.shape[0], max_length), dtype="i4")
 
-        position_ids = jnp.broadcast_to(
-            jnp.arange(input_ids.shape[-1] - 1)[None, :],
-            (input_ids.shape[0], input_ids.shape[-1] - 1),
-        )
         outputs_cache = model(
             input_ids[:, :-1],
             attention_mask=attention_mask,
             past_key_values=past_key_values,
-            position_ids=position_ids,
         )
 
-        position_ids = jnp.array(input_ids.shape[0] * [[input_ids.shape[-1] - 1]], dtype="i4")
         outputs_cache_next = model(
             input_ids[:, -1:],
             attention_mask=attention_mask,
             past_key_values=outputs_cache.past_key_values,
-            position_ids=position_ids,
         )
 
         outputs = model(input_ids)
@@ -162,23 +155,16 @@ class FlaxBloomModelTester:
         )
 
         past_key_values = model.init_cache(input_ids.shape[0], max_length)
-        position_ids = jnp.broadcast_to(
-            jnp.arange(input_ids.shape[-1] - 1)[None, :],
-            (input_ids.shape[0], input_ids.shape[-1] - 1),
-        )
 
         outputs_cache = model(
             input_ids[:, :-1],
             attention_mask=attention_mask_cache,
             past_key_values=past_key_values,
-            position_ids=position_ids,
         )
-        position_ids = jnp.array(input_ids.shape[0] * [[input_ids.shape[-1] - 1]], dtype="i4")
         outputs_cache_next = model(
             input_ids[:, -1:],
             past_key_values=outputs_cache.past_key_values,
             attention_mask=attention_mask_cache,
-            position_ids=position_ids,
         )
 
         outputs = model(input_ids, attention_mask=attention_mask)
