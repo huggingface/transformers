@@ -686,10 +686,10 @@ try:
     if not (is_timm_available() and is_vision_available()):
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
-    from .utils import dummy_timm_objects
+    from .utils import dummy_timm_and_vision_objects
 
-    _import_structure["utils.dummy_timm_objects"] = [
-        name for name in dir(dummy_timm_objects) if not name.startswith("_")
+    _import_structure["utils.dummy_timm_and_vision_objects"] = [
+        name for name in dir(dummy_timm_and_vision_objects) if not name.startswith("_")
     ]
 else:
     _import_structure["models.deformable_detr"].extend(
@@ -3515,7 +3515,7 @@ if TYPE_CHECKING:
         if not (is_timm_available() and is_vision_available()):
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
-        from .utils.dummy_timm_objects import *
+        from .utils.dummy_timm_and_vision_objects import *
     else:
         from .models.deformable_detr import (
             DEFORMABLE_DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
