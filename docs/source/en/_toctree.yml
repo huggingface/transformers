@@ -176,12 +176,12 @@
       title: BEiT
     - local: model_doc/bert
       title: BERT
-    - local: model_doc/bertweet
-      title: Bertweet
     - local: model_doc/bert-generation
       title: BertGeneration
     - local: model_doc/bert-japanese
       title: BertJapanese
+    - local: model_doc/bertweet
+      title: Bertweet
     - local: model_doc/big_bird
       title: BigBird
     - local: model_doc/bigbird_pegasus
@@ -200,14 +200,14 @@
       title: CamemBERT
     - local: model_doc/canine
       title: CANINE
-    - local: model_doc/codegen
-      title: CodeGen
-    - local: model_doc/convnext
-      title: ConvNeXT
     - local: model_doc/clip
       title: CLIP
+    - local: model_doc/codegen
+      title: CodeGen
     - local: model_doc/convbert
       title: ConvBERT
+    - local: model_doc/convnext
+      title: ConvNeXT
     - local: model_doc/cpm
       title: CPM
     - local: model_doc/ctrl
@@ -250,14 +250,20 @@
       title: FSMT
     - local: model_doc/funnel
       title: Funnel Transformer
-    - local: model_doc/gptj
-      title: GPT-J
     - local: model_doc/glpn
       title: GLPN
+    - local: model_doc/openai-gpt
+      title: GPT
+    - local: model_doc/gpt2
+      title: GPT2
+    - local: model_doc/gptj
+      title: GPT-J
     - local: model_doc/gpt_neo
       title: GPT Neo
     - local: model_doc/gpt_neox
       title: GPT NeoX
+    - local: model_doc/groupvit
+      title: GroupViT
     - local: model_doc/herbert
       title: HerBERT
     - local: model_doc/hubert
@@ -286,12 +292,12 @@
       title: LUKE
     - local: model_doc/lxmert
       title: LXMERT
+    - local: model_doc/m2m_100
+      title: M2M100
     - local: model_doc/marian
       title: MarianMT
     - local: model_doc/maskformer
       title: MaskFormer
-    - local: model_doc/m2m_100
-      title: M2M100
     - local: model_doc/mbart
       title: MBart and MBart-50
     - local: model_doc/mctct
@@ -316,20 +322,6 @@
       title: NEZHA
     - local: model_doc/nystromformer
       title: Nyströmformer
-    - local: model_doc/openai-gpt
-      title: OpenAI GPT
-    - local: model_doc/gpt2
-      title: OpenAI GPT2
-    - local: model_doc/gptj
-      title: GPT-J
-    - local: model_doc/gpt_neo
-      title: GPT Neo
-    - local: model_doc/gpt_neox
-      title: GPT NeoX
-    - local: model_doc/groupvit
-      title: GroupViT
-    - local: model_doc/hubert
-      title: Hubert
     - local: model_doc/opt
       title: OPT
     - local: model_doc/pegasus
@@ -352,10 +344,10 @@
       title: REALM
     - local: model_doc/reformer
       title: Reformer
-    - local: model_doc/rembert
-      title: RemBERT
     - local: model_doc/regnet
       title: RegNet
+    - local: model_doc/rembert
+      title: RemBERT
     - local: model_doc/resnet
       title: ResNet
     - local: model_doc/retribert
@@ -396,10 +388,10 @@
       title: Transformer XL
     - local: model_doc/trocr
       title: TrOCR
-    - local: model_doc/unispeech
-      title: UniSpeech
     - local: model_doc/ul2
       title: UL2
+    - local: model_doc/unispeech
+      title: UniSpeech
     - local: model_doc/unispeech-sat
       title: UniSpeech-SAT
     - local: model_doc/van
@@ -412,10 +404,10 @@
       title: Vision Text Dual Encoder
     - local: model_doc/vit
       title: Vision Transformer (ViT)
-    - local: model_doc/vit_mae
-      title: ViTMAE
     - local: model_doc/visual_bert
       title: VisualBERT
+    - local: model_doc/vit_mae
+      title: ViTMAE
     - local: model_doc/wav2vec2
       title: Wav2Vec2
     - local: model_doc/wav2vec2-conformer
@@ -436,10 +428,10 @@
       title: XLM-RoBERTa-XL
     - local: model_doc/xlnet
       title: XLNet
-    - local: model_doc/xlsr_wav2vec2
-      title: XLSR-Wav2Vec2
     - local: model_doc/xls_r
       title: XLS-R
+    - local: model_doc/xlsr_wav2vec2
+      title: XLSR-Wav2Vec2
     - local: model_doc/yolos
       title: YOLOS
     - local: model_doc/yoso
