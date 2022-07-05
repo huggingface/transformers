@@ -215,7 +215,6 @@ class FlaxBloomScaledSoftmax(nn.Module):
 
 class FlaxBloomAttention(nn.Module):
     config: BloomConfig
-    layer_number: int = None
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
@@ -237,9 +236,6 @@ class FlaxBloomAttention(nn.Module):
                 f"`hidden_size` must be divisible by `num_heads` (got `hidden_size`: {self.hidden_size} and "
                 f"`num_heads`: {self.num_heads})."
             )
-
-        # Layer-wise attention scaling
-        self.norm_factor = jnp.sqrt(self.head_dim).astype(self.dtype) * self.layer_number
 
         self.attn_dropout = nn.Dropout(self.config.attention_dropout)
 
@@ -308,6 +304,7 @@ class FlaxBloomAttention(nn.Module):
         deterministic: bool = True,
         init_cache: bool = False,
         output_attentions: bool = False,
+        layer_number: int = None
     ):
         # TODO: this module __call__ needs checking for correctness of implementation.
         fused_qkv = self.query_key_value(hidden_states)
@@ -369,16 +366,19 @@ class FlaxBloomAttention(nn.Module):
         query = jnp.transpose(query, (1, 0, 2))
         key = jnp.transpose(key, (1, 2, 0))
 
-        # scaling factors
-        alpha = 1.0 / self.norm_factor
-        beta = 1.0 / self.layer_number
+        # Layer-wise attention scaling
+        # layer_number matters for attn scaling and should not be 0. see `FlaxBloomAttention` for its use.
+        layer_number = jnp.where(layer_number < 1, 1, layer_number)
+        norm_factor = jnp.sqrt(self.head_dim).astype(self.dtype) * layer_number
+        alpha = 1.0 / norm_factor
+        beta = 1.0 / layer_number
 
         # usual dot product attention
         attn_weights = beta * alibi + alpha * jnp.matmul(query, key)
         attn_weights = attn_weights.reshape(output_size)
 
         # TODO: apply softmax to attention weights
-        att_probs = self.scale_mask_softmax(attn_weights, attention_mask, causal_mask, self.layer_number)
+        att_probs = self.scale_mask_softmax(attn_weights, attention_mask, causal_mask, layer_number)
         if head_mask is not None:
             attention_probs = attention_probs * head_mask
 
@@ -451,14 +451,13 @@ class FlaxBloomMLP(nn.Module):
 
 class FlaxBloomBlock(nn.Module):
     config: BloomConfig
-    layer_number: int = None
     dtype: jnp.dtype = jnp.float32
     use_scan: bool = False
 
     def setup(self):
         self.input_layernorm = nn.LayerNorm(epsilon=self.config.layer_norm_epsilon, dtype=self.dtype)
 
-        self.self_attention = FlaxBloomAttention(self.config, layer_number=self.layer_number, dtype=self.dtype)
+        self.self_attention = FlaxBloomAttention(self.config, dtype=self.dtype)
         self.post_attention_layernorm = nn.LayerNorm(epsilon=self.config.layer_norm_epsilon, dtype=self.dtype)
 
         self.mlp = FlaxBloomMLP(self.config, dtype=self.dtype)
@@ -477,6 +476,7 @@ class FlaxBloomBlock(nn.Module):
         init_cache: bool = False,
         output_attentions: bool = False,
         use_cache: bool = False,
+        layer_number: int = None,
     ):
         if self.use_scan:
             hidden_states = hidden_states[0]
@@ -499,6 +499,7 @@ class FlaxBloomBlock(nn.Module):
             deterministic=deterministic,
             init_cache=init_cache,
             output_attentions=output_attentions,
+            layer_number=layer_number,
         )
 
         attention_output = attn_outputs[0]
@@ -666,9 +667,8 @@ class FlaxBloomBlockCollection(nn.Module):
     use_scan: bool = False
 
     def setup(self):
-        # layer_number matters for attn scaling and should not be 0. see `FlaxBloomAttention` for its use.
         self.blocks = [
-            FlaxBloomBlock(self.config, layer_number=max(1, i), name=str(i), dtype=self.dtype, use_scan=False)
+            FlaxBloomBlock(self.config, name=str(i), dtype=self.dtype, use_scan=False)
             for i in range(self.config.num_hidden_layers)
         ]
 
@@ -710,7 +710,7 @@ class FlaxBloomBlockCollection(nn.Module):
             hidden_states = hidden_states[0]
 
         else:
-            for block in self.blocks:
+            for layer_number, block in enumerate(self.blocks):
                 if output_hidden_states:
                     all_hidden_states += (hidden_states,)
 
@@ -721,6 +721,7 @@ class FlaxBloomBlockCollection(nn.Module):
                     deterministic=deterministic,
                     init_cache=init_cache,
                     output_attentions=output_attentions,
+                    layer_number=layer_number,
                 )
                 hidden_states = layer_outputs[0]
 
