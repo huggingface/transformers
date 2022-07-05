@@ -83,7 +83,6 @@ past_versions_testing = {
             ),
         },
     },
-    # Should we include `tensorflow_probability`?
     "tensorflow": {
         "2.8": {
             "tensorflow": "2.8.2",
@@ -106,11 +105,6 @@ past_versions_testing = {
             "tensorflow": "2.4.4",
             "install": "python3 -m pip install --no-cache-dir -U tensorflow==2.4.4",
             "base_docker": "nvidia/cuda:11.0.3-cudnn8-devel-ubuntu20.04",
-        },
-        "2.3": {
-            "tensorflow": "2.3.4",
-            "install": "python3 -m pip install --no-cache-dir -U tensorflow==2.3.4",
-            "base_docker": "nvidia/cuda:10.1-cudnn7-devel-ubuntu18.04",
         },
     },
 }
