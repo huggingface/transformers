@@ -86,29 +86,50 @@ class TFAlbertPreTrainingLoss:
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction=tf.keras.losses.Reduction.NONE
         )
-        # make sure only labels that are not equal to -100
-        # are taken into account as loss
-        masked_lm_active_loss = tf.not_equal(tf.reshape(tensor=labels["labels"], shape=(-1,)), -100)
-        masked_lm_reduced_logits = tf.boolean_mask(
-            tensor=tf.reshape(tensor=logits[0], shape=(-1, shape_list(logits[0])[2])),
-            mask=masked_lm_active_loss,
-        )
-        masked_lm_labels = tf.boolean_mask(
-            tensor=tf.reshape(tensor=labels["labels"], shape=(-1,)), mask=masked_lm_active_loss
-        )
-        sentence_order_active_loss = tf.not_equal(tf.reshape(tensor=labels["sentence_order_label"], shape=(-1,)), -100)
-        sentence_order_reduced_logits = tf.boolean_mask(
-            tensor=tf.reshape(tensor=logits[1], shape=(-1, 2)), mask=sentence_order_active_loss
-        )
-        sentence_order_label = tf.boolean_mask(
-            tensor=tf.reshape(tensor=labels["sentence_order_label"], shape=(-1,)), mask=sentence_order_active_loss
-        )
-        masked_lm_loss = loss_fn(y_true=masked_lm_labels, y_pred=masked_lm_reduced_logits)
-        sentence_order_loss = loss_fn(y_true=sentence_order_label, y_pred=sentence_order_reduced_logits)
-        masked_lm_loss = tf.reshape(tensor=masked_lm_loss, shape=(-1, shape_list(sentence_order_loss)[0]))
-        masked_lm_loss = tf.reduce_mean(input_tensor=masked_lm_loss, axis=0)
+        if self.config.tf_legacy_loss:
+            # make sure only labels that are not equal to -100
+            # are taken into account as loss
+            masked_lm_active_loss = tf.not_equal(tf.reshape(tensor=labels["labels"], shape=(-1,)), -100)
+            masked_lm_reduced_logits = tf.boolean_mask(
+                tensor=tf.reshape(tensor=logits[0], shape=(-1, shape_list(logits[0])[2])),
+                mask=masked_lm_active_loss,
+            )
+            masked_lm_labels = tf.boolean_mask(
+                tensor=tf.reshape(tensor=labels["labels"], shape=(-1,)), mask=masked_lm_active_loss
+            )
+            sentence_order_active_loss = tf.not_equal(
+                tf.reshape(tensor=labels["sentence_order_label"], shape=(-1,)), -100
+            )
+            sentence_order_reduced_logits = tf.boolean_mask(
+                tensor=tf.reshape(tensor=logits[1], shape=(-1, 2)), mask=sentence_order_active_loss
+            )
+            sentence_order_label = tf.boolean_mask(
+                tensor=tf.reshape(tensor=labels["sentence_order_label"], shape=(-1,)), mask=sentence_order_active_loss
+            )
+            masked_lm_loss = loss_fn(y_true=masked_lm_labels, y_pred=masked_lm_reduced_logits)
+            sentence_order_loss = loss_fn(y_true=sentence_order_label, y_pred=sentence_order_reduced_logits)
+            masked_lm_loss = tf.reshape(tensor=masked_lm_loss, shape=(-1, shape_list(sentence_order_loss)[0]))
+            masked_lm_loss = tf.reduce_mean(input_tensor=masked_lm_loss, axis=0)
 
-        return masked_lm_loss + sentence_order_loss
+            return masked_lm_loss + sentence_order_loss
+
+        # Clip negative labels to zero here to avoid NaNs and errors - those positions will get masked later anyway
+        unmasked_lm_losses = loss_fn(y_true=tf.nn.relu(labels["labels"]), y_pred=logits[0])
+        # make sure only labels that are not equal to -100
+        # are taken into account for the loss computation
+        lm_loss_mask = tf.cast(labels["labels"] != -100, dtype=unmasked_lm_losses.dtype)
+        masked_lm_losses = unmasked_lm_losses * lm_loss_mask
+        reduced_masked_lm_loss = tf.reduce_sum(masked_lm_losses) / tf.reduce_sum(lm_loss_mask)
+
+        sop_logits = tf.reshape(logits[1], (-1, 2))
+        # Clip negative labels to zero here to avoid NaNs and errors - those positions will get masked later anyway
+        unmasked_sop_loss = loss_fn(y_true=tf.nn.relu(labels["sentence_order_label"]), y_pred=sop_logits)
+        sop_loss_mask = tf.cast(labels["sentence_order_label"] != -100, dtype=unmasked_sop_loss.dtype)
+
+        masked_sop_loss = unmasked_sop_loss * sop_loss_mask
+        reduced_masked_sop_loss = tf.reduce_sum(masked_sop_loss) / tf.reduce_sum(sop_loss_mask)
+
+        return tf.reshape(reduced_masked_lm_loss + reduced_masked_sop_loss, (1,))
 
 
 class TFAlbertEmbeddings(tf.keras.layers.Layer):
