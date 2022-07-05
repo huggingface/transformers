@@ -44,10 +44,9 @@ def _as_period(val, freq):
     return pd.Period(val, freq)
 
 
-# TODO
-def process_start_field(freq):
-    # FieldName.START: _as_period(data[FieldName.START], self.freq),
-    pass
+def transform_start_field(batch, freq):
+    batch[FieldName.START] = [_as_period(entry, freq) for entry in batch[FieldName.START]]
+    return batch
 
 
 def create_transformation(config) -> Transformation:
