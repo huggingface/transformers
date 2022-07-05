@@ -40,19 +40,6 @@ else:
         "Swinv2PreTrainedModel",
     ]
 
-try:
-    if not is_tf_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_tf_swinv2"] = [
-        "TF_SWINV2_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "TFSwinv2ForImageClassification",
-        "TFSwinv2ForMaskedImageModeling",
-        "TFSwinv2Model",
-        "TFSwinv2PreTrainedModel",
-    ]
 
 if TYPE_CHECKING:
     from .configuration_swinv2 import SWINV2_PRETRAINED_CONFIG_ARCHIVE_MAP, Swinv2Config
@@ -71,19 +58,6 @@ if TYPE_CHECKING:
             Swinv2PreTrainedModel,
         )
 
-    try:
-        if not is_tf_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_tf_swinv2 import (
-            TF_SWINV2_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TFSwinv2ForImageClassification,
-            TFSwinv2ForMaskedImageModeling,
-            TFSwinv2Model,
-            TFSwinv2PreTrainedModel,
-        )
 
 else:
     import sys

@@ -2073,37 +2073,6 @@ class TFSwinPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
-TF_SWINV2_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
-class TFSwinv2ForImageClassification(metaclass=DummyObject):
-    _backends = ["tf"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
-
-
-class TFSwinv2ForMaskedImageModeling(metaclass=DummyObject):
-    _backends = ["tf"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
-
-
-class TFSwinv2Model(metaclass=DummyObject):
-    _backends = ["tf"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
-
-
-class TFSwinv2PreTrainedModel(metaclass=DummyObject):
-    _backends = ["tf"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
-
-
 TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 

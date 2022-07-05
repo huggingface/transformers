@@ -71,7 +71,6 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("segformer", "TFSegformerModel"),
         ("speech_to_text", "TFSpeech2TextModel"),
         ("swin", "TFSwinModel"),
-        ("swinv2", "TFSwinv2Model"),
         ("t5", "TFT5Model"),
         ("tapas", "TFTapasModel"),
         ("transfo-xl", "TFTransfoXLModel"),
@@ -171,7 +170,6 @@ TF_MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
     [
         ("deit", "TFDeiTForMaskedImageModeling"),
         ("swin", "TFSwinForMaskedImageModeling"),
-        ("swinv2", "TFSwinv2ForMaskedImageModeling"),
     ]
 )
 
@@ -185,7 +183,6 @@ TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("resnet", "TFResNetForImageClassification"),
         ("segformer", "TFSegformerForImageClassification"),
         ("swin", "TFSwinForImageClassification"),
-        ("swinv2", "TFSwinv2ForImageClassification"),
         ("vit", "TFViTForImageClassification"),
     ]
 )

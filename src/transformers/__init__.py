@@ -2486,15 +2486,6 @@ else:
             "TFSwinPreTrainedModel",
         ]
     )
-    _import_structure["models.swinv2"].extend(
-        [
-            "TF_SWINV2_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TFSwinv2ForImageClassification",
-            "TFSwinv2ForMaskedImageModeling",
-            "TFSwinv2Model",
-            "TFSwinv2PreTrainedModel",
-        ]
-    )
     _import_structure["models.t5"].extend(
         [
             "TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -4882,13 +4873,6 @@ if TYPE_CHECKING:
             TFSwinForMaskedImageModeling,
             TFSwinModel,
             TFSwinPreTrainedModel,
-        )
-        from .models.swinv2 import (
-            TF_SWINV2_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TFSwinv2ForImageClassification,
-            TFSwinv2ForMaskedImageModeling,
-            TFSwinv2Model,
-            TFSwinv2PreTrainedModel,
         )
         from .models.t5 import (
             TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST,
