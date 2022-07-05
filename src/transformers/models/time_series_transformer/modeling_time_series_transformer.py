@@ -14,7 +14,6 @@
 # limitations under the License.
 """ PyTorch TimeSeriesTransformer model. """
 
-
 import math
 import copy
 import random

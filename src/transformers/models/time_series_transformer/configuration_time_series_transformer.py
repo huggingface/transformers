@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ TimeSeriesTransformer model configuration """
+
 from typing import List, Optional
 
 from gluonts.time_feature import get_lags_for_frequency, time_features_from_frequency_str
