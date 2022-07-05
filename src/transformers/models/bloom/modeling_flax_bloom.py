@@ -350,9 +350,13 @@ class FlaxBloomAttention(nn.Module):
         # Reshape according to batch size
         query = jnp.transpose(query, (1, 0, 2))
         key = jnp.transpose(key, (1, 2, 0)) 
-        # usual dot product attention
+
+        # scaling factors
         alpha = (1.0 / self.norm_factor)
-        attn_weights = alibi + jnp.matmul(query, key)*alpha
+        beta = 1.0 / self.layer_number
+
+        # usual dot product attention
+        attn_weights = beta * alibi + alpha * jnp.matmul(query, key)
 
         # TODO: apply softmax to attention weights
         
