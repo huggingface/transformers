@@ -54,7 +54,7 @@ LAYOUTLMV3_START_DOCSTRING = r"""
     behavior.
 
     Parameters:
-        config ([`LayoutLMv2Config`]): Model configuration class with all the parameters of the model.
+        config ([`LayoutLMv3Config`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -76,7 +76,7 @@ LAYOUTLMV3_INPUTS_DOCSTRING = r"""
             y1) represents the position of the lower right corner.
             {1}
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Batch of document images. Each Image is divided into patches of shape `(num_channels, config.patch_size,
+            Batch of document images. Each image is divided into patches of shape `(num_channels, config.patch_size,
             config.patch_size)` and the total number of patches (=`patch_sequence_length`) equals to
             `((height / config.patch_size) * (width / config.patch_size))`.
 
@@ -120,7 +120,7 @@ LAYOUTLMV3_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-LAYOUTLMV3MODEL_INPUTS_DOCSTRING = r"""
+LAYOUTLMV3_INPUT_CLARIFICATION = r"""
             Note that `sequence_length = token_sequence_length + patch_sequence_length + 1` where `1` is for
             [CLS] token. See `pixel_values` for `patch_sequence_length`.
 """
@@ -771,7 +771,7 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
         return embeddings
 
     @add_start_docstrings_to_model_forward(
-        LAYOUTLMV3_INPUTS_DOCSTRING.format("batch_size, token_sequence_length", LAYOUTLMV3MODEL_INPUTS_DOCSTRING)
+        LAYOUTLMV3_INPUTS_DOCSTRING.format("batch_size, token_sequence_length", LAYOUTLMV3_INPUT_CLARIFICATION)
     )
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
