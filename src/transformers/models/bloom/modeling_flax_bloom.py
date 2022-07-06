@@ -119,11 +119,7 @@ BLOOM_INPUTS_DOCSTRING = r"""
 """
 
 
-def flax_unsqueeze(x, axis):
-    return jnp.expand_dims(x, axis)
-
-
-def build_alibi_tensor_flax(max_seq_len, n_head, dtype):
+def build_alibi_tensor_flax(attention_mask, n_head, dtype):
     def get_slopes(n):
         def get_slopes_power_of_2(n):
             start = 2 ** (-(2 ** -(math.log2(n) - 3)))
@@ -139,21 +135,24 @@ def build_alibi_tensor_flax(max_seq_len, n_head, dtype):
                 + get_slopes(2 * closest_power_of_2)[0::2][: n - closest_power_of_2]
             )
 
-    slopes = jnp.array(get_slopes(n_head))[None, :, None, None]
-    arange_tensor = jnp.arange(max_seq_len, dtype=dtype)[None, None, None, :]
-
     # Note: alibi will added to the attention bias that will be applied to the query, key product of attention
     # => therefore alibi will have to be of shape (batch_size, num_heads, query_length, key_length)
     # => here we set (batch_size=1, num_heads=n_head, query_length=1, key_length=max_length)
-    # => the batch_size and query_length dimension will then be broadcasted correctly
+    # => the query_length dimension will then be broadcasted correctly
     # This is more or less identical to T5's relative position bias:
     # https://github.com/huggingface/transformers/blob/f681437203baa7671de3174b0fa583c349d9d5e1/src/transformers/models/t5/modeling_flax_t5.py#L426
     # batch_size = 1, n_head = n_head, query_length
-    batch_size = query_length = 1
+    batch_size, key_length = attention_mask.shape
     num_heads = n_head
-    key_length = arange_tensor.shape[-1]
+    query_length = 1
 
-    alibi = slopes * jnp.broadcast_to(arange_tensor, (batch_size, num_heads, query_length, key_length))
+    slopes = jnp.array(get_slopes(n_head))[None, :, None, None]
+    arange_tensor = attention_mask.cumsum(-1, dtype=dtype)[:, None, None, :] - 1
+
+    slopes_broadcasted = jnp.broadcast_to(slopes, (batch_size, num_heads, query_length, key_length))
+    arange_broadcasted = jnp.broadcast_to(arange_tensor, (batch_size, num_heads, query_length, key_length))
+
+    alibi = slopes_broadcasted * arange_broadcasted
     return alibi
 
 
@@ -279,9 +278,6 @@ class FlaxBloomAttention(nn.Module):
             jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
             jnp.full(attention_mask.shape, -1e9).astype(self.dtype),
         )
-
-#        if alibi.shape[1:] != (1, 1):
-#            import ipdb; ipdb.set_trace()
 
         attention_bias = attention_bias + alibi
 
