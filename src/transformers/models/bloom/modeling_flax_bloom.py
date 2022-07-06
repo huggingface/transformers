@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Flax BLOOM model. """
+""" Flax BLOOM model."""
 # TODO: see todos throughout this file
 # TODO: check correctness against pytorch implementation
 # TODO: add unit tests
@@ -28,7 +28,7 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
-from flax.linen import combine_masks, make_causal_mask, dot_product_attention_weights
+from flax.linen import combine_masks, dot_product_attention_weights, make_causal_mask
 from flax.linen.activation import tanh
 from flax.linen.partitioning import scan_with_axes
 from flax.traverse_util import flatten_dict, unflatten_dict
@@ -342,7 +342,7 @@ class FlaxBloomMLP(nn.Module):
         hidden_states = self.act(hidden_states)
 
         # TODO: this code block is from the pytorch implementation. needs changing to work.
-#        if self.pretraining_tp > 1 and self.slow_but_exact:
+        #        if self.pretraining_tp > 1 and self.slow_but_exact:
         if False:
             intermediate_output = jnp.zeros_like(residual)
             slices = self.dense_4h_to_h.weight.shape[-1] / self.pretraining_tp
@@ -685,7 +685,7 @@ class FlaxBloomModule(nn.Module):
         batch_size, curr_seq_len, _ = hidden_states.shape
 
         alibi = build_alibi_tensor_flax(curr_seq_len, self.config.n_head, hidden_states.dtype)
-        if attention_mask is not None:
+        if False and attention_mask is not None:
             alibi = shift_alibi_for_padding(alibi, attention_mask, batch_size)
 
         past_key_values = () if use_cache else None  # TODO: come back to this line
