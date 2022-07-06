@@ -474,11 +474,20 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 
         input_ids = ids_tensor([2, 5], self.model_tester.vocab_size)
         attention_mask = torch.ones_like(input_ids)
+
+        # normal generate
+        output_sequences = model.generate(input_ids, attention_mask=attention_mask)
+
+        # normal pos ids
+        position_ids = attention_mask.cumsum(-1) - 1
+        output_sequences_pos_ids = model.generate(input_ids, attention_mask=attention_mask, position_ids=position_ids)
+
         # make very different position_ids
         position_ids = 20 * attention_mask
+        output_sequences_pos_ids_diff = model.generate(input_ids, attention_mask=attention_mask, position_ids=position_ids)
 
-        output_sequences_pos_ids = model.generate(input_ids, attention_mask=attention_mask, position_ids=position_ids)
-        output_sequences = model.generate(input_ids, attention_mask=attention_mask)
+        self.assertTrue(output_sequences.cpu().tolist() == output_sequences_pos_ids.cpu().tolist())
+        self.assertFalse(output_sequences.cpu().tolist() == output_sequences_pos_ids_diff.cpu().tolist())
 
 
 @require_torch
