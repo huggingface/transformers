@@ -466,6 +466,20 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
         self.assertTrue(torch.all(attn_probs[:, :, 5, 2:6] != 0))
         self.assertTrue(torch.all(attn_probs[:, :, 5, :2] == 0))
 
+    def test_generate_position_ids(self):
+        model = GPTNeoForCausalLM.from_pretrained("valhalla/gpt-neo-random-tiny").eval()
+        model.config.eos_token_id = None
+        model.config.max_length = 15
+        model.config.do_sample = False
+
+        input_ids = ids_tensor([2, 5], self.model_tester.vocab_size)
+        attention_mask = torch.ones_like(input_ids)
+        # make very different position_ids
+        position_ids = 20 * attention_mask
+
+        output_sequences_pos_ids = model.generate(input_ids, attention_mask=attention_mask, position_ids=position_ids)
+        output_sequences = model.generate(input_ids, attention_mask=attention_mask)
+
 
 @require_torch
 class GPTNeoModelLanguageGenerationTest(unittest.TestCase):

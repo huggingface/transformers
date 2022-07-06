@@ -625,6 +625,10 @@ class GenerationMixin:
                 model_kwargs["attention_mask"] = torch.cat(
                     [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1
                 )
+            if "position_ids" in model_kwargs:
+                position_ids = model_kwargs["position_ids"]
+                # increase `position_ids`
+                model_kwargs["position_ids"] = torch.concat([position_ids, position_ids[:, -1:] + 1], dim=-1)
 
         return model_kwargs
 
