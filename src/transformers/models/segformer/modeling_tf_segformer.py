@@ -789,16 +789,13 @@ class TFSegformerForSemanticSegmentation(TFSegformerPreTrainedModel):
         # compute weighted loss
         loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction="none")
 
-        # Adapted from https://www.tensorflow.org/text/tutorials/transformer#loss_and_metrics.
-        # Utility to mask the index to ignore during computing the loss.
         def masked_loss(real, pred):
-            mask = tf.math.logical_not(tf.math.equal(real, self.config.semantic_loss_ignore_index))
-            loss_ = loss_fct(real, pred)
-            mask = tf.cast(mask, dtype=loss_.dtype)
-            loss_ *= mask
+            unmasked_loss = loss_fct(real, pred)
+            mask = tf.cast(real != self.config.semantic_loss_ignore_index, dtype=unmasked_loss.dtype)
+            unmasked_loss *= mask
             # Reduction strategy in the similar spirit with
             # https://github.com/huggingface/transformers/blob/main/src/transformers/modeling_tf_utils.py#L210
-            reduced_masked_loss = tf.reduce_sum(loss_) / tf.reduce_sum(mask)
+            reduced_masked_loss = tf.reduce_sum(unmasked_loss) / tf.reduce_sum(mask)
             return tf.reshape(reduced_masked_loss, (1,))
 
         return masked_loss(labels, upsampled_logits)
