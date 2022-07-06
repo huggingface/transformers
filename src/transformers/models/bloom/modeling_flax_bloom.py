@@ -54,8 +54,8 @@ _TOKENIZER_FOR_DOC = "BloomTokenizer"
 def shift_alibi_for_padding(alibi, attention_mask, batch_size):
     if jnp.isin(0, attention_mask):
         unpadded_indices = nn.relu(lax.cumsum(attention_mask, axis=1) - 1)
-        reshaped_alibi = jnp.reshape(alibi, (batch_size, int(alibi.shape[0]/batch_size), alibi.shape[-1]))
-        
+        reshaped_alibi = jnp.reshape(alibi, (batch_size, int(alibi.shape[0] / batch_size), alibi.shape[-1]))
+
         final_alibi = []
         for i in range(reshaped_alibi.shape[0]):
             final_alibi.append(jnp.take_along_axis(reshaped_alibi[i], jnp.expand_dims(unpadded_indices[i], 0), -1))
@@ -688,7 +688,6 @@ class FlaxBloomModule(nn.Module):
         if attention_mask is not None:
             alibi = shift_alibi_for_padding(alibi, attention_mask, batch_size)
 
-
         past_key_values = () if use_cache else None  # TODO: come back to this line
         # TODO: how to handle alibi? build alibi tensor here?
 
@@ -798,6 +797,7 @@ class FlaxBloomForCausalLMModule(nn.Module):
 # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoForCausalLM with GPTNeo->Bloom
 class FlaxBloomForCausalLM(FlaxBloomPreTrainedModel):
     module_class = FlaxBloomForCausalLMModule
+
     # TODO: check if this class is correct / take out position ids
     def prepare_inputs_for_generation(self, input_ids, max_length, attention_mask: Optional[jnp.DeviceArray] = None):
         # initializing the cache
