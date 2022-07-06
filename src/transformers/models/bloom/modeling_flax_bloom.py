@@ -221,18 +221,10 @@ class FlaxBloomAttention(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        # TODO: make sure these affect behavior correctly
-        self.pretraining_tp = self.config.pretraining_tp
-        self.slow_but_exact = self.config.slow_but_exact
-
         self.hidden_size = self.config.hidden_size
         self.num_heads = self.config.n_head
         self.head_dim = self.hidden_size // self.num_heads
-        self.split_size = self.hidden_size
-        # TODO: deal with softmax
         self.attention_softmax_in_fp32 = self.config.attention_softmax_in_fp32
-        # TODO: deal with hidden dropout
-        self.hidden_dropout = self.config.hidden_dropout
 
         if self.head_dim * self.num_heads != self.hidden_size:
             raise ValueError(
@@ -240,8 +232,7 @@ class FlaxBloomAttention(nn.Module):
                 f"`num_heads`: {self.num_heads})."
             )
 
-        self.attn_dropout = nn.Dropout(self.config.attention_dropout)
-
+        # Scaled softmax
         self.scale_mask_softmax = FlaxBloomScaledSoftmax(
             self.config,
             attention_mask_func,
@@ -259,12 +250,13 @@ class FlaxBloomAttention(nn.Module):
         self.attention_dropout = nn.Dropout(self.config.attention_dropout)
 
     def _split_heads(self, hidden_states):
-        return hidden_states.reshape(hidden_states.shape[:2] + (self.num_heads, self.head_dim))
+        return hidden_states.reshape(hidden_states.shape[:-1] + (self.num_heads, 3 * self.head_dim))
 
     def _merge_heads(self, hidden_states):
         return hidden_states.reshape(hidden_states.shape[:2] + (self.hidden_size,))
 
     @nn.compact
+    # Copied from transformers.models.gptj.modeling_flax_gptj.FlaxGPTJAttention._concatenate_to_cache
     def _concatenate_to_cache(self, key, value, query, attention_mask):
         """
         This function takes projected key, value states from a single input token and concatenates the states to cached
@@ -309,12 +301,9 @@ class FlaxBloomAttention(nn.Module):
         output_attentions: bool = False,
         layer_number: int = None,
     ):
-        batch_size, sequence, hidden_size = hidden_states.shape
-
         fused_qkv = self.query_key_value(hidden_states)
 
-        new_tensor_shape = fused_qkv.shape[:-1] + (self.num_heads, 3 * self.head_dim)
-        fused_qkv = fused_qkv.reshape(new_tensor_shape)
+        fused_qkv = self._split_heads(fused_qkv)
 
         query, key, value = jnp.split(fused_qkv, 3, axis=-1)
 
@@ -337,6 +326,8 @@ class FlaxBloomAttention(nn.Module):
         if attention_mask is not None:
             attention_mask = jnp.broadcast_to(jnp.expand_dims(attention_mask, axis=(-3, -2)), causal_mask.shape)
             attention_mask = combine_masks(attention_mask, causal_mask)
+        else:
+            attention_mask = causal_mask
 
         dropout_rng = None
         if not deterministic and self.config.attention_dropout > 0.0:
@@ -347,14 +338,12 @@ class FlaxBloomAttention(nn.Module):
         if self.has_variable("cache", "cached_key") or init_cache:
             key, value, attention_mask = self._concatenate_to_cache(key, value, query, attention_mask)
 
-        attention_bias = None
         # transform boolean mask into float mask
-        if attention_mask is not None:
-            attention_bias = lax.select(
-                attention_mask > 0,
-                jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
-                jnp.full(attention_mask.shape, -1e9).astype(self.dtype),
-            )
+        attention_bias = lax.select(
+            attention_mask > 0,
+            jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
+            jnp.full(attention_mask.shape, -1e9).astype(self.dtype),
+        )
 
         # Reshape input tensors
         output_size = (query.shape[0], query.shape[2], query.shape[1], key.shape[1])
@@ -371,7 +360,7 @@ class FlaxBloomAttention(nn.Module):
 
         # Layer-wise attention scaling
         # layer_number matters for attn scaling and should not be 0. see `FlaxBloomAttention` for its use.
-        layer_number = jnp.where(layer_number < 1, 1, layer_number)
+        layer_number = jax.lax.max(1, layer_number)
         norm_factor = jnp.sqrt(self.head_dim).astype(self.dtype) * layer_number
         alpha = 1.0 / norm_factor
         beta = 1.0 / layer_number
@@ -702,7 +691,7 @@ class FlaxBloomBlockCollection(nn.Module):
                 if output_hidden_states:
                     all_hidden_states += (hidden_states,)
 
-                
+
                 layer_outputs = FlaxBloomBlock(self.config, name=str(layer_number), dtype=self.dtype, use_scan=False)(
                     hidden_states,
                     alibi=alibi,
