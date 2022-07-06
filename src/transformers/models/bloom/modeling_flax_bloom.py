@@ -311,8 +311,6 @@ class FlaxBloomAttention(nn.Module):
     ):
         batch_size, sequence, hidden_size = hidden_states.shape
 
-        alibi = jnp.broadcast_to(alibi[None, :], (batch_size,) + alibi.shape).reshape((-1,) + alibi.shape[1:])
-
         fused_qkv = self.query_key_value(hidden_states)
 
         new_tensor_shape = fused_qkv.shape[:-1] + (self.num_heads, 3 * self.head_dim)
@@ -771,8 +769,11 @@ class FlaxBloomModule(nn.Module):
         # do post-embedding layernorm
         hidden_states = self.word_embeddings_layernorm(inputs_embeds)
 
-        curr_seq_len = hidden_states.shape[1]
+        batch_size, curr_seq_len, _ = hidden_states.shape
         alibi = build_alibi_tensor_flax(curr_seq_len, self.config.n_head, hidden_states.dtype)
+        # TODO put repeat here
+        alibi = jnp.broadcast_to(alibi[None, :], (batch_size,) + alibi.shape).reshape((-1,) + alibi.shape[1:])
+
 
         past_key_values = () if use_cache else None  # TODO: come back to this line
         # TODO: how to handle alibi? build alibi tensor here?
