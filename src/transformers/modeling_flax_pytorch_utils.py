@@ -209,11 +209,11 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
                 continue
 
             # also add unexpected weight so that warning is thrown
-            flax_state_dict[("params",) + flax_key] = jnp.asarray(flax_tensor)
+            flax_state_dict[("params",) + flax_key] = jnp.asarray(flax_tensor) if not is_bfloat_16 else jnp.asarray(flax_tensor, dtype=jnp.bfloat16)
 
         else:
             # also add unexpected weight so that warning is thrown
-            flax_state_dict[flax_key] = jnp.asarray(flax_tensor)
+            flax_state_dict[flax_key] = jnp.asarray(flax_tensor) if not is_bfloat_16 else jnp.asarray(flax_tensor, dtype=jnp.bfloat16)
 
     return unflatten_dict(flax_state_dict)
 
@@ -290,11 +290,11 @@ def convert_pytorch_sharded_state_dict_to_flax(shard_filenames, flax_model):
                     continue
 
                 # also add unexpected weight so that warning is thrown
-                flax_state_dict[("params",) + flax_key] = jnp.asarray(flax_tensor) if not is_bfloat_16 else jnp.asarray(flax_tensor, dtype=jnp.bfloat16)
+                flax_state_dict[("params",) + flax_key] = jnp.asarray(flax_tensor)
 
             else:
                 # also add unexpected weight so that warning is thrown
-                flax_state_dict[flax_key] = jnp.asarray(flax_tensor) if not is_bfloat_16 else jnp.asarray(flax_tensor, dtype=jnp.bfloat16)
+                flax_state_dict[flax_key] = jnp.asarray(flax_tensor)
     return unflatten_dict(flax_state_dict)
 
 
