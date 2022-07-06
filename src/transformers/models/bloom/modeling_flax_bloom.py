@@ -234,49 +234,59 @@ class FlaxBloomAttention(nn.Module):
         output_attentions: bool = False,
         layer_number: int = None,
     ):
-        batch_size = hidden_states.shape[0]
+        batch_size, seq_length = hidden_states.shape[:2]
 
         # proj q, k, v
         fused_qkv = self.query_key_value(hidden_states)
         fused_qkv = self._split_heads(fused_qkv)
         query, key, value = jnp.split(fused_qkv, 3, axis=-1)
 
-        query_length, key_length = query.shape[1], key.shape[1]
+        causal_attention_mask = make_causal_mask(attention_mask, dtype="bool")
 
-        causal_mask = make_causal_mask(jnp.ones((1, hidden_states.shape[1]), dtype="bool"), dtype="bool")
+        # for fast decoding causal attention mask should be shifted
+        causal_attention_mask_shift = (
+            self.variables["cache"]["cache_index"] if self.has_variable("cache", "cached_key") else 0
+        )
 
+        # fast decoding for generate requires special attention_mask
         if self.has_variable("cache", "cached_key"):
-            mask_shift = self.variables["cache"]["cache_index"]
             max_decoder_length = self.variables["cache"]["cached_key"].shape[1]
-            causal_mask = lax.dynamic_slice(
-                causal_mask, (0, 0, mask_shift, 0), (1, 1, query_length, max_decoder_length)
+            causal_attention_mask = jax.lax.dynamic_slice(
+                causal_attention_mask,
+                (0, 0, causal_attention_mask_shift, 0),
+                (1, 1, seq_length, max_decoder_length),
             )
-        else:
-            causal_mask = causal_mask[:, :, :query_length, :key_length]
 
-        causal_mask = jnp.broadcast_to(causal_mask, (batch_size,) + causal_mask.shape[1:])
-
-        # create attention mask
-        if attention_mask is not None:
-            attention_mask = jnp.broadcast_to(jnp.expand_dims(attention_mask, axis=(-3, -2)), causal_mask.shape)
-            attention_mask = combine_masks(attention_mask, causal_mask)
-        else:
-            attention_mask = causal_mask
+        # broadcast causal attention mask & attention mask to fit for merge
+        causal_attention_mask = jnp.broadcast_to(
+            causal_attention_mask, (batch_size,) + causal_attention_mask.shape[1:]
+        )
+        attention_mask = jnp.broadcast_to(jnp.expand_dims(attention_mask, axis=(-3, -2)), causal_attention_mask.shape)
+        attention_mask = combine_masks(attention_mask, causal_attention_mask)
 
         dropout_rng = None
         if not deterministic and self.config.attention_dropout > 0.0:
             dropout_rng = self.make_rng("dropout")
+
+        #        print("layer")
+        #
+        #        if init_cache:
+        #            print("init_cache")
 
         # During fast autoregressive decoding, we feed one position at a time,
         # and cache the keys and values step by step.
         if self.has_variable("cache", "cached_key") or init_cache:
             key, value, attention_mask = self._concatenate_to_cache(key, value, query, attention_mask)
 
+        #        if hidden_states.shape[:2] != (1, 1) and hidden_states.shape[1] < 10:
+        #            import ipdb; ipdb.set_trace()
+
         # transform boolean mask into float mask
+        mask_value = jnp.finfo(self.dtype).min
         attention_bias = lax.select(
             attention_mask > 0,
             jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
-            jnp.full(attention_mask.shape, -1e9).astype(self.dtype),
+            jnp.full(attention_mask.shape, mask_value).astype(self.dtype),
         )
 
         attention_bias = attention_bias + alibi
@@ -493,10 +503,9 @@ class FlaxBloomPreTrainedModel(FlaxPreTrainedModel):
         # init input variables to retrieve cache
         input_ids = jnp.ones((batch_size, max_length))
         attention_mask = jnp.ones_like(input_ids)
-        position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
 
         init_variables = self.module.init(
-            jax.random.PRNGKey(0), input_ids, attention_mask, position_ids, return_dict=False, init_cache=True
+            jax.random.PRNGKey(0), input_ids, attention_mask, return_dict=False, init_cache=True
         )
         return unfreeze(init_variables["cache"])
 
@@ -535,13 +544,12 @@ class FlaxBloomPreTrainedModel(FlaxPreTrainedModel):
         inputs = {"params": params or self.params}
 
         # if past_key_values are passed then cache is already initialized a private flag init_cache has to be passed down to ensure cache is used. It has to be made sure that cache is marked as mutable so that it can be changed by FlaxBloomAttention module
-        # TODO: check with patrick
-        # if isinstance(past_key_values, jnp.ndarray):
-        #     inputs["cache"] = past_key_values
-        #     mutable = ["cache"]
-        # else:
-        #     mutable = False
-        mutable = False
+        if past_key_values:
+            inputs["cache"] = past_key_values
+            mutable = ["cache"]
+        else:
+            mutable = False
+
         outputs = self.module.apply(
             inputs,
             jnp.array(input_ids, dtype="i4"),
