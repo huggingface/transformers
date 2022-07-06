@@ -1189,7 +1189,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         prefetch: bool = True,
     ):
         """
-        Wraps a HuggingFace `datasets.Dataset` as a `tf.data.Dataset` with collation and batching. This method is
+        Wraps a HuggingFace [`~datasets.Dataset`] as a `tf.data.Dataset` with collation and batching. This method is
         designed to create a "ready-to-use" dataset that can be passed directly to Keras methods like `fit()` without
         further modification. The method will drop columns from the dataset if they don't match input names for the
         model. If you want to specify the column names to return rather than using the names that match this model, we
@@ -1197,7 +1197,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         Args:
             dataset (`Any`):
-                A `datasets.Dataset` to be wrapped as a `tf.data.Dataset`.
+                A [~`datasets.Dataset`] to be wrapped as a `tf.data.Dataset`.
             batch_size (`int`, defaults to 8):
                 The size of batches to return.
             shuffle (`bool`, defaults to `True`):
