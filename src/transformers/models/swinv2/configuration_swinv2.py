@@ -29,7 +29,7 @@ SWINV2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class Swinv2Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Swinv2Model`]. It is used to instantiate a Swinv2
+    This is the configuration class to store the configuration of a [`Swinv2Model`]. It is used to instantiate a Swin v2
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Swinv2
     [microsoft/swinv2_tiny_patch4_windows8_256](https://huggingface.co/microsoft/swinv2_tiny_patch4_windows8_256)
