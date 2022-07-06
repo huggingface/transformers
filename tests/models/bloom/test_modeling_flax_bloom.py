@@ -16,7 +16,8 @@ import unittest
 import numpy as np
 import timeout_decorator  # noqa
 
-from transformers import BloomConfig, is_flax_available
+from transformers import BloomConfig, is_flax_available, BloomTokenizerFast
+from transformers.utils.import_utils import is_torch_cuda_available
 from transformers.testing_utils import require_flax, slow
 
 from ...generation.test_generation_flax_utils import FlaxGenerationTesterMixin
@@ -34,6 +35,7 @@ if is_flax_available():
     import jax
     import jax.numpy as jnp
     from transformers import FlaxBloomForCausalLM, FlaxBloomModel
+    from transformers.models.bloom.modeling_flax_bloom import build_alibi_tensor_flax
 
 
 def prepare_opt_inputs_dict(config, input_ids, attention_mask=None, head_mask=None):
@@ -172,7 +174,6 @@ class FlaxBloomModelTester:
         diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
-
 @require_flax
 class FlaxBloomModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTesterMixin):
     all_model_classes = (FlaxBloomModel, FlaxBloomForCausalLM) if is_flax_available() else ()
@@ -198,3 +199,45 @@ class FlaxBloomModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGeneration
             input_ids = np.ones((1, 1)) * model.config.eos_token_id
             outputs = model(input_ids)
             self.assertIsNotNone(outputs)
+    
+
+#@slow
+@require_flax
+class FlaxBloomGenerationTest(unittest.TestCase):
+    all_model_classes = (FlaxBloomForCausalLM) if is_flax_available() else ()
+    all_generative_model_classes = () if is_flax_available() else ()
+
+    def setUp(self):
+        self.model_id = "bigscience/bloom-350m"
+        self.tokenizer = BloomTokenizerFast.from_pretrained(self.model_id, padding_side="left")
+        self.model_tester = FlaxBloomModelTester(self)
+        self.model = FlaxBloomForCausalLM.from_pretrained(self.model_id, from_pt=True)
+
+    def test_model_batched_gen(self):
+        # tests if the model outputs the same generation for the same batched input
+        input_sentences = ["Hello there is this string is definitely longer I believe that", "Hello there is this string is definitely longer I believe that"]
+        inputs = self.tokenizer(input_sentences, return_tensors="np", padding=True, truncation=True)
+        sequences_fx = self.model.generate(**inputs, max_length=20).sequences
+        self.assertEqual(sequences_fx[0], sequences_fx[1])
+    
+    def test_model_batched_padding_left(self):
+        # tests if the model outputs the same generation for an input that is part of a batch
+        # and a single input
+        input_sentences_batch = ["Hello there is this string is definitely longer I believe that", "Hi I want to order"]
+        inputs = self.tokenizer(input_sentences_batch, return_tensors="np", padding=True, truncation=True)
+        sequences_fx_batch = self.model.generate(**inputs, max_length=20).sequences
+
+        input_sentence_simple = "Hi I want to order"
+        inputs_simple = self.tokenizer(input_sentence_simple, return_tensors="np")
+        sequences_fx_simple = self.model.generate(**inputs_simple, max_length=20).sequences
+
+        self.assertEqual(sequences_fx_batch[1][6:].tolist(), sequences_fx_simple[0][:-6].tolist())
+
+@require_flax
+class FlaxBloomConversionTest(unittest.TestCase):
+    def setup(self):
+        self.model_tester = FlaxBloomConversionTest(self)
+    
+    def test_alibi_padding(self):
+        # example_attn_mask = 
+        pass
