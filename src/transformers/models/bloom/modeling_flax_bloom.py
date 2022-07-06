@@ -171,7 +171,7 @@ class FlaxBloomAttention(nn.Module):
 
         self.query_key_value = dense(self.hidden_size * 3)
         self.dense = dense(self.hidden_size)
-        self.attention_dropout = nn.Dropout(self.config.attention_dropout)
+        self.resid_dropout = nn.Dropout(rate=self.config.hidden_dropout)
 
     def _split_heads(self, hidden_states):
         return hidden_states.reshape(hidden_states.shape[:-1] + (self.num_heads, 3 * self.head_dim))
@@ -284,9 +284,13 @@ class FlaxBloomAttention(nn.Module):
             precision=None,
         )
 
+        if head_mask is not None:
+            attn_weights = attn_weights * head_mask
+
         attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value)
         attn_output = self._merge_heads(attn_output)
         attn_output = self.dense(attn_output)
+        attn_output = self.resid_dropout(attn_output, deterministic=deterministic)
 
         attn_output = attn_output + residual
 
