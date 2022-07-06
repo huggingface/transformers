@@ -51,6 +51,21 @@ BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_values_length: int = 0):
+    """
+    Make causal mask used for bi-directional self-attention.
+    """
+    bsz, tgt_len = input_ids_shape
+    mask = torch.full((tgt_len, tgt_len), torch.tensor(float("-inf")))
+    mask_cond = torch.arange(mask.size(-1))
+    mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
+    mask = mask.to(dtype)
+
+    if past_key_values_length > 0:
+        mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype), mask], dim=-1)
+    return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
+
+
 def split_tensor_along_last_dim(tensor, num_partitions, contiguous_split_chunks=False):
     """Split a tensor along its last dimension.
 
@@ -77,23 +92,18 @@ def split_tensor_along_last_dim(tensor, num_partitions, contiguous_split_chunks=
     return tensor_list
 
 
-def attention_mask_func(attention_scores, attention_mask, causal_mask):
-    if attention_mask.dtype == torch.bool:
-        attention_mask_bool = ~attention_mask
-    else:
-        attention_mask_bool = (1 - attention_mask).bool()
+def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: int = None):
+    """
+    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
+    """
+    bsz, src_len = mask.size()
+    tgt_len = tgt_len if tgt_len is not None else src_len
 
-    query_length, key_length, n_heads = attention_scores.size(2), attention_scores.size(3), attention_scores.size(1)
-    padded_causal_mask = (
-        attention_mask_bool[:, None, key_length - query_length : key_length, None]
-        + ~causal_mask[:, :, key_length - query_length : key_length, :key_length]
-    ).bool()
-    padded_causal_mask = padded_causal_mask + attention_mask_bool[:, None, None, :key_length].bool()
-    # Make use of floats
-    return (
-        attention_scores.masked_fill_(padded_causal_mask.expand(-1, n_heads, -1, -1), -10000.0),
-        padded_causal_mask,
-    )
+    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
+
+    inverted_mask = 1.0 - expanded_mask
+
+    return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
 def build_alibi_tensor(
@@ -142,7 +152,6 @@ def pre_process_alibi_for_pad(alibi: torch.Tensor, attention_mask: torch.Tensor)
         attention_mask: ([`torch.tensor`], *required*):
             attention mask to pre-process
     """
-
     unpadded_indices = torch.relu(attention_mask.cumsum(dim=1) - 1)
     # ^-- [batch, max_len], values correspond to element indices after removing padding
     # We shift the alibi tensor + replace all the values where attention_mask==0.0 by 0
@@ -234,34 +243,30 @@ class BloomGelu(nn.Module):
 
 class BloomScaledSoftmax(nn.Module):
     """
-    fused operation: scaling + mask + softmax
-
     Args:
+    fused operation: scaling + mask + softmax
         input_in_fp16 (`bool`, *required*):
             flag to indicate if input in fp16 data format.
         input_in_bf16 (`bool`, *required*):
             flag to indicate if input in bf16 data format.
         scaled_masked_softmax_fusion (`bool`, *required*):
             flag to indicate user want to use softmax fusion
-        mask_func (`function`, *required*):
-            mask function to be applied.
         softmax_in_fp32 (`bool`, *required*):
             if true, softmax in performed at fp32 precision.
         scale (`float`, *required*):
             scaling factor used in input tensor scaling.
     """
 
-    def __init__(self, scaled_masked_softmax_fusion, mask_func, softmax_in_fp32, scale):
+    def __init__(self, scaled_masked_softmax_fusion, softmax_in_fp32, scale):
         super().__init__()
         self.scaled_masked_softmax_fusion = scaled_masked_softmax_fusion
-        self.mask_func = mask_func
         self.softmax_in_fp32 = softmax_in_fp32
         self.scale = scale
 
         if not (self.scale is None or softmax_in_fp32):
             raise ValueError("softmax should be in fp32 when scaled")
 
-    def forward(self, input, mask, max_positions):
+    def forward(self, input, causal_mask):
         input_dtype = input.dtype
         input_in_16bit = input_dtype in [torch.float16, torch.bfloat16]
         softmax_dtype = torch.float32 if self.softmax_in_fp32 else input_dtype
@@ -269,17 +274,7 @@ class BloomScaledSoftmax(nn.Module):
         if self.scale is not None:
             input = input * self.scale
 
-        if mask is not None:
-            mask = mask.to(input.device)
-            causal_mask = (
-                torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool))
-                .view(1, 1, max_positions, max_positions)
-                .to(input.device)
-            )
-            mask_output, padded_causal_mask = self.mask_func(input, mask, causal_mask)
-            probs = nn.functional.softmax(mask_output, dim=-1, dtype=softmax_dtype) * (~padded_causal_mask)
-        else:
-            probs = nn.functional.softmax(input, dim=-1, dtype=softmax_dtype)
+        probs = nn.functional.softmax(input + causal_mask, dim=-1, dtype=softmax_dtype) * (~causal_mask.bool())
 
         if input_in_16bit and self.softmax_in_fp32:
             probs = probs.to(dtype=input_dtype)
@@ -315,7 +310,6 @@ class BloomAttention(nn.Module):
         # Scaled Softmax
         self.scale_mask_softmax = BloomScaledSoftmax(
             self.masked_softmax_fusion,
-            attention_mask_func,
             self.attention_softmax_in_fp32,
             self.layer_number,
         )
@@ -335,14 +329,6 @@ class BloomAttention(nn.Module):
         use_cache=False,
         output_attentions=False,
     ):
-        # hidden_states: [batch_size, seq_length, hidden_size]
-        # apply preprocessing if the input is padded
-        if attention_mask is not None and 0 in attention_mask:
-            alibi = pre_process_alibi_for_pad(alibi, attention_mask)
-        # otherwise repeat alibi tensor with the batch size
-        else:
-            alibi = alibi.repeat(hidden_states.shape[0], 1, 1)
-
         mixed_x_layer = self.query_key_value(hidden_states)
 
         # [batch_size, seq_length, 3 x hidden_size] --> [batch_size, seq_length, num_heads, 3 x head_dim]
@@ -389,10 +375,7 @@ class BloomAttention(nn.Module):
         attention_scores = matmul_result.view(*output_size)
 
         # attention scores and attention mask [b, np, sq, sk]
-        max_positions = max(attention_scores.shape[-1], attention_scores.shape[-2])
-        attention_probs = self.scale_mask_softmax(attention_scores, attention_mask, max_positions).to(
-            value_layer.dtype
-        )
+        attention_probs = self.scale_mask_softmax(attention_scores, attention_mask).to(value_layer.dtype)
         attention_probs = self.attention_dropout(attention_probs)
 
         if head_mask is not None:
@@ -686,6 +669,24 @@ class BloomModel(BloomPreTrainedModel):
     def get_input_embeddings(self):
         return self.word_embeddings
 
+    def _prepare_attn_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
+        # create causal mask
+        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+        combined_attention_mask = None
+        if input_shape[-1] > 1:
+            combined_attention_mask = _make_causal_mask(
+                input_shape, inputs_embeds.dtype, past_key_values_length=past_key_values_length
+            ).to(inputs_embeds.device)
+
+        if attention_mask is not None:
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
+            combined_attention_mask = (
+                expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
+            )
+
+        return combined_attention_mask
+
     def set_input_embeddings(self, new_embeddings):
         self.word_embeddings = new_embeddings
 
@@ -748,9 +749,23 @@ class BloomModel(BloomPreTrainedModel):
 
         # Compute alibi tensor: check build_alibi_tensor documentation
         current_sequence_length = hidden_states.shape[1]
+        past_key_values_length = 0
         if past_key_values[0] is not None:
-            current_sequence_length += past_key_values[0][0].shape[1]
+            past_key_values_length = past_key_values[0][0].shape[1]
+            current_sequence_length += past_key_values_length
         alibi = build_alibi_tensor(current_sequence_length, self.n_head, hidden_states.dtype, hidden_states.device)
+
+        # apply preprocessing if the input is padded
+        if attention_mask is not None and 0 in attention_mask:
+            alibi = pre_process_alibi_for_pad(alibi, attention_mask)
+        # otherwise repeat alibi tensor with the batch size
+        else:
+            alibi = alibi.repeat(hidden_states.shape[0], 1, 1)
+
+        if attention_mask is None:
+            attention_mask = torch.ones((hidden_states.shape[:-1]), device=hidden_states.device)
+
+        causal_mask = self._prepare_attn_mask(attention_mask, input_shape, inputs_embeds, past_key_values_length)
 
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
 
@@ -776,14 +791,14 @@ class BloomModel(BloomPreTrainedModel):
                     create_custom_forward(block),
                     hidden_states,
                     None,
-                    attention_mask,
+                    causal_mask,
                     head_mask[i],
                 )
             else:
                 outputs = block(
                     hidden_states,
                     layer_past=layer_past,
-                    attention_mask=attention_mask,
+                    attention_mask=causal_mask,
                     head_mask=head_mask[i],
                     use_cache=use_cache,
                     output_attentions=output_attentions,
