@@ -2291,21 +2291,7 @@ class Trainer:
         """
         A helper wrapper that creates an appropriate context manager for `torchdynamo`.
         """
-        ctx_manager = contextlib.nullcontext()
-        if is_torchdynamo_available() and is_torch_tensorrt_fx_available():
-            import torchdynamo
-            from torchdynamo.optimizations import backends
-            from torchdynamo.optimizations.training import aot_autograd_speedup_strategy
-
-            if self.args.torchdynamo == "eager":
-                ctx_manager = torchdynamo.optimize("eager")
-            elif self.args.torchdynamo == "nvfuser":
-                ctx_manager = torchdynamo.optimize(aot_autograd_speedup_strategy)
-            elif self.args.torchdynamo == "fx2trt-fp16":
-                ctx_manager = torchdynamo.optimize(backends.fx2trt_compiler_fp16)
-            elif self.args.torchdynamo == "fx2trt":
-                ctx_manager = torchdynamo.optimize(backends.fx2trt_compiler)
-        return ctx_manager
+        return self.args.ctx_manager_torchdynamo
 
     def autocast_smart_context_manager(self):
         """

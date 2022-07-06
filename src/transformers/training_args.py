@@ -1218,6 +1218,29 @@ class TrainingArguments:
                 FutureWarning,
             )
 
+        if self.torchdynamo:
+            if not is_torchdynamo_available():
+                raise RuntimeError("Torchdynamo is not installed.")
+
+            import torchdynamo
+            from torchdynamo.optimizations import backends
+            from torchdynamo.optimizations.training import aot_autograd_speedup_strategy
+
+            if self.torchdynamo == "eager":
+                self.ctx_manager_torchdynamo = torchdynamo.optimize("eager")
+            elif self.torchdynamo == "nvfuser":
+                self.ctx_manager_torchdynamo = torchdynamo.optimize(aot_autograd_speedup_strategy)
+            elif self.torchdynamo == "fx2trt-fp16":
+                if not is_torch_tensorrt_fx_available():
+                    raise RuntimeError("Torch-TensorRT FX path is not installed.")
+                self.ctx_manager_torchdynamo = torchdynamo.optimize(backends.fx2trt_compiler_fp16)
+            elif self.torchdynamo == "fx2trt":
+                if not is_torch_tensorrt_fx_available():
+                    raise RuntimeError("Torch-TensorRT FX path is not installed.")
+                self.ctx_manager_torchdynamo = torchdynamo.optimize(backends.fx2trt_compiler)
+            else:
+                raise RuntimeError(f"Torchdynamo backend {self.torchdynamo} is not supported.")
+
     def __str__(self):
         self_as_dict = asdict(self)
 
