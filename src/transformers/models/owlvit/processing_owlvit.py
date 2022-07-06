@@ -27,9 +27,9 @@ from transformers import is_flax_available, is_torch_available, is_tf_available
 
 class OwlViTProcessor(ProcessorMixin):
     r"""
-    Constructs an OWL-ViT processor which wraps an OWL-ViT feature extractor and a CLIP tokenizer into a single processor.
-    [`OwlViTProcessor`] offers all the functionalities of [`OwlViTFeatureExtractor`] and [`CLIPTokenizer`]/[`CLIPTokenizerFast`]. See the
-    [`~OwlViTProcessor.__call__`] and [`~OwlViTProcessor.decode`] for more information.
+    Constructs an OWL-ViT processor which wraps [`OwlViTFeatureExtractor`] and [`CLIPTokenizer`]/[`CLIPTokenizerFast`] into a single 
+    processor that interits both the feature extractor and tokenizer functionalities. See the [`~OwlViTProcessor.__call__`] and 
+    [`~OwlViTProcessor.decode`] for more information.
     Args:
         feature_extractor ([`OwlViTFeatureExtractor`]):
             The feature extractor is a required input.

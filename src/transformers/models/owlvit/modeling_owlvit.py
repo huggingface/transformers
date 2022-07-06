@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The OpenAI Team Authors and The HuggingFace Team. All rights reserved.
+# Copyright 2022 Google AI and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch OwlViT model."""
+""" PyTorch OWL-ViT model."""
 
 
 from dataclasses import dataclass
@@ -63,8 +63,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
-# contrastive loss function, adapted from
-# https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/OwlViT.html
+# Copied from transformers.models.clip.modeling_clip with clip->owlvit
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
     return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
 
@@ -650,7 +649,7 @@ class OwlViTTextTransformer(nn.Module):
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=OwlViTTextConfig)
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -666,16 +665,13 @@ class OwlViTTextTransformer(nn.Module):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if input_ids is None:
-            raise ValueError("You have to specify either input_ids")
-
         input_shape = input_ids.size()
         input_ids = input_ids.view(-1, input_shape[-1])
         hidden_states = self.embeddings(input_ids=input_ids)
 
         bsz, seq_len = input_shape
         # OWLVIT's text model uses causal mask, prepare it here.
-        # https://github.com/openai/OWLVIT/blob/cfcffb90e69f37bf2ff1e988237a0fbe41f33c04/owlvit/model.py#L324
+        # https://github.com/openai/CLIP/blob/cfcffb90e69f37bf2ff1e988237a0fbe41f33c04/clip/model.py#L324
         causal_attention_mask = self._build_causal_attention_mask(bsz, seq_len).to(hidden_states.device)
         # expand attention_mask
         if attention_mask is not None:
@@ -695,7 +691,7 @@ class OwlViTTextTransformer(nn.Module):
         last_hidden_state = self.final_layer_norm(last_hidden_state)
 
         # text_embeds.shape = [batch_size, sequence_length, transformer.width]
-        # take features from the eot embedding (eot_token is the highest number in each sequence)
+        # take features from the end of tokens embedding (end of token is the highest number in each sequence)
         pooled_output = last_hidden_state[torch.arange(last_hidden_state.shape[0]), input_ids.argmax(dim=-1)]
 
         if not return_dict:
@@ -737,7 +733,7 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=OwlViTTextConfig)
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -754,7 +750,7 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
         >>> model = OwlViTTextModel.from_pretrained("adirik/owlvit-base-patch32")
         >>> processor = OwlViTProcessor.from_pretrained("adirik/owlvit-base-patch32")
 
-        >>> inputs = processor(text=[["a photo of a cat", "a photo of a dog"], ["photo of a astranout"]], return_tensors="pt")
+        >>> inputs = processor(text=[["a photo of a cat", "a photo of a dog"], ["photo of a astranaut"]], return_tensors="pt")
         >>> outputs = model(**inputs)
 
         >>> for output in outputs:  # loop over sets of text queries
@@ -764,32 +760,19 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
         batch_size = input_ids.shape[0]
 
         # Get embeddings for all text queries in all batch samples
-        if attention_mask is not None:
-            output = tuple(
-                [
-                    self.text_model(
-                        input_ids=input_ids[idx],
-                        attention_mask=attention_mask[idx],
-                        output_attentions=output_attentions,
-                        output_hidden_states=output_hidden_states,
-                        return_dict=return_dict,
-                    )
-                    for idx in range(batch_size)
-                ]
-            )
-        else:
-            output = tuple(
-                [
-                    self.text_model(
-                        input_ids=input_ids[idx],
-                        attention_mask=None,
-                        output_attentions=output_attentions,
-                        output_hidden_states=output_hidden_states,
-                        return_dict=return_dict,
-                    )
-                    for idx in range(batch_size)
-                ]
-            )
+        output = tuple(
+            [
+                self.text_model(
+                    input_ids=input_ids[idx],
+                    attention_mask=attention_mask[idx] if attention_mask is not None else None,
+                    output_attentions=output_attentions,
+                    output_hidden_states=output_hidden_states,
+                    return_dict=return_dict,
+                )
+                for idx in range(batch_size)
+            ]
+        )
+
         return output
 
 
@@ -808,7 +791,7 @@ class OwlViTVisionTransformer(nn.Module):
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=OwlViTVisionConfig)
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -823,9 +806,6 @@ class OwlViTVisionTransformer(nn.Module):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
 
         pixel_values = pixel_values.to(torch.float32)
         hidden_states = self.embeddings(pixel_values)
@@ -966,10 +946,10 @@ class OwlViTModel(OwlViTPreTrainedModel):
         >>> model = OwlViTModel.from_pretrained("adirik/owlvit-base-patch32")
         >>> processor = OwlViTProcessor.from_pretrained("adirik/owlvit-base-patch32")
 
-        >>> inputs = processor(text=[["a photo of a cat", "a photo of a dog"], ["photo of a astranout"]], return_tensors="pt")
+        >>> inputs = processor(text=[["a photo of a cat", "a photo of a dog"], ["photo of a astranaut"]], return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
         ```"""
-        # Use OWLVIT model's config for some fields (if specified) instead of those of vision & text components.
+        # Use OWL-ViT model's config for some fields (if specified) instead of those of vision & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1091,7 +1071,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
         >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
         >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
         ```"""
-        # Use OWLVIT model's config for some fields (if specified) instead of those of vision & text components.
+        # Use OWL-ViT model's config for some fields (if specified) instead of those of vision & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1267,9 +1247,10 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         self.sigmoid = nn.Sigmoid()
 
     def normalize_grid_corner_coordinates(self, feature_map: torch.FloatTensor):
+        # Computes normalized xy corner coordinates from feature_map.
+        if not feature_map.ndim == 4:
+            raise ValueError("Expected input shape is [batch_size, num_channels, height, width]")
 
-        # Computes normalized xy corner coords from feature_map.
-        assert feature_map.ndim == 4  # [B, H, W, C]
         h, w = feature_map.shape[1:3]
 
         xy = np.stack(np.meshgrid(np.arange(1, w + 1), np.arange(1, h + 1)), axis=-1).astype(np.float32)
@@ -1282,7 +1263,6 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         return xy
 
     def compute_box_bias(self, feature_map: torch.FloatTensor) -> torch.FloatTensor:
-
         # The box center is biased to its position on the feature grid:
         xy = self.normalize_grid_corner_coordinates(feature_map)
         xy = torch.clip(xy, 0.0, 1.0)

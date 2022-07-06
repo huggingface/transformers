@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 HuggingFace Inc.
+# Copyright 2022 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -224,67 +224,6 @@ class OwlViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Tes
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
-            ),
-        )
-
-
-@require_torch
-@require_vision
-class OwlViTFeatureExtractionTestFourChannels(FeatureExtractionSavingTestMixin, unittest.TestCase):
-
-    feature_extraction_class = OwlViTFeatureExtractor if is_vision_available() else None
-
-    def setUp(self):
-        self.feature_extract_tester = OwlViTFeatureExtractionTester(self, num_channels=4)
-        self.expected_encoded_image_num_channels = 3
-
-    @property
-    def feat_extract_dict(self):
-        return self.feature_extract_tester.prepare_feat_extract_dict()
-
-    def test_feat_extract_properties(self):
-        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
-        self.assertTrue(hasattr(feature_extractor, "do_resize"))
-        self.assertTrue(hasattr(feature_extractor, "size"))
-        self.assertTrue(hasattr(feature_extractor, "do_center_crop"))
-        self.assertTrue(hasattr(feature_extractor, "center_crop"))
-        self.assertTrue(hasattr(feature_extractor, "do_normalize"))
-        self.assertTrue(hasattr(feature_extractor, "image_mean"))
-        self.assertTrue(hasattr(feature_extractor, "image_std"))
-        self.assertTrue(hasattr(feature_extractor, "do_convert_rgb"))
-
-    def test_batch_feature(self):
-        pass
-
-    def test_call_pil_four_channels(self):
-        # Initialize feature_extractor
-        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
-        # create random PIL images
-        image_inputs = self.feature_extract_tester.prepare_inputs(equal_resolution=False)
-        for image in image_inputs:
-            self.assertIsInstance(image, Image.Image)
-
-        # Test not batched input
-        encoded_images = feature_extractor(image_inputs[0], return_tensors="pt").pixel_values
-        self.assertEqual(
-            encoded_images.shape,
-            (
-                1,
-                self.expected_encoded_image_num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
-            ),
-        )
-
-        # Test batched
-        encoded_images = feature_extractor(image_inputs, return_tensors="pt").pixel_values
-        self.assertEqual(
-            encoded_images.shape,
-            (
-                self.feature_extract_tester.batch_size,
-                self.expected_encoded_image_num_channels,
                 self.feature_extract_tester.crop_size,
                 self.feature_extract_tester.crop_size,
             ),
