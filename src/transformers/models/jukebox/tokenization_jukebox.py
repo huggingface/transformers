@@ -149,7 +149,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         artists_file,
         genres_file,
         lyrics_file,
-        version = ["v3","v2","v2"],
+        version=["v3", "v2", "v2"],
         max_n_lyric_tokens=512,
         n_genres=5,
         unk_token="<|endoftext|>",
@@ -158,8 +158,8 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
         super().__init__(
             unk_token=unk_token,
-            n_genres=n_genres, 
-            version = version,
+            n_genres=n_genres,
+            version=version,
             max_n_lyric_tokens=max_n_lyric_tokens,
             **kwargs,
         )
@@ -168,21 +168,20 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         self.n_genres = n_genres
 
         with open(artists_file, encoding="utf-8") as vocab_handle:
-            self.artists_encoder  = json.load(vocab_handle)
-            
+            self.artists_encoder = json.load(vocab_handle)
 
         with open(genres_file, encoding="utf-8") as vocab_handle:
-            self.genres_encoder  = json.load(vocab_handle)
-           
+            self.genres_encoder = json.load(vocab_handle)
+
         with open(lyrics_file, encoding="utf-8") as vocab_handle:
-            self.lyrics_encoder  = json.load(vocab_handle)
-            
-        oov = '[^A-Za-z0-9.,:;!?\-\'\"()\[\] \t\n]+'
+            self.lyrics_encoder = json.load(vocab_handle)
+
+        oov = "[^A-Za-z0-9.,:;!?\-'\"()\[\] \t\n]+"
         # In v2, we had a n_vocab=80 and in v3 we missed + and so n_vocab=79 of characters.
         if len(self.lyrics_encoder) == 79:
-            oov = oov.replace("\-\'","\-+\'")
+            oov = oov.replace("\-'", "\-+'")
 
-        self.out_of_vocab = re.compile(oov) 
+        self.out_of_vocab = re.compile(oov)
         self.artists_decoder = {v: k for k, v in self.artists_encoder.items()}
         self.genres_decoder = {v: k for k, v in self.genres_encoder.items()}
         self.lyrics_decoder = {v: k for k, v in self.lyrics_encoder.items()}
@@ -213,12 +212,12 @@ class JukeboxTokenizer(PreTrainedTokenizer):
             duration (`_type_`):
                 _description_
         """
-        artists_id = [self.artists_encoder.get(artist) for artist in list_artists ]
+        artists_id = [self.artists_encoder.get(artist) for artist in list_artists]
         for genres in range(len(list_genres)):
             list_genres[genres] = [self.genres_encoder.get(genre) for genre in list_genres[genres]]
             list_genres[genres] = list_genres[genres] + [-1] * (self.n_genres - len(list_genres[genres]))
-        
-        lyric_ids = [[],[], [self.lyrics_encoder.get(character) for character in list_lyrics[-1]]]
+
+        lyric_ids = [[], [], [self.lyrics_encoder.get(character) for character in list_lyrics[-1]]]
         return artists_id, list_genres, lyric_ids
 
     def _tokenize(self, lyrics):
@@ -274,31 +273,32 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         Returns:
             `Tuple[str, str, str, Dict[str, Any]]`: The prepared text and the unused kwargs.
         """
-        for idx in range(len(self.version)): 
+        for idx in range(len(self.version)):
             if self.version[idx] == "v3":
-                artists[idx] = artists[idx].lower() 
+                artists[idx] = artists[idx].lower()
                 genres[idx] = [genres[idx].lower()]
-            else: 
-                artists[idx] = self._normalize(artists[idx])+ ".v2"
-                genres[idx] = self._normalize(genres[idx]+ ".v2").split("_")  # split is for the full dictionnary with combined genres
-                
-                
+            else:
+                artists[idx] = self._normalize(artists[idx]) + ".v2"
+                genres[idx] = self._normalize(genres[idx] + ".v2").split(
+                    "_"
+                )  # split is for the full dictionnary with combined genres
+
         if self.version[idx] == "v3":
-            self.out_of_vocab = re.compile('[^A-Za-z0-9.,:;!?\-\'\"()\[\] \t\n]+')
-            vocab = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,:;!?-+\'\"()[] \t\n'
+            self.out_of_vocab = re.compile("[^A-Za-z0-9.,:;!?\-'\"()\[\] \t\n]+")
+            vocab = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,:;!?-+'\"()[] \t\n"
             self.vocab = {vocab[index]: index + 1 for index in range(len(vocab))}
-            self.vocab['<unk>'] = 0
+            self.vocab["<unk>"] = 0
             self.n_vocab = len(vocab) + 1
             self.lyrics_encoder = self.vocab
             self.lyrics_decoder = {v: k for k, v in self.vocab.items()}
-            self.lyrics_decoder[0] = '' 
-        else: 
-            self.out_of_vocab = re.compile('[^A-Za-z0-9.,:;!?\-+\'\"()\[\] \t\n]+')
-            
+            self.lyrics_decoder[0] = ""
+        else:
+            self.out_of_vocab = re.compile("[^A-Za-z0-9.,:;!?\-+'\"()\[\] \t\n]+")
+
         normalizer = normalizers.Sequence([normalizers.NFD(), normalizers.StripAccents()])
         lyrics = normalizer.normalize_str(lyrics)
         lyrics = lyrics.replace("\\", "\n")
-        lyrics = [],[],self.out_of_vocab.sub("", lyrics)
+        lyrics = [], [], self.out_of_vocab.sub("", lyrics)
         return artists, genres, lyrics, kwargs
 
     def _normalize(self, text: str) -> str:
@@ -313,7 +313,8 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         accepted = (
             [chr(i) for i in range(ord("a"), ord("z") + 1)]
             + [chr(i) for i in range(ord("A"), ord("Z") + 1)]
-            + [chr(i) for i in range(ord("0"), ord("9") + 1)] + ['.']
+            + [chr(i) for i in range(ord("0"), ord("9") + 1)]
+            + ["."]
         )
         accepted = frozenset(accepted)
         rex = re.compile(r"_+")
@@ -321,14 +322,13 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         text = rex.sub("_", text).strip("_")
         return text
 
-
     def convert_lyric_tokens_to_string(self, lyrics: List[str]) -> str:
         return " ".join(lyrics)
 
     # TODO : should add_token be implemeted for artists, genres and lyrics? Should it have
     # a type argument to add an artist token with self.getattr('artist') ?
 
-    def __call__(self, artist, genres, lyrics, return_tensor = "pt"):
+    def __call__(self, artist, genres, lyrics, return_tensor="pt"):
         """Convert the raw string to a list of token ids
 
         Args:
@@ -344,22 +344,22 @@ class JukeboxTokenizer(PreTrainedTokenizer):
                 _description_
         """
         input_ids = [0, 0, 0]
-        artist = [artist]*len(self.version)
-        genres = [genres]*len(self.version)
-        
-        
+        artist = [artist] * len(self.version)
+        genres = [genres] * len(self.version)
+
         artists_tokens, genres_tokens, lyrics_tokens = self.tokenize(artist, genres, lyrics)
-        artists_id, genres_ids, full_tokens = self._convert_token_to_id(
-            artists_tokens, genres_tokens, lyrics_tokens
-        )
-          
+        artists_id, genres_ids, full_tokens = self._convert_token_to_id(artists_tokens, genres_tokens, lyrics_tokens)
+
         attention_masks = [-INFINITY] * len(full_tokens[-1])
         # TODO properly handle the return pt tensor option
         if return_tensor == "pt":
-            return [{
-                "input_ids":  input_ids + [artists_id[i]] + genres_ids[i] + full_tokens[i],
-                "attention_masks": torch.tensor(attention_masks),
-            } for i in range(len(self.version))]
+            return [
+                {
+                    "input_ids": input_ids + [artists_id[i]] + genres_ids[i] + full_tokens[i],
+                    "attention_masks": torch.tensor(attention_masks),
+                }
+                for i in range(len(self.version))
+            ]
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         """
@@ -394,7 +394,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
             f.write(json.dumps(self.lyrics_encoder, ensure_ascii=False))
 
         return (artists_file, genres_file, lyrics_file)
-    
+
     def _convert_id_to_token(self, artists_index, genres_index, lyric_index):
         """Converts an index (integer) in a token (str) using the vocab.
         Args:
