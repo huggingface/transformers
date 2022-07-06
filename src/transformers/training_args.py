@@ -41,8 +41,10 @@ from .utils import (
     is_torch_available,
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
+    is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
+    is_torchdynamo_available,
     logging,
     torch_required,
 )
@@ -1218,6 +1220,7 @@ class TrainingArguments:
                 FutureWarning,
             )
 
+        self.ctx_manager_torchdynamo = contextlib.nullcontext()
         if self.torchdynamo:
             if not is_torchdynamo_available():
                 raise RuntimeError("Torchdynamo is not installed.")
