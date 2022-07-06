@@ -228,7 +228,6 @@ class FlaxBloomAttention(nn.Module):
         alibi,
         layer_past=None,
         attention_mask=None,
-        head_mask=None,
         deterministic: bool = True,
         init_cache: bool = False,
         output_attentions: bool = False,
@@ -268,18 +267,10 @@ class FlaxBloomAttention(nn.Module):
         if not deterministic and self.config.attention_dropout > 0.0:
             dropout_rng = self.make_rng("dropout")
 
-        #        print("layer")
-        #
-        #        if init_cache:
-        #            print("init_cache")
-
         # During fast autoregressive decoding, we feed one position at a time,
         # and cache the keys and values step by step.
         if self.has_variable("cache", "cached_key") or init_cache:
             key, value, attention_mask = self._concatenate_to_cache(key, value, query, attention_mask)
-
-        #        if hidden_states.shape[:2] != (1, 1) and hidden_states.shape[1] < 10:
-        #            import ipdb; ipdb.set_trace()
 
         # transform boolean mask into float mask
         mask_value = jnp.finfo(self.dtype).min
@@ -303,9 +294,6 @@ class FlaxBloomAttention(nn.Module):
             dtype=self.dtype,
             precision=None,
         )
-
-        if head_mask is not None:
-            attn_weights = attn_weights * head_mask
 
         attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value)
         attn_output = self._merge_heads(attn_output)
@@ -389,11 +377,9 @@ class FlaxBloomBlock(nn.Module):
         attention_mask=None,
         layer_number: int = None,
         layer_past=None,
-        head_mask=None,
         deterministic: bool = True,
         init_cache: bool = False,
         output_attentions: bool = False,
-        use_cache: bool = False,
     ):
         if self.use_scan:
             hidden_states = hidden_states[0]
@@ -412,7 +398,6 @@ class FlaxBloomBlock(nn.Module):
             alibi=alibi,
             layer_past=layer_past,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             deterministic=deterministic,
             init_cache=init_cache,
             output_attentions=output_attentions,
@@ -433,10 +418,11 @@ class FlaxBloomBlock(nn.Module):
 
         output = self.mlp(post_layernorm, residual, deterministic=deterministic)
 
-        if use_cache:
-            outputs = (output,) + outputs
-        else:
-            outputs = (output,) + outputs[1:]
+        #        if use_cache:
+        #            outputs = (output,) + outputs
+        #        else:
+
+        outputs = (output,) + outputs[1:]
 
         if self.use_scan:
             outputs = (outputs, None)
@@ -516,8 +502,6 @@ class FlaxBloomPreTrainedModel(FlaxPreTrainedModel):
         input_ids,
         attention_mask=None,
         past_key_values: dict = None,
-        head_mask=None,
-        inputs_embeds=None,
         params: dict = None,
         dropout_rng: jax.random.PRNGKey = None,
         train: bool = False,
@@ -673,10 +657,6 @@ class FlaxBloomModule(nn.Module):
         self,
         input_ids=None,
         attention_mask=None,
-        past_key_values=None,
-        head_mask=None,
-        inputs_embeds=None,
-        use_cache=None,
         deterministic=True,
         init_cache: bool = False,
         output_attentions: bool = False,
@@ -693,10 +673,6 @@ class FlaxBloomModule(nn.Module):
         # TODO put repeat here
         alibi = jnp.broadcast_to(alibi[None, :], (batch_size,) + alibi.shape).reshape((-1,) + alibi.shape[1:])
 
-        past_key_values = () if use_cache else None  # TODO: come back to this line
-        # TODO: how to handle alibi? build alibi tensor here?
-
-        # TODO: fix inputs to this (and args to submodules in general)
         # TODO: gradient checkpointing
         outputs = self.h(
             hidden_states,
@@ -719,11 +695,10 @@ class FlaxBloomModule(nn.Module):
 
         if not return_dict:
             # TODO: don't think this return value / ordering is correct
-            return tuple(v for v in [outputs[0], past_key_values, outputs[-1]] if v is not None)
+            return tuple(v for v in [outputs[0], outputs[-1]] if v is not None)
 
         return FlaxBaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
             hidden_states=outputs[1],
             attentions=outputs[-1],
         )
