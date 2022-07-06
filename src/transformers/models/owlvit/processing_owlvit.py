@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team.
+# Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Image/Text processor class for OwlViT
+Image/Text processor class for OWL-ViT
 """
 from typing import List
 
@@ -27,13 +27,13 @@ from transformers import is_flax_available, is_torch_available, is_tf_available
 
 class OwlViTProcessor(ProcessorMixin):
     r"""
-    Constructs a OwlViT processor which wraps a OwlViT feature extractor and a CLIP tokenizer into a single processor.
-    [`OwlViTProcessor`] offers all the functionalities of [`OwlViTFeatureExtractor`] and [`CLIPTokenizerFast`]. See the
+    Constructs an OWL-ViT processor which wraps an OWL-ViT feature extractor and a CLIP tokenizer into a single processor.
+    [`OwlViTProcessor`] offers all the functionalities of [`OwlViTFeatureExtractor`] and [`CLIPTokenizer`]/[`CLIPTokenizerFast`]. See the
     [`~OwlViTProcessor.__call__`] and [`~OwlViTProcessor.decode`] for more information.
     Args:
         feature_extractor ([`OwlViTFeatureExtractor`]):
             The feature extractor is a required input.
-        tokenizer ([`CLIPTokenizerFast`]):
+        tokenizer ([`CLIPTokenizer`, `CLIPTokenizerFast`]):
             The tokenizer is a required input.
     """
     feature_extractor_class = "OwlViTFeatureExtractor"
@@ -41,7 +41,6 @@ class OwlViTProcessor(ProcessorMixin):
 
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
-        self.current_processor = self.feature_extractor
 
     def __call__(self, text=None, images=None, return_tensors=None, **kwargs):
         """
@@ -78,14 +77,14 @@ class OwlViTProcessor(ProcessorMixin):
             raise ValueError("You have to specify either text or images. Both cannot be none.")
 
         if text is not None:
-            if isinstance(text, str):
+            if isinstance(text, str) or (isinstance(text, List) and not isinstance(text[0], List)):
                 encodings = [self.tokenizer(text, return_tensors=return_tensors, **kwargs)]
 
-            if isinstance(text, List) and not isinstance(text[0], List):
-                encodings = [self.tokenizer(text, return_tensors=return_tensors, **kwargs)]
-
-            if isinstance(text, List) and isinstance(text[0], List):
+            elif isinstance(text, List) and isinstance(text[0], List):
                 encodings = []
+
+            else:
+                raise TypeError("Input text should be a string, a list of strings or a nested list of strings")
 
                 # Maximum number of queries across batch
                 max_num_queries = max([len(t) for t in text])
@@ -122,7 +121,7 @@ class OwlViTProcessor(ProcessorMixin):
                 attention_mask = tf.stack([encoding["attention_mask"] for encoding in encodings])
 
             else:
-                raise Exception("Target return tensor type could not be returned")
+                raise ValueError("Target return tensor type could not be returned")
 
             encoding["input_ids"] = input_ids
             encoding["attention_mask"] = attention_mask
