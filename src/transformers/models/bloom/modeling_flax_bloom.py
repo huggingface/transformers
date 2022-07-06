@@ -51,6 +51,20 @@ _CONFIG_FOR_DOC = "BloomConfig"
 _TOKENIZER_FOR_DOC = "BloomTokenizer"
 
 
+def shift_alibi_for_padding(alibi, attention_mask, batch_size):
+    if jnp.isin(0, attention_mask):
+        unpadded_indices = nn.relu(lax.cumsum(attention_mask, axis=1) - 1)
+        reshaped_alibi = jnp.reshape(alibi, (batch_size, int(alibi.shape[0]/batch_size), alibi.shape[-1]))
+        
+        final_alibi = []
+        for i in range(reshaped_alibi.shape[0]):
+            final_alibi.append(jnp.take_along_axis(reshaped_alibi[i], jnp.expand_dims(unpadded_indices[i], 0), -1))
+        alibi = jnp.array(final_alibi)
+        return jnp.reshape(alibi, (alibi.shape[0] * alibi.shape[1], 1, -1))
+    else:
+        return alibi
+
+
 BLOOM_START_DOCSTRING = r"""
 
     This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -598,7 +612,6 @@ class FlaxBloomBlockCollection(nn.Module):
                 if output_hidden_states:
                     all_hidden_states += (hidden_states,)
 
-
                 layer_outputs = FlaxBloomBlock(self.config, name=str(layer_number), dtype=self.dtype, use_scan=False)(
                     hidden_states,
                     alibi=alibi,
@@ -666,7 +679,11 @@ class FlaxBloomModule(nn.Module):
         hidden_states = self.word_embeddings_layernorm(inputs_embeds)
 
         batch_size, curr_seq_len, _ = hidden_states.shape
+
         alibi = build_alibi_tensor_flax(curr_seq_len, self.config.n_head, hidden_states.dtype)
+        if attention_mask is not None:
+            alibi = shift_alibi_for_padding(alibi, attention_mask, batch_size)
+
 
         past_key_values = () if use_cache else None  # TODO: come back to this line
         # TODO: how to handle alibi? build alibi tensor here?
