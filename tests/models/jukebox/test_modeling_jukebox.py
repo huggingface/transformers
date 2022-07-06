@@ -41,7 +41,6 @@ class JukeboxModelTest(unittest.TestCase):
     metas = dict(
         artist="Zac Brown Band",
         genres="Country",
-        offset=0,
         lyrics="""I met a traveller from an antique land,
     Who said "Two vast and trunkless legs of stone
     Stand in the desert. . . . Near them, on the sand,
@@ -58,7 +57,9 @@ class JukeboxModelTest(unittest.TestCase):
     The lone and level sands stretch far away
     """,
     )
+
     # @slow
+
     def test_model(self):
         set_seed(0)
 
@@ -573,35 +574,45 @@ class JukeboxModelTest(unittest.TestCase):
 
     def prepare_inputs(self, model, model_id, chunk_size=32):
         tokenizer = JukeboxTokenizer.from_pretrained(model_id)
+        top_prior = model.priors[-1]
         # create sampling parameters
         sampling_temperature = 0.98
         lower_batch_size = 16
         max_batch_size = 16
+        sample_length_in_seconds = 24
         sampling_kwargs = [
-            dict(temp=0.99, fp16=False, max_batch_size=lower_batch_size, chunk_size=chunk_size, sample_tokens=10),
-            dict(temp=0.99, fp16=False, max_batch_size=lower_batch_size, chunk_size=chunk_size, sample_tokens=10),
+            dict(
+                temp=0.99,
+                fp16=False,
+                max_batch_size=lower_batch_size,
+                chunk_size=chunk_size,
+                sample_tokens=10,
+                total_length=(int(sample_length_in_seconds * model.config.sr) // top_prior.raw_to_tokens)
+                * top_prior.raw_to_tokens,
+            ),
+            dict(
+                temp=0.99,
+                fp16=False,
+                max_batch_size=lower_batch_size,
+                chunk_size=chunk_size,
+                sample_tokens=10,
+                total_length=(int(sample_length_in_seconds * model.config.sr) // top_prior.raw_to_tokens)
+                * top_prior.raw_to_tokens,
+            ),
             dict(
                 temp=sampling_temperature,
                 fp16=False,
                 max_batch_size=max_batch_size,
                 chunk_size=chunk_size,
                 sample_tokens=10,
+                total_length=(int(sample_length_in_seconds * model.config.sr) // top_prior.raw_to_tokens)
+                * top_prior.raw_to_tokens,
             ),
         ]
 
-        sample_length_in_seconds = 24
-        top_prior = model.priors[-1]
-        total_length = (
-            int(sample_length_in_seconds * model.config.sr) // top_prior.raw_to_tokens
-        ) * top_prior.raw_to_tokens
-        tokens = tokenizer(**self.metas, sample_length=top_prior.sample_length, total_length=total_length)
+        tokens = tokenizer(**self.metas)
         inputs, _ = tokens["input_ids"], tokens["attention_masks"]
-
-        labels = [inputs.copy() for i in range(3)]
-        labels[1]["y"] = labels[1]["y"][:, : (4 + tokenizer.n_genres)]
-        labels[0]["y"] = labels[0]["y"][:, : (4 + tokenizer.n_genres)]
-
-        return labels, sampling_kwargs
+        return inputs, sampling_kwargs
 
     # @slow
     def test_1b_lyrics(self):
@@ -892,4 +903,4 @@ class JukeboxModelTest(unittest.TestCase):
 if __name__ == "__main__":
     tester = JukeboxModelTest()
     tester.test_1b_lyrics()
-    tester.test_5b_lyrics()
+    # tester.test_5b_lyrics()

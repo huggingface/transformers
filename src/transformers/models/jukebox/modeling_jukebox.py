@@ -25,8 +25,6 @@ import torch.utils.checkpoint
 from packaging import version
 from torch import nn
 
-from rich.progress import Progress
-
 
 if version.parse(torch.__version__) >= version.parse("1.6"):
     is_amp_available = True
@@ -61,6 +59,17 @@ def empty_cache():
     torch.cuda.empty_cache()
 
 
+import sys
+
+import tqdm
+
+
+def get_range(x):
+    return tqdm(
+        x, leave=True, file=sys.stdout, bar_format="{n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]"
+    )
+
+
 ####################################################################
 # Attention and scalable transformer
 # Import FusedLayerNorm if we have apex, otherwise use regular LayerNorm
@@ -82,7 +91,7 @@ class Conv1D(nn.Module):
             w = torch.zeros(n_in, n_out)
         else:
             w = torch.empty(n_in, n_out)
-            nn.init.normal_(w, std=0.02 * init_scale)
+
         b = torch.zeros(n_out)
         self.weight = nn.Parameter(w)  # modified self.w
         self.bias = nn.Parameter(b)
@@ -99,6 +108,7 @@ class Conv1D(nn.Module):
 class ResConvBlock(nn.Module):
     def __init__(self, n_in, n_state):
         super().__init__()
+        # TODO remvove the sequential in favor of a more understanble code
         self.model = nn.Sequential(
             nn.ReLU(),
             nn.Conv2d(n_in, n_state, 3, 1, 1),
@@ -113,6 +123,8 @@ class ResConvBlock(nn.Module):
 class Resnet(nn.Module):
     def __init__(self, n_in, n_depth, m_conv=1.0):
         super().__init__()
+        # TODO remvove the sequential in favor of a more understanble code
+        # the list comprehension is maybe not very readable
         self.model = nn.Sequential(*[ResConvBlock(n_in, int(m_conv * n_in)) for _ in range(n_depth)])
 
     def forward(self, x):
@@ -123,12 +135,14 @@ class ResConv1DBlock(nn.Module):
     def __init__(self, n_in, n_state, dilation=1, zero_out=False, res_scale=1.0):
         super().__init__()
         padding = dilation
+        # TODO remvove the sequential in favor of a more understanble code
         self.model = nn.Sequential(
             nn.ReLU(),
             nn.Conv1d(n_in, n_state, 3, 1, padding, dilation),
             nn.ReLU(),
             nn.Conv1d(n_state, n_in, 1, 1, 0),
         )
+        # TODO remvove the initialisation scheme
         if zero_out:
             out = self.model[-1]
             nn.init.zeros_(out.weight)
@@ -160,6 +174,8 @@ class Resnet1D(nn.Module):
             else:
                 return depth % dilation_cycle
 
+        # TODO remvove comprehension in favor of a for loop more understanbnle
+
         blocks = [
             ResConv1DBlock(
                 n_in,
@@ -172,22 +188,11 @@ class Resnet1D(nn.Module):
         ]
         if reverse_dilation:
             blocks = blocks[::-1]
-        self.checkpoint_res = checkpoint_res
-        # if self.checkpoint_res == 1:
-        #     # if dist.get_rank() == 0:
-        #     #     print("Checkpointing convs")
-        #     self.blocks = nn.ModuleList(blocks)
-        # else:
-        #    self.model = nn.Sequential(*blocks)
+
+        # TODO remvove the sequential in favor of a more understanble code
         self.model = nn.Sequential(*blocks)
 
     def forward(self, x):
-        # if self.checkpoint_res == 1:
-        #     for block in self.blocks:
-        #         x = checkpoint(block, (x, ), block.parameters(), True)
-        #     return x
-        # else:
-        #     return self.model(x)
         return self.model(x)
 
 
@@ -211,6 +216,7 @@ class EncoderConvBlock(nn.Module):
         filter_t, pad_t = stride_t * 2, stride_t // 2
         if down_t > 0:
             for i in range(down_t):
+                # TODO remvove the sequential in favor of a more understanble code
                 block = nn.Sequential(
                     nn.Conv1d(input_emb_width if i == 0 else width, width, filter_t, stride_t, pad_t),
                     Resnet1D(width, depth, m_conv, dilation_growth_rate, dilation_cycle, zero_out, res_scale),
@@ -294,13 +300,13 @@ class Encoder(nn.Module):
             )
 
         self.level_blocks = nn.ModuleList()
+        # TODO remvove iterator
+
         iterator = zip(list(range(self.levels)), downs_t, strides_t)
         for level, down_t, stride_t in iterator:
             self.level_blocks.append(level_block(level, down_t, stride_t))
 
     def forward(self, x):
-        # N, T = x.shape[0], x.shape[-1]
-        # emb = self.input_emb_width
         xs = []
 
         # 64, 32, ...
@@ -308,8 +314,6 @@ class Encoder(nn.Module):
         for level, down_t, stride_t in iterator:
             level_block = self.level_blocks[-level - 1]
             x = level_block(x)
-            # emb, T = self.output_emb_width, T // (stride_t**down_t)
-            # assert_shape(x, (N, emb, T))
             xs.append(x)
 
         return xs
@@ -321,9 +325,7 @@ class Decoder(nn.Module):
         self.input_emb_width = input_emb_width
         self.output_emb_width = output_emb_width
         self.levels = levels
-
         self.downs_t = downs_t
-
         self.strides_t = strides_t
 
         def level_block(level, down_t, stride_t):
@@ -342,17 +344,13 @@ class Decoder(nn.Module):
         else:
             assert len(xs) == 1
         x = xs[-1]
-        _, T = x.shape[0], x.shape[-1]
-        # emb = self.output_emb_width
-        # assert_shape(x, (N, emb, T))
 
         # 32, 64 ...
         iterator = reversed(list(zip(list(range(self.levels)), self.downs_t, self.strides_t)))
         for level, down_t, stride_t in iterator:
             level_block = self.level_blocks[level]
             x = level_block(x)
-            _, T = self.output_emb_width, T * (stride_t**down_t)
-            # assert_shape(x, (N, emb, T))
+
             if level != 0 and all_levels:
                 x = x + xs[level - 1]
 
@@ -409,11 +407,6 @@ class BottleneckBlock(nn.Module):
         self.init = False
         self.k_sum = None
         self.k_elem = None
-        # self.register_buffer('k',  torch.zeros(self.k_bins, self.emb_width).cuda())
-
-        # if torch.cuda.is_available():
-        #     self.register_buffer("k", torch.zeros(self.k_bins, self.emb_width).to("cuda"))
-        # else:
         self.register_buffer("k", torch.zeros(self.k_bins, self.emb_width))
 
     def _tile(self, x):
@@ -426,7 +419,9 @@ class BottleneckBlock(nn.Module):
         return x
 
     def init_k(self, x):
-        _, emb_width, k_bins = self.mu, self.emb_width, self.k_bins  # mu,
+        # TODO rename x to a way more meaningful name
+
+        emb_width, k_bins = self.emb_width, self.k_bins  # mu,
         self.init = True
         # init k_w using random vectors from x
         y = self._tile(x)
@@ -438,9 +433,8 @@ class BottleneckBlock(nn.Module):
         self.k_elem = torch.ones(k_bins, device=self.k.device)
 
     def restore_k(self, num_tokens=None, threshold=1.0):
-        _, emb_width, k_bins = self.mu, self.emb_width, self.k_bins  # mu -> _
+        emb_width, k_bins = self.emb_width, self.k_bins  # mu -> _
         self.init = True
-        assert self.k.shape == (k_bins, emb_width)
         self.k_sum = self.k.clone()
         self.k_elem = torch.ones(k_bins, device=self.k.device)
         if num_tokens is not None:
@@ -525,9 +519,11 @@ class BottleneckBlock(nn.Module):
 
         # Preprocess.
         x, prenorm = self.preprocess(x)
+        # TODO remvove unused prenorm variable
 
         # Quantise
         x_l, fit = self.quantise(x)
+        # TODO remvove unused fit and the return variable
 
         # Postprocess.
         x_l = x_l.view(N, T)
@@ -617,6 +613,7 @@ class Bottleneck(nn.Module):
         return zs, xs_quantised, commit_losses, metrics
 
 
+# TODO replace FFT calls with torch.fft
 def stft(sig, hps):
     return torch.stft(
         sig,
@@ -627,8 +624,12 @@ def stft(sig, hps):
     )
 
 
+# TODO replace spec
 def spec(x, hps):
     return torch.norm(stft(x, hps), p=2, dim=-1)
+
+
+# TODO check if can be removed
 
 
 class DefaultSTFTValues:
@@ -773,7 +774,6 @@ class VQVAE(nn.Module):
 
     def preprocess(self, x):
         # x: NTC [-1,1] -> NCT [-1,1]
-        assert len(x.shape) == 3
         x = x.permute(0, 2, 1).float()
         return x
 
@@ -786,10 +786,7 @@ class VQVAE(nn.Module):
         # Decode
         if end_level is None:
             end_level = self.levels
-        assert len(zs) == end_level - start_level
         xs_quantised = self.bottleneck.decode(zs, start_level=start_level, end_level=end_level)
-        assert len(xs_quantised) == end_level - start_level
-
         # Use only lowest level
         decoder, x_quantised = self.decoders[start_level], xs_quantised[0:1]
         x_out = decoder(x_quantised, all_levels=False)
@@ -828,6 +825,8 @@ class VQVAE(nn.Module):
         return zs
 
     def sample(self, n_samples):
+        # TODO handle device properly
+
         zs = [torch.randint(0, self.l_bins, size=(n_samples, *z_shape), device="cpu") for z_shape in self.z_shapes]
         return self.decode(zs)
 
@@ -936,6 +935,9 @@ class JukeboxMLP(nn.Module):
         return hidden_states
 
 
+# TODO rename to JukeboxLayerNorm
+
+
 class LayerNorm(FusedLayerNorm):
     def __init__(self, normalized_shape, eps=1e-5, elementwise_affine=True):
         super().__init__(normalized_shape, eps=eps, elementwise_affine=elementwise_affine)
@@ -1008,7 +1010,6 @@ class JukeboxAttention(nn.Module):
         self.width = width  # should have a better name
         self.n_ctx = n_ctx  # NOTE: n_ctx could be different within operations. This is complete n_ctx
         self.n_state = n_state
-        assert n_state % n_head == 0
         self.n_head = n_head
         self.scale = scale
         self.mask = mask
@@ -1039,7 +1040,6 @@ class JukeboxAttention(nn.Module):
         self.blocks = blocks
         self.spread = spread
         if blocks is not None:
-            assert n_ctx % blocks == 0
             self.block_ctx = n_ctx // blocks
         self.checkpoint_attn = checkpoint_attn  # 0: None, 1: Attn after heads split, 2: Attn
 
@@ -1097,10 +1097,6 @@ class JukeboxAttention(nn.Module):
         query = self.split_heads(query)
         key = self.split_heads(key, k=True)
         value = self.split_heads(value)
-        # if self.checkpoint_attn == 1 and not sample:
-        #     a = checkpoint(lambda q,k,v,s=sample: self._attn(q,k,v,s), (query, key, value),
-        #                (), True)
-        # else:
         a = self._attn(query, key, value, sample)
         a = self.merge_heads(a)
         return a
@@ -1291,20 +1287,10 @@ class JukeboxAttention(nn.Module):
                 self._slice_cache(0, self._prime_len)
             key, value = self.cache["key"], self.cache["value"]
             self.sample_t += curr_ctx
-            assert (
-                key.shape[1] == value.shape[1] == self._suff_cache_len()
-            ), f"k: {key.shape}, v: {value.shape}, prime_dims: {self._suff_cache_len()}"
-        else:
-            assert (
-                key.shape[1] == value.shape[1] == self.n_ctx
-            ), f"k: {key.shape}, v: {value.shape}, prime_dims: {self.n_ctx}"
-        assert key.shape[0] == value.shape[0] == query.shape[0], f"k: {key.shape}, v: {value.shape}, q: {query.shape}"
-        assert key.shape[2] == value.shape[2] == query.shape[2], f"k: {key.shape}, v: {value.shape}, q: {query.shape}"
         return query, key, value, sample
 
     def decode_qkv(self, x, encoder_kv=None, sample=False):
         curr_ctx = x.shape[1]
-        assert encoder_kv is not None
         query = x
         if sample:
             if self.sample_t == 0:
@@ -1313,20 +1299,12 @@ class JukeboxAttention(nn.Module):
             self.sample_t += curr_ctx
         else:
             key, value = self.c_enc_kv(encoder_kv.type_as(x)).chunk(2, dim=2)
-        assert key.shape[0] == value.shape[0] == query.shape[0], f"k: {key.shape}, v: {value.shape}, q: {query.shape}"
-        assert (
-            key.shape[1] == value.shape[1] == self.encoder_dims
-        ), f"k: {key.shape}, v: {value.shape}, enc_dims: {self.encoder_dims}"
-        assert key.shape[2] == value.shape[2] == query.shape[2], f"k: {key.shape}, v: {value.shape}, q: {query.shape}"
         return query, key, value, sample
 
     def forward(self, x, encoder_kv=None, sample=False):
         curr_ctx = x.shape[1]
         x = self.c_attn(x)
         query, key, value, sample = self.qkv(x, encoder_kv=encoder_kv, sample=sample)
-        # if self.checkpoint_attn == 2 and not sample:
-        #     a = checkpoint(lambda q,k,v,s=sample: self.attn(q,k,v,s), (query, key, value), (), True)
-        # else:
         a = self.attn(query, key, value, sample)
         if a.shape[1] != curr_ctx:
             offset = self._offset(curr_ctx)
@@ -1755,15 +1733,6 @@ class JukeboxTransformer(nn.Module):
 
         # Blocks
         for i, l in enumerate(self._attn_mods):
-            # if self.checkpoint_res == 1 and not sample:
-            #     if l.attn_func == 6:
-            #         assert encoder_kv is not None
-            #         f = functools.partial(l, sample=sample)
-            #         x = checkpoint(f, (x, encoder_kv), l.parameters(), True)
-            #     else:
-            #         f = functools.partial(l, encoder_kv=None, sample=sample)
-            #         x = checkpoint(f, (x,), l.parameters(), True)
-            # else:
             if l.attn_func == 6:
                 x = l(x, encoder_kv=encoder_kv, sample=sample)
             else:
@@ -1815,14 +1784,6 @@ class PositionEmbedding(nn.Module):
         self.input_shape = input_shape
         self.input_dims = input_dims = np.prod(input_shape)
         self.pos_init = pos_init
-        # if pos_init:
-        #    self.register_buffer("pos", torch.tensor(get_pos_idx(input_shape)).long())
-        #    self._pos_embs = nn.ModuleList()
-        #    for i in range(len(input_shape)):
-        #        emb = nn.Embedding(input_shape[i], width)
-        #        nn.init.normal_(emb.weight, std=0.02)
-        #        self._pos_embs.append(emb)
-        # else:
         self.pos_emb = nn.Parameter(get_normal(input_dims, width, std=0.01 * init_scale))
 
     def forward(self):
@@ -1961,27 +1922,27 @@ class JukeboxConditionalAutoregressive(nn.Module):
 
         N, D = x.shape
         # assert isinstance(x, torch.cuda.LongTensor)
-        assert (0 <= x).all() and (x < self.bins).all()
+        # assert (0 <= x).all() and (x < self.bins).all()
 
-        if self.y_cond:
-            assert y_cond is not None
-            assert y_cond.shape == (N, 1, self.width)
-        else:
-            assert y_cond is None
+        # if self.y_cond:
+        #     assert y_cond is not None
+        #     assert y_cond.shape == (N, 1, self.width)
+        # else:
+        #     assert y_cond is None
 
-        if self.x_cond:
-            assert x_cond is not None
-            assert x_cond.shape == (N, D, self.width) or x_cond.shape == (
-                N,
-                1,
-                self.width,
-            ), (
-                f"{x_cond.shape} != {(N, D, self.width)} nor {(N, 1, self.width)}. Did you pass the correct"
-                " --sample_length?"
-            )
-        else:
-            assert x_cond is None
-            x_cond = torch.zeros((N, 1, self.width), device=x.device, dtype=torch.float)
+        # if self.x_cond:
+        #     assert x_cond is not None
+        #     assert x_cond.shape == (N, D, self.width) or x_cond.shape == (
+        #         N,
+        #         1,
+        #         self.width,
+        #     ), (
+        #         f"{x_cond.shape} != {(N, D, self.width)} nor {(N, 1, self.width)}. Did you pass the correct"
+        #         " --sample_length?"
+        #     )
+        # else:
+        #     assert x_cond is None
+        #     x_cond = torch.zeros((N, 1, self.width), device=x.device, dtype=torch.float)
 
         x_t = x  # Target
         x = self.x_emb(x)  # X emb
@@ -2086,10 +2047,8 @@ class JukeboxConditionalAutoregressive(nn.Module):
             xs, x = [], None
             if get_preds:
                 preds = []
-            # for sample_t in get_range(range(0, sample_tokens)):
-            total = sample_tokens - len(xs)
-            task3 = progress.add_task("Sampling indivdual tokens ", total=total)
-            for sample_t in range(0, sample_tokens):
+
+            for sample_t in get_range(range(0, sample_tokens)):
 
                 x, cond = self.get_emb(sample_t, n_samples, x, x_cond, y_cond)
                 self.transformer.check_cache(n_samples, sample_t, fp16)
@@ -2108,9 +2067,6 @@ class JukeboxConditionalAutoregressive(nn.Module):
                 x = torch.distributions.Categorical(logits=x).sample()  # Sample and replace x
                 assert x.shape == (n_samples, 1)
                 xs.append(x.clone())
-                progress.update(task3, advance=1)
-                progress.update(0, advance=1 / total)
-
             del x
             self.transformer.del_cache()
 
@@ -2182,9 +2138,8 @@ class JukeboxConditionalAutoregressive(nn.Module):
             x_primes = []
             start = 0
             x = None
-            # for current_chunk_size in get_range(chunk_sizes):
-            task2 = progress.add_task("Primed Sampling chunks ", total=len(chunk_sizes))
-            for current_chunk_size in chunk_sizes:
+
+            for current_chunk_size in get_range(chunk_sizes):
 
                 xs_prime, conds_prime = [], []
                 for sample_t in range(start, start + current_chunk_size):
@@ -2212,8 +2167,6 @@ class JukeboxConditionalAutoregressive(nn.Module):
                 else:
                     del x_prime
 
-                progress.update(task2, advance=1)
-
             if get_preds:
                 x_prime = torch.cat(x_primes, dim=1)
                 assert x_prime.shape == (n_samples, len(xs), self.width)
@@ -2226,10 +2179,8 @@ class JukeboxConditionalAutoregressive(nn.Module):
             x = xs[-1]
             assert x.shape == (n_samples, 1)
             empty_cache()
-            # for sample_t in get_range(range(len(xs), sample_tokens)):
-            total = sample_tokens - len(xs)
-            task3 = progress.add_task("Sampling indivdual tokens ", total=total)
-            for sample_t in range(len(xs), sample_tokens):
+
+            for sample_t in get_range(range(len(xs), sample_tokens)):
                 x, cond = self.get_emb(sample_t, n_samples, x, x_cond, y_cond)
                 self.transformer.check_cache(n_samples, sample_t, fp16)
                 x = self.transformer(x, encoder_kv=encoder_kv, sample=True, fp16=fp16)  # Transformer
@@ -2245,8 +2196,6 @@ class JukeboxConditionalAutoregressive(nn.Module):
                 x = torch.distributions.Categorical(logits=x).sample()  # Sample and replace x
                 assert x.shape == (n_samples, 1)
                 xs.append(x.clone())
-                progress.update(task3, advance=1)
-                progress.update(0, advance=1 / total)
 
             del x
             self.transformer.del_cache()
@@ -2588,7 +2537,6 @@ class JukeboxPrior(nn.Module):
         self.z_shape = self.z_shapes[level]
 
         self.level = level
-        assert level < self.levels, f"Total levels {self.levels}, got level {level}"
 
         self.l_bins = config.l_bins
 
@@ -2745,30 +2693,24 @@ class JukeboxPrior(nn.Module):
         self.cond_downsample = self.downsamples[level + 1] if level != self.levels - 1 else None
         self.raw_to_tokens = np.prod(self.downsamples[: level + 1])
         self.sample_length = self.n_ctx * self.raw_to_tokens
-        # if the labels are used for training, the trainer will use it?
-        # This is probably were its gonna get a bit complicated
-
-        # if labels:
-        #     self.labels_v3 = labels_v3
-        #     self.labeller = Labeller(self.y_emb.max_bow_genre_size, self.n_tokens, self.sample_length, v3=self.labels_v3)
-        # else:
-        #     self.labeller = EmptyLabeller()
 
         print(
             f"Level:{level}, Cond downsample:{self.cond_downsample}, Raw to tokens:{self.raw_to_tokens}, Sample"
             f" length:{self.sample_length}"
         )
 
-    def get_y(self, labels, start, get_indices=False):
-        y = labels["y"].clone()
+    def get_y(self, labels, start, total_length, get_indices=False):
+        y = labels["input_ids"].clone()
         # y = labels.clone()
-
+        y[:, 0] = total_length
         # Set sample_length to match this level
         y[:, 2] = int(self.sample_length)
 
         # Set offset
         y[:, 1:2] = y[:, 1:2] + int(start * self.raw_to_tokens)
-        indices = self.set_y_lyric_tokens(y, labels)
+        # here since y has the full token_list, ze just need to selected the ones that are relevant
+
+        y, indices = self.set_y_lyric_tokens(y, labels)
         if get_indices:
             return y, indices
         else:
@@ -2781,13 +2723,18 @@ class JukeboxPrior(nn.Module):
             tokens_list = []
             indices_list = []  # whats the index of each current character in original array
             for i in range(ys.shape[0]):
-                full_tokens = labels["full_tokens"]
+                full_tokens = labels["input_ids"]
                 total_length, offset, duration = ys[i, 0], ys[i, 1], ys[i, 2]
                 tokens, indices = get_relevant_lyric_tokens(full_tokens, self.n_tokens, total_length, offset, duration)
                 tokens_list.append(tokens)
                 indices_list.append(indices)
             ys[:, -self.n_tokens :] = torch.tensor(tokens_list, dtype=torch.long, device="cpu")
-            return indices_list
+            return [
+                total_length,
+                offset,
+                duration,
+                torch.tensor(tokens_list, dtype=torch.long, device="cpu"),
+            ], indices_list
         else:
             return None
 
@@ -2911,9 +2858,6 @@ class JukeboxPrior(nn.Module):
                 assert z_cond.shape[0] == N, f"Expected shape ({N},**), got shape {z_cond.shape}"
 
         no_past_context = z is None or z.shape[1] == 0
-        # if dist.get_rank() == 0:
-        #     name = {True: 'Ancestral', False: 'Primed'}[no_past_context]
-        #     print(f"{name} sampling {n_samples} samples with temp={temp}, top_k={top_k}, top_p={top_p}")
         name = {True: "Ancestral", False: "Primed"}[no_past_context]
         print(f"{name} sampling {n_samples} samples with temp={temp}, top_k={top_k}, top_p={top_p}")
 
@@ -3061,42 +3005,40 @@ class JukeboxPreTrainedModel(PreTrainedModel):
 
     config_class = JukeboxConfig
     base_model_prefix = "transformer"
-    is_parallelizable = True
-    supports_gradient_checkpointing = True
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
 
-    def _init_weights(self, module):
-        """Initialize the weights."""
-        if isinstance(module, (nn.Linear, Conv1D)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+    # def _init_weights(self, module):
+    #     """Initialize the weights."""
+    #     if isinstance(module, (nn.Linear, Conv1D)):
+    #         # Slightly different from the TF version which uses truncated_normal for initialization
+    #         # cf https://github.com/pytorch/pytorch/pull/5617
+    #         module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+    #         if module.bias is not None:
+    #             module.bias.data.zero_()
+    #     elif isinstance(module, nn.Embedding):
+    #         module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+    #         if module.padding_idx is not None:
+    #             module.weight.data[module.padding_idx].zero_()
+    #     elif isinstance(module, nn.LayerNorm):
+    #         module.bias.data.zero_()
+    #         module.weight.data.fill_(1.0)
 
-        # Reinitialize selected weights subject to the Jukebox Paper Scheme:
-        #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
-        #   > the weights of residual layers at initialization by a factor of 1/√N where N is the # of residual layers.
-        #   >   -- GPT-2 :: https://openai.com/blog/better-language-models/
-        #
-        # Reference (Megatron-LM): https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/gpt_model.py
-        for name, p in module.named_parameters():
-            if "c_proj" in name and "weight" in name:
-                # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
-                p.data.normal_(mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.n_layer)))
+    #     # Reinitialize selected weights subject to the Jukebox Paper Scheme:
+    #     #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
+    #     #   > the weights of residual layers at initialization by a factor of 1/√N where N is the # of residual layers.
+    #     #   >   -- GPT-2 :: https://openai.com/blog/better-language-models/
+    #     #
+    #     # Reference (Megatron-LM): https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/gpt_model.py
+    #     for name, p in module.named_parameters():
+    #         if "c_proj" in name and "weight" in name:
+    #             # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
+    #             p.data.normal_(mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.n_layer)))
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, JukeboxModel):
-            module.gradient_checkpointing = value
+    # def _set_gradient_checkpointing(self, module, value=False):
+    #     if isinstance(module, JukeboxModel):
+    #         module.gradient_checkpointing = value
 
 
 JUKEBOX_START_DOCSTRING = r"""
@@ -3172,7 +3114,7 @@ def get_alignment(x, zs, labels, prior, level, fp16, hps):
         end = start + n_ctx
 
         # set y offset, sample_length and lyrics tokens
-        y, indices_hop = prior.get_y(labels, start, get_indices=True)
+        y, indices_hop = prior.get_y(labels, start, total_length, get_indices=True)
         # assert len(indices_hop) == bs
         for indices in indices_hop:
             assert len(indices) == n_tokens
@@ -3204,7 +3146,7 @@ def get_alignment(x, zs, labels, prior, level, fp16, hps):
     alignments = []
     for item in range(bs):
         # Note each item has different length lyrics
-        full_tokens = labels["info"][item]["full_tokens"]
+        full_tokens = labels["input_ids"][:, 3:]
         alignment = np.zeros((total_length, len(full_tokens) + 1))
         for start in reversed(get_starts(total_length, n_ctx, hop_length)):
             end = start + n_ctx
@@ -3216,20 +3158,6 @@ def get_alignment(x, zs, labels, prior, level, fp16, hps):
         alignment = alignment[: total_length - padding_length, :-1]  # remove token padding, and last lyric index
         alignments.append(alignment)
     return alignments
-
-
-from rich.live import Live
-from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn
-
-
-progress = Progress(
-    "{task.description}",
-    SpinnerColumn(),
-    BarColumn(),
-    TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-    TimeElapsedColumn(),
-    TimeRemainingColumn(),
-)
 
 
 @add_start_docstrings(
@@ -3247,14 +3175,6 @@ class JukeboxModel(JukeboxPreTrainedModel):
         self.vqvae = VQVAE(config)
         config.vqvae_z_shapes = self.vqvae.z_shapes
         self.priors = nn.ModuleList([JukeboxPrior(config, level=i) for i in range(config.nb_priors)])
-
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
-        self.gradient_checkpointing = False
-
-        # Initialize weights and apply final processing
-        self.post_init()
 
     # Sample a partial window of length<n_ctx with tokens_to_sample new tokens on level=level
     def sample_partial_window(self, zs, labels, sampling_kwargs, level, tokens_to_sample, hps):
@@ -3277,7 +3197,9 @@ class JukeboxModel(JukeboxPreTrainedModel):
         n_samples = hps.n_samples
         n_ctx = prior.n_ctx
         end = start + n_ctx
-
+        total_length = sampling_kwargs.totat_length  # this is new, but makes way more sens than having it inside
+        # the tokenizer, as [total_length, offset, sample_length] can be written on the fly and changed without changing the
+        # lyric tokens.
         # get z already sampled at current level
         z = zs[level][:, start:end]
 
@@ -3302,7 +3224,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         # if there are no levels above should return None!
 
         # set y offset, sample_length and lyrics okens
-        y = prior.get_y(labels, start)
+        y = prior.get_y(labels, start, total_length)
 
         empty_cache()
         max_batch_size = 2
@@ -3331,12 +3253,8 @@ class JukeboxModel(JukeboxPreTrainedModel):
         print(f"Sampling level {level}")
         prior = self.priors[level]
         if total_length >= prior.n_ctx:
-            with Live(progress):
-                progress.add_task(
-                    "[red]Sampling single window...", total=len(get_starts(total_length, prior.n_ctx, hop_length))
-                )
-                for start in get_starts(total_length, prior.n_ctx, hop_length):
-                    zs = self.sample_single_window(zs, labels, sampling_kwargs, level, start, hps)
+            for start in get_range(get_starts(total_length, prior.n_ctx, hop_length)):
+                zs = self.sample_single_window(zs, labels, sampling_kwargs, level, start, hps)
 
         else:
             zs = self.sample_partial_window(zs, labels, sampling_kwargs, level, total_length, hps)
@@ -3359,13 +3277,6 @@ class JukeboxModel(JukeboxPreTrainedModel):
 
             zs = self.sample_level(zs, labels[level], sampling_kwargs[level], level, total_length, hop_length, hps)
 
-            # TODO either mask them or ddo better
-            # if level != len(sample_levels) - 1:
-            #     labels_level = labels[level][0][: 4 + hps.max_bow_genre_size].unsqueeze(0)
-            #     zs = self.sample_level(zs, labels_level, sampling_kwargs[level], level, total_length, hop_length, hps)
-            # else:
-            #     zs = self.sample_level(zs, labels[level], sampling_kwargs[level], level, total_length, hop_length, hps)
-
             prior.to(zs[0].device)
             empty_cache()
 
@@ -3373,10 +3284,6 @@ class JukeboxModel(JukeboxPreTrainedModel):
             with torch.no_grad():
                 x = self.vqvae.decode(zs[level:], start_level=level, bs_chunks=zs[level].shape[0])
 
-            # if dist.get_world_size() > 1:
-            #     logdir = f"{hps.name}_rank_{dist.get_rank()}/level_{level}"
-            # else:
-            #     logdir = f"{hps.name}/level_{level}"
             logdir = f"{hps.name}/level_{level}"
             if not os.path.exists(logdir):
                 os.makedirs(logdir)
