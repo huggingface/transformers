@@ -21,15 +21,14 @@
 # TODO: check that code is jit-able
 
 import math
-import numpy as np
 from functools import partial
-from typing import Callable, Optional, Tuple
+from typing import Optional, Tuple
 
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
-from flax.linen import combine_masks, make_causal_mask
+from flax.linen import combine_masks, make_causal_mask, dot_product_attention_weights
 from flax.linen.activation import tanh
 from flax.linen.partitioning import scan_with_axes
 from flax.traverse_util import flatten_dict, unflatten_dict
@@ -50,33 +49,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "bigscience/bloom"
 _CONFIG_FOR_DOC = "BloomConfig"
 _TOKENIZER_FOR_DOC = "BloomTokenizer"
-
-
-def masked_fill(mask, a, fill):
-    return jax.lax.select(mask, a, jax.lax.broadcast(fill, a.shape))
-
-
-def attention_mask_func(attention_scores, attention_mask, causal_mask):
-    attention_mask_bool = ~(attention_mask)
-
-    query_length, key_length, n_heads = attention_scores.shape[2], attention_scores.shape[3], attention_scores.shape[1]
-    padded_causal_mask = jnp.logical_or(
-        attention_mask_bool[:, :, key_length - query_length : key_length, :],
-        ~(causal_mask[:, :, key_length - query_length : key_length, :key_length] == 1),
-    )
-    padded_causal_mask = jnp.logical_or(padded_causal_mask, attention_mask_bool[:, :, :, :key_length])
-    # Make use of floats
-    return (
-        masked_fill(
-            jnp.broadcast_to(
-                ~padded_causal_mask,
-                (padded_causal_mask.shape[0], n_heads, padded_causal_mask.shape[2], padded_causal_mask.shape[3]),
-            ),
-            attention_scores,
-            -1e4,
-        ),
-        ~padded_causal_mask,
-    )
 
 
 BLOOM_START_DOCSTRING = r"""
@@ -175,47 +147,6 @@ def build_alibi_tensor_flax(max_seq_len, n_head, dtype):
     return alibi
 
 
-class FlaxBloomScaledSoftmax(nn.Module):
-    config: BloomConfig
-    mask_func: Callable
-    softmax_in_fp32: bool
-    """
-    Scaled Softmax module. Also performs masking.
-    Args:
-        mask_func (`function`, *required*):
-            mask function to be applied.
-        softmax_in_fp32 (`bool`, *required*):
-            if true, softmax in performed at fp32 precision.
-        scale (`float`, *optional*):
-            scaling factor used in input tensor scaling.
-    """
-
-    def setup(self):
-        pass
-
-    def __call__(self, input, mask, causal_mask, scale):
-        input_dtype = input.dtype
-        input_in_16bit = input_dtype in [jnp.float16, jnp.bfloat16]
-        softmax_dtype = jnp.float32 if self.softmax_in_fp32 else input_dtype
-
-        if scale is not None:
-            input = input * scale
-
-        if mask is None:
-            mask = jnp.ones((input.shape[0], input.shape[1]), dtype=bool)
-        else:
-            mask = mask.astype(bool)
-
-        mask_output, padded_causal_mask = self.mask_func(input, mask, causal_mask)
-        mask_output.astype(softmax_dtype)
-        probs = nn.softmax(mask_output, axis=-1) * (padded_causal_mask)
-
-        if input_dtype != softmax_dtype:
-            probs = probs.astype(input_dtype)
-
-        return probs
-
-
 class FlaxBloomAttention(nn.Module):
     config: BloomConfig
     dtype: jnp.dtype = jnp.float32
@@ -231,13 +162,6 @@ class FlaxBloomAttention(nn.Module):
                 f"`hidden_size` must be divisible by `num_heads` (got `hidden_size`: {self.hidden_size} and "
                 f"`num_heads`: {self.num_heads})."
             )
-
-        # Scaled softmax
-        self.scale_mask_softmax = FlaxBloomScaledSoftmax(
-            self.config,
-            attention_mask_func,
-            self.attention_softmax_in_fp32,
-        )
 
         dense = partial(
             nn.Dense,
@@ -345,41 +269,24 @@ class FlaxBloomAttention(nn.Module):
             jnp.full(attention_mask.shape, -1e9).astype(self.dtype),
         )
 
-        # Reshape input tensors
-        output_size = (query.shape[0], query.shape[2], query.shape[1], key.shape[1])
+        attention_bias = attention_bias + alibi
 
-        # [batch_size, q_length, num_heads, head_dim] -> [q_length, batch_size * num_heads, head_dim]
-        query = jnp.transpose(query, (1, 0, 2, 3)).reshape(output_size[2], output_size[0] * output_size[1], -1)
-
-        # [batch_size, k_length, num_heads, head_dim] -> [k_length, batch_size * num_heads, head_dim]
-        key = jnp.transpose(key, (1, 0, 2, 3)).reshape(output_size[3], output_size[0] * output_size[1], -1)
-
-        # Reshape according to batch size
-        query = jnp.transpose(query, (1, 0, 2))
-        key = jnp.transpose(key, (1, 2, 0))
-
-        # Layer-wise attention scaling
-        # layer_number matters for attn scaling and should not be 0. see `FlaxBloomAttention` for its use.
-        layer_number = jax.lax.max(1, layer_number)
-        norm_factor = jnp.sqrt(self.head_dim).astype(self.dtype) * layer_number
-        alpha = 1.0 / norm_factor
-        beta = 1.0 / layer_number
-
+        # TODO: override softmax precision to fp32 if self.attention_softmax_in_fp32=True and self.dtype != fp32
         # usual dot product attention
-        attn_weights = beta * alibi + alpha * jnp.matmul(query, key)
-        attn_weights = attn_weights.reshape(output_size)
+        attn_weights = dot_product_attention_weights(
+            query,
+            key,
+            bias=attention_bias,
+            dropout_rng=dropout_rng,
+            dropout_rate=self.config.attention_dropout,
+            deterministic=deterministic,
+            dtype=self.dtype,
+            precision=None,
+        )
 
-        # TODO: apply softmax to attention weights
-        attention_probs = self.scale_mask_softmax(attn_weights, attention_mask, causal_mask, layer_number)
-
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
-        output_size = (value.shape[0], value.shape[2], query.shape[1], value.shape[3])
-
-        attn_output = jnp.einsum("...hqk,...khd->...qhd", attention_probs, value)
+        attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value)
         attn_output = self._merge_heads(attn_output)
-        attn_output = self.dense(attn_output )
+        attn_output = self.dense(attn_output)
 
         attn_output = attn_output + residual
 
@@ -760,9 +667,6 @@ class FlaxBloomModule(nn.Module):
 
         batch_size, curr_seq_len, _ = hidden_states.shape
         alibi = build_alibi_tensor_flax(curr_seq_len, self.config.n_head, hidden_states.dtype)
-        # TODO put repeat here
-        alibi = jnp.broadcast_to(alibi[None, :], (batch_size,) + alibi.shape).reshape((-1,) + alibi.shape[1:])
-
 
         past_key_values = () if use_cache else None  # TODO: come back to this line
         # TODO: how to handle alibi? build alibi tensor here?
