@@ -419,7 +419,7 @@ class Swinv2SelfAttention(nn.Module):
         self.pretrained_window_size = pretrained_window_size
         self.logit_scale = nn.Parameter(torch.log(10 * torch.ones((num_heads, 1, 1))))
         # mlp to generate continuous relative position bias
-        self.cpb_mlp = nn.Sequential(
+        self.continuous_position_bias_mlp = nn.Sequential(
             nn.Linear(2, 512, bias=True), nn.ReLU(inplace=True), nn.Linear(512, num_heads, bias=False)
         )
 
@@ -485,7 +485,9 @@ class Swinv2SelfAttention(nn.Module):
         attention_scores = F.normalize(query_layer, dim=-1) @ F.normalize(key_layer, dim=-1).transpose(-2, -1)
         logit_scale = torch.clamp(self.logit_scale, max=math.log(1.0 / 0.01)).exp()
         attention_scores = attention_scores * logit_scale
-        relative_position_bias_table = self.cpb_mlp(self.relative_coords_table).view(-1, self.num_attention_heads)
+        relative_position_bias_table = self.continuous_position_bias_mlp(self.relative_coords_table).view(
+            -1, self.num_attention_heads
+        )
         relative_position_bias = relative_position_bias_table[self.relative_position_index.view(-1)].view(
             self.window_size[0] * self.window_size[1], self.window_size[0] * self.window_size[1], -1
         )  # Wh*Ww,Wh*Ww,nH
