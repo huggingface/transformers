@@ -18,7 +18,7 @@ import timeout_decorator  # noqa
 
 from transformers import BloomConfig, is_flax_available, BloomTokenizerFast
 from transformers.utils.import_utils import is_torch_cuda_available
-from transformers.testing_utils import require_flax, slow
+from transformers.testing_utils import require_flax, slow, is_pt_flax_cross_test, require_torch
 
 from ...generation.test_generation_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
@@ -35,7 +35,12 @@ if is_flax_available():
     import jax
     import jax.numpy as jnp
     from transformers import FlaxBloomForCausalLM, FlaxBloomModel
+    
+
+if is_pt_flax_cross_test:
+
     from transformers.models.bloom.modeling_flax_bloom import build_alibi_tensor_flax
+    from transformers.models.bloom.modeling_bloom import build_alibi_tensor
 
 
 def prepare_opt_inputs_dict(config, input_ids, attention_mask=None, head_mask=None):
@@ -233,11 +238,32 @@ class FlaxBloomGenerationTest(unittest.TestCase):
 
         self.assertEqual(sequences_fx_batch[1][6:].tolist(), sequences_fx_simple[0][:-6].tolist())
 
-@require_flax
+@require_torch
+@is_pt_flax_cross_test
 class FlaxBloomConversionTest(unittest.TestCase):
     def setup(self):
+        self.n_head = 16
         self.model_tester = FlaxBloomConversionTest(self)
     
+    def test_flax_torch_alibi(self):
+        import torch
+        dtype = jnp.float16
+        single_attention_mask = jnp.array([[1, 1, 1, 1, 1]])
+        seq_len = single_attention_mask.shape[-1]
+
+        alibi = build_alibi_tensor(seq_len, self.n_head, torch.float16)
+        alibi_flax = build_alibi_tensor_flax(single_attention_mask, self.n_head, dtype)[0]
+
+        self.assertTrue(jnp.equal(alibi_flax, alibi.numpy()).all())
+
+
     def test_alibi_padding(self):
-        # example_attn_mask = 
-        pass
+        dtype = jnp.bfloat16
+
+        batch_attention_mask = jnp.array([[1, 1, 1, 1, 1], [0, 0, 0, 1, 1]])
+        single_attention_mask = jnp.array([[1, 1, 1, 1, 1]])
+        
+        alibi_padd = build_alibi_tensor_flax(batch_attention_mask, self.n_head, dtype)
+        alibi_simple = build_alibi_tensor_flax(single_attention_mask, self.n_head, dtype)
+        
+        self.assertTrue(jnp.equal(alibi_simple[:, :, :, :2], alibi_padd[1][:, :, 3:]).all())
