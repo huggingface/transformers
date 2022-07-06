@@ -1046,8 +1046,7 @@ class Swinv2Model(Swinv2PreTrainedModel):
 
 
 @add_start_docstrings(
-    "Swinv2 Model with a decoder on top for masked image modeling, as proposed in `SimMIM"
-    " <https://arxiv.org/abs/2111.09886>`__.",
+    "Swinv2 Model with a decoder on top for masked image modeling, as proposed in [SimMIM](https://arxiv.org/abs/2111.09886).",
     SWINV2_START_DOCSTRING,
 )
 class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
