@@ -80,7 +80,7 @@ class Swinv2Config(PretrainedConfig):
 Example:
 
     ```python
-    >>> from transformers import Swinv2Model, Swinv2Config
+    >>> from transformers import Swinv2Config, Swinv2Model
 
     >>> # Initializing a Swinv2 microsoft/swinv2_tiny_patch4_windows8_256 style configuration
     >>> configuration = Swinv2Config()
