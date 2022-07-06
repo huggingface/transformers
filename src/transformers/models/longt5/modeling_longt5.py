@@ -32,7 +32,8 @@ from ...modeling_outputs import (
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
-from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import ALL_LAYERNORM_LAYERS, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
@@ -246,6 +247,8 @@ class LongT5LayerNorm(nn.Module):
 
         return self.weight * hidden_states
 
+
+ALL_LAYERNORM_LAYERS.append(LongT5LayerNorm)
 
 try:
     from apex.normalization import FusedRMSNorm
