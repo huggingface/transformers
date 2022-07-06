@@ -12,14 +12,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Transformations for Time Series Transformers."""
+""" Transformations for Time Series Transformers. """
 
-from typing import Optional, List
+from typing import Optional, List, Iterable
 from functools import lru_cache
 
 import pandas as pd
 
-from gluonts.time_feature import time_features_from_frequency_str, TimeFeature
+from torch.utils.data import DataLoader
+
+from gluonts.time_feature import time_features_from_frequency_str
 from gluonts.dataset.field_names import FieldName
 from gluonts.transform import (
     AddAgeFeature,
@@ -30,6 +32,7 @@ from gluonts.transform import (
     ExpectedNumInstanceSampler,
     InstanceSplitter,
     RemoveFields,
+    SelectFields,
     SetField,
     TestSplitSampler,
     Transformation,
@@ -37,6 +40,8 @@ from gluonts.transform import (
     VstackFeatures,
 )
 from gluonts.transform.sampler import InstanceSampler
+from gluonts.itertools import Cyclic, IterableSlice, PseudoShuffled
+from gluonts.torch.util import IterableDataset
 
 
 @lru_cache(10_000)
@@ -76,7 +81,6 @@ def create_transformation(config) -> Transformation:
             ),
             AsNumpyArray(
                 field=FieldName.TARGET,
-                # in the following line, we add 1 for the time dimension
                 expected_ndim=config.input_size,
             ),
             AddObservedValuesIndicator(
@@ -131,4 +135,52 @@ def create_instance_splitter(
             FieldName.FEAT_TIME,
             FieldName.OBSERVED_VALUES,
         ],
+    )
+
+
+def create_training_data_loader(
+    config,
+    data,
+    batch_size: int,
+    num_batches_per_epoch: int,
+    shuffle_buffer_length: Optional[int] = None,
+    **kwargs,
+) -> Iterable:
+    PREDICTION_INPUT_NAMES = [
+        FieldName.FEAT_STATIC_CAT,
+        FieldName.FEAT_STATIC_REAL,
+        "past_" + FieldName.FEAT_TIME,
+        "past_" + FieldName.TARGET,
+        "past_" + FieldName.OBSERVED_VALUES,
+        "future_" + FieldName.FEAT_TIME,
+    ]
+
+    TRAINING_INPUT_NAMES = PREDICTION_INPUT_NAMES + [
+        "future_" + FieldName.TARGET,
+        "future_" + FieldName.OBSERVED_VALUES,
+    ]
+
+    transformation = create_transformation(config)
+    transformed_data = transformation.apply(data, is_train=True)
+
+    instance_splitter = create_instance_splitter(config, "train") + SelectFields(TRAINING_INPUT_NAMES)
+
+    training_instances = instance_splitter.apply(
+        Cyclic(transformed_data)
+        if shuffle_buffer_length is None
+        else PseudoShuffled(
+            Cyclic(transformed_data),
+            shuffle_buffer_length=shuffle_buffer_length,
+        )
+    )
+
+    return IterableSlice(
+        iter(
+            DataLoader(
+                IterableDataset(training_instances),
+                batch_size=batch_size,
+                **kwargs,
+            )
+        ),
+        num_batches_per_epoch,
     )
