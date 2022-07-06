@@ -51,6 +51,20 @@ _CONFIG_FOR_DOC = "BloomConfig"
 _TOKENIZER_FOR_DOC = "BloomTokenizer"
 
 
+def shift_alibi_for_padding(alibi, attention_mask, batch_size):
+    if jnp.isin(0, attention_mask):
+        unpadded_indices = nn.relu(lax.cumsum(attention_mask, axis=1) - 1)
+        reshaped_alibi = jnp.reshape(alibi, (batch_size, int(alibi.shape[0] / batch_size), alibi.shape[-1]))
+
+        final_alibi = []
+        for i in range(reshaped_alibi.shape[0]):
+            final_alibi.append(jnp.take_along_axis(reshaped_alibi[i], jnp.expand_dims(unpadded_indices[i], 0), -1))
+        alibi = jnp.array(final_alibi)
+        return jnp.reshape(alibi, (alibi.shape[0] * alibi.shape[1], 1, -1))
+    else:
+        return alibi
+
+
 BLOOM_START_DOCSTRING = r"""
 
     This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -139,8 +153,8 @@ def build_alibi_tensor_flax(max_seq_len, n_head, dtype):
                 + get_slopes(2 * closest_power_of_2)[0::2][: n - closest_power_of_2]
             )
 
-    slopes = jnp.array(get_slopes(n_head))[None, :, None, None]
-    arange_tensor = jnp.arange(max_seq_len, dtype=dtype)[None, None, None, :]
+    slopes = jnp.array(get_slopes(n_head))[:, None, None]
+    arange_tensor = jnp.arange(max_seq_len, dtype=dtype)[None, None, :]
 
     # Note: alibi will added to the attention bias that will be applied to the query, key product of attention
     # => therefore alibi will have to be of shape (batch_size, num_heads, query_length, key_length)
@@ -149,9 +163,9 @@ def build_alibi_tensor_flax(max_seq_len, n_head, dtype):
     # This is more or less identical to T5's relative position bias:
     # https://github.com/huggingface/transformers/blob/f681437203baa7671de3174b0fa583c349d9d5e1/src/transformers/models/t5/modeling_flax_t5.py#L426
     # batch_size = 1, n_head = n_head, query_length
-    batch_size = query_length = 1
+    batch_size = key_length = 1
     num_heads = n_head
-    key_length = arange_tensor.shape[-1]
+    query_length = arange_tensor.shape[-1]
 
     alibi = slopes * jnp.broadcast_to(arange_tensor, (batch_size, num_heads, query_length, key_length))
     return alibi
@@ -280,8 +294,8 @@ class FlaxBloomAttention(nn.Module):
             jnp.full(attention_mask.shape, -1e9).astype(self.dtype),
         )
 
-#        if alibi.shape[1:] != (1, 1):
-#            import ipdb; ipdb.set_trace()
+        if alibi.shape[1:] != (1, 1):
+            import ipdb; ipdb.set_trace()
 
         attention_bias = attention_bias + alibi
 
@@ -616,7 +630,6 @@ class FlaxBloomBlockCollection(nn.Module):
                 if output_hidden_states:
                     all_hidden_states += (hidden_states,)
 
-
                 layer_outputs = FlaxBloomBlock(self.config, name=str(layer_number), dtype=self.dtype, use_scan=False)(
                     hidden_states,
                     alibi=alibi,
@@ -686,8 +699,9 @@ class FlaxBloomModule(nn.Module):
         batch_size, curr_seq_len, _ = hidden_states.shape
 
         alibi = build_alibi_tensor_flax(curr_seq_len, self.config.n_head, hidden_states.dtype)
-        # TODO put repeat here
-        alibi = jnp.broadcast_to(alibi[None, :], (batch_size,) + alibi.shape).reshape((-1,) + alibi.shape[1:])
+
+        if False and attention_mask is not None:
+            alibi = shift_alibi_for_padding(alibi, attention_mask, batch_size)
 
         past_key_values = () if use_cache else None  # TODO: come back to this line
         # TODO: how to handle alibi? build alibi tensor here?
