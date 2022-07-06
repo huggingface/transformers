@@ -262,8 +262,6 @@ class T5LayerNorm(nn.Module):
         return self.weight * hidden_states
 
 
-ALL_LAYERNORM_LAYERS.append(T5LayerNorm)
-
 try:
     from apex.normalization import FusedRMSNorm
 
@@ -276,6 +274,8 @@ except ImportError:
 except Exception:
     logger.warning("discovered apex but it failed to load, falling back to T5LayerNorm")
     pass
+
+ALL_LAYERNORM_LAYERS.append(T5LayerNorm)
 
 
 class T5DenseActDense(nn.Module):

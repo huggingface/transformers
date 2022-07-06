@@ -248,8 +248,6 @@ class LongT5LayerNorm(nn.Module):
         return self.weight * hidden_states
 
 
-ALL_LAYERNORM_LAYERS.append(LongT5LayerNorm)
-
 try:
     from apex.normalization import FusedRMSNorm
 
@@ -262,6 +260,8 @@ except ImportError:
 except Exception:
     logger.warning("discovered apex but it failed to load, falling back to LongT5LayerNorm")
     pass
+
+ALL_LAYERNORM_LAYERS.append(LongT5LayerNorm)
 
 
 # Copied from transformers.models.t5.modeling_t5.T5DenseActDense with T5->LongT5
