@@ -675,7 +675,6 @@ class FlaxBloomModule(nn.Module):
         # TODO put repeat here
         alibi = jnp.broadcast_to(alibi[None, :], (batch_size,) + alibi.shape).reshape((-1,) + alibi.shape[1:])
 
-
         past_key_values = () if use_cache else None  # TODO: come back to this line
         # TODO: how to handle alibi? build alibi tensor here?
 
@@ -785,6 +784,7 @@ class FlaxBloomForCausalLMModule(nn.Module):
 # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoForCausalLM with GPTNeo->Bloom
 class FlaxBloomForCausalLM(FlaxBloomPreTrainedModel):
     module_class = FlaxBloomForCausalLMModule
+
     # TODO: check if this class is correct / take out position ids
     def prepare_inputs_for_generation(self, input_ids, max_length, attention_mask: Optional[jnp.DeviceArray] = None):
         # initializing the cache
