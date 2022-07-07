@@ -67,7 +67,7 @@ class TFMT5ModelIntegrationTest(unittest.TestCase):
         labels = tokenizer("Hi I am", return_tensors="tf").input_ids
 
         loss = model(input_ids, labels=labels).loss
-        mtf_score = -tf.math.reduce_sum(loss).numpy()
+        mtf_score = -tf.math.reduce_mean(loss).numpy()
 
-        EXPECTED_SCORE = -84.9127
+        EXPECTED_SCORE = -21.210594
         self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 2e-4)
