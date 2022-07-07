@@ -107,7 +107,10 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: int = None):
 
 
 def build_alibi_tensor(
-    max_seq_len: int, n_head: int, dtype: torch.dtype = torch.bfloat16, device: torch.device = torch.device("cpu")
+    attention_mask: torch.Tensor,
+    n_head: int,
+    dtype: torch.dtype = torch.bfloat16,
+    device: torch.device = torch.device("cpu"),
 ) -> torch.Tensor:
     """
     Link to paper: https://arxiv.org/abs/2108.12409 Alibi tensor is not causal as the original paper mentions, it
@@ -116,9 +119,9 @@ def build_alibi_tensor(
     https://github.com/ofirpress/attention_with_linear_biases/blob/a35aaca144e0eb6b789dfcb46784c4b8e31b7983/fairseq/models/transformer.py#L742
 
     Args:
-    Returns tensor shaped (n_head, 1, max_seq_len)
-        max_seq_len: (`int`, *required*):
-            max sequence length
+    Returns tensor shaped (batch_size * n_head, 1, max_seq_len)
+        attention_mask: (`torch.Tensor`, *required*)
+            attention mask
         n_head: (`int`, *required*):
             number of heads
         dtype: (`torch.dtype`, *optional*, default=`torch.bfloat16`):
@@ -139,25 +142,18 @@ def build_alibi_tensor(
         extra_powers = torch.arange(1, 1 + 2 * num_remaining_heads, 2, device=device, dtype=torch.int32)
         slopes = torch.cat([slopes, torch.pow(extra_base, extra_powers)], dim=0)
 
-    lengths = torch.arange(max_seq_len, device=device, dtype=torch.int32)
-    return (slopes.view(-1, 1, 1) * lengths.view(1, 1, -1)).to(dtype)
+    # Note: alibi will added to the attention bias that will be applied to the query, key product of attention
+    # => therefore alibi will have to be of shape (batch_size, num_heads, query_length, key_length)
+    # => here we set (batch_size=1, num_heads=n_head, query_length=1, key_length=max_length)
+    # => the query_length dimension will then be broadcasted correctly
+    # This is more or less identical to T5's relative position bias:
+    # https://github.com/huggingface/transformers/blob/f681437203baa7671de3174b0fa583c349d9d5e1/src/transformers/models/t5/modeling_flax_t5.py#L426
+    # batch_size = 1, n_head = n_head, query_length
 
-
-def pre_process_alibi_for_pad(alibi: torch.Tensor, attention_mask: torch.Tensor):
-    """
-    Args:
-    Pre-process the alibi tensor for padding.
-        alibi: ([`torch.tensor`], *required*):
-            alibi tensor to pre-process
-        attention_mask: ([`torch.tensor`], *required*):
-            attention mask to pre-process
-    """
-    unpadded_indices = torch.relu(attention_mask.cumsum(dim=1) - 1)
-    # ^-- [batch, max_len], values correspond to element indices after removing padding
-    # We shift the alibi tensor + replace all the values where attention_mask==0.0 by 0
-    alibi = alibi.take_along_dim(unpadded_indices.unsqueeze(0), -1) * attention_mask.unsqueeze(0) # [num_heads, batch_size, max_len]
-    alibi = alibi.transpose(0, 1) # [batch_size, num_heads, max_len]
-    return alibi.reshape(alibi.shape[0] * alibi.shape[1], 1, -1)
+    arange_tensor = (attention_mask.cumsum(-1)[:, None, :].to(device) - 1) * attention_mask.unsqueeze(1)
+    alibi = slopes.unsqueeze(-1) * arange_tensor
+    alibi = alibi * attention_mask.unsqueeze(1)
+    return alibi.reshape(alibi.shape[0] * n_head, 1, -1).to(dtype)
 
 
 def dropout_add(x, residual, prob, training):
@@ -756,19 +752,13 @@ class BloomModel(BloomPreTrainedModel):
         if past_key_values[0] is not None:
             past_key_values_length = past_key_values[0][0].shape[1]
             current_sequence_length += past_key_values_length
-        alibi = build_alibi_tensor(current_sequence_length, self.n_head, hidden_states.dtype, hidden_states.device)
-
-        # apply preprocessing if the input is padded
-        if attention_mask is not None:
-            attention_mask = attention_mask.to(hidden_states.device)
-        if attention_mask is not None and 0 in attention_mask:
-            alibi = pre_process_alibi_for_pad(alibi, attention_mask)
-        # otherwise repeat alibi tensor with the batch size
-        else:
-            alibi = alibi.repeat(hidden_states.shape[0], 1, 1)
 
         if attention_mask is None:
             attention_mask = torch.ones((hidden_states.shape[:-1]), device=hidden_states.device)
+        else:
+            attention_mask = attention_mask.to(hidden_states.device)
+
+        alibi = build_alibi_tensor(attention_mask, self.n_head, hidden_states.dtype, hidden_states.device)
 
         causal_mask = self._prepare_attn_mask(attention_mask, input_shape, inputs_embeds, past_key_values_length)
 
