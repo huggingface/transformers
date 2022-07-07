@@ -60,6 +60,7 @@ else:
         "BertLayer",
         "BertLMHeadModel",
         "BertModel",
+        "Bert2DModel",
         "BertPreTrainedModel",
         "load_tf_weights_in_bert",
     ]
@@ -142,6 +143,7 @@ if TYPE_CHECKING:
             BertLayer,
             BertLMHeadModel,
             BertModel,
+            Bert2DModel,
             BertPreTrainedModel,
             load_tf_weights_in_bert,
         )
