@@ -471,9 +471,6 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
 
     @require_torch_gpu
     def test_batched_nan_fp16(self):
-        # a bug manifested starting at models facebook/opt-1.3 and larger when running batched generations,
-        # therefore not using a tiny model, but the smallest model the problem was seen with which is opt-1.3b.
-        # please refer to this github thread: https://github.com/huggingface/transformers/pull/17437 for more details
         model_name = "facebook/xglm-564M"
         tokenizer = XGLMTokenizer.from_pretrained(model_name, use_fast=False, padding_side="left")
 
