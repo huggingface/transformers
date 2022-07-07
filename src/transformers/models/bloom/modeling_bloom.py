@@ -123,11 +123,11 @@ def build_alibi_tensor(
     Returns tensor shaped (batch_size * n_head, 1, max_seq_len)
         attention_mask (`torch.Tensor`, *required*):
             Token-wise attention mask, this should be of shape (batch_size, max_seq_len).
-        n_head: (`int`, *required*):
+        n_head (`int`, *required*):
             number of heads
-        dtype: (`torch.dtype`, *optional*, default=`torch.bfloat16`):
+        dtype (`torch.dtype`, *optional*, default=`torch.bfloat16`):
             dtype of the output tensor
-        device: (`torch.device`, *optional*, default=`torch.device('cpu')`):
+        device (`torch.device`, *optional*, default=`torch.device('cpu')`):
             device of the output alibi tensor
     """
     closest_power_of_2 = 2 ** math.floor(math.log2(n_head))
