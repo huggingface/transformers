@@ -21,7 +21,12 @@ import numpy as np
 import torch
 
 from huggingface_hub import hf_hub_download
-from transformers import VideoMAEConfig, VideoMAEFeatureExtractor, VideoMAEForVideoClassification
+from transformers import (
+    VideoMAEConfig,
+    VideoMAEFeatureExtractor,
+    VideoMAEForPreTraining,
+    VideoMAEForVideoClassification,
+)
 
 
 def get_videomae_config(checkpoint_path, model_name):
@@ -34,23 +39,26 @@ def get_videomae_config(checkpoint_path, model_name):
         config.num_attention_heads = 16
 
     repo_id = "datasets/huggingface/label-files"
-    if "kinetics" in model_name:
-        config.num_labels = 400
-        filename = "kinetics400-id2label.json"
-    elif "ssv2" in model_name:
-        config.num_labels = 174
-        filename = "something-something-v2-id2label.json"
-    else:
-        raise ValueError("Model name should either contain 'kinetics' or 'ssv2'.")
-    id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
-    id2label = {int(k): v for k, v in id2label.items()}
-    config.id2label = id2label
-    config.label2id = {v: k for k, v in id2label.items()}
+    if "finetuned" in model_name:
+        if "kinetics" in model_name:
+            config.num_labels = 400
+            filename = "kinetics400-id2label.json"
+        elif "ssv2" in model_name:
+            config.num_labels = 174
+            filename = "something-something-v2-id2label.json"
+        else:
+            raise ValueError("Model name should either contain 'kinetics' or 'ssv2' in case it's fine-tuned.")
+        id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
+        id2label = {int(k): v for k, v in id2label.items()}
+        config.id2label = id2label
+        config.label2id = {v: k for k, v in id2label.items()}
 
     return config
 
 
 def rename_key(name):
+    if "encoder." in name:
+        name = name.replace("encoder.", "")
     if "cls_token" in name:
         name = name.replace("cls_token", "videomae.embeddings.cls_token")
     if "mask_token" in name:
@@ -63,8 +71,8 @@ def rename_key(name):
         name = name.replace("patch_embed.proj", "videomae.embeddings.patch_embeddings.projection")
     if "patch_embed.norm" in name:
         name = name.replace("patch_embed.norm", "videomae.embeddings.norm")
-    if "decoder_blocks" in name:
-        name = name.replace("decoder_blocks", "decoder.decoder_layers")
+    if "decoder.blocks" in name:
+        name = name.replace("decoder.blocks", "decoder.decoder_layers")
     if "blocks" in name:
         name = name.replace("blocks", "videomae.encoder.layer")
     if "attn.proj" in name:
@@ -100,13 +108,19 @@ def rename_key(name):
 def convert_state_dict(orig_state_dict, config):
     for key in orig_state_dict.copy().keys():
         val = orig_state_dict.pop(key)
-
+        
+        if key.startswith("encoder."):
+            key = key.replace("encoder.", "")
+        
         if "qkv" in key:
             key_split = key.split(".")
-            layer_num = int(key_split[1])
-            if "decoder_blocks" in key:
+            print("Key:", key)
+            if key.startswith("decoder.blocks"):
                 dim = config.decoder_hidden_size
+                layer_num = int(key_split[2])
                 prefix = "decoder.decoder_layers."
+                print("Old name:", key)
+                print("New name:", f"{prefix}{layer_num}.attention.attention.query.weight")
                 if "weight" in key:
                     orig_state_dict[f"{prefix}{layer_num}.attention.attention.query.weight"] = val[:dim, :]
                     orig_state_dict[f"{prefix}{layer_num}.attention.attention.key.weight"] = val[dim : dim * 2, :]
@@ -117,6 +131,7 @@ def convert_state_dict(orig_state_dict, config):
                 #     orig_state_dict[f"{prefix}{layer_num}.attention.attention.value.bias"] = val[-dim:]
             else:
                 dim = config.hidden_size
+                layer_num = int(key_split[1])
                 prefix = "videomae.encoder.layer."
                 if "weight" in key:
                     orig_state_dict[f"{prefix}{layer_num}.attention.attention.query.weight"] = val[:dim, :]
@@ -145,9 +160,16 @@ def prepare_video():
 def convert_videomae_checkpoint(checkpoint_path, pytorch_dump_folder_path, model_name, push_to_hub):
     config = get_videomae_config(checkpoint_path, model_name)
 
-    model = VideoMAEForVideoClassification(config)
+    if "finetuned" in model_name:
+        model = VideoMAEForVideoClassification(config)
+    else:
+        model = VideoMAEForPreTraining(config)
 
-    state_dict = torch.load(checkpoint_path, map_location="cpu")["module"]
+    state_dict = torch.load(checkpoint_path, map_location="cpu")
+    if "finetuned" in model_name:
+        state_dict = state_dict["module"]
+    else:
+        state_dict = state_dict["model"]
     new_state_dict = convert_state_dict(state_dict, config)
 
     model.load_state_dict(new_state_dict)
@@ -160,20 +182,17 @@ def convert_videomae_checkpoint(checkpoint_path, pytorch_dump_folder_path, model
     outputs = model(**inputs)
     logits = outputs.logits
 
-    print("First values of logits:", logits[0, :3])
-
-    predicted_class_idx = logits.argmax(-1).item()
-    print("Predicted class:", model.config.id2label[predicted_class_idx])
+    print("Shape of logits:", logits.shape)
 
     model_names = [
-        # Kinetics-400 checkpoints
+        # Kinetics-400 checkpoints (short = pretrained only for 800 epochs instead of 1600)
         "videomae-base-short",
         "videomae-base-short-finetuned-kinetics",
         "videomae-base",
         "videomae-base-finetuned-kinetics",
         "videomae-large",
         "videomae-large-finetuned-kinetics",
-        # Something-Something-v2 checkpoints
+        # Something-Something-v2 checkpoints (short = pretrained only for 800 epochs instead of 2400)
         "videomae-base-short-ssv2",
         "videomae-base-short-finetuned-ssv2",
         "videomae-base-ssv2",
@@ -189,10 +208,12 @@ def convert_videomae_checkpoint(checkpoint_path, pytorch_dump_folder_path, model
 
     # verify logits
     assert torch.allclose(logits[0, :3], expected_slice, atol=1e-4)
+    print("Logits ok!")
 
-    print(f"Saving model and feature extractor to {pytorch_dump_folder_path}")
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
-    model.save_pretrained(pytorch_dump_folder_path)
+    if pytorch_dump_folder_path is not None:
+        print(f"Saving model and feature extractor to {pytorch_dump_folder_path}")
+        feature_extractor.save_pretrained(pytorch_dump_folder_path)
+        model.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
         print("Pushing to the hub...")
@@ -204,7 +225,10 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--checkpoint_path",
-        default="/Users/nielsrogge/Documents/VideoMAE/Original checkpoints/Kinetics-400/checkpoint.pth",
+        default=(
+            "/Users/nielsrogge/Documents/VideoMAE/Original"
+            " checkpoints/Kinetics-400/videomae-base-finetuned-kinetics/checkpoint.pth"
+        ),
         type=str,
         help="Path of the original PyTorch checkpoint you'd like to convert.",
     )

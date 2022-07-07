@@ -74,7 +74,7 @@ class VideoMAEConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the decoder.
         decoder_hidden_size (`int`, *optional*, defaults to 384):
             Dimensionality of the decoder.
-        decoder_num_hidden_layers (`int`, *optional*, defaults to 12):
+        decoder_num_hidden_layers (`int`, *optional*, defaults to 4):
             Number of hidden layers in the decoder.
         decoder_intermediate_size (`int`, *optional*, defaults to 1536):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the decoder.
@@ -117,7 +117,7 @@ class VideoMAEConfig(PretrainedConfig):
         use_mean_pooling=True,
         decoder_num_attention_heads=6,
         decoder_hidden_size=384,
-        decoder_num_hidden_layers=12,
+        decoder_num_hidden_layers=4,
         decoder_intermediate_size=1536,
         norm_pix_loss=True,
         **kwargs
