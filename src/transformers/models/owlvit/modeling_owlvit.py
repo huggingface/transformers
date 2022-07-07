@@ -984,6 +984,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        return_projected: Optional[bool] = True,
     ) -> torch.FloatTensor:
         r"""
         Returns:
@@ -1023,8 +1024,8 @@ class OwlViTModel(OwlViTPreTrainedModel):
 
         pooled_output = vision_outputs[1]  # pooled_output
 
-        # Return projected output if in training mode
-        if self.training:
+        # Return projected output
+        if return_projected:
             image_features = self.visual_projection(pooled_output)
         else:
             image_features = pooled_output
@@ -1042,7 +1043,6 @@ class OwlViTModel(OwlViTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         normalize: Optional[bool] = True,
-        train: Optional[bool] = False,
     ) -> Union[Tuple, OwlViTOutput]:
         r"""
         Returns:
@@ -1080,7 +1080,6 @@ class OwlViTModel(OwlViTPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            train=True,
         )
 
         # Get embeddings for all text queries in all batch samples
@@ -1221,7 +1220,7 @@ class OwlViTImageTextEmbedder(nn.Module):
 
         # Encode image
         if pixel_values is not None:
-            image_embeds = self.clip.get_image_features(pixel_values, train=False)
+            image_embeds = self.clip.get_image_features(pixel_values, return_projected=False)
 
             # Resize class token
             new_size = tuple(np.array(image_embeds.shape) - np.array((0, 1, 0)))

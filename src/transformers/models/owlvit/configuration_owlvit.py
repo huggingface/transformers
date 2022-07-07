@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" OwlViT model configuration"""
+""" OWL-ViT model configuration"""
 
 import copy
 import os
@@ -33,13 +33,9 @@ OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class OwlViTTextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`OwlViTModel`]. It is used to instantiate an OwlViT
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the OwlViT
-    [adirik/owlvit-base-patch32](https://huggingface.co/adirik/owlvit-base-patch32) architecture.
+    This is the configuration class to store the configuration of a [`OwlViTModel`]. It is used to instantiate an OwlViT model according to the specified arguments, defining the model architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the OwlViT [adirik/owlvit-base-patch32](https://huggingface.co/adirik/owlvit-base-patch32) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
@@ -74,7 +70,7 @@ class OwlViTTextConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import OwlViTTextModel, OwlViTTextConfig
+    >>> from transformers import OwlViTTextConfig, OwlViTTextModel
 
     >>> # Initializing a OwlViTTextModel with adirik/owlvit-base-patch32 style configuration
     >>> configuration = OwlViTTextConfig()
@@ -141,13 +137,9 @@ class OwlViTTextConfig(PretrainedConfig):
 
 class OwlViTVisionConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`OwlViTModel`]. It is used to instantiate an OwlViT
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the OwlViT
-    [adirik/owlvit-base-patch32](https://huggingface.co/adirik/owlvit-base-patch32) architecture.
+    This is the configuration class to store the configuration of an [`OwlViTVisionModel`]. It is used to instantiate an OWL-ViT image encoder according to the specified arguments, defining the model architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the OWL-ViT [google/owlvit-base-patch32](https://huggingface.co/google/owlvit-base-patch32) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
@@ -180,7 +172,7 @@ class OwlViTVisionConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import OwlViTVisionModel, OwlViTVisionConfig
+    >>> from transformers import OwlViTVisionConfig, OwlViTVisionModel
 
     >>> # Initializing a OwlViTVisionModel with adirik/owlvit-base-patch32 style configuration
     >>> configuration = OwlViTVisionConfig()
@@ -245,11 +237,9 @@ class OwlViTVisionConfig(PretrainedConfig):
 
 class OwlViTConfig(PretrainedConfig):
     r"""
-    [`OwlViTConfig`] is the configuration class to store the configuration of a [`OwlViTModel`]. It is used to instantiate
-    OwlViT model according to the specified arguments, defining the text model and vision model configs.
+    [`OwlViTConfig`] is the configuration class to store the configuration of an [`OwlViTModel`]. It is used to instantiate an OWL-ViT model according to the specified arguments, defining the text model and vision model configs.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the documentation from [`PretrainedConfig`] for more information.
 
     Args:
         text_config_dict (`dict`, *optional*):
@@ -257,9 +247,9 @@ class OwlViTConfig(PretrainedConfig):
         vision_config_dict (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`OwlViTVisionConfig`].
         projection_dim (`int`, *optional*, defaults to 512):
-            Dimentionality of text and vision projection layers.
+            Dimensionality of text and vision projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The inital value of the *logit_scale* paramter. Default is used as per the original OwlViT implementation.
+            The inital value of the *logit_scale* parameter. Default is used as per the original OWL-ViT implementation.
         kwargs (*optional*):
             Dictionary of keyword arguments.
     """

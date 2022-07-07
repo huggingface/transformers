@@ -1,3 +1,19 @@
+# coding=utf-8
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Convert OWL-ViT checkpoints from the original repository. URL: https://github.com/google-research/scenic/tree/main/scenic/projects/owl_vit"""
+
 import argparse
 import collections
 
@@ -143,7 +159,7 @@ def copy_text_model_and_projection(hf_model, pt_model):
     copy_encoder(hf_model.text_model, pt_model)
 
 
-def copy_vison_model_and_projection(hf_model, pt_model):
+def copy_vision_model_and_projection(hf_model, pt_model):
     # copy projection
     hf_model.visual_projection.weight.data = pt_model.visual.proj.data.T
 
@@ -319,7 +335,7 @@ def convert_owlvit_checkpoint(pt_backbone, flax_params, attn_params, pytorch_dum
     hf_model = OwlViTForObjectDetection(config).eval()
 
     copy_text_model_and_projection(hf_backbone, pt_backbone)
-    copy_vison_model_and_projection(hf_backbone, pt_backbone)
+    copy_vision_model_and_projection(hf_backbone, pt_backbone)
     hf_backbone.logit_scale = pt_backbone.logit_scale
     copy_flax_attn_params(hf_backbone, attn_params)
 

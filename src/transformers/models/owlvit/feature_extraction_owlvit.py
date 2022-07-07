@@ -29,7 +29,7 @@ from ...utils import TensorType, logging
 logger = logging.get_logger(__name__)
 
 
-# # Copied from transformers.models.detr.feature_extraction_detr.center_to_corners_format
+# Copied from transformers.models.detr.feature_extraction_detr.center_to_corners_format
 def center_to_corners_format(x):
     """
     Converts a PyTorch tensor of bounding boxes of center format (center_x, center_y, width, height) to corners format
@@ -42,16 +42,16 @@ def center_to_corners_format(x):
 
 class OwlViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
-    Constructs a OwlViT feature extractor.
+    Constructs an OWL-ViT feature extractor.
 
     This feature extractor inherits from [`FeatureExtractionMixin`] which contains most of the main methods. Users
     should refer to this superclass for more information regarding those methods.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the input to a certain `size`.
+            Whether to resize the shorter edge of the input to a certain `size`.
         size (`int`, *optional*, defaults to 224):
-            Resize the input to the given size. Only has an effect if `do_resize` is set to `True`.
+            Resize the shorter edge of the input to the given size. Only has an effect if `do_resize` is set to `True`.
         resample (`int`, *optional*, defaults to `PIL.Image.BICUBIC`):
             An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
             `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`. Only has an effect
@@ -67,7 +67,9 @@ class OwlViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin
             The sequence of means for each channel, to be used when normalizing images.
         image_std (`List[int]`, defaults to `[0.229, 0.224, 0.225]`):
             The sequence of standard deviations for each channel, to be used when normalizing images.
-        convert_rgb (`bool`, defaults to `True`):
+        rescale (`bool`, defaults to `True`):
+            Whether or not to rescale input images to between 0-1 range. `PIL.Image.Image` inputs are automatically scaled.
+        do_convert_rgb (`bool`, defaults to `True`):
             Whether or not to convert `PIL.Image.Image` into `RGB` format
     """
 
@@ -160,8 +162,14 @@ class OwlViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin
         if not is_batched:
             images = [images]
 
-        if self.rescale:
-            images = [self.to_numpy_array(image) for image in images]
+        # PIL images are automatically scaled, scale numpy arrays and torch tensors if rescale is True
+        if rescale:
+            if isinstance(images[0], np.ndarray):
+                images = [image.astype(np.float32) / 255.0 for image in images]
+            elif is_torch_tensor(images[0]):
+                images = [image.to(torch.float32) / 255.0 for image in images]
+            else:
+                pass
 
         # transformations (convert rgb + resizing + center cropping + normalization)
         if self.do_convert_rgb:
