@@ -492,10 +492,6 @@ class FlaxBloomPreTrainedModel(FlaxPreTrainedModel):
         init_variables = self.module.init(
             jax.random.PRNGKey(0), input_ids, attention_mask, return_dict=False, init_cache=True
         )
-        import ipdb
-
-        ipdb.set_trace()
-
         return unfreeze(init_variables["cache"])
 
     # TODO: check whether this is correct (position ids might not be required)
