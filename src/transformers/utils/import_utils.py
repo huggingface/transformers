@@ -474,6 +474,8 @@ def is_protobuf_available():
 def is_accelerate_available():
     return importlib.util.find_spec("accelerate") is not None
 
+def is_bitsandbytes_available():
+    return importlib.util.find_spec("bitsandbytes") is not None
 
 def is_tokenizers_available():
     return importlib.util.find_spec("tokenizers") is not None
