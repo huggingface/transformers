@@ -143,6 +143,7 @@ _import_structure = {
         "BertTokenizer",
         "WordpieceTokenizer",
     ],
+    "models.bert2d": ["Bert2DModel"],
     "models.bert_generation": ["BertGenerationConfig"],
     "models.bert_japanese": ["BertJapaneseTokenizer", "CharacterTokenizer", "MecabTokenizer"],
     "models.bertweet": ["BertweetTokenizer"],
@@ -509,6 +510,7 @@ else:
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
     _import_structure["models.bert"].append("BertTokenizerFast")
+    _import_structure["models.bert2d"].append("BertTokenizerFast")
     _import_structure["models.big_bird"].append("BigBirdTokenizerFast")
     _import_structure["models.blenderbot"].append("BlenderbotTokenizerFast")
     _import_structure["models.blenderbot_small"].append("BlenderbotSmallTokenizerFast")
@@ -864,9 +866,13 @@ else:
             "BertLayer",
             "BertLMHeadModel",
             "BertModel",
-            "Bert2DModel",
             "BertPreTrainedModel",
             "load_tf_weights_in_bert",
+        ]
+    )
+    _import_structure["models.bert2d"].extend(
+        [
+            "Bert2DModel"
         ]
     )
     _import_structure["models.bert_generation"].extend(
@@ -3482,9 +3488,11 @@ if TYPE_CHECKING:
             BertLayer,
             BertLMHeadModel,
             BertModel,
-            Bert2DModel,
             BertPreTrainedModel,
             load_tf_weights_in_bert,
+        )
+        from .models.bert2d import (
+            Bert2DModel,
         )
         from .models.bert_generation import (
             BertGenerationDecoder,
