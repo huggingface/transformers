@@ -274,7 +274,6 @@ class FlaxBloomConversionTest(unittest.TestCase):
         single_attention_mask = jnp.array([[1, 1, 1, 1, 1]])
         num_attention_heads = 16
 
-
         alibi_padd = build_alibi_tensor_flax(batch_attention_mask, num_attention_heads, dtype)
         alibi_simple = build_alibi_tensor_flax(single_attention_mask, num_attention_heads, dtype)
 
