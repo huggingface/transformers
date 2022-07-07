@@ -3465,6 +3465,9 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
     ) -> Union[Tuple, MaskRCNNModelOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        # TODO: remove img_metas, compute `img_shape`` based on pixel_values
+        # and figure out where `scale_factor` and `ori_shape` come from (probably test_pipeline)
+
         # we need the intermediate hidden states
         outputs = self.convnext(pixel_values, output_hidden_states=True, return_dict=return_dict)
 
@@ -3485,16 +3488,6 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
         # rpn_outs[0] are the class features for each of the feature maps
         # rpn_outs[1] are the bounding box features for each of the feature maps
 
-        # TODO: remove img_metas, compute `img_shape`` based on pixel_values
-        # and figure out where `scale_factor` and `ori_shape` come from (probably test_pipeline)
-        if img_metas is None:
-            img_metas = [
-                dict(
-                    img_shape=(800, 1067, 3),
-                    scale_factor=np.array([1.6671875, 1.6666666, 1.6671875, 1.6666666], dtype=np.float32),
-                    ori_shape=(480, 640, 3),
-                )
-            ]
         losses = dict()
         results = None
         if labels is not None:
