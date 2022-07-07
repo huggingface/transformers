@@ -15,14 +15,15 @@
 """ Testing suite for the PyTorch OwlViT model. """
 
 
+import copy
 import inspect
 import os
-import copy
 import tempfile
 import unittest
-from typing import List, Tuple, Dict
+from typing import Dict, List, Tuple
 
 import numpy as np
+
 import requests
 import transformers
 from transformers import OwlViTConfig, OwlViTTextConfig, OwlViTVisionConfig
@@ -50,7 +51,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import OwlViTModel, OwlViTTextModel, OwlViTVisionModel, OwlViTForObjectDetection
+    from transformers import OwlViTForObjectDetection, OwlViTModel, OwlViTTextModel, OwlViTVisionModel
     from transformers.models.owlvit.modeling_owlvit import OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -292,7 +293,9 @@ class OwlViTTextModelTester:
         with torch.no_grad():
             result = model(input_ids, attention_mask=input_mask)
             result = model(input_ids)
-        self.parent.assertEqual(result[0].last_hidden_state.shape, (self.num_queries, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result[0].last_hidden_state.shape, (self.num_queries, self.seq_length, self.hidden_size)
+        )
         self.parent.assertEqual(result[0].pooler_output.shape, (self.num_queries, self.hidden_size))
 
     def prepare_config_and_inputs_for_common(self):
@@ -739,12 +742,16 @@ class OwlViTModelTester:
             result = model(input_ids, pixel_values, attention_mask)
 
         image_logits_size = (
-            self.vision_model_tester.batch_size, 
-            self.vision_model_tester.batch_size * self.text_model_tester.batch_size * self.text_model_tester.num_queries
+            self.vision_model_tester.batch_size,
+            self.vision_model_tester.batch_size
+            * self.text_model_tester.batch_size
+            * self.text_model_tester.num_queries,
         )
         text_logits_size = (
-            self.vision_model_tester.batch_size * self.text_model_tester.batch_size * self.text_model_tester.num_queries,
             self.vision_model_tester.batch_size
+            * self.text_model_tester.batch_size
+            * self.text_model_tester.num_queries,
+            self.vision_model_tester.batch_size,
         )
         self.parent.assertEqual(result.logits_per_image.shape, image_logits_size)
         self.parent.assertEqual(result.logits_per_text.shape, text_logits_size)
@@ -946,17 +953,21 @@ class OwlViTModelIntegrationTest(unittest.TestCase):
         # verify the logits
         self.assertEqual(
             outputs.logits_per_image.shape,
-            torch.Size((
-                inputs.pixel_values.shape[0], 
-                inputs.input_ids.shape[0]*inputs.input_ids.shape[1]*inputs.pixel_values.shape[0]
-            )),
+            torch.Size(
+                (
+                    inputs.pixel_values.shape[0],
+                    inputs.input_ids.shape[0] * inputs.input_ids.shape[1] * inputs.pixel_values.shape[0],
+                )
+            ),
         )
         self.assertEqual(
             outputs.logits_per_text.shape,
-            torch.Size((
-                inputs.input_ids.shape[0]*inputs.input_ids.shape[1]*inputs.pixel_values.shape[0],
-                inputs.pixel_values.shape[0]
-            )),
+            torch.Size(
+                (
+                    inputs.input_ids.shape[0] * inputs.input_ids.shape[1] * inputs.pixel_values.shape[0],
+                    inputs.pixel_values.shape[0],
+                )
+            ),
         )
 
         expected_logits = torch.tensor([[1.0115, 0.9982]], device=torch_device)
@@ -982,7 +993,7 @@ class OwlViTModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
 
-        num_queries = int((model.config.vision_config.image_size / model.config.vision_config.patch_size)**2)
+        num_queries = int((model.config.vision_config.image_size / model.config.vision_config.patch_size) ** 2)
         self.assertEqual(outputs.pred_boxes.shape, torch.Size((1, num_queries, 4)))
         expected_slice_boxes = torch.tensor(
             [[0.0143, 0.0236, 0.0285], [0.0649, 0.0247, 0.0437], [0.0601, 0.0446, 0.0699]]

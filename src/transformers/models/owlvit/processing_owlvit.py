@@ -19,16 +19,16 @@ from typing import List
 
 import numpy as np
 
+from transformers import is_flax_available, is_tf_available, is_torch_available
+
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
-from transformers import is_flax_available, is_torch_available, is_tf_available
-
 
 
 class OwlViTProcessor(ProcessorMixin):
     r"""
-    Constructs an OWL-ViT processor which wraps [`OwlViTFeatureExtractor`] and [`CLIPTokenizer`]/[`CLIPTokenizerFast`] into a single 
-    processor that interits both the feature extractor and tokenizer functionalities. See the [`~OwlViTProcessor.__call__`] and 
+    Constructs an OWL-ViT processor which wraps [`OwlViTFeatureExtractor`] and [`CLIPTokenizer`]/[`CLIPTokenizerFast`] into a single
+    processor that interits both the feature extractor and tokenizer functionalities. See the [`~OwlViTProcessor.__call__`] and
     [`~OwlViTProcessor.decode`] for more information.
     Args:
         feature_extractor ([`OwlViTFeatureExtractor`]):
@@ -83,9 +83,6 @@ class OwlViTProcessor(ProcessorMixin):
             elif isinstance(text, List) and isinstance(text[0], List):
                 encodings = []
 
-            else:
-                raise TypeError("Input text should be a string, a list of strings or a nested list of strings")
-
                 # Maximum number of queries across batch
                 max_num_queries = max([len(t) for t in text])
 
@@ -99,7 +96,8 @@ class OwlViTProcessor(ProcessorMixin):
                         encoding = self.tokenizer(t, return_tensors=return_tensors, **kwargs)
                         encodings.append(encoding)
 
-            encoding = BatchEncoding()
+            else:
+                raise TypeError("Input text should be a string, a list of strings or a nested list of strings")
 
             if return_tensors == "np":
                 input_ids = np.stack([encoding["input_ids"] for encoding in encodings])
@@ -107,22 +105,26 @@ class OwlViTProcessor(ProcessorMixin):
 
             elif return_tensors == "jax" and is_flax_available():
                 import jax.numpy as jnp
+
                 input_ids = jnp.stack([encoding["input_ids"] for encoding in encodings])
                 attention_mask = jnp.stack([encoding["attention_mask"] for encoding in encodings])
 
             elif return_tensors == "pt" and is_torch_available():
                 import torch
+
                 input_ids = torch.stack([encoding["input_ids"] for encoding in encodings])
                 attention_mask = torch.stack([encoding["attention_mask"] for encoding in encodings])
 
             elif return_tensors == "tf" and is_tf_available():
                 import tensorflow as tf
+
                 input_ids = tf.stack([encoding["input_ids"] for encoding in encodings])
                 attention_mask = tf.stack([encoding["attention_mask"] for encoding in encodings])
 
             else:
                 raise ValueError("Target return tensor type could not be returned")
 
+            encoding = BatchEncoding()
             encoding["input_ids"] = input_ids
             encoding["attention_mask"] = attention_mask
 

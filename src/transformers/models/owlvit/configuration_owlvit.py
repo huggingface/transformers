@@ -268,17 +268,12 @@ class OwlViTConfig(PretrainedConfig):
     is_composition = True
 
     def __init__(
-        self,
-        text_config=None,
-        vision_config=None,
-        projection_dim=512,
-        logit_scale_init_value=2.6592,
-        **kwargs
+        self, text_config=None, vision_config=None, projection_dim=512, logit_scale_init_value=2.6592, **kwargs
     ):
         super().__init__(text_config=text_config, vision_config=vision_config, **kwargs)
 
         if text_config is None:
-            text_config= {}
+            text_config = {}
             logger.info("text_config_dict is None. Initializing the OwlViTTextConfig with default values.")
 
         if vision_config is None:
@@ -301,7 +296,7 @@ class OwlViTConfig(PretrainedConfig):
                 f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
                 f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
             )
-     
+
         return cls.from_dict(config_dict, **kwargs)
 
     @classmethod

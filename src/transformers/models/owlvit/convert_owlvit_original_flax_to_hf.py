@@ -8,9 +8,15 @@ import jax
 import jax.numpy as jnp
 from clip_model import CLIP
 from flax.training import checkpoints
-from transformers import OwlViTConfig, OwlViTModel, OwlViTForObjectDetection
-from transformers import CLIPTokenizer, OwlViTFeatureExtractor, OwlViTProcessor
 from huggingface_hub import Repository
+from transformers import (
+    CLIPTokenizer,
+    OwlViTConfig,
+    OwlViTFeatureExtractor,
+    OwlViTForObjectDetection,
+    OwlViTModel,
+    OwlViTProcessor,
+)
 
 
 CONFIGS = {
@@ -326,14 +332,15 @@ def convert_owlvit_checkpoint(pt_backbone, flax_params, attn_params, pytorch_dum
 
     # Initialize feature extractor
     feature_extractor = OwlViTFeatureExtractor(
-        size=config.vision_config.image_size, 
-        crop_size=config.vision_config.image_size
+        size=config.vision_config.image_size, crop_size=config.vision_config.image_size
     )
     # Initialize tokenizer
-    tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32", pad_token='!', model_max_length=16)
+    tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32", pad_token="!", model_max_length=16)
 
     # Initialize processor
-    processor = OwlViTProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer, return_tensors="pt", padding="max_length")
+    processor = OwlViTProcessor(
+        feature_extractor=feature_extractor, tokenizer=tokenizer, return_tensors="pt", padding="max_length"
+    )
     processor.save_pretrained(repo.local_dir)
 
     repo.git_add()

@@ -40,7 +40,7 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "adirik/owlvit-base-patch32"
 
- # See all OwlViT models at https://huggingface.co/models?filter=owlvit
+# See all OwlViT models at https://huggingface.co/models?filter=owlvit
 OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "adirik/owlvit-base-patch32",
     "adirik/owlvit-base-patch16",
@@ -795,7 +795,6 @@ class OwlViTVisionTransformer(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        train: Optional[bool] = False,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
         Returns:
@@ -807,7 +806,6 @@ class OwlViTVisionTransformer(nn.Module):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        pixel_values = pixel_values.to(torch.float32)
         hidden_states = self.embeddings(pixel_values)
         hidden_states = self.pre_layrnorm(hidden_states)
         encoder_outputs = self.encoder(
@@ -820,7 +818,7 @@ class OwlViTVisionTransformer(nn.Module):
         last_hidden_state = encoder_outputs[0]
         pooled_output = last_hidden_state[:, 0, :]
 
-        if train:
+        if self.training:
             pooled_output = self.post_layernorm(pooled_output)
         else:
             pooled_output = self.post_layernorm(last_hidden_state)
@@ -986,7 +984,6 @@ class OwlViTModel(OwlViTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        train: Optional[bool] = True,
     ) -> torch.FloatTensor:
         r"""
         Returns:
@@ -1027,7 +1024,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
         pooled_output = vision_outputs[1]  # pooled_output
 
         # Return projected output if in training mode
-        if train:
+        if self.training:
             image_features = self.visual_projection(pooled_output)
         else:
             image_features = pooled_output
@@ -1379,7 +1376,6 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         >>> pred_logits = outputs.logits
         ```"""
         # Embed images
-        pixel_values = pixel_values.to(torch.float32)
         feature_map = self.image_embedder(pixel_values)
         b, h, w, d = feature_map.shape
         image_feats = torch.reshape(feature_map, (b, h * w, d))

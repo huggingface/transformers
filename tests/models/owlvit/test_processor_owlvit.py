@@ -66,10 +66,10 @@ class OwlViTProcessorTest(unittest.TestCase):
             json.dump(feature_extractor_map, fp)
 
     def get_tokenizer(self, **kwargs):
-        return CLIPTokenizer.from_pretrained(self.tmpdirname, pad_token='!', **kwargs)
+        return CLIPTokenizer.from_pretrained(self.tmpdirname, pad_token="!", **kwargs)
 
     def get_rust_tokenizer(self, **kwargs):
-        return CLIPTokenizerFast.from_pretrained(self.tmpdirname, pad_token='!', **kwargs)
+        return CLIPTokenizerFast.from_pretrained(self.tmpdirname, pad_token="!", **kwargs)
 
     def get_feature_extractor(self, **kwargs):
         return OwlViTFeatureExtractor.from_pretrained(self.tmpdirname, **kwargs)
@@ -119,7 +119,9 @@ class OwlViTProcessorTest(unittest.TestCase):
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
         feature_extractor_add_kwargs = self.get_feature_extractor(do_normalize=False)
 
-        processor = OwlViTProcessor.from_pretrained(self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False)
+        processor = OwlViTProcessor.from_pretrained(
+            self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False
+        )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
         self.assertIsInstance(processor.tokenizer, CLIPTokenizerFast)
