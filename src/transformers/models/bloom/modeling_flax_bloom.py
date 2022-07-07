@@ -492,6 +492,10 @@ class FlaxBloomPreTrainedModel(FlaxPreTrainedModel):
         init_variables = self.module.init(
             jax.random.PRNGKey(0), input_ids, attention_mask, return_dict=False, init_cache=True
         )
+        import ipdb
+
+        ipdb.set_trace()
+
         return unfreeze(init_variables["cache"])
 
     # TODO: check whether this is correct (position ids might not be required)
@@ -640,9 +644,11 @@ class FlaxBloomModule(nn.Module):
             self.config.vocab_size,
             self.embed_dim,
             embedding_init=embedding_init,
+            dtype=self.dtype,
         )
+
         # post-embedding layernorm
-        self.word_embeddings_layernorm = nn.LayerNorm(epsilon=self.config.layer_norm_epsilon)
+        self.word_embeddings_layernorm = nn.LayerNorm(epsilon=self.config.layer_norm_epsilon, dtype=self.dtype)
 
         # transformer layers
         self.h = FlaxBloomBlockCollection(self.config, dtype=self.dtype, use_scan=self.use_scan)
