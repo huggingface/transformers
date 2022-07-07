@@ -586,8 +586,7 @@ class TrainingSummary:
                 if dataset_metadata is None:
                     dataset_metadata = [{
                         "config": one_dataset.info.config_name,
-                        "revision": one_dataset.version,
-                        "split": one_dataset.split
+                        "split": one_dataset.split.__str__()
                     }]
                 if dataset_tags is None:
                     dataset_tags = [default_tag]
@@ -767,7 +766,7 @@ def parse_log_history(log_history):
         while idx >= 0 and "eval_loss" not in log_history[idx]:
             idx -= 1
 
-        if idx > 0:
+        if idx >= 0:
             return None, None, log_history[idx]
         else:
             return None, None, None
