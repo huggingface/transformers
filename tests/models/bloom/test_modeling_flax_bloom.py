@@ -13,12 +13,10 @@
 # limitations under the License.
 import unittest
 
-import numpy as np
-import timeout_decorator  # noqa
+import numpy as np  # noqa
 
-from transformers import BloomConfig, is_flax_available, BloomTokenizerFast
-from transformers.utils.import_utils import is_torch_cuda_available
-from transformers.testing_utils import require_flax, slow, is_pt_flax_cross_test, require_torch
+from transformers import BloomConfig, BloomTokenizerFast, is_flax_available
+from transformers.testing_utils import is_pt_flax_cross_test, require_flax, require_torch, slow
 
 from ...generation.test_generation_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
@@ -32,15 +30,14 @@ if is_flax_available():
     # but will be slower as stated here https://jax.readthedocs.io/en/latest/gpu_memory_allocation.html
     os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
-    import jax
     import jax.numpy as jnp
     from transformers import FlaxBloomForCausalLM, FlaxBloomModel
-    
+
 
 if is_pt_flax_cross_test:
 
-    from transformers.models.bloom.modeling_flax_bloom import build_alibi_tensor_flax
     from transformers.models.bloom.modeling_bloom import build_alibi_tensor
+    from transformers.models.bloom.modeling_flax_bloom import build_alibi_tensor_flax
 
 
 def prepare_opt_inputs_dict(config, input_ids, attention_mask=None, head_mask=None):
@@ -82,7 +79,7 @@ class FlaxBloomModelTester:
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = n_layer
-        self.n_head = n_head
+        self.num_attention_heads = n_head
         self.hidden_act = hidden_act
         self.hidden_dropout = hidden_dropout
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
@@ -101,7 +98,7 @@ class FlaxBloomModelTester:
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             n_layer=self.num_hidden_layers,
-            n_head=self.n_head,
+            n_head=self.num_attention_heads,
             hidden_dropout=self.hidden_dropout,
             attention_dropout=self.attention_probs_dropout_prob,
             eos_token_id=self.eos_token_id,
@@ -179,6 +176,7 @@ class FlaxBloomModelTester:
         diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
+
 @require_flax
 class FlaxBloomModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTesterMixin):
     all_model_classes = (FlaxBloomModel, FlaxBloomForCausalLM) if is_flax_available() else ()
@@ -204,9 +202,9 @@ class FlaxBloomModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGeneration
             input_ids = np.ones((1, 1)) * model.config.eos_token_id
             outputs = model(input_ids)
             self.assertIsNotNone(outputs)
-    
 
-#@slow
+
+@slow
 @require_flax
 class FlaxBloomGenerationTest(unittest.TestCase):
     all_model_classes = (FlaxBloomForCausalLM) if is_flax_available() else ()
@@ -220,15 +218,21 @@ class FlaxBloomGenerationTest(unittest.TestCase):
 
     def test_model_batched_gen(self):
         # tests if the model outputs the same generation for the same batched input
-        input_sentences = ["Hello there is this string is definitely longer I believe that", "Hello there is this string is definitely longer I believe that"]
+        input_sentences = [
+            "Hello there is this string is definitely longer I believe that",
+            "Hello there is this string is definitely longer I believe that",
+        ]
         inputs = self.tokenizer(input_sentences, return_tensors="np", padding=True, truncation=True)
         sequences_fx = self.model.generate(**inputs, max_length=20).sequences
-        self.assertEqual(sequences_fx[0], sequences_fx[1])
-    
+        self.assertEqual(sequences_fx[0].tolist(), sequences_fx[1].tolist())
+
     def test_model_batched_padding_left(self):
         # tests if the model outputs the same generation for an input that is part of a batch
         # and a single input
-        input_sentences_batch = ["Hello there is this string is definitely longer I believe that", "Hi I want to order"]
+        input_sentences_batch = [
+            "Hello there is this string is definitely longer I believe that",
+            "Hi I want to order",
+        ]
         inputs = self.tokenizer(input_sentences_batch, return_tensors="np", padding=True, truncation=True)
         sequences_fx_batch = self.model.generate(**inputs, max_length=20).sequences
 
@@ -238,32 +242,42 @@ class FlaxBloomGenerationTest(unittest.TestCase):
 
         self.assertEqual(sequences_fx_batch[1][6:].tolist(), sequences_fx_simple[0][:-6].tolist())
 
+    def test_scan_model(self):
+        scan_model = FlaxBloomForCausalLM.from_pretrained("sanchit-gandhi/bloom-350m-scan", use_scan=True)
+        input_ids = np.array([[1, 2, 3, 4, 5, 6]], dtype=np.int32)
+
+        unrolled_logits = self.model(input_ids).logits
+        scan_logits = scan_model(input_ids).logits
+
+        self.assertTrue(np.max(np.abs(unrolled_logits - scan_logits)) <= 1e-3)
+
+
 @require_torch
 @is_pt_flax_cross_test
 class FlaxBloomConversionTest(unittest.TestCase):
     def setup(self):
-        self.n_head = 16
+        self.num_attention_heads = 16
         self.model_tester = FlaxBloomConversionTest(self)
-    
+
     def test_flax_torch_alibi(self):
         import torch
+
         dtype = jnp.float16
         single_attention_mask = jnp.array([[1, 1, 1, 1, 1]])
         seq_len = single_attention_mask.shape[-1]
 
-        alibi = build_alibi_tensor(seq_len, self.n_head, torch.float16)
-        alibi_flax = build_alibi_tensor_flax(single_attention_mask, self.n_head, dtype)[0]
+        alibi = build_alibi_tensor(seq_len, self.num_attention_heads, torch.float16)
+        alibi_flax = build_alibi_tensor_flax(single_attention_mask, self.num_attention_heads, dtype)[0]
 
         self.assertTrue(jnp.equal(alibi_flax, alibi.numpy()).all())
-
 
     def test_alibi_padding(self):
         dtype = jnp.bfloat16
 
         batch_attention_mask = jnp.array([[1, 1, 1, 1, 1], [0, 0, 0, 1, 1]])
         single_attention_mask = jnp.array([[1, 1, 1, 1, 1]])
-        
-        alibi_padd = build_alibi_tensor_flax(batch_attention_mask, self.n_head, dtype)
-        alibi_simple = build_alibi_tensor_flax(single_attention_mask, self.n_head, dtype)
-        
+
+        alibi_padd = build_alibi_tensor_flax(batch_attention_mask, self.num_attention_heads, dtype)
+        alibi_simple = build_alibi_tensor_flax(single_attention_mask, self.num_attention_heads, dtype)
+
         self.assertTrue(jnp.equal(alibi_simple[:, :, :, :2], alibi_padd[1][:, :, 3:]).all())

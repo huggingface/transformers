@@ -422,7 +422,7 @@ class FlaxBloomBlock(nn.Module):
         #            outputs = (output,) + outputs
         #        else:
 
-        outputs = (output,) + outputs[1:]
+        outputs = (output,) + outputs
 
         if self.use_scan:
             outputs = (outputs, None)
@@ -461,11 +461,10 @@ class FlaxBloomPreTrainedModel(FlaxPreTrainedModel):
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
         attention_mask = jnp.ones_like(input_ids)
-        position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_shape)
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        random_params = self.module.init(rngs, input_ids, attention_mask, position_ids, return_dict=False)["params"]
+        random_params = self.module.init(rngs, input_ids, attention_mask, return_dict=False)["params"]
 
         if params is not None:
             random_params = flatten_dict(unfreeze(random_params))
@@ -718,7 +717,6 @@ append_call_sample_docstring(
 )
 
 
-# Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoForCausalLMModule with GPTNeo->Bloom
 class FlaxBloomForCausalLMModule(nn.Module):
     config: BloomConfig
     dtype: jnp.dtype = jnp.float32
@@ -774,7 +772,6 @@ class FlaxBloomForCausalLMModule(nn.Module):
     """,
     BLOOM_START_DOCSTRING,
 )
-# Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoForCausalLM with GPTNeo->Bloom
 class FlaxBloomForCausalLM(FlaxBloomPreTrainedModel):
     module_class = FlaxBloomForCausalLMModule
 
