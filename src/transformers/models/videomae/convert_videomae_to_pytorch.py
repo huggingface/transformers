@@ -31,7 +31,7 @@ from transformers import (
 
 def get_videomae_config(checkpoint_path, model_name):
     config = VideoMAEConfig()
-
+    
     if "large" in checkpoint_path:
         config.hidden_size = 1024
         config.intermediate_size = 4096
@@ -205,20 +205,31 @@ def convert_videomae_checkpoint(checkpoint_path, pytorch_dump_folder_path, model
         raise ValueError("Model name not supported.")
 
     if model_name == "videomae-base-short":
+        expected_shape = torch.Size([1, 1408, 1536])
         expected_slice = torch.tensor(
             [[-0.4798, -0.3191, -0.2558], [-0.3396, -0.2823, -0.1581], [0.4327, 0.4635, 0.4745]]
         )
+        expected_loss = torch.tensor([0.5379046201705933])
     elif model_name == "videomae-base-finetuned-kinetics":
+        expected_shape = torch.Size([1, 400])
         expected_slice = torch.tensor([0.7666, -0.2265, -0.5551])
     elif model_name == "videomae-base-finetuned-ssv2":
+        expected_shape = torch.Size([1, 74])
         expected_slice = torch.tensor([-0.1354, -0.4494, -0.4979])
 
     # verify logits
+    assert logits.shape == expected_shape
     if "finetuned" in model_name:
         assert torch.allclose(logits[0, :3], expected_slice, atol=1e-4)
     else:
         assert torch.allclose(logits[0, :3, :3], expected_slice, atol=1e-4)
     print("Logits ok!")
+
+    # verify loss, if applicable
+    if "finetuned" not in model_name:
+        loss = outputs.loss
+        assert torch.allclose(loss, expected_loss, atol=1e-4)
+        print("Loss ok!")
 
     if pytorch_dump_folder_path is not None:
         print(f"Saving model and feature extractor to {pytorch_dump_folder_path}")
