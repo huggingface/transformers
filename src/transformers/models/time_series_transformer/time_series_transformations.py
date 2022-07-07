@@ -171,7 +171,8 @@ def create_training_data_loader(
         else PseudoShuffled(
             Cyclic(transformed_data),
             shuffle_buffer_length=shuffle_buffer_length,
-        )
+        ),
+        is_train=True,
     )
 
     return IterableSlice(
@@ -183,4 +184,62 @@ def create_training_data_loader(
             )
         ),
         num_batches_per_epoch,
+    )
+
+
+def create_validation_data_loader(
+    config,
+    data,
+    batch_size,
+    **kwargs,
+):
+    PREDICTION_INPUT_NAMES = [
+        FieldName.FEAT_STATIC_CAT,
+        FieldName.FEAT_STATIC_REAL,
+        "past_" + FieldName.FEAT_TIME,
+        "past_" + FieldName.TARGET,
+        "past_" + FieldName.OBSERVED_VALUES,
+        "future_" + FieldName.FEAT_TIME,
+    ]
+
+    TRAINING_INPUT_NAMES = PREDICTION_INPUT_NAMES + [
+        "future_" + FieldName.TARGET,
+        "future_" + FieldName.OBSERVED_VALUES,
+    ]
+    transformation = create_transformation(config)
+    transformed_data = transformation.apply(data, is_train=True)
+
+    instance_splitter = create_instance_splitter(config, "validation") + SelectFields(TRAINING_INPUT_NAMES)
+    validation_instances = instance_splitter.apply(transformed_data, is_train=True)
+
+    return DataLoader(
+        IterableDataset(validation_instances),
+        batch_size=batch_size,
+        **kwargs,
+    )
+
+
+def create_test_data_loader(
+    config,
+    data,
+    batch_size,
+    **kwargs,
+):
+    PREDICTION_INPUT_NAMES = [
+        FieldName.FEAT_STATIC_CAT,
+        FieldName.FEAT_STATIC_REAL,
+        "past_" + FieldName.FEAT_TIME,
+        "past_" + FieldName.TARGET,
+        "past_" + FieldName.OBSERVED_VALUES,
+        "future_" + FieldName.FEAT_TIME,
+    ]
+    transformation = create_transformation(config)
+    transformed_data = transformation.apply(data, is_train=False)
+    instance_splitter = create_instance_splitter(config, "test") + SelectFields(PREDICTION_INPUT_NAMES)
+    test_instances = instance_splitter.apply(transformed_data, is_tran=False)
+
+    return DataLoader(
+        IterableDataset(test_instances),
+        batch_size=batch_size,
+        **kwargs,
     )
