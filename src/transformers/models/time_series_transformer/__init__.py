@@ -50,6 +50,7 @@ else:
         "TimeSeriesTransformerForQuestionAnswering",
         "TimeSeriesTransformerForSequenceClassification",
         "TimeSeriesTransformerForCausalLM",
+        "TimeSeriesTransformerForPrediction",
         "TimeSeriesTransformerModel",
         "TimeSeriesTransformerPreTrainedModel",
     ]
@@ -73,6 +74,7 @@ if TYPE_CHECKING:
             TimeSeriesTransformerForCausalLM,
             TimeSeriesTransformerForQuestionAnswering,
             TimeSeriesTransformerForSequenceClassification,
+            TimeSeriesTransformerForPrediction,
             TimeSeriesTransformerModel,
             TimeSeriesTransformerPreTrainedModel,
         )

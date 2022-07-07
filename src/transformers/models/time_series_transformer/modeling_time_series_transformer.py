@@ -1089,7 +1089,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
             sum(self.config.embedding_dimension)
             + self.config.num_feat_dynamic_real
             + self.config.num_time_features
-            + self.config.num_feat_static_real
+            + max(1, self.config.num_feat_static_real)  # there is at least one dummy static real feature
             + 1  # the log(scale)
         )
 
@@ -1118,6 +1118,12 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
             dropout=self.config.dropout,
             activation=self.config.activation_function,
             batch_first=True,
+        )
+
+        # causal decoder tgt mask
+        self.register_buffer(
+            "tgt_mask",
+            self.transformer.generate_square_subsequent_mask(self.config.prediction_length),
         )
 
         # Initialize weights and apply final processing
@@ -1294,7 +1300,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         # )
 
 
-class TimeSeriesTransformerModelForPrediction(TimeSeriesTransformerModel):
+class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
     def __init__(self, config: TimeSeriesTransformerConfig):
         super().__init__(config)
         self.config = config
@@ -1345,7 +1351,7 @@ class TimeSeriesTransformerModelForPrediction(TimeSeriesTransformerModel):
             loss_weights = future_observed_values
         else:
             loss_weights = future_observed_values.min(dim=-1, keepdim=False)
-        
+
         return weighted_average(loss_values, weights=loss_weights)
 
 

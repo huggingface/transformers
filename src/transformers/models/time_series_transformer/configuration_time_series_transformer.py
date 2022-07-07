@@ -136,8 +136,8 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         self.lags_seq = lags_seq or get_lags_for_frequency(freq_str=self.freq)
         self.scaling = scaling
         self.num_feat_dynamic_real = num_feat_dynamic_real
-        self.num_feat_static_real = num_feat_static_real  # there is at least one dummy static real feature
-        self.num_feat_static_cat = num_feat_static_cat  # there is at least one dummy static categorical feature
+        self.num_feat_static_real = num_feat_static_real
+        self.num_feat_static_cat = num_feat_static_cat
         self.cardinality = cardinality if cardinality and num_feat_static_cat > 0 else [1]
         self.embedding_dimension = embedding_dimension or [min(50, (cat + 1) // 2) for cat in self.cardinality]
 

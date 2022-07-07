@@ -37,6 +37,7 @@ if is_torch_available():
         TimeSeriesTransformerForQuestionAnswering,
         TimeSeriesTransformerForCausalLM,
         TimeSeriesTransformerForSequenceClassification,
+        TimeSeriesTransformerForPrediction,
         TimeSeriesTransformerModel,
         TimeSeriesTransformerTokenizer,
     )
@@ -156,7 +157,9 @@ class TimeSeriesTransformerModelTester:
         next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
 
         output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)["last_hidden_state"]
+        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
+            "last_hidden_state"
+        ]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -204,7 +207,12 @@ class TimeSeriesTransformerModelTester:
 @require_torch
 class TimeSeriesTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (TimeSeriesTransformerModel, TimeSeriesTransformerForConditionalGeneration, TimeSeriesTransformerForSequenceClassification, TimeSeriesTransformerForQuestionAnswering)
+        (
+            TimeSeriesTransformerModel,
+            TimeSeriesTransformerForConditionalGeneration,
+            TimeSeriesTransformerForSequenceClassification,
+            TimeSeriesTransformerForQuestionAnswering,
+        )
         if is_torch_available()
         else ()
     )
@@ -243,7 +251,11 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, un
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        for model_class in (TimeSeriesTransformerModel, TimeSeriesTransformerForConditionalGeneration, TimeSeriesTransformerForQuestionAnswering):
+        for model_class in (
+            TimeSeriesTransformerModel,
+            TimeSeriesTransformerForConditionalGeneration,
+            TimeSeriesTransformerForQuestionAnswering,
+        ):
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -313,10 +325,10 @@ TOLERANCE = 1e-4
 class TimeSeriesTransformerModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_tokenizer(self):
-        return TimeSeriesTransformerTokenizer.from_pretrained('huggingface/tst-ett')
+        return TimeSeriesTransformerTokenizer.from_pretrained("huggingface/tst-ett")
 
     def test_inference_no_head(self):
-        model = TimeSeriesTransformerModel.from_pretrained('huggingface/tst-ett').to(torch_device)
+        model = TimeSeriesTransformerModel.from_pretrained("huggingface/tst-ett").to(torch_device)
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         decoder_input_ids = _long_tensor([[2, 0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588]])
         inputs_dict = prepare_time_series_transformer_inputs_dict(model.config, input_ids, decoder_input_ids)
@@ -331,7 +343,7 @@ class TimeSeriesTransformerModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_inference_head(self):
-        model = TimeSeriesTransformerForConditionalGeneration.from_pretrained('huggingface/tst-ett').to(torch_device)
+        model = TimeSeriesTransformerForConditionalGeneration.from_pretrained("huggingface/tst-ett").to(torch_device)
 
         # change to intended input
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
@@ -348,8 +360,8 @@ class TimeSeriesTransformerModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_seq_to_seq_generation(self):
-        hf = TimeSeriesTransformerForConditionalGeneration.from_pretrained('huggingface/tst-ett').to(torch_device)
-        tok = TimeSeriesTransformerTokenizer.from_pretrained('huggingface/tst-ett')
+        hf = TimeSeriesTransformerForConditionalGeneration.from_pretrained("huggingface/tst-ett").to(torch_device)
+        tok = TimeSeriesTransformerTokenizer.from_pretrained("huggingface/tst-ett")
 
         batch_input = [
             # string 1,
@@ -576,7 +588,9 @@ class TimeSeriesTransformerStandaloneDecoderModelTester:
 
 @require_torch
 class TimeSeriesTransformerStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (TimeSeriesTransformerDecoder, TimeSeriesTransformerForCausalLM) if is_torch_available() else ()
+    all_model_classes = (
+        (TimeSeriesTransformerDecoder, TimeSeriesTransformerForCausalLM) if is_torch_available() else ()
+    )
     all_generative_model_classes = (TimeSeriesTransformerForCausalLM,) if is_torch_available() else ()
     test_pruning = False
     is_encoder_decoder = False

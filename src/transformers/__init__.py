@@ -308,7 +308,11 @@ _import_structure = {
     "models.t5": ["T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "T5Config"],
     "models.tapas": ["TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP", "TapasConfig", "TapasTokenizer"],
     "models.tapex": ["TapexTokenizer"],
-    "models.time_series_transformer": ["TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TimeSeriesTransformerConfig", "TimeSeriesTransformerTokenizer"],
+    "models.time_series_transformer": [
+        "TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "TimeSeriesTransformerConfig",
+        "TimeSeriesTransformerTokenizer",
+    ],
     "models.trajectory_transformer": [
         "TRAJECTORY_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TrajectoryTransformerConfig",
@@ -760,6 +764,7 @@ else:
             "TimeSeriesTransformerForConditionalGeneration",
             "TimeSeriesTransformerForQuestionAnswering",
             "TimeSeriesTransformerForSequenceClassification",
+            "TimeSeriesTransformerForPrediction",
             "TimeSeriesTransformerModel",
             "TimeSeriesTransformerPreTrainedModel",
         ]
@@ -4224,6 +4229,7 @@ if TYPE_CHECKING:
             TimeSeriesTransformerForConditionalGeneration,
             TimeSeriesTransformerForQuestionAnswering,
             TimeSeriesTransformerForSequenceClassification,
+            TimeSeriesTransformerForPrediction,
             TimeSeriesTransformerModel,
             TimeSeriesTransformerPreTrainedModel,
         )
