@@ -31,7 +31,7 @@ from transformers import (
 
 def get_videomae_config(checkpoint_path, model_name):
     config = VideoMAEConfig()
-    
+
     if "large" in checkpoint_path:
         config.hidden_size = 1024
         config.intermediate_size = 4096
@@ -209,7 +209,10 @@ def convert_videomae_checkpoint(checkpoint_path, pytorch_dump_folder_path, model
         expected_slice = torch.tensor(
             [[-0.4798, -0.3191, -0.2558], [-0.3396, -0.2823, -0.1581], [0.4327, 0.4635, 0.4745]]
         )
-        expected_loss = torch.tensor([0.5379046201705933])
+        # we verified the loss both for normalized and unnormalized targets for this one
+        expected_loss = (
+            torch.tensor([0.5379046201705933]) if config.norm_pix_loss else torch.tensor([0.593469500541687])
+        )
     elif model_name == "videomae-base-finetuned-kinetics":
         expected_shape = torch.Size([1, 400])
         expected_slice = torch.tensor([0.7666, -0.2265, -0.5551])
@@ -228,6 +231,7 @@ def convert_videomae_checkpoint(checkpoint_path, pytorch_dump_folder_path, model
     # verify loss, if applicable
     if "finetuned" not in model_name:
         loss = outputs.loss
+        print("Loss:", loss)
         assert torch.allclose(loss, expected_loss, atol=1e-4)
         print("Loss ok!")
 
