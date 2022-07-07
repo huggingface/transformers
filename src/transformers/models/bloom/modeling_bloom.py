@@ -248,17 +248,14 @@ class BloomScaledSoftmax(nn.Module):
             flag to indicate if input in fp16 data format.
         input_in_bf16 (`bool`, *required*):
             flag to indicate if input in bf16 data format.
-        scaled_masked_softmax_fusion (`bool`, *required*):
-            flag to indicate user want to use softmax fusion
         softmax_in_fp32 (`bool`, *required*):
             if true, softmax in performed at fp32 precision.
         scale (`float`, *required*):
             scaling factor used in input tensor scaling.
     """
 
-    def __init__(self, scaled_masked_softmax_fusion, softmax_in_fp32, scale):
+    def __init__(self, softmax_in_fp32, scale):
         super().__init__()
-        self.scaled_masked_softmax_fusion = scaled_masked_softmax_fusion
         self.softmax_in_fp32 = softmax_in_fp32
         self.scale = scale
 
@@ -295,7 +292,6 @@ class BloomAttention(nn.Module):
         self.head_dim = self.hidden_size // self.num_heads
         self.split_size = self.hidden_size
         self.attention_softmax_in_fp32 = config.attention_softmax_in_fp32
-        self.masked_softmax_fusion = config.masked_softmax_fusion
         self.hidden_dropout = config.hidden_dropout
 
         if self.head_dim * self.num_heads != self.hidden_size:
@@ -310,7 +306,6 @@ class BloomAttention(nn.Module):
 
         # Scaled Softmax
         self.scale_mask_softmax = BloomScaledSoftmax(
-            self.masked_softmax_fusion,
             self.attention_softmax_in_fp32,
             self.layer_number,
         )
