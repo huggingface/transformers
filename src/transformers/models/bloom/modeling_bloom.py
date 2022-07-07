@@ -110,8 +110,8 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: int = None):
 def build_alibi_tensor(
     attention_mask: torch.Tensor,
     n_head: int,
-    dtype: torch.dtype = torch.bfloat16,
-    device: torch.device = torch.device("cpu"),
+    dtype,
+    device,
 ) -> torch.Tensor:
     """
     Link to paper: https://arxiv.org/abs/2108.12409 Alibi tensor is not causal as the original paper mentions, it
