@@ -10,11 +10,11 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# OwlViT
+# OWL-ViT
 
 ## Overview
 
-The Owl-ViT model was proposed in [Simple Open-Vocabulary Object Detection with Vision Transformers](https://arxiv.org/abs/2205.06230) by Matthias Minderer, Alexey Gritsenko, Austin Stone, Maxim Neumann, Dirk Weissenborn, Alexey Dosovitskiy, Aravindh Mahendran, Anurag Arnab, Mostafa Dehghani, Zhuoran Shen, Xiao Wang, Xiaohua Zhai, Thomas Kipf, and Neil Houlsby. Owl-ViT is an open-vocabulary object detection network trained on a variety of (image, text) pairs. It can be used to query an image with one or multiple text queries to search for and detect target objects described in text.
+The OWL-ViT model was proposed in [Simple Open-Vocabulary Object Detection with Vision Transformers](https://arxiv.org/abs/2205.06230) by Matthias Minderer, Alexey Gritsenko, Austin Stone, Maxim Neumann, Dirk Weissenborn, Alexey Dosovitskiy, Aravindh Mahendran, Anurag Arnab, Mostafa Dehghani, Zhuoran Shen, Xiao Wang, Xiaohua Zhai, Thomas Kipf, and Neil Houlsby. OWL-ViT is an open-vocabulary object detection network trained on a variety of (image, text) pairs. It can be used to query an image with one or multiple text queries to search for and detect target objects described in text.
 
 The abstract from the paper is the following:
 
@@ -22,9 +22,9 @@ The abstract from the paper is the following:
 
 ## Usage
 
-OwlViT is a zero-shot text-conditioned object detection model. OwlViT uses CLIP as its multi-modal backbone, with a ViT like transformer to get visual features and a causal language model to get the text features. To use CLIP for detection, OwlViT removes the final token pooling layer of the vision model and attaches a lightweight classification and box head to each transformer output token. Open-vocabulary classification is enabled by replacing the fixed classification layer weights with the class-name embeddings obtained from the text model. The authors first train CLIP from scratch and fine-tune it end-to-end with the classification and box heads on standard detection datasets using a bipartite matching loss. One or multiple text queries per image can be used to perform zero-shot text-conditioned object detection. 
+OWL-ViT is a zero-shot text-conditioned object detection model. OWL-ViT uses CLIP as its multi-modal backbone, with a ViT-like Transformer to get visual features and a causal language model to get the text features. To use CLIP for detection, OWL-ViT removes the final token pooling layer of the vision model and attaches a lightweight classification and box head to each transformer output token. Open-vocabulary classification is enabled by replacing the fixed classification layer weights with the class-name embeddings obtained from the text model. The authors first train CLIP from scratch and fine-tune it end-to-end with the classification and box heads on standard detection datasets using a bipartite matching loss. One or multiple text queries per image can be used to perform zero-shot text-conditioned object detection. 
 
-The [`CLIPFeatureExtractor`] can be used to resize (or rescale) and normalize images for the model and the [`CLIPTokenizer`] is used to encode the text. The [`OwlViTProcessor`] wraps [`CLIPFeatureExtractor`] and [`CLIPTokenizer`] into a single instance to both encode the text and prepare the images. The following example shows how to perform object detection using [`OwlViTProcessor`] and [`OwlViTForObjectDetection`].
+The [`OwlViTFeatureExtractor`] can be used to resize (or rescale) and normalize images for the model and the [`CLIPTokenizer`] is used to encode the text. The [`OwlViTProcessor`] wraps [`CLIPFeatureExtractor`] and [`CLIPTokenizer`] into a single instance to both encode the text and prepare the images. The following example shows how to perform object detection using [`OwlViTProcessor`] and [`OwlViTForObjectDetection`].
 
 
 ```python
@@ -33,8 +33,8 @@ The [`CLIPFeatureExtractor`] can be used to resize (or rescale) and normalize im
 
 >>> from transformers import OwlViTProcessor, OwlViTForObjectDetection
 
->>> model = OwlViTForObjectDetection.from_pretrained("adirik/owlvit-base-patch32")
 >>> processor = OwlViTProcessor.from_pretrained("adirik/owlvit-base-patch32")
+>>> model = OwlViTForObjectDetection.from_pretrained("adirik/owlvit-base-patch32")
 
 >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -60,6 +60,11 @@ This model was contributed by [adirik](https://huggingface.co/adirik). The origi
 ## OwlViTVisionConfig
 
 [[autodoc]] OwlViTVisionConfig
+
+## OwlViTFeatureExtractor
+
+[[autodoc]] OwlViTFeatureExtractor
+    - __call__
 
 ## OwlViTProcessor
 

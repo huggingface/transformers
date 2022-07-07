@@ -74,7 +74,7 @@ class OwlViTProcessor(ProcessorMixin):
         """
 
         if text is None and images is None:
-            raise ValueError("You have to specify either text or images. Both cannot be none.")
+            raise ValueError("You have to specify at least one of text or images. Both cannot be none.")
 
         if text is not None:
             if isinstance(text, str) or (isinstance(text, List) and not isinstance(text[0], List)):
@@ -89,7 +89,7 @@ class OwlViTProcessor(ProcessorMixin):
                 # Pad all batch samples to max number of text queries
                 for t in text:
                     if len(t) != max_num_queries:
-                        t.extend([""] * (max_num_queries - len(t)))
+                        t = t + [""]*(max_num_queries - len(t))
                         encoding = self.tokenizer(t, return_tensors=return_tensors, **kwargs)
                         encodings.append(encoding)
                     else:

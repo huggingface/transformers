@@ -857,7 +857,6 @@ class OwlViTVisionModel(OwlViTPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
-        Returns:
 
         Examples:
 
@@ -1237,9 +1236,9 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
     def __init__(self, config: OwlViTConfig):
         super().__init__(config)
 
-        self._embedder = OwlViTImageTextEmbedder(config)
-        self._class_head = OwlViTClassPredictionHead(config)
-        self._box_head = OwlViTBoxPredictionHead(config)
+        self.embedder = OwlViTImageTextEmbedder(config)
+        self.class_head = OwlViTClassPredictionHead(config)
+        self.box_head = OwlViTBoxPredictionHead(config)
         self.sigmoid = nn.Sigmoid()
 
     def normalize_grid_corner_coordinates(self, feature_map: torch.FloatTensor):

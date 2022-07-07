@@ -347,7 +347,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("nystromformer", "Nyströmformer"),
         ("openai-gpt", "OpenAI GPT"),
         ("opt", "OPT"),
-        ("owlvit", "OwlViT"),
+        ("owlvit", "OWL-ViT"),
         ("pegasus", "Pegasus"),
         ("perceiver", "Perceiver"),
         ("phobert", "PhoBERT"),
