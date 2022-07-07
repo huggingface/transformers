@@ -375,3 +375,34 @@ class VideoMAEModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor([0.7666, -0.2265, -0.5551]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+
+    @slow
+    def test_inference_for_pretraining(self):
+        # TODO update to appropriate organization
+        model = VideoMAEForPreTraining.from_pretrained("nielsr/videomae-base-short").to(torch_device)
+
+        feature_extractor = self.default_feature_extractor
+        video = prepare_video()
+        inputs = feature_extractor(video, return_tensors="pt").to(torch_device)
+
+        # add boolean mask, indicating which patches to mask
+        local_path = hf_hub_download(repo_id="nielsr/bool-masked-pos", filename="bool_masked_pos.pt")
+        inputs["bool_masked_pos"] = torch.load(local_path)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        # verify the logits
+        expected_shape = torch.Size([1, 1408, 1536])
+        expected_slice = torch.tensor(
+            [[-0.4798, -0.3191, -0.2558], [-0.3396, -0.2823, -0.1581], [0.4327, 0.4635, 0.4745]]
+        )
+        self.assertEqual(outputs.logits.shape, expected_shape)
+        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice, atol=1e-4))
+
+        # verify the loss
+        expected_loss = (
+            torch.tensor([0.5379046201705933]) if model.config.norm_pix_loss else torch.tensor([0.593469500541687])
+        )
+        self.assertTrue(torch.allclose(outputs.loss, expected_loss, atol=1e-4))
