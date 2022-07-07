@@ -46,8 +46,10 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
             The prediction horizon for the model.
         context_length (`int`, *optional*, default to `None`):
             The context length for the encoder. If  `None`, the context length will be the same as the prediction length.
-        distr_output (`DistributionOutput` default to `StudentTOutput()`):
+        distr_output (`string` default to `StudentT`):
             The distribution emission head for the model.
+        loss (`string` default to `NLL`):
+            The loss function for the model with corresponding to the `distr_output` head.
         input_size (`int` default to 1):
             The size of the target variable which by default is 1 for univariate targets.
         scaling (`bool` default to `True`):
@@ -102,7 +104,8 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         freq: Optional[str] = None,
         prediction_length: Optional[int] = None,
         context_length: Optional[int] = None,
-        # TODO distr_output: DistributionOutput = StudentTOutput(),
+        distr_output: str = "StudentT",
+        loss: str = "NLL",
         lags_seq: Optional[List[int]] = None,
         scaling: bool = True,
         num_feat_dynamic_real: int = 0,
@@ -124,7 +127,8 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         self.prediction_length = prediction_length
         self.context_length = context_length or prediction_length
         self.freq = freq or "1S"
-        # self.distr_output = distr_output
+        self.distr_output = distr_output
+        self.loss = loss
         self.input_size = input_size
         self.num_time_features = (
             len(time_features_from_frequency_str(freq_str=self.freq)) + 1

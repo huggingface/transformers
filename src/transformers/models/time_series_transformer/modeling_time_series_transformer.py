@@ -25,6 +25,9 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from gluonts.torch.modules.scaler import MeanScaler, NOPScaler
 from gluonts.torch.modules.feature import FeatureEmbedder
+from gluonts.torch.distributions import StudentTOutput
+from gluonts.torch.modules.loss import NegativeLogLikelihood
+from gluonts.torch.util import weighted_average
 
 
 from ...activations import ACT2FN
@@ -1265,7 +1268,6 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         past_observed_values: torch.Tensor,
         future_time_feat: Optional[torch.Tensor] = None,
         future_target: Optional[torch.Tensor] = None,
-        future_observed_values: Optional[torch.Tensor] = None,
     ):
         transformer_inputs, scale, _ = self.create_network_inputs(
             feat_static_cat,
@@ -1278,7 +1280,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         )
         dec_output = self.output_params(transformer_inputs)
 
-        return dec_output
+        return dec_output, scale
 
         # return Seq2SeqModelOutput(
         #     last_hidden_state=decoder_outputs.last_hidden_state,
@@ -1290,6 +1292,61 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         #     encoder_hidden_states=encoder_outputs.hidden_states,
         #     encoder_attentions=encoder_outputs.attentions,
         # )
+
+
+class TimeSeriesTransformerModelForPrediction(TimeSeriesTransformerModel):
+    def __init__(self, config: TimeSeriesTransformerConfig):
+        super().__init__(config)
+        self.config = config
+        self.transformer = TimeSeriesTransformerModel(config)
+        if config.distr_output == "StudentT":
+            self.distr_output = StudentTOutput()
+            self.param_proj = self.distr_output.get_args_proj(self.transformer.d_model)
+            self.target_shape = self.distr_output.event_shape
+
+        if config.loss == "NLL":
+            self.loss = NegativeLogLikelihood()
+
+    def output_params(self, dec_output):
+        return self.param_proj(dec_output)
+
+    @torch.jit.ignore
+    def output_distribution(self, params, scale=None, trailing_n=None) -> torch.distributions.Distribution:
+        sliced_params = params
+        if trailing_n is not None:
+            sliced_params = [p[:, -trailing_n:] for p in params]
+        return self.distr_output.distribution(sliced_params, scale=scale)
+
+    def forward(self, batch):
+        feat_static_cat = batch["feat_static_cat"]
+        feat_static_real = batch["feat_static_real"]
+        past_time_feat = batch["past_time_feat"]
+        past_target = batch["past_target"]
+        future_time_feat = batch["future_time_feat"]
+        future_target = batch["future_target"]
+        past_observed_values = batch["past_observed_values"]
+        future_observed_values = batch["future_observed_values"]
+
+        dec_output, scale = self.transformer(
+            feat_static_cat,
+            feat_static_real,
+            past_time_feat,
+            past_target,
+            past_observed_values,
+            future_time_feat,
+            future_target,
+        )
+        params = self.output_params(dec_output)
+        distr = self.output_distribution(params, scale)
+
+        loss_values = self.loss(distr, future_target)
+
+        if len(self.target_shape) == 0:
+            loss_weights = future_observed_values
+        else:
+            loss_weights = future_observed_values.min(dim=-1, keepdim=False)
+        
+        return weighted_average(loss_values, weights=loss_weights)
 
 
 @add_start_docstrings(
