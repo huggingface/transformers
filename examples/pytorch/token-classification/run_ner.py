@@ -97,6 +97,10 @@ class ModelArguments:
 class DataTrainingArguments:
     """
     Arguments pertaining to what data we are going to input our model for training and eval.
+
+    Using `HfArgumentParser` we can turn this class
+    into argparse arguments to be able to specify them on
+    the command line.
     """
 
     task_name: Optional[str] = field(default="ner", metadata={"help": "The name of the task (ner, pos...)."})

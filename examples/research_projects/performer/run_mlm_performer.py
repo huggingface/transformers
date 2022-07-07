@@ -632,7 +632,6 @@ if __name__ == "__main__":
 
     epochs = tqdm(range(nb_epochs), desc=f"Epoch ... (1/{nb_epochs})", position=0)
     for epoch in epochs:
-
         # ======================== Training ================================
         # Create sampling rng
         rng, training_rng, eval_rng = jax.random.split(rng, 3)

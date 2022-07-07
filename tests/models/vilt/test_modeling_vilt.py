@@ -197,7 +197,6 @@ class ViltModelTester:
 
 @require_torch
 class ViltModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             ViltModel,
@@ -492,7 +491,6 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
 
 @require_torch
 class ViltForImagesAndTextClassificationModelTest(ViltModelTest, unittest.TestCase):
-
     all_model_classes = (ViltForImagesAndTextClassification,) if is_torch_available() else ()
 
     def setUp(self):

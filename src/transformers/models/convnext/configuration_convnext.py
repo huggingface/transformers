@@ -110,7 +110,6 @@ class ConvNextConfig(PretrainedConfig):
 
 
 class ConvNextOnnxConfig(OnnxConfig):
-
     torch_onnx_minimum_version = version.parse("1.11")
 
     @property

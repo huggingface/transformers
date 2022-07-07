@@ -99,7 +99,6 @@ def require_retrieval(test_case):
 @require_retrieval
 @require_sentencepiece
 class RagTestMixin:
-
     all_model_classes = (
         (RagModel, RagTokenForGeneration, RagSequenceForGeneration)
         if is_torch_available() and is_datasets_available() and is_faiss_available()

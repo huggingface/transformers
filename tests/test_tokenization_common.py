@@ -122,7 +122,6 @@ def merge_model_tokenizer_mappings(
 
 
 class TokenizerTesterMixin:
-
     tokenizer_class = None
     rust_tokenizer_class = None
     test_slow_tokenizer = True
@@ -879,7 +878,6 @@ class TokenizerTesterMixin:
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-
                 new_toks = [
                     AddedToken("[ABC]", normalized=False),
                     AddedToken("[DEF]", normalized=False),
@@ -917,7 +915,6 @@ class TokenizerTesterMixin:
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-
                 if (
                     tokenizer.build_inputs_with_special_tokens.__qualname__.split(".")[0] != "PreTrainedTokenizer"
                     and "token_type_ids" in tokenizer.model_input_names
@@ -968,7 +965,6 @@ class TokenizerTesterMixin:
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-
                 seq_0 = "Test this method."
                 seq_1 = "With these inputs."
 
@@ -1640,7 +1636,8 @@ class TokenizerTesterMixin:
                 self.assertEqual(encoded_sequence, truncated_sequence_left)
 
     def test_padding_to_max_length(self):
-        """We keep this test for backward compatibility but it should be remove when `pad_to_max_length` is deprecated."""
+        """We keep this test for backward compatibility but it should be remove when `pad_to_max_length` is deprecated.
+        """
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
@@ -2059,7 +2056,6 @@ class TokenizerTesterMixin:
         tokenizers = self.get_tokenizers(do_lower_case=False)  # , add_prefix_space=True)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-
                 if hasattr(tokenizer, "add_prefix_space") and not tokenizer.add_prefix_space:
                     continue
 
@@ -2292,7 +2288,6 @@ class TokenizerTesterMixin:
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-
                 if tokenizer.__class__ not in MODEL_TOKENIZER_MAPPING:
                     return
 
@@ -2875,7 +2870,6 @@ class TokenizerTesterMixin:
             tokenizer = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name}, {tokenizer.__class__.__name__})"):
-
                 if is_torch_available():
                     returned_tensor = "pt"
                 elif is_tf_available():
@@ -3496,7 +3490,6 @@ class TokenizerTesterMixin:
     def test_special_tokens_initialization(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-
                 added_tokens = [AddedToken("<special>", lstrip=True)]
 
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(

@@ -776,12 +776,10 @@ class BloomModel(BloomPreTrainedModel):
         alibi = build_alibi_tensor(current_sequence_length, self.n_head, hidden_states.dtype)
 
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
-
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."

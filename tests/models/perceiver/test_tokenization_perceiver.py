@@ -36,7 +36,6 @@ else:
 
 
 class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
     tokenizer_class = PerceiverTokenizer
     test_rust_tokenizer = False
 

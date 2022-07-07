@@ -197,7 +197,6 @@ class TFLayoutLMModelTester:
 
 @require_tf
 class TFLayoutLMModelTest(TFModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (TFLayoutLMModel, TFLayoutLMForMaskedLM, TFLayoutLMForTokenClassification, TFLayoutLMForSequenceClassification)
         if is_tf_available()

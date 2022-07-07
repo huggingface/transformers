@@ -31,7 +31,6 @@ from ..bert.test_tokenization_bert import BertTokenizationTest
 
 @require_tokenizers
 class DPRContextEncoderTokenizationTest(BertTokenizationTest):
-
     tokenizer_class = DPRContextEncoderTokenizer
     rust_tokenizer_class = DPRContextEncoderTokenizerFast
     test_rust_tokenizer = True
@@ -39,7 +38,6 @@ class DPRContextEncoderTokenizationTest(BertTokenizationTest):
 
 @require_tokenizers
 class DPRQuestionEncoderTokenizationTest(BertTokenizationTest):
-
     tokenizer_class = DPRQuestionEncoderTokenizer
     rust_tokenizer_class = DPRQuestionEncoderTokenizerFast
     test_rust_tokenizer = True
@@ -47,7 +45,6 @@ class DPRQuestionEncoderTokenizationTest(BertTokenizationTest):
 
 @require_tokenizers
 class DPRReaderTokenizationTest(BertTokenizationTest):
-
     tokenizer_class = DPRReaderTokenizer
     rust_tokenizer_class = DPRReaderTokenizerFast
     test_rust_tokenizer = True

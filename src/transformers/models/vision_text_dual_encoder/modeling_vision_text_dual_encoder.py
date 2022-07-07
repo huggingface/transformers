@@ -169,7 +169,6 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         vision_model: Optional[PreTrainedModel] = None,
         text_model: Optional[PreTrainedModel] = None,
     ):
-
         if config is None and (vision_model is None or text_model is None):
             raise ValueError("Either a configuration or an vision and a text model has to be provided")
 

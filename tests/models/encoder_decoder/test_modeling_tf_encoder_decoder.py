@@ -327,7 +327,6 @@ class TFEncoderDecoderMixin:
         self.assertEqual(tuple(generated_output.shape.as_list()), (input_ids.shape[0],) + (decoder_config.max_length,))
 
     def check_pt_tf_equivalence(self, pt_model, tf_model, inputs_dict):
-
         pt_model.to(torch_device)
         pt_model.eval()
 
@@ -354,7 +353,6 @@ class TFEncoderDecoderMixin:
 
         # PT -> TF
         with tempfile.TemporaryDirectory() as encoder_tmp_dirname, tempfile.TemporaryDirectory() as decoder_tmp_dirname:
-
             pt_model.encoder.save_pretrained(encoder_tmp_dirname)
             pt_model.decoder.save_pretrained(decoder_tmp_dirname)
             tf_model_loaded = TFEncoderDecoderModel.from_encoder_decoder_pretrained(
@@ -373,13 +371,11 @@ class TFEncoderDecoderMixin:
             self.assert_almost_equals(tf_output_loaded.numpy(), pt_output.detach().to("cpu").numpy(), 1e-3)
 
     def check_equivalence_pt_to_tf(self, config, decoder_config, inputs_dict):
-
         encoder_decoder_config = EncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
 
         pt_model = EncoderDecoderModel(encoder_decoder_config)
 
         with tempfile.TemporaryDirectory() as encoder_tmp_dirname, tempfile.TemporaryDirectory() as decoder_tmp_dirname:
-
             pt_model.encoder.save_pretrained(encoder_tmp_dirname)
             pt_model.decoder.save_pretrained(decoder_tmp_dirname)
             tf_model = TFEncoderDecoderModel.from_encoder_decoder_pretrained(
@@ -391,7 +387,6 @@ class TFEncoderDecoderMixin:
         self.check_pt_tf_equivalence(pt_model, tf_model, inputs_dict)
 
     def check_equivalence_tf_to_pt(self, config, decoder_config, inputs_dict):
-
         encoder_decoder_config = EncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
 
         # Using `_tf_model`, the test will fail, because the weights of `_tf_model` get extended before saving
@@ -412,7 +407,6 @@ class TFEncoderDecoderMixin:
         tf_model = TFEncoderDecoderModel(encoder=encoder, decoder=decoder)
 
         with tempfile.TemporaryDirectory() as encoder_tmp_dirname, tempfile.TemporaryDirectory() as decoder_tmp_dirname:
-
             tf_model.encoder.save_pretrained(encoder_tmp_dirname)
             tf_model.decoder.save_pretrained(decoder_tmp_dirname)
             pt_model = EncoderDecoderModel.from_encoder_decoder_pretrained(
@@ -461,7 +455,6 @@ class TFEncoderDecoderMixin:
 
     @is_pt_tf_cross_test
     def test_pt_tf_equivalence(self):
-
         config_inputs_dict = self.prepare_config_and_inputs()
         labels = config_inputs_dict.pop("decoder_token_labels")
 
@@ -613,7 +606,6 @@ class TFBertEncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
     @slow
     @is_pt_tf_cross_test
     def test_bert2bert_summarization(self):
-
         from transformers import EncoderDecoderModel
 
         tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
@@ -712,7 +704,6 @@ class TFGPT2EncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
     @slow
     @is_pt_tf_cross_test
     def test_bert2gpt2_summarization(self):
-
         from transformers import EncoderDecoderModel
 
         tokenizer_in = AutoTokenizer.from_pretrained("bert-base-cased")
@@ -1016,7 +1007,6 @@ class TFEncoderDecoderModelSaveLoadTests(unittest.TestCase):
         decoder_input_ids = decoder_tokenizer("Linda Davis", return_tensors="tf").input_ids
 
         with tempfile.TemporaryDirectory() as tmp_dirname:
-
             # Since most of HF's models don't have pretrained cross-attention layers, they are randomly
             # initialized even if we create models using `from_pretrained` method.
             # For the tests, the decoder need to be a model with pretrained cross-attention layers.

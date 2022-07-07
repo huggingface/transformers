@@ -476,7 +476,6 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
 
     @staticmethod
     def create_masks_for_block_sparse_attn(attention_mask, block_size: int):
-
         batch_size, seq_length = attention_mask.shape
         if seq_length % block_size != 0:
             raise ValueError(
@@ -1829,7 +1828,6 @@ class FlaxBigBirdForPreTrainingModule(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
-
         # Model
         outputs = self.bert(
             input_ids,
@@ -2274,7 +2272,6 @@ class FlaxBigBirdForQuestionAnsweringModule(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
-
         # Model
         outputs = self.bert(
             input_ids,

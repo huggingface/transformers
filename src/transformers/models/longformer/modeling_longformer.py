@@ -1259,7 +1259,6 @@ class LongformerEncoder(nn.Module):
         output_hidden_states=False,
         return_dict=True,
     ):
-
         is_index_masked = attention_mask < 0
         is_index_global_attn = attention_mask > 0
         is_global_attn = is_index_global_attn.flatten().any().item()
@@ -1738,7 +1737,6 @@ class LongformerModel(LongformerPreTrainedModel):
 
 @add_start_docstrings("""Longformer Model with a `language modeling` head on top.""", LONGFORMER_START_DOCSTRING)
 class LongformerForMaskedLM(LongformerPreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):
@@ -1851,7 +1849,6 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
     LONGFORMER_START_DOCSTRING,
 )
 class LongformerForSequenceClassification(LongformerPreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):
@@ -1980,7 +1977,6 @@ class LongformerClassificationHead(nn.Module):
     LONGFORMER_START_DOCSTRING,
 )
 class LongformerForQuestionAnswering(LongformerPreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):
@@ -2120,7 +2116,6 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
     LONGFORMER_START_DOCSTRING,
 )
 class LongformerForTokenClassification(LongformerPreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):

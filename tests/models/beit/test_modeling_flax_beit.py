@@ -105,7 +105,6 @@ class FlaxBeitModelTester(unittest.TestCase):
         return config, pixel_values, labels
 
     def create_and_check_model(self, config, pixel_values, labels):
-
         model = FlaxBeitModel(config=config)
         result = model(pixel_values)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
@@ -134,7 +133,6 @@ class FlaxBeitModelTester(unittest.TestCase):
 
 @require_flax
 class FlaxBeitModelTest(FlaxModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (FlaxBeitModel, FlaxBeitForImageClassification, FlaxBeitForMaskedImageModeling) if is_flax_available() else ()
     )

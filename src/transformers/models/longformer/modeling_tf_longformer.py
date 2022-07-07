@@ -1700,7 +1700,6 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
         return_dict=None,
         training=False,
     ):
-
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -2046,7 +2045,6 @@ class TFLongformerModel(TFLongformerPreTrainedModel):
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
     ) -> Union[TFLongformerBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
-
         outputs = self.longformer(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -2369,7 +2367,6 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
     ) -> Union[TFLongformerSequenceClassifierOutput, Tuple[tf.Tensor]]:
-
         if global_attention_mask is None and input_ids is not None:
             logger.info("Initializing global attention on CLS token...")
             # global attention on cls token

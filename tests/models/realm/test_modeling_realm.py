@@ -304,7 +304,6 @@ class RealmModelTester:
 
 @require_torch
 class RealmModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             RealmEmbedder,

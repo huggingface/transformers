@@ -524,7 +524,6 @@ class FastAttentionviaLowRankDecomposition(FastAttention):
         deterministic=False,
         precision=None,
     ):
-
         assert key.shape[:-1] == value.shape[:-1]
         assert query.shape[0:1] == key.shape[0:1] and query.shape[-1] == key.shape[-1]
         if axis is None:

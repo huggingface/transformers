@@ -583,7 +583,6 @@ def retrieve_available_artifacts():
 
 
 if __name__ == "__main__":
-
     org = "huggingface"
     repo = "transformers"
     repository_full_name = f"{org}/{repo}"
@@ -703,7 +702,6 @@ if __name__ == "__main__":
 
                 for line in artifact["summary_short"].split("\n"):
                     if re.search("FAILED", line):
-
                         line = line.replace("FAILED ", "")
                         line = line.split()[0].replace("\n", "")
 
@@ -768,7 +766,6 @@ if __name__ == "__main__":
     }
 
     for key in additional_results.keys():
-
         # If a whole suite of test fails, the artifact isn't available.
         if additional_files[key] not in available_artifacts:
             additional_results[key]["error"] = True

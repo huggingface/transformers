@@ -269,7 +269,6 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         return_dict=None,
         training=False,
     ):
-
         # If using past key value states, only the last tokens
         # should be given as an input
         if past_key_values is not None:

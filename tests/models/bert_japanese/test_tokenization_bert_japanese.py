@@ -34,7 +34,6 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @custom_tokenizers
 class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
     tokenizer_class = BertJapaneseTokenizer
     test_rust_tokenizer = False
     space_between_special_tokens = True
@@ -204,7 +203,6 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
 @custom_tokenizers
 class BertJapaneseCharacterTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
     tokenizer_class = BertJapaneseTokenizer
     test_rust_tokenizer = False
 

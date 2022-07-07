@@ -370,7 +370,6 @@ class TFGPT2ModelTester:
 
 @require_tf
 class TFGPT2ModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (TFGPT2Model, TFGPT2LMHeadModel, TFGPT2ForSequenceClassification, TFGPT2DoubleHeadsModel)
         if is_tf_available()

@@ -208,7 +208,6 @@ class SplinterModelTester:
 
 @require_torch
 class SplinterModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             SplinterModel,

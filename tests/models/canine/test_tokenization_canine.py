@@ -28,7 +28,6 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 
 class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
     tokenizer_class = CanineTokenizer
     test_rust_tokenizer = False
 
@@ -187,7 +186,6 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-
                 # a special token for Canine can be defined as follows:
                 NEW_TOKEN = 0xE006
                 new_token = chr(NEW_TOKEN)
@@ -261,7 +259,6 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-
                 input = "hello world"
                 if self.space_between_special_tokens:
                     output = "[CLS] hello world [SEP]"

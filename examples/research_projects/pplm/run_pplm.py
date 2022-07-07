@@ -463,7 +463,6 @@ def generate_text_pplm(
     unpert_discrim_loss = 0
     loss_in_time = []
     for i in trange(length, ascii=True):
-
         # Get past/probs for current output, except for last word
         # Note that GPT takes 2 inputs: past + current_token
 
@@ -547,7 +546,6 @@ def generate_text_pplm(
 
         # Fuse the modified model and original model
         if perturb:
-
             unpert_probs = nn.functional.softmax(unpert_logits[:, -1, :], dim=-1)
 
             pert_probs = (pert_probs**gm_scale) * (unpert_probs ** (1 - gm_scale))  # + SMALL_CONST

@@ -76,7 +76,6 @@ class ConvNextFeatureExtractionTester(unittest.TestCase):
 @require_torch
 @require_vision
 class ConvNextFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
-
     feature_extraction_class = ConvNextFeatureExtractor if is_vision_available() else None
 
     def setUp(self):

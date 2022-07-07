@@ -60,8 +60,10 @@ MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 class DataTrainingArguments:
     """
     Arguments pertaining to what data we are going to input our model for training and eval.
-    Using `HfArgumentParser` we can turn this class into argparse arguments to be able to
-    specify them on the command line.
+
+    Using `HfArgumentParser` we can turn this class
+    into argparse arguments to be able to specify them on
+    the command line.
     """
 
     dataset_name: Optional[str] = field(

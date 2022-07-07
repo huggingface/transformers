@@ -251,7 +251,6 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         return super().__call__(examples, **kwargs)
 
     def preprocess(self, example, padding="do_not_pad", doc_stride=None, max_question_len=64, max_seq_len=None):
-
         if max_seq_len is None:
             max_seq_len = min(self.tokenizer.model_max_length, 384)
         if doc_stride is None:

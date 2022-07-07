@@ -488,7 +488,6 @@ class TFElectraModelTester:
 
 @require_tf
 class TFElectraModelTest(TFModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             TFElectraModel,

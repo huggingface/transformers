@@ -151,7 +151,6 @@ class FlavaFeatureExtractionTester(unittest.TestCase):
 @require_torch
 @require_vision
 class FlavaFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
-
     feature_extraction_class = FlavaFeatureExtractor if is_vision_available() else None
     maxDiff = None
 

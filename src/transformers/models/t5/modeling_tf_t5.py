@@ -539,7 +539,6 @@ class TFT5Block(tf.keras.layers.Layer):
         output_attentions=False,
         training=False,
     ):
-
         if past_key_value is not None:
             assert self.is_decoder, "Only decoder can use `past_key_values`"
             expected_num_past_key_values = 2 if encoder_hidden_states is None else 4
@@ -655,7 +654,6 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         return_dict=None,
         training=False,
     ) -> Tuple:
-
         if input_ids is not None and inputs_embeds is not None:
             err_msg_prefix = "decoder_" if self.is_decoder else ""
             raise ValueError(
@@ -1484,7 +1482,6 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         encoder_outputs=None,
         **kwargs
     ):
-
         # cut decoder_input_ids if past is used
         if past is not None:
             input_ids = input_ids[:, -1:]

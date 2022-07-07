@@ -431,7 +431,6 @@ class LukeTokenizer(RobertaTokenizer):
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
-
         if return_offsets_mapping:
             raise NotImplementedError(
                 "return_offset_mapping is not available when using Python tokenizers. "
@@ -603,7 +602,6 @@ class LukeTokenizer(RobertaTokenizer):
             )
 
         if entities is not None:
-
             if not isinstance(entities, list):
                 raise ValueError("If you specify entities, they should be given as a list")
 
@@ -662,7 +660,6 @@ class LukeTokenizer(RobertaTokenizer):
         first_entity_token_spans, second_entity_token_spans = None, None
 
         if self.task is None:
-
             if entity_spans is None:
                 first_ids = get_input_ids(text)
             else:
@@ -745,7 +742,6 @@ class LukeTokenizer(RobertaTokenizer):
                 first_ids = first_ids[:entity_token_start] + [special_token_id] + first_ids[entity_token_start:]
 
         elif self.task == "entity_span_classification":
-
             if not (isinstance(entity_spans, list) and len(entity_spans) > 0 and isinstance(entity_spans[0], tuple)):
                 raise ValueError(
                     "Entity spans should be provided as a list of tuples, "

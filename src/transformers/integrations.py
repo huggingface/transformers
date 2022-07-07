@@ -305,7 +305,6 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
 
 
 def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
-
     from sigopt import Connection
 
     conn = Connection()
@@ -373,7 +372,6 @@ def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> Bes
         sweep_config["name"] = name
 
     def _objective():
-
         run = wandb.run if wandb.run else wandb.init()
         trainer.state.trial_name = run.name
         run.config.update({"assignments": {}, "metric": metric})

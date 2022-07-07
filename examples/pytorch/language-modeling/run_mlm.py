@@ -127,7 +127,7 @@ class ModelArguments:
 class DataTrainingArguments:
     """
     Arguments pertaining to what data we are going to input our model for training and eval.
-    
+
     Using `HfArgumentParser` we can turn this class
     into argparse arguments to be able to specify them on
     the command line.
@@ -158,7 +158,7 @@ class DataTrainingArguments:
         metadata={
             "help": (
                 "The maximum total input sequence length after tokenization. Sequences longer "
-                "than this will be truncated, sequences shorter will be padded."
+                "than this will be truncated."
             )
         },
     )

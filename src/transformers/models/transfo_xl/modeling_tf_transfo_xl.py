@@ -551,7 +551,6 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
         return_dict=None,
         training=False,
     ):
-
         # the original code for Transformer-XL used shapes [len, bsz] but we want a unified interface in the library
         # so we transpose here from shape [bsz, len] to shape [len, bsz]
         if input_ids is not None and inputs_embeds is not None:

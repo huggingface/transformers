@@ -94,6 +94,10 @@ class ModelArguments:
 class DataTrainingArguments:
     """
     Arguments pertaining to what data we are going to input our model for training and eval.
+
+    Using `HfArgumentParser` we can turn this class
+    into argparse arguments to be able to specify them on
+    the command line.
     """
 
     train_file: Optional[str] = field(default=None, metadata={"help": "The input training data file (a text file)."})

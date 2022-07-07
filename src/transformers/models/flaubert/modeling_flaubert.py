@@ -132,7 +132,6 @@ FLAUBERT_INPUTS_DOCSTRING = r"""
     FLAUBERT_START_DOCSTRING,
 )
 class FlaubertModel(XLMModel):
-
     config_class = FlaubertConfig
 
     def __init__(self, config):  # , dico, is_encoder, with_output):

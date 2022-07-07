@@ -55,7 +55,6 @@ def generate_n_pairs(
     data_file="data/tokenized_stories_train_wikitext103.jbl",
     igf_data_file="igf_context_pairs.jbl",
 ):
-
     """
     Collecting *n* pairs for training the secondary learner
     Args:

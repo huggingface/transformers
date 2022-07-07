@@ -25,7 +25,6 @@ from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor
 
 
 if is_flax_available():
-
     import jax
     from transformers.models.vit.modeling_flax_vit import FlaxViTForImageClassification, FlaxViTModel
 
@@ -92,7 +91,6 @@ class FlaxViTModelTester(unittest.TestCase):
         return config, pixel_values
 
     def create_and_check_model(self, config, pixel_values, labels):
-
         model = FlaxViTModel(config=config)
         result = model(pixel_values)
         # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
@@ -113,7 +111,6 @@ class FlaxViTModelTester(unittest.TestCase):
 
 @require_flax
 class FlaxViTModelTest(FlaxModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (FlaxViTModel, FlaxViTForImageClassification) if is_flax_available() else ()
 
     def setUp(self) -> None:

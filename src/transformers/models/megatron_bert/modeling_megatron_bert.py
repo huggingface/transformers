@@ -537,7 +537,6 @@ class MegatronBertEncoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -1113,7 +1112,6 @@ class MegatronBertForPreTraining(MegatronBertPreTrainedModel):
     MEGATRON_BERT_START_DOCSTRING,
 )
 class MegatronBertForCausalLM(MegatronBertPreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
 
@@ -1259,7 +1257,6 @@ class MegatronBertForCausalLM(MegatronBertPreTrainedModel):
 
 @add_start_docstrings("""MegatronBert Model with a `language modeling` head on top.""", MEGATRON_BERT_START_DOCSTRING)
 class MegatronBertForMaskedLM(MegatronBertPreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"pooler", r"seq_relationship"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
 
@@ -1369,7 +1366,6 @@ class MegatronBertForMaskedLM(MegatronBertPreTrainedModel):
     MEGATRON_BERT_START_DOCSTRING,
 )
 class MegatronBertForNextSentencePrediction(MegatronBertPreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"predictions"]
 
     def __init__(self, config):
@@ -1668,7 +1664,6 @@ class MegatronBertForMultipleChoice(MegatronBertPreTrainedModel):
     MEGATRON_BERT_START_DOCSTRING,
 )
 class MegatronBertForTokenClassification(MegatronBertPreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):
@@ -1750,7 +1745,6 @@ class MegatronBertForTokenClassification(MegatronBertPreTrainedModel):
     MEGATRON_BERT_START_DOCSTRING,
 )
 class MegatronBertForQuestionAnswering(MegatronBertPreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):

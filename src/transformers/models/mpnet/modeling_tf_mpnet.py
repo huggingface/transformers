@@ -498,7 +498,6 @@ class TFMPNetMainLayer(tf.keras.layers.Layer):
         return_dict=None,
         training=False,
     ):
-
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -765,7 +764,6 @@ class TFMPNetLMHead(tf.keras.layers.Layer):
 
 @add_start_docstrings("""MPNet Model with a `language modeling` head on top.""", MPNET_START_DOCSTRING)
 class TFMPNetForMaskedLM(TFMPNetPreTrainedModel, TFMaskedLanguageModelingLoss):
-
     _keys_to_ignore_on_load_missing = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
@@ -876,7 +874,6 @@ class TFMPNetClassificationHead(tf.keras.layers.Layer):
     MPNET_START_DOCSTRING,
 )
 class TFMPNetForSequenceClassification(TFMPNetPreTrainedModel, TFSequenceClassificationLoss):
-
     _keys_to_ignore_on_load_missing = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
@@ -1074,7 +1071,6 @@ class TFMPNetForMultipleChoice(TFMPNetPreTrainedModel, TFMultipleChoiceLoss):
     MPNET_START_DOCSTRING,
 )
 class TFMPNetForTokenClassification(TFMPNetPreTrainedModel, TFTokenClassificationLoss):
-
     _keys_to_ignore_on_load_missing = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
@@ -1157,7 +1153,6 @@ class TFMPNetForTokenClassification(TFMPNetPreTrainedModel, TFTokenClassificatio
     MPNET_START_DOCSTRING,
 )
 class TFMPNetForQuestionAnswering(TFMPNetPreTrainedModel, TFQuestionAnsweringLoss):
-
     _keys_to_ignore_on_load_missing = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):

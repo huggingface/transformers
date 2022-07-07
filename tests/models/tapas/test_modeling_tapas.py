@@ -416,7 +416,6 @@ class TapasModelTester:
 @require_torch
 @require_scatter
 class TapasModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             TapasModel,

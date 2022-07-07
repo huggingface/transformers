@@ -510,7 +510,6 @@ class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
 
     @unittest.skip("different from marian (needs more research)")
     def test_positional_emb_weights_against_marian(self):
-
         desired_weights = torch.tensor(
             [
                 [0, 0, 0, 0, 0],

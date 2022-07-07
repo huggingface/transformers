@@ -337,7 +337,6 @@ def main():
         metrics["val_loss"] = round(metrics["val_loss"], 4)
 
         if trainer.is_world_process_zero():
-
             handle_metrics("val", metrics, training_args.output_dir)
             all_metrics.update(metrics)
 

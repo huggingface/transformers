@@ -52,6 +52,7 @@ require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/imag
 class DataTrainingArguments:
     """
     Arguments pertaining to what data we are going to input our model for training and eval.
+
     Using `HfArgumentParser` we can turn this class
     into argparse arguments to be able to specify them on
     the command line.

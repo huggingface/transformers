@@ -64,7 +64,6 @@ class TapexTruncationStrategy(ExplicitEnum):
 
 
 class TokenizerStrategy(ExplicitEnum):
-
     TOKENIZE_SOURCE = "tokenize_source"
     TOKENIZE_TARGET = "tokenize_target"
 
@@ -766,7 +765,6 @@ class TapexTokenizer(PreTrainedTokenizer):
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
-
         if return_offsets_mapping:
             raise NotImplementedError(
                 "return_offset_mapping is not available when using Python tokenizers. "
@@ -1151,10 +1149,8 @@ class TapexTokenizer(PreTrainedTokenizer):
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
-
         batch_outputs = {}
         for text in answer:
-
             if self.do_lower_case:
                 text = text.lower()
 
