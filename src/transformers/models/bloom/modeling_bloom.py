@@ -56,7 +56,7 @@ def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_
     Make causal mask used for bi-directional self-attention.
     """
     bsz, tgt_len = input_ids_shape
-    mask = torch.full((tgt_len, tgt_len), torch.tensor(float("-inf")))
+    mask = torch.full((tgt_len, tgt_len), torch.finfo(dtype).min)
     mask_cond = torch.arange(mask.size(-1))
     mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
     mask = mask.to(dtype)
@@ -155,7 +155,8 @@ def pre_process_alibi_for_pad(alibi: torch.Tensor, attention_mask: torch.Tensor)
     unpadded_indices = torch.relu(attention_mask.cumsum(dim=1) - 1)
     # ^-- [batch, max_len], values correspond to element indices after removing padding
     # We shift the alibi tensor + replace all the values where attention_mask==0.0 by 0
-    alibi = alibi.take_along_dim(unpadded_indices.unsqueeze(0), -1) * attention_mask.unsqueeze(0)
+    alibi = alibi.take_along_dim(unpadded_indices.unsqueeze(0), -1) * attention_mask.unsqueeze(0) # [num_heads, batch_size, max_len]
+    alibi = alibi.transpose(0, 1) # [batch_size, num_heads, max_len]
     return alibi.reshape(alibi.shape[0] * alibi.shape[1], 1, -1)
 
 
@@ -274,7 +275,9 @@ class BloomScaledSoftmax(nn.Module):
         if self.scale is not None:
             input = input * self.scale
 
-        probs = nn.functional.softmax(input + causal_mask, dim=-1, dtype=softmax_dtype) * (~causal_mask.bool())
+        attn_weights = input + causal_mask
+        attn_weights = torch.max(attn_weights, torch.tensor(torch.finfo(attn_weights.dtype).min))
+        probs = nn.functional.softmax(attn_weights, dim=-1, dtype=softmax_dtype) * (~causal_mask.bool())
 
         if input_in_16bit and self.softmax_in_fp32:
             probs = probs.to(dtype=input_dtype)
@@ -676,7 +679,7 @@ class BloomModel(BloomPreTrainedModel):
         if input_shape[-1] > 1:
             combined_attention_mask = _make_causal_mask(
                 input_shape, inputs_embeds.dtype, past_key_values_length=past_key_values_length
-            ).to(inputs_embeds.device)
+            ).to(attention_mask.device)
 
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -756,6 +759,8 @@ class BloomModel(BloomPreTrainedModel):
         alibi = build_alibi_tensor(current_sequence_length, self.n_head, hidden_states.dtype, hidden_states.device)
 
         # apply preprocessing if the input is padded
+        if attention_mask is not None:
+            attention_mask = attention_mask.to(hidden_states.device)
         if attention_mask is not None and 0 in attention_mask:
             alibi = pre_process_alibi_for_pad(alibi, attention_mask)
         # otherwise repeat alibi tensor with the batch size
