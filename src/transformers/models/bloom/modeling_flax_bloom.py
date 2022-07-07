@@ -146,7 +146,7 @@ def build_alibi_tensor_flax(attention_mask, n_head, dtype):
     num_heads = n_head
     query_length = 1
 
-    slopes = jnp.array(get_slopes(n_head))[None, :, None, None]
+    slopes = jnp.array(get_slopes(n_head))[None, :, None, None].astype(dtype)
     arange_tensor = attention_mask.cumsum(-1, dtype=dtype)[:, None, None, :] - 1
 
     slopes_broadcasted = jnp.broadcast_to(slopes, (batch_size, num_heads, query_length, key_length))
