@@ -23,7 +23,10 @@ import os
 import warnings
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
+from numpy import isin
+
 from ..configuration_utils import PretrainedConfig
+from ..dynamic_module_utils import get_class_from_dynamic_module
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..models.auto.configuration_auto import AutoConfig
 from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
@@ -379,6 +382,22 @@ def check_task(task: str) -> Tuple[Dict, Any]:
     return PIPELINE_REGISTRY.check_task(task)
 
 
+def clean_custom_task(task_info):
+    import transformers
+
+    if "impl" not in task_info:
+        raise RuntimeError("This model introduces a custom pipeline without specifying its implementation.")
+    pt_class_names = task_info.get("pt", ())
+    if isinstance(pt_class_names, str):
+        pt_class_names = [pt_class_names]
+    task_info["pt"] = tuple(getattr(transformers, c) for c in pt_class_names)
+    tf_class_names = task_info.get("tf", ())
+    if isinstance(tf_class_names, str):
+        tf_class_names = [tf_class_names]
+    task_info["tf"] = tuple(getattr(transformers, c) for c in tf_class_names)
+    return task_info, None
+
+
 def pipeline(
     task: str = None,
     model: Optional = None,
@@ -537,6 +556,25 @@ def pipeline(
             " or a path/identifier to a pretrained model when providing feature_extractor."
         )
 
+    # Config is the primordial information item.
+    # Instantiate config if needed
+    if isinstance(config, str):
+        config = AutoConfig.from_pretrained(config, revision=revision, _from_pipeline=task, **model_kwargs)
+    elif config is None and isinstance(model, str):
+        config = AutoConfig.from_pretrained(model, revision=revision, _from_pipeline=task, **model_kwargs)
+
+    custom_tasks = {}
+    if config is not None and len(getattr(config, "custom_pipelines", {})) > 0:
+        custom_tasks = config.custom_pipelines
+        if task is None:
+            if len(custom_tasks) == 1:
+                task = list(custom_tasks.keys())[0]
+            else:
+                raise RuntimeError(
+                    "We can't infer the task automatically for this model as there are multiple tasks available. Pick "
+                    f"one in {', '.join(custom_tasks.keys())}"
+                )
+
     if task is None and model is not None:
         if not isinstance(model, str):
             raise RuntimeError(
@@ -546,9 +584,18 @@ def pipeline(
         task = get_task(model, use_auth_token)
 
     # Retrieve the task
-    targeted_task, task_options = check_task(task)
-    if pipeline_class is None:
-        pipeline_class = targeted_task["impl"]
+    if task in custom_tasks:
+        targeted_task, task_options = clean_custom_task(custom_tasks[task])
+        if pipeline_class is None:
+            class_ref = targeted_task["impl"]
+            module_file, class_name = class_ref.split(".")
+            pipeline_class = get_class_from_dynamic_module(
+                model, module_file + ".py", class_name, revision=revision, use_auth_token=use_auth_token
+            )
+    else:
+        targeted_task, task_options = check_task(task)
+        if pipeline_class is None:
+            pipeline_class = targeted_task["impl"]
 
     # Use default model/config/tokenizer for the task if no model is provided
     if model is None:
@@ -560,6 +607,8 @@ def pipeline(
             f" {revision} ({HUGGINGFACE_CO_RESOLVE_ENDPOINT}/{model}).\n"
             "Using a pipeline without specifying a model name and revision in production is not recommended."
         )
+        if config is None and isinstance(model, str):
+            config = AutoConfig.from_pretrained(model, revision=revision, _from_pipeline=task, **model_kwargs)
 
     # Retrieve use_auth_token and add it to model_kwargs to be used in .from_pretrained
     model_kwargs["use_auth_token"] = model_kwargs.get("use_auth_token", use_auth_token)
@@ -577,13 +626,6 @@ def pipeline(
                 " arguments might conflict, use only one.)"
             )
         model_kwargs["torch_dtype"] = torch_dtype
-
-    # Config is the primordial information item.
-    # Instantiate config if needed
-    if isinstance(config, str):
-        config = AutoConfig.from_pretrained(config, revision=revision, _from_pipeline=task, **model_kwargs)
-    elif config is None and isinstance(model, str):
-        config = AutoConfig.from_pretrained(model, revision=revision, _from_pipeline=task, **model_kwargs)
 
     model_name = model if isinstance(model, str) else None
 
