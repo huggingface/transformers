@@ -55,22 +55,23 @@ def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_
     """
     Make causal mask used for bi-directional self-attention.
     """
-    bsz, tgt_len = input_ids_shape
-    mask = torch.full((tgt_len, tgt_len), torch.finfo(dtype).min)
+    batch_size, target_length = input_ids_shape
+    mask = torch.full((target_length, target_length), torch.finfo(dtype).min)
     mask_cond = torch.arange(mask.size(-1))
-    mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
+    intermediate_mask = mask_cond < (mask_cond + 1).view(mask.size(-1), 1)
+    mask.masked_fill_(intermediate_mask, 0)
     mask = mask.to(dtype)
 
     if past_key_values_length > 0:
-        mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype), mask], dim=-1)
-    return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
+        mask = torch.cat([torch.zeros(target_length, past_key_values_length, dtype=dtype), mask], dim=-1)
+    return mask[None, None, :, :].expand(batch_size, 1, target_length, target_length + past_key_values_length)
 
 
 def split_tensor_along_last_dim(tensor, num_partitions, contiguous_split_chunks=False):
     """Split a tensor along its last dimension.
 
     Args:
-        tensor: ([`torch.tensor`], *required*):
+        tensor ([`torch.tensor`], *required*):
             input tensor to split
         num_partitions ([`int`], *required*):
             number of partitions to split the tensor
@@ -96,10 +97,10 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: int = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
-    bsz, src_len = mask.size()
-    tgt_len = tgt_len if tgt_len is not None else src_len
+    batch_size, source_length = mask.size()
+    tgt_len = tgt_len if tgt_len is not None else source_length
 
-    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
+    expanded_mask = mask[:, None, None, :].expand(batch_size, 1, tgt_len, source_length).to(dtype)
 
     inverted_mask = 1.0 - expanded_mask
 
@@ -120,8 +121,8 @@ def build_alibi_tensor(
 
     Args:
     Returns tensor shaped (batch_size * n_head, 1, max_seq_len)
-        attention_mask: (`torch.Tensor`, *required*)
-            attention mask
+        attention_mask (`torch.Tensor`, *required*):
+            Token-wise attention mask, this should be of shape (batch_size, max_seq_len).
         n_head: (`int`, *required*):
             number of heads
         dtype: (`torch.dtype`, *optional*, default=`torch.bfloat16`):
