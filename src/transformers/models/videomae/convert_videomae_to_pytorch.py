@@ -38,8 +38,11 @@ def get_videomae_config(checkpoint_path, model_name):
         config.num_hidden_layers = 24
         config.num_attention_heads = 16
 
-    repo_id = "datasets/huggingface/label-files"
+    if "finetuned" not in model_name:
+        config.use_mean_pooling = False
+
     if "finetuned" in model_name:
+        repo_id = "datasets/huggingface/label-files"
         if "kinetics" in model_name:
             config.num_labels = 400
             filename = "kinetics400-id2label.json"
@@ -170,10 +173,15 @@ def convert_videomae_checkpoint(checkpoint_path, pytorch_dump_folder_path, model
     model.load_state_dict(new_state_dict)
     model.eval()
 
-    # forward pass
+    # verify model on basic input
     feature_extractor = VideoMAEFeatureExtractor()
     video = prepare_video()
     inputs = feature_extractor(video, return_tensors="pt")
+
+    if "finetuned" not in model_name:
+        local_path = hf_hub_download(repo_id="nielsr/bool-masked-pos", filename="bool_masked_pos.pt")
+        inputs["bool_masked_pos"] = torch.load(local_path)
+
     outputs = model(**inputs)
     logits = outputs.logits
 
@@ -196,13 +204,20 @@ def convert_videomae_checkpoint(checkpoint_path, pytorch_dump_folder_path, model
     if model_name not in model_names:
         raise ValueError("Model name not supported.")
 
-    if model_name == "videomae-base-finetuned-kinetics":
+    if model_name == "videomae-base-short":
+        expected_slice = torch.tensor(
+            [[-0.4798, -0.3191, -0.2558], [-0.3396, -0.2823, -0.1581], [0.4327, 0.4635, 0.4745]]
+        )
+    elif model_name == "videomae-base-finetuned-kinetics":
         expected_slice = torch.tensor([0.7666, -0.2265, -0.5551])
     elif model_name == "videomae-base-finetuned-ssv2":
         expected_slice = torch.tensor([-0.1354, -0.4494, -0.4979])
 
     # verify logits
-    assert torch.allclose(logits[0, :3], expected_slice, atol=1e-4)
+    if "finetuned" in model_name:
+        assert torch.allclose(logits[0, :3], expected_slice, atol=1e-4)
+    else:
+        assert torch.allclose(logits[0, :3, :3], expected_slice, atol=1e-4)
     print("Logits ok!")
 
     if pytorch_dump_folder_path is not None:

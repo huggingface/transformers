@@ -544,11 +544,10 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
         self.embeddings = VideoMAEEmbeddings(config)
         self.encoder = VideoMAEEncoder(config)
 
-        print("Creating layernorm:", config.use_mean_pooling)
-        
-        self.layernorm = (
-            nn.Identity() if config.use_mean_pooling else nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        )
+        if config.use_mean_pooling:
+            self.layernorm = None
+        else:
+            self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -616,7 +615,8 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
             return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
-        sequence_output = self.layernorm(sequence_output)
+        if self.layernorm is not None:
+            sequence_output = self.layernorm(sequence_output)
 
         if not return_dict:
             return (sequence_output,) + encoder_outputs[1:]
@@ -791,6 +791,8 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
             x_full, pos_emb_mask.shape[1]
         )  # [batch_size, num_masked_patches, num_channels * patch_size * patch_size]
         logits = decoder_outputs.logits
+
+        print("Shape of reconstruction:", logits.shape)
 
         # TODO verify loss computation
         loss = None
