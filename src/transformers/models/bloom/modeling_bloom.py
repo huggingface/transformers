@@ -754,7 +754,7 @@ class BloomModel(BloomPreTrainedModel):
             current_sequence_length += past_key_values_length
 
         if attention_mask is None:
-            attention_mask = torch.ones((hidden_states.shape[:-1]), device=hidden_states.device)
+            attention_mask = torch.ones((hidden_states.shape[0], current_sequence_length), device=hidden_states.device)
         else:
             attention_mask = attention_mask.to(hidden_states.device)
 
