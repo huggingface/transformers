@@ -61,8 +61,6 @@ def rename_key(name):
         name = name.replace("encoder.", "")
     if "cls_token" in name:
         name = name.replace("cls_token", "videomae.embeddings.cls_token")
-    if "mask_token" in name:
-        name = name.replace("mask_token", "decoder.mask_token")
     if "decoder_pos_embed" in name:
         name = name.replace("decoder_pos_embed", "decoder.decoder_pos_embed")
     if "pos_embed" in name and "decoder" not in name:
@@ -99,7 +97,7 @@ def rename_key(name):
         name = name.replace("norm.weight", "videomae.layernorm.weight")
     if "norm.bias" in name and "decoder" not in name and "fc" not in name:
         name = name.replace("norm.bias", "videomae.layernorm.bias")
-    if "head" in name:
+    if "head" in name and "decoder" not in name:
         name = name.replace("head", "classifier")
 
     return name
@@ -108,19 +106,16 @@ def rename_key(name):
 def convert_state_dict(orig_state_dict, config):
     for key in orig_state_dict.copy().keys():
         val = orig_state_dict.pop(key)
-        
+
         if key.startswith("encoder."):
             key = key.replace("encoder.", "")
-        
+
         if "qkv" in key:
             key_split = key.split(".")
-            print("Key:", key)
             if key.startswith("decoder.blocks"):
                 dim = config.decoder_hidden_size
                 layer_num = int(key_split[2])
                 prefix = "decoder.decoder_layers."
-                print("Old name:", key)
-                print("New name:", f"{prefix}{layer_num}.attention.attention.query.weight")
                 if "weight" in key:
                     orig_state_dict[f"{prefix}{layer_num}.attention.attention.query.weight"] = val[:dim, :]
                     orig_state_dict[f"{prefix}{layer_num}.attention.attention.key.weight"] = val[dim : dim * 2, :]

@@ -544,6 +544,8 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
         self.embeddings = VideoMAEEmbeddings(config)
         self.encoder = VideoMAEEncoder(config)
 
+        print("Creating layernorm:", config.use_mean_pooling)
+        
         self.layernorm = (
             nn.Identity() if config.use_mean_pooling else nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         )
@@ -641,8 +643,8 @@ class VideoMAEDecoder(nn.Module):
             [VideoMAELayer(decoder_config) for _ in range(config.decoder_num_hidden_layers)]
         )
 
-        self.decoder_norm = nn.LayerNorm(config.decoder_hidden_size)
-        self.decoder_pred = (
+        self.norm = nn.LayerNorm(config.decoder_hidden_size)
+        self.head = (
             nn.Linear(config.decoder_hidden_size, decoder_num_labels) if decoder_num_labels > 0 else nn.Identity()
         )
 
@@ -692,8 +694,8 @@ class VideoMAEDecoder(nn.Module):
             hidden_states = hidden_states[:, -return_token_num:]
 
         # predictor projection
-        hidden_states = self.decoder_norm(hidden_states)
-        logits = self.decoder_pred(hidden_states)
+        hidden_states = self.norm(hidden_states)
+        logits = self.head(hidden_states)
 
         if not return_dict:
             return tuple(v for v in [logits, all_hidden_states, all_self_attentions] if v is not None)
