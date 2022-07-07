@@ -64,7 +64,8 @@ def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_
 
     if past_key_values_length > 0:
         mask = torch.cat([torch.zeros(target_length, past_key_values_length, dtype=dtype), mask], dim=-1)
-    return mask[None, None, :, :].expand(batch_size, 1, target_length, target_length + past_key_values_length)
+    expanded_mask = mask[None, None, :, :].expand(batch_size, 1, target_length, target_length + past_key_values_length)
+    return expanded_mask
 
 
 def split_tensor_along_last_dim(tensor, num_partitions, contiguous_split_chunks=False):
