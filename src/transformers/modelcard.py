@@ -585,9 +585,9 @@ class TrainingSummary:
             if default_tag not in ["csv", "json", "pandas", "parquet", "text"]:
                 if dataset_metadata is None:
                     dataset_metadata = [{
-                        "config": one_dataset.config,
+                        "config": one_dataset.info.config_name,
                         "revision": one_dataset.version,
-                        "split": "train" if trainer.train_dataset is not None else "eval"
+                        "split": one_dataset.split
                     }]
                 if dataset_tags is None:
                     dataset_tags = [default_tag]
