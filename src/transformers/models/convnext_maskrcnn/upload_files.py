@@ -1,4 +1,4 @@
-from huggingface_hub import CommitOperationAdd, CommitOperationDelete, HfApi
+from huggingface_hub import CommitOperationAdd, HfApi
 
 
 api = HfApi()
