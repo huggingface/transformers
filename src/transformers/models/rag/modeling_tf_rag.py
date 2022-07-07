@@ -1333,6 +1333,8 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
     # Adopted modeling_tf_bart + add smooth_loss to match with pytorch version
     def hf_compute_loss(self, labels, y_pred, smooth_epsilon=0.0, from_logits=True, reduce_loss=False):
         """CrossEntropyLoss that ignores pad tokens"""
+        # Matt: As written, this loss is not XLA-compatible, but it's doing some very weird things
+        #       and I don't feel comfortable converting it.
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True,
             reduction=tf.keras.losses.Reduction.SUM,

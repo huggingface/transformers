@@ -827,7 +827,7 @@ class TFDebertaV2Embeddings(tf.keras.layers.Layer):
         self.position_biased_input = getattr(config, "position_biased_input", True)
         self.initializer_range = config.initializer_range
         if self.embedding_size != config.hidden_size:
-            self.embed_proj = tf.keras.layers.Dense(config.hidden_size, bias=False)
+            self.embed_proj = tf.keras.layers.Dense(config.hidden_size, use_bias=False)
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = TFDebertaV2StableDropout(config.hidden_dropout_prob, name="dropout")
 
@@ -876,7 +876,8 @@ class TFDebertaV2Embeddings(tf.keras.layers.Layer):
         Returns:
             final_embeddings (`tf.Tensor`): output embedding tensor.
         """
-        assert not (input_ids is None and inputs_embeds is None)
+        if input_ids is None and inputs_embeds is None:
+            raise ValueError("Need to provide either `input_ids` or `input_embeds`.")
 
         if input_ids is not None:
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
