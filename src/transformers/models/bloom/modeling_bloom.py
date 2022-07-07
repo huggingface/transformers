@@ -152,9 +152,9 @@ def build_alibi_tensor(
     # https://github.com/huggingface/transformers/blob/f681437203baa7671de3174b0fa583c349d9d5e1/src/transformers/models/t5/modeling_flax_t5.py#L426
     # batch_size = 1, n_head = n_head, query_length
 
-    arange_tensor = (attention_mask.cumsum(-1)[:, None, :].to(device) - 1) * attention_mask.unsqueeze(1)
+    arange_tensor = (attention_mask.cumsum(-1)[:, None, :].to(device) - 1) * attention_mask[:, None]
     alibi = slopes.unsqueeze(-1) * arange_tensor
-    alibi = alibi * attention_mask.unsqueeze(1)
+    alibi = alibi * attention_mask[:, None]
     return alibi.reshape(alibi.shape[0] * n_head, 1, -1).to(dtype)
 
 
