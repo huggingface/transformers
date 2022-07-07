@@ -73,8 +73,9 @@ class ModelArguments:
     model_name_or_path: Optional[str] = field(
         default=None,
         metadata={
-            "help": "The model checkpoint for weights initialization."
-            "Don't set if you want to train a model from scratch."
+            "help": (
+                "The model checkpoint for weights initialization.Don't set if you want to train a model from scratch."
+            )
         },
     )
     model_type: Optional[str] = field(
@@ -84,8 +85,10 @@ class ModelArguments:
     config_overrides: Optional[str] = field(
         default=None,
         metadata={
-            "help": "Override some existing default config settings when a model is trained from scratch. Example: "
-            "n_embd=10,resid_pdrop=0.2,scale_attn_weights=false,summary_type=cls_index"
+            "help": (
+                "Override some existing default config settings when a model is trained from scratch. Example: "
+                "n_embd=10,resid_pdrop=0.2,scale_attn_weights=false,summary_type=cls_index"
+            )
         },
     )
     config_name: Optional[str] = field(
@@ -109,8 +112,10 @@ class ModelArguments:
     use_auth_token: bool = field(
         default=False,
         metadata={
-            "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
-            "with private models)."
+            "help": (
+                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "with private models)."
+            )
         },
     )
 
@@ -150,9 +155,11 @@ class DataTrainingArguments:
     block_size: Optional[int] = field(
         default=None,
         metadata={
-            "help": "Optional input sequence length after tokenization. "
-            "The training dataset will be truncated in block of this size for training. "
-            "Default to the model max input length for single sentence inputs (take into account special tokens)."
+            "help": (
+                "Optional input sequence length after tokenization. "
+                "The training dataset will be truncated in block of this size for training. "
+                "Default to the model max input length for single sentence inputs (take into account special tokens)."
+            )
         },
     )
     preprocessing_num_workers: Optional[int] = field(
@@ -166,15 +173,19 @@ class DataTrainingArguments:
     max_train_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of training examples to this "
+                "value if set."
+            )
         },
     )
     max_eval_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
+                "value if set."
+            )
         },
     )
     keep_linebreaks: bool = field(
@@ -412,7 +423,8 @@ def main():
         eval_dataset = lm_datasets["validation"]
     else:
         logger.info(
-            f"Validation file not found: using {data_args.validation_split_percentage}% of the dataset as validation as provided in data_args"
+            f"Validation file not found: using {data_args.validation_split_percentage}% of the dataset as validation"
+            " as provided in data_args"
         )
         train_indices, val_indices = train_test_split(
             list(range(len(train_dataset))), test_size=data_args.validation_split_percentage / 100

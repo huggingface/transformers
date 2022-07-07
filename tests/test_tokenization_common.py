@@ -1005,7 +1005,8 @@ class TokenizerTesterMixin:
                         self.assertEqual(len(cm.records), 1)
                         self.assertTrue(
                             cm.records[0].message.startswith(
-                                "Token indices sequence length is longer than the specified maximum sequence length for this model"
+                                "Token indices sequence length is longer than the specified maximum sequence length"
+                                " for this model"
                             )
                         )
 
@@ -1016,7 +1017,8 @@ class TokenizerTesterMixin:
                         self.assertEqual(len(cm.records), 1)
                         self.assertTrue(
                             cm.records[0].message.startswith(
-                                "Token indices sequence length is longer than the specified maximum sequence length for this model"
+                                "Token indices sequence length is longer than the specified maximum sequence length"
+                                " for this model"
                             )
                         )
 
@@ -1131,7 +1133,8 @@ class TokenizerTesterMixin:
                         self.assertEqual(len(cm.records), 1)
                         self.assertTrue(
                             cm.records[0].message.startswith(
-                                "Token indices sequence length is longer than the specified maximum sequence length for this model"
+                                "Token indices sequence length is longer than the specified maximum sequence length"
+                                " for this model"
                             )
                         )
 
@@ -1142,7 +1145,8 @@ class TokenizerTesterMixin:
                         self.assertEqual(len(cm.records), 1)
                         self.assertTrue(
                             cm.records[0].message.startswith(
-                                "Token indices sequence length is longer than the specified maximum sequence length for this model"
+                                "Token indices sequence length is longer than the specified maximum sequence length"
+                                " for this model"
                             )
                         )
 
@@ -2401,13 +2405,15 @@ class TokenizerTesterMixin:
                 # Longer text that will definitely require truncation.
                 src_text = [
                     " UN Chief Says There Is No Military Solution in Syria",
-                    " Secretary-General Ban Ki-moon says his response to Russia's stepped up military support for Syria is that 'there is no military solution' to the nearly five-year conflict and more weapons will only worsen the violence and misery for millions of people.",
+                    " Secretary-General Ban Ki-moon says his response to Russia's stepped up military support for"
+                    " Syria is that 'there is no military solution' to the nearly five-year conflict and more weapons"
+                    " will only worsen the violence and misery for millions of people.",
                 ]
                 tgt_text = [
                     "Şeful ONU declară că nu există o soluţie militară în Siria",
-                    "Secretarul General Ban Ki-moon declară că răspunsul său la intensificarea sprijinului militar al Rusiei "
-                    'pentru Siria este că "nu există o soluţie militară" la conflictul de aproape cinci ani şi că noi arme nu '
-                    "vor face decât să înrăutăţească violenţele şi mizeria pentru milioane de oameni.",
+                    "Secretarul General Ban Ki-moon declară că răspunsul său la intensificarea sprijinului militar al"
+                    ' Rusiei pentru Siria este că "nu există o soluţie militară" la conflictul de aproape cinci ani şi'
+                    " că noi arme nu vor face decât să înrăutăţească violenţele şi mizeria pentru milioane de oameni.",
                 ]
                 try:
                     batch = tokenizer.prepare_seq2seq_batch(
@@ -3658,11 +3664,9 @@ class TokenizerTesterMixin:
                         break
                 self.assertTrue(
                     find,
-                    (
-                        f"'{new_special_token_str}' doesn't appear in the list "
-                        f"'{new_tokenizer.all_special_tokens_extended}' as an AddedToken with the same parameters as "
-                        f"'{special_token}' in the list {tokenizer.all_special_tokens_extended}"
-                    ),
+                    f"'{new_special_token_str}' doesn't appear in the list "
+                    f"'{new_tokenizer.all_special_tokens_extended}' as an AddedToken with the same parameters as "
+                    f"'{special_token}' in the list {tokenizer.all_special_tokens_extended}",
                 )
             elif special_token not in special_tokens_map:
                 # The special token must appear identically in the list of the new tokenizer.
@@ -3725,7 +3729,8 @@ class TokenizerTesterMixin:
                     finally:
                         self.assertTrue(
                             cm.records[0].message.startswith(
-                                "The tokenizer class you load from this checkpoint is not the same type as the class this function is called from."
+                                "The tokenizer class you load from this checkpoint is not the same type as the class"
+                                " this function is called from."
                             )
                         )
 

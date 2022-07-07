@@ -23,7 +23,14 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .debug_utils import DebugOption
-from .trainer_utils import EvaluationStrategy, HubStrategy, IntervalStrategy, SchedulerType, ShardedDDPOption
+from .trainer_utils import (
+    EvaluationStrategy,
+    FSDPOption,
+    HubStrategy,
+    IntervalStrategy,
+    SchedulerType,
+    ShardedDDPOption,
+)
 from .utils import (
     ExplicitEnum,
     cached_property,
@@ -80,6 +87,8 @@ class OptimizerNames(ExplicitEnum):
     ADAMW_APEX_FUSED = "adamw_apex_fused"
     ADAFACTOR = "adafactor"
     ADAMW_BNB = "adamw_bnb_8bit"
+    SGD = "sgd"
+    ADAGRAD = "adagrad"
 
 
 @dataclass
@@ -280,8 +289,7 @@ class TrainingArguments:
             [`~notebook.NotebookTrainingTracker`] in Jupyter Notebooks. Will default to `True` if the logging level is
             set to warn or lower (default), `False` otherwise.
         remove_unused_columns (`bool`, *optional*, defaults to `True`):
-            If using `datasets.Dataset` datasets, whether or not to automatically remove the columns unused by the
-            model forward method.
+            Whether or not to automatically remove the columns unused by the model forward method.
 
             (Note that this behavior is not implemented for [`TFTrainer`] yet.)
         label_names (`List[str]`, *optional*):
@@ -331,6 +339,18 @@ class TrainingArguments:
 
             If a string is passed, it will be split on space. If a bool is passed, it will be converted to an empty
             list for `False` and `["simple"]` for `True`.
+        fsdp (`bool`, `str` or list of [`~trainer_utils.FSDPOption`], *optional*, defaults to `False`):
+            Use PyTorch Distributed Parallel Training (in distributed training only).
+
+            A list of options along the following:
+
+            - `"full_shard"`: Shard parameters, gradients and optimizer states.
+            - `"shard_grad_op"`: Shard optimizer states and gradients.
+            - `"offload"`: Offload parameters and gradients to CPUs (only compatible with `"full_shard"` and
+              `"shard_grad_op"`).
+            - `"auto_wrap"`: Automatically recursively wrap layers with FSDP using `default_auto_wrap_policy`.
+        fsdp_min_num_params (`int`, *optional*, defaults to `0`):
+            FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `fsdp` field is passed).
         deepspeed (`str` or `dict`, *optional*):
             Use [Deepspeed](https://github.com/microsoft/deepspeed). This is an experimental feature and its API may
             evolve in the future. The value is either the location of DeepSpeed json config file (e.g.,
@@ -424,6 +444,12 @@ class TrainingArguments:
         include_inputs_for_metrics (`bool`, *optional*, defaults to `False`):
             Whether or not the inputs will be passed to the `compute_metrics` function. This is intended for metrics
             that need inputs, predictions and references for scoring calculation in Metric class.
+        auto_find_batch_size (`bool`, *optional*, defaults to `False`)
+            Whether to find a batch size that will fit into memory automatically through exponential decay, avoiding
+            CUDA Out-of-Memory errors. Requires accelerate to be installed (`pip install accelerate`)
+        full_determinism (`bool`, *optional*, defaults to `False`)
+            If `True`, [`enable_full_determinism`] is called instead of [`set_seed`] to ensure reproducible results in
+            distributed training
     """
 
     output_dir: str = field(
@@ -461,15 +487,19 @@ class TrainingArguments:
     per_gpu_train_batch_size: Optional[int] = field(
         default=None,
         metadata={
-            "help": "Deprecated, the use of `--per_device_train_batch_size` is preferred. "
-            "Batch size per GPU/TPU core/CPU for training."
+            "help": (
+                "Deprecated, the use of `--per_device_train_batch_size` is preferred. "
+                "Batch size per GPU/TPU core/CPU for training."
+            )
         },
     )
     per_gpu_eval_batch_size: Optional[int] = field(
         default=None,
         metadata={
-            "help": "Deprecated, the use of `--per_device_eval_batch_size` is preferred. "
-            "Batch size per GPU/TPU core/CPU for evaluation."
+            "help": (
+                "Deprecated, the use of `--per_device_eval_batch_size` is preferred. "
+                "Batch size per GPU/TPU core/CPU for evaluation."
+            )
         },
     )
 
@@ -485,7 +515,10 @@ class TrainingArguments:
     eval_delay: Optional[float] = field(
         default=0,
         metadata={
-            "help": "Number of epochs or steps to wait for before the first evaluation can be performed, depending on the evaluation_strategy."
+            "help": (
+                "Number of epochs or steps to wait for before the first evaluation can be performed, depending on the"
+                " evaluation_strategy."
+            )
         },
     )
 
@@ -513,7 +546,11 @@ class TrainingArguments:
     log_level: Optional[str] = field(
         default="passive",
         metadata={
-            "help": "Logger log level to use on the main node. Possible choices are the log levels as strings: 'debug', 'info', 'warning', 'error' and 'critical', plus a 'passive' level which doesn't set anything and lets the application set the level. Defaults to 'passive'.",
+            "help": (
+                "Logger log level to use on the main node. Possible choices are the log levels as strings: 'debug',"
+                " 'info', 'warning', 'error' and 'critical', plus a 'passive' level which doesn't set anything and"
+                " lets the application set the level. Defaults to 'passive'."
+            ),
             "choices": trainer_log_levels.keys(),
         },
     )
@@ -527,7 +564,10 @@ class TrainingArguments:
     log_on_each_node: bool = field(
         default=True,
         metadata={
-            "help": "When doing a multinode distributed training, whether to log once per node or just once on the main node."
+            "help": (
+                "When doing a multinode distributed training, whether to log once per node or just once on the main"
+                " node."
+            )
         },
     )
     logging_dir: Optional[str] = field(default=None, metadata={"help": "Tensorboard log dir."})
@@ -555,16 +595,22 @@ class TrainingArguments:
     save_on_each_node: bool = field(
         default=False,
         metadata={
-            "help": "When doing multi-node distributed training, whether to save models and checkpoints on each node, or only on the main one"
+            "help": (
+                "When doing multi-node distributed training, whether to save models and checkpoints on each node, or"
+                " only on the main one"
+            )
         },
     )
     no_cuda: bool = field(default=False, metadata={"help": "Do not use CUDA even when it is available"})
     seed: int = field(default=42, metadata={"help": "Random seed that will be set at the beginning of training."})
-    data_seed: int = field(default=None, metadata={"help": "Random seed to be used with data samplers."})
+    data_seed: Optional[int] = field(default=None, metadata={"help": "Random seed to be used with data samplers."})
     bf16: bool = field(
         default=False,
         metadata={
-            "help": "Whether to use bf16 (mixed) precision instead of 32-bit. Requires Ampere or higher NVIDIA architecture. This is an experimental API and it may change."
+            "help": (
+                "Whether to use bf16 (mixed) precision instead of 32-bit. Requires Ampere or higher NVIDIA"
+                " architecture. This is an experimental API and it may change."
+            )
         },
     )
     fp16: bool = field(
@@ -587,21 +633,27 @@ class TrainingArguments:
     bf16_full_eval: bool = field(
         default=False,
         metadata={
-            "help": "Whether to use full bfloat16 evaluation instead of 32-bit. This is an experimental API and it may change."
+            "help": (
+                "Whether to use full bfloat16 evaluation instead of 32-bit. This is an experimental API and it may"
+                " change."
+            )
         },
     )
     fp16_full_eval: bool = field(
         default=False,
         metadata={"help": "Whether to use full float16 evaluation instead of 32-bit"},
     )
-    tf32: bool = field(
+    tf32: Optional[bool] = field(
         default=None,
         metadata={
-            "help": "Whether to enable tf32 mode, available in Ampere and newer GPU architectures. This is an experimental API and it may change."
+            "help": (
+                "Whether to enable tf32 mode, available in Ampere and newer GPU architectures. This is an experimental"
+                " API and it may change."
+            )
         },
     )
     local_rank: int = field(default=-1, metadata={"help": "For distributed training: local_rank"})
-    xpu_backend: str = field(
+    xpu_backend: Optional[str] = field(
         default=None,
         metadata={"help": "The backend to be used for distributed training on Intel XPU.", "choices": ["mpi", "ccl"]},
     )
@@ -611,26 +663,33 @@ class TrainingArguments:
     tpu_metrics_debug: bool = field(
         default=False,
         metadata={
-            "help": "Deprecated, the use of `--debug tpu_metrics_debug` is preferred. TPU: Whether to print debug metrics"
+            "help": (
+                "Deprecated, the use of `--debug tpu_metrics_debug` is preferred. TPU: Whether to print debug metrics"
+            )
         },
     )
     debug: str = field(
         default="",
         metadata={
-            "help": "Whether or not to enable debug mode. Current options: "
-            "`underflow_overflow` (Detect underflow and overflow in activations and weights), "
-            "`tpu_metrics_debug` (print debug metrics on TPU)."
+            "help": (
+                "Whether or not to enable debug mode. Current options: "
+                "`underflow_overflow` (Detect underflow and overflow in activations and weights), "
+                "`tpu_metrics_debug` (print debug metrics on TPU)."
+            )
         },
     )
 
     dataloader_drop_last: bool = field(
         default=False, metadata={"help": "Drop the last incomplete batch if it is not divisible by the batch size."}
     )
-    eval_steps: int = field(default=None, metadata={"help": "Run an evaluation every X steps."})
+    eval_steps: Optional[int] = field(default=None, metadata={"help": "Run an evaluation every X steps."})
     dataloader_num_workers: int = field(
         default=0,
         metadata={
-            "help": "Number of subprocesses to use for data loading (PyTorch only). 0 means that the data will be loaded in the main process."
+            "help": (
+                "Number of subprocesses to use for data loading (PyTorch only). 0 means that the data will be loaded"
+                " in the main process."
+            )
         },
     )
 
@@ -666,22 +725,51 @@ class TrainingArguments:
     ignore_data_skip: bool = field(
         default=False,
         metadata={
-            "help": "When resuming training, whether or not to skip the first epochs and batches to get to the same training data."
+            "help": (
+                "When resuming training, whether or not to skip the first epochs and batches to get to the same"
+                " training data."
+            )
         },
     )
     sharded_ddp: str = field(
         default="",
         metadata={
-            "help": "Whether or not to use sharded DDP training (in distributed training only). The base option "
-            "should be `simple`, `zero_dp_2` or `zero_dp_3` and you can add CPU-offload to `zero_dp_2` or `zero_dp_3` "
-            "like this: zero_dp_2 offload` or `zero_dp_3 offload`. You can add auto-wrap to `zero_dp_2` or "
-            "with the same syntax: zero_dp_2 auto_wrap` or `zero_dp_3 auto_wrap`.",
+            "help": (
+                "Whether or not to use sharded DDP training (in distributed training only). The base option should be"
+                " `simple`, `zero_dp_2` or `zero_dp_3` and you can add CPU-offload to `zero_dp_2` or `zero_dp_3` like"
+                " this: zero_dp_2 offload` or `zero_dp_3 offload`. You can add auto-wrap to `zero_dp_2` or `zero_dp_3`"
+                " with the same syntax: zero_dp_2 auto_wrap` or `zero_dp_3 auto_wrap`."
+            ),
+        },
+    )
+    fsdp: str = field(
+        default="",
+        metadata={
+            "help": (
+                "Whether or not to use PyTorch Fully Sharded Data Parallel (FSDP) training (in distributed training"
+                " only). The base option should be `full_shard` or `shard_grad_op` and you can add CPU-offload to"
+                " `full_shard` or `shard_grad_op` like this: full_shard offload` or `shard_grad_op offload`. You can"
+                " add auto-wrap to `full_shard` or `shard_grad_op` with the same syntax: full_shard auto_wrap` or"
+                " `shard_grad_op auto_wrap`."
+            ),
+        },
+    )
+    fsdp_min_num_params: int = field(
+        default=0,
+        metadata={
+            "help": (
+                "FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `fsdp` field is"
+                " passed)."
+            )
         },
     )
     deepspeed: Optional[str] = field(
         default=None,
         metadata={
-            "help": "Enable deepspeed and pass the path to deepspeed json config file (e.g. ds_config.json) or an already loaded json file as a dict"
+            "help": (
+                "Enable deepspeed and pass the path to deepspeed json config file (e.g. ds_config.json) or an already"
+                " loaded json file as a dict"
+            )
         },
     )
     label_smoothing_factor: float = field(
@@ -706,15 +794,19 @@ class TrainingArguments:
     ddp_find_unused_parameters: Optional[bool] = field(
         default=None,
         metadata={
-            "help": "When using distributed training, the value of the flag `find_unused_parameters` passed to "
-            "`DistributedDataParallel`."
+            "help": (
+                "When using distributed training, the value of the flag `find_unused_parameters` passed to "
+                "`DistributedDataParallel`."
+            )
         },
     )
     ddp_bucket_cap_mb: Optional[int] = field(
         default=None,
         metadata={
-            "help": "When using distributed training, the value of the flag `bucket_cap_mb` passed to "
-            "`DistributedDataParallel`."
+            "help": (
+                "When using distributed training, the value of the flag `bucket_cap_mb` passed to "
+                "`DistributedDataParallel`."
+            )
         },
     )
     dataloader_pin_memory: bool = field(
@@ -733,14 +825,14 @@ class TrainingArguments:
         default=None,
         metadata={"help": "The path to a folder with a valid checkpoint for your model."},
     )
-    hub_model_id: str = field(
+    hub_model_id: Optional[str] = field(
         default=None, metadata={"help": "The name of the repository to keep in sync with the local `output_dir`."}
     )
     hub_strategy: HubStrategy = field(
         default="every_save",
         metadata={"help": "The hub strategy to use when `--push_to_hub` is activated."},
     )
-    hub_token: str = field(default=None, metadata={"help": "The token to use to push to the Model Hub."})
+    hub_token: Optional[str] = field(default=None, metadata={"help": "The token to use to push to the Model Hub."})
     hub_private_repo: bool = field(default=False, metadata={"help": "Whether the model repository is private or not."})
     gradient_checkpointing: bool = field(
         default=False,
@@ -756,17 +848,38 @@ class TrainingArguments:
         default="auto",
         metadata={"help": "Deprecated. Use half_precision_backend instead", "choices": ["auto", "amp", "apex"]},
     )
-    push_to_hub_model_id: str = field(
+    push_to_hub_model_id: Optional[str] = field(
         default=None, metadata={"help": "The name of the repository to which push the `Trainer`."}
     )
-    push_to_hub_organization: str = field(
+    push_to_hub_organization: Optional[str] = field(
         default=None, metadata={"help": "The name of the organization in with to which push the `Trainer`."}
     )
-    push_to_hub_token: str = field(default=None, metadata={"help": "The token to use to push to the Model Hub."})
+    push_to_hub_token: Optional[str] = field(
+        default=None, metadata={"help": "The token to use to push to the Model Hub."}
+    )
     _n_gpu: int = field(init=False, repr=False, default=-1)
     mp_parameters: str = field(
         default="",
         metadata={"help": "Used by the SageMaker launcher to send mp-specific args. Ignored in Trainer"},
+    )
+
+    auto_find_batch_size: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Whether to automatically decrease the batch size in half and rerun the training loop again each time"
+                " a CUDA Out-of-Memory was reached"
+            )
+        },
+    )
+    full_determinism: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Whether to call enable_full_determinism instead of set_seed for reproducibility in distributed"
+                " training"
+            )
+        },
     )
 
     def __post_init__(self):
@@ -795,7 +908,8 @@ class TrainingArguments:
 
         if isinstance(self.evaluation_strategy, EvaluationStrategy):
             warnings.warn(
-                "using `EvaluationStrategy` for `evaluation_strategy` is deprecated and will be removed in version 5 of 🤗 Transformers. Use `IntervalStrategy` instead",
+                "using `EvaluationStrategy` for `evaluation_strategy` is deprecated and will be removed in version 5"
+                " of 🤗 Transformers. Use `IntervalStrategy` instead",
                 FutureWarning,
             )
             # Go back to the underlying string or we won't be able to instantiate `IntervalStrategy` on it.
@@ -817,7 +931,8 @@ class TrainingArguments:
                 self.eval_steps = self.logging_steps
             else:
                 raise ValueError(
-                    f"evaluation strategy {self.evaluation_strategy} requires either non-zero --eval_steps or --logging_steps"
+                    f"evaluation strategy {self.evaluation_strategy} requires either non-zero --eval_steps or"
+                    " --logging_steps"
                 )
 
         # logging_steps must be non-zero for logging_strategy that is other than 'no'
@@ -846,7 +961,8 @@ class TrainingArguments:
 
         if self.fp16_backend and self.fp16_backend != "auto":
             warnings.warn(
-                "`fp16_backend` is deprecated and will be removed in version 5 of 🤗 Transformers. Use `half_precision_backend` instead",
+                "`fp16_backend` is deprecated and will be removed in version 5 of 🤗 Transformers. Use"
+                " `half_precision_backend` instead",
                 FutureWarning,
             )
             self.half_precision_backend = self.fp16_backend
@@ -859,7 +975,8 @@ class TrainingArguments:
         if self.bf16:
             if self.half_precision_backend == "apex":
                 raise ValueError(
-                    " `--half_precision_backend apex`: bf16 is not supported by apex. Use `--half_precision_backend amp` instead"
+                    " `--half_precision_backend apex`: bf16 is not supported by apex. Use `--half_precision_backend"
+                    " amp` instead"
                 )
             if not (self.sharded_ddp == "" or not self.sharded_ddp):
                 raise ValueError("sharded_ddp is not supported with bf16")
@@ -867,7 +984,8 @@ class TrainingArguments:
         self.optim = OptimizerNames(self.optim)
         if self.adafactor:
             warnings.warn(
-                "`--adafactor` is deprecated and will be removed in version 5 of 🤗 Transformers. Use `--optim adafactor` instead",
+                "`--adafactor` is deprecated and will be removed in version 5 of 🤗 Transformers. Use `--optim"
+                " adafactor` instead",
                 FutureWarning,
             )
             self.optim = OptimizerNames.ADAFACTOR
@@ -879,7 +997,8 @@ class TrainingArguments:
             and (self.fp16 or self.fp16_full_eval or self.bf16 or self.bf16_full_eval)
         ):
             raise ValueError(
-                "Mixed precision training with AMP or APEX (`--fp16` or `--bf16`) and half precision evaluation (`--fp16_full_eval` or `--bf16_full_eval`) can only be used on CUDA devices."
+                "Mixed precision training with AMP or APEX (`--fp16` or `--bf16`) and half precision evaluation"
+                " (`--fp16_full_eval` or `--bf16_full_eval`) can only be used on CUDA devices."
             )
 
         if is_torch_available() and self.tf32 is not None:
@@ -914,7 +1033,8 @@ class TrainingArguments:
             raise ValueError("warmup_ratio must lie in range [0,1]")
         elif self.warmup_ratio > 0 and self.warmup_steps > 0:
             logger.info(
-                "Both warmup_ratio and warmup_steps given, warmup_steps will override any effect of warmup_ratio during training"
+                "Both warmup_ratio and warmup_steps given, warmup_steps will override any effect of warmup_ratio"
+                " during training"
             )
 
         if isinstance(self.sharded_ddp, bool):
@@ -931,9 +1051,25 @@ class TrainingArguments:
         elif ShardedDDPOption.ZERO_DP_2 in self.sharded_ddp and ShardedDDPOption.ZERO_DP_3 in self.sharded_ddp:
             raise ValueError("`--sharded_ddp zero_dp_2` is not compatible with `--sharded_ddp zero_dp_3`.")
 
+        if isinstance(self.fsdp, bool):
+            self.fsdp = "full_shard" if self.fsdp else ""
+        if isinstance(self.fsdp, str):
+            self.fsdp = [FSDPOption(s) for s in self.fsdp.split()]
+        if self.fsdp == [FSDPOption.OFFLOAD]:
+            raise ValueError(
+                "`--fsdp offload` can't work on its own. It needs to be added to `--fsdp full_shard` or "
+                '`--fsdp shard_grad_op`. For example, `--fsdp "full_shard offload"`.'
+            )
+        elif FSDPOption.FULL_SHARD in self.fsdp and FSDPOption.SHARD_GRAD_OP in self.sharded_ddp:
+            raise ValueError("`--fsdp full_shard` is not compatible with `--fsdp shard_grad_op`.")
+
+        if len(self.fsdp) == 0 and self.fsdp_min_num_params > 0:
+            warnings.warn("`--fsdp_min_num_params` is useful only when `--fsdp` is specified.")
+
         if self.tpu_metrics_debug:
             warnings.warn(
-                "using `--tpu_metrics_debug` is deprecated and will be removed in version 5 of 🤗 Transformers. Use `--debug tpu_metrics_debug` instead",
+                "using `--tpu_metrics_debug` is deprecated and will be removed in version 5 of 🤗 Transformers. Use"
+                " `--debug tpu_metrics_debug` instead",
                 FutureWarning,
             )
             self.debug += " tpu_metrics_debug"

@@ -219,7 +219,8 @@ class DisjunctiveTrie:
 
         if no_subsets and self.has_subsets(root, nested_token_ids):
             raise ValueError(
-                f"Each list in `nested_token_ids` can't be a complete subset of another list, but is {nested_token_ids}."
+                "Each list in `nested_token_ids` can't be a complete subset of another list, but is"
+                f" {nested_token_ids}."
             )
 
         self.trie = root

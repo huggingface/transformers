@@ -290,8 +290,8 @@ class Blenderbot90MIntegrationTests(unittest.TestCase):
     def test_90_generation_from_long_input(self):
 
         src_text = [
-            "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel like\
-       i'm going to throw up.\nand why is that?"
+            "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel"
+            " like       i'm going to throw up.\nand why is that?"
         ]
 
         model_inputs = self.tokenizer(src_text, return_tensors="pt").to(torch_device)

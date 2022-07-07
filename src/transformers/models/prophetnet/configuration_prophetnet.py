@@ -22,7 +22,9 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/prophetnet-large-uncased": "https://huggingface.co/microsoft/prophetnet-large-uncased/resolve/main/config.json",
+    "microsoft/prophetnet-large-uncased": (
+        "https://huggingface.co/microsoft/prophetnet-large-uncased/resolve/main/config.json"
+    ),
 }
 
 
@@ -174,5 +176,6 @@ class ProphetNetConfig(PretrainedConfig):
     @num_hidden_layers.setter
     def num_hidden_layers(self, value):
         raise NotImplementedError(
-            "This model does not support the setting of `num_hidden_layers`. Please set `num_encoder_layers` and `num_decoder_layers`."
+            "This model does not support the setting of `num_hidden_layers`. Please set `num_encoder_layers` and"
+            " `num_decoder_layers`."
         )

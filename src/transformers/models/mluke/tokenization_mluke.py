@@ -342,7 +342,8 @@ class MLukeTokenizer(PreTrainedTokenizer):
             self.max_entity_length = 2
         else:
             raise ValueError(
-                f"Task {task} not supported. Select task from ['entity_classification', 'entity_pair_classification', 'entity_span_classification'] only."
+                f"Task {task} not supported. Select task from ['entity_classification', 'entity_pair_classification',"
+                " 'entity_span_classification'] only."
             )
 
         self.max_mention_length = max_mention_length
@@ -707,7 +708,7 @@ class MLukeTokenizer(PreTrainedTokenizer):
             raise ValueError("entity_spans should be given as a list")
         elif len(entity_spans) > 0 and not isinstance(entity_spans[0], tuple):
             raise ValueError(
-                "entity_spans should be given as a list of tuples " "containing the start and end character indices"
+                "entity_spans should be given as a list of tuples containing the start and end character indices"
             )
 
         if entities is not None:
@@ -1119,7 +1120,8 @@ class MLukeTokenizer(PreTrainedTokenizer):
 
             if num_invalid_entities != 0:
                 logger.warning(
-                    f"{num_invalid_entities} entities are ignored because their entity spans are invalid due to the truncation of input tokens"
+                    f"{num_invalid_entities} entities are ignored because their entity spans are invalid due to the"
+                    " truncation of input tokens"
                 )
 
             if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE and total_entity_len > max_entity_length:
@@ -1144,7 +1146,7 @@ class MLukeTokenizer(PreTrainedTokenizer):
             entity_position_ids = []
             entity_start_positions = []
             entity_end_positions = []
-            for (token_spans, offset) in (
+            for token_spans, offset in (
                 (valid_entity_token_spans, entity_token_offset),
                 (valid_pair_entity_token_spans, pair_entity_token_offset),
             ):
@@ -1294,7 +1296,7 @@ class MLukeTokenizer(PreTrainedTokenizer):
             else:
                 raise ValueError(
                     f"type of {first_element} unknown: {type(first_element)}. "
-                    f"Should be one of a python, numpy, pytorch or tensorflow object."
+                    "Should be one of a python, numpy, pytorch or tensorflow object."
                 )
 
             for key, value in encoded_inputs.items():

@@ -94,7 +94,10 @@ def format_for_slack(total_results, results, scheduled: bool, title: str):
         "type": "section",
         "text": {
             "type": "mrkdwn",
-            "text": f"<https://github.com/huggingface/transformers/actions/runs/{os.environ['GITHUB_RUN_ID']}|View on GitHub>",
+            "text": (
+                f"<https://github.com/huggingface/transformers/actions/runs/{os.environ['GITHUB_RUN_ID']}|View on"
+                " GitHub>"
+            ),
         },
     }
 

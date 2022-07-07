@@ -216,6 +216,8 @@
       title: Encoder Decoder Models
     - local: model_doc/flaubert
       title: FlauBERT
+    - local: model_doc/flava
+      title: FLAVA
     - local: model_doc/fnet
       title: FNet
     - local: model_doc/fsmt
@@ -268,6 +270,8 @@
       title: Nyströmformer
     - local: model_doc/openai-gpt
       title: OpenAI GPT
+    - local: model_doc/opt
+      title: OPT
     - local: model_doc/gpt2
       title: OpenAI GPT2
     - local: model_doc/gptj

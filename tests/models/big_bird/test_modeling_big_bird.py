@@ -799,7 +799,16 @@ class BigBirdModelIntegrationTest(unittest.TestCase):
         model.to(torch_device)
 
         text = [
-            "Transformer-based models are unable to process long sequences due to their self-attention operation, which scales quadratically with the sequence length. To address this limitation, we introduce the Longformer with an attention mechanism that scales linearly with sequence length, making it easy to process documents of thousands of tokens or longer. Longformer’s attention mechanism is a drop-in replacement for the standard self-attention and combines a local windowed attention with a task motivated global attention. Following prior work on long-sequence transformers, we evaluate Longformer on character-level language modeling and achieve state-of-the-art results on text8 and enwik8. In contrast to most prior work, we also pretrain Longformer and finetune it on a variety of downstream tasks. Our pretrained Longformer consistently outperforms RoBERTa on long document tasks and sets new state-of-the-art results on WikiHop and TriviaQA."
+            "Transformer-based models are unable to process long sequences due to their self-attention operation,"
+            " which scales quadratically with the sequence length. To address this limitation, we introduce the"
+            " Longformer with an attention mechanism that scales linearly with sequence length, making it easy to"
+            " process documents of thousands of tokens or longer. Longformer’s attention mechanism is a drop-in"
+            " replacement for the standard self-attention and combines a local windowed attention with a task"
+            " motivated global attention. Following prior work on long-sequence transformers, we evaluate Longformer"
+            " on character-level language modeling and achieve state-of-the-art results on text8 and enwik8. In"
+            " contrast to most prior work, we also pretrain Longformer and finetune it on a variety of downstream"
+            " tasks. Our pretrained Longformer consistently outperforms RoBERTa on long document tasks and sets new"
+            " state-of-the-art results on WikiHop and TriviaQA."
         ]
         inputs = tokenizer(text)
 
@@ -837,7 +846,18 @@ class BigBirdModelIntegrationTest(unittest.TestCase):
         )
         model.to(torch_device)
 
-        context = "The BigBird model was proposed in Big Bird: Transformers for Longer Sequences by Zaheer, Manzil and Guruganesh, Guru and Dubey, Kumar Avinava and Ainslie, Joshua and Alberti, Chris and Ontanon, Santiago and Pham, Philip and Ravula, Anirudh and Wang, Qifan and Yang, Li and others. BigBird, is a sparse-attention based transformer which extends Transformer based models, such as BERT to much longer sequences. In addition to sparse attention, BigBird also applies global attention as well as random attention to the input sequence. Theoretically, it has been shown that applying sparse, global, and random attention approximates full attention, while being computationally much more efficient for longer sequences. As a consequence of the capability to handle longer context, BigBird has shown improved performance on various long document NLP tasks, such as question answering and summarization, compared to BERT or RoBERTa."
+        context = (
+            "The BigBird model was proposed in Big Bird: Transformers for Longer Sequences by Zaheer, Manzil and"
+            " Guruganesh, Guru and Dubey, Kumar Avinava and Ainslie, Joshua and Alberti, Chris and Ontanon, Santiago"
+            " and Pham, Philip and Ravula, Anirudh and Wang, Qifan and Yang, Li and others. BigBird, is a"
+            " sparse-attention based transformer which extends Transformer based models, such as BERT to much longer"
+            " sequences. In addition to sparse attention, BigBird also applies global attention as well as random"
+            " attention to the input sequence. Theoretically, it has been shown that applying sparse, global, and"
+            " random attention approximates full attention, while being computationally much more efficient for longer"
+            " sequences. As a consequence of the capability to handle longer context, BigBird has shown improved"
+            " performance on various long document NLP tasks, such as question answering and summarization, compared"
+            " to BERT or RoBERTa."
+        )
 
         question = [
             "Which is better for longer sequences- BigBird or BERT?",

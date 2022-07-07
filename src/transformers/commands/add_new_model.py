@@ -15,6 +15,7 @@
 import json
 import os
 import shutil
+import warnings
 from argparse import ArgumentParser, Namespace
 from pathlib import Path
 from typing import List
@@ -54,6 +55,11 @@ class AddNewModelCommand(BaseTransformersCLICommand):
         self._path = path
 
     def run(self):
+        warnings.warn(
+            "The command `transformers-cli add-new-model` is deprecated and will be removed in v5 of Transformers. "
+            "It is not actively maintained anymore, so might give a result that won't pass all tests and quality "
+            "checks, you should use `transformers-cli add-new-model-like` instead."
+        )
         if not _has_cookiecutter:
             raise ImportError(
                 "Model creation dependencies are required to use the `add_new_model` command. Install them by running "

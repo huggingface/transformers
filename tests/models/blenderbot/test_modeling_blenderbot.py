@@ -304,7 +304,10 @@ class Blenderbot3BIntegrationTests(unittest.TestCase):
         generated_txt = self.tokenizer.batch_decode(generated_utterances, **TOK_DECODE_KW)
         assert generated_txt[0].strip() == tgt_text
 
-        src_text = "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel like i'm going to throw up.\nand why is that?"
+        src_text = (
+            "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel"
+            " like i'm going to throw up.\nand why is that?"
+        )
 
         model_inputs = self.tokenizer([src_text], return_tensors="pt").to(torch_device)
 

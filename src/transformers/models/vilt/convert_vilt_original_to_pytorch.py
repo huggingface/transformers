@@ -231,7 +231,10 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     if nlvr_model:
         image1 = Image.open(requests.get("https://lil.nlp.cornell.edu/nlvr/exs/ex0_0.jpg", stream=True).raw)
         image2 = Image.open(requests.get("https://lil.nlp.cornell.edu/nlvr/exs/ex0_0.jpg", stream=True).raw)
-        text = "The left image contains twice the number of dogs as the right image, and at least two dogs in total are standing."
+        text = (
+            "The left image contains twice the number of dogs as the right image, and at least two dogs in total are"
+            " standing."
+        )
         encoding_1 = processor(image1, text, return_tensors="pt")
         encoding_2 = processor(image2, text, return_tensors="pt")
         outputs = model(

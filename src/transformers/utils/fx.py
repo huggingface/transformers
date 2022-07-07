@@ -14,12 +14,12 @@
 # limitations under the License.
 
 import builtins
+import collections
 import functools
 import inspect
 import math
 import random
 import warnings
-from copy import deepcopy
 from typing import Any, Callable, Dict, Iterable, List, Optional, Type, Union
 
 import torch
@@ -31,6 +31,7 @@ from .. import (
     CONFIG_MAPPING,
     MODEL_FOR_CAUSAL_LM_MAPPING,
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
+    MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
     MODEL_FOR_MASKED_LM_MAPPING,
     MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
     MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
@@ -71,6 +72,7 @@ def _generate_supported_model_classes(
         "question-answering": MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         "sequence-classification": MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         "token-classification": MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+        "masked-image-modeling": MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
         "image-classification": MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
     }
 
@@ -100,6 +102,8 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "gpt_neo",
     "t5",
     "roberta",
+    "vit",
+    "swin",
     # TODO: add support for them as it should be quite easy to do so (small blocking issues).
     # "layoutlm",
     # "xlnet",
@@ -276,6 +280,31 @@ def torch_tensor_index_select(self, dim, index):
     return torch_tensor_index_select(self, dim, index)
 
 
+def torch_roll(input, shifts, dims=None):
+    return input
+
+
+def torch_nn_conv2d(self, input):
+    h_in, w_in = input.shape[-2:]
+    shape = None
+    padding = self.padding
+    if padding == "valid":
+        padding = (0, 0)
+    if padding == "same":
+        shape = list(input.shape)
+    if shape is None:
+        shape = list(input.shape)
+        h_out = math.floor(
+            (h_in + 2 * padding[0] - self.dilation[0] * (self.kernel_size[0] - 1) - 1) / self.stride[0] + 1
+        )
+        w_out = math.floor(
+            (w_in + 2 * padding[1] - self.dilation[1] * (self.kernel_size[1] - 1) - 1) / self.stride[1] + 1
+        )
+        shape[-2:] = [h_out, w_out]
+    shape[-3] = self.out_channels
+    return torch.empty(shape, device="meta")
+
+
 def torch_nn_mseloss(self, input, target):
     if self.reduction == "none":
         shape = target.shape
@@ -317,9 +346,11 @@ _MANUAL_META_OVERRIDES: Dict[Callable, Callable] = {
     torch.Tensor.mul: torch_tensor_mul_override,
     torch.matmul: torch_matmul_override,
     torch.Tensor.repeat: torch_tensor_repeat_override,
+    torch.roll: torch_roll,
     # TODO: those might not be needed.
     # torch.index_select: torch_index_select,
     # torch.Tensor.index_select: torch_tensor_index_select,
+    torch.nn.Conv2d: torch_nn_conv2d,
     torch.nn.MSELoss: torch_nn_mseloss,
     torch.nn.CrossEntropyLoss: torch_nn_crossentropyloss,
     torch.nn.BCEWithLogitsLoss: torch_nn_bcewithlogitsloss,
@@ -367,6 +398,9 @@ class HFProxy(Proxy):
         # note: not added to the graph yet, if this is a method call
         # we peephole optimize to the method invocation
         return HFAttribute(self, k)
+
+    def __setitem__(self, indices, values):
+        return self.tracer.create_proxy("call_method", "__setitem__", (self, indices, values), {})
 
     def __contains__(self, key):
         # To handle cases such as :
@@ -521,6 +555,15 @@ class HFTracer(Tracer):
                 inputs_dict["labels"] = torch.zeros(shape, dtype=torch.long, device=device)
             else:
                 raise NotImplementedError(f"{model_class} not supported yet.")
+        elif "pixel_values" in input_name:
+            batch_size = shape[0]
+            image_size = model.config.image_size
+            if not isinstance(image_size, collections.abc.Iterable):
+                image_size = (image_size, image_size)
+            height, width = image_size
+            inputs_dict[input_name] = torch.zeros(
+                batch_size, model.config.num_channels, height, width, dtype=torch.float32, device=device
+            )
 
         elif "mask" in input_name or "ids" in input_name:
             inputs_dict[input_name] = torch.zeros(shape, dtype=torch.long, device=device)
@@ -663,6 +706,11 @@ class HFTracer(Tracer):
                 else:
                     self.graph.erase_node(node)
 
+            # TODO: solves GraphModule creation.
+            # Without this, return type annotation "Tuple" is causing code execution failure.
+            if node.op == "output":
+                node.type = None
+
         return self.graph
 
     def _stateless_mod_instanciation_depends_on_proxies(self, mod: nn.Module) -> bool:
@@ -760,13 +808,5 @@ def symbolic_trace(
     tracer = HFTracer()
     traced_graph = tracer.trace(model, concrete_args=concrete_args)
     traced = torch.fx.GraphModule(model, traced_graph)
-
-    # Copy all the original attributes to the traced GraphModule.
-    regular_module_attributes = dir(nn.Module())
-    for name in dir(model):
-        attr = getattr(model, name)
-        if name.startswith("_") or name in regular_module_attributes:
-            continue
-        setattr(traced, name, deepcopy(attr))
 
     return traced

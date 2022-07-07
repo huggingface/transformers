@@ -27,10 +27,18 @@ logger = logging.get_logger(__name__)
 ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "junnyu/roformer_chinese_small": "https://huggingface.co/junnyu/roformer_chinese_small/resolve/main/config.json",
     "junnyu/roformer_chinese_base": "https://huggingface.co/junnyu/roformer_chinese_base/resolve/main/config.json",
-    "junnyu/roformer_chinese_char_small": "https://huggingface.co/junnyu/roformer_chinese_char_small/resolve/main/config.json",
-    "junnyu/roformer_chinese_char_base": "https://huggingface.co/junnyu/roformer_chinese_char_base/resolve/main/config.json",
-    "junnyu/roformer_small_discriminator": "https://huggingface.co/junnyu/roformer_small_discriminator/resolve/main/config.json",
-    "junnyu/roformer_small_generator": "https://huggingface.co/junnyu/roformer_small_generator/resolve/main/config.json",
+    "junnyu/roformer_chinese_char_small": (
+        "https://huggingface.co/junnyu/roformer_chinese_char_small/resolve/main/config.json"
+    ),
+    "junnyu/roformer_chinese_char_base": (
+        "https://huggingface.co/junnyu/roformer_chinese_char_base/resolve/main/config.json"
+    ),
+    "junnyu/roformer_small_discriminator": (
+        "https://huggingface.co/junnyu/roformer_small_discriminator/resolve/main/config.json"
+    ),
+    "junnyu/roformer_small_generator": (
+        "https://huggingface.co/junnyu/roformer_small_generator/resolve/main/config.json"
+    ),
     # See all RoFormer models at https://huggingface.co/models?filter=roformer
 }
 

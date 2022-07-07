@@ -1226,7 +1226,15 @@ class ProphetNetModelIntegrationTest(unittest.TestCase):
 
         tokenizer = ProphetNetTokenizer.from_pretrained("microsoft/prophetnet-large-uncased-cnndm")
 
-        ARTICLE_TO_SUMMARIZE = "USTC was founded in Beijing by the Chinese Academy of Sciences (CAS) in September 1958. The Director of CAS, Mr. Guo Moruo was appointed the first president of USTC. USTC's founding mission was to develop a high-level science and technology workforce, as deemed critical for development of China's economy, defense, and science and technology education. The establishment was hailed as \"A Major Event in the History of Chinese Education and Science.\" CAS has supported USTC by combining most of its institutes with the departments of the university. USTC is listed in the top 16 national key universities, becoming the youngest national key university.".lower()
+        ARTICLE_TO_SUMMARIZE = (
+            "USTC was founded in Beijing by the Chinese Academy of Sciences (CAS) in September 1958. The Director of"
+            " CAS, Mr. Guo Moruo was appointed the first president of USTC. USTC's founding mission was to develop a"
+            " high-level science and technology workforce, as deemed critical for development of China's economy,"
+            ' defense, and science and technology education. The establishment was hailed as "A Major Event in the'
+            ' History of Chinese Education and Science." CAS has supported USTC by combining most of its institutes'
+            " with the departments of the university. USTC is listed in the top 16 national key universities, becoming"
+            " the youngest national key university.".lower()
+        )
         input_ids = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=511, return_tensors="pt").input_ids
 
         input_ids = input_ids.to(torch_device)
@@ -1234,7 +1242,10 @@ class ProphetNetModelIntegrationTest(unittest.TestCase):
         summary_ids = model.generate(
             input_ids, num_beams=4, length_penalty=1.0, no_repeat_ngram_size=3, early_stopping=True
         )
-        EXPECTED_SUMMARIZE_512 = "us ##tc was founded by the chinese academy of sciences ( cas ) in 1958 . [X_SEP] us ##tc is listed in the top 16 national key universities ."
+        EXPECTED_SUMMARIZE_512 = (
+            "us ##tc was founded by the chinese academy of sciences ( cas ) in 1958 . [X_SEP] us ##tc is listed in the"
+            " top 16 national key universities ."
+        )
         generated_titles = [
             " ".join(tokenizer.convert_ids_to_tokens(g, skip_special_tokens=True)) for g in summary_ids
         ]
@@ -1251,7 +1262,8 @@ class ProphetNetModelIntegrationTest(unittest.TestCase):
         EXPECTED_SUMMARIZE_100 = (
             r"us ##tc was founded in beijing by the chinese academy of sciences ( cas ) in 1958 . [X_SEP] us ##tc "
             "'"
-            ' s founding mission was to develop a high - level science and technology workforce . [X_SEP] establishment hailed as " a major event in the history of chinese education and science "'
+            " s founding mission was to develop a high - level science and technology workforce . [X_SEP]"
+            ' establishment hailed as " a major event in the history of chinese education and science "'
         )
         generated_titles = [
             " ".join(tokenizer.convert_ids_to_tokens(g, skip_special_tokens=True)) for g in summary_ids

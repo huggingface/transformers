@@ -326,7 +326,8 @@ class ProphetNetSeq2SeqLMOutput(ModelOutput):
     @property
     def decoder_cross_attentions(self):
         warnings.warn(
-            "`decoder_cross_attentions` is deprecated and will be removed soon. Please use `cross_attentions` instead.",
+            "`decoder_cross_attentions` is deprecated and will be removed soon. Please use `cross_attentions`"
+            " instead.",
             FutureWarning,
         )
         return self.cross_attentions
@@ -411,7 +412,8 @@ class ProphetNetSeq2SeqModelOutput(ModelOutput):
     @property
     def decoder_cross_attentions(self):
         warnings.warn(
-            "`decoder_cross_attentions` is deprecated and will be removed soon. Please use `cross_attentions` instead.",
+            "`decoder_cross_attentions` is deprecated and will be removed soon. Please use `cross_attentions`"
+            " instead.",
             FutureWarning,
         )
         return self.cross_attentions
@@ -562,9 +564,10 @@ class ProphetNetPreTrainedModel(PreTrainedModel):
         decoder_start_token_id = self.config.decoder_start_token_id
         pad_token_id = self.config.pad_token_id
 
-        assert (
-            decoder_start_token_id is not None
-        ), "self.model.config.decoder_start_token_id has to be defined. In ProphetNet it is usually set to the pad_token_id. See ProphetNet docs for more information"
+        assert decoder_start_token_id is not None, (
+            "self.model.config.decoder_start_token_id has to be defined. In ProphetNet it is usually set to the"
+            " pad_token_id. See ProphetNet docs for more information"
+        )
 
         # shift inputs to the right
         shifted_input_ids = input_ids.new_zeros(input_ids.shape)
@@ -639,9 +642,10 @@ class ProphetNetAttention(nn.Module):
         self.num_attn_heads = num_attn_heads
         self.head_dim = hidden_size // num_attn_heads
 
-        assert (
-            self.head_dim * num_attn_heads == hidden_size
-        ), "`config.hidden_size` must be divisible by `config.num_encoder_attention_heads` and `config.num_decoder_attention_heads`"
+        assert self.head_dim * num_attn_heads == hidden_size, (
+            "`config.hidden_size` must be divisible by `config.num_encoder_attention_heads` and"
+            " `config.num_decoder_attention_heads`"
+        )
 
         self.key_proj = nn.Linear(hidden_size, hidden_size)
         self.value_proj = nn.Linear(hidden_size, hidden_size)
@@ -708,7 +712,10 @@ class ProphetNetAttention(nn.Module):
             batch_size * self.num_attn_heads,
             tgt_len,
             src_len,
-        ), f"`attn_weights` should be of size {batch_size * self.num_attn_heads, tgt_len, src_len}, but is of size {attn_weights.shape}"
+        ), (
+            f"`attn_weights` should be of size {batch_size * self.num_attn_heads, tgt_len, src_len}, but is of size"
+            f" {attn_weights.shape}"
+        )
 
         # This is part of a workaround to get around fork/join parallelism not supporting Optional types.
         if attention_mask is not None and attention_mask.dim() == 0:
@@ -717,7 +724,10 @@ class ProphetNetAttention(nn.Module):
             self.num_attn_heads * batch_size,
             1,
             src_len,
-        ), f"`attention_mask` should be `None` or of shape attention_mask.size() == {batch_size * self.num_attn_heads, 1, src_len}, but is {attention_mask.shape}"
+        ), (
+            "`attention_mask` should be `None` or of shape attention_mask.size() =="
+            f" {batch_size * self.num_attn_heads, 1, src_len}, but is {attention_mask.shape}"
+        )
 
         if attention_mask is not None:  # don't attend to padding symbols
             attn_weights = attn_weights + attention_mask
@@ -735,9 +745,10 @@ class ProphetNetAttention(nn.Module):
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
         if layer_head_mask is not None:
-            assert layer_head_mask.size() == (
-                self.num_attn_heads,
-            ), f"Head mask for a single layer should be of size {(self.num_attn_heads,)}, but is {layer_head_mask.size()}"
+            assert layer_head_mask.size() == (self.num_attn_heads,), (
+                f"Head mask for a single layer should be of size {(self.num_attn_heads,)}, but is"
+                f" {layer_head_mask.size()}"
+            )
             attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(
                 batch_size, self.num_attn_heads, tgt_len, src_len
             )
@@ -757,7 +768,10 @@ class ProphetNetAttention(nn.Module):
             batch_size * self.num_attn_heads,
             tgt_len,
             self.head_dim,
-        ), f"`attn_output` should be of shape {batch_size * self.num_attn_heads, tgt_len, self.head_dim}, but is of shape {attn_output.size()}"
+        ), (
+            f"`attn_output` should be of shape {batch_size * self.num_attn_heads, tgt_len, self.head_dim}, but is of"
+            f" shape {attn_output.size()}"
+        )
 
         attn_output = (
             attn_output.view(batch_size, self.num_attn_heads, tgt_len, self.head_dim)
@@ -847,7 +861,10 @@ class ProphetNetNgramSelfAttention(nn.Module):
             batch_size,
             ngram_sequence_length,
             hidden_size,
-        ], f"`hidden_states` should be of shape {batch_size, ngram_sequence_length, hidden_size}, but is of shape {hidden_states.shape}"
+        ], (
+            f"`hidden_states` should be of shape {batch_size, ngram_sequence_length, hidden_size}, but is of shape"
+            f" {hidden_states.shape}"
+        )
 
         # project
         query_states = self.query_proj(hidden_states)
@@ -916,9 +933,10 @@ class ProphetNetNgramSelfAttention(nn.Module):
         ).type_as(main_attn_weights)
 
         if layer_head_mask is not None:
-            assert layer_head_mask.size() == (
-                self.num_attn_heads,
-            ), f"Head mask for a single layer should be of size {(self.num_attn_heads,)}, but is {layer_head_mask.size()}"
+            assert layer_head_mask.size() == (self.num_attn_heads,), (
+                f"Head mask for a single layer should be of size {(self.num_attn_heads,)}, but is"
+                f" {layer_head_mask.size()}"
+            )
             main_attn_probs = layer_head_mask.view(1, -1, 1, 1) * main_attn_probs.view(
                 batch_size, self.num_attn_heads, -1, sequence_length
             )
@@ -979,9 +997,10 @@ class ProphetNetNgramSelfAttention(nn.Module):
         ).type_as(predict_attn_weights)
 
         if layer_head_mask is not None:
-            assert layer_head_mask.size() == (
-                self.num_attn_heads,
-            ), f"Head mask for a single layer should be of size {(self.num_attn_heads,)}, but is {layer_head_mask.size()}"
+            assert layer_head_mask.size() == (self.num_attn_heads,), (
+                f"Head mask for a single layer should be of size {(self.num_attn_heads,)}, but is"
+                f" {layer_head_mask.size()}"
+            )
             predict_attn_probs = layer_head_mask.view(1, 1, -1, 1, 1) * predict_attn_probs.view(
                 self.ngram, batch_size, self.num_attn_heads, sequence_length, 2 * sequence_length
             )
@@ -1559,9 +1578,10 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         # check if head_mask/cross_attn_head_mask has a correct number of layers specified if desired
         for attn_mask, mask_name in zip([head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]):
             if attn_mask is not None:
-                assert attn_mask.size()[0] == (
-                    len(self.layers)
-                ), f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+                assert attn_mask.size()[0] == (len(self.layers)), (
+                    f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for"
+                    f" {head_mask.size()[0]}."
+                )
         for idx, decoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 # grad cannot be kept because tensor is sliced
@@ -2081,7 +2101,8 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The standalone decoder part of the ProphetNetModel with a lm head on top. The model can be used for causal language modeling.",
+    "The standalone decoder part of the ProphetNetModel with a lm head on top. The model can be used for causal"
+    " language modeling.",
     PROPHETNET_START_DOCSTRING,
 )
 class ProphetNetForCausalLM(ProphetNetPreTrainedModel):

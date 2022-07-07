@@ -971,8 +971,8 @@ class BigBirdBlockSparseAttention(nn.Module):
 
         if params.shape[:2] != indices.shape[:2]:
             raise ValueError(
-                f"Make sure that the first two dimensions of params and indices are identical, \
-                but they are params: {params.shape[:2]} vs. indices: {params.shape[:2]}"
+                "Make sure that the first two dimensions of params and indices are identical,                 but"
+                f" they are params: {params.shape[:2]} vs. indices: {params.shape[:2]}"
             )
         num_indices_to_gather = indices.shape[-2] * indices.shape[-1]
         num_indices_to_pick_from = params.shape[2]
@@ -1517,8 +1517,8 @@ class BigBirdLayer(nn.Module):
         if self.is_decoder and encoder_hidden_states is not None:
             if not hasattr(self, "crossattention"):
                 raise ValueError(
-                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with \
-                    cross-attention layers by setting `config.add_cross_attention=True`"
+                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with                    "
+                    " cross-attention layers by setting `config.add_cross_attention=True`"
                 )
 
             # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
@@ -1957,7 +1957,8 @@ class BigBirdModel(BigBirdPreTrainedModel):
 
         if self.attention_type != "original_full" and config.add_cross_attention:
             logger.warning(
-                "When using `BigBirdForCausalLM` as decoder, then `attention_type` must be `original_full`. Setting `attention_type=original_full`"
+                "When using `BigBirdForCausalLM` as decoder, then `attention_type` must be `original_full`. Setting"
+                " `attention_type=original_full`"
             )
             self.set_attention_type("original_full")
 
@@ -2187,7 +2188,8 @@ class BigBirdModel(BigBirdPreTrainedModel):
         batch_size, seq_length = attention_mask.size()
         if seq_length % block_size != 0:
             raise ValueError(
-                f"Sequence length must be multiple of block size, but sequence length is {seq_length}, while block size is {block_size}."
+                f"Sequence length must be multiple of block size, but sequence length is {seq_length}, while block"
+                f" size is {block_size}."
             )
 
         def create_band_mask_from_inputs(from_blocked_mask, to_blocked_mask):
@@ -2916,8 +2918,10 @@ class BigBirdForTokenClassification(BigBirdPreTrainedModel):
         checkpoint="vumichien/token-classification-bigbird-roberta-base-random",
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output="['LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', "
-        "'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1']",
+        expected_output=(
+            "['LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', "
+            "'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1']"
+        ),
         expected_loss=0.54,
     )
     def forward(

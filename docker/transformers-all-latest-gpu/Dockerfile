@@ -17,6 +17,8 @@ RUN python3 -m pip install --no-cache-dir torch-scatter -f https://data.pyg.org/
 RUN python3 -m pip install --no-cache-dir git+https://github.com/facebookresearch/detectron2.git pytesseract https://github.com/kpu/kenlm/archive/master.zip
 RUN python3 -m pip install -U "itsdangerous<2.1.0"
 
+RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
+
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.
 RUN cd transformers && python3 setup.py develop

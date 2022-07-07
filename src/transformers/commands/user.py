@@ -39,7 +39,7 @@ class UserCommands(BaseTransformersCLICommand):
         # new system: git-based repo system
         repo_parser = parser.add_parser(
             "repo",
-            help="Deprecated: use `huggingface-cli` instead. " "Commands to interact with your huggingface.co repos.",
+            help="Deprecated: use `huggingface-cli` instead. Commands to interact with your huggingface.co repos.",
         )
         repo_subparsers = repo_parser.add_subparsers(
             help="Deprecated: use `huggingface-cli` instead. huggingface.co repos related commands"
@@ -224,6 +224,6 @@ class RepoCreateCommand(BaseUserCommand):
             exit(1)
         print("\nYour repo now lives at:")
         print(f"  {ANSI.bold(url)}")
-        print("\nYou can clone it locally with the command below," " and commit/push as usual.")
+        print("\nYou can clone it locally with the command below, and commit/push as usual.")
         print(f"\n  git clone {url}")
         print("")

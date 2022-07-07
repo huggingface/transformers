@@ -775,7 +775,10 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
             tf.debugging.assert_equal(
                 shape_list(attn_scores),
                 [batch_size, seq_len, self.num_heads, self.one_sided_attn_window_size * 2 + 1],
-                message=f"attn_probs should be of size ({batch_size}, {seq_len}, {self.num_heads}, {self.one_sided_attn_window_size * 2 + 1}), but is of size {shape_list(attn_scores)}",
+                message=(
+                    f"attn_probs should be of size ({batch_size}, {seq_len}, {self.num_heads},"
+                    f" {self.one_sided_attn_window_size * 2 + 1}), but is of size {shape_list(attn_scores)}"
+                ),
             )
 
         # compute global attn indices required through out forward fn
@@ -828,7 +831,10 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
                 tf.debugging.assert_equal(
                     shape_list(layer_head_mask),
                     [self.num_heads],
-                    message=f"Head mask for a single layer should be of size {(self.num_heads)}, but is {shape_list(layer_head_mask)}",
+                    message=(
+                        f"Head mask for a single layer should be of size {(self.num_heads)}, but is"
+                        f" {shape_list(layer_head_mask)}"
+                    ),
                 )
 
             attn_probs = tf.reshape(layer_head_mask, (1, 1, -1, 1)) * attn_probs
@@ -921,7 +927,10 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
             tf.debugging.assert_equal(
                 shape_list(query),
                 shape_list(key),
-                message=f"Shape of query and key should be equal, but got query: {shape_list(query)} and key: {shape_list(key)}",
+                message=(
+                    f"Shape of query and key should be equal, but got query: {shape_list(query)} and key:"
+                    f" {shape_list(key)}"
+                ),
             )
 
         chunks_count = seq_len // window_overlap - 1
@@ -1206,7 +1215,10 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
             tf.debugging.assert_equal(
                 shape_list(chunked_hidden_states),
                 [batch_size, num_output_chunks, frame_size],
-                message=f"Make sure chunking is correctly applied. `Chunked hidden states should have output  dimension {[batch_size, frame_size, num_output_chunks]}, but got {shape_list(chunked_hidden_states)}.",
+                message=(
+                    "Make sure chunking is correctly applied. `Chunked hidden states should have output  dimension"
+                    f" {[batch_size, frame_size, num_output_chunks]}, but got {shape_list(chunked_hidden_states)}."
+                ),
             )
 
         chunked_hidden_states = tf.reshape(
@@ -1384,7 +1396,11 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
             tf.debugging.assert_equal(
                 shape_list(global_attn_scores),
                 [batch_size * self.num_heads, max_num_global_attn_indices, seq_len],
-                message=f"global_attn_scores have the wrong size. Size should be {(batch_size * self.num_heads, max_num_global_attn_indices, seq_len)}, but is {shape_list(global_attn_scores)}.",
+                message=(
+                    "global_attn_scores have the wrong size. Size should be"
+                    f" {(batch_size * self.num_heads, max_num_global_attn_indices, seq_len)}, but is"
+                    f" {shape_list(global_attn_scores)}."
+                ),
             )
 
         global_attn_scores = tf.reshape(
@@ -1423,7 +1439,10 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
                 tf.debugging.assert_equal(
                     shape_list(layer_head_mask),
                     [self.num_heads],
-                    message=f"Head mask for a single layer should be of size {(self.num_heads)}, but is {shape_list(layer_head_mask)}",
+                    message=(
+                        f"Head mask for a single layer should be of size {(self.num_heads)}, but is"
+                        f" {shape_list(layer_head_mask)}"
+                    ),
                 )
             global_attn_probs_float = tf.reshape(layer_head_mask, (1, -1, 1, 1)) * tf.reshape(
                 global_attn_probs_float, (batch_size, self.num_heads, max_num_global_attn_indices, seq_len)
@@ -1442,7 +1461,11 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
             tf.debugging.assert_equal(
                 shape_list(global_attn_output),
                 [batch_size * self.num_heads, max_num_global_attn_indices, self.head_dim],
-                message=f"global_attn_output tensor has the wrong size. Size should be {(batch_size * self.num_heads, max_num_global_attn_indices, self.head_dim)}, but is {shape_list(global_attn_output)}.",
+                message=(
+                    "global_attn_output tensor has the wrong size. Size should be"
+                    f" {(batch_size * self.num_heads, max_num_global_attn_indices, self.head_dim)}, but is"
+                    f" {shape_list(global_attn_output)}."
+                ),
             )
 
         global_attn_output = tf.reshape(
@@ -2207,7 +2230,10 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
         if global_attention_mask is None and input_ids is not None:
             if shape_list(tf.where(input_ids == self.config.sep_token_id))[0] != 3 * shape_list(input_ids)[0]:
                 logger.warning(
-                    f"There should be exactly three separator tokens: {self.config.sep_token_id} in every sample for questions answering. You might also consider to set `global_attention_mask` manually in the forward function to avoid this. This is most likely an error. The global attention is disabled for this forward pass."
+                    f"There should be exactly three separator tokens: {self.config.sep_token_id} in every sample for"
+                    " questions answering. You might also consider to set `global_attention_mask` manually in the"
+                    " forward function to avoid this. This is most likely an error. The global attention is disabled"
+                    " for this forward pass."
                 )
                 global_attention_mask = tf.fill(shape_list(input_ids), value=0)
             else:

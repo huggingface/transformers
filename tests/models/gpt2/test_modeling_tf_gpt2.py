@@ -576,7 +576,8 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
 
             sentence = ["The dog"]
             expected_output_string = [
-                "The dog owner asked why did our vet decide there needed to be extra ventilation inside because most puppies"
+                "The dog owner asked why did our vet decide there needed to be extra ventilation inside because most"
+                " puppies"
             ]
             expected_output_string_xla = [
                 "The dog has been named in connection with the murder of a 20-year-old man in!"

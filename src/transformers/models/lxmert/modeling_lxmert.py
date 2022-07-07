@@ -1193,7 +1193,8 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
 
         if "masked_lm_labels" in kwargs:
             warnings.warn(
-                "The `masked_lm_labels` argument is deprecated and will be removed in a future version, use `labels` instead.",
+                "The `masked_lm_labels` argument is deprecated and will be removed in a future version, use `labels`"
+                " instead.",
                 FutureWarning,
             )
             labels = kwargs.pop("masked_lm_labels")

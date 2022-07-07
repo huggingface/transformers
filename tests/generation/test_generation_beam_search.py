@@ -464,7 +464,7 @@ class ConstrainedBeamSearchTester:
         self.parent.assertNotEqual(sequences[2, -1].item(), self.eos_token_id)
 
         # test that the constraint is indeed fulfilled
-        for (output, constraint) in [(s, c) for s in sequences for c in constraints]:
+        for output, constraint in [(s, c) for s in sequences for c in constraints]:
             forced_token_ids = constraint.token_ids
             if isinstance(forced_token_ids[0], list):
                 # disjunctive case

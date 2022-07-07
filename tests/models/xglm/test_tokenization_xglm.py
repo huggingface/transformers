@@ -179,7 +179,10 @@ class XGLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @slow
     def test_tokenization_base_hard_symbols(self):
-        symbols = 'This is a very long text with a lot of weird characters, such as: . , ~ ? ( ) " [ ] ! : - . Also we will add words that should not exsist and be tokenized to unk, such as saoneuhaoesuth'
+        symbols = (
+            'This is a very long text with a lot of weird characters, such as: . , ~ ? ( ) " [ ] ! : - . Also we will'
+            " add words that should not exsist and be tokenized to unk, such as saoneuhaoesuth"
+        )
         # fmt: off
         original_tokenizer_encodings = [2, 1018, 67, 11, 1988, 2617, 5631, 278, 11, 3407, 48, 71630, 28085, 4, 3234, 157, 13, 6, 5, 6, 4, 3526, 768, 15, 659, 57, 298, 3983, 864, 129, 21, 6, 5, 13675, 377, 652, 7580, 10341, 155, 2817, 422, 1666, 7, 1674, 53, 113, 202277, 17892, 33, 60, 87, 4, 3234, 157, 61, 2667, 52376, 19, 88, 23, 735]
         # fmt: on

@@ -599,8 +599,9 @@ class TFGenerationMixin:
         # We cannot generate if the model does not have a LM head
         if self.get_output_embeddings() is None:
             raise AttributeError(
-                "You tried to generate sequences with a model that does not have a LM Head. "
-                "Please use another model class (e.g. `TFOpenAIGPTLMHeadModel`, `TFXLNetLMHeadModel`, `TFGPT2LMHeadModel`, `TFCTRLLMHeadModel`, `TFT5ForConditionalGeneration`, `TFTransfoXLLMHeadModel`)"
+                "You tried to generate sequences with a model that does not have a LM Head. Please use another model"
+                " class (e.g. `TFOpenAIGPTLMHeadModel`, `TFXLNetLMHeadModel`, `TFGPT2LMHeadModel`,"
+                " `TFCTRLLMHeadModel`, `TFT5ForConditionalGeneration`, `TFTransfoXLLMHeadModel`)"
             )
 
         max_length = max_length if max_length is not None else self.config.max_length
@@ -696,15 +697,17 @@ class TFGenerationMixin:
         if do_sample is False:
             if num_beams == 1:
                 # no_beam_search greedy generation conditions
-                assert (
-                    num_return_sequences == 1
-                ), "Greedy decoding will always produce the same output for num_beams == 1 and num_return_sequences > 1. Please set num_return_sequences = 1"
+                assert num_return_sequences == 1, (
+                    "Greedy decoding will always produce the same output for num_beams == 1 and num_return_sequences >"
+                    " 1. Please set num_return_sequences = 1"
+                )
 
             else:
                 # beam_search greedy generation conditions
-                assert (
-                    num_beams >= num_return_sequences
-                ), "Greedy beam search decoding cannot return more sequences than it has beams. Please set num_beams >= num_return_sequences"
+                assert num_beams >= num_return_sequences, (
+                    "Greedy beam search decoding cannot return more sequences than it has beams. Please set num_beams"
+                    " >= num_return_sequences"
+                )
 
         # create attention mask if necessary
         accepts_attention_mask = "attention_mask" in set(inspect.signature(self.call).parameters.keys())
@@ -794,9 +797,11 @@ class TFGenerationMixin:
             encoder_outputs = None
             cur_len = shape_list(input_ids)[-1]
 
-        assert (
-            cur_len < max_length
-        ), f"The context has {cur_len} number of tokens, but `max_length` is only {max_length}. Please make sure that `max_length` is bigger than the number of tokens, by setting either `generate(max_length=...,...)` or `config.max_length = ...`"
+        assert cur_len < max_length, (
+            f"The context has {cur_len} number of tokens, but `max_length` is only {max_length}. Please make sure that"
+            " `max_length` is bigger than the number of tokens, by setting either `generate(max_length=...,...)` or"
+            " `config.max_length = ...`"
+        )
 
         return self._generate_beam_search(
             input_ids,

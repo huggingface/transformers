@@ -18,7 +18,14 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import _LazyModule, is_flax_available, is_tf_available, is_tokenizers_available, is_torch_available
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_flax_available,
+    is_tf_available,
+    is_tokenizers_available,
+    is_torch_available,
+)
 
 
 _import_structure = {
@@ -26,10 +33,20 @@ _import_structure = {
     "tokenization_gpt2": ["GPT2Tokenizer"],
 }
 
-if is_tokenizers_available():
+try:
+    if not is_tokenizers_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["tokenization_gpt2_fast"] = ["GPT2TokenizerFast"]
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_gpt2"] = [
         "GPT2_PRETRAINED_MODEL_ARCHIVE_LIST",
         "GPT2DoubleHeadsModel",
@@ -41,7 +58,12 @@ if is_torch_available():
         "load_tf_weights_in_gpt2",
     ]
 
-if is_tf_available():
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_tf_gpt2"] = [
         "TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFGPT2DoubleHeadsModel",
@@ -52,17 +74,32 @@ if is_tf_available():
         "TFGPT2PreTrainedModel",
     ]
 
-if is_flax_available():
+try:
+    if not is_flax_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_flax_gpt2"] = ["FlaxGPT2LMHeadModel", "FlaxGPT2Model", "FlaxGPT2PreTrainedModel"]
 
 if TYPE_CHECKING:
     from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2OnnxConfig
     from .tokenization_gpt2 import GPT2Tokenizer
 
-    if is_tokenizers_available():
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .tokenization_gpt2_fast import GPT2TokenizerFast
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_gpt2 import (
             GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPT2DoubleHeadsModel,
@@ -74,7 +111,12 @@ if TYPE_CHECKING:
             load_tf_weights_in_gpt2,
         )
 
-    if is_tf_available():
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_tf_gpt2 import (
             TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFGPT2DoubleHeadsModel,
@@ -85,7 +127,12 @@ if TYPE_CHECKING:
             TFGPT2PreTrainedModel,
         )
 
-    if is_flax_available():
+    try:
+        if not is_flax_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_flax_gpt2 import FlaxGPT2LMHeadModel, FlaxGPT2Model, FlaxGPT2PreTrainedModel
 
 else:

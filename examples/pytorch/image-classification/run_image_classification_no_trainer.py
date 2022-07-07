@@ -62,7 +62,10 @@ def parse_args():
         "--dataset_name",
         type=str,
         default="cifar10",
-        help="The name of the Dataset (from the HuggingFace hub) to train on (could be your own, possibly private, dataset).",
+        help=(
+            "The name of the Dataset (from the HuggingFace hub) to train on (could be your own, possibly private,"
+            " dataset)."
+        ),
     )
     parser.add_argument("--train_dir", type=str, default=None, help="A folder containing the training data.")
     parser.add_argument("--validation_dir", type=str, default=None, help="A folder containing the validation data.")
@@ -70,15 +73,19 @@ def parse_args():
         "--max_train_samples",
         type=int,
         default=None,
-        help="For debugging purposes or quicker training, truncate the number of training examples to this "
-        "value if set.",
+        help=(
+            "For debugging purposes or quicker training, truncate the number of training examples to this "
+            "value if set."
+        ),
     )
     parser.add_argument(
         "--max_eval_samples",
         type=int,
         default=None,
-        help="For debugging purposes or quicker training, truncate the number of evaluation examples to this "
-        "value if set.",
+        help=(
+            "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
+            "value if set."
+        ),
     )
     parser.add_argument(
         "--train_val_split",

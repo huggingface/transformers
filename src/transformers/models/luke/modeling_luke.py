@@ -874,7 +874,8 @@ LUKE_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare LUKE model transformer outputting raw hidden-states for both word tokens and entities without any specific head on top.",
+    "The bare LUKE model transformer outputting raw hidden-states for both word tokens and entities without any"
+    " specific head on top.",
     LUKE_START_DOCSTRING,
 )
 class LukeModel(LukePreTrainedModel):

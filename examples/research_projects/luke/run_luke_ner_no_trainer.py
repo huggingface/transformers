@@ -101,8 +101,8 @@ def parse_args():
         type=int,
         default=32,
         help=(
-            "The maximum total input entity length after tokenization (Used only for (M)Luke models). Sequences longer than this will be truncated,"
-            " sequences shorter will be padded if `--pad_to_max_length` is passed."
+            "The maximum total input entity length after tokenization (Used only for (M)Luke models). Sequences longer"
+            " than this will be truncated, sequences shorter will be padded if `--pad_to_max_length` is passed."
         ),
     )
     parser.add_argument(
@@ -110,8 +110,8 @@ def parse_args():
         type=int,
         default=30,
         help=(
-            "The maximum total input mention length after tokenization (Used only for (M)Luke models). Sequences longer than this will be truncated,"
-            " sequences shorter will be padded if `--pad_to_max_length` is passed."
+            "The maximum total input mention length after tokenization (Used only for (M)Luke models). Sequences"
+            " longer than this will be truncated, sequences shorter will be padded if `--pad_to_max_length` is passed."
         ),
     )
     parser.add_argument(

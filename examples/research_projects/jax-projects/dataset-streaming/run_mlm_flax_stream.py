@@ -75,8 +75,9 @@ class ModelArguments:
     model_name_or_path: Optional[str] = field(
         default=None,
         metadata={
-            "help": "The model checkpoint for weights initialization."
-            "Don't set if you want to train a model from scratch."
+            "help": (
+                "The model checkpoint for weights initialization.Don't set if you want to train a model from scratch."
+            )
         },
     )
     model_type: Optional[str] = field(
@@ -99,7 +100,10 @@ class ModelArguments:
     dtype: Optional[str] = field(
         default="float32",
         metadata={
-            "help": "Floating-point format in which the model weights should be initialized and trained. Choose one of `[float32, float16, bfloat16]`."
+            "help": (
+                "Floating-point format in which the model weights should be initialized and trained. Choose one of"
+                " `[float32, float16, bfloat16]`."
+            )
         },
     )
 
@@ -141,8 +145,10 @@ class DataTrainingArguments:
     max_seq_length: Optional[int] = field(
         default=None,
         metadata={
-            "help": "The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated. Default to the max input length of the model."
+            "help": (
+                "The maximum total input sequence length after tokenization. Sequences longer "
+                "than this will be truncated. Default to the max input length of the model."
+            )
         },
     )
     preprocessing_num_workers: Optional[int] = field(
@@ -155,8 +161,10 @@ class DataTrainingArguments:
     pad_to_max_length: bool = field(
         default=False,
         metadata={
-            "help": "Whether to pad all samples to `max_seq_length`. "
-            "If False, will pad the samples dynamically when batching to the maximum length in the batch."
+            "help": (
+                "Whether to pad all samples to `max_seq_length`. "
+                "If False, will pad the samples dynamically when batching to the maximum length in the batch."
+            )
         },
     )
     line_by_line: bool = field(
@@ -575,7 +583,8 @@ if __name__ == "__main__":
 
         if step % training_args.logging_steps == 0 and step > 0:
             steps.write(
-                f"Step... ({step} | Loss: {train_metric['loss'].mean()}, Learning Rate: {train_metric['learning_rate'].mean()})"
+                f"Step... ({step} | Loss: {train_metric['loss'].mean()}, Learning Rate:"
+                f" {train_metric['learning_rate'].mean()})"
             )
             train_time += time.time() - train_start
             if has_tensorboard and jax.process_index() == 0:
@@ -604,7 +613,10 @@ if __name__ == "__main__":
             eval_metrics = jax.tree_map(lambda x: x / eval_normalizer, eval_metrics)
 
             # Update progress bar
-            steps.desc = f"Step... ({step + 1}/{num_train_steps} | Loss: {eval_metrics['loss']}, Acc: {eval_metrics['accuracy']})"
+            steps.desc = (
+                f"Step... ({step + 1}/{num_train_steps} | Loss: {eval_metrics['loss']}, Acc:"
+                f" {eval_metrics['accuracy']})"
+            )
 
             if has_tensorboard and jax.process_index() == 0:
                 write_eval_metric(summary_writer, eval_metrics, step)

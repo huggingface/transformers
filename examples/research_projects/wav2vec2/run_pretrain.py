@@ -104,7 +104,9 @@ class DataTrainingArguments:
     validation_split_name: Optional[str] = field(
         default="validation",
         metadata={
-            "help": "The name of the validation data set split to use (via the datasets library). Defaults to 'validation'"
+            "help": (
+                "The name of the validation data set split to use (via the datasets library). Defaults to 'validation'"
+            )
         },
     )
     speech_file_column: Optional[str] = field(
@@ -369,7 +371,8 @@ def main():
 
     if not config.do_stable_layer_norm or config.feat_extract_norm != "layer":
         raise ValueError(
-            "PreTraining is only supported for ``config.do_stable_layer_norm=True`` and ``config.feat_extract_norm='layer'"
+            "PreTraining is only supported for ``config.do_stable_layer_norm=True`` and"
+            " ``config.feat_extract_norm='layer'"
         )
 
     model = Wav2Vec2ForPreTraining(config)

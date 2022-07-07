@@ -222,8 +222,8 @@ class FlaxBertSelfAttention(nn.Module):
         self.head_dim = self.config.hidden_size // self.config.num_attention_heads
         if self.config.hidden_size % self.config.num_attention_heads != 0:
             raise ValueError(
-                "`config.hidden_size`: {self.config.hidden_size} has to be a multiple of `config.num_attention_heads`\
-                    : {self.config.num_attention_heads}"
+                "`config.hidden_size`: {self.config.hidden_size} has to be a multiple of `config.num_attention_heads` "
+                "                   : {self.config.num_attention_heads}"
             )
 
         self.query = nn.Dense(
@@ -571,8 +571,8 @@ class FlaxBertLayerCollection(nn.Module):
         if head_mask is not None:
             if head_mask.shape[0] != (len(self.layers)):
                 raise ValueError(
-                    f"The head_mask should be specified for {len(self.layers)} layers, but it is for \
-                        {head_mask.shape[0]}."
+                    f"The head_mask should be specified for {len(self.layers)} layers, but it is for                  "
+                    f"       {head_mask.shape[0]}."
                 )
 
         for i, layer in enumerate(self.layers):

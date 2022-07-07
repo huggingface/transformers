@@ -59,6 +59,20 @@ class DPTFeatureExtractor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class FlavaFeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class FlavaProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class GLPNFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 

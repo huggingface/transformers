@@ -18,7 +18,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import _LazyModule, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
 _import_structure = {
@@ -26,7 +26,12 @@ _import_structure = {
     "tokenization_prophetnet": ["ProphetNetTokenizer"],
 }
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_prophetnet"] = [
         "PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ProphetNetDecoder",
@@ -42,7 +47,12 @@ if TYPE_CHECKING:
     from .configuration_prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig
     from .tokenization_prophetnet import ProphetNetTokenizer
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_prophetnet import (
             PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST,
             ProphetNetDecoder,

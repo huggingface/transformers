@@ -551,14 +551,14 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                     has_file_kwargs = {"revision": revision, "proxies": proxies, "use_auth_token": use_auth_token}
                     if has_file(pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs):
                         raise EnvironmentError(
-                            f"{pretrained_model_name_or_path} does not appear to have a file named {FLAX_WEIGHTS_NAME} "
-                            "but there is a file for PyTorch weights. Use `from_pt=True` to load this model from "
-                            "those weights."
+                            f"{pretrained_model_name_or_path} does not appear to have a file named"
+                            f" {FLAX_WEIGHTS_NAME} but there is a file for PyTorch weights. Use `from_pt=True` to load"
+                            " this model from those weights."
                         )
                     else:
                         raise EnvironmentError(
-                            f"{pretrained_model_name_or_path} does not appear to have a file named {FLAX_WEIGHTS_NAME} "
-                            f"or {WEIGHTS_NAME}."
+                            f"{pretrained_model_name_or_path} does not appear to have a file named"
+                            f" {FLAX_WEIGHTS_NAME} or {WEIGHTS_NAME}."
                         )
                 else:
                     raise EnvironmentError(
@@ -571,11 +571,11 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 )
             except ValueError:
                 raise EnvironmentError(
-                    f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this model, couldn't find it in the cached "
-                    f"files and it looks like {pretrained_model_name_or_path} is not the path to a directory "
-                    f"containing a file named {FLAX_WEIGHTS_NAME} or {WEIGHTS_NAME}.\n"
-                    "Checkout your internet connection or see how to run the library in offline mode at "
-                    "'https://huggingface.co/docs/transformers/installation#offline-mode'."
+                    f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this model, couldn't find it"
+                    f" in the cached files and it looks like {pretrained_model_name_or_path} is not the path to a"
+                    f" directory containing a file named {FLAX_WEIGHTS_NAME} or {WEIGHTS_NAME}.\nCheckout your"
+                    " internet connection or see how to run the library in offline mode at"
+                    " 'https://huggingface.co/docs/transformers/installation#offline-mode'."
                 )
             except EnvironmentError:
                 raise EnvironmentError(
@@ -606,9 +606,9 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                         with open(resolved_archive_file) as f:
                             if f.read().startswith("version"):
                                 raise OSError(
-                                    "You seem to have cloned a repository without having git-lfs installed. Please install "
-                                    "git-lfs and run `git lfs install` followed by `git lfs pull` in the folder "
-                                    "you cloned."
+                                    "You seem to have cloned a repository without having git-lfs installed. Please"
+                                    " install git-lfs and run `git lfs install` followed by `git lfs pull` in the"
+                                    " folder you cloned."
                                 )
                             else:
                                 raise ValueError from e
@@ -643,7 +643,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         if missing_keys and not _do_init:
             logger.warning(
                 f"The checkpoint {pretrained_model_name_or_path} is missing required keys: {missing_keys}. "
-                f"Make sure to call model.init_weights to initialize the missing weights."
+                "Make sure to call model.init_weights to initialize the missing weights."
             )
             cls._missing_keys = missing_keys
 
@@ -674,27 +674,29 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
         if len(unexpected_keys) > 0:
             logger.warning(
-                f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when "
-                f"initializing {model.__class__.__name__}: {unexpected_keys}\n"
-                f"- This IS expected if you are initializing {model.__class__.__name__} from the checkpoint of a model trained on another task "
-                f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a BertForPreTraining model).\n"
-                f"- This IS NOT expected if you are initializing {model.__class__.__name__} from the checkpoint of a model that you expect "
-                f"to be exactly identical (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
+                f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when"
+                f" initializing {model.__class__.__name__}: {unexpected_keys}\n- This IS expected if you are"
+                f" initializing {model.__class__.__name__} from the checkpoint of a model trained on another task or"
+                " with another architecture (e.g. initializing a BertForSequenceClassification model from a"
+                " BertForPreTraining model).\n- This IS NOT expected if you are initializing"
+                f" {model.__class__.__name__} from the checkpoint of a model that you expect to be exactly identical"
+                " (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
             )
         else:
             logger.info(f"All model checkpoint weights were used when initializing {model.__class__.__name__}.\n")
 
         if len(missing_keys) > 0:
             logger.warning(
-                f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
-                f"and are newly initialized: {missing_keys}\n"
-                f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
+                f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at"
+                f" {pretrained_model_name_or_path} and are newly initialized: {missing_keys}\nYou should probably"
+                " TRAIN this model on a down-stream task to be able to use it for predictions and inference."
             )
         elif len(mismatched_keys) == 0:
             logger.info(
-                f"All the weights of {model.__class__.__name__} were initialized from the model checkpoint at {pretrained_model_name_or_path}.\n"
-                f"If your task is similar to the task the model of the checkpoint was trained on, "
-                f"you can already use {model.__class__.__name__} for predictions without further training."
+                f"All the weights of {model.__class__.__name__} were initialized from the model checkpoint at"
+                f" {pretrained_model_name_or_path}.\nIf your task is similar to the task the model of the checkpoint"
+                f" was trained on, you can already use {model.__class__.__name__} for predictions without further"
+                " training."
             )
         if len(mismatched_keys) > 0:
             mismatched_warning = "\n".join(
@@ -704,9 +706,10 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 ]
             )
             logger.warning(
-                f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
-                f"and are newly initialized because the shapes did not match:\n{mismatched_warning}\n"
-                f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
+                f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at"
+                f" {pretrained_model_name_or_path} and are newly initialized because the shapes did not"
+                f" match:\n{mismatched_warning}\nYou should probably TRAIN this model on a down-stream task to be able"
+                " to use it for predictions and inference."
             )
 
         # dictionary of key: dtypes for the model params

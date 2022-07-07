@@ -86,8 +86,7 @@ class LayoutXLMProcessor(ProcessorMixin):
 
         if self.feature_extractor.apply_ocr and (word_labels is not None):
             raise ValueError(
-                "You cannot provide word labels "
-                "if you initialized the feature extractor with apply_ocr set to True."
+                "You cannot provide word labels if you initialized the feature extractor with apply_ocr set to True."
             )
 
         # first, apply the feature extractor

@@ -74,12 +74,11 @@ class OnnxConfig(ABC):
     default_fixed_num_choices = 4
     torch_onnx_minimum_version = version.parse("1.8")
     _tasks_to_common_outputs = {
-        "default": OrderedDict({"last_hidden_state": {0: "batch", 1: "sequence"}}),
-        "masked-lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
         "causal-lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
-        "seq2seq-lm": OrderedDict({"logits": {0: "batch", 1: "decoder_sequence"}}),
-        "sequence-classification": OrderedDict({"logits": {0: "batch"}}),
-        "token-classification": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
+        "default": OrderedDict({"last_hidden_state": {0: "batch", 1: "sequence"}}),
+        "image-classification": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
+        "masked-im": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
+        "masked-lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
         "multiple-choice": OrderedDict({"logits": {0: "batch"}}),
         "question-answering": OrderedDict(
             {
@@ -87,7 +86,9 @@ class OnnxConfig(ABC):
                 "end_logits": {0: "batch", 1: "sequence"},
             }
         ),
-        "image-classification": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
+        "seq2seq-lm": OrderedDict({"logits": {0: "batch", 1: "decoder_sequence"}}),
+        "sequence-classification": OrderedDict({"logits": {0: "batch"}}),
+        "token-classification": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
     }
 
     def __init__(self, config: "PretrainedConfig", task: str = "default", patching_specs: List[PatchingSpec] = None):
@@ -292,7 +293,8 @@ class OnnxConfig(ABC):
             raise ValueError("You cannot provide both a tokenizer and a preprocessor to generate dummy inputs.")
         if tokenizer is not None:
             warnings.warn(
-                "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use `preprocessor` instead.",
+                "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use"
+                " `preprocessor` instead.",
                 FutureWarning,
             )
             logger.warning("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
@@ -409,7 +411,8 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
         """
         if not hasattr(self._config, "num_layers"):
             raise AttributeError(
-                "could not find the number of layers attribute in the model configuration, override the num_layers property of the model OnnxConfig to solve this"
+                "could not find the number of layers attribute in the model configuration, override the num_layers"
+                " property of the model OnnxConfig to solve this"
             )
         return self._config.num_layers
 
@@ -421,7 +424,8 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
         """
         if not hasattr(self._config, "num_attention_heads"):
             raise AttributeError(
-                "could not find the number of attention heads attribute in the model configuration, override the num_attention_heads property of the model OnnxConfig to solve this"
+                "could not find the number of attention heads attribute in the model configuration, override the"
+                " num_attention_heads property of the model OnnxConfig to solve this"
             )
         return self._config.num_attention_heads
 
@@ -456,8 +460,10 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
             )
 
             if "attention_mask" in common_inputs:
+                mask_dtype = common_inputs["attention_mask"].dtype
                 common_inputs["attention_mask"] = torch.cat(
-                    [common_inputs["attention_mask"], torch.ones(batch, past_key_values_length)], dim=1
+                    [common_inputs["attention_mask"], torch.ones(batch, past_key_values_length, dtype=mask_dtype)],
+                    dim=1,
                 )
 
             common_inputs["past_key_values"] = []
@@ -527,7 +533,8 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
                 num_layers = (self._config.encoder_layers, self._config.decoder_layers)
             else:
                 raise AttributeError(
-                    "could not find the number of encoder and decoder layers attributes in the model configuration, override the num_layers property of the model OnnxConfig to solve this"
+                    "could not find the number of encoder and decoder layers attributes in the model configuration,"
+                    " override the num_layers property of the model OnnxConfig to solve this"
                 )
 
         return num_layers
@@ -542,7 +549,9 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
                 num_attention_heads = (self._config.encoder_attention_heads, self._config.decoder_attention_heads)
             else:
                 raise AttributeError(
-                    "could not find the number of attention heads for the encoder and the decoder attributes in the model configuration, override the num_attention_heads property of the model OnnxConfig to solve this"
+                    "could not find the number of attention heads for the encoder and the decoder attributes in the"
+                    " model configuration, override the num_attention_heads property of the model OnnxConfig to solve"
+                    " this"
                 )
         return num_attention_heads
 

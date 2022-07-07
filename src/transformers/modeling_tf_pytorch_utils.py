@@ -254,25 +254,26 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
 
     if len(unexpected_keys) > 0:
         logger.warning(
-            f"Some weights of the PyTorch model were not used when "
-            f"initializing the TF 2.0 model {tf_model.__class__.__name__}: {unexpected_keys}\n"
-            f"- This IS expected if you are initializing {tf_model.__class__.__name__} from a PyTorch model trained on another task "
-            f"or with another architecture (e.g. initializing a TFBertForSequenceClassification model from a BertForPreTraining model).\n"
-            f"- This IS NOT expected if you are initializing {tf_model.__class__.__name__} from a PyTorch model that you expect "
-            f"to be exactly identical (e.g. initializing a TFBertForSequenceClassification model from a BertForSequenceClassification model)."
+            "Some weights of the PyTorch model were not used when initializing the TF 2.0 model"
+            f" {tf_model.__class__.__name__}: {unexpected_keys}\n- This IS expected if you are initializing"
+            f" {tf_model.__class__.__name__} from a PyTorch model trained on another task or with another architecture"
+            " (e.g. initializing a TFBertForSequenceClassification model from a BertForPreTraining model).\n- This IS"
+            f" NOT expected if you are initializing {tf_model.__class__.__name__} from a PyTorch model that you expect"
+            " to be exactly identical (e.g. initializing a TFBertForSequenceClassification model from a"
+            " BertForSequenceClassification model)."
         )
     else:
         logger.warning(f"All PyTorch model weights were used when initializing {tf_model.__class__.__name__}.\n")
     if len(missing_keys) > 0:
         logger.warning(
-            f"Some weights or buffers of the TF 2.0 model {tf_model.__class__.__name__} were not initialized from the PyTorch model "
-            f"and are newly initialized: {missing_keys}\n"
-            f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
+            f"Some weights or buffers of the TF 2.0 model {tf_model.__class__.__name__} were not initialized from the"
+            f" PyTorch model and are newly initialized: {missing_keys}\nYou should probably TRAIN this model on a"
+            " down-stream task to be able to use it for predictions and inference."
         )
     else:
         logger.warning(
             f"All the weights of {tf_model.__class__.__name__} were initialized from the PyTorch model.\n"
-            f"If your task is similar to the task the model of the checkpoint was trained on, "
+            "If your task is similar to the task the model of the checkpoint was trained on, "
             f"you can already use {tf_model.__class__.__name__} for predictions without further training."
         )
 
@@ -430,25 +431,26 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
 
     if len(unexpected_keys) > 0:
         logger.warning(
-            f"Some weights of the TF 2.0 model were not used when "
-            f"initializing the PyTorch model {pt_model.__class__.__name__}: {unexpected_keys}\n"
-            f"- This IS expected if you are initializing {pt_model.__class__.__name__} from a TF 2.0 model trained on another task "
-            f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a TFBertForPreTraining model).\n"
-            f"- This IS NOT expected if you are initializing {pt_model.__class__.__name__} from a TF 2.0 model that you expect "
-            f"to be exactly identical (e.g. initializing a BertForSequenceClassification model from a TFBertForSequenceClassification model)."
+            "Some weights of the TF 2.0 model were not used when initializing the PyTorch model"
+            f" {pt_model.__class__.__name__}: {unexpected_keys}\n- This IS expected if you are initializing"
+            f" {pt_model.__class__.__name__} from a TF 2.0 model trained on another task or with another architecture"
+            " (e.g. initializing a BertForSequenceClassification model from a TFBertForPreTraining model).\n- This IS"
+            f" NOT expected if you are initializing {pt_model.__class__.__name__} from a TF 2.0 model that you expect"
+            " to be exactly identical (e.g. initializing a BertForSequenceClassification model from a"
+            " TFBertForSequenceClassification model)."
         )
     else:
         logger.warning(f"All TF 2.0 model weights were used when initializing {pt_model.__class__.__name__}.\n")
     if len(missing_keys) > 0:
         logger.warning(
-            f"Some weights of {pt_model.__class__.__name__} were not initialized from the TF 2.0 model "
-            f"and are newly initialized: {missing_keys}\n"
-            f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
+            f"Some weights of {pt_model.__class__.__name__} were not initialized from the TF 2.0 model and are newly"
+            f" initialized: {missing_keys}\nYou should probably TRAIN this model on a down-stream task to be able to"
+            " use it for predictions and inference."
         )
     else:
         logger.warning(
             f"All the weights of {pt_model.__class__.__name__} were initialized from the TF 2.0 model.\n"
-            f"If your task is similar to the task the model of the checkpoint was trained on, "
+            "If your task is similar to the task the model of the checkpoint was trained on, "
             f"you can already use {pt_model.__class__.__name__} for predictions without further training."
         )
 

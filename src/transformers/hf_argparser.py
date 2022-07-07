@@ -155,8 +155,8 @@ class HfArgumentParser(ArgumentParser):
         except NameError:
             raise RuntimeError(
                 f"Type resolution failed for f{dtype}. Try declaring the class in global scope or "
-                f"removing line of `from __future__ import annotations` which opts in Postponed "
-                f"Evaluation of Annotations (PEP 563)"
+                "removing line of `from __future__ import annotations` which opts in Postponed "
+                "Evaluation of Annotations (PEP 563)"
             )
 
         for field in dataclasses.fields(dtype):

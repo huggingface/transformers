@@ -505,7 +505,8 @@ class TFModelTesterMixin:
             self.assertLessEqual(max_diff, tol, f"{name}: Difference between torch and tf is {max_diff} (>= {tol}).")
         else:
             raise ValueError(
-                f"`tf_outputs` should be an instance of `tf.Tensor`, a `tuple`, or an instance of `tf.Tensor`. Got {type(tf_outputs)} instead."
+                "`tf_outputs` should be an instance of `tf.Tensor`, a `tuple`, or an instance of `tf.Tensor`. Got"
+                f" {type(tf_outputs)} instead."
             )
 
     def prepare_pt_inputs_from_tf_inputs(self, tf_inputs_dict):
@@ -956,7 +957,10 @@ class TFModelTesterMixin:
                 else:
                     self.assertTrue(
                         all(tf.equal(tuple_object, dict_object)),
-                        msg=f"Tuple and dict output are not equal. Difference: {tf.math.reduce_max(tf.abs(tuple_object - dict_object))}",
+                        msg=(
+                            "Tuple and dict output are not equal. Difference:"
+                            f" {tf.math.reduce_max(tf.abs(tuple_object - dict_object))}"
+                        ),
                     )
 
                 recursive_check(tuple_output, dict_output)
@@ -1371,6 +1375,26 @@ class TFModelTesterMixin:
                 )
                 val_loss2 = history2.history["val_loss"][0]
                 self.assertTrue(np.allclose(val_loss1, val_loss2, atol=1e-2, rtol=1e-3))
+
+    def test_int64_inputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            prepared_for_class = self._prepare_for_class(
+                inputs_dict.copy(),
+                model_class,
+                return_labels=True if "labels" in inspect.signature(model_class.call).parameters.keys() else False,
+            )
+            if not any(
+                [tensor.dtype.is_integer for tensor in prepared_for_class.values() if isinstance(tensor, tf.Tensor)]
+            ):
+                return  # No integer inputs means no need for this test
+
+            prepared_for_class = {
+                key: tf.cast(tensor, tf.int64) if isinstance(tensor, tf.Tensor) and tensor.dtype.is_integer else tensor
+                for key, tensor in prepared_for_class.items()
+            }
+            model = model_class(config)
+            model(**prepared_for_class)  # No assertion, we're just checking this doesn't throw an error
 
     def test_generate_with_headmasking(self):
         attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]

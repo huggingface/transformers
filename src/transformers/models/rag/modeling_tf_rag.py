@@ -321,9 +321,10 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
         # by the value of the flag `is_generator` that we need to set correctly.
         question_encoder = kwargs_question_encoder.pop("model", None)
         if question_encoder is None:
-            assert (
-                question_encoder_pretrained_model_name_or_path is not None
-            ), "If `model` is not defined as an argument, a `question_encoder_pretrained_model_name_or_path` has to be defined"
+            assert question_encoder_pretrained_model_name_or_path is not None, (
+                "If `model` is not defined as an argument, a `question_encoder_pretrained_model_name_or_path` has to"
+                " be defined"
+            )
 
             from ..auto.modeling_tf_auto import TFAutoModel
 
@@ -343,9 +344,10 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
 
         generator = kwargs_generator.pop("generator", None)
         if generator is None:
-            assert (
-                generator_pretrained_model_name_or_path is not None
-            ), "If `generator_model` is not defined as an argument, a `generator_pretrained_model_name_or_path` has to be defined"
+            assert generator_pretrained_model_name_or_path is not None, (
+                "If `generator_model` is not defined as an argument, a `generator_pretrained_model_name_or_path` has"
+                " to be defined"
+            )
 
             from ..auto.modeling_tf_auto import TFAutoModelForSeq2SeqLM
 
@@ -632,23 +634,27 @@ class TFRagModel(TFRagPreTrainedModel):
                 )
 
             else:
-                assert (
-                    context_input_ids is not None
-                ), "Make sure that `context_input_ids` are passed, if no `retriever` is set. Alternatively, you can set a retriever using the `set_retriever(...)` function."
-                assert (
-                    context_attention_mask is not None
-                ), "Make sure that `context_attention_mask` are passed, if no `retriever` is set. Alternatively, you can set a retriever using the `set_retriever(...)` function."
-                assert (
-                    doc_scores is not None
-                ), "Make sure that `doc_scores` are passed, if no `retriever` is set. Alternatively, you can set a retriever using the `set_retriever(...)` function."
+                assert context_input_ids is not None, (
+                    "Make sure that `context_input_ids` are passed, if no `retriever` is set. Alternatively, you can"
+                    " set a retriever using the `set_retriever(...)` function."
+                )
+                assert context_attention_mask is not None, (
+                    "Make sure that `context_attention_mask` are passed, if no `retriever` is set. Alternatively, you"
+                    " can set a retriever using the `set_retriever(...)` function."
+                )
+                assert doc_scores is not None, (
+                    "Make sure that `doc_scores` are passed, if no `retriever` is set. Alternatively, you can set a"
+                    " retriever using the `set_retriever(...)` function."
+                )
 
         assert (
             doc_scores is not None
         ), "Make sure that `doc_scores` are passed when passing `encoder_outputs` to the forward function."
 
-        assert (
-            doc_scores.shape[1] % n_docs
-        ) == 0, f" The first dimension of `context_input_ids` should be a multiple of `n_docs`={n_docs}, but is {context_input_ids.shape[0]}."
+        assert (doc_scores.shape[1] % n_docs) == 0, (
+            f" The first dimension of `context_input_ids` should be a multiple of `n_docs`={n_docs}, but is"
+            f" {context_input_ids.shape[0]}."
+        )
 
         # Decoder input without context documents
         if decoder_input_ids is not None:
@@ -1149,9 +1155,10 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
             )
             doc_scores = tf.squeeze(doc_scores, axis=1)
 
-        assert (
-            context_input_ids.shape[0] % n_docs
-        ) == 0, f" The first dimension of `context_input_ids` should be a multiple of `n_docs`={n_docs}, but is {context_input_ids.shape[0]}."
+        assert (context_input_ids.shape[0] % n_docs) == 0, (
+            f" The first dimension of `context_input_ids` should be a multiple of `n_docs`={n_docs}, but is"
+            f" {context_input_ids.shape[0]}."
+        )
 
         batch_size = context_input_ids.shape[0] // n_docs
 
@@ -1286,9 +1293,10 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
 
         if start_token_id is None:
             start_token_id = self.generator.config.decoder_start_token_id
-            assert (
-                start_token_id is not None
-            ), "self.generator.config.decoder_start_token_id has to be defined. In Rag we commonly use Bart as generator, see Bart docs for more information"
+            assert start_token_id is not None, (
+                "self.generator.config.decoder_start_token_id has to be defined. In Rag we commonly use Bart as"
+                " generator, see Bart docs for more information"
+            )
 
         pad_token_id = self.generator.config.pad_token_id
         assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
@@ -1745,12 +1753,14 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
                 new_input_ids = tf.tile(input_ids[index : index + 1], (num_candidates, 1))
                 outputs = self(new_input_ids, labels=output_sequences, exclude_bos_score=True)
             else:  # input_ids is None, need context_input_ids/mask and doc_scores
-                assert (
-                    context_attention_mask is not None
-                ), "Make sure that `context_attention_mask` are passed, if no `input_ids` is set. Alternatively, you can set a retriever using the `set_retriever(...)` function."
-                assert (
-                    doc_scores is not None
-                ), "Make sure that `doc_scores` are passed, if no `input_ids` is set. Alternatively, you can set a retriever using the `set_retriever(...)` function."
+                assert context_attention_mask is not None, (
+                    "Make sure that `context_attention_mask` are passed, if no `input_ids` is set. Alternatively, you"
+                    " can set a retriever using the `set_retriever(...)` function."
+                )
+                assert doc_scores is not None, (
+                    "Make sure that `doc_scores` are passed, if no `input_ids` is set. Alternatively, you can set a"
+                    " retriever using the `set_retriever(...)` function."
+                )
 
                 individual_input_ids = tf.tile(
                     generator_input_ids, (num_candidates, 1)

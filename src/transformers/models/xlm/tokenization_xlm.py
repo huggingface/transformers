@@ -697,7 +697,8 @@ class XLMTokenizer(PreTrainedTokenizer):
                 )
             except (AttributeError, ImportError):
                 logger.error(
-                    "Make sure you install KyTea (https://github.com/neubig/kytea) and it's python wrapper (https://github.com/chezou/Mykytea-python) with the following steps"
+                    "Make sure you install KyTea (https://github.com/neubig/kytea) and it's python wrapper"
+                    " (https://github.com/chezou/Mykytea-python) with the following steps"
                 )
                 logger.error("1. git clone git@github.com:neubig/kytea.git && cd kytea")
                 logger.error("2. autoreconf -i")
@@ -801,7 +802,8 @@ class XLMTokenizer(PreTrainedTokenizer):
         """
         if lang and self.lang2id and lang not in self.lang2id:
             logger.error(
-                "Supplied language code not found in lang2id mapping. Please check that your language is supported by the loaded pretrained model."
+                "Supplied language code not found in lang2id mapping. Please check that your language is supported by"
+                " the loaded pretrained model."
             )
         if bypass_tokenizer:
             text = text.split()

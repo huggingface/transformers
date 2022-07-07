@@ -403,8 +403,8 @@ def main():
         else:
             logger.warning(
                 "Your model seems to have been trained with labels, but they don't match the dataset: ",
-                f"model labels: {list(sorted(model.config.label2id.keys()))}, dataset labels: {list(sorted(label_list))}."
-                "\nIgnoring the model labels as a result.",
+                f"model labels: {list(sorted(model.config.label2id.keys()))}, dataset labels:"
+                f" {list(sorted(label_list))}.\nIgnoring the model labels as a result.",
             )
 
     # Set the correspondences label/ID inside the model config

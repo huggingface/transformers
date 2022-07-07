@@ -33,13 +33,19 @@ VOCAB_FILES_NAMES = {
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "facebook/s2t-wav2vec2-large-en-de": "https://huggingface.co/facebook/s2t-wav2vec2-large-en-de/resolve/main/vocab.json",
+        "facebook/s2t-wav2vec2-large-en-de": (
+            "https://huggingface.co/facebook/s2t-wav2vec2-large-en-de/resolve/main/vocab.json"
+        ),
     },
     "tokenizer_config_file": {
-        "facebook/s2t-wav2vec2-large-en-de": "https://huggingface.co/facebook/s2t-wav2vec2-large-en-de/resolve/main/tokenizer_config.json",
+        "facebook/s2t-wav2vec2-large-en-de": (
+            "https://huggingface.co/facebook/s2t-wav2vec2-large-en-de/resolve/main/tokenizer_config.json"
+        ),
     },
     "merges_file": {
-        "facebook/s2t-wav2vec2-large-en-de": "https://huggingface.co/facebook/s2t-wav2vec2-large-en-de/resolve/main/merges.txt",
+        "facebook/s2t-wav2vec2-large-en-de": (
+            "https://huggingface.co/facebook/s2t-wav2vec2-large-en-de/resolve/main/merges.txt"
+        ),
     },
 }
 
