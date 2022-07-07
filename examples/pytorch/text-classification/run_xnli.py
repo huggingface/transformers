@@ -58,10 +58,8 @@ logger = logging.getLogger(__name__)
 class DataTrainingArguments:
     """
     Arguments pertaining to what data we are going to input our model for training and eval.
-
-    Using `HfArgumentParser` we can turn this class
-    into argparse arguments to be able to specify them on
-    the command line.
+    Using `HfArgumentParser` we can turn this class into argparse arguments to be able to specify
+    them on the command line.
     """
 
     max_seq_length: Optional[int] = field(
