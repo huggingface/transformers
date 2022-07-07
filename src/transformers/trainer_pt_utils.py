@@ -621,13 +621,12 @@ class DistributedLengthGroupedSampler(DistributedSampler):
                     f"'{model_input_name}' key."
                 )
             lengths = [len(feature[model_input_name]) for feature in dataset]
-        else:
-            if isinstance(lengths, torch.Tensor):
-                logger.info(
-                    "If lengths is a torch.Tensor, DistributedLengthGroupedSampler will be slow. Converting lengths to"
-                    " List[int]..."
-                )
-                lengths = lengths.tolist()
+        elif isinstance(lengths, torch.Tensor):
+            logger.info(
+                "If lengths is a torch.Tensor, DistributedLengthGroupedSampler will be slow. Converting lengths to"
+                " List[int]..."
+            )
+            lengths = lengths.tolist()
 
         self.lengths = lengths
 
