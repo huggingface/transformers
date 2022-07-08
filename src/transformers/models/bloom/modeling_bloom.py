@@ -1062,12 +1062,13 @@ class BloomForPrefixLM(BloomPreTrainedModel):
         if custom_mask is None and self.custom_mask is None:
             # No custom mask provided. Falling back to default prefix-LM mask.
             # TODO: don't hardcode max_positions = 1024
+            # TODO: is there a cleaner way of putting mask onto the right device? (doing it later?)
             causal_mask = (torch.tril(torch.ones((1024, 1024), dtype=torch.bool)).view(1, 1, 1024, 1024)).to(
-                input_ids.device
+                input_ids.device if input_ids is not None else inputs_embeds.device
             )
             if prefix_length is not None:
                 prefix_mask = torch.zeros((prefix_length.shape[0], 1, 1024, 1024), dtype=torch.bool).to(
-                    input_ids.device
+                    input_ids.device if input_ids is not None else inputs_embeds.device
                 )
                 for idx in range(prefix_length.shape[0]):
                     prefix_mask_length = int(prefix_length[idx])
