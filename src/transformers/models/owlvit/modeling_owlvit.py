@@ -711,7 +711,7 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
         self.text_model.embeddings.token_embedding = value
 
     @add_start_docstrings_to_model_forward(OWLVIT_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Tuple[BaseModelOutputWithPooling], config_class=OwlViTTextConfig)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=OwlViTTextConfig)
     def forward(
         self,
         input_ids: torch.Tensor,
@@ -937,8 +937,8 @@ class OwlViTModel(OwlViTPreTrainedModel):
 
         pooled_outputs = [text_output[1] for text_output in text_outputs]
 
-        text_features = [self.text_projection(pooled_outputs[i]).unsqueeze(0) for i in range(batch_size)]
-        text_features = torch.cat(text_features)
+        text_features = [self.text_projection(pooled_output) for pooled_output in pooled_outputs]
+        text_features = torch.stack(text_features)
 
         return text_features
 
@@ -1205,8 +1205,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         xy = np.stack(np.meshgrid(np.arange(1, w + 1), np.arange(1, h + 1)), axis=-1).astype(np.float32)
         xy /= np.array([w, h], np.float32)
 
-        # Flatten h, w dimensions
-        xy = xy.reshape(*(xy.shape[:-3] + (-1, 2)))
+        # Flatten (h, w, 2) -> (h*w, 2)
+        xy = xy.reshape(xy.shape[0] * xy.shape[1], xy.shape[2])
         xy = torch.from_numpy(xy)
 
         return xy
@@ -1243,7 +1243,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
                 List of predicted boxes (cxcywh normalized to 0, 1) nested within a dictionary.
         """
         # Bounding box detection head [batch_size, num_boxes, 4].
-        pred_boxes = self._box_head(image_feats)
+        pred_boxes = self.box_head(image_feats)
 
         # Compute the location of each token on the grid and use it to compute a bias for the bbox prediction
         pred_boxes += self.compute_box_bias(feature_map)
@@ -1265,13 +1265,13 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             query_mask:
                 Must be provided with query_embeddings. A mask indicating which query embeddings are valid.
         """
-        (pred_logits, image_class_embeds) = self._class_head(image_feats, query_embeds, query_mask)
+        (pred_logits, image_class_embeds) = self.class_head(image_feats, query_embeds, query_mask)
 
         return (pred_logits, image_class_embeds)
 
     def image_embedder(self, pixel_values: torch.FloatTensor) -> torch.FloatTensor:
         # Returns a 2D map of image features.
-        (image_embeds, _) = self._embedder(pixel_values=pixel_values)
+        (image_embeds, _) = self.embedder(pixel_values=pixel_values)
 
         # Resize to [batch_size, num_patches, num_patches, hidden_size]
         new_size = (
@@ -1291,7 +1291,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
     ) -> torch.FloatTensor:
 
         # Returns text embeddings
-        (_, text_feats) = self._embedder(input_ids=input_ids, attention_mask=attention_mask)
+        (_, text_feats) = self.embedder(input_ids=input_ids, attention_mask=attention_mask)
 
         return text_feats
 
@@ -1343,8 +1343,9 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         Returns:
         Examples:
         ```python
-        >>> from PIL import Image
+        >>> torch.nn as nn
         >>> import requests
+        >>> from PIL import Image
         >>> from transformers import OwlViTProcessor, OwlViTForObjectDetection
         >>> model = OwlViTModel.from_pretrained("adirik/owlvit-base-patch32")
         >>> processor = OwlViTProcessor.from_pretrained("adirik/owlvit-base-patch32")
@@ -1354,8 +1355,15 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         ...     text=[["a photo of a cat", "a photo of a dog"]], images=image, return_tensors="pt"
         ... )
         >>> outputs = model(**inputs)
-        >>> pred_boxes = outputs.pred_boxes
-        >>> pred_logits = outputs.logits
+        >>> logits = outputs.logits # Prediction logits of shape [batch_size, num_patches, 4]
+        >>> boxes = outputs.boxes # Object box boundaries of shape # [batch_size, num_patches, 4]
+
+        >>> sigmoid = nn.Sigmoid()
+        >>> for i in range(batch_size): # Loop over sets of images and text queries
+        >>>     boxes = outputs["pred_boxes"][i]
+        >>>     logits = outputs["logits"][i]
+        >>>     scores = sigmoid(torch.max(logits, dim=-1).values)
+        >>>     labels = logits.indices
         ```"""
         # Embed images
         feature_map = self.image_embedder(pixel_values)

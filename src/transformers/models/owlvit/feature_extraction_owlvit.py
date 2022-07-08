@@ -163,7 +163,7 @@ class OwlViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin
             images = [images]
 
         # PIL images are automatically scaled, scale numpy arrays and torch tensors if rescale is True
-        if rescale:
+        if self.rescale:
             if isinstance(images[0], np.ndarray):
                 images = [image.astype(np.float32) / 255.0 for image in images]
             elif is_torch_tensor(images[0]):

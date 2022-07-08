@@ -554,10 +554,8 @@ class OwlViTTextModelTest(ModelTesterMixin, unittest.TestCase):
                 self.assertIsNotNone(attentions.grad)
 
     def test_feed_forward_chunking(self):
-        (
-            original_config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
         for model_class in self.all_model_classes:
             torch.manual_seed(0)
             config = copy.deepcopy(original_config)
