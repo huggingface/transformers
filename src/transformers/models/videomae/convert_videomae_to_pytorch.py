@@ -123,10 +123,6 @@ def convert_state_dict(orig_state_dict, config):
                     orig_state_dict[f"{prefix}{layer_num}.attention.attention.query.weight"] = val[:dim, :]
                     orig_state_dict[f"{prefix}{layer_num}.attention.attention.key.weight"] = val[dim : dim * 2, :]
                     orig_state_dict[f"{prefix}{layer_num}.attention.attention.value.weight"] = val[-dim:, :]
-                # elif "bias" in key:
-                #     orig_state_dict[f"{prefix}{layer_num}.attention.attention.query.bias"] = val[:dim]
-                #     orig_state_dict[f"{prefix}{layer_num}.attention.attention.key.bias"] = val[dim : dim * 2]
-                #     orig_state_dict[f"{prefix}{layer_num}.attention.attention.value.bias"] = val[-dim:]
             else:
                 dim = config.hidden_size
                 layer_num = int(key_split[1])
@@ -135,12 +131,6 @@ def convert_state_dict(orig_state_dict, config):
                     orig_state_dict[f"{prefix}{layer_num}.attention.attention.query.weight"] = val[:dim, :]
                     orig_state_dict[f"{prefix}{layer_num}.attention.attention.key.weight"] = val[dim : dim * 2, :]
                     orig_state_dict[f"{prefix}{layer_num}.attention.attention.value.weight"] = val[-dim:, :]
-                # elif "bias" in key:
-                #     print("hello we're here")
-                #     orig_state_dict[f"{prefix}{layer_num}.attention.attention.query.bias"] = val[:dim]
-                #     orig_state_dict[f"{prefix}{layer_num}.attention.attention.key.bias"] = val[dim : dim * 2]
-                #     orig_state_dict[f"{prefix}{layer_num}.attention.attention.value.bias"] = val[-dim:]
-
         else:
             orig_state_dict[rename_key(key)] = val
 
