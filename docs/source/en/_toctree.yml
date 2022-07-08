@@ -102,7 +102,7 @@
   - local: add_new_model
     title: How to add a model to 🤗 Transformers?
   - local: add_new_pipeline
-    title: How to add a pipeline to 🤗 Transformers?
+    title: How to create a custom pipeline?
   - local: testing
     title: Testing
   - local: pr_checks
