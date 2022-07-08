@@ -67,27 +67,13 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - restore_cache:
-                  keys:
-                      - v0.4-torch_examples-{{ checksum "setup.py" }}
-                      - v0.4-{{ checksum "setup.py" }}
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,sentencepiece,testing,torch-speech]
             - run: pip install -r examples/pytorch/_tests_requirements.txt
-            - save_cache:
-                  key: v0.4-torch_examples-{{ checksum "setup.py" }}
-                  paths:
-                      - '~/.cache/pip'
             - run: python utils/tests_fetcher.py --filters examples tests | tee test_preparation.txt
-            - store_artifacts:
-                  path: ~/transformers/test_preparation.txt
             - run: |
                     python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/test_pytorch_examples.py -k "(test_run_111_audio_classification or test_run_222_clm)" | tee tests_output.txt
-            - store_artifacts:
-                  path: ~/transformers/examples_output.txt
-            - store_artifacts:
-                  path: ~/transformers/reports
 
 workflow_filters: &workflow_filters
     filters:
