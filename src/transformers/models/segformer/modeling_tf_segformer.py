@@ -858,6 +858,10 @@ class TFSegformerForSemanticSegmentation(TFSegformerPreTrainedModel):
             else:
                 loss = self.hf_compute_loss(logits=logits, labels=labels)
 
+        # make logits of shape (batch_size, num_labels, height, width) to
+        # keep them consistent across APIs
+        logits = tf.transpose(logits, perm=[0, 3, 1, 2])
+
         if not return_dict:
             if output_hidden_states:
                 output = (logits,) + outputs[1:]
@@ -865,9 +869,6 @@ class TFSegformerForSemanticSegmentation(TFSegformerPreTrainedModel):
                 output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        # make logits of shape (batch_size, num_labels, height, width) to
-        # keep them consistent across APIs
-        logits = tf.transpose(logits, perm=[0, 3, 1, 2])
         return TFSemanticSegmenterOutput(
             loss=loss,
             logits=logits,
