@@ -780,10 +780,8 @@ class TFSegformerForSemanticSegmentation(TFSegformerPreTrainedModel):
 
     def hf_compute_loss(self, logits, labels):
         # upsample logits to the images' original size
-        if len(shape_list(labels)) > 3:
-            label_interp_shape = shape_list(labels)[1:-1]
-        else:
-            label_interp_shape = shape_list(labels)[-2:]
+        # `labels` is of shape (batch_size, height, width)
+        label_interp_shape = shape_list(labels)[1:]
 
         upsampled_logits = tf.image.resize(logits, size=label_interp_shape, method="bilinear")
         # compute weighted loss
