@@ -160,12 +160,7 @@ class BloomConfig(PretrainedConfig):
         self.torch_dtype = torch_dtype
         self.slow_but_exact = slow_but_exact
 
-        super().__init__(
-            bos_token_id=bos_token_id, 
-            eos_token_id=eos_token_id, 
-            torch_dtype=torch_dtype, 
-            **kwargs
-        )
+        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, torch_dtype=torch_dtype, **kwargs)
 
 
 class BloomOnnxConfig(OnnxConfigWithPast):

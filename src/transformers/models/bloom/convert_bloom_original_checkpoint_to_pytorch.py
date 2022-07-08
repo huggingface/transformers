@@ -79,10 +79,10 @@ def get_dtype_size(dtype):
 
 
 def convert_bloom_checkpoint_to_pytorch(
-    bloom_checkpoint_path, 
-    bloom_config_file, 
-    pytorch_dump_folder_path, 
-    shard_model, 
+    bloom_checkpoint_path,
+    bloom_config_file,
+    pytorch_dump_folder_path,
+    shard_model,
     pretraining_tp,
 ):
     # Construct model
