@@ -133,6 +133,7 @@ def find_code_in_transformers(object_name):
 
 _re_copy_warning = re.compile(r"^(\s*)#\s*Copied from\s+transformers\.(\S+\.\S+)\s*($|\S.*$)")
 _re_replace_pattern = re.compile(r"^\s*(\S+)->(\S+)(\s+.*|$)")
+_re_fill_pattern = re.compile(r"<FILL\s+[^>]*>")
 
 
 def get_indent(code):
@@ -346,6 +347,11 @@ def convert_to_localized_md(model_list, localized_model_list, format_str):
             # Add an anchor white space behind a model description string for regex.
             # If metadata cannot be captured, the English version will be directly copied.
             localized_model_index[title] = _re_capture_meta.sub(_rep, model + " ")
+        elif _re_fill_pattern.search(localized_model_index[title]) is not None:
+            update = _re_capture_meta.sub(_rep, model + " ")
+            if update != localized_model_index[title]:
+                readmes_match = False
+                localized_model_index[title] = update
         else:
             # Synchronize link
             localized_model_index[title] = _re_capture_title_link.sub(
