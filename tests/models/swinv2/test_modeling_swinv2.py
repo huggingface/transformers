@@ -203,6 +203,7 @@ class Swinv2ModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester.check_config_can_be_init_without_params()
         self.config_tester.check_config_arguments_init()
 
+    @unittest.skip(reason="...")
     def create_and_test_config_common_properties(self):
         return
 
