@@ -58,11 +58,13 @@ from transformers.testing_utils import (
     slow,
 )
 from transformers.utils import logging as transformers_logging
+from transformers.utils.import_utils import is_torch_available
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
 
-from test_module.custom_pipeline import PairClassificationPipeline  # noqa E402
+if is_torch_available():
+    from test_module.custom_pipeline import PairClassificationPipeline  # noqa E402
 
 
 logger = logging.getLogger(__name__)
