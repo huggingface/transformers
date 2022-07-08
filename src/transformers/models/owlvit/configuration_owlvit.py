@@ -33,15 +33,19 @@ OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class OwlViTTextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`OwlViTModel`]. It is used to instantiate an OwlViT model according to the specified arguments, defining the model architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the OwlViT [adirik/owlvit-base-patch32](https://huggingface.co/adirik/owlvit-base-patch32) architecture.
+    This is the configuration class to store the configuration of a [`OwlViTModel`]. It is used to instantiate an
+    OwlViT model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the OwlViT
+    [adirik/owlvit-base-patch32](https://huggingface.co/adirik/owlvit-base-patch32) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
         vocab_size (`int`, *optional*, defaults to 49408):
-            Vocabulary size of the OwlViT text model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`OwlViTModel`].
+            Vocabulary size of the OWL-ViT text model. Defines the number of different tokens that can be represented
+            by the `inputs_ids` passed when calling [`OwlViTModel`].
         hidden_size (`int`, *optional*, defaults to 512):
             Dimensionality of the encoder layers and the pooler layer.
         intermediate_size (`int`, *optional*, defaults to 2048):
@@ -63,7 +67,7 @@ class OwlViTTextConfig(PretrainedConfig):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float``, *optional*, defaults to 1):
+        initializer_factor (`float`, *optional*, defaults to 1):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
 
@@ -137,9 +141,13 @@ class OwlViTTextConfig(PretrainedConfig):
 
 class OwlViTVisionConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of an [`OwlViTVisionModel`]. It is used to instantiate an OWL-ViT image encoder according to the specified arguments, defining the model architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the OWL-ViT [google/owlvit-base-patch32](https://huggingface.co/google/owlvit-base-patch32) architecture.
+    This is the configuration class to store the configuration of an [`OwlViTVisionModel`]. It is used to instantiate
+    an OWL-ViT image encoder according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the OWL-ViT
+    [google/owlvit-base-patch32](https://huggingface.co/google/owlvit-base-patch32) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
@@ -237,9 +245,12 @@ class OwlViTVisionConfig(PretrainedConfig):
 
 class OwlViTConfig(PretrainedConfig):
     r"""
-    [`OwlViTConfig`] is the configuration class to store the configuration of an [`OwlViTModel`]. It is used to instantiate an OWL-ViT model according to the specified arguments, defining the text model and vision model configs.
+    [`OwlViTConfig`] is the configuration class to store the configuration of an [`OwlViTModel`]. It is used to
+    instantiate an OWL-ViT model according to the specified arguments, defining the text model and vision model
+    configs.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         text_config_dict (`dict`, *optional*):
@@ -249,7 +260,8 @@ class OwlViTConfig(PretrainedConfig):
         projection_dim (`int`, *optional*, defaults to 512):
             Dimensionality of text and vision projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The inital value of the *logit_scale* parameter. Default is used as per the original OWL-ViT implementation.
+            The inital value of the *logit_scale* parameter. Default is used as per the original OWL-ViT
+            implementation.
         kwargs (*optional*):
             Dictionary of keyword arguments.
     """
@@ -292,8 +304,8 @@ class OwlViTConfig(PretrainedConfig):
     @classmethod
     def from_text_vision_configs(cls, text_config: OwlViTTextConfig, vision_config: OwlViTVisionConfig, **kwargs):
         r"""
-        Instantiate a [`OwlViTConfig`] (or a derived class) from owlvit text model configuration and owlvit vision model
-        configuration.
+        Instantiate a [`OwlViTConfig`] (or a derived class) from owlvit text model configuration and owlvit vision
+        model configuration.
 
         Returns:
             [`OwlViTConfig`]: An instance of a configuration object

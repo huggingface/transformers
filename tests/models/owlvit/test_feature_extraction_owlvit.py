@@ -108,7 +108,7 @@ class OwlViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Tes
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
         # create random PIL images
         image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False)
-        
+
         for image in image_inputs:
             self.assertIsInstance(image, Image.Image)
 

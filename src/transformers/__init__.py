@@ -275,9 +275,9 @@ _import_structure = {
     "models.owlvit": [
         "OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "OwlViTConfig",
+        "OwlViTProcessor",
         "OwlViTTextConfig",
         "OwlViTVisionConfig",
-        "OwlViTProcessor",
     ],
     "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
     "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
@@ -4032,12 +4032,12 @@ if TYPE_CHECKING:
         )
         from .models.opt import OPT_PRETRAINED_MODEL_ARCHIVE_LIST, OPTForCausalLM, OPTModel, OPTPreTrainedModel
         from .models.owlvit import (
-            OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST, 
+            OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            OwlViTForObjectDetection,
             OwlViTModel,
             OwlViTPreTrainedModel,
             OwlViTTextModel,
             OwlViTVisionModel,
-            OwlViTForObjectDetection,
         )
         from .models.pegasus import (
             PegasusForCausalLM,

@@ -27,10 +27,10 @@ from ...tokenization_utils_base import BatchEncoding
 
 class OwlViTProcessor(ProcessorMixin):
     r"""
-    Constructs an OWL-ViT processor which wraps [`OwlViTFeatureExtractor`] and [`CLIPTokenizer`]/[`CLIPTokenizerFast`] into a single
-    processor that interits both the feature extractor and tokenizer functionalities. See the [`~OwlViTProcessor.__call__`] and
-    [`~OwlViTProcessor.decode`] for more information.
     Args:
+    Constructs an OWL-ViT processor which wraps [`OwlViTFeatureExtractor`] and [`CLIPTokenizer`]/[`CLIPTokenizerFast`]
+    into a single processor that interits both the feature extractor and tokenizer functionalities. See the
+    [`~OwlViTProcessor.__call__`] and [`~OwlViTProcessor.decode`] for more information.
         feature_extractor ([`OwlViTFeatureExtractor`]):
             The feature extractor is a required input.
         tokenizer ([`CLIPTokenizer`, `CLIPTokenizerFast`]):
@@ -44,17 +44,18 @@ class OwlViTProcessor(ProcessorMixin):
 
     def __call__(self, text=None, images=None, return_tensors=None, **kwargs):
         """
+        Args:
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to CLIPTokenizerFast's [`~CLIPTokenizerFast.__call__`] if `text` is not `None` to encode
+        and `kwargs` arguments to CLIPTokenizerFast's [`~CLIPTokenizerFast.__call__`] if `text` is not `None` to encode:
         the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
         CLIPFeatureExtractor's [`~CLIPFeatureExtractor.__call__`] if `images` is not `None`. Please refer to the
         doctsring of the above two methods for more information.
-        Args:
             text (`str`, `List[str]`, `List[List[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`,
+            `List[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
@@ -89,7 +90,7 @@ class OwlViTProcessor(ProcessorMixin):
                 # Pad all batch samples to max number of text queries
                 for t in text:
                     if len(t) != max_num_queries:
-                        t = t + [""]*(max_num_queries - len(t))
+                        t = t + [""] * (max_num_queries - len(t))
                         encoding = self.tokenizer(t, return_tensors=return_tensors, **kwargs)
                         encodings.append(encoding)
                     else:

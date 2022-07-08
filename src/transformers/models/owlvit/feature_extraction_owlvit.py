@@ -17,14 +17,16 @@
 from typing import List, Optional, Union
 
 import numpy as np
-import torch
-import torch.nn as nn
 from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
-from ...utils import TensorType, logging
+from ...utils import TensorType, is_torch_available, logging
 
+
+if is_torch_available():
+    import torch
+    from torch import nn
 
 logger = logging.get_logger(__name__)
 
@@ -33,11 +35,11 @@ logger = logging.get_logger(__name__)
 def center_to_corners_format(x):
     """
     Converts a PyTorch tensor of bounding boxes of center format (center_x, center_y, width, height) to corners format
-    (x_0, y_0, x_1, y_1).
+    (left, top, right, bottom).
     """
-    x_c, y_c, w, h = x.unbind(-1)
-    b = [(x_c - 0.5 * w), (y_c - 0.5 * h), (x_c + 0.5 * w), (y_c + 0.5 * h)]
-    return torch.stack(b, dim=-1)
+    x_center, y_center, width, height = x.unbind(-1)
+    boxes = [(x_center - 0.5 * width), (y_center - 0.5 * height), (x_center + 0.5 * width), (y_center + 0.5 * height)]
+    return torch.stack(boxes, dim=-1)
 
 
 class OwlViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
@@ -68,9 +70,10 @@ class OwlViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin
         image_std (`List[int]`, defaults to `[0.229, 0.224, 0.225]`):
             The sequence of standard deviations for each channel, to be used when normalizing images.
         rescale (`bool`, defaults to `True`):
-            Whether or not to rescale input images to between 0-1 range. `PIL.Image.Image` inputs are automatically scaled.
+            Whether or not to rescale input images to between 0-1 range. `PIL.Image.Image` inputs are automatically
+            scaled.
         do_convert_rgb (`bool`, defaults to `True`):
-            Whether or not to convert `PIL.Image.Image` into `RGB` format
+            Whether or not to convert `PIL.Image.Image` into `RGB` format.
     """
 
     model_input_names = ["pixel_values"]
@@ -100,6 +103,44 @@ class OwlViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin
         self.image_std = image_std if image_std is not None else [0.26862954, 0.26130258, 0.27577711]
         self.rescale = rescale
         self.do_convert_rgb = do_convert_rgb
+
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.post_process
+    def post_process(self, outputs, target_sizes):
+        """
+        Converts the output of [`OwlViTForObjectDetection`] into the format expected by the COCO api.
+
+        Args:
+            outputs ([`OwlViTObjectDetectionOutput`]):
+                Raw outputs of the model.
+            target_sizes (`torch.Tensor` of shape `(batch_size, 2)`):
+                Tensor containing the size (h, w) of each image of the batch. For evaluation, this must be the original
+                image size (before any data augmentation). For visualization, this should be the image size after data
+                augment, but before padding.
+        Returns:
+            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
+            in the batch as predicted by the model.
+        """
+        out_logits, out_bbox = outputs.logits, outputs.pred_boxes
+
+        if len(out_logits) != len(target_sizes):
+            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
+        if target_sizes.shape[1] != 2:
+            raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
+
+        prob = nn.functional.softmax(out_logits, -1)
+        scores, labels = prob[..., :-1].max(-1)
+
+        # Convert to [x0, y0, x1, y1] format
+        boxes = center_to_corners_format(out_bbox)
+
+        # Convert from relative [0, 1] to absolute [0, height] coordinates
+        img_h, img_w = target_sizes.unbind(1)
+        scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
+        boxes = boxes * scale_fct[:, None, :]
+
+        results = [{"scores": s, "labels": l, "boxes": b} for s, l, b in zip(scores, labels, boxes)]
+
+        return results
 
     def __call__(
         self,

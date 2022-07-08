@@ -40,18 +40,20 @@ The [`OwlViTFeatureExtractor`] can be used to resize (or rescale) and normalize 
 >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 >>> image = Image.open(requests.get(url, stream=True).raw)
 
->>> inputs = processor(text=[["a photo of a cat", "a photo of a dog"]], images=image, return_tensors="pt", padding=True)
+>>> inputs = processor(
+...     text=[["a photo of a cat", "a photo of a dog"]], images=image, return_tensors="pt", padding=True
+... )
 
 >>> outputs = model(**inputs)
->>> logits = outputs.logits # Prediction logits of shape [batch_size, num_patches, 4]
->>> boxes = outputs.boxes # Object box boundaries of shape # [batch_size, num_patches, 4]
+>>> logits = outputs.logits  # Prediction logits of shape [batch_size, num_patches, 4]
+>>> boxes = outputs.boxes  # Object box boundaries of shape # [batch_size, num_patches, 4]
 
 >>> sigmoid = nn.Sigmoid()
->>> for i in range(batch_size): # Loop over sets of images and text queries
->>>     boxes = outputs["pred_boxes"][i]
->>>     logits = outputs["logits"][i]
->>>     scores = sigmoid(torch.max(logits, dim=-1).values)
->>>     labels = logits.indices
+>>> for i in range(batch_size):  # Loop over sets of images and text queries
+...     boxes = outputs["pred_boxes"][i]
+...     logits = outputs["logits"][i]
+...     scores = sigmoid(torch.max(logits, dim=-1).values)
+...     labels = logits.indices
 ```
 
 This model was contributed by [adirik](https://huggingface.co/adirik). The original code can be found [here](https://github.com/google-research/scenic/tree/a41d24676f64a2158bfcd7cb79b0a87673aa875b/scenic/projects/owl_vit).
