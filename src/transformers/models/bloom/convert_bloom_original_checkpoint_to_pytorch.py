@@ -78,13 +78,7 @@ def get_dtype_size(dtype):
     return bit_size // 8
 
 
-def convert_bloom_checkpoint_to_pytorch(
-    bloom_checkpoint_path,
-    bloom_config_file,
-    pytorch_dump_folder_path,
-    shard_model,
-    pretraining_tp,
-):
+def convert_bloom_checkpoint_to_pytorch(bloom_checkpoint_path, bloom_config_file, pytorch_dump_folder_path, shard_model, pretraining_tp):
     # Construct model
     if bloom_config_file == "":
         config = BloomConfig()
