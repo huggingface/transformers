@@ -138,7 +138,9 @@ class BloomConfig(PretrainedConfig):
         **kwargs,
     ):
         self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
+        # Backward compatibility with n_embed kwarg
+        n_embed = kwargs.pop("n_embed", None)
+        self.hidden_size = hidden_size if n_embed is None else n_embed
         self.n_layer = n_layer
         self.n_head = n_head
         self.masked_softmax_fusion = masked_softmax_fusion
