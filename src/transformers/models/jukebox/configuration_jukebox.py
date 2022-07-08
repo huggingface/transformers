@@ -198,7 +198,7 @@ class JukeboxConfig(PretrainedConfig):
         cond_dilation_growth_rate=[1, 3, 3],
         cond_dilation_cycle=[None, 8, 8],
         cond_c_res=[0, 1, 1],
-        cond_res_scale=False,
+        cond_res_scale=[None,True, False],
         prime_width=[128, 128, 128],
         prime_depth=[18, 3, 3],
         prime_cond_c_res=[0, 1, 1],

@@ -73,6 +73,7 @@ def get_relevant_lyric_tokens(full_tokens, max_n_lyric_tokens, total_length, off
             Expected duration of the generated music, in samples. The duration has to be smaller than the total lenght,
             which represent the overall length of the signal,
     """
+    full_tokens = full_tokens[0]
     if len(full_tokens) < max_n_lyric_tokens:
         tokens = [0] * (max_n_lyric_tokens - len(full_tokens)) + full_tokens
         indices = [-1] * (max_n_lyric_tokens - len(full_tokens)) + list(range(0, len(full_tokens)))
@@ -84,8 +85,8 @@ def get_relevant_lyric_tokens(full_tokens, max_n_lyric_tokens, total_length, off
         indices = list(range(midpoint - max_n_lyric_tokens // 2, midpoint + max_n_lyric_tokens // 2))
     assert len(tokens) == max_n_lyric_tokens, f"Expected length {max_n_lyric_tokens}, got {len(tokens)}"
     assert len(indices) == max_n_lyric_tokens, f"Expected length {max_n_lyric_tokens}, got {len(indices)}"
-    assert tokens == [full_tokens[index] if index != -1 else 0 for index in indices]
-    return tokens, indices
+    # assert tokens == [full_tokens[index] if index != -1 else 0 for index in indices]
+    return tokens.unsqueeze(dim=0), indices
 
 
 class JukeboxTokenizer(PreTrainedTokenizer):
@@ -283,7 +284,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
                     "_"
                 )  # split is for the full dictionnary with combined genres
 
-        if self.version[idx] == "v3":
+        if self.version[idx] == "v2":
             self.out_of_vocab = re.compile("[^A-Za-z0-9.,:;!?\-'\"()\[\] \t\n]+")
             vocab = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,:;!?-+'\"()[] \t\n"
             self.vocab = {vocab[index]: index + 1 for index in range(len(vocab))}
@@ -352,14 +353,15 @@ class JukeboxTokenizer(PreTrainedTokenizer):
 
         attention_masks = [-INFINITY] * len(full_tokens[-1])
         # TODO properly handle the return pt tensor option
+        input_ids = [torch.tensor([input_ids + [artists_id[i]] + genres_ids[i] + full_tokens[i]])for i in range(len(self.version))]
         if return_tensor == "pt":
-            return [
-                {
-                    "input_ids": input_ids + [artists_id[i]] + genres_ids[i] + full_tokens[i],
+            # TODO use BatchEncoding to support
+            
+            return {
+                    "input_ids": input_ids,
                     "attention_masks": torch.tensor(attention_masks),
                 }
-                for i in range(len(self.version))
-            ]
+                
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         """

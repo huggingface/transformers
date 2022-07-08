@@ -61,7 +61,7 @@ def empty_cache():
 
 import sys
 
-import tqdm
+from tqdm import tqdm
 
 
 def get_range(x):
@@ -186,13 +186,19 @@ class Resnet1D(nn.Module):
             )
             for depth in range(n_depth)
         ]
+        self.checkpoint_res = checkpoint_res
         if reverse_dilation:
             blocks = blocks[::-1]
-
-        # TODO remvove the sequential in favor of a more understanble code
-        self.model = nn.Sequential(*blocks)
+        if self.checkpoint_res == 1:
+            self.blocks = nn.ModuleList(blocks)
+        else:
+            self.model = nn.Sequential(*blocks)
 
     def forward(self, x):
+        if self.checkpoint_res == 1:
+            for block in self.blocks:
+                x = block(x)
+            return x
         return self.model(x)
 
 
@@ -255,20 +261,8 @@ class DecoderConvBock(nn.Module):
             blocks.append(block)
             for i in range(down_t):
                 block = nn.Sequential(
-                    Resnet1D(
-                        width,
-                        depth,
-                        m_conv,
-                        dilation_growth_rate,
-                        dilation_cycle,
-                        zero_out=zero_out,
-                        res_scale=res_scale,
-                        reverse_dilation=reverse_decoder_dilation,
-                        checkpoint_res=checkpoint_res,
-                    ),
-                    nn.ConvTranspose1d(
-                        width, input_emb_width if i == (down_t - 1) else width, filter_t, stride_t, pad_t
-                    ),
+                    Resnet1D(width, depth, m_conv, dilation_growth_rate, dilation_cycle, zero_out=zero_out, res_scale=res_scale, reverse_dilation=reverse_decoder_dilation, checkpoint_res=checkpoint_res),
+                    nn.ConvTranspose1d(width, input_emb_width if i == (down_t - 1) else width, filter_t, stride_t, pad_t)
                 )
                 blocks.append(block)
         self.model = nn.Sequential(*blocks)
@@ -1924,25 +1918,25 @@ class JukeboxConditionalAutoregressive(nn.Module):
         # assert isinstance(x, torch.cuda.LongTensor)
         # assert (0 <= x).all() and (x < self.bins).all()
 
-        # if self.y_cond:
-        #     assert y_cond is not None
-        #     assert y_cond.shape == (N, 1, self.width)
-        # else:
-        #     assert y_cond is None
+        if self.y_cond:
+            assert y_cond is not None
+            assert y_cond.shape == (N, 1, self.width)
+        else:
+            assert y_cond is None
 
-        # if self.x_cond:
-        #     assert x_cond is not None
-        #     assert x_cond.shape == (N, D, self.width) or x_cond.shape == (
-        #         N,
-        #         1,
-        #         self.width,
-        #     ), (
-        #         f"{x_cond.shape} != {(N, D, self.width)} nor {(N, 1, self.width)}. Did you pass the correct"
-        #         " --sample_length?"
-        #     )
-        # else:
-        #     assert x_cond is None
-        #     x_cond = torch.zeros((N, 1, self.width), device=x.device, dtype=torch.float)
+        if self.x_cond:
+            assert x_cond is not None
+            assert x_cond.shape == (N, D, self.width) or x_cond.shape == (
+                N,
+                1,
+                self.width,
+            ), (
+                f"{x_cond.shape} != {(N, D, self.width)} nor {(N, 1, self.width)}. Did you pass the correct"
+                " --sample_length?"
+            )
+        else:
+            assert x_cond is None
+            x_cond = torch.zeros((N, 1, self.width), device=x.device, dtype=torch.float)
 
         x_t = x  # Target
         x = self.x_emb(x)  # X emb
@@ -2339,17 +2333,11 @@ class MusicTokenConditioner(nn.Module):
         return x
 
     def forward(self, x, x_cond=None):
-        # N = x.shape[0]
-        # assert_shape(x, (N, *self.x_shape))
-        if x_cond is not None:
-            # assert_shape(x_cond, (N, *self.x_shape, self.width))
-            pass
-        else:
-            x_cond = 0.0
+        if x_cond is None:
+           x_cond = 0.0
         # Embed x
         x = x.long()
         x = self.x_emb(x)
-        # assert_shape(x, (N, *self.x_shape, self.width))
         x = x + x_cond
 
         # Run conditioner
@@ -2590,7 +2578,7 @@ class JukeboxPrior(nn.Module):
             dilation_growth_rate=config.cond_dilation_growth_rate[-level - 1],
             dilation_cycle=config.cond_dilation_cycle[-level - 1],
             zero_out=config.cond_zero_out,
-            res_scale=config.cond_res_scale,
+            res_scale=config.cond_res_scale[-level - 1],
             checkpoint_res=config.cond_c_res[-level - 1],
         )  # have to keep this else names wrong
 
@@ -2700,7 +2688,7 @@ class JukeboxPrior(nn.Module):
         )
 
     def get_y(self, labels, start, total_length, get_indices=False):
-        y = labels["input_ids"].clone()
+        y = labels.clone()
         # y = labels.clone()
         y[:, 0] = total_length
         # Set sample_length to match this level
@@ -2710,33 +2698,30 @@ class JukeboxPrior(nn.Module):
         y[:, 1:2] = y[:, 1:2] + int(start * self.raw_to_tokens)
         # here since y has the full token_list, ze just need to selected the ones that are relevant
 
-        y, indices = self.set_y_lyric_tokens(y, labels)
+        # Set lyric tokens
+        y, indices = self.set_y_lyric_tokens(y)
         if get_indices:
             return y, indices
         else:
             return y
 
-    def set_y_lyric_tokens(self, ys, labels):
+
+    def set_y_lyric_tokens(self, labels):
         # assert ys.shape[0] == len(labels)
         if self.n_tokens > 0:
             # total_length, offset, duration):
-            tokens_list = []
+            tokens_list = torch.zeros((1,self.n_tokens),dtype=torch.long)
             indices_list = []  # whats the index of each current character in original array
-            for i in range(ys.shape[0]):
-                full_tokens = labels["input_ids"]
-                total_length, offset, duration = ys[i, 0], ys[i, 1], ys[i, 2]
+            for i in range(labels.shape[0]):
+                full_tokens = labels.clone()[:,4 + self.y_emb.max_bow_genre_size:]
+                total_length, offset, duration = labels[i, 0], labels[i, 1], labels[i, 2]
                 tokens, indices = get_relevant_lyric_tokens(full_tokens, self.n_tokens, total_length, offset, duration)
-                tokens_list.append(tokens)
+                tokens_list[i,:] = tokens
                 indices_list.append(indices)
-            ys[:, -self.n_tokens :] = torch.tensor(tokens_list, dtype=torch.long, device="cpu")
-            return [
-                total_length,
-                offset,
-                duration,
-                torch.tensor(tokens_list, dtype=torch.long, device="cpu"),
-            ], indices_list
+                
+            return torch.cat((labels[:, :4 + self.y_emb.max_bow_genre_size],tokens_list),dim=-1), indices_list
         else:
-            return None
+            return labels, None
 
     def get_z_conds(self, zs, start, end):
         if self.level != self.levels - 1:
@@ -3146,7 +3131,7 @@ def get_alignment(x, zs, labels, prior, level, fp16, hps):
     alignments = []
     for item in range(bs):
         # Note each item has different length lyrics
-        full_tokens = labels["input_ids"][:, 3:]
+        full_tokens = labels[:, 3:]
         alignment = np.zeros((total_length, len(full_tokens) + 1))
         for start in reversed(get_starts(total_length, n_ctx, hop_length)):
             end = start + n_ctx
@@ -3197,7 +3182,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         n_samples = hps.n_samples
         n_ctx = prior.n_ctx
         end = start + n_ctx
-        total_length = sampling_kwargs.totat_length  # this is new, but makes way more sens than having it inside
+        
         # the tokenizer, as [total_length, offset, sample_length] can be written on the fly and changed without changing the
         # lyric tokens.
         # get z already sampled at current level
@@ -3224,7 +3209,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         # if there are no levels above should return None!
 
         # set y offset, sample_length and lyrics okens
-        y = prior.get_y(labels, start, total_length)
+        y = prior.get_y(labels, start, self.total_length)
 
         empty_cache()
         max_batch_size = 2
@@ -3262,10 +3247,12 @@ class JukeboxModel(JukeboxPreTrainedModel):
 
     # Sample multiple levels
     def _sample(self, zs, labels, sampling_kwargs, sample_levels, hps):
+        
         alignments = None
         for level in reversed(sample_levels):
+            self.total_length = sampling_kwargs[level].pop('total_length') 
             prior = self.priors[level]
-            prior = prior.to(zs[0].device)
+            prior = prior.to(zs[0].device).eval()
             empty_cache()
 
             # Set correct total_length, hop_length, labels and sampling_kwargs for level
@@ -3277,7 +3264,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
 
             zs = self.sample_level(zs, labels[level], sampling_kwargs[level], level, total_length, hop_length, hps)
 
-            prior.to(zs[0].device)
+            prior.to(zs[-1].device)
             empty_cache()
 
             # Decode sample
