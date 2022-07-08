@@ -327,10 +327,10 @@ class FeaturesManager:
         "longformer": supported_features_mapping(
             "default",
             "masked-lm",
-            "sequence-classification",
             "multiple-choice",
-            "token-classification",
             "question-answering",
+            "sequence-classification",
+            "token-classification",
             onnx_config_cls="models.longformer.LongformerOnnxConfig",
         ),
         "marian": supported_features_mapping(

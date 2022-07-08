@@ -16,7 +16,6 @@
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, List, Mapping, Optional, Union
 
-from ... import PreTrainedTokenizer
 from ...onnx import OnnxConfig
 from ...utils import TensorType, logging
 from ..roberta.configuration_roberta import RobertaConfig
@@ -25,6 +24,7 @@ from ..roberta.configuration_roberta import RobertaConfig
 if TYPE_CHECKING:
     from ...configuration_utils import PretrainedConfig
     from ...onnx.config import PatchingSpec
+    from ...tokenization_utils_base import PreTrainedTokenizerBase
 
 
 logger = logging.get_logger(__name__)
@@ -130,7 +130,7 @@ class LongformerOnnxConfig(OnnxConfig):
 
     def generate_dummy_inputs(
         self,
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: "PreTrainedTokenizerBase",
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
