@@ -33,6 +33,9 @@ else:
     is_amp_available = False
 
 import gc
+import sys
+
+from tqdm import tqdm
 
 from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
@@ -57,11 +60,6 @@ JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST = [
 def empty_cache():
     gc.collect()
     torch.cuda.empty_cache()
-
-
-import sys
-
-from tqdm import tqdm
 
 
 def get_range(x):
@@ -439,7 +437,7 @@ class BottleneckBlock(nn.Module):
         self.k_elem = torch.ones(k_bins, device=self.k.device)
 
     def restore_k(self, num_tokens=None, threshold=1.0):
-        emb_width, k_bins = self.emb_width, self.k_bins  # mu -> _
+        k_bins = self.k_bins  # mu -> _
         self.init = True
         self.k_sum = self.k.clone()
         self.k_elem = torch.ones(k_bins, device=self.k.device)
