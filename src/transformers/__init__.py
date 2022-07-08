@@ -759,10 +759,6 @@ else:
     _import_structure["models.time_series_transformer"].extend(
         [
             "TIME_SERIES_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TimeSeriesTransformerForCausalLM",
-            "TimeSeriesTransformerForConditionalGeneration",
-            "TimeSeriesTransformerForQuestionAnswering",
-            "TimeSeriesTransformerForSequenceClassification",
             "TimeSeriesTransformerForPrediction",
             "TimeSeriesTransformerModel",
             "TimeSeriesTransformerPreTrainedModel",
