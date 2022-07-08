@@ -806,12 +806,12 @@ class Pipeline(_ScikitCompat):
                 info = info.copy()
                 module_name = info["impl"].__module__
                 last_module = module_name.split(".")[-1]
-                # Checnge classes into their names/full names
+                # Change classes into their names/full names
                 info["impl"] = f"{last_module}.{info['impl'].__name__}"
                 info["pt"] = tuple(c.__name__ for c in info["pt"])
                 info["tf"] = tuple(c.__name__ for c in info["tf"])
 
-                custom_pipelines["task"] = info
+                custom_pipelines[task] = info
             self.model.config.custom_pipelines = custom_pipelines
             # Save the pipeline custom code
             custom_object_save(self, save_directory)
@@ -1172,7 +1172,7 @@ class PipelineRegistry:
             task_impl["type"] = type
 
         self.supported_tasks[task] = task_impl
-        pipeline_class._registered_impl = {"task": task_impl}
+        pipeline_class._registered_impl = {task: task_impl}
 
     def to_dict(self):
         return self.supported_tasks
