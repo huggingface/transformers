@@ -81,9 +81,6 @@ class BloomConfig(PretrainedConfig):
             Dropout rate applied to the attention probs
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        torch_dtype (`str`, *optional*, defaults to `"bfloat16"`):
-            Precision that has been used for the model's training in Megatron. Please load the model in the correct
-            precision by doing `model = BloomModel.from_pretrained(model_name, torch_dtype="auto")`.`
         pretraining_tp (`int`, *optional*, defaults to `1`):
             Experimental feature. Tensor parallelism rank used during pretraining with Megatron. Please refer to [this
             document](https://huggingface.co/docs/transformers/parallelism) to understand more about it. This value is
@@ -137,7 +134,6 @@ class BloomConfig(PretrainedConfig):
         attention_dropout=0.0,
         attention_softmax_in_fp32=True,
         pretraining_tp=1,  # TP rank used when training with megatron
-        torch_dtype="bfloat16",
         slow_but_exact=False,
         **kwargs,
     ):
@@ -157,10 +153,9 @@ class BloomConfig(PretrainedConfig):
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
-        self.torch_dtype = torch_dtype
         self.slow_but_exact = slow_but_exact
 
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, torch_dtype=torch_dtype, **kwargs)
+        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
 
 class BloomOnnxConfig(OnnxConfigWithPast):
