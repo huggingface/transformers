@@ -862,6 +862,7 @@ jobs:
             - run: python utils/sort_auto_mappings.py --check_only
             - run: flake8 examples tests src utils
             - run: doc-builder style src/transformers docs/source --max_len 119 --check_only --path_to_docs docs/source
+            - run: python utils/check_doc_toc.py
 
     check_repository_consistency:
         working_directory: ~/transformers
