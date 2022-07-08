@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Testing suite for the PyTorch Swinv2 model. """
-
+import collections
 import copy
 import inspect
 import unittest
@@ -31,7 +31,7 @@ if is_torch_available():
     from torch import nn
 
     from transformers import Swinv2ForImageClassification, Swinv2ForMaskedImageModeling, Swinv2Model
-    from transformers.models.swinv2.modeling_swinv2 import SWINV2_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
+    from transformers.models.swinv2.modeling_swinv2 import SWINV2_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
     from PIL import Image
@@ -302,7 +302,11 @@ class Swinv2ModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(len(hidden_states), expected_num_layers)
 
         # Swinv2 has a different seq_length
-        patch_size = to_2tuple(config.patch_size)
+        patch_size = (
+            config.patch_size
+            if isinstance(config.patch_size, collections.abc.Iterable)
+            else (config.patch_size, config.patch_size)
+        )
 
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
 
@@ -326,7 +330,11 @@ class Swinv2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_hidden_states_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        image_size = to_2tuple(self.model_tester.image_size)
+        image_size = (
+            self.model_tester.image_size
+            if isinstance(self.model_tester.image_size, collections.abc.Iterable)
+            else (self.model_tester.image_size, self.model_tester.image_size)
+        )
 
         for model_class in self.all_model_classes:
             inputs_dict["output_hidden_states"] = True
@@ -342,8 +350,16 @@ class Swinv2ModelTest(ModelTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.patch_size = 3
 
-        image_size = to_2tuple(self.model_tester.image_size)
-        patch_size = to_2tuple(config.patch_size)
+        image_size = (
+            self.model_tester.image_size
+            if isinstance(self.model_tester.image_size, collections.abc.Iterable)
+            else (self.model_tester.image_size, self.model_tester.image_size)
+        )
+        patch_size = (
+            config.patch_size
+            if isinstance(config.patch_size, collections.abc.Iterable)
+            else (config.patch_size, config.patch_size)
+        )
 
         padded_height = image_size[0] + patch_size[0] - (image_size[0] % patch_size[0])
         padded_width = image_size[1] + patch_size[1] - (image_size[1] % patch_size[1])
