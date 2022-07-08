@@ -1101,7 +1101,7 @@ def add_code_sample_docstrings(
             code_sample = sample_docstrings["MultipleChoice"]
         elif "MaskedLM" in model_class or model_class in ["FlaubertWithLMHeadModel", "XLMWithLMHeadModel"]:
             code_sample = sample_docstrings["MaskedLM"]
-        elif "LMHead" in model_class or "CausalLM" in model_class:
+        elif "LMHead" in model_class or "CausalLM" in model_class or "PrefixLM" in model_class:
             code_sample = sample_docstrings["LMHead"]
         elif "CTC" in model_class:
             code_sample = sample_docstrings["CTC"]

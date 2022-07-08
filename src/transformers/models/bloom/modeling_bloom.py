@@ -101,7 +101,8 @@ def build_alibi_tensor(max_seq_len, n_head, dtype=torch.bfloat16):
     Link to paper: https://arxiv.org/abs/2108.12409 Alibi tensor is not causal as the original paper mentions, it
     relies on a translation invariance of softmax for quick implementation: with l being a tensor, and a fixed value
     `softmax(l+a) = softmax(l)`. Based on
-    https://github.com/ofirpress/attention_with_linear_biases/blob/a35aaca144e0eb6b789dfcb46784c4b8e31b7983/fairseq/models/transformer.py#L742
+    https:
+        //github.com/ofirpress/attention_with_linear_biases/blob/a35aaca144e0eb6b789dfcb46784c4b8e31b7983/fairseq/models/transformer.py#L742
     Returns tensor shaped (n_head, 1, max_seq_len)
         max_seq_len: (`int`, *required*):
             max sequence length
@@ -192,7 +193,7 @@ def dropout_add(x, residual, prob, training):
 def bloom_gelu_forward(x):
     """
     Args:
-    Custom bias GELU function. Adapted from Megatron-DeepSpeed code. Here we use a simple implementation (inference) to
+    Custom bias GELU function. Adapted from Megatron-DeepSpeed code. Here we use a simple implementation (inference) to:
     make the model jitable.
         x (`torch.tensor`, *required*):
             input hidden states
@@ -608,9 +609,9 @@ class BloomPreTrainedModel(PreTrainedModel):
 BLOOM_START_DOCSTRING = r"""
     Parameters:
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings etc.) This model
+    library implements for all its model (such as downloading or saving, resizing the input embeddings etc.) This model:
     is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it as a
-    regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and behavior.
+    regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and behavior.:
         config ([`BloomConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -1022,13 +1023,13 @@ class BloomForPrefixLM(BloomPreTrainedModel):
             "custom_mask": self.custom_mask,
         }
 
-    # @add_start_docstrings_to_model_forward(BLOOM_INPUTS_DOCSTRING)
-    # @add_code_sample_docstrings(
-    #     processor_class=_TOKENIZER_FOR_DOC,
-    #     checkpoint=_CHECKPOINT_FOR_DOC,
-    #     output_type=CausalLMOutputWithCrossAttentions,
-    #     config_class=_CONFIG_FOR_DOC,
-    # )
+    @add_start_docstrings_to_model_forward(BLOOM_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        processor_class=_TOKENIZER_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=CausalLMOutputWithCrossAttentions,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids=None,

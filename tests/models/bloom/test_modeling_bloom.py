@@ -16,7 +16,6 @@
 
 import math
 import unittest
-from builtins import NotImplementedError
 
 from transformers import BloomConfig, is_torch_available
 from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
