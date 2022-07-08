@@ -612,24 +612,23 @@ class TFEncoderDecoderMixin:
 
         # Make sure no sequence has all zeros as attention mask, otherwise some tests fail due to the inconsistency
         # of the usage `1e-4`, `1e-9`, `1e-30`, `-inf`.
-        for k in ["attention_mask", "encoder_attention_mask", "decoder_attention_mask"]:
-            if k in tf_inputs_dict:
-                attention_mask = tf_inputs_dict[k]
+        for k in ["attention_mask", "decoder_attention_mask"]:
+            attention_mask = tf_inputs_dict[k]
 
-                # Make sure no all 0s attention masks - to avoid failure at this moment.
-                # Put `1` at the beginning of sequences to make it still work when combining causal attention masks.
-                # TODO: remove this line once a fix regarding large negative values for attention mask is done.
-                attention_mask = tf.concat(
-                    [tf.ones_like(attention_mask[:, :1], dtype=attention_mask.dtype), attention_mask[:, 1:]], axis=-1
-                )
-                tf_inputs_dict[k] = attention_mask
+            # Make sure no all 0s attention masks - to avoid failure at this moment.
+            # Put `1` at the beginning of sequences to make it still work when combining causal attention masks.
+            # TODO: remove this line once a fix regarding large negative values for attention mask is done.
+            attention_mask = tf.concat(
+                [tf.ones_like(attention_mask[:, :1], dtype=attention_mask.dtype), attention_mask[:, 1:]], axis=-1
+            )
+            tf_inputs_dict[k] = attention_mask
 
         tf_inputs_dict_with_labels = copy.copy(tf_inputs_dict)
         tf_inputs_dict_with_labels["labels"] = labels
 
         self.assertTrue(decoder_config.cross_attention_hidden_size is None)
 
-        # # Original test: check without `labels` and  without `enc_to_dec_proj` projection
+        # Original test: check without `labels` and  without `enc_to_dec_proj` projection
         self.assertTrue(config.hidden_size == decoder_config.hidden_size)
         self.check_pt_to_tf_equivalence(config, decoder_config, tf_inputs_dict)
         self.check_tf_to_pt_equivalence(config, decoder_config, tf_inputs_dict)
@@ -640,7 +639,7 @@ class TFEncoderDecoderMixin:
 
         # This is not working, because pt/tf equivalence test for encoder-decoder use `from_encoder_decoder_pretrained`,
         # which randomly initialize `enc_to_dec_proj`.
-        # # check `enc_to_dec_proj` work as expected
+        # check `enc_to_dec_proj` work as expected
         # decoder_config.hidden_size = decoder_config.hidden_size * 2
         # self.assertTrue(config.hidden_size != decoder_config.hidden_size)
         # self.check_pt_to_tf_equivalence(config, decoder_config, tf_inputs_dict)
