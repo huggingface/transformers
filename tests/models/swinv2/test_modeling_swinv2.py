@@ -14,7 +14,6 @@
 # limitations under the License.
 """ Testing suite for the PyTorch Swinv2 model. """
 import collections
-import copy
 import inspect
 import unittest
 
@@ -23,7 +22,7 @@ from transformers.testing_utils import require_torch, require_vision, slow, torc
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 
 
 if is_torch_available():
@@ -37,14 +36,6 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import AutoFeatureExtractor
-
-
-def _config_zero_init(config):
-    configs_no_init = copy.deepcopy(config)
-    for key in configs_no_init.__dict__.keys():
-        if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
-            setattr(configs_no_init, key, 1e-10)
-    return configs_no_init
 
 
 class Swinv2ModelTester:
@@ -143,6 +134,25 @@ class Swinv2ModelTester:
         expected_dim = int(config.embed_dim * 2 ** (len(config.depths) - 1))
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, expected_seq_len, expected_dim))
+
+    def create_and_check_for_masked_image_modeling(self, config, pixel_values, labels):
+        model = Swinv2ForMaskedImageModeling(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.num_channels, self.image_size, self.image_size)
+        )
+
+        # test greyscale images
+        config.num_channels = 1
+        model = Swinv2ForMaskedImageModeling(config)
+        model.to(torch_device)
+        model.eval()
+
+        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
+        result = model(pixel_values)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, 1, self.image_size, self.image_size))
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
@@ -403,14 +413,14 @@ class Swinv2ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         return (
-            AutoFeatureExtractor.from_pretrained("nandwalritik/swinv2-tiny-patch4-window8-256")
+            AutoFeatureExtractor.from_pretrained("microsoft/swinv2-tiny-patch4-window8-256")
             if is_vision_available()
             else None
         )
 
     @slow
     def test_inference_image_classification_head(self):
-        model = Swinv2ForImageClassification.from_pretrained("nandwalritik/swinv2-tiny-patch4-window8-256").to(
+        model = Swinv2ForImageClassification.from_pretrained("microsoft/swinv2-tiny-patch4-window8-256").to(
             torch_device
         )
         feature_extractor = self.default_feature_extractor
