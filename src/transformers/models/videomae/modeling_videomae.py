@@ -161,16 +161,15 @@ class VideoMAEPatchEmbeddings(nn.Module):
     """
 
     def __init__(self, config):
-        image_size, patch_size, num_channels, hidden_size, num_frames, tubelet_size = (
-            config.image_size,
-            config.patch_size,
-            config.num_channels,
-            config.hidden_size,
-            config.num_frames,
-            config.tubelet_size,
-        )
-
         super().__init__()
+
+        image_size = config.image_size
+        patch_size = config.patch_size
+        num_channels = config.num_channels
+        hidden_size = config.hidden_size
+        num_frames = config.num_frames
+        tubelet_size = config.tubelet_size
+
         image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
         patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         self.image_size = image_size
@@ -783,18 +782,13 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
         pos_emb_visible = expanded_position_embeddings[~bool_masked_pos].reshape(batch_size, -1, num_channels)
         pos_emb_mask = expanded_position_embeddings[bool_masked_pos].reshape(batch_size, -1, num_channels)
 
-        x_full = torch.cat(
-            [sequence_output + pos_emb_visible, self.mask_token + pos_emb_mask], dim=1
-        )  # [batch_size, num_patches, decoder_hidden_size]
+        # [batch_size, num_patches, decoder_hidden_size]
+        x_full = torch.cat([sequence_output + pos_emb_visible, self.mask_token + pos_emb_mask], dim=1)
 
-        decoder_outputs = self.decoder(
-            x_full, pos_emb_mask.shape[1]
-        )  # [batch_size, num_masked_patches, num_channels * patch_size * patch_size]
+        # [batch_size, num_masked_patches, num_channels * patch_size * patch_size]
+        decoder_outputs = self.decoder(x_full, pos_emb_mask.shape[1])
         logits = decoder_outputs.logits
 
-        print("Shape of reconstruction:", logits.shape)
-
-        # TODO verify loss computation
         loss = None
         with torch.no_grad():
             # calculate the labels to be predicted
@@ -818,9 +812,9 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
                     width // patch_size,
                     patch_size,
                 )
-                # step 2: move dimensions to concatenate: (batch_size, T//ts, H//ps, W//ps, ts, ps, ps, C)
+                # step 2: move dimensions to concatenate:
                 frames = frames.permute(0, 1, 4, 6, 2, 5, 7, 3).contiguous()
-                # step 3: concatenate: (batch_size, T//ts, H//bs, W//bs, ts*bs*bs, C)
+                # step 3: concatenate:
                 frames = frames.view(
                     batch_size,
                     time // tubelet_size * height // patch_size * width // patch_size,
