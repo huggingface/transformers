@@ -47,16 +47,16 @@ _CONFIG_FOR_DOC = "Swinv2Config"
 _FEAT_EXTRACTOR_FOR_DOC = "AutoFeatureExtractor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "nandwalritik/swinv2-tiny-patch4-window8-256"
+_CHECKPOINT_FOR_DOC = "microsoft/swinv2-tiny-patch4-window8-256"
 _EXPECTED_OUTPUT_SHAPE = [1, 64, 768]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "nandwalritik/swinv2-tiny-patch4-window8-256"
+_IMAGE_CLASS_CHECKPOINT = "microsoft/swinv2-tiny-patch4-window8-256"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
 
 
 SWINV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "nandwalritik/swinv2-tiny-patch4-window8-256",
+    "microsoft/swinv2-tiny-patch4-window8-256",
     # See all Swinv2 models at https://huggingface.co/models?filter=swinv2
 ]
 
@@ -1092,8 +1092,8 @@ class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("nandwalritik/swinv2-tiny-patch4-window8-256")
-        >>> model = Swinv2ForMaskedImageModeling.from_pretrained("nandwalritik/swinv2-tiny-patch4-window8-256")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/swinv2-tiny-patch4-window8-256")
+        >>> model = Swinv2ForMaskedImageModeling.from_pretrained("microsoft/swinv2-tiny-patch4-window8-256")
 
         >>> num_patches = (model.config.image_size // model.config.patch_size) ** 2
         >>> pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values
