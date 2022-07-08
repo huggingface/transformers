@@ -3452,6 +3452,44 @@ class OPTPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST, = None
+
+
+class OwlViTModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class OwlViTPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class OwlViTTextModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class OwlViTVisionModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class OwlViTForObjectDetection(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class PegasusForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 

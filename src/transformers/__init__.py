@@ -4038,6 +4038,14 @@ if TYPE_CHECKING:
             load_tf_weights_in_openai_gpt,
         )
         from .models.opt import OPT_PRETRAINED_MODEL_ARCHIVE_LIST, OPTForCausalLM, OPTModel, OPTPreTrainedModel
+        from .models.owlvit import (
+            OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST, 
+            OwlViTModel,
+            OwlViTPreTrainedModel,
+            OwlViTTextModel,
+            OwlViTVisionModel,
+            OwlViTForObjectDetection,
+        )
         from .models.pegasus import (
             PegasusForCausalLM,
             PegasusForConditionalGeneration,
