@@ -67,6 +67,9 @@ jobs:
         parallelism: 1
         steps:
             - checkout
+            - run: apt update
+            - run: apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg
+            - run: python3 -m pip install --no-cache-dir --upgrade pip
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,sentencepiece,testing,torch-speech]
