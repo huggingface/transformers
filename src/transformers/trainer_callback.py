@@ -262,7 +262,7 @@ class TrainerCallback:
         """
         pass
 
-    def on_predict(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+    def on_predict(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, metrics, **kwargs):
         """
         Event called after a successful prediction.
         """
@@ -378,8 +378,8 @@ class CallbackHandler(TrainerCallback):
         control.should_evaluate = False
         return self.call_event("on_evaluate", args, state, control, metrics=metrics)
 
-    def on_predict(self, args: TrainingArguments, state: TrainerState, control: TrainerControl):
-        return self.call_event("on_predict", args, state, control)
+    def on_predict(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, metrics):
+        return self.call_event("on_predict", args, state, control, metrics=metrics)
 
     def on_save(self, args: TrainingArguments, state: TrainerState, control: TrainerControl):
         control.should_save = False
