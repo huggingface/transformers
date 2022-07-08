@@ -558,6 +558,12 @@ class LengthGroupedSampler(Sampler):
                     f"'{model_input_name}' key."
                 )
             lengths = [len(feature[model_input_name]) for feature in dataset]
+        elif isinstance(lengths, torch.Tensor):
+            logger.info(
+                "If lengths is a torch.Tensor, LengthGroupedSampler will be slow. Converting lengths to List[int]..."
+            )
+            lengths = lengths.tolist()
+
         self.lengths = lengths
         self.generator = generator
 
@@ -614,6 +620,13 @@ class DistributedLengthGroupedSampler(DistributedSampler):
                     f"'{model_input_name}' key."
                 )
             lengths = [len(feature[model_input_name]) for feature in dataset]
+        elif isinstance(lengths, torch.Tensor):
+            logger.info(
+                "If lengths is a torch.Tensor, DistributedLengthGroupedSampler will be slow. Converting lengths to"
+                " List[int]..."
+            )
+            lengths = lengths.tolist()
+
         self.lengths = lengths
 
         # If the dataset length is evenly divisible by # of replicas, then there
