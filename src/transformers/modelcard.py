@@ -441,7 +441,7 @@ class TrainingSummary:
                 result["task"] = {"name": task_mapping[task_tag], "type": task_tag}
 
             if ds_tag is not None:
-                metadata = dataset_metadata_mapping.get(ds_tag, None) or {}
+                metadata = dataset_metadata_mapping.get(ds_tag, {})
                 result["dataset"] = {
                     "name": dataset_mapping[ds_tag],
                     "type": ds_tag,
@@ -584,7 +584,7 @@ class TrainingSummary:
             # Those are not real datasets from the Hub so we exclude them.
             if default_tag not in ["csv", "json", "pandas", "parquet", "text"]:
                 if dataset_metadata is None:
-                    dataset_metadata = [{"config": one_dataset.info.config_name, "split": one_dataset.split.__str__()}]
+                    dataset_metadata = [{"config": one_dataset.config_name, "split": str(one_dataset.split)}]
                 if dataset_tags is None:
                     dataset_tags = [default_tag]
                 if dataset_args is None:
