@@ -106,6 +106,8 @@ def rename_key(name):
         name = name.replace("k_bias", "key.bias")
     if "v_bias" in name:
         name = name.replace("v_bias", "value.bias")
+    if "cpb_mlp" in name:
+        name = name.replace("cpb_mlp", "continuous_position_bias_mlp")
     if name == "norm.weight":
         name = "layernorm.weight"
     if name == "norm.bias":
