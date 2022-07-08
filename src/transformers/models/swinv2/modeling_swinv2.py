@@ -1085,6 +1085,7 @@ class Swinv2Model(Swinv2PreTrainedModel):
     " [SimMIM](https://arxiv.org/abs/2111.09886).",
     SWINV2_START_DOCSTRING,
 )
+# Copied from transformers.models.swin.modeling_swin.SwinForMaskedImageModeling with SWIN->SWINV2,Swin->Swinv2,swin->swinv2,224->256,window7->window8
 class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1093,7 +1094,9 @@ class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
 
         num_features = int(config.embed_dim * 2 ** (config.num_layers - 1))
         self.decoder = nn.Sequential(
-            nn.Conv2d(in_channels=num_features, out_channels=config.encoder_stride**2 * 3, kernel_size=1),
+            nn.Conv2d(
+                in_channels=num_features, out_channels=config.encoder_stride**2 * config.num_channels, kernel_size=1
+            ),
             nn.PixelShuffle(config.encoder_stride),
         )
 
