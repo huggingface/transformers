@@ -164,18 +164,28 @@ class OwlViTVisionEmbeddings(nn.Module):
         self.patch_embedding = nn.Conv2d(
             in_channels=3, out_channels=self.embed_dim, kernel_size=self.patch_size, stride=self.patch_size, bias=False
         )
+        """
         self.num_positions = (self.image_size // self.patch_size) ** 2 + 1
         self.position_embedding = nn.Parameter(torch.rand(self.num_positions, self.embed_dim))
+        """
+
+        self.num_patches = (self.image_size // self.patch_size) ** 2
+        self.num_positions = self.num_patches + 1
+        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
+        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)))
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
-
         patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, num_channels, height, width]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
 
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
+        """
         embeddings = embeddings + self.position_embedding
+        """
+
+        embeddings = embeddings + self.position_embedding(self.position_ids)
         return embeddings
 
 
@@ -183,20 +193,38 @@ class OwlViTTextEmbeddings(nn.Module):
     def __init__(self, config: OwlViTTextConfig):
         super().__init__()
         embed_dim = config.hidden_size
-
+        """
         self.token_embedding = nn.Embedding(config.vocab_size, embed_dim)
         self.position_embedding = nn.Parameter(torch.rand(config.max_position_embeddings, embed_dim))
+        """
+        self.token_embedding = nn.Embedding(config.vocab_size, embed_dim)
+        self.position_embedding = nn.Embedding(config.max_position_embeddings, embed_dim)
 
+        # position_ids (1, len position emb) is contiguous in memory and exported when serialized
+        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
     ) -> torch.Tensor:
-
+        """
         if inputs_embeds is None:
             inputs_embeds = self.token_embedding(input_ids)
 
         embeddings = inputs_embeds + self.position_embedding
+        """
+        seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
+
+        if position_ids is None:
+            position_ids = self.position_ids[:, :seq_length]
+
+        if inputs_embeds is None:
+            inputs_embeds = self.token_embedding(input_ids)
+
+        position_embeddings = self.position_embedding(position_ids)
+        embeddings = inputs_embeds + position_embeddings
+
         return embeddings
 
 
@@ -389,12 +417,12 @@ class OwlViTPreTrainedModel(PreTrainedModel):
         factor = self.config.initializer_factor
         if isinstance(module, OwlViTTextEmbeddings):
             module.token_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
-            nn.init.normal_(module.position_embedding, mean=0.0, std=factor * 0.02)
+            module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
         elif isinstance(module, OwlViTVisionEmbeddings):
             factor = self.config.initializer_factor
             nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
-            nn.init.normal_(module.position_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
             nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
+            nn.init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
         elif isinstance(module, OwlViTAttention):
             factor = self.config.initializer_factor
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
@@ -631,6 +659,7 @@ class OwlViTTextTransformer(nn.Module):
         self,
         input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -646,7 +675,7 @@ class OwlViTTextTransformer(nn.Module):
 
         input_shape = input_ids.size()
         input_ids = input_ids.view(-1, input_shape[-1])
-        hidden_states = self.embeddings(input_ids=input_ids)
+        hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids)
 
         bsz, seq_len = input_shape
         # OWLVIT's text model uses causal mask, prepare it here.
