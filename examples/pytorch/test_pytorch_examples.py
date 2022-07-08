@@ -131,7 +131,7 @@ class ExamplesTests(TestCasePlus):
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["eval_accuracy"], 0.75)
 
-    def test_run_clm(self):
+    def test_run_111_clm(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_clm.py
@@ -476,7 +476,7 @@ class ExamplesTests(TestCasePlus):
             result = get_results(tmp_dir)
             self.assertLess(result["eval_loss"], result["train_loss"])
 
-    def test_run_audio_classification(self):
+    def test_run_222_audio_classification(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_audio_classification.py
