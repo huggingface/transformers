@@ -18,7 +18,7 @@ import unittest
 import numpy as np
 
 from transformers import JukeboxConfig, is_torch_available
-from transformers.testing_utils import require_torch
+from transformers.testing_utils import require_torch, slow
 from transformers.trainer_utils import set_seed
 
 
@@ -143,6 +143,19 @@ class Jukebox1bModelTester(unittest.TestCase):
         zs = model._sample(zs, labels, sampling_kwargs, [0], model.config)
         assert torch.allclose(zs[0][0, :40], self.EXPECTED_OUTPUT_0)
 
+        
+    @slow
+    def test_slow_sampling(self):
+
+        model_id = "ArthurZ/jukebox-1b-lyrics"
+        model = JukeboxModel.from_pretrained(model_id).eval().to("cuda")
+
+        labels, sampling_kwargs = self.prepare_inputs(model, model_id, chunk_size=32)
+        set_seed(0)
+        zs = [torch.zeros(1, 0, dtype=torch.long).cuda() for _ in range(3)]
+        zs = model._sample(zs, labels, sampling_kwargs, [2], model.config)
+        assert torch.allclose(zs[-1][0], self.EXPECTED_OUTPUT_2)
+
     def test_vqvae(self):
         # implemented vavae decoding test at 3 levels using the expected outputs
         pass
@@ -237,7 +250,7 @@ class Jukebox5bModelTester(unittest.TestCase):
 
     def test_sampling(self):
         model_id = "ArthurZ/jukebox-5b-lyrics"
-        model = JukeboxModel.from_pretrained(model_id,cond_res_scale=[None,True, False] ).eval()
+        model = JukeboxModel.from_pretrained(model_id).eval()
 
         labels, sampling_kwargs = self.prepare_inputs(model, model_id, chunk_size=32)
         set_seed(0)
@@ -258,6 +271,18 @@ class Jukebox5bModelTester(unittest.TestCase):
         zs[-2] = torch.cat((zs[-2], torch.zeros(1, 1000000 - zs[-2].shape[-1]).cpu()), dim=-1).long()
         zs = model._sample(zs, labels, sampling_kwargs, [0], model.config)
         assert torch.allclose(zs[0][0, :80], self.EXPECTED_OUTPUT_0)
+    
+    @slow
+    def test_slow_sampling(self):
+
+        model_id = "ArthurZ/jukebox-5b-lyrics"
+        model = JukeboxModel.from_pretrained(model_id).eval().to("cuda")
+
+        labels, sampling_kwargs = self.prepare_inputs(model, model_id, chunk_size=32)
+        set_seed(0)
+        zs = [torch.zeros(1, 0, dtype=torch.long).cuda() for _ in range(3)]
+        zs = model._sample(zs, labels, sampling_kwargs, [2], model.config)
+        assert torch.allclose(zs[-1][0], self.EXPECTED_OUTPUT_2)
 
     def test_vqvae(self):
         # implemented vavae decoding test at 3 levels using the expected outputs
@@ -849,4 +874,4 @@ class JukeboxModelTest(unittest.TestCase):
 if __name__ == "__main__":
     tester = Jukebox5bModelTester()
     # tester.test_1b_lyrics()
-    tester.test_sampling()
+    tester.test_slow_sampling()
