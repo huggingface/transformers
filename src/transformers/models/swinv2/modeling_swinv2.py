@@ -61,7 +61,7 @@ SWINV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# to_2tuple, drop_path, Swinv2PatchEmbeddings, Swinv2PatchMerging and Swinv2DropPath are from the timm library.
+# drop_path, Swinv2PatchEmbeddings, Swinv2PatchMerging and Swinv2DropPath are from the timm library.
 
 
 @dataclass
@@ -209,12 +209,7 @@ class Swinv2ImageClassifierOutput(ModelOutput):
     reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
-def to_2tuple(x):
-    if isinstance(x, collections.abc.Iterable):
-        return x
-    return (x, x)
-
-
+# Copied from transformers.models.swin.modeling_swin.window_partition
 def window_partition(input_feature, window_size):
     """
     Partitions the given input into windows.
@@ -227,6 +222,7 @@ def window_partition(input_feature, window_size):
     return windows
 
 
+# Copied from transformers.models.swin.modeling_swin.window_reverse
 def window_reverse(windows, window_size, height, width):
     """
     Merges windows to produce higher resolution features.
@@ -237,18 +233,25 @@ def window_reverse(windows, window_size, height, width):
     return windows
 
 
+# Copied from transformers.models.swin.modeling_swin.drop_path
 def drop_path(input, drop_prob=0.0, training=False, scale_by_keep=True):
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
+
+    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
+    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
+    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
+    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
+    argument.
     """
     if drop_prob == 0.0 or not training:
         return input
     keep_prob = 1 - drop_prob
     shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = input.new_empty(shape).bernoulli_(keep_prob)
-    if keep_prob > 0.0 and scale_by_keep:
-        random_tensor.div_(keep_prob)
-    return input * random_tensor
+    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
+    random_tensor.floor_()  # binarize
+    output = input.div(keep_prob) * random_tensor
+    return output
 
 
 # Copied from transformers.models.swin.modeling_swin.SwinEmbeddings with Swin->Swinv2
@@ -294,9 +297,12 @@ class Swinv2Embeddings(nn.Module):
         return embeddings, output_dimensions
 
 
+# Copied from transformers.models.swin.modeling_swin.SwinPatchEmbeddings with Swin->Swinv2
 class Swinv2PatchEmbeddings(nn.Module):
     """
-    Image to Patch Embedding.
+    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
+    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
+    Transformer.
     """
 
     def __init__(self, config):
@@ -324,7 +330,11 @@ class Swinv2PatchEmbeddings(nn.Module):
         return pixel_values
 
     def forward(self, pixel_values: Optional[torch.FloatTensor]) -> Tuple[torch.Tensor, Tuple[int]]:
-        _, _, height, width = pixel_values.shape
+        _, num_channels, height, width = pixel_values.shape
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
         # pad the input to be divisible by self.patch_size, if needed
         pixel_values = self.maybe_pad(pixel_values, height, width)
         embeddings = self.projection(pixel_values)
@@ -415,7 +425,9 @@ class Swinv2SelfAttention(nn.Module):
         self.num_attention_heads = num_heads
         self.attention_head_size = int(dim / num_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
-        self.window_size = to_2tuple(window_size)
+        self.window_size = (
+            window_size if isinstance(window_size, collections.abc.Iterable) else (window_size, window_size)
+        )
         self.pretrained_window_size = pretrained_window_size
         self.logit_scale = nn.Parameter(torch.log(10 * torch.ones((num_heads, 1, 1))))
         # mlp to generate continuous relative position bias
@@ -543,7 +555,13 @@ class Swinv2Attention(nn.Module):
     def __init__(self, config, dim, num_heads, window_size, pretrained_window_size=0):
         super().__init__()
         self.self = Swinv2SelfAttention(
-            config, dim, num_heads, window_size, pretrained_window_size=to_2tuple(pretrained_window_size)
+            config,
+            dim,
+            num_heads,
+            window_size,
+            pretrained_window_size=pretrained_window_size
+            if isinstance(pretrained_window_size, collections.abc.Iterable)
+            else (pretrained_window_size, pretrained_window_size),
         )
         self.output = Swinv2SelfOutput(config, dim)
         self.pruned_heads = set()
@@ -621,7 +639,9 @@ class Swinv2Layer(nn.Module):
             dim,
             num_heads,
             window_size=self.window_size,
-            pretrained_window_size=to_2tuple(pretrained_window_size),
+            pretrained_window_size=pretrained_window_size
+            if isinstance(pretrained_window_size, collections.abc.Iterable)
+            else (pretrained_window_size, pretrained_window_size),
         )
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.drop_path = Swinv2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
@@ -630,11 +650,26 @@ class Swinv2Layer(nn.Module):
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
 
     def set_shift_and_window_size(self, input_resolution):
-        target_window_size = to_2tuple(self.window_size)
-        target_shift_size = to_2tuple(self.shift_size)
+        target_window_size = (
+            self.window_size
+            if isinstance(self.window_size, collections.abc.Iterable)
+            else (self.window_size, self.window_size)
+        )
+        target_shift_size = (
+            self.shift_size
+            if isinstance(self.shift_size, collections.abc.Iterable)
+            else (self.shift_size, self.shift_size)
+        )
         self.window_size = [r if r <= w else w for r, w in zip(input_resolution, target_window_size)][0]
         self.shift_size = [
-            0 if r <= w else s for r, w, s in zip(input_resolution, to_2tuple(self.window_size), target_shift_size)
+            0 if r <= w else s
+            for r, w, s in zip(
+                input_resolution,
+                self.window_size
+                if isinstance(self.window_size, collections.abc.Iterable)
+                else (self.window_size, self.window_size),
+                target_shift_size,
+            )
         ][0]
 
     def get_attn_mask(self, height, width):
