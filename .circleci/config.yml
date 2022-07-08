@@ -86,7 +86,7 @@ jobs:
             - store_artifacts:
                   path: ~/transformers/test_preparation.txt
             - run: |
-                    python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/test_pytorch_examples.py -k "ExamplesTests and test_run_ner" | tee tests_output.txt
+                    python -m pytest -n 1 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/ | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/examples_output.txt
             - store_artifacts:
