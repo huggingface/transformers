@@ -143,6 +143,7 @@ _deps = [
     "ray[tune]",
     "regex!=2019.12.17",
     "requests",
+    "resampy<0.3.1",
     "rjieba",
     "rouge-score",
     "sacrebleu>=1.4.12,<2.0.0",
@@ -295,6 +296,7 @@ extras["testing"] = (
         "nltk",
         "GitPython",
         "hf-doc-builder",
+        "resampy",  # can be remoed once we can unpin resampy
         "protobuf",  # Can be removed once we can unpin protobuf
         "sacremoses",
         "rjieba",
