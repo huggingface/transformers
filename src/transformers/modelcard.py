@@ -441,7 +441,7 @@ class TrainingSummary:
                 result["task"] = {"name": task_mapping[task_tag], "type": task_tag}
 
             if ds_tag is not None:
-                metadata = dataset_metadata_mapping[ds_tag] or {}
+                metadata = dataset_metadata_mapping.get(ds_tag, None) or {}
                 result["dataset"] = {
                     "name": dataset_mapping[ds_tag],
                     "type": ds_tag,
