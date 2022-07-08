@@ -56,27 +56,32 @@ class Jukebox1bModelTester(unittest.TestCase):
     The lone and level sands stretch far away
     """,
     )
-    
-    EXPECTED_OUTPUTS_2 = torch.tensor([1864, 1536, 1213, 1869, 1321, 1597,  519,  947, 1177,  789, 1434,  653,
-         653,  653,  653,  653,  653,  653,  653,  653, 1007, 1472,  255, 1228,
-         555, 1272, 1379, 1423, 1673,  427, 1683, 1321,  475,  416, 1177, 1827,
-        1106, 1127, 1494,  812])
-    EXPECTED_OUTPUT_1 = torch.tensor([1125, 1585, 1485, 2020, 1141, 1680,  381,  539, 1368,  642, 1585,  284,
-         717, 1544, 1045, 1320,  711,  193, 1440, 1193,  416, 1125,  539, 1544,
-         593, 1274, 1181, 1658, 1181, 1145, 2037, 1125,  556, 1014, 1045, 1858,
+    # fmt: off
+    EXPECTED_OUTPUTS_2 = torch.tensor([
+        1864, 1536, 1213, 1869, 1321, 1597,  519,  947, 1177,  789, 1434,  653,
+        653,  653,  653,  653,  653,  653,  653,  653, 1007, 1472,  255, 1228,
+        555, 1272, 1379, 1423, 1673,  427, 1683, 1321,  475,  416, 1177, 1827,
+        1106, 1127, 1494,  812
+        ]
+    )
+    EXPECTED_OUTPUT_1 = torch.tensor([
+        1125, 1585, 1485, 2020, 1141, 1680,  381,  539, 1368,  642, 1585,  284,
+        717, 1544, 1045, 1320,  711,  193, 1440, 1193,  416, 1125,  539, 1544,
+        593, 1274, 1181, 1658, 1181, 1145, 2037, 1125,  556, 1014, 1045, 1858,
         1749, 1803, 1440, 1145,  416,  416, 1372, 1079, 1045, 1320, 1764,  158,
         2020, 1543, 2037,  416,  539, 2047, 1446,  885, 1749, 2047,  118, 1348,
         1585,  284,  529, 2047, 1228,  556,  732, 2047,  307, 1323, 2037, 1446,
-         591, 1803,   58,  591,  529, 1079,  642,  591]
-        )
-    EXPECTED_OUTPUT_0 =  torch.tensor(
-            [1979, 1613,  290, 1843,  844, 1427,  293,  616, 1771,  632,  591,  290,
-         234,  842,  589,  948,  983,  616, 1613, 1613,  290,  632,   89,  632,
-         290, 1022,  983, 1612, 1353,  581, 1353,  755,  185,  307,  632, 1979,
-         854, 1120, 1572,  719]
-        )
-    
-
+        591, 1803,   58,  591,  529, 1079,  642,  591
+        ]
+    )
+    EXPECTED_OUTPUT_0 =  torch.tensor([
+        1979, 1613,  290, 1843,  844, 1427,  293,  616, 1771,  632,  591,  290,
+        234,  842,  589,  948,  983,  616, 1613, 1613,  290,  632,   89,  632,
+        290, 1022,  983, 1612, 1353,  581, 1353,  755,  185,  307,  632, 1979,
+        854, 1120, 1572,  719
+        ]
+    )
+    # fmt: on
 
     def prepare_inputs(self, model, model_id, chunk_size=32):
         tokenizer = JukeboxTokenizer.from_pretrained(model_id)
@@ -116,12 +121,12 @@ class Jukebox1bModelTester(unittest.TestCase):
             ),
         ]
 
-        tokens = tokenizer(**self.metas)['input_ids']
+        tokens = tokenizer(**self.metas)["input_ids"]
         return tokens, sampling_kwargs
 
     def test_sampling(self):
         model_id = "ArthurZ/jukebox-1b-lyrics"
-        model = JukeboxModel.from_pretrained(model_id,cond_res_scale=[None,True, False] ).eval()
+        model = JukeboxModel.from_pretrained(model_id, cond_res_scale=[None, True, False]).eval()
 
         labels, sampling_kwargs = self.prepare_inputs(model, model_id)
         set_seed(0)
@@ -134,7 +139,6 @@ class Jukebox1bModelTester(unittest.TestCase):
         zs[-1] = torch.cat((zs[-1], torch.zeros(1, 1000000 - zs[-1].shape[-1]).cpu()), dim=-1).long()
         zs = model._sample(zs, labels, sampling_kwargs, [1], model.config)
         assert torch.allclose(zs[-2][0, :40], self.EXPECTED_OUTPUT_1)
-    
 
         zs[-2] = self.EXPECTED_OUTPUT_1.unsqueeze(0)
 
@@ -143,7 +147,6 @@ class Jukebox1bModelTester(unittest.TestCase):
         zs = model._sample(zs, labels, sampling_kwargs, [0], model.config)
         assert torch.allclose(zs[0][0, :40], self.EXPECTED_OUTPUT_0)
 
-        
     @slow
     def test_slow_sampling(self):
 
@@ -160,7 +163,6 @@ class Jukebox1bModelTester(unittest.TestCase):
         # implemented vavae decoding test at 3 levels using the expected outputs
         pass
 
-    
 
 @require_torch
 class Jukebox5bModelTester(unittest.TestCase):
@@ -184,28 +186,34 @@ class Jukebox5bModelTester(unittest.TestCase):
     The lone and level sands stretch far away
     """,
     )
-    
-    EXPECTED_OUTPUT_2 = torch.tensor([1489,  653,  653,  653,  653,  653,  653,  653,  653,  653, 1489,  653,
-          653,  653,  653,  653,  653,  653,  653,  653])
 
-    EXPECTED_OUTPUT_1 = torch.tensor([1125,  416, 1125, 1125, 1125, 1125,  416,  416,  416,  416, 1585,  284,
-         717, 1544, 1045, 1320,  711,  193, 1440, 1193,  416, 1125,  539, 1544,
-         593, 1274, 1181, 1658, 1181, 1145, 2037, 1125,  556, 1014, 1045, 1858,
+    # fmt: off
+    EXPECTED_OUTPUT_2 = torch.tensor([
+        1489,  653,  653,  653,  653,  653,  653,  653,  653,  653, 1489,  653,
+        653,  653,  653,  653,  653,  653,  653,  653
+        ]
+    )
+    EXPECTED_OUTPUT_1 = torch.tensor([
+        1125,  416, 1125, 1125, 1125, 1125,  416,  416,  416,  416, 1585,  284,
+        717, 1544, 1045, 1320,  711,  193, 1440, 1193,  416, 1125,  539, 1544,
+        593, 1274, 1181, 1658, 1181, 1145, 2037, 1125,  556, 1014, 1045, 1858,
         1749, 1803, 1440, 1145,  416,  416, 1372, 1079, 1045, 1320, 1764,  158,
         2020, 1543, 2037,  416,  539, 2047, 1446,  885, 1749, 2047,  118, 1348,
         1585,  284,  529, 2047, 1228,  556,  732, 2047,  307, 1323, 2037, 1446,
-         591, 1803,   58,  591,  529, 1079,  642,  591]
-        )
-    EXPECTED_OUTPUT_0 =  torch.tensor([1755, 1061,  234, 1755,  290, 1572,  234,  491,  992,  417,  591,  290,
-         234,  842,  589,  948,  983,  616, 1613, 1613,  290,  632,   89,  632,
-         290, 1022,  983, 1612, 1353,  581, 1353,  755,  185,  307,  632, 1979,
-         854, 1120, 1572,  719,  491,   34,  755,  632,  844,  755, 1802,  225,
+        591, 1803,   58,  591,  529, 1079,  642,  591
+        ]
+    )
+    EXPECTED_OUTPUT_0 =  torch.tensor([
+        1755, 1061,  234, 1755,  290, 1572,  234,  491,  992,  417,  591,  290,
+        234,  842,  589,  948,  983,  616, 1613, 1613,  290,  632,   89,  632,
+        290, 1022,  983, 1612, 1353,  581, 1353,  755,  185,  307,  632, 1979,
+        854, 1120, 1572,  719,  491,   34,  755,  632,  844,  755, 1802,  225,
         2013, 1814, 1148,  616,  185, 1979, 1460,  983, 1168, 1613,   34, 1242,
-         632,   34,   34, 1982, 1510,  554,  983, 1784,  526, 1691, 1268, 1268,
-         290,  755,   34,  307,  222,  234,  648,  526
-         ])
-    
-
+        632,   34,   34, 1982, 1510,  554,  983, 1784,  526, 1691, 1268, 1268,
+        290,  755,   34,  307,  222,  234,  648,  526
+        ]
+    )
+    # fmt: on
 
     def prepare_inputs(self, model, model_id, chunk_size=32):
         tokenizer = JukeboxTokenizer.from_pretrained(model_id)
@@ -245,7 +253,7 @@ class Jukebox5bModelTester(unittest.TestCase):
             ),
         ]
 
-        tokens = tokenizer(**self.metas)['input_ids']
+        tokens = tokenizer(**self.metas)["input_ids"]
         return tokens, sampling_kwargs
 
     def test_sampling(self):
@@ -263,7 +271,6 @@ class Jukebox5bModelTester(unittest.TestCase):
         zs[-1] = torch.cat((zs[-1], torch.zeros(1, 1000000 - zs[-1].shape[-1]).cpu()), dim=-1).long()
         zs = model._sample(zs, labels, sampling_kwargs, [1], model.config)
         assert torch.allclose(zs[-2][0, :80], self.EXPECTED_OUTPUT_1)
-    
 
         zs[-2] = self.EXPECTED_OUTPUT_1.unsqueeze(0)
 
@@ -271,7 +278,7 @@ class Jukebox5bModelTester(unittest.TestCase):
         zs[-2] = torch.cat((zs[-2], torch.zeros(1, 1000000 - zs[-2].shape[-1]).cpu()), dim=-1).long()
         zs = model._sample(zs, labels, sampling_kwargs, [0], model.config)
         assert torch.allclose(zs[0][0, :80], self.EXPECTED_OUTPUT_0)
-    
+
     @slow
     def test_slow_sampling(self):
 
@@ -287,8 +294,6 @@ class Jukebox5bModelTester(unittest.TestCase):
     def test_vqvae(self):
         # implemented vavae decoding test at 3 levels using the expected outputs
         pass
-
-    
 
 
 @require_torch
@@ -867,7 +872,7 @@ class JukeboxModelTest(unittest.TestCase):
             ),
         ]
 
-        tokens = tokenizer(**self.metas)['input_ids']
+        tokens = tokenizer(**self.metas)["input_ids"]
         return tokens, sampling_kwargs
 
 
