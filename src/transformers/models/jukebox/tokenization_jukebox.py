@@ -353,15 +353,17 @@ class JukeboxTokenizer(PreTrainedTokenizer):
 
         attention_masks = [-INFINITY] * len(full_tokens[-1])
         # TODO properly handle the return pt tensor option
-        input_ids = [torch.tensor([input_ids + [artists_id[i]] + genres_ids[i] + full_tokens[i]])for i in range(len(self.version))]
+        input_ids = [
+            torch.tensor([input_ids + [artists_id[i]] + genres_ids[i] + full_tokens[i]])
+            for i in range(len(self.version))
+        ]
         if return_tensor == "pt":
             # TODO use BatchEncoding to support
-            
+
             return {
-                    "input_ids": input_ids,
-                    "attention_masks": torch.tensor(attention_masks),
-                }
-                
+                "input_ids": input_ids,
+                "attention_masks": torch.tensor(attention_masks),
+            }
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         """

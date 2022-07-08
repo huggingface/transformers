@@ -261,8 +261,20 @@ class DecoderConvBock(nn.Module):
             blocks.append(block)
             for i in range(down_t):
                 block = nn.Sequential(
-                    Resnet1D(width, depth, m_conv, dilation_growth_rate, dilation_cycle, zero_out=zero_out, res_scale=res_scale, reverse_dilation=reverse_decoder_dilation, checkpoint_res=checkpoint_res),
-                    nn.ConvTranspose1d(width, input_emb_width if i == (down_t - 1) else width, filter_t, stride_t, pad_t)
+                    Resnet1D(
+                        width,
+                        depth,
+                        m_conv,
+                        dilation_growth_rate,
+                        dilation_cycle,
+                        zero_out=zero_out,
+                        res_scale=res_scale,
+                        reverse_dilation=reverse_decoder_dilation,
+                        checkpoint_res=checkpoint_res,
+                    ),
+                    nn.ConvTranspose1d(
+                        width, input_emb_width if i == (down_t - 1) else width, filter_t, stride_t, pad_t
+                    ),
                 )
                 blocks.append(block)
         self.model = nn.Sequential(*blocks)
@@ -2334,7 +2346,7 @@ class MusicTokenConditioner(nn.Module):
 
     def forward(self, x, x_cond=None):
         if x_cond is None:
-           x_cond = 0.0
+            x_cond = 0.0
         # Embed x
         x = x.long()
         x = self.x_emb(x)
@@ -2705,21 +2717,20 @@ class JukeboxPrior(nn.Module):
         else:
             return y
 
-
     def set_y_lyric_tokens(self, labels):
         # assert ys.shape[0] == len(labels)
         if self.n_tokens > 0:
             # total_length, offset, duration):
-            tokens_list = torch.zeros((1,self.n_tokens),dtype=torch.long)
+            tokens_list = torch.zeros((1, self.n_tokens), dtype=torch.long)
             indices_list = []  # whats the index of each current character in original array
             for i in range(labels.shape[0]):
-                full_tokens = labels.clone()[:,4 + self.y_emb.max_bow_genre_size:]
+                full_tokens = labels.clone()[:, 4 + self.y_emb.max_bow_genre_size :]
                 total_length, offset, duration = labels[i, 0], labels[i, 1], labels[i, 2]
                 tokens, indices = get_relevant_lyric_tokens(full_tokens, self.n_tokens, total_length, offset, duration)
-                tokens_list[i,:] = tokens
+                tokens_list[i, :] = tokens
                 indices_list.append(indices)
-                
-            return torch.cat((labels[:, :4 + self.y_emb.max_bow_genre_size],tokens_list),dim=-1), indices_list
+
+            return torch.cat((labels[:, : 4 + self.y_emb.max_bow_genre_size], tokens_list), dim=-1), indices_list
         else:
             return labels, None
 
@@ -3182,7 +3193,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         n_samples = hps.n_samples
         n_ctx = prior.n_ctx
         end = start + n_ctx
-        
+
         # the tokenizer, as [total_length, offset, sample_length] can be written on the fly and changed without changing the
         # lyric tokens.
         # get z already sampled at current level
@@ -3247,10 +3258,10 @@ class JukeboxModel(JukeboxPreTrainedModel):
 
     # Sample multiple levels
     def _sample(self, zs, labels, sampling_kwargs, sample_levels, hps):
-        
+
         alignments = None
         for level in reversed(sample_levels):
-            self.total_length = sampling_kwargs[level].pop('total_length') 
+            self.total_length = sampling_kwargs[level].pop("total_length")
             prior = self.priors[level]
             prior = prior.to(zs[0].device).eval()
             empty_cache()
