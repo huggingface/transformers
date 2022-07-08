@@ -200,8 +200,8 @@ class Swinv2ModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip(reason="Swinv2 does not use inputs_embeds")
     def test_inputs_embeds(self):
-        # Swinv2 does not use inputs_embeds
         pass
 
     def test_model_common_attributes(self):
