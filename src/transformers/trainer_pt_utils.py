@@ -560,8 +560,7 @@ class LengthGroupedSampler(Sampler):
             lengths = [len(feature[model_input_name]) for feature in dataset]
         elif isinstance(lengths, torch.Tensor):
             logger.info(
-                "If lengths is a torch.Tensor, LengthGroupedSampler will be slow. Converting lengths to"
-                " List[int]..."
+                "If lengths is a torch.Tensor, LengthGroupedSampler will be slow. Converting lengths to List[int]..."
             )
             lengths = lengths.tolist()
 
