@@ -411,7 +411,7 @@ class BloomAttention(nn.Module):
         attention_probs = self.scale_mask_softmax(attention_scores, attention_mask, max_positions, custom_mask).to(
             value_layer.dtype
         )
-        # print(attention_probs)
+
         attention_probs = self.attention_dropout(attention_probs)
 
         if head_mask is not None:
@@ -1012,10 +1012,8 @@ class BloomForPrefixLM(BloomPreTrainedModel):
             if attention_mask is not None:
                 # TODO: what will attn mask look like for concatenated inputs+targets, in a decoder?
                 prefix_length = attention_mask.sum(-1)
-                # print(prefix_length)
             else:
                 prefix_length = torch.LongTensor([input_ids.shape[-1] for _ in range(input_ids.shape[0])])
-                # print(prefix_length)
 
         return {
             "input_ids": input_ids,
@@ -1057,16 +1055,14 @@ class BloomForPrefixLM(BloomPreTrainedModel):
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        # TODO: batch generation
+        
         if type(prefix_length) == int:
             prefix_length = torch.LongTensor([prefix_length])
-            # print(prefix_length)
         elif type(prefix_length) == list:
             prefix_length = torch.LongTensor(prefix_length)
-            # print("prefix_length:", prefix_length)
         
         if custom_mask is None and self.custom_mask is None:
-            print("No custom mask provided. Falling back to default prefix-LM mask.")
+            # No custom mask provided. Falling back to default prefix-LM mask.
             # TODO: don't hardcode max_positions = 1024
             causal_mask = (
                 torch.tril(torch.ones((1024, 1024), dtype=torch.bool))

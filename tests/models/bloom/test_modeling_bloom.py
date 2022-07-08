@@ -14,6 +14,7 @@
 # limitations under the License.
 #
 
+from builtins import NotImplementedError
 import math
 import unittest
 
@@ -31,6 +32,7 @@ if is_torch_available():
     from transformers import (
         BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST,
         BloomForCausalLM,
+        BloomForPrefixLM,
         BloomForSequenceClassification,
         BloomForTokenClassification,
         BloomModel,
@@ -256,6 +258,15 @@ class BloomModelTester:
         result = model(input_ids, labels=input_ids)
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+    
+    def create_and_check_prefix_lm_head_model(self, config, input_ids, input_mask, *args):
+        model = BloomForPrefixLM(config)
+        model.to(torch_device)
+        model.eval()
+
+        result = model(input_ids, labels=input_ids)
+        self.parent.assertEqual(result.loss.shape, ())
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_sequence_classification_model(self, config, input_ids, input_mask, *args):
         config.num_labels = self.num_labels
@@ -351,6 +362,10 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     def test_bloom_lm_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_lm_head_model(*config_and_inputs)
+
+    def test_bloom_prefix_lm_head_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_prefix_lm_head_model(*config_and_inputs)
 
     def test_bloom_sequence_classification_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -467,6 +482,75 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
             tokenizer.decode(outputs_right[0], skip_special_tokens=True),
             tokenizer.decode(outputs_left[0], skip_special_tokens=True),
         )
+    
+    @slow
+    @require_torch_gpu
+    def test_generation_prefix_lm(self):
+        path_350m = "bigscience/bloom-350m"
+        model = BloomForPrefixLM.from_pretrained(path_350m, torch_dtype="auto", use_cache=True).cuda()
+        model = model.eval()
+        tokenizer = BloomTokenizerFast.from_pretrained(path_350m)
+
+        input_sentence = "I enjoy walking with my cute dog"
+        EXPECTED_OUTPUT = (
+            "I enjoy walking with my cute dog with with with with with with with with with with with" 
+            " with with with with with with with with with with with with the with the with the with"
+            " the with the with the with the with the with the in the in"
+        )
+
+        input_ids = tokenizer.encode(input_sentence, return_tensors="pt")
+        greedy_output = model.generate(input_ids.cuda(), max_length=50, prefix_tokens=input_ids[:, :1])
+
+        self.assertEqual(tokenizer.decode(greedy_output[0], skip_special_tokens=True), EXPECTED_OUTPUT)
+    
+    @slow
+    @require_torch_gpu
+    def test_equivalence_prefix_causal_lm(self):
+        """Tests that the prefix LM is equivalent to the causal LM when prefix_length = 0,
+        and that the prefix LM is not equivalent to the causal LM otherwise."""
+        path_350m = "bigscience/bloom-350m"
+        model_prefix = BloomForPrefixLM.from_pretrained(path_350m, torch_dtype="auto", use_cache=True).cuda()
+        model_causal = BloomForCausalLM.from_pretrained(path_350m, torch_dtype="auto", use_cache=True).cuda()
+        model_prefix = model_prefix.eval()
+        model_causal = model_causal.eval()
+        tokenizer = BloomTokenizerFast.from_pretrained(path_350m)
+
+        input_sentence = "I enjoy walking with my cute dog"
+
+        input_ids = tokenizer.encode(input_sentence, return_tensors="pt")
+
+        greedy_output_prefix = model_prefix.generate(input_ids.cuda(), max_length=50, prefix_length=0)
+        prefixed_output = model_prefix.generate(input_ids.cuda(), max_length=50)
+
+        greedy_output_causal = model_causal.generate(input_ids.cuda(), max_length=50)
+
+        self.assertEqual(tokenizer.decode(greedy_output_prefix[0], skip_special_tokens=True), tokenizer.decode(greedy_output_causal[0], skip_special_tokens=True))
+        self.assertNotEqual(tokenizer.decode(prefixed_output[0], skip_special_tokens=True), tokenizer.decode(greedy_output_causal[0], skip_special_tokens=True))
+    
+    @slow
+    @require_torch_gpu
+    def test_custom_mask(self):
+        path_350m = "bigscience/bloom-350m"
+        model_prefix = BloomForPrefixLM.from_pretrained(path_350m, torch_dtype="auto", use_cache=True).cuda()
+        model_causal = BloomForCausalLM.from_pretrained(path_350m, torch_dtype="auto", use_cache=True).cuda()
+        model_prefix = model_prefix.eval()
+        model_causal = model_causal.eval()
+
+        tokenizer = BloomTokenizerFast.from_pretrained(path_350m)
+
+        input_sentence = "I enjoy walking with my cute dog"
+
+        input_ids = tokenizer.encode(input_sentence, return_tensors="pt")
+
+        causal_mask = (
+                torch.tril(torch.ones((1024, 1024), dtype=torch.bool))
+                .view(1, 1, 1024, 1024)
+            ).to(input_ids.device)
+
+        greedy_output_prefix = model_prefix.generate(input_ids.cuda(), max_length=50, custom_mask=causal_mask)
+        greedy_output_causal = model_causal.generate(input_ids.cuda(), max_length=50)
+
+        self.assertEqual(tokenizer.decode(greedy_output_prefix[0], skip_special_tokens=True), tokenizer.decode(greedy_output_causal[0], skip_special_tokens=True))
 
 
 @require_torch
