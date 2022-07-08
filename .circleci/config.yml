@@ -595,6 +595,8 @@ jobs:
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,sentencepiece,testing,torch-speech]
             - run: pip install -r examples/pytorch/_tests_requirements.txt
+            - run: pip uninstall -y debugpy fonttools jupyter-core resampy jsonschema
+            - run: pip install debugpy==1.6.1 fonttools==4.34.3 jupyter-core==4.10.0 resampy==0.3.0 jsonschema==4.6.1
             - save_cache:
                   key: v0.4-torch_examples-{{ checksum "setup.py" }}
                   paths:
