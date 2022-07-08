@@ -14,9 +14,9 @@
 # limitations under the License.
 #
 
-from builtins import NotImplementedError
 import math
 import unittest
+from builtins import NotImplementedError
 
 from transformers import BloomConfig, is_torch_available
 from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
@@ -258,7 +258,7 @@ class BloomModelTester:
         result = model(input_ids, labels=input_ids)
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-    
+
     def create_and_check_prefix_lm_head_model(self, config, input_ids, input_mask, *args):
         model = BloomForPrefixLM(config)
         model.to(torch_device)
@@ -323,6 +323,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         (
             BloomModel,
             BloomForCausalLM,
+            BloomForPrefixLM,
             BloomForSequenceClassification,
             BloomForTokenClassification,
         )
@@ -482,7 +483,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
             tokenizer.decode(outputs_right[0], skip_special_tokens=True),
             tokenizer.decode(outputs_left[0], skip_special_tokens=True),
         )
-    
+
     @slow
     @require_torch_gpu
     def test_generation_prefix_lm(self):
@@ -493,7 +494,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
 
         input_sentence = "I enjoy walking with my cute dog"
         EXPECTED_OUTPUT = (
-            "I enjoy walking with my cute dog with with with with with with with with with with with" 
+            "I enjoy walking with my cute dog with with with with with with with with with with with"
             " with with with with with with with with with with with with the with the with the with"
             " the with the with the with the with the with the in the in"
         )
@@ -502,7 +503,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         greedy_output = model.generate(input_ids.cuda(), max_length=50, prefix_tokens=input_ids[:, :1])
 
         self.assertEqual(tokenizer.decode(greedy_output[0], skip_special_tokens=True), EXPECTED_OUTPUT)
-    
+
     @slow
     @require_torch_gpu
     def test_equivalence_prefix_causal_lm(self):
@@ -524,9 +525,15 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
 
         greedy_output_causal = model_causal.generate(input_ids.cuda(), max_length=50)
 
-        self.assertEqual(tokenizer.decode(greedy_output_prefix[0], skip_special_tokens=True), tokenizer.decode(greedy_output_causal[0], skip_special_tokens=True))
-        self.assertNotEqual(tokenizer.decode(prefixed_output[0], skip_special_tokens=True), tokenizer.decode(greedy_output_causal[0], skip_special_tokens=True))
-    
+        self.assertEqual(
+            tokenizer.decode(greedy_output_prefix[0], skip_special_tokens=True),
+            tokenizer.decode(greedy_output_causal[0], skip_special_tokens=True),
+        )
+        self.assertNotEqual(
+            tokenizer.decode(prefixed_output[0], skip_special_tokens=True),
+            tokenizer.decode(greedy_output_causal[0], skip_special_tokens=True),
+        )
+
     @slow
     @require_torch_gpu
     def test_custom_mask(self):
@@ -542,15 +549,17 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
 
         input_ids = tokenizer.encode(input_sentence, return_tensors="pt")
 
-        causal_mask = (
-                torch.tril(torch.ones((1024, 1024), dtype=torch.bool))
-                .view(1, 1, 1024, 1024)
-            ).to(input_ids.device)
+        causal_mask = (torch.tril(torch.ones((1024, 1024), dtype=torch.bool)).view(1, 1, 1024, 1024)).to(
+            input_ids.device
+        )
 
         greedy_output_prefix = model_prefix.generate(input_ids.cuda(), max_length=50, custom_mask=causal_mask)
         greedy_output_causal = model_causal.generate(input_ids.cuda(), max_length=50)
 
-        self.assertEqual(tokenizer.decode(greedy_output_prefix[0], skip_special_tokens=True), tokenizer.decode(greedy_output_causal[0], skip_special_tokens=True))
+        self.assertEqual(
+            tokenizer.decode(greedy_output_prefix[0], skip_special_tokens=True),
+            tokenizer.decode(greedy_output_causal[0], skip_special_tokens=True),
+        )
 
 
 @require_torch

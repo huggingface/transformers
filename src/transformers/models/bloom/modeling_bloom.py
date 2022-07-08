@@ -97,11 +97,11 @@ def attention_mask_func(attention_scores, attention_mask, causal_mask):
 
 def build_alibi_tensor(max_seq_len, n_head, dtype=torch.bfloat16):
     """
+    Args:
     Link to paper: https://arxiv.org/abs/2108.12409 Alibi tensor is not causal as the original paper mentions, it
     relies on a translation invariance of softmax for quick implementation: with l being a tensor, and a fixed value
     `softmax(l+a) = softmax(l)`. Based on
     https://github.com/ofirpress/attention_with_linear_biases/blob/a35aaca144e0eb6b789dfcb46784c4b8e31b7983/fairseq/models/transformer.py#L742
-    Args:
     Returns tensor shaped (n_head, 1, max_seq_len)
         max_seq_len: (`int`, *required*):
             max sequence length
@@ -173,8 +173,8 @@ def pre_process_alibi_for_pad(alibi, attention_mask, num_heads):
 
 def dropout_add(x, residual, prob, training):
     """
-    Dropout add function
     Args:
+    Dropout add function
         x (`torch.tensor`, *required*):
             input tensor
         residual (`torch.tensor`, *rquired*):
@@ -191,9 +191,9 @@ def dropout_add(x, residual, prob, training):
 
 def bloom_gelu_forward(x):
     """
+    Args:
     Custom bias GELU function. Adapted from Megatron-DeepSpeed code. Here we use a simple implementation (inference) to
     make the model jitable.
-    Args:
         x (`torch.tensor`, *required*):
             input hidden states
     """
@@ -202,9 +202,9 @@ def bloom_gelu_forward(x):
 
 def bloom_gelu_back(g, x):
     """
+    Args:
     gradient of tanh approximation of gelu gradient of actual gelu is: 0.5 * (1. + torch.erf(x * 0.70710678)) +
     0.3989423 * x * torch.exp(-0.5 * x * x)
-    Args:
         g (`torch.tensor`, *required*):
             gradient output tensor
         x (`torch.tensor`, *required*):
@@ -234,8 +234,8 @@ class BloomGelu(nn.Module):
     """
     BloomBiasGelu wrapper function that make use of the simple function on inference mode to make the model
     torchscriptable and use the autograd function in training mode to get the accurate results of the gradients Partly
-    copied from Megatron-DeepSpeed code and adapted for our needs
-    See here why autograd functions are not torchscriptable: https://github.com/pytorch/pytorch/issues/22329
+    copied from Megatron-DeepSpeed code and adapted for our needs See here why autograd functions are not
+    torchscriptable: https://github.com/pytorch/pytorch/issues/22329
     """
 
     def __init__(self):
@@ -250,8 +250,8 @@ class BloomGelu(nn.Module):
 
 class BloomScaledSoftmax(nn.Module):
     """
-    fused operation: scaling + mask + softmax
     Args:
+    fused operation: scaling + mask + softmax
         input_in_fp16 (`bool`, *required*):
             flag to indicate if input in fp16 data format.
         input_in_bf16 (`bool`, *required*):
@@ -606,12 +606,11 @@ class BloomPreTrainedModel(PreTrainedModel):
 
 
 BLOOM_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings etc.)
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
     Parameters:
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings etc.) This model
+    is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it as a
+    regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and behavior.
         config ([`BloomConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -622,12 +621,10 @@ BLOOM_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
             `past_key_values[0][0].shape[-2]` (`sequence_length` of input past key value states). Indices of input
-            sequence tokens in the vocabulary.
-            If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
-            `input_ids`.
-            Indices can be obtained using [`BloomTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-            [What are input IDs?](../glossary#input-ids)
+            sequence tokens in the vocabulary. If `past_key_values` is used, only `input_ids` that do not have their
+            past calculated should be passed as `input_ids`. Indices can be obtained using [`BloomTokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
+            IDs?](../glossary#input-ids)
         past_key_values (`Tuple[Tuple[torch.Tensor]]` of length `config.n_layers`):
             Contains precomputed hidden-states (key and values in the attention blocks) as computed by the model (see
             `past_key_values` output below). Can be used to speed up sequential decoding. The `input_ids` which have
@@ -639,8 +636,7 @@ BLOOM_INPUTS_DOCSTRING = r"""
             [What are attention masks?](../glossary#attention-mask)
         position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-            [What are position IDs?](../glossary#position-ids)
+            config.max_position_embeddings - 1]`. [What are position IDs?](../glossary#position-ids)
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
             - 1 indicates the head is **not masked**,
@@ -648,9 +644,8 @@ BLOOM_INPUTS_DOCSTRING = r"""
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-            If `past_key_values` is used, optionally only the last `inputs_embeds` have to be input (see
-            `past_key_values`).
+            model's internal embedding lookup matrix. If `past_key_values` is used, optionally only the last
+            `inputs_embeds` have to be input (see `past_key_values`).
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
@@ -903,7 +898,7 @@ class BloomForCausalLM(BloomPreTrainedModel):
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
- 
+
         transformer_outputs = self.transformer(
             input_ids,
             past_key_values=past_key_values,
@@ -954,11 +949,13 @@ class BloomForCausalLM(BloomPreTrainedModel):
             for layer_past in past
         )
 
+
 @add_start_docstrings(
     """
     The Bloom Model transformer with a language modeling head on top (linear layer with weights tied to the input
-    embeddings). Uses prefix language modeling (bidirectional attention on inputs to `generate()`) and can use an additional mask passed as `prefix_mask`
-    to override the default prefix LM mask. See https://arxiv.org/pdf/2204.05832.pdf for more details.
+    embeddings). Uses prefix language modeling (bidirectional attention on inputs to `generate()`) and can use an
+    additional mask passed as `prefix_mask` to override the default prefix LM mask. See
+    https://arxiv.org/pdf/2204.05832.pdf for more details.
     """,
     BLOOM_START_DOCSTRING,
 )
@@ -993,7 +990,7 @@ class BloomForPrefixLM(BloomPreTrainedModel):
 
         custom_mask = kwargs.get("custom_mask", None)
         if past is None:
-            # custom_mask is a class attribute so that the prefix mask 
+            # custom_mask is a class attribute so that the prefix mask
             # set at the start of generation persists throughout timesteps.
             # here, we reset it at start of a generation call so that forward() creates a new one.
             self.custom_mask = custom_mask
@@ -1055,33 +1052,31 @@ class BloomForPrefixLM(BloomPreTrainedModel):
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        
+
         if type(prefix_length) == int:
             prefix_length = torch.LongTensor([prefix_length])
         elif type(prefix_length) == list:
             prefix_length = torch.LongTensor(prefix_length)
-        
+
         if custom_mask is None and self.custom_mask is None:
             # No custom mask provided. Falling back to default prefix-LM mask.
             # TODO: don't hardcode max_positions = 1024
-            causal_mask = (
-                torch.tril(torch.ones((1024, 1024), dtype=torch.bool))
-                .view(1, 1, 1024, 1024)
-            ).to(input_ids.device)
+            causal_mask = (torch.tril(torch.ones((1024, 1024), dtype=torch.bool)).view(1, 1, 1024, 1024)).to(
+                input_ids.device
+            )
             if prefix_length is not None:
-                prefix_mask = torch.zeros(
-                    (prefix_length.shape[0], 1, 1024, 1024),
-                    dtype=torch.bool
-                ).to(input_ids.device)
+                prefix_mask = torch.zeros((prefix_length.shape[0], 1, 1024, 1024), dtype=torch.bool).to(
+                    input_ids.device
+                )
                 for idx in range(prefix_length.shape[0]):
                     prefix_mask_length = int(prefix_length[idx])
                     prefix_mask[idx, :, :prefix_mask_length, :prefix_mask_length] = 1
-                
-                causal_mask = (causal_mask+prefix_mask).bool()
-            
+
+                causal_mask = (causal_mask + prefix_mask).bool()
+
             custom_mask = causal_mask
             self.custom_mask = custom_mask
-        
+
         transformer_outputs = self.transformer(
             input_ids,
             past_key_values=past_key_values,
@@ -1137,12 +1132,11 @@ class BloomForPrefixLM(BloomPreTrainedModel):
     """
     The Bloom Model transformer with a sequence classification head on top (linear layer).
     [`BloomForSequenceClassification`] uses the last token in order to do the classification, as other causal models
-    (e.g. GPT-1) do.
-    Since it does classification on the last token, it requires to know the position of the last token. If a
-    `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If
-    no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot guess the
-    padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
-    each row of the batch).
+    (e.g. GPT-1) do. Since it does classification on the last token, it requires to know the position of the last
+    token. If a `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in
+    each row. If no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot
+    guess the padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last
+    value in each row of the batch).
     """,
     BLOOM_START_DOCSTRING,
 )
@@ -1349,4 +1343,3 @@ class BloomForTokenClassification(BloomPreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
-        
