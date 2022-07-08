@@ -588,13 +588,16 @@ class FlaxBloomBlockCollection(nn.Module):
                 FlaxBloomBlock,
                 variable_axes={"params": 0, "cache": 0},
                 split_rngs={"params": True, "dropout": True},
-                in_axes=(nn.broadcast, nn.broadcast, 0),
+                in_axes=(nn.broadcast, nn.broadcast, 0, nn.broadcast, nn.broadcast, nn.broadcast),
                 length=self.config.num_hidden_layers,
             )(self.config, dtype=self.dtype, use_scan=True, name="FlaxBloomBlockLayers")(
                 hidden_states,
                 alibi,
                 attention_mask,  # kwargs not supported by scan
                 jnp.arange(self.config.num_hidden_layers),
+                None,
+                deterministic,
+                init_cache,
             )
             hidden_states = hidden_states[0]
 
