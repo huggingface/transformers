@@ -584,10 +584,7 @@ class TrainingSummary:
             # Those are not real datasets from the Hub so we exclude them.
             if default_tag not in ["csv", "json", "pandas", "parquet", "text"]:
                 if dataset_metadata is None:
-                    dataset_metadata = [{
-                        "config": one_dataset.info.config_name,
-                        "split": one_dataset.split.__str__()
-                    }]
+                    dataset_metadata = [{"config": one_dataset.info.config_name, "split": one_dataset.split.__str__()}]
                 if dataset_tags is None:
                     dataset_tags = [default_tag]
                 if dataset_args is None:
