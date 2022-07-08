@@ -460,6 +460,7 @@ class FlaxDataCollatorForT5MLM:
 
 
 def generate_batch_splits(samples_idx: jnp.ndarray, batch_size: int) -> jnp.ndarray:
+    samples_idx = jax.device_get(samples_idx)
     num_samples = len(samples_idx)
     samples_to_remove = num_samples % batch_size
 

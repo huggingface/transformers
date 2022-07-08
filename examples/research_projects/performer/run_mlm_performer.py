@@ -434,6 +434,7 @@ def eval_step(params, batch):
 
 
 def generate_batch_splits(samples_idx: jnp.ndarray, batch_size: int) -> jnp.ndarray:
+    samples_idx = jax.device_get(samples_idx)
     nb_samples = len(samples_idx)
     samples_to_remove = nb_samples % batch_size
 
