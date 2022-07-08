@@ -68,6 +68,7 @@ jobs:
         steps:
             - checkout
             - run: sudo apt update
+            - run: sudo apt-get update; sudo apt-get install make build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev wget curl llvm libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev
             - run: sudo apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg
             - run: sudo python3 -m pip install --no-cache-dir --upgrade pip
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
