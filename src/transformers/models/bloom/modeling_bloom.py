@@ -283,14 +283,14 @@ class BloomAttention(nn.Module):
     ):
         fused_qkv = self.query_key_value(hidden_states)
 
-        # [batch_size, seq_length, 3 x hidden_size] --> 3 x [batch_size, seq_length, num_heads, head_dim]
+        # [batch_size, seq_length, 3 x hidden_size] --> 3 x [seq_length, batch_size * num_heads, head_dim]
         (query_layer, key_layer, value_layer) = self._split_heads(fused_qkv)
         query_layer = query_layer * (1 / math.sqrt(self.head_dim))
 
         if layer_past is not None:
             past_key, past_value = layer_past
-            key_layer = torch.cat((past_key.type_as(key_layer), key_layer), dim=-1)
-            value_layer = torch.cat((past_value.type_as(value_layer), value_layer), dim=-1)
+            key_layer = torch.cat((past_key.type_as(key_layer), key_layer), dim=0)
+            value_layer = torch.cat((past_value.type_as(value_layer), value_layer), dim=0)
 
         if use_cache is True:
             present = (key_layer, value_layer)
@@ -320,7 +320,7 @@ class BloomAttention(nn.Module):
         output_size = (value_layer.size(1) // self.num_heads, self.num_heads, value_layer.size(0), self.head_dim)
 
         # change view [batch_size x num_heads, q_length, k_length]
-        attention_probs_reshaped = attention_probs.view(output_size[0] * output_size[1], output_size[2], -1)
+        attention_probs_reshaped = attention_probs.view(output_size[0] * output_size[1], -1, output_size[2])
 
         # matmul: [batch_size * num_heads, q_length, head_dim]
         context_layer = torch.bmm(attention_probs_reshaped, value_layer.transpose(0, 1))
@@ -671,7 +671,7 @@ class BloomModel(BloomPreTrainedModel):
         current_sequence_length = hidden_states.shape[1]
         past_key_values_length = 0
         if past_key_values[0] is not None:
-            past_key_values_length = past_key_values[0][0].shape[1]
+            past_key_values_length = past_key_values[0][0].shape[0]
             current_sequence_length += past_key_values_length
 
         if attention_mask is None:
