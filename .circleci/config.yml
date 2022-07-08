@@ -62,7 +62,7 @@ jobs:
     run_examples_torch:
         working_directory: ~/transformers
         machine: # executor type
-          image: ubuntu-2004:202010-01 # # recommended linux image - includes Ubuntu 20.04, docker 19.03.13, docker-compose 1.27.4
+          image: ubuntu-2004:202206-01 # # recommended linux image - includes Ubuntu 20.04, docker 19.03.13, docker-compose 1.27.4
         resource_class: xlarge
         parallelism: 1
         steps:
