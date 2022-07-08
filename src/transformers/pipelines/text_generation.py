@@ -212,7 +212,12 @@ class TextGenerationPipeline(Pipeline):
         else:
             in_b = input_ids.shape[0]
         prompt_text = model_inputs.pop("prompt_text")
+        import datetime
+
+        start = datetime.datetime.now()
         generated_sequence = self.model.generate(input_ids=input_ids, **generate_kwargs)  # BS x SL
+
+        print(f"Generation took {datetime.datetime.now() - start}")
         out_b = generated_sequence.shape[0]
         if self.framework == "pt":
             generated_sequence = generated_sequence.reshape(in_b, out_b // in_b, *generated_sequence.shape[1:])

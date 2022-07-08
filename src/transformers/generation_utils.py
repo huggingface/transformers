@@ -1679,6 +1679,10 @@ class GenerationMixin:
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
+            print("Input ids", input_ids.shape)
+            print("Input ids", model_inputs["input_ids"].shape)
+            print("Keys", model_inputs.keys())
+
             # forward pass to get next token
             outputs = self(
                 **model_inputs,
@@ -1933,6 +1937,10 @@ class GenerationMixin:
 
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+
+            print("Input ids", input_ids.shape)
+            print("Input ids", model_inputs["input_ids"].shape)
+            print("Keys", model_inputs.keys())
 
             # forward pass to get next token
             outputs = self(
