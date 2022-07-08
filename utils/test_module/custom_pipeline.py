@@ -17,7 +17,7 @@ class PairClassificationPipeline(Pipeline):
         return preprocess_kwargs, {}, {}
 
     def preprocess(self, text, second_text=None):
-        return self.tokenizer(text, text_pair=second_text, return_tensors="pt")
+        return self.tokenizer(text, text_pair=second_text, return_tensors=self.framework)
 
     def _forward(self, model_inputs):
         return self.model(**model_inputs)
