@@ -71,12 +71,12 @@ jobs:
             - run: sudo apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg
             - run: sudo python3 -m pip install --no-cache-dir --upgrade pip
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
-            - run: pip install --upgrade pip
-            - run: pip install .[sklearn,torch,sentencepiece,testing,torch-speech]
-            - run: pip install -r examples/pytorch/_tests_requirements.txt
-            - run: python utils/tests_fetcher.py --filters examples tests | tee test_preparation.txt
+            - run: pip3 install --upgrade pip
+            - run: pip3 install .[sklearn,torch,sentencepiece,testing,torch-speech]
+            - run: pip3 install -r examples/pytorch/_tests_requirements.txt
+            - run: python3 utils/tests_fetcher.py --filters examples tests | tee test_preparation.txt
             - run: |
-                    python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/test_pytorch_examples.py -k "(test_run_111_audio_classification or test_run_222_clm)" | tee tests_output.txt
+                    python3 -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/test_pytorch_examples.py -k "(test_run_111_audio_classification or test_run_222_clm)" | tee tests_output.txt
 
 workflow_filters: &workflow_filters
     filters:
