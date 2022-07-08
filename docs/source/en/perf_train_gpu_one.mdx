@@ -33,7 +33,7 @@ pip install transformers datasets accelerate nvidia-ml-py3
 
 The `nvidia-ml-py3` library allows us to monitor the memory usage of the models from within Python. You might be familiar with the `nvidia-smi` command in the terminal - this library allows to access the same information in Python directly.
 
-Then we create some dummy data. We create random token IDs between 100 and 30000 and binary labels for a classifier. In total we get 512 sequences each with length 512 and store them in a [`Dataset`](https://huggingface.co/docs/datasets/package_reference/main_classes.html?highlight=dataset#datasets.Dataset) with PyTorch format.
+Then we create some dummy data. We create random token IDs between 100 and 30000 and binary labels for a classifier. In total we get 512 sequences each with length 512 and store them in a [`~datasets.Dataset`] with PyTorch format.
 
 
 ```py
@@ -400,7 +400,7 @@ TrainingArguments(tf32=True)
 ```
 By default the PyTorch default is used.
 
-Note: tf32 mode is internal to CUDA and can't be accessed directly via `tensor.to(dtype=torch.tf32)` as `torch.tf32` doesn't exit.
+Note: tf32 mode is internal to CUDA and can't be accessed directly via `tensor.to(dtype=torch.tf32)` as `torch.tf32` doesn't exist.
 
 Note: you need `torch>=1.7` to enjoy this feature.
 

@@ -1696,6 +1696,30 @@ class TFRagTokenForGeneration(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+TF_REGNET_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFRegNetForImageClassification(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFRegNetModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFRegNetPreTrainedModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 TF_REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -1756,6 +1780,30 @@ class TFRemBertModel(metaclass=DummyObject):
 
 
 class TFRemBertPreTrainedModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+TF_RESNET_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFResNetForImageClassification(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFResNetModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFResNetPreTrainedModel(metaclass=DummyObject):
     _backends = ["tf"]
 
     def __init__(self, *args, **kwargs):

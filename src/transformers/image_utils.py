@@ -358,3 +358,20 @@ class ImageFeatureExtractionMixin:
         ]
 
         return new_image
+
+    def flip_channel_order(self, image):
+        """
+        Flips the channel order of `image` from RGB to BGR, or vice versa. Note that this will trigger a conversion of
+        `image` to a NumPy array if it's a PIL Image.
+
+        Args:
+            image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
+                The image whose color channels to flip. If `np.ndarray` or `torch.Tensor`, the channel dimension should
+                be first.
+        """
+        self._ensure_format_supported(image)
+
+        if isinstance(image, PIL.Image.Image):
+            image = self.to_numpy_array(image)
+
+        return image[::-1, :, :]

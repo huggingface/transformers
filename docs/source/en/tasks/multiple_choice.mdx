@@ -79,7 +79,7 @@ The preprocessing function needs to do:
 ...     return {k: [v[i : i + 4] for i in range(0, len(v), 4)] for k, v in tokenized_examples.items()}
 ```
 
-Use 🤗 Datasets [`map`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map) function to apply the preprocessing function over the entire dataset. You can speed up the `map` function by setting `batched=True` to process multiple elements of the dataset at once:
+Use 🤗 Datasets [`~datasets.Dataset.map`] function to apply the preprocessing function over the entire dataset. You can speed up the `map` function by setting `batched=True` to process multiple elements of the dataset at once:
 
 ```py
 tokenized_swag = swag.map(preprocess_function, batched=True)
@@ -224,7 +224,7 @@ At this point, only three steps remain:
 ```
 </pt>
 <tf>
-To fine-tune a model in TensorFlow, start by converting your datasets to the `tf.data.Dataset` format with [`to_tf_dataset`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.to_tf_dataset). Specify inputs in `columns`, targets in `label_cols`, whether to shuffle the dataset order, batch size, and the data collator:
+To fine-tune a model in TensorFlow, start by converting your datasets to the `tf.data.Dataset` format with [`~datasets.Dataset.to_tf_dataset`]. Specify inputs in `columns`, targets in `label_cols`, whether to shuffle the dataset order, batch size, and the data collator:
 
 ```py
 >>> data_collator = DataCollatorForMultipleChoice(tokenizer=tokenizer)
