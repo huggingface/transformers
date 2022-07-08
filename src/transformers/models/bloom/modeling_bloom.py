@@ -245,16 +245,20 @@ class BloomAttention(nn.Module):
         """
         Split the last dimension into (num_heads, head_dim)
         """
-        new_tensor_shape = fused_qkv.size()[1:-1] + (fused_qkv.size()[0] * self.num_heads, 3 * self.head_dim)
+        new_tensor_shape = fused_qkv.size()[:-1] + (self.num_heads, 3 * self.head_dim)
         # new_tensor_shape = (fused_qkv.size(1), fused_qkv.size(0)*fused_qkv.size(2), fused_qkv.size(-1))
-        fused_qkv = fused_qkv.transpose(1, 0)
+        # fused_qkv = fused_qkv.permute(1, 0)
         fused_qkv = fused_qkv.reshape(*new_tensor_shape)
+        fused_qkv = fused_qkv.permute(0, 2, 1, 3)
         return torch.split(fused_qkv, self.head_dim, -1)
 
     def _split_attention(self, matmul_result):
         return matmul_result.view(
             matmul_result.size(0) // self.num_heads, self.num_heads, matmul_result.size(1), matmul_result.size(2)
         )
+
+    def _merge_batch(self, x):
+        return x.reshape(x.size(0)*x.size(1), x.size(3), x.size(2))
 
     def _merge_heads(self, x):
         # What we want to achieve is:
@@ -283,19 +287,21 @@ class BloomAttention(nn.Module):
     ):
         fused_qkv = self.query_key_value(hidden_states)
 
-        # [batch_size, seq_length, 3 x hidden_size] --> 3 x [seq_length, batch_size * num_heads, head_dim]
+        # [batch_size, seq_length, 3 x hidden_size] --> 3 x [seq_length, batch_size, num_heads, head_dim]
         (query_layer, key_layer, value_layer) = self._split_heads(fused_qkv)
         query_layer = query_layer * (1 / math.sqrt(self.head_dim))
 
         if layer_past is not None:
             past_key, past_value = layer_past
-            key_layer = torch.cat((past_key.type_as(key_layer), key_layer), dim=0)
-            value_layer = torch.cat((past_value.type_as(value_layer), value_layer), dim=0)
+            key_layer = torch.cat((past_key.type_as(key_layer), key_layer), dim=1)
+            value_layer = torch.cat((past_value.type_as(value_layer), value_layer), dim=1)
 
         if use_cache is True:
             present = (key_layer, value_layer)
         else:
             present = None
+        
+        query_layer, key_layer, value_layer = self._merge_batch(query_layer), self._merge_batch(key_layer), self._merge_batch(value_layer)
 
         # [num_heads*batch_size, q_length, k_length]
         matmul_result = torch.bmm(query_layer.transpose(1, 0), key_layer.permute(1, 2, 0)) + alibi
@@ -791,7 +797,6 @@ class BloomForCausalLM(BloomPreTrainedModel):
             "input_ids": input_ids,
             "past_key_values": past,
             "use_cache": kwargs.get("use_cache"),
-            "position_ids": position_ids,
             "attention_mask": attention_mask,
         }
 
