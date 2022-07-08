@@ -48,11 +48,11 @@ _FEAT_EXTRACTOR_FOR_DOC = "AutoFeatureExtractor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "nandwalritik/swinv2-tiny-patch4-window8-256"
-_EXPECTED_OUTPUT_SHAPE = [1, 49, 768]
+_EXPECTED_OUTPUT_SHAPE = [1, 64, 768]
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "nandwalritik/swinv2-tiny-patch4-window8-256"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
 
 
 SWINV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -1046,7 +1046,8 @@ class Swinv2Model(Swinv2PreTrainedModel):
 
 
 @add_start_docstrings(
-    "Swinv2 Model with a decoder on top for masked image modeling, as proposed in [SimMIM](https://arxiv.org/abs/2111.09886).",
+    "Swinv2 Model with a decoder on top for masked image modeling, as proposed in"
+    " [SimMIM](https://arxiv.org/abs/2111.09886).",
     SWINV2_START_DOCSTRING,
 )
 class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
@@ -1091,8 +1092,8 @@ class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/swinv2_tiny_patch4_windows8_256")
-        >>> model = Swinv2ForMaskedImageModeling.from_pretrained("microsoft/swinv2_tiny_patch4_windows8_256")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("nandwalritik/swinv2-tiny-patch4-window8-256")
+        >>> model = Swinv2ForMaskedImageModeling.from_pretrained("nandwalritik/swinv2-tiny-patch4-window8-256")
 
         >>> num_patches = (model.config.image_size // model.config.patch_size) ** 2
         >>> pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values
@@ -1102,7 +1103,7 @@ class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
         >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
         >>> loss, reconstructed_pixel_values = outputs.loss, outputs.logits
         >>> list(reconstructed_pixel_values.shape)
-        [1, 3, 224, 224]
+        [1, 3, 256, 256]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
