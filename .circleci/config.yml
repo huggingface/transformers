@@ -86,7 +86,7 @@ jobs:
             - store_artifacts:
                   path: ~/transformers/test_preparation.txt
             - run: |
-                    python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/test_pytorch_examples.py -k "(test_run_clm or test_run_wav2vec2_pretraining)" | tee tests_output.txt
+                    python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/test_pytorch_examples.py -k "(test_run_speech_recognition_ctc or test_run_audio_classification or test_run_wav2vec2_pretraining or test_run_clm)" | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/examples_output.txt
             - store_artifacts:
