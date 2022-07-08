@@ -40,6 +40,7 @@ from transformers import (
     IBertConfig,
     RobertaConfig,
     TextClassificationPipeline,
+    TFAutoModelForSequenceClassification,
     pipeline,
 )
 from transformers.pipelines import PIPELINE_REGISTRY, get_task
@@ -57,14 +58,13 @@ from transformers.testing_utils import (
     require_torch,
     slow,
 )
+from transformers.utils import is_tf_available, is_torch_available
 from transformers.utils import logging as transformers_logging
-from transformers.utils.import_utils import is_torch_available
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
 
-if is_torch_available():
-    from test_module.custom_pipeline import PairClassificationPipeline  # noqa E402
+from test_module.custom_pipeline import PairClassificationPipeline  # noqa E402
 
 
 logger = logging.getLogger(__name__)
@@ -805,20 +805,20 @@ class CustomPipelineTest(unittest.TestCase):
             # restore
             PIPELINE_REGISTRY.supported_tasks[alias] = original_task
 
-    @require_torch
     def test_register_pipeline(self):
         PIPELINE_REGISTRY.register_pipeline(
             "custom-text-classification",
             pipeline_class=PairClassificationPipeline,
-            pt_model=AutoModelForSequenceClassification,
+            pt_model=AutoModelForSequenceClassification if is_torch_available() else None,
+            tf_model=TFAutoModelForSequenceClassification if is_tf_available() else None,
             default={"pt": "hf-internal-testing/tiny-random-distilbert"},
             type="text",
         )
         assert "custom-text-classification" in PIPELINE_REGISTRY.get_supported_tasks()
 
         task_def, _ = PIPELINE_REGISTRY.check_task("custom-text-classification")
-        self.assertEqual(task_def["pt"], (AutoModelForSequenceClassification,))
-        self.assertEqual(task_def["tf"], ())
+        self.assertEqual(task_def["pt"], (AutoModelForSequenceClassification,) if is_torch_available() else ())
+        self.assertEqual(task_def["tf"], (TFAutoModelForSequenceClassification,) if is_tf_available() else ())
         self.assertEqual(task_def["type"], "text")
         self.assertEqual(task_def["impl"], PairClassificationPipeline)
         self.assertEqual(task_def["default"], {"model": {"pt": "hf-internal-testing/tiny-random-distilbert"}})
@@ -826,12 +826,12 @@ class CustomPipelineTest(unittest.TestCase):
         # Clean registry for next tests.
         del PIPELINE_REGISTRY.supported_tasks["custom-text-classification"]
 
-    @require_torch
     def test_dynamic_pipeline(self):
         PIPELINE_REGISTRY.register_pipeline(
             "pair-classification",
             pipeline_class=PairClassificationPipeline,
-            pt_model=AutoModelForSequenceClassification,
+            pt_model=AutoModelForSequenceClassification if is_torch_available() else None,
+            tf_model=TFAutoModelForSequenceClassification if is_tf_available() else None,
         )
 
         classifier = pipeline("pair-classification", model="hf-internal-testing/tiny-random-bert")
@@ -847,8 +847,8 @@ class CustomPipelineTest(unittest.TestCase):
                 {
                     "pair-classification": {
                         "impl": "custom_pipeline.PairClassificationPipeline",
-                        "pt": ("AutoModelForSequenceClassification",),
-                        "tf": (),
+                        "pt": ("AutoModelForSequenceClassification",) if is_torch_available() else (),
+                        "tf": ("TFAutoModelForSequenceClassification",) if is_tf_available() else (),
                     }
                 },
             )
