@@ -346,7 +346,14 @@ class TFGenerationMixin:
     A class containing all of the functions supporting generation, to be used as a mixin in [`TFPreTrainedModel`].
     """
 
-    seed_generator = tf.random.Generator.from_non_deterministic_state()
+    _seed_generator = None
+
+    @property
+    def seed_generator(self):
+        if self._seed_generator is None:
+            self._seed_generator = tf.random.Generator.from_non_deterministic_state()
+        return self._seed_generator
+
     supports_xla_generation = True
 
     def prepare_inputs_for_generation(self, inputs, **kwargs):

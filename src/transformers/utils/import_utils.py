@@ -506,7 +506,9 @@ def is_in_notebook():
             raise ImportError("console")
         if "VSCODE_PID" in os.environ:
             raise ImportError("vscode")
-        if "DATABRICKS_RUNTIME_VERSION" in os.environ:
+        if "DATABRICKS_RUNTIME_VERSION" in os.environ and os.environ["DATABRICKS_RUNTIME_VERSION"] < "11.0":
+            # Databricks Runtime 11.0 and above uses IPython kernel by default so it should be compatible with Jupyter notebook
+            # https://docs.microsoft.com/en-us/azure/databricks/notebooks/ipython-kernel
             raise ImportError("databricks")
 
         return importlib.util.find_spec("IPython") is not None

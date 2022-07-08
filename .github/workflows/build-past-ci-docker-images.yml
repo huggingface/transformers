@@ -1,0 +1,108 @@
+name: Build docker images (Past CI)
+
+on:
+  push:
+    branches:
+      - past-ci-docker-image*
+
+concurrency:
+  group: docker-images-builds
+  cancel-in-progress: false
+
+jobs:
+  past-pytorch-docker:
+    name: "Past PyTorch Docker"
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ["1.10", "1.9", "1.8", "1.7", "1.6", "1.5", "1.4"]
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+      -
+        name: Check out code
+        uses: actions/checkout@v2
+      -
+        name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      -
+        name: Build and push
+        uses: docker/build-push-action@v2
+        with:
+          context: ./docker/transformers-past-gpu
+          build-args: |
+            REF=main
+            FRAMEWORK=pytorch
+            VERSION=${{ matrix.version }}
+          push: true
+          tags: huggingface/transformers-pytorch-past-${{ matrix.version }}-gpu
+
+  past-tensorflow-docker:
+    name: "Past TensorFlow Docker"
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ["2.8", "2.7", "2.6", "2.5"]
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+      -
+        name: Check out code
+        uses: actions/checkout@v2
+      -
+        name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      -
+        name: Build and push
+        uses: docker/build-push-action@v2
+        with:
+          context: ./docker/transformers-past-gpu
+          build-args: |
+            REF=main
+            FRAMEWORK=tensorflow
+            VERSION=${{ matrix.version }}
+          push: true
+          tags: huggingface/transformers-tensorflow-past-${{ matrix.version }}-gpu
+
+  past-tensorflow-docker-2-4:
+    name: "Past TensorFlow Docker"
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ["2.4"]
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+      -
+        name: Check out code
+        uses: actions/checkout@v2
+      -
+        name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      -
+        name: Build and push
+        uses: docker/build-push-action@v2
+        with:
+          context: ./docker/transformers-past-gpu
+          build-args: |
+            REF=main
+            BASE_DOCKER_IMAGE=nvidia/cuda:11.0.3-cudnn8-devel-ubuntu20.04
+            FRAMEWORK=tensorflow
+            VERSION=${{ matrix.version }}
+          push: true
+          tags: huggingface/transformers-tensorflow-past-${{ matrix.version }}-gpu
