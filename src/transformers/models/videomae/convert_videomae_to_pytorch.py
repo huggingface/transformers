@@ -185,8 +185,6 @@ def convert_videomae_checkpoint(checkpoint_path, pytorch_dump_folder_path, model
     outputs = model(**inputs)
     logits = outputs.logits
 
-    print("Shape of logits:", logits.shape)
-
     model_names = [
         # Kinetics-400 checkpoints (short = pretrained only for 800 epochs instead of 1600)
         "videomae-base-short",
@@ -206,19 +204,15 @@ def convert_videomae_checkpoint(checkpoint_path, pytorch_dump_folder_path, model
 
     if model_name == "videomae-base-short":
         expected_shape = torch.Size([1, 1408, 1536])
-        expected_slice = torch.tensor(
-            [[-0.4798, -0.3191, -0.2558], [-0.3396, -0.2823, -0.1581], [0.4327, 0.4635, 0.4745]]
-        )
+        expected_slice = torch.tensor([[0.7994, 0.9612, 0.8508], [0.7401, 0.8958, 0.8302], [0.5862, 0.7468, 0.7325]])
         # we verified the loss both for normalized and unnormalized targets for this one
-        expected_loss = (
-            torch.tensor([0.5379046201705933]) if config.norm_pix_loss else torch.tensor([0.593469500541687])
-        )
+        expected_loss = torch.tensor([0.5142]) if config.norm_pix_loss else torch.tensor([0.6469])
     elif model_name == "videomae-base-finetuned-kinetics":
         expected_shape = torch.Size([1, 400])
-        expected_slice = torch.tensor([0.7666, -0.2265, -0.5551])
+        expected_slice = torch.tensor([0.3669, -0.0688, -0.2421])
     elif model_name == "videomae-base-finetuned-ssv2":
-        expected_shape = torch.Size([1, 74])
-        expected_slice = torch.tensor([-0.1354, -0.4494, -0.4979])
+        expected_shape = torch.Size([1, 174])
+        expected_slice = torch.tensor([-0.0537, -0.1539, -0.3266])
 
     # verify logits
     assert logits.shape == expected_shape

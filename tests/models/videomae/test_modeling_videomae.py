@@ -372,7 +372,7 @@ class VideoMAEModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 400))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([0.7666, -0.2265, -0.5551]).to(torch_device)
+        expected_slice = torch.tensor([0.3669, -0.0688, -0.2421]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
 
@@ -395,14 +395,21 @@ class VideoMAEModelIntegrationTest(unittest.TestCase):
 
         # verify the logits
         expected_shape = torch.Size([1, 1408, 1536])
-        expected_slice = torch.tensor(
-            [[-0.4798, -0.3191, -0.2558], [-0.3396, -0.2823, -0.1581], [0.4327, 0.4635, 0.4745]]
-        )
+        expected_slice = torch.tensor([[0.7994, 0.9612, 0.8508], [0.7401, 0.8958, 0.8302], [0.5862, 0.7468, 0.7325]])
         self.assertEqual(outputs.logits.shape, expected_shape)
         self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice, atol=1e-4))
 
-        # verify the loss
-        expected_loss = (
-            torch.tensor([0.5379046201705933]) if model.config.norm_pix_loss else torch.tensor([0.593469500541687])
+        # verify the loss (`config.norm_pix_loss` = `True`)
+        expected_loss = torch.tensor([0.5142])
+        self.assertTrue(torch.allclose(outputs.loss, expected_loss, atol=1e-4))
+
+        # verify the loss (`config.norm_pix_loss` = `False`)
+        model = VideoMAEForPreTraining.from_pretrained("nielsr/videomae-base-short", norm_pix_loss=False).to(
+            torch_device
         )
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        expected_loss = torch.tensor(torch.tensor([0.6469]))
         self.assertTrue(torch.allclose(outputs.loss, expected_loss, atol=1e-4))

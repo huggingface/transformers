@@ -42,11 +42,11 @@ class VideoMAEFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the input to a certain `size`.
+            Whether to resize the shorter edge of the input to a certain `size`.
         size (`int` or `Tuple(int)`, *optional*, defaults to 224):
-            Resize the input to the given size. If a tuple is provided, it should be (width, height). If only an
-            integer is provided, then the input will be resized to (size, size). Only has an effect if `do_resize` is
-            set to `True`.
+            Resize the shorter edge of the input to the given size. If a tuple is provided, it should be (width,
+            height). If only an integer is provided, then the input will be resized to (size, size). Only has an effect
+            if `do_resize` is set to `True`.
         resample (`int`, *optional*, defaults to `PIL.Image.BILINEAR`):
             An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
             `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`. Only has an effect
@@ -84,7 +84,7 @@ class VideoMAEFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
 
     def resize_video(self, video, size, resample="bilinear"):
-        return [self.resize(frame, size, resample) for frame in video]
+        return [self.resize(frame, size, resample, default_to_square=False) for frame in video]
 
     def crop_video(self, video, size):
         return [self.center_crop(frame, size) for frame in video]
@@ -105,10 +105,11 @@ class VideoMAEFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
         </Tip>
 
         Args:
-            videos (`List[PIL.Image.Image]`, `List[np.ndarray]`, `List[List[PIL.Image.Image]]`, `List[List[np.ndarrray]]`):
-                The video or batch of videos to be prepared. Each video should be a list of frames, which can be either
-                PIL images or NumPy arrays. In case of a NumPy array, each frame should be of shape (H, W, C), where H
-                and W are frame height and width, and C is a number of channels.
+            videos (`List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`, `List[List[PIL.Image.Image]]`, `List[List[np.ndarrray]]`,:
+                `List[List[torch.Tensor]]`): The video or batch of videos to be prepared. Each video should be a list
+                of frames, which can be either PIL images or NumPy arrays. In case of NumPy arrays/PyTorch tensors,
+                each frame should be of shape (H, W, C), where H and W are frame height and width, and C is a number of
+                channels.
 
             return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to `'np'`):
                 If set, will return tensors of a particular framework. Acceptable values are:

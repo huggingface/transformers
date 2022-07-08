@@ -1,5 +1,5 @@
-# import torch
 import numpy as np
+import torch
 
 from transformers import VideoMAEFeatureExtractor
 
@@ -10,8 +10,12 @@ feature_extractor = VideoMAEFeatureExtractor()
 
 video = [np.random.rand(512, 640, 3), np.random.rand(312, 200, 3)]
 
-video = np.random.rand(16, 360, 640, 3)
-video = [video[i] for i in range(video.shape[0])]
+video = [np.random.rand(3, 512, 640), np.random.rand(3, 312, 200)]
+
+video = [torch.randn(3, 512, 640), torch.rand(3, 312, 200)]
+
+# video = np.random.rand(16, 360, 640, 3)
+# video = [video[i] for i in range(video.shape[0])]
 
 encoding = feature_extractor(video, return_tensors="pt")
 
