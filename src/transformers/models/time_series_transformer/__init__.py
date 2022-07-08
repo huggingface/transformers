@@ -46,10 +46,6 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_time_series_transformer"] = [
         "TIME_SERIES_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "TimeSeriesTransformerForConditionalGeneration",
-        "TimeSeriesTransformerForQuestionAnswering",
-        "TimeSeriesTransformerForSequenceClassification",
-        "TimeSeriesTransformerForCausalLM",
         "TimeSeriesTransformerForPrediction",
         "TimeSeriesTransformerModel",
         "TimeSeriesTransformerPreTrainedModel",
