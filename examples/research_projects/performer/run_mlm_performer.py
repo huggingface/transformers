@@ -640,7 +640,7 @@ if __name__ == "__main__":
         # Generate an epoch by shuffling sampling indices from the train dataset
         nb_training_samples = len(tokenized_datasets["train"])
         # Avoid using jax.numpy here in case of TPU training
-        train_samples_idx = np.random.permutation(np.arange(nb_training_samples))
+        training_samples_idx = np.random.permutation(np.arange(nb_training_samples))
         training_batch_idx = generate_batch_splits(training_samples_idx, batch_size)
 
         # Gather the indexes for creating the batch and do a training step
