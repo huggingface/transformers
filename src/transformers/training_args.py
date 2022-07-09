@@ -1239,9 +1239,9 @@ class TrainingArguments:
                     if not is_torch_tensorrt_fx_available():
                         raise RuntimeError("Torch-TensorRT FX path is not installed.")
                     if self.torchdynamo == "fx2trt-fp16":
-	                    return torchdynamo.optimize(backends.fx2trt_compiler_fp16)
+                        return torchdynamo.optimize(backends.fx2trt_compiler_fp16)
                     elif self.torchdynamo == "fx2trt":
-	                    return torchdynamo.optimize(backends.fx2trt_compiler)
+                        return torchdynamo.optimize(backends.fx2trt_compiler)
                 else:
                     raise RuntimeError(f"Torchdynamo backend {self.torchdynamo} is not supported.")
 
