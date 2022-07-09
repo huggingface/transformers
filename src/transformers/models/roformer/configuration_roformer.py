@@ -89,6 +89,12 @@ class RoFormerConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         rotary_value (`bool`, *optional*, defaults to `False`):
             Whether or not apply rotary position embeddings on value layer.
+        use_bias (`bool`, *optional*, defaults to `False`):
+            Whether or not apply rotary position embeddings on value layer.
+        rotary_value (`bool`, *optional*, defaults to `False`):
+            Whether or not apply rotary position embeddings on value layer. use_bias=True,
+        use_bias=True,
+        norm_type
 
     Example:
 
@@ -124,6 +130,8 @@ class RoFormerConfig(PretrainedConfig):
         pad_token_id=0,
         rotary_value=False,
         use_cache=True,
+        use_bias=True,
+        norm_type="layer_norm",
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
@@ -143,6 +151,8 @@ class RoFormerConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.rotary_value = rotary_value
         self.use_cache = use_cache
+        self.use_bias = use_bias
+        self.norm_type = norm_type
 
 
 class RoFormerOnnxConfig(OnnxConfig):

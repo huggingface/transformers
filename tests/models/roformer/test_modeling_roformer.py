@@ -472,6 +472,24 @@ class RoFormerModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
 
+    def test_inference_roformer_v2(self):
+        model = RoFormerForMaskedLM.from_pretrained("sijunhe/tiny_roformer_v2_test")
+        # Under this tiny config, properly initiated Roformer V2 model should only have 1672 parameters instead of 1912 parameters
+        # due to using RMS norm and removing biases in the attention module
+        num_trainable_weights = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        self.assertEquals(num_trainable_weights, 1672)
+
+        input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
+        output = model(input_ids)[0]
+
+        expected_shape = torch.Size((1, 6, 16))
+        self.assertEqual(output.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[[0.0000, -0.0720, 0.0497], [0.0000, -0.0802, 0.1169], [0.0000, 0.0022, -0.0271]]]
+        )
+        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+
 
 @require_torch
 class RoFormerSinusoidalPositionalEmbeddingTest(unittest.TestCase):

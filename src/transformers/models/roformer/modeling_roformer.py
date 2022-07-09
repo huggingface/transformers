@@ -172,6 +172,16 @@ def load_tf_weights_in_roformer(model, config, tf_checkpoint_path):
     return model
 
 
+class Norm(nn.Module):
+    def __init__(self, eps=1e-12):
+        super().__init__()
+        self.eps = eps
+
+    def forward(self, x):
+        variance = torch.mean(torch.square(x), dim=-1, keepdim=True)
+        return x / torch.sqrt(variance + self.eps)
+
+
 class RoFormerEmbeddings(nn.Module):
     """Construct the embeddings from word and token_type embeddings."""
 
@@ -182,7 +192,11 @@ class RoFormerEmbeddings(nn.Module):
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
-        self.LayerNorm = nn.LayerNorm(config.embedding_size, eps=config.layer_norm_eps)
+        self.LayerNorm = (
+            nn.LayerNorm(config.embedding_size, eps=config.layer_norm_eps)
+            if config.norm_type == "layer_norm"
+            else Norm(eps=config.layer_norm_eps)
+        )
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, input_ids=None, token_type_ids=None, inputs_embeds=None):
@@ -219,9 +233,9 @@ class RoFormerSelfAttention(nn.Module):
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = nn.Linear(config.hidden_size, self.all_head_size)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size)
+        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.use_bias)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.use_bias)
+        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.use_bias)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
@@ -351,7 +365,11 @@ class RoFormerSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.LayerNorm = (
+            nn.LayerNorm(config.embedding_size, eps=config.layer_norm_eps)
+            if config.norm_type == "layer_norm"
+            else Norm(eps=config.layer_norm_eps)
+        )
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
@@ -435,7 +453,11 @@ class RoFormerOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.LayerNorm = (
+            nn.LayerNorm(config.embedding_size, eps=config.layer_norm_eps)
+            if config.norm_type == "layer_norm"
+            else Norm(eps=config.layer_norm_eps)
+        )
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
@@ -647,7 +669,11 @@ class RoFormerPredictionHeadTransform(nn.Module):
             self.transform_act_fn = ACT2FN[config.hidden_act]
         else:
             self.transform_act_fn = config.hidden_act
-        self.LayerNorm = nn.LayerNorm(config.embedding_size, eps=config.layer_norm_eps)
+        self.LayerNorm = (
+            nn.LayerNorm(config.embedding_size, eps=config.layer_norm_eps)
+            if config.norm_type == "layer_norm"
+            else Norm(eps=config.layer_norm_eps)
+        )
 
     def forward(self, hidden_states):
         hidden_states = self.dense(hidden_states)
