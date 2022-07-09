@@ -383,6 +383,10 @@ class Swinv2ModelTest(ModelTesterMixin, unittest.TestCase):
             config.output_hidden_states = True
             self.check_hidden_states_output(inputs_dict, config, model_class, (padded_height, padded_width))
 
+    def test_for_masked_image_modeling(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_masked_image_modeling(*config_and_inputs)
+
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
