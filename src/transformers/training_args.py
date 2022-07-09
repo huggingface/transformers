@@ -952,6 +952,20 @@ class TrainingArguments:
         },
     )
 
+    timeout: int = field(
+        default=1800,
+        metadata={
+            "help": (
+                "Variable to override the default timeout defined by PyTorch and "
+                "introduce a way to prevent Socket Timeouts when mapping large datasets"
+                "Expects timeout in seconds. Used for timeout argument in "
+                "torch.distributed.init_process_group calls. Please refer the PyTorch documentation"
+                "https://pytorch.org/docs/stable/distributed.html#torch.distributed.init_process_group"
+                " timeout is passed datetime object"
+            )
+        }
+    )
+
     def __post_init__(self):
         # Handle --use_env option in torch.distributed.launch (local_rank not passed as an arg then).
         # This needs to happen before any call to self.device or self.n_gpu.
