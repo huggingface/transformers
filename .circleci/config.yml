@@ -64,7 +64,7 @@ jobs:
 #        machine: # executor type
 #          image: ubuntu-2004:202201-02 # # recommended linux image - includes Ubuntu 20.04, docker 19.03.13, docker-compose 1.27.4
         docker:
-            - image: circleci/python:3.7
+            - image: ubuntu:20.04
         resource_class: xlarge
         parallelism: 1
         steps:
