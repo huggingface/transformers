@@ -90,7 +90,20 @@ class VideoMAEFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
         return [self.center_crop(frame, size) for frame in video]
 
     def normalize_video(self, video, mean, std):
-        return [self.normalize(frame, mean, std) for frame in video]
+        # video can be a list of PIL images, list of NumPy arrays or list of PyTorch tensors
+        # first: convert to list of NumPy arrays
+        video = [self.to_numpy_array(frame) for frame in video]
+
+        # second: stack to get (num_frames, num_channels, height, width)
+        video = np.stack(video, axis=0)
+
+        # third: normalize
+        if not isinstance(mean, np.ndarray):
+            mean = np.array(mean).astype(video.dtype)
+        if not isinstance(std, np.ndarray):
+            std = np.array(std).astype(video.dtype)
+
+        return (video - mean[None, :, None, None]) / std[None, :, None, None]
 
     def __call__(
         self, videos: ImageInput, return_tensors: Optional[Union[str, TensorType]] = None, **kwargs
