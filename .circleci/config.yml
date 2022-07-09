@@ -61,26 +61,22 @@ references:
 jobs:
     run_examples_torch:
         working_directory: ~/transformers
-#        machine: # executor type
-#          image: ubuntu-2004:202201-02 # # recommended linux image - includes Ubuntu 20.04, docker 19.03.13, docker-compose 1.27.4
         docker:
-            - image: ubuntu:20.04
+            - image: circleci/python:3.7
+        environment:
+            OMP_NUM_THREADS: 1
+            TRANSFORMERS_IS_CI: yes
         resource_class: xlarge
         parallelism: 1
         steps:
             - checkout
-            - run: apt update
-            - run: apt-get update; apt-get install --reinstall -y make build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev wget curl llvm libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev
-            #- run: sudo apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg
-            - run: apt-get install --reinstall -y git libsndfile1-dev tesseract-ocr espeak-ng python3 ffmpeg
-            - run: python3 -m pip install --no-cache-dir --upgrade pip
-            - run: apt-get -y update && apt-get install --reinstall -y libsndfile1-dev espeak-ng
-            - run: pip3 install --upgrade pip
-            - run: pip3 install .[sklearn,torch,sentencepiece,testing,torch-speech]
-            - run: pip3 install -r examples/pytorch/_tests_requirements.txt
-            - run: python3 utils/tests_fetcher.py --filters examples tests | tee test_preparation.txt
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
+            - run: sudo pip install --upgrade pip
+            - run: sudo pip install .[sklearn,torch,sentencepiece,testing,torch-speech]
+            - run: sudo pip install -r examples/pytorch/_tests_requirements.txt
+            - run: sudo pip freeze
             - run: |
-                    python3 -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/test_pytorch_examples.py -k "(test_run_111_audio_classification or test_run_222_clm)" | tee tests_output.txt
+                    sudo python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/test_pytorch_examples.py -k "(test_run_audio_classification or test_run_clm)"
 
 workflow_filters: &workflow_filters
     filters:
