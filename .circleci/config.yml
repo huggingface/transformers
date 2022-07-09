@@ -70,11 +70,11 @@ jobs:
         steps:
             - checkout
             - run: apt update
-            - run: apt-get update; sudo apt-get install --reinstall -y make build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev wget curl llvm libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev
+            - run: apt-get update; apt-get install --reinstall -y make build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev wget curl llvm libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev
             #- run: sudo apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg
             - run: apt-get install --reinstall -y git libsndfile1-dev tesseract-ocr espeak-ng python3 ffmpeg
             - run: python3 -m pip install --no-cache-dir --upgrade pip
-            - run: apt-get -y update && sudo apt-get install --reinstall -y libsndfile1-dev espeak-ng
+            - run: apt-get -y update && apt-get install --reinstall -y libsndfile1-dev espeak-ng
             - run: pip3 install --upgrade pip
             - run: pip3 install .[sklearn,torch,sentencepiece,testing,torch-speech]
             - run: pip3 install -r examples/pytorch/_tests_requirements.txt
