@@ -265,7 +265,6 @@ class FlaxDataCollatorForLanguageModeling:
 
 
 def generate_batch_splits(samples_idx: jnp.ndarray, batch_size: int) -> jnp.ndarray:
-    samples_idx = jax.device_get(samples_idx)
     num_samples = len(samples_idx)
     samples_to_remove = num_samples % batch_size
 
@@ -593,7 +592,8 @@ if __name__ == "__main__":
 
         # ======================== Evaluating ==============================
         if step % training_args.eval_steps == 0 and step > 0:
-            eval_samples_idx = jnp.arange(data_args.num_eval_samples)
+            # Avoid using jax.numpy here in case of TPU training
+            eval_samples_idx = np.arange(data_args.num_eval_samples)
             eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size)
 
             for i, batch_idx in enumerate(tqdm(eval_batch_idx, desc="Evaluating ...", position=1)):
