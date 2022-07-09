@@ -88,13 +88,17 @@ class RoFormerConfig(PretrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
         rotary_value (`bool`, *optional*, defaults to `False`):
-            Whether or not apply rotary position embeddings on value layer.
+            Whether to apply rotary position embeddings on value layer.
         use_bias (`bool`, *optional*, defaults to `False`):
-            Whether or not apply rotary position embeddings on value layer.
+            Whether to apply rotary position embeddings on value layer.
         rotary_value (`bool`, *optional*, defaults to `False`):
-            Whether or not apply rotary position embeddings on value layer. use_bias=True,
-        use_bias=True,
-        norm_type
+            Whether to apply rotary position embeddings on value layer
+        use_bias (`bool`, *optional*, defaults to `True`):
+            Whether to add bias terms in the Query, Key and Value Linear layers in the Attention Module. This should be
+            `False` for RoFormer V2 models
+        norm_type (`bool`, *optional*, defaults to `"layer_norm"`)
+            The type of normalization layer used in the model. This defaults to `"layer_norm"` and should be set to
+            `"rms_norm"` for RoFormer V2 models
 
     Example:
 
