@@ -247,18 +247,10 @@ class BloomAttention(nn.Module):
         """
         new_tensor_shape = fused_qkv.size()[:-1] + (self.num_heads, 3 * self.head_dim)
         # new_tensor_shape = (fused_qkv.size(1), fused_qkv.size(0)*fused_qkv.size(2), fused_qkv.size(-1))
-        # fused_qkv = fused_qkv.permute(1, 0)
+        # fused_qkv = fused_qkv.transpose(1, 0)
         fused_qkv = fused_qkv.reshape(*new_tensor_shape)
-        fused_qkv = fused_qkv.permute(0, 2, 1, 3)
+        # fused_qkv = fused_qkv.permute(0, 2, 1, 3)
         return torch.split(fused_qkv, self.head_dim, -1)
-
-    def _split_attention(self, matmul_result):
-        return matmul_result.view(
-            matmul_result.size(0) // self.num_heads, self.num_heads, matmul_result.size(1), matmul_result.size(2)
-        )
-
-    def _merge_batch(self, x):
-        return x.reshape(x.size(0)*x.size(1), x.size(3), x.size(2))
 
     def _merge_heads(self, x):
         # What we want to achieve is:
@@ -285,51 +277,72 @@ class BloomAttention(nn.Module):
         use_cache=False,
         output_attentions=False,
     ):
-        fused_qkv = self.query_key_value(hidden_states)
+        fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
 
-        # [batch_size, seq_length, 3 x hidden_size] --> 3 x [seq_length, batch_size, num_heads, head_dim]
+        # 3 x [batch_size, seq_length, num_heads, head_dim]
         (query_layer, key_layer, value_layer) = self._split_heads(fused_qkv)
         query_layer = query_layer * (1 / math.sqrt(self.head_dim))
 
         if layer_past is not None:
             past_key, past_value = layer_past
-            key_layer = torch.cat((past_key.type_as(key_layer), key_layer), dim=1)
-            value_layer = torch.cat((past_value.type_as(value_layer), value_layer), dim=1)
+            # concatenate along seq_length dimension
+            key_layer = torch.cat(
+                (past_key.type_as(key_layer), key_layer), dim=1
+            )  # [batch_size, k_length, num_heads, head_dim]
+            value_layer = torch.cat(
+                (past_value.type_as(value_layer), value_layer), dim=1
+            )  # [batch_size, k_length, num_heads, head_dim]
 
         if use_cache is True:
             present = (key_layer, value_layer)
         else:
             present = None
-        
-        query_layer, key_layer, value_layer = self._merge_batch(query_layer), self._merge_batch(key_layer), self._merge_batch(value_layer)
 
-        # [num_heads*batch_size, q_length, k_length]
-        matmul_result = torch.bmm(query_layer.transpose(1, 0), key_layer.permute(1, 2, 0)) + alibi
+        q = query_layer.transpose(1, 2).reshape(-1, query_layer.shape[1], query_layer.shape[3])
+        k = key_layer.permute(0, 2, 3, 1).reshape(-1, key_layer.shape[3], key_layer.shape[1])
+
+
+        # [batch_size*num_heads, q_length, k_length]
+        matmul_result = (
+            torch.bmm(
+                query_layer.transpose(1, 2).reshape(
+                    -1, query_layer.shape[1], query_layer.shape[3]
+                ),  # [batch_size*num_heads, q_length, head_dim]
+                key_layer.permute(0, 2, 3, 1).reshape(
+                    -1, key_layer.shape[3], key_layer.shape[1]
+                ),  # [batch_size*num_heads, head_dim, k_length]
+            )
+            + alibi
+        )
+
+        import joblib
+        joblib.dump(matmul_result, "matmul_result.pkl")
+        joblib.dump(q, "q.pkl")
+        joblib.dump(k, "k.pkl")
+        joblib.dump(alibi, "alibi.pkl")
 
         # change view to [batch_size, num_heads, q_length, k_length]
-        attention_scores = self._split_attention(matmul_result)
+        attention_scores = matmul_result.view(-1, self.num_heads, matmul_result.size(1), matmul_result.size(2))
 
-        # attention scores and attention mask [b, np, sq, sk]
         input_dtype = attention_scores.dtype
-        attn_weights = attention_scores + attention_mask
+        attn_weights = attention_scores + attention_mask  # [batch_size, num_heads, q_length, k_length]
         attn_weights = torch.max(attn_weights, torch.tensor(torch.finfo(attn_weights.dtype).min))
         attention_probs = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(input_dtype) * (
             ~attention_mask.bool()
-        )
+        )  # [batch_size, num_heads, q_length, k_length]
         # attention_probs = self.scale_mask_softmax(attention_scores, attention_mask).to(value_layer.dtype)
         attention_probs = self.attention_dropout(attention_probs)
 
         if head_mask is not None:
             attention_probs = attention_probs * head_mask
 
-        # context layer shape: [batch_size, num_heads, q_length, head_dim]
-        output_size = (value_layer.size(1) // self.num_heads, self.num_heads, value_layer.size(0), self.head_dim)
-
         # change view [batch_size x num_heads, q_length, k_length]
-        attention_probs_reshaped = attention_probs.view(output_size[0] * output_size[1], -1, output_size[2])
+        attention_probs_reshaped = attention_probs.view(*matmul_result.shape)
 
         # matmul: [batch_size * num_heads, q_length, head_dim]
-        context_layer = torch.bmm(attention_probs_reshaped, value_layer.transpose(0, 1))
+        context_layer = torch.bmm(
+            attention_probs_reshaped, value_layer.transpose(1, 2).reshape(-1, value_layer.size(1), value_layer.size(3))
+        )
 
         # change view [batch_size, num_heads, q_length, head_dim]
         context_layer = self._merge_heads(context_layer)
@@ -677,7 +690,7 @@ class BloomModel(BloomPreTrainedModel):
         current_sequence_length = hidden_states.shape[1]
         past_key_values_length = 0
         if past_key_values[0] is not None:
-            past_key_values_length = past_key_values[0][0].shape[0]
+            past_key_values_length = past_key_values[0][0].shape[1]
             current_sequence_length += past_key_values_length
 
         if attention_mask is None:
