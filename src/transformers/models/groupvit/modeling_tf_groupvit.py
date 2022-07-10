@@ -93,7 +93,7 @@ def groupvit_loss(similarity: tf.Tensor) -> tf.Tensor:
 
 def hard_softmax(logits: tf.Tensor, dim: int):
     """
-    Reference: https://gist.github.com/ariG23498/b9eca9a73fc9d93884fb2f59c4a303fb
+    Reference: https://gist.github.com/ariG23498/08cdae21637b8b61bdd6d21d11719fb3
     """
     y_soft = stable_softmax(logits, dim)
     # Straight through.
@@ -102,6 +102,7 @@ def hard_softmax(logits: tf.Tensor, dim: int):
         index,
         depth=shape_list(logits)[dim],
         axis=dim,
+        dtype=y_soft.dtype,
     )
     ret = y_hard - tf.stop_gradient(y_soft) + y_soft
 
@@ -110,7 +111,10 @@ def hard_softmax(logits: tf.Tensor, dim: int):
 
 def gumbel_softmax(logits: tf.Tensor, tau: float = 1, hard: bool = False, dim: int = -1) -> tf.Tensor:
     gumbel_dist = tfp.distributions.Gumbel(0.0, 1.0)
-    gumbels = gumbel_dist.sample(shape_list(logits))
+    gumbels = gumbel_dist.sample(
+        shape_list(logits),
+        dtype=logits.dtype,
+    )
 
     gumbels = (logits + gumbels) / tau  # ~Gumbel(logits,tau)
     y_soft = stable_softmax(gumbels, dim)
@@ -122,6 +126,7 @@ def gumbel_softmax(logits: tf.Tensor, tau: float = 1, hard: bool = False, dim: i
             index,
             depth=shape_list(logits)[dim],
             axis=dim,
+            dtype=y_soft.dtype,
         )
         ret = y_hard - tf.stop_gradient(y_soft) + y_soft
     else:
@@ -132,6 +137,7 @@ def gumbel_softmax(logits: tf.Tensor, tau: float = 1, hard: bool = False, dim: i
 
 def resize_attention_map(attentions: tf.Tensor, height: int, width: int, align_corners: Optional[bool] = False) -> tf.Tensor:
     """
+    Refernece: https://gist.github.com/ariG23498/3777f8d9be25de8ae782256f5aacb2c5
     Args:
         attentions (`tf.Tensor`): attention map of shape [batch_size, groups, feat_height*feat_width]
         height (`int`): height of the output attention map
@@ -139,7 +145,7 @@ def resize_attention_map(attentions: tf.Tensor, height: int, width: int, align_c
         align_corners (`bool`, *optional*): the `align_corner` argument for `nn.functional.interpolate`.
 
     Returns:
-        `torch.Tensor`: resized attention map of shape [batch_size, groups, height, width]
+        `tf.Tensor`: resized attention map of shape [batch_size, groups, height, width]
     """
 
     scale = (height * width // attentions.shape[2]) ** 0.5
@@ -152,27 +158,31 @@ def resize_attention_map(attentions: tf.Tensor, height: int, width: int, align_c
 
     batch_size = shape_list(attentions)[0]
     groups = shape_list(attentions)[1]  # number of group token
-    # [batch_size, groups, height*width, groups] -> [batch_size, groups, height, width]
+    # [batch_size, groups, height x width, groups] -> [batch_size, groups, height, width]
     attentions = tf.reshape(attentions, (batch_size, groups, feat_height, feat_width))
     attentions = tf.transpose(attentions, perm=(0, 2, 3, 1))
-    attentions = tf.image.resize(
-        attentions, size=(height, width), method="bilinear",
-    )
+    if align_corners:
+        attentions = tf.compat.v1.image.resize(
+            attentions, size=(height, width), method="bilinear", align_corners=align_corners,
+        )
+    else:
+        attentions = tf.image.resize(
+            attentions, size=(height, width), method="bilinear"
+        )
     attentions = tf.transpose(attentions, perm=(0, 3, 1, 2))
     return attentions
 
 
-def get_grouping_from_attentions(attentions: Tuple[tf.Tensor], hw_shape: int) -> tf.Tensor:
+def get_grouping_from_attentions(attentions: Tuple[tf.Tensor], hw_shape: Tuple[int]) -> tf.Tensor:
     """
     Args:
-        attentions (`tuple(tf.Tensor)`: tuple of attention maps returned by `TFGroupViTVisionTransformer`
+        attentions (`tuple(tf.Tensor)`: tuple of attention maps returned by `GroupViTVisionTransformer`
         hw_shape (`tuple(int)`): height and width of the output attention map
     Returns:
         `tf.Tensor`: the attention map of shape [batch_size, groups, height, width]
     """
 
     attn_maps = []
-    
     prev_attn_masks = None
     for attn_masks in attentions:
         # [batch_size, num_groups, height x width] -> [batch_size, height x width, num_groups]
@@ -181,9 +191,10 @@ def get_grouping_from_attentions(attentions: Tuple[tf.Tensor], hw_shape: int) ->
             prev_attn_masks = attn_masks
         else:
             prev_attn_masks = prev_attn_masks @ attn_masks
-        # [batch_size, heightxwidth, num_groups] -> [batch_size, num_groups, heightxwidth] -> [batch_size, num_groups, height, width]
+        # [batch_size, height x width, num_groups] -> [batch_size, num_groups, height x width] -> [batch_size, num_groups, height, width]
         cur_attn_map = resize_attention_map(
-            tf.transpose(prev_attn_masks, perm=(0, 2, 1)), *hw_shape
+            tf.transpose(prev_attn_masks, perm=(0, 2, 1)),
+            *hw_shape
         )
         attn_maps.append(cur_attn_map)
 
@@ -191,4 +202,3 @@ def get_grouping_from_attentions(attentions: Tuple[tf.Tensor], hw_shape: int) ->
     final_grouping = attn_maps[-1]
 
     return final_grouping
-
