@@ -348,11 +348,11 @@ class BloomAttention(nn.Module):
         residual,
         layer_past=None,
         attention_mask=None,
+        causal_mask=None,
         alibi=None,
         head_mask=None,
         use_cache=False,
         output_attentions=False,
-        custom_mask=None,
     ):
         # hidden_states: [batch_size, seq_length, hidden_size]
         # repeat alibi tensor with the batch size
@@ -409,7 +409,7 @@ class BloomAttention(nn.Module):
 
         # attention scores and attention mask [b, np, sq, sk]
         max_positions = max(attention_scores.shape[-1], attention_scores.shape[-2])
-        attention_probs = self.scale_mask_softmax(attention_scores, attention_mask, max_positions, custom_mask).to(
+        attention_probs = self.scale_mask_softmax(attention_scores, attention_mask, max_positions, causal_mask).to(
             value_layer.dtype
         )
 
@@ -517,11 +517,11 @@ class BloomBlock(nn.Module):
         hidden_states,
         layer_past=None,
         attention_mask=None,
+        causal_mask=None,
         head_mask=None,
         use_cache=False,
         output_attentions=False,
         alibi=None,
-        custom_mask=None,
     ):
         # hidden_states: [batch_size, seq_length, hidden_size]
 
@@ -540,11 +540,11 @@ class BloomBlock(nn.Module):
             residual,
             layer_past=layer_past,
             attention_mask=attention_mask,
+            causal_mask=None,
             alibi=alibi,
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            custom_mask=custom_mask,
         )
 
         attention_output = attn_outputs[0]
@@ -706,6 +706,7 @@ class BloomModel(BloomPreTrainedModel):
         input_ids=None,
         past_key_values=None,
         attention_mask=None,
+        causal_mask=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
@@ -713,7 +714,6 @@ class BloomModel(BloomPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        custom_mask=None,
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -790,11 +790,11 @@ class BloomModel(BloomPreTrainedModel):
                     hidden_states,
                     layer_past=layer_past,
                     attention_mask=attention_mask,
+                    causal_mask=None,
                     head_mask=head_mask[i],
                     use_cache=use_cache,
                     output_attentions=output_attentions,
                     alibi=alibi,
-                    custom_mask=custom_mask,
                 )
 
             hidden_states = outputs[0]
@@ -904,6 +904,7 @@ class BloomForCausalLM(BloomPreTrainedModel):
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
+            causal_mask=None,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
@@ -911,7 +912,6 @@ class BloomForCausalLM(BloomPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            custom_mask=None,
         )
         hidden_states = transformer_outputs[0]
 
@@ -971,8 +971,8 @@ class BloomForPrefixLM(BloomPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-        # attribute for storing `custom_mask` throughout a call to `generate()`
-        self.custom_mask = None
+        # attribute for storing `causal_mask` throughout a call to `generate()`
+        self.causal_mask = None
 
     def get_output_embeddings(self):
         return self.lm_head
@@ -989,12 +989,12 @@ class BloomForPrefixLM(BloomPreTrainedModel):
         position_ids = kwargs.get("position_ids", None)
         prefix_length = kwargs.get("prefix_length", None)
 
-        custom_mask = kwargs.get("custom_mask", None)
+        causal_mask = kwargs.get("causal_mask", None)
         if past is None:
-            # custom_mask is a class attribute so that the prefix mask
+            # causal_mask is a class attribute so that the prefix mask
             # set at the start of generation persists throughout timesteps.
             # here, we reset it at start of a generation call so that forward() creates a new one.
-            self.custom_mask = custom_mask
+            self.causal_mask = causal_mask
 
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
@@ -1006,7 +1006,7 @@ class BloomForPrefixLM(BloomPreTrainedModel):
             position_ids = None
 
         # determine length of prefix, if none is provided
-        if prefix_length is None and self.custom_mask is None and past is None:
+        if prefix_length is None and self.causal_mask is None and past is None:
             if attention_mask is not None:
                 # TODO: what will attn mask look like for concatenated inputs+targets, in a decoder?
                 prefix_length = attention_mask.sum(-1)
@@ -1020,7 +1020,7 @@ class BloomForPrefixLM(BloomPreTrainedModel):
             "position_ids": position_ids,
             "attention_mask": attention_mask,
             "prefix_length": prefix_length,
-            "custom_mask": self.custom_mask,
+            "causal_mask": self.causal_mask,
         }
 
     @add_start_docstrings_to_model_forward(BLOOM_INPUTS_DOCSTRING)
@@ -1035,6 +1035,7 @@ class BloomForPrefixLM(BloomPreTrainedModel):
         input_ids=None,
         past_key_values=None,
         attention_mask=None,
+        causal_mask=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
@@ -1044,7 +1045,6 @@ class BloomForPrefixLM(BloomPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         prefix_length=None,
-        custom_mask=None,
     ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1059,7 +1059,7 @@ class BloomForPrefixLM(BloomPreTrainedModel):
         elif type(prefix_length) == list:
             prefix_length = torch.LongTensor(prefix_length)
 
-        if custom_mask is None and self.custom_mask is None:
+        if causal_mask is None and self.causal_mask is None:
             # No custom mask provided. Falling back to default prefix-LM mask.
             # TODO: don't hardcode max_positions = 1024
             # TODO: is there a cleaner way of putting mask onto the right device? (doing it later?)
@@ -1076,13 +1076,13 @@ class BloomForPrefixLM(BloomPreTrainedModel):
 
                 causal_mask = (causal_mask + prefix_mask).bool()
 
-            custom_mask = causal_mask
-            self.custom_mask = custom_mask
+            self.causal_mask = causal_mask
 
         transformer_outputs = self.transformer(
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
+            causal_mask=None,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
@@ -1090,7 +1090,6 @@ class BloomForPrefixLM(BloomPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            custom_mask=self.custom_mask,
         )
         hidden_states = transformer_outputs[0]
 
