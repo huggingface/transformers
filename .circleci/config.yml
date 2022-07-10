@@ -63,11 +63,7 @@ jobs:
         working_directory: ~/transformers
         docker:
             - image: cimg/base:current-20.04
-        environment:
-            OMP_NUM_THREADS: 1
-            TRANSFORMERS_IS_CI: yes
         resource_class: xlarge
-        parallelism: 1
         steps:
             - checkout
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
