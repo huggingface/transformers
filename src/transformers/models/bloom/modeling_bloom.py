@@ -313,13 +313,7 @@ class BloomAttention(nn.Module):
                 ),  # [batch_size*num_heads, head_dim, k_length]
             )
             + alibi
-        )
-
-        import joblib
-        joblib.dump(matmul_result, "matmul_result.pkl")
-        joblib.dump(q, "q.pkl")
-        joblib.dump(k, "k.pkl")
-        joblib.dump(alibi, "alibi.pkl")
+        ) # TODO: this doesn't give same results as torch.baddbmm() for fp16
 
         # change view to [batch_size, num_heads, q_length, k_length]
         attention_scores = matmul_result.view(-1, self.num_heads, matmul_result.size(1), matmul_result.size(2))
