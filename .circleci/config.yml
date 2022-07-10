@@ -62,7 +62,7 @@ jobs:
     run_examples_torch:
         working_directory: ~/transformers
         docker:
-            - image: cimg/python:3.9.13
+            - image: cimg/base:current-20.04
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
@@ -71,12 +71,15 @@ jobs:
         steps:
             - checkout
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
+            - run: sudo apt-get install python3-pip
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,sentencepiece,testing,torch-speech]
             - run: pip install -r examples/pytorch/_tests_requirements.txt
+            - run: pip install -U resampy==0.3.1
+            - run: pip install numpy==1.22.0
             - run: pip freeze
             - run: |
-                    python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/test_pytorch_examples.py -k "(test_run_audio_classification or test_run_clm)"
+                    python3 -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/test_pytorch_examples.py -k "(test_run_audio_classification or test_run_clm)"
 
 workflow_filters: &workflow_filters
     filters:
