@@ -297,18 +297,16 @@ class BloomAttention(nn.Module):
             present = (key_layer, value_layer)
         else:
             present = None
-            
+
         # [batch_size*num_heads, q_length, k_length]
-        matmul_result = (
-            torch.baddbmm(
-                alibi,
-                query_layer.transpose(1, 2).reshape(
-                    -1, query_layer.shape[1], query_layer.shape[3]
-                ),  # [batch_size*num_heads, q_length, head_dim]
-                key_layer.permute(0, 2, 3, 1).reshape(
-                    -1, key_layer.shape[3], key_layer.shape[1]
-                ),  # [batch_size*num_heads, head_dim, k_length]
-            )
+        matmul_result = torch.baddbmm(
+            alibi,
+            query_layer.transpose(1, 2).reshape(
+                -1, query_layer.shape[1], query_layer.shape[3]
+            ),  # [batch_size*num_heads, q_length, head_dim]
+            key_layer.permute(0, 2, 3, 1).reshape(
+                -1, key_layer.shape[3], key_layer.shape[1]
+            ),  # [batch_size*num_heads, head_dim, k_length]
         )
 
         # change view to [batch_size, num_heads, q_length, k_length]
