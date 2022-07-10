@@ -485,26 +485,6 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
 
     @slow
     @require_torch_gpu
-    def test_generation_prefix_lm(self):
-        path_350m = "bigscience/bloom-350m"
-        model = BloomForPrefixLM.from_pretrained(path_350m, torch_dtype="auto", use_cache=True).cuda()
-        model = model.eval()
-        tokenizer = BloomTokenizerFast.from_pretrained(path_350m)
-
-        input_sentence = "I enjoy walking with my cute dog"
-        EXPECTED_OUTPUT = (
-            "I enjoy walking with my cute dog with with with with with with with with with with with"
-            " with with with with with with with with with with with with the with the with the with"
-            " the with the with the with the with the with the in the in"
-        )
-
-        input_ids = tokenizer.encode(input_sentence, return_tensors="pt")
-        greedy_output = model.generate(input_ids.cuda(), max_length=50, prefix_tokens=input_ids[:, :1])
-
-        self.assertEqual(tokenizer.decode(greedy_output[0], skip_special_tokens=True), EXPECTED_OUTPUT)
-
-    @slow
-    @require_torch_gpu
     def test_equivalence_prefix_causal_lm(self):
         """Tests that the prefix LM is equivalent to the causal LM when prefix_length = 0,
         and that the prefix LM is not equivalent to the causal LM otherwise."""
@@ -530,33 +510,6 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         )
         self.assertNotEqual(
             tokenizer.decode(prefixed_output[0], skip_special_tokens=True),
-            tokenizer.decode(greedy_output_causal[0], skip_special_tokens=True),
-        )
-
-    @slow
-    @require_torch_gpu
-    def test_custom_mask(self):
-        path_350m = "bigscience/bloom-350m"
-        model_prefix = BloomForPrefixLM.from_pretrained(path_350m, torch_dtype="auto", use_cache=True).cuda()
-        model_causal = BloomForCausalLM.from_pretrained(path_350m, torch_dtype="auto", use_cache=True).cuda()
-        model_prefix = model_prefix.eval()
-        model_causal = model_causal.eval()
-
-        tokenizer = BloomTokenizerFast.from_pretrained(path_350m)
-
-        input_sentence = "I enjoy walking with my cute dog"
-
-        input_ids = tokenizer.encode(input_sentence, return_tensors="pt")
-
-        causal_mask = (torch.tril(torch.ones((1024, 1024), dtype=torch.bool)).view(1, 1, 1024, 1024)).to(
-            input_ids.device
-        )
-
-        greedy_output_prefix = model_prefix.generate(input_ids.cuda(), max_length=50, custom_mask=causal_mask)
-        greedy_output_causal = model_causal.generate(input_ids.cuda(), max_length=50)
-
-        self.assertEqual(
-            tokenizer.decode(greedy_output_prefix[0], skip_special_tokens=True),
             tokenizer.decode(greedy_output_causal[0], skip_special_tokens=True),
         )
 
