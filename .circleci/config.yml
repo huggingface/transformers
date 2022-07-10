@@ -71,12 +71,12 @@ jobs:
         steps:
             - checkout
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
-            - run: sudo pip install --upgrade pip
-            - run: sudo pip install .[sklearn,torch,sentencepiece,testing,torch-speech]
-            - run: sudo pip install -r examples/pytorch/_tests_requirements.txt
-            - run: sudo pip freeze
+            - run: pip install --upgrade pip
+            - run: pip install .[sklearn,torch,sentencepiece,testing,torch-speech]
+            - run: pip install -r examples/pytorch/_tests_requirements.txt
+            - run: pip freeze
             - run: |
-                    sudo python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/test_pytorch_examples.py -k "(test_run_audio_classification or test_run_clm)"
+                    python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/test_pytorch_examples.py -k "(test_run_audio_classification or test_run_clm)"
 
 workflow_filters: &workflow_filters
     filters:
