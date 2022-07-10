@@ -297,14 +297,11 @@ class BloomAttention(nn.Module):
             present = (key_layer, value_layer)
         else:
             present = None
-
-        q = query_layer.transpose(1, 2).reshape(-1, query_layer.shape[1], query_layer.shape[3])
-        k = key_layer.permute(0, 2, 3, 1).reshape(-1, key_layer.shape[3], key_layer.shape[1])
-
-
+            
         # [batch_size*num_heads, q_length, k_length]
         matmul_result = (
-            torch.bmm(
+            torch.baddbmm(
+                alibi,
                 query_layer.transpose(1, 2).reshape(
                     -1, query_layer.shape[1], query_layer.shape[3]
                 ),  # [batch_size*num_heads, q_length, head_dim]
@@ -312,8 +309,7 @@ class BloomAttention(nn.Module):
                     -1, key_layer.shape[3], key_layer.shape[1]
                 ),  # [batch_size*num_heads, head_dim, k_length]
             )
-            + alibi
-        ) # TODO: this doesn't give same results as torch.baddbmm() for fp16
+        )
 
         # change view to [batch_size, num_heads, q_length, k_length]
         attention_scores = matmul_result.view(-1, self.num_heads, matmul_result.size(1), matmul_result.size(2))
