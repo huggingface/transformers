@@ -289,12 +289,6 @@ class BloomScaledSoftmax(nn.Module):
             mask = torch.ones(input.shape[0], max_positions, dtype=torch.bool, device=input.device)
 
         mask = mask.to(input.device)
-        if causal_mask is None:
-            causal_mask = (
-                torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool))
-                .view(1, 1, max_positions, max_positions)
-                .to(input.device)
-            )
 
         mask_output, padded_causal_mask = self.mask_func(input, mask, causal_mask)
         probs = nn.functional.softmax(mask_output, dim=-1, dtype=softmax_dtype) * (~padded_causal_mask)
@@ -540,7 +534,7 @@ class BloomBlock(nn.Module):
             residual,
             layer_past=layer_past,
             attention_mask=attention_mask,
-            causal_mask=None,
+            causal_mask=causal_mask,
             alibi=alibi,
             head_mask=head_mask,
             use_cache=use_cache,
@@ -744,6 +738,15 @@ class BloomModel(BloomPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
 
+        # prepare causal mask if not supplied
+        # TODO: remove reliance on hardcoded max_length
+        if causal_mask is None:
+            causal_mask = (
+                torch.tril(torch.ones((1024, 1024), dtype=torch.bool))
+                .view(1, 1, 1024, 1024)
+                .to(inputs_embeds.device)
+            )
+
         hidden_states = self.word_embeddings_layernorm(inputs_embeds)
 
         output_shape = input_shape + (hidden_states.size(-1),)
@@ -790,7 +793,7 @@ class BloomModel(BloomPreTrainedModel):
                     hidden_states,
                     layer_past=layer_past,
                     attention_mask=attention_mask,
-                    causal_mask=None,
+                    causal_mask=causal_mask,
                     head_mask=head_mask[i],
                     use_cache=use_cache,
                     output_attentions=output_attentions,
@@ -883,6 +886,7 @@ class BloomForCausalLM(BloomPreTrainedModel):
         input_ids=None,
         past_key_values=None,
         attention_mask=None,
+        causal_mask=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
@@ -904,7 +908,7 @@ class BloomForCausalLM(BloomPreTrainedModel):
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
-            causal_mask=None,
+            causal_mask=causal_mask,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
@@ -1082,7 +1086,7 @@ class BloomForPrefixLM(BloomPreTrainedModel):
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
-            causal_mask=None,
+            causal_mask=self.causal_mask,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
