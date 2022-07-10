@@ -77,7 +77,7 @@ jobs:
             - run: pip install -r examples/pytorch/_tests_requirements.txt
             #- run: pip install -U resampy==0.3.1
             - run: pip uninstall -y numpy resampy
-            - run: git clone https://github.com/bmcfee/resampy.git && cd resampy && git checkout f8d4bb93d99a3edc2be972a07a9055ac4248f15a && pip install -U -e . && cd ..
+            - run: git clone https://github.com/bmcfee/resampy.git && cd resampy && git checkout a36275670f284e8f09d71ef3515dc7513aeba6e6 && pip install -U -e . && cd ..
             - run: pip install -U numpy==1.22.0
             - run: pip freeze
             - run: |
