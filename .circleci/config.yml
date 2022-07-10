@@ -75,8 +75,10 @@ jobs:
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,sentencepiece,testing,torch-speech]
             - run: pip install -r examples/pytorch/_tests_requirements.txt
-            - run: pip install -U resampy==0.3.1
-            - run: pip install numpy==1.22.0
+            #- run: pip install -U resampy==0.3.1
+            - run: pip uninstall -y numpy resampy
+            - run: git clone https://github.com/bmcfee/resampy.git && cd resampy && git checkout f8d4bb93d99a3edc2be972a07a9055ac4248f15a && pip install -U -e . && cd ..
+            - run: pip install -U numpy==1.22.0
             - run: pip freeze
             - run: |
                     python3 -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/test_pytorch_examples.py -k "(test_run_audio_classification or test_run_clm)"
