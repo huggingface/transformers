@@ -742,9 +742,7 @@ class BloomModel(BloomPreTrainedModel):
         # TODO: remove reliance on hardcoded max_length
         if causal_mask is None:
             causal_mask = (
-                torch.tril(torch.ones((1024, 1024), dtype=torch.bool))
-                .view(1, 1, 1024, 1024)
-                .to(inputs_embeds.device)
+                torch.tril(torch.ones((1024, 1024), dtype=torch.bool)).view(1, 1, 1024, 1024).to(inputs_embeds.device)
             )
 
         hidden_states = self.word_embeddings_layernorm(inputs_embeds)
