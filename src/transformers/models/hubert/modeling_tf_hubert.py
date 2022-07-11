@@ -203,7 +203,7 @@ def _compute_mask_indices(
     Computes random mask spans for a given shape
 
     Args:
-        shape: the the shape for which to compute masks.
+        shape: the shape for which to compute masks.
             should be of size 2 where first element is batch size and 2nd is timesteps
         attention_mask: optional padding mask of the same size as shape, which will prevent masking padded elements
         mask_prob:
