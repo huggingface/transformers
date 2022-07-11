@@ -35,6 +35,7 @@ _import_structure = {
         "OwlViTTextConfig",
         "OwlViTVisionConfig",
     ],
+    "processing_owlvit": ["OwlViTProcessor"],
 }
 
 
@@ -45,7 +46,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_owlvit"] = ["OwlViTFeatureExtractor"]
-    _import_structure["processing_owlvit"] = ["OwlViTProcessor"]
 
 try:
     if not is_torch_available():
@@ -69,6 +69,7 @@ if TYPE_CHECKING:
         OwlViTTextConfig,
         OwlViTVisionConfig,
     )
+    from .processing_owlvit import OwlViTProcessor
 
     try:
         if not is_vision_available():
@@ -77,7 +78,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_owlvit import OwlViTFeatureExtractor
-        from .processing_owlvit import OwlViTProcessor
 
     try:
         if not is_torch_available():
