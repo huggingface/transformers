@@ -443,23 +443,19 @@ def is_apex_available():
 
 
 def is_ipex_available():
-    def get_major_and_minor_from_version(version):
-        import re
-
-        matches = re.match("(\d+\.\d+).*", version)
-        if matches and len(matches.groups()) == 1:
-            return matches.group(1)
+    def get_major_and_minor_from_version(full_version):
+        return str(version.parse(full_version).major) + "." + str(version.parse(full_version).minor)
 
     if not is_torch_available() or importlib.util.find_spec("intel_extension_for_pytorch") is None:
         return False
-    _ipex_version = ""
+    _ipex_version = "N/A"
     try:
         _ipex_version = importlib_metadata.version("intel_extension_for_pytorch")
     except importlib_metadata.PackageNotFoundError:
         return False
     torch_major_and_minor = get_major_and_minor_from_version(_torch_version)
     ipex_major_and_minor = get_major_and_minor_from_version(_ipex_version)
-    if torch_major_and_minor == "" or ipex_major_and_minor == "" or torch_major_and_minor != ipex_major_and_minor:
+    if torch_major_and_minor != ipex_major_and_minor:
         logger.warning(
             f"Intel Extension for PyTorch {ipex_major_and_minor} needs to work with PyTorch {ipex_major_and_minor}.*,"
             f" but PyTorch {_torch_version} is found. Please switch to the matching version and run again."
