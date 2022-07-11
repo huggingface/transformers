@@ -147,7 +147,6 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         pass
 
     @require_torch
-    @unittest.skip("Test is broken, fix me please!")
     def test_small_model_pt(self):
         model_id = "hf-internal-testing/tiny-detr-mobilenetsv3-panoptic"
 
@@ -165,12 +164,12 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             [
                 {
                     "score": 0.004,
-                    "label": "LABEL_0",
+                    "label": "LABEL_215",
                     "mask": "34eecd16bbfb0f476083ef947d81bf66",
                 },
                 {
                     "score": 0.004,
-                    "label": "LABEL_0",
+                    "label": "LABEL_215",
                     "mask": "34eecd16bbfb0f476083ef947d81bf66",
                 },
             ],
@@ -193,24 +192,24 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
                 [
                     {
                         "score": 0.004,
-                        "label": "LABEL_0",
+                        "label": "LABEL_215",
                         "mask": "34eecd16bbfb0f476083ef947d81bf66",
                     },
                     {
                         "score": 0.004,
-                        "label": "LABEL_0",
+                        "label": "LABEL_215",
                         "mask": "34eecd16bbfb0f476083ef947d81bf66",
                     },
                 ],
                 [
                     {
                         "score": 0.004,
-                        "label": "LABEL_0",
+                        "label": "LABEL_215",
                         "mask": "34eecd16bbfb0f476083ef947d81bf66",
                     },
                     {
                         "score": 0.004,
-                        "label": "LABEL_0",
+                        "label": "LABEL_215",
                         "mask": "34eecd16bbfb0f476083ef947d81bf66",
                     },
                 ],
