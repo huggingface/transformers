@@ -88,12 +88,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: int = None):
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
-def build_alibi_tensor(
-    attention_mask: torch.Tensor,
-    n_head: int,
-    dtype,
-    device,
-) -> torch.Tensor:
+def build_alibi_tensor(attention_mask: torch.Tensor, n_head: int, dtype, device) -> torch.Tensor:
     """
     Link to paper: https://arxiv.org/abs/2108.12409 Alibi tensor is not causal as the original paper mentions, it
     relies on a translation invariance of softmax for quick implementation: with l being a tensor, and a fixed value
@@ -102,7 +97,7 @@ def build_alibi_tensor(
 
     Args:
     Returns tensor shaped (batch_size * n_head, 1, max_seq_len)
-        attention_mask (`torch.Tensor`, *required*):
+        attention_mask (`torch.Tensor`):
             Token-wise attention mask, this should be of shape (batch_size, max_seq_len).
         n_head (`int`, *required*):
             number of heads
