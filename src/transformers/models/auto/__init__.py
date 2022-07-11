@@ -64,6 +64,7 @@ else:
         "MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING",
         "MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
         "MODEL_FOR_VISION_2_SEQ_MAPPING",
+        "MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING",
         "MODEL_MAPPING",
         "MODEL_WITH_LM_HEAD_MAPPING",
         "AutoModel",
@@ -89,6 +90,7 @@ else:
         "AutoModelForTableQuestionAnswering",
         "AutoModelForTokenClassification",
         "AutoModelForVision2Seq",
+        "AutoModelForVisualQuestionAnswering",
         "AutoModelWithLMHead",
     ]
 
@@ -101,6 +103,7 @@ else:
     _import_structure["modeling_tf_auto"] = [
         "TF_MODEL_FOR_CAUSAL_LM_MAPPING",
         "TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
+        "TF_MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING",
         "TF_MODEL_FOR_MASKED_LM_MAPPING",
         "TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING",
         "TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING",
@@ -201,6 +204,7 @@ if TYPE_CHECKING:
             MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
             MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             MODEL_FOR_VISION_2_SEQ_MAPPING,
+            MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING,
             MODEL_MAPPING,
             MODEL_WITH_LM_HEAD_MAPPING,
             AutoModel,
@@ -226,6 +230,7 @@ if TYPE_CHECKING:
             AutoModelForTableQuestionAnswering,
             AutoModelForTokenClassification,
             AutoModelForVision2Seq,
+            AutoModelForVisualQuestionAnswering,
             AutoModelWithLMHead,
         )
 
@@ -238,6 +243,7 @@ if TYPE_CHECKING:
         from .modeling_tf_auto import (
             TF_MODEL_FOR_CAUSAL_LM_MAPPING,
             TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
+            TF_MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
             TF_MODEL_FOR_MASKED_LM_MAPPING,
             TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
             TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,

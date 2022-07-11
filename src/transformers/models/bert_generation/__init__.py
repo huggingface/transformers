@@ -21,9 +21,7 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_sentencepiece_available, is_torch_available
 
 
-_import_structure = {
-    "configuration_bert_generation": ["BertGenerationConfig"],
-}
+_import_structure = {"configuration_bert_generation": ["BertGenerationConfig"]}
 
 try:
     if not is_sentencepiece_available():

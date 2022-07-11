@@ -147,8 +147,9 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         pass
 
     @require_torch
+    @unittest.skip("Test is broken, fix me please!")
     def test_small_model_pt(self):
-        model_id = "mishig/tiny-detr-mobilenetsv3-panoptic"
+        model_id = "hf-internal-testing/tiny-detr-mobilenetsv3-panoptic"
 
         model = AutoModelForImageSegmentation.from_pretrained(model_id)
         feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)

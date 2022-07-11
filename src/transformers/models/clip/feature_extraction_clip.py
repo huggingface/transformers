@@ -149,7 +149,10 @@ class CLIPFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         if self.do_convert_rgb:
             images = [self.convert_rgb(image) for image in images]
         if self.do_resize and self.size is not None and self.resample is not None:
-            images = [self.resize(image=image, size=self.size, resample=self.resample) for image in images]
+            images = [
+                self.resize(image=image, size=self.size, resample=self.resample, default_to_square=False)
+                for image in images
+            ]
         if self.do_center_crop and self.crop_size is not None:
             images = [self.center_crop(image, self.crop_size) for image in images]
         if self.do_normalize:
@@ -160,70 +163,3 @@ class CLIPFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
 
         return encoded_inputs
-
-    def convert_rgb(self, image):
-        """
-        Converts `image` to RGB format. Note that this will trigger a conversion of `image` to a PIL Image.
-
-        Args:
-            image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
-                The image to convert.
-        """
-        self._ensure_format_supported(image)
-        if not isinstance(image, Image.Image):
-            return image
-
-        return image.convert("RGB")
-
-    def center_crop(self, image, size):
-        """
-        Crops `image` to the given size using a center crop. Note that if the image is too small to be cropped to the
-        size is given, it will be padded (so the returned result has the size asked).
-
-        Args:
-            image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
-                The image to resize.
-            size (`int` or `Tuple[int, int]`):
-                The size to which crop the image.
-        """
-        self._ensure_format_supported(image)
-        if not isinstance(size, tuple):
-            size = (size, size)
-
-        if not isinstance(image, Image.Image):
-            image = self.to_pil_image(image)
-
-        image_width, image_height = image.size
-        crop_height, crop_width = size
-
-        crop_top = int((image_height - crop_height + 1) * 0.5)
-        crop_left = int((image_width - crop_width + 1) * 0.5)
-
-        return image.crop((crop_left, crop_top, crop_left + crop_width, crop_top + crop_height))
-
-    def resize(self, image, size, resample=Image.BICUBIC):
-        """
-        Resizes `image`. Note that this will trigger a conversion of `image` to a PIL Image.
-
-        Args:
-            image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
-                The image to resize.
-            size (`int` or `Tuple[int, int]`):
-                The size to use for resizing the image. If `int` it will be resized to match the shorter side
-            resample (`int`, *optional*, defaults to `PIL.Image.BILINEAR`):
-                The filter to user for resampling.
-        """
-        self._ensure_format_supported(image)
-
-        if not isinstance(image, Image.Image):
-            image = self.to_pil_image(image)
-        if isinstance(size, tuple):
-            new_w, new_h = size
-        else:
-            width, height = image.size
-            short, long = (width, height) if width <= height else (height, width)
-            if short == size:
-                return image
-            new_short, new_long = size, int(size * long / short)
-            new_w, new_h = (new_short, new_long) if width <= height else (new_long, new_short)
-        return image.resize((new_w, new_h), resample)

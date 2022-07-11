@@ -18,13 +18,10 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...file_utils import _LazyModule, is_torch_available
-from ...utils import OptionalDependencyNotAvailable
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tf_available, is_torch_available
 
 
-_import_structure = {
-    "configuration_regnet": ["REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "RegNetConfig"],
-}
+_import_structure = {"configuration_regnet": ["REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "RegNetConfig"]}
 
 try:
     if not is_torch_available():
@@ -37,6 +34,19 @@ else:
         "RegNetForImageClassification",
         "RegNetModel",
         "RegNetPreTrainedModel",
+    ]
+
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["modeling_tf_regnet"] = [
+        "TF_REGNET_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TFRegNetForImageClassification",
+        "TFRegNetModel",
+        "TFRegNetPreTrainedModel",
     ]
 
 
@@ -54,6 +64,19 @@ if TYPE_CHECKING:
             RegNetForImageClassification,
             RegNetModel,
             RegNetPreTrainedModel,
+        )
+
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .modeling_tf_regnet import (
+            TF_REGNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFRegNetForImageClassification,
+            TFRegNetModel,
+            TFRegNetPreTrainedModel,
         )
 
 

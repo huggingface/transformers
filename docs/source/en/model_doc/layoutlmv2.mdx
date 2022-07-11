@@ -44,6 +44,14 @@ including FUNSD (0.7895 -> 0.8420), CORD (0.9493 -> 0.9601), SROIE (0.9524 -> 0.
 RVL-CDIP (0.9443 -> 0.9564), and DocVQA (0.7295 -> 0.8672). The pre-trained LayoutLMv2 model is publicly available at
 this https URL.*
 
+LayoutLMv2 depends on `detectron2`, `torchvision` and `tesseract`. Run the
+following to install them: 
+```
+python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'
+python -m pip install torchvision tesseract
+```
+(If you are developing for LayoutLMv2, note that passing the doctests also requires the installation of these packages.)
+
 Tips:
 
 - The main difference between LayoutLMv1 and LayoutLMv2 is that the latter incorporates visual embeddings during
