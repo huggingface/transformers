@@ -314,6 +314,7 @@ class NezhaModelTester:
 
 
 @require_torch
+@slow
 class NezhaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     all_model_classes = (
