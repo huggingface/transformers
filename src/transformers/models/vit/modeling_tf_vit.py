@@ -52,19 +52,6 @@ _IMAGE_CLASS_CHECKPOINT = "google/vit-base-patch16-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
 
 
-# Inspired by
-# https://github.com/rwightman/pytorch-image-models/blob/b9bd960a032c75ca6b808ddeed76bee5f3ed4972/timm/models/layers/helpers.py
-# From PyTorch internals
-def to_2tuple(x):
-    if isinstance(x, collections.abc.Iterable):
-        return x
-    return (x, x)
-
-
-# Based on timm implementation, which can be found here:
-# https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
-
-
 class TFViTEmbeddings(tf.keras.layers.Layer):
     """
     Construct the CLS token, position and patch embeddings.
@@ -74,7 +61,7 @@ class TFViTEmbeddings(tf.keras.layers.Layer):
     def __init__(self, config: ViTConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.patch_embeddings = TFPatchEmbeddings(config, name="patch_embeddings")
+        self.patch_embeddings = TFViTPatchEmbeddings(config, name="patch_embeddings")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.config = config
 
@@ -103,19 +90,21 @@ class TFViTEmbeddings(tf.keras.layers.Layer):
         """
 
         batch_size, seq_len, dim = shape_list(embeddings)
-        npatch = seq_len - 1
+        num_patches = seq_len - 1
 
-        _, N, _ = shape_list(self.position_embeddings)
-        N -= 1
+        _, num_positions, _ = shape_list(self.position_embeddings)
+        num_positions -= 1
 
-        if npatch == N and height == width:
+        if num_patches == num_positions and height == width:
             return self.position_embeddings
         class_pos_embed = self.position_embeddings[:, :1]
         patch_pos_embed = self.position_embeddings[:, 1:]
         h0 = height // self.config.patch_size
         w0 = width // self.config.patch_size
         patch_pos_embed = tf.image.resize(
-            images=tf.reshape(patch_pos_embed, shape=(1, int(math.sqrt(N)), int(math.sqrt(N)), dim)),
+            images=tf.reshape(
+                patch_pos_embed, shape=(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
+            ),
             size=(h0, w0),
             method="bicubic",
         )
@@ -150,27 +139,31 @@ class TFViTEmbeddings(tf.keras.layers.Layer):
 
 # Based on timm implementation, which can be found here:
 # https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
-class TFPatchEmbeddings(tf.keras.layers.Layer):
+class TFViTPatchEmbeddings(tf.keras.layers.Layer):
     """
-    Image to Patch Embedding.
+    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
+    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
+    Transformer.
     """
 
     def __init__(self, config: ViTConfig, **kwargs):
         super().__init__(**kwargs)
-        image_size = to_2tuple(config.image_size)
-        patch_size = to_2tuple(config.patch_size)
+        image_size, patch_size = config.image_size, config.patch_size
+        num_channels, hidden_size = config.num_channels, config.hidden_size
+
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_patches = num_patches
-        self.num_channels = config.num_channels
-        self.embed_dim = config.hidden_size
+        self.num_channels = num_channels
         self.config = config
 
         self.projection = tf.keras.layers.Conv2D(
-            filters=self.embed_dim,
+            filters=hidden_size,
             kernel_size=patch_size,
-            strides=self.patch_size,
+            strides=patch_size,
             padding="valid",
             data_format="channels_last",
             use_bias=True,
@@ -183,8 +176,12 @@ class TFPatchEmbeddings(tf.keras.layers.Layer):
         self, pixel_values: tf.Tensor, interpolate_pos_encoding: bool = False, training: bool = False
     ) -> tf.Tensor:
         batch_size, num_channels, height, width = shape_list(pixel_values)
+        if tf.executing_eagerly() and num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
         if not interpolate_pos_encoding:
-            if getattr(height, "numpy", None) and getattr(width, "numpy", None):
+            if tf.executing_eagerly():
                 if height != self.image_size[0] or width != self.image_size[1]:
                     raise ValueError(
                         f"Input image size ({height}*{width}) doesn't match model"
@@ -201,9 +198,9 @@ class TFPatchEmbeddings(tf.keras.layers.Layer):
         # Change the 2D spatial dimensions to a single temporal dimension.
         # shape = (batch_size, num_patches, out_channels=embed_dim)
         num_patches = (width // self.patch_size[1]) * (height // self.patch_size[0])
-        x = tf.reshape(tensor=projection, shape=(batch_size, num_patches, -1))
+        embeddings = tf.reshape(tensor=projection, shape=(batch_size, num_patches, -1))
 
-        return x
+        return embeddings
 
 
 class TFViTSelfAttention(tf.keras.layers.Layer):

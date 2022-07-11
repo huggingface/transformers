@@ -26,9 +26,7 @@ from ...utils import (
 )
 
 
-_import_structure = {
-    "configuration_vit_mae": ["VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMAEConfig"],
-}
+_import_structure = {"configuration_vit_mae": ["VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMAEConfig"]}
 
 try:
     if not is_torch_available():

@@ -354,6 +354,8 @@ class FeatureExtractionMixin(PushToHubMixin):
             url = self._push_to_hub(repo, commit_message=commit_message)
             logger.info(f"Feature extractor pushed to the hub in this commit: {url}")
 
+        return [output_feature_extractor_file]
+
     @classmethod
     def get_feature_extractor_dict(
         cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs

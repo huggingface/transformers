@@ -1,7 +1,11 @@
 - sections:
+  - local: index
+    title: 🤗 Transformers
+  - local: quicktour
+    title: Tour rápido
   - local: installation
     title: Instalação
-  title: Iniciar
+  title: Início
 - sections:
   - local: pipeline_tutorial
     title: Pipelines para inferência
@@ -13,6 +17,12 @@
 - sections:
   - local: fast_tokenizers
     title: Usando os Tokenizers do 🤗 Tokenizers
+  - sections:
+    - local: tasks/sequence_classification
+      title: Classificação de texto
+    - local: tasks/token_classification
+      title: Classificação de tokens
+    title: Fine-tuning para tarefas específicas
   - local: multilingual
     title: Modelos multilinguísticos para inferência
   title: Guias práticos

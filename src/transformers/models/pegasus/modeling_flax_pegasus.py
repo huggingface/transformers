@@ -544,7 +544,7 @@ class FlaxPegasusDecoderLayer(nn.Module):
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
         self.fc1 = nn.Dense(
-            self.config.encoder_ffn_dim,
+            self.config.decoder_ffn_dim,
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(self.config.init_std),
         )

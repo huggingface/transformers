@@ -169,7 +169,7 @@ The [`DefaultDataCollator`] assembles tensors into a batch for the model to trai
 
 </Tip>
 
-Next, convert the tokenized datasets to TensorFlow datasets with the [`to_tf_dataset`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.to_tf_dataset) method. Specify your inputs in `columns`, and your label in `label_cols`:
+Next, convert the tokenized datasets to TensorFlow datasets with the [`~datasets.Dataset.to_tf_dataset`] method. Specify your inputs in `columns`, and your label in `label_cols`:
 
 ```py
 >>> tf_train_dataset = small_train_dataset.to_tf_dataset(
