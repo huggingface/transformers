@@ -396,7 +396,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         # >=760m + allow_fp16_reduced_precision_reduction = False  + torch.bmm  ==> PASS
 
         path_350m = "bigscience/bloom-350m"
-        model = BloomForCausalLM.from_pretrained(path_350m, torch_dtype="auto", use_cache=True).cuda()
+        model = BloomForCausalLM.from_pretrained(path_350m, use_cache=True).cuda()
         model = model.eval()
         tokenizer = BloomTokenizerFast.from_pretrained(path_350m)
 
@@ -412,9 +412,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         # ) # for bloom-760m
 
         input_ids = tokenizer.encode(input_sentence, return_tensors="pt")
-        torch.backends.cuda.matmul.allow_fp16_reduced_precision_reduction = False
         greedy_output = model.generate(input_ids.cuda(), max_length=50)
-        torch.backends.cuda.matmul.allow_fp16_reduced_precision_reduction = True
 
         self.assertEqual(tokenizer.decode(greedy_output[0], skip_special_tokens=True), EXPECTED_OUTPUT)
 
@@ -422,7 +420,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     @require_torch_gpu
     def test_batch_generation(self):
         path_350m = "bigscience/bloom-350m"
-        model = BloomForCausalLM.from_pretrained(path_350m, torch_dtype="auto", use_cache=True).cuda()
+        model = BloomForCausalLM.from_pretrained(path_350m, use_cache=True).cuda()
         model = model.eval()
         tokenizer = BloomTokenizerFast.from_pretrained(path_350m, padding_side="left")
 
@@ -441,18 +439,6 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     @slow
     @require_torch_gpu
     def test_batch_generation_padd(self):
-        # With small models the test will fail because of the operator torch.baddm that will give inconsistent results
-        # for small models (<350m).
-
-        # 350m + allow_fp16_reduced_precision_reduction = False  + torch.bmm  ==> FAIL
-        # 350m + allow_fp16_reduced_precision_reduction = False  + torch.baddm  ==> FAIL
-        # 350m + allow_fp16_reduced_precision_reduction = True  + torch.bmm  ==> PASS
-        # 350m + allow_fp16_reduced_precision_reduction = True  + torch.baddm  ==> FAIL
-
-        # >=760m + allow_fp16_reduced_precision_reduction = False  + torch.bmm  ==> PASS
-        # >=760m + allow_fp16_reduced_precision_reduction = False  + torch.baddm  ==> PASS
-        # >=760m + allow_fp16_reduced_precision_reduction = True  + torch.bmm  ==> PASS
-        # >=760m + allow_fp16_reduced_precision_reduction = True  + torch.baddm  ==>  PASS
 
         path_350m = "bigscience/bloom-350m"
         model = BloomForCausalLM.from_pretrained(path_350m, torch_dtype="auto", use_cache=True).cuda()
