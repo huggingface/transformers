@@ -402,8 +402,8 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
 
         input_sentence = "I enjoy walking with my cute dog"
         EXPECTED_OUTPUT = (  # for bloom-350m
-            "I enjoy walking with my cute dog, and I love to watch the kids play. I am a very active person, and I am"
-            " a very good listener. I am a very good person, and I am a very good person. I am a"
+            "I enjoy walking with my cute dog, and I love to watch the kids play with the kids. I am a very "
+            "active person, and I enjoy working out, and I am a very active person. I am a very active person, and I"
         )
 
         # EXPECTED_OUTPUT = (
@@ -413,7 +413,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
 
         input_ids = tokenizer.encode(input_sentence, return_tensors="pt")
         greedy_output = model.generate(input_ids.cuda(), max_length=50)
-
+        
         self.assertEqual(tokenizer.decode(greedy_output[0], skip_special_tokens=True), EXPECTED_OUTPUT)
 
     @slow
