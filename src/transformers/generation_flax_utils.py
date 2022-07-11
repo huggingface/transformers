@@ -212,7 +212,8 @@ class FlaxGenerationMixin:
             input_ids (`jnp.ndarray` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
             max_length (`int`, *optional*, defaults to `model.config.max_length`):
-                **DEPRECATED** The maximum length of the sequence to be generated. Prefer the use of `max_new_tokens`.
+                The maximum length of the sequence to be generated. Prefer the use of `max_new_tokens`, which ignores
+                the number of tokens in the prompt.
             max_new_tokens (`int`, *optional*, defaults to None):
                 The maximum numbers of tokens to generate, ignoring the current number of tokens.
             do_sample (`bool`, *optional*, defaults to `False`):
@@ -280,23 +281,22 @@ class FlaxGenerationMixin:
             # prepare decoder_input_ids for generation
             input_ids = jnp.ones((input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
 
-        # Prepare `max_length` depending on other stopping criteria
-        # if `max_new_tokens` is passed, but not `max_length` -> set `max_length = max_new_tokens`
+        # Prepare `max_length` depending on other stopping criteria.
         input_ids_seq_length = input_ids.shape[-1]
-        if max_length is not None:
+        if max_length is None and max_new_tokens is None:
             warnings.warn(
-                "The `max_length` argument is deprecated and will be removed in v5. Use `max_new_tokens` instead.",
-                FutureWarning,
+                "Neither `max_length` nor `max_new_tokens` have been set, `max_length` will default to "
+                f"{self.config.max_length} (`self.config.max_length`). This behavior is deprecated and will be "
+                "removed in v5 of Transformers -- we recommend using `max_new_tokens` to control the maximum length"
+                "of the generation.",
+                UserWarning,
             )
-        if max_length is None and max_new_tokens is not None:
+        elif max_length is None and max_new_tokens is not None:
             max_length = max_new_tokens + input_ids_seq_length
         elif max_length is not None and max_new_tokens is not None:
-            # Both are set, this is odd, raise a warning
-            warnings.warn(
-                "Both `max_length` and `max_new_tokens` have been set "
-                f"but they serve the same purpose. `max_length` {max_length} "
-                f"will take priority over `max_new_tokens` {max_new_tokens}.",
-                UserWarning,
+            raise ValueError(
+                "Both `max_new_tokens` and `max_length` have been set but they serve the same purpose -- setting a "
+                "limit to the generated output length. Please refer to the documentation for more information."
             )
         # default to config if still None
         max_length = max_length if max_length is not None else self.config.max_length
@@ -310,9 +310,9 @@ class FlaxGenerationMixin:
         if input_ids_seq_length >= max_length:
             input_ids_string = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
             logger.warning(
-                f"Input length of {input_ids_string} is {input_ids_seq_length}, but ``max_length`` is set to"
+                f"Input length of {input_ids_string} is {input_ids_seq_length}, but `max_length` is set to"
                 f" {max_length}. This can lead to unexpected behavior. You should consider increasing"
-                "``max_new_tokens``."
+                "`max_new_tokens`."
             )
 
         do_sample = do_sample if do_sample is not None else self.config.do_sample

@@ -923,7 +923,8 @@ class GenerationMixin:
                 should of in the format of `input_ids`. For encoder-decoder models *inputs* can represent any of
                 `input_ids`, `input_values`, `input_features`, or `pixel_values`.
             max_length (`int`, *optional*, defaults to `model.config.max_length`):
-                **DEPRECATED** The maximum length of the sequence to be generated. Prefer the use of `max_new_tokens`.
+                The maximum length of the sequence to be generated. Prefer the use of `max_new_tokens`, which ignores
+                the number of tokens in the prompt.
             max_new_tokens (`int`, *optional*, defaults to None):
                 The maximum numbers of tokens to generate, ignoring the current number of tokens.
             min_length (`int`, *optional*, defaults to 10):
@@ -1194,23 +1195,22 @@ class GenerationMixin:
             # if decoder-only then inputs_tensor has to be `input_ids`
             input_ids = inputs_tensor
 
-        # 5. Prepare `max_length` depending on other stopping criteria
-        # if `max_new_tokens` is passed, but not `max_length` -> set `max_length = max_new_tokens`
+        # 5. Prepare `max_length` depending on other stopping criteria.
         input_ids_seq_length = input_ids.shape[-1]
-        if max_length is not None:
+        if max_length is None and max_new_tokens is None:
             warnings.warn(
-                "The `max_length` argument is deprecated and will be removed in v5. Use `max_new_tokens` instead.",
-                FutureWarning,
+                "Neither `max_length` nor `max_new_tokens` have been set, `max_length` will default to "
+                f"{self.config.max_length} (`self.config.max_length`). This behavior is deprecated and will be "
+                "removed in v5 of Transformers -- we recommend using `max_new_tokens` to control the maximum length"
+                "of the generation.",
+                UserWarning,
             )
-        if max_length is None and max_new_tokens is not None:
+        elif max_length is None and max_new_tokens is not None:
             max_length = max_new_tokens + input_ids_seq_length
         elif max_length is not None and max_new_tokens is not None:
-            # Both are set, this is odd, raise a warning
-            warnings.warn(
-                "Both `max_length` and `max_new_tokens` have been set "
-                f"but they serve the same purpose. `max_length` {max_length} "
-                f"will take priority over `max_new_tokens` {max_new_tokens}.",
-                UserWarning,
+            raise ValueError(
+                "Both `max_new_tokens` and `max_length` have been set but they serve the same purpose -- setting a "
+                "limit to the generated output length. Please refer to the documentation for more information."
             )
         # default to config if still None
         max_length = max_length if max_length is not None else self.config.max_length
