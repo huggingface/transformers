@@ -459,7 +459,7 @@ class FlaxDataCollatorForT5MLM:
         return is_noise[:orig_length]
 
 
-def generate_batch_splits(samples_idx: jnp.ndarray, batch_size: int) -> jnp.ndarray:
+def generate_batch_splits(samples_idx: np.ndarray, batch_size: int) -> np.ndarray:
     num_samples = len(samples_idx)
     samples_to_remove = num_samples % batch_size
 

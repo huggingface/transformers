@@ -237,7 +237,7 @@ def write_eval_metric(summary_writer, eval_metrics, step):
         summary_writer.scalar(f"eval_{metric_name}", value, step)
 
 
-def generate_batch_splits(samples_idx: jnp.ndarray, batch_size: int) -> jnp.ndarray:
+def generate_batch_splits(samples_idx: np.ndarray, batch_size: int) -> np.ndarray:
     num_samples = len(samples_idx)
     samples_to_remove = num_samples % batch_size
 

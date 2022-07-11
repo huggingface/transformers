@@ -433,7 +433,7 @@ def eval_step(params, batch):
     return compute_metrics(logits, targets, token_mask)
 
 
-def generate_batch_splits(samples_idx: jnp.ndarray, batch_size: int) -> jnp.ndarray:
+def generate_batch_splits(samples_idx: np.ndarray, batch_size: int) -> np.ndarray:
     nb_samples = len(samples_idx)
     samples_to_remove = nb_samples % batch_size
 
