@@ -283,6 +283,7 @@ class BloomAttention(nn.Module):
         use_cache=False,
         output_attentions=False,
     ):
+        alibi = alibi.to(hidden_states.device)  # to make the model possible to run under accelerate
         fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
 
         # 3 x [batch_size, seq_length, num_heads, head_dim]
