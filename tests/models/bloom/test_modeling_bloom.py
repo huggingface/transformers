@@ -416,7 +416,6 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         greedy_output = model.generate(input_ids.cuda(), max_length=50)
         torch.backends.cuda.matmul.allow_fp16_reduced_precision_reduction = True
 
-        print(tokenizer.decode(greedy_output[0], skip_special_tokens=True))
         self.assertEqual(tokenizer.decode(greedy_output[0], skip_special_tokens=True), EXPECTED_OUTPUT)
 
     @slow

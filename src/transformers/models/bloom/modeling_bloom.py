@@ -36,12 +36,6 @@ from .configuration_bloom import BloomConfig
 
 logger = logging.get_logger(__name__)
 
-if torch.backends.cuda.matmul.allow_fp16_reduced_precision_reduction is False:
-    logger.info(
-        "allow_fp16_reduced_precision_reduction is set to False, this can lead to slightly inconsistent results"
-        " (batched/cached) under half precision mode. Use it at your own risk."
-    )
-
 _CHECKPOINT_FOR_DOC = "bigscience/Bloom"
 _CONFIG_FOR_DOC = "BloomConfig"
 _TOKENIZER_FOR_DOC = "BloomTokenizerFast"
