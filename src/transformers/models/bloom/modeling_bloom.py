@@ -118,7 +118,7 @@ def build_alibi_tensor(attention_mask: torch.Tensor, n_head: int, dtype, device)
     # => here we set (batch_size=1, num_heads=n_head, query_length=1, key_length=max_length)
     # => the query_length dimension will then be broadcasted correctly
     # This is more or less identical to T5's relative position bias:
-    # https://github.com/huggingface/transformers/blob/f681437203baa7671de3174b0fa583c349d9d5e1/src/transformers/models/t5/modeling_flax_t5.py#L426
+    # https://github.com/huggingface/transformers/blob/f681437203baa7671de3174b0fa583c349d9d5e1/src/transformers/models/t5/modeling_t5.py#L527
     # batch_size = 1, n_head = n_head, query_length
 
     arange_tensor = (attention_mask.cumsum(-1)[:, None, :].to(device) - 1) * attention_mask[:, None]
