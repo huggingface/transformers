@@ -66,7 +66,7 @@ jobs:
             - image: ubuntu:20.04
         resource_class: xlarge
         steps:
-            - run: apt-get -y update && apt-get install -y sudo git
+            - run: apt-get install -y sudo git
             - run: git clone https://github.com/huggingface/transformers.git && cd transformers
             - run: export DEBIAN_FRONTEND=noninteractive
             - run: export TZ=Europe/Minsk
