@@ -286,13 +286,9 @@ class BloomAttention(nn.Module):
 
         if layer_past is not None:
             past_key, past_value = layer_past
-            # concatenate along seq_length dimension
-            key_layer = torch.cat(
-                (past_key.type_as(key_layer), key_layer), dim=1
-            )  # [batch_size, k_length, num_heads, head_dim]
-            value_layer = torch.cat(
-                (past_value.type_as(value_layer), value_layer), dim=1
-            )  # [batch_size, k_length, num_heads, head_dim]
+            # concatenate along seq_length dimension -> [batch_size, qk_length, num_heads, head_dim]
+            key_layer = torch.cat((past_key.type_as(key_layer), key_layer), dim=1)
+            value_layer = torch.cat((past_value.type_as(value_layer), value_layer), dim=1)
 
         if use_cache is True:
             present = (key_layer, value_layer)
@@ -301,28 +297,21 @@ class BloomAttention(nn.Module):
 
         beta = 1.0 / self.layer_number
 
-        # [batch_size*num_heads, q_length, k_length]
+        # # [batch_size*num_heads, head_dim, q_length] x [batch_size*num_heads, head_dim, k_length] -> [batch_size*num_heads, q_length, k_length]
         matmul_result = (1.0 / self.norm_factor) * torch.bmm(
-            query_layer.transpose(1, 2).reshape(
-                -1, query_layer.shape[1], query_layer.shape[3]
-            ),  # [batch_size*num_heads, q_length, head_dim]
-            key_layer.permute(0, 2, 3, 1).reshape(
-                -1, key_layer.shape[3], key_layer.shape[1]
-            ),  # [batch_size*num_heads, head_dim, k_length]
+            query_layer.transpose(1, 2).reshape(-1, query_layer.shape[1], query_layer.shape[3]),
+            key_layer.permute(0, 2, 3, 1).reshape(-1, key_layer.shape[3], key_layer.shape[1]),
         ) + beta * alibi
 
         # change view to [batch_size, num_heads, q_length, k_length]
         attention_scores = matmul_result.view(-1, self.num_heads, matmul_result.size(1), matmul_result.size(2))
 
-        # We replace the scaled softmax by just a few line of code
+        # We replace the scaled softmax by just a few line of code - [batch_size, num_heads, q_length, k_length]
         input_dtype = attention_scores.dtype
-        attn_weights = (
-            attention_scores * self.layer_number
-        ) + attention_mask  # [batch_size, num_heads, q_length, k_length]
+        attn_weights = (attention_scores * self.layer_number) + attention_mask
         attn_weights = torch.max(attn_weights, torch.tensor(torch.finfo(attn_weights.dtype).min))
-        attention_probs = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(input_dtype) * (
-            ~attention_mask.bool()
-        )
+        attention_probs = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(input_dtype)
+        attention_probs = attention_probs * (~attention_mask.bool())
         # [batch_size, num_heads, q_length, k_length]
         attention_probs = self.attention_dropout(attention_probs)
 
