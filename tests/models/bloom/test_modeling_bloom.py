@@ -377,10 +377,10 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     @slow
     @require_torch_gpu
     def test_simple_generation(self):
-        # This test is a bit flaky. For some GPU architectures, pytorch sets by default allow_fp16_reduced_precision_reduction = True and some operations 
+        # This test is a bit flaky. For some GPU architectures, pytorch sets by default allow_fp16_reduced_precision_reduction = True and some operations
         # do not give the same results under this configuration, especially torch.baddmm and torch.bmm. https://pytorch.org/docs/stable/notes/numerical_accuracy.html#fp16-on-mi200
         # We set allow_fp16_reduced_precision_reduction = True. Please see: https://pytorch.org/docs/stable/notes/cuda.html#reduced-precision-reduction-in-fp16-gemms
-        # This discrepancy is observed only when using small models and seems to be stable for larger models. 
+        # This discrepancy is observed only when using small models and seems to be stable for larger models.
         # Our conclusion is that these operations are flaky for small inputs but seems to be stable for larger inputs (for the functions `baddmm` and `bmm`), and therefore for larger models.
 
         # Here is a summary of an ablation study of our observations
@@ -401,11 +401,11 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         tokenizer = BloomTokenizerFast.from_pretrained(path_350m)
 
         input_sentence = "I enjoy walking with my cute dog"
-        EXPECTED_OUTPUT = (
+        EXPECTED_OUTPUT = (  # for bloom-350m
             "I enjoy walking with my cute dog, and I love to watch the kids play. I am a very active person, and I am"
             " a very good listener. I am a very good person, and I am a very good person. I am a"
-        ) # for bloom-350m 
-        
+        )
+
         # EXPECTED_OUTPUT = (
         #     "I enjoy walking with my cute dog, but I also enjoy hiking, biking, and swimming. I love to cook and bake."
         #     " I love to cook and bake. I love to cook and bake. I love to cook and bake. I love"
@@ -443,21 +443,17 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     @require_torch_gpu
     def test_batch_generation_padd(self):
         # With small models the test will fail because of the operator torch.baddm that will give inconsistent results
-        # for small models (<350m). 
-        
+        # for small models (<350m).
+
         # 350m + allow_fp16_reduced_precision_reduction = False  + torch.bmm  ==> FAIL
         # 350m + allow_fp16_reduced_precision_reduction = False  + torch.baddm  ==> FAIL
         # 350m + allow_fp16_reduced_precision_reduction = True  + torch.bmm  ==> PASS
         # 350m + allow_fp16_reduced_precision_reduction = True  + torch.baddm  ==> FAIL
-        
+
         # >=760m + allow_fp16_reduced_precision_reduction = False  + torch.bmm  ==> PASS
         # >=760m + allow_fp16_reduced_precision_reduction = False  + torch.baddm  ==> PASS
         # >=760m + allow_fp16_reduced_precision_reduction = True  + torch.bmm  ==> PASS
         # >=760m + allow_fp16_reduced_precision_reduction = True  + torch.baddm  ==>  PASS
-
-        if torch.backends.cuda.matmul.allow_fp16_reduced_precision_reduction == False:
-            # warning this could fail
-            pass
 
         path_350m = "bigscience/bloom-350m"
         model = BloomForCausalLM.from_pretrained(path_350m, torch_dtype="auto", use_cache=True).cuda()
