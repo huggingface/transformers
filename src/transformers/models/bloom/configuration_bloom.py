@@ -72,9 +72,6 @@ class BloomConfig(PretrainedConfig):
             If set to `True`, it will skip bias add for each linear layer in the transformer blocks
         skip_bias_add_qkv (`bool`, *optional*, defaults to `False`):
             If set to `True`, it will skip bias add for the first linear layer in the transformer blocks
-        attention_softmax_in_fp32 (`bool`, *optional*, defaults to `True`):
-            If set to `True` and the `dtype` is set to `float16` it will scale the input of the Softmax function to
-            `fp32`
         hidden_dropout (`float`, *optional*, defaults to 0.1):
             Dropout rate of the dropout function on the bias dropout.
         attention_dropout (`float`, *optional*, defaults to 0.1):
@@ -136,7 +133,6 @@ class BloomConfig(PretrainedConfig):
         apply_residual_connection_post_layernorm=False,
         hidden_dropout=0.0,
         attention_dropout=0.0,
-        attention_softmax_in_fp32=True,
         pretraining_tp=1,  # TP rank used when training with megatron
         dtype="bfloat16",
         slow_but_exact=False,
@@ -153,7 +149,6 @@ class BloomConfig(PretrainedConfig):
         self.apply_residual_connection_post_layernorm = apply_residual_connection_post_layernorm
         self.hidden_dropout = hidden_dropout
         self.attention_dropout = attention_dropout
-        self.attention_softmax_in_fp32 = attention_softmax_in_fp32
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
