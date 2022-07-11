@@ -27,10 +27,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_trocr": [
-        "TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "TrOCRConfig",
-    ],
+    "configuration_trocr": ["TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP", "TrOCRConfig"],
     "processing_trocr": ["TrOCRProcessor"],
 }
 

@@ -695,6 +695,10 @@ class FlavaImageCodebookTest(ModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
+    @unittest.skip(reason="Flava does not output attentions")
+    def test_attention_outputs(self):
+        pass
+
     def test_model_common_attributes(self):
         # No embedding in multimodal model
         pass
@@ -1219,6 +1223,6 @@ class FlavaForPreTrainingIntegrationTest(unittest.TestCase):
 
         expected_logits = torch.tensor([[16.1291, 8.4033], [16.1291, 8.4033]], device=torch_device)
         self.assertTrue(torch.allclose(outputs.contrastive_logits_per_image, expected_logits, atol=1e-3))
-        self.assertAlmostEqual(outputs.loss_info.mmm_text.item(), 1.75533199)
+        self.assertAlmostEqual(outputs.loss_info.mmm_text.item(), 1.75533199, places=4)
         self.assertAlmostEqual(outputs.loss_info.mmm_image.item(), 7.0290069, places=4)
         self.assertAlmostEqual(outputs.loss.item(), 11.0626, places=4)

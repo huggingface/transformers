@@ -21,6 +21,8 @@ from torch import _softmax_backward_data, nn
 from .utils import logging
 
 
+ALL_LAYERNORM_LAYERS = [nn.LayerNorm]
+
 logger = logging.get_logger(__name__)
 
 is_torch_less_than_1_8 = version.parse(version.parse(torch.__version__).base_version) < version.parse("1.8.0")

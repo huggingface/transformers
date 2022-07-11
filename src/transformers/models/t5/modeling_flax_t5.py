@@ -87,7 +87,7 @@ class FlaxT5LayerNorm(nn.Module):
         return self.weight * hidden_states
 
 
-class FlaxT5DenseReluDense(nn.Module):
+class FlaxT5DenseActDense(nn.Module):
     config: T5Config
     dtype: jnp.dtype = jnp.float32
 
@@ -108,16 +108,17 @@ class FlaxT5DenseReluDense(nn.Module):
             dtype=self.dtype,
         )
         self.dropout = nn.Dropout(self.config.dropout_rate)
+        self.act = ACT2FN[self.config.dense_act_fn]
 
     def __call__(self, hidden_states, deterministic=True):
         hidden_states = self.wi(hidden_states)
-        hidden_states = jax.nn.relu(hidden_states)
+        hidden_states = self.act(hidden_states)
         hidden_states = self.dropout(hidden_states, deterministic=deterministic)
         hidden_states = self.wo(hidden_states)
         return hidden_states
 
 
-class FlaxT5DenseGatedGeluDense(nn.Module):
+class FlaxT5DenseGatedActDense(nn.Module):
     config: T5Config
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
@@ -144,10 +145,10 @@ class FlaxT5DenseGatedGeluDense(nn.Module):
             dtype=self.dtype,
         )
         self.dropout = nn.Dropout(self.config.dropout_rate)
-        self.gelu_act = ACT2FN["gelu_new"]
+        self.act = ACT2FN[self.config.dense_act_fn]
 
     def __call__(self, hidden_states, deterministic):
-        hidden_gelu = self.gelu_act(self.wi_0(hidden_states))
+        hidden_gelu = self.act(self.wi_0(hidden_states))
         hidden_linear = self.wi_1(hidden_states)
         hidden_states = hidden_gelu * hidden_linear
         hidden_states = self.dropout(hidden_states, deterministic=deterministic)
@@ -160,14 +161,10 @@ class FlaxT5LayerFF(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        if self.config.feed_forward_proj == "relu":
-            self.DenseReluDense = FlaxT5DenseReluDense(self.config, dtype=self.dtype)
-        elif self.config.feed_forward_proj == "gated-gelu":
-            self.DenseReluDense = FlaxT5DenseGatedGeluDense(self.config, dtype=self.dtype)
+        if self.config.is_gated_act:
+            self.DenseReluDense = FlaxT5DenseGatedActDense(self.config, dtype=self.dtype)
         else:
-            raise ValueError(
-                f"{self.config.feed_forward_proj} is not supported. Choose between `relu` and `gated-gelu`"
-            )
+            self.DenseReluDense = FlaxT5DenseActDense(self.config, dtype=self.dtype)
 
         self.layer_norm = FlaxT5LayerNorm(self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype)
         self.dropout = nn.Dropout(self.config.dropout_rate)
@@ -412,10 +409,11 @@ class FlaxT5Attention(nn.Module):
 
         # replace masked positions with -10_000
         if attention_mask is not None:
+            mask_value = jnp.finfo(self.dtype).min
             attention_mask = jax.lax.select(
                 attention_mask > 0,
                 jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
-                jnp.full(attention_mask.shape, -1e4).astype(self.dtype),
+                jnp.full(attention_mask.shape, mask_value).astype(self.dtype),
             )
 
         if position_bias is None:
@@ -931,18 +929,18 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
         input_ids = jnp.zeros(input_shape, dtype="i4")
 
         attention_mask = jnp.ones_like(input_ids)
-        decoder_input_ids = jnp.ones_like(input_ids)
-        decoder_attention_mask = jnp.ones_like(input_ids)
+        args = [input_ids, attention_mask]
+        if self.module_class not in [FlaxT5EncoderModule]:
+            decoder_input_ids = jnp.ones_like(input_ids)
+            decoder_attention_mask = jnp.ones_like(input_ids)
+            args.extend([decoder_input_ids, decoder_attention_mask])
 
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
         random_params = self.module.init(
             rngs,
-            input_ids,
-            attention_mask,
-            decoder_input_ids,
-            decoder_attention_mask,
+            *args,
         )["params"]
 
         if params is not None:
@@ -1357,6 +1355,90 @@ FLAX_T5_MODEL_DOCSTRING = """
 
 overwrite_call_docstring(FlaxT5Model, T5_INPUTS_DOCSTRING + FLAX_T5_MODEL_DOCSTRING)
 append_replace_return_docstrings(FlaxT5Model, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+
+
+@add_start_docstrings(
+    "The bare T5 Model transformer outputting encoder's raw hidden-states without any specific head on top.",
+    T5_START_DOCSTRING,
+)
+class FlaxT5EncoderModule(nn.Module):
+    config: T5Config
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+
+    def setup(self):
+        self.shared = nn.Embed(
+            self.config.vocab_size,
+            self.config.d_model,
+            embedding_init=jax.nn.initializers.normal(self.config.initializer_factor * 1.0),
+        )
+
+        encoder_config = copy.deepcopy(self.config)
+        encoder_config.is_decoder = False
+        encoder_config.is_encoder_decoder = False
+        encoder_config.causal = False
+        self.encoder = FlaxT5Stack(encoder_config, embed_tokens=self.shared, dtype=self.dtype)
+
+    def __call__(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        output_attentions=False,
+        output_hidden_states=False,
+        return_dict=True,
+        deterministic: bool = True,
+    ):
+
+        # Encode if needed (training, first prediction pass)
+        encoder_outputs = self.encoder(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            deterministic=deterministic,
+        )
+
+        return encoder_outputs
+
+
+class FlaxT5EncoderModel(FlaxT5PreTrainedModel):
+    module_class = FlaxT5EncoderModule
+
+    @add_start_docstrings_to_model_forward(T5_ENCODE_INPUTS_DOCSTRING)
+    def __call__(
+        self,
+        input_ids: jnp.ndarray,
+        attention_mask: Optional[jnp.ndarray] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        train: bool = False,
+        params: dict = None,
+        dropout_rng: PRNGKey = None,
+    ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
+        # prepare encoder inputs
+        if attention_mask is None:
+            attention_mask = jnp.ones_like(input_ids)
+
+        # Handle any PRNG if needed
+        rngs = {"dropout": dropout_rng} if dropout_rng is not None else {}
+
+        return self.module.apply(
+            {"params": params or self.params},
+            input_ids=jnp.array(input_ids, dtype="i4"),
+            attention_mask=jnp.array(attention_mask, dtype="i4"),
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            deterministic=not train,
+            rngs=rngs,
+        )
 
 
 @add_start_docstrings("""T5 Model with a `language modeling` head on top.""", T5_START_DOCSTRING)

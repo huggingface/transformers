@@ -75,14 +75,19 @@ def _pad(items, key, padding_value, padding_side):
         # Others include `attention_mask` etc...
         shape = items[0][key].shape
         dim = len(shape)
-        if dim == 4:
+        if key == "pixel_values":
             # This is probable image so padding shouldn't be necessary
             # B, C, H, W
             return torch.cat([item[key] for item in items], dim=0)
         max_length = max(item[key].shape[1] for item in items)
+        min_length = min(item[key].shape[1] for item in items)
         dtype = items[0][key].dtype
 
         if dim == 2:
+            if max_length == min_length:
+                # Bypass for `ImageGPT` which doesn't provide a padding value, yet
+                # we can consistently pad since the size should be matching
+                return torch.cat([item[key] for item in items], dim=0)
             tensor = torch.zeros((batch_size, max_length), dtype=dtype) + padding_value
         elif dim == 3:
             tensor = torch.zeros((batch_size, max_length, shape[-1]), dtype=dtype) + padding_value
@@ -146,7 +151,11 @@ def pad_collate_fn(tokenizer, feature_extractor):
         padded = {}
         for key in keys:
             if key in {"input_ids"}:
-                _padding_value = t_padding_value
+                # ImageGPT uses a feature extractor
+                if feature_extractor is not None:
+                    _padding_value = f_padding_value
+                else:
+                    _padding_value = t_padding_value
             elif key in {"input_values", "pixel_values", "input_features"}:
                 _padding_value = f_padding_value
             elif key in {"p_mask", "special_tokens_mask"}:
@@ -332,7 +341,9 @@ def get_framework(model, revision: Optional[str] = None):
     return framework
 
 
-def get_default_model(targeted_task: Dict, framework: Optional[str], task_options: Optional[Any]) -> str:
+def get_default_model_and_revision(
+    targeted_task: Dict, framework: Optional[str], task_options: Optional[Any]
+) -> Union[str, Tuple[str, str]]:
     """
     Select a default model to use for a given task. Defaults to pytorch if ambiguous.
 
@@ -693,7 +704,7 @@ PIPELINE_INIT_ARGS = r"""
             Reference to the object in charge of parsing supplied pipeline parameters.
         device (`int`, *optional*, defaults to -1):
             Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the model on
-            the associated CUDA device id.
+            the associated CUDA device id. You can pass native `torch.device` too.
         binary_output (`bool`, *optional*, defaults to `False`):
             Flag indicating if the output the pipeline should happen in a binary format (i.e., pickle) or as raw text.
 """
@@ -750,7 +761,10 @@ class Pipeline(_ScikitCompat):
         self.feature_extractor = feature_extractor
         self.modelcard = modelcard
         self.framework = framework
-        self.device = device if framework == "tf" else torch.device("cpu" if device < 0 else f"cuda:{device}")
+        if is_torch_available() and isinstance(device, torch.device):
+            self.device = device
+        else:
+            self.device = device if framework == "tf" else torch.device("cpu" if device < 0 else f"cuda:{device}")
         self.binary_output = binary_output
 
         # Special handling
@@ -857,6 +871,8 @@ class Pipeline(_ScikitCompat):
         elif isinstance(inputs, tuple):
             return tuple([self._ensure_tensor_on_device(item, device) for item in inputs])
         elif isinstance(inputs, torch.Tensor):
+            if device == torch.device("cpu") and inputs.dtype in {torch.float16, torch.bfloat16}:
+                inputs = inputs.float()
             return inputs.to(device)
         else:
             return inputs
@@ -1071,3 +1087,41 @@ class ChunkPipeline(Pipeline):
         model_iterator = PipelinePackIterator(dataloader, self.forward, forward_params, loader_batch_size=batch_size)
         final_iterator = PipelineIterator(model_iterator, self.postprocess, postprocess_params)
         return final_iterator
+
+
+class PipelineRegistry:
+    def __init__(self, supported_tasks: Dict[str, Any], task_aliases: Dict[str, str]) -> None:
+        self.supported_tasks = supported_tasks
+        self.task_aliases = task_aliases
+
+    def get_supported_tasks(self) -> List[str]:
+        supported_task = list(self.supported_tasks.keys()) + list(self.task_aliases.keys())
+        supported_task.sort()
+        return supported_task
+
+    def check_task(self, task: str) -> Tuple[Dict, Any]:
+        if task in self.task_aliases:
+            task = self.task_aliases[task]
+        if task in self.supported_tasks:
+            targeted_task = self.supported_tasks[task]
+            return targeted_task, None
+
+        if task.startswith("translation"):
+            tokens = task.split("_")
+            if len(tokens) == 4 and tokens[0] == "translation" and tokens[2] == "to":
+                targeted_task = self.supported_tasks["translation"]
+                return targeted_task, (tokens[1], tokens[3])
+            raise KeyError(f"Invalid translation task {task}, use 'translation_XX_to_YY' format")
+
+        raise KeyError(
+            f"Unknown task {task}, available tasks are {self.get_supported_tasks() + ['translation_XX_to_YY']}"
+        )
+
+    def register_pipeline(self, task: str, task_impl: Dict[str, Any]) -> None:
+        if task in self.supported_tasks:
+            logger.warning(f"{task} is already registered. Overwriting pipeline for task {task}...")
+
+        self.supported_tasks[task] = task_impl
+
+    def to_dict(self):
+        return self.supported_tasks

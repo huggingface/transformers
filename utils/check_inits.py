@@ -25,6 +25,8 @@ PATH_TO_TRANSFORMERS = "src/transformers"
 
 # Matches is_xxx_available()
 _re_backend = re.compile(r"is\_([a-z_]*)_available()")
+# Catches a one-line _import_struct = {xxx}
+_re_one_line_import_struct = re.compile(r"^_import_structure\s+=\s+\{([^\}]+)\}")
 # Catches a line with a key-values pattern: "bla": ["foo", "bar"]
 _re_import_struct_key_value = re.compile(r'\s+"\S*":\s+\[([^\]]*)\]')
 # Catches a line if not is_foo_available
@@ -74,6 +76,14 @@ def parse_init(init_file):
     objects = []
     while not lines[line_index].startswith("if TYPE_CHECKING") and find_backend(lines[line_index]) is None:
         line = lines[line_index]
+        # If we have everything on a single line, let's deal with it.
+        if _re_one_line_import_struct.search(line):
+            content = _re_one_line_import_struct.search(line).groups()[0]
+            imports = re.findall("\[([^\]]+)\]", content)
+            for imp in imports:
+                objects.extend([obj[1:-1] for obj in imp.split(", ")])
+            line_index += 1
+            continue
         single_line_import_search = _re_import_struct_key_value.search(line)
         if single_line_import_search is not None:
             imports = [obj[1:-1] for obj in single_line_import_search.groups()[0].split(", ") if len(obj) > 0]
@@ -144,7 +154,7 @@ def parse_init(init_file):
     type_hint_objects = {"none": objects}
     # Let's continue with backend-specific objects
     while line_index < len(lines):
-        # If the line is an if is_backemd_available, we grab all objects associated.
+        # If the line is an if is_backend_available, we grab all objects associated.
         backend = find_backend(lines[line_index])
         # Check if the backend declaration is inside a try block:
         if _re_try.search(lines[line_index - 1]) is None:

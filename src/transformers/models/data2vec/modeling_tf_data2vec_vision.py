@@ -17,7 +17,7 @@
 import collections.abc
 import math
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -25,7 +25,12 @@ import tensorflow as tf
 from transformers.tf_utils import shape_list, stable_softmax
 
 from ...activations_tf import get_tf_activation
-from ...modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPooling, TFSequenceClassifierOutput
+from ...modeling_tf_outputs import (
+    TFBaseModelOutput,
+    TFBaseModelOutputWithPooling,
+    TFSemanticSegmenterOutput,
+    TFSequenceClassifierOutput,
+)
 from ...modeling_tf_utils import (
     TFModelInputType,
     TFPreTrainedModel,
@@ -34,7 +39,13 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_data2vec_vision import Data2VecVisionConfig
 
 
@@ -89,7 +100,7 @@ class TFData2VecVisionModelOutputWithPooling(TFBaseModelOutputWithPooling):
     attentions: Optional[Tuple[tf.Tensor]] = None
 
 
-class TFDropPath(tf.keras.layers.Layer):
+class TFData2VecVisionDropPath(tf.keras.layers.Layer):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
     References:
         (1) github.com:rwightman/pytorch-image-models
@@ -109,8 +120,6 @@ class TFDropPath(tf.keras.layers.Layer):
         return x
 
 
-# Based on timm implementation, which can be found here:
-# https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
 class TFData2VecVisionEmbeddings(tf.keras.layers.Layer):
     """
     Construct the CLS token, position and patch embeddings. Optionally, also the mask token.
@@ -121,9 +130,7 @@ class TFData2VecVisionEmbeddings(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.config = config
 
-        self.patch_embeddings = TFPatchEmbeddings(
-            config=config, image_size=config.image_size, patch_size=config.patch_size, name="patch_embeddings"
-        )
+        self.patch_embeddings = TFData2VecVisionPatchEmbeddings(config, name="patch_embeddings")
         self.num_patches = self.patch_embeddings.num_patches
         self.config = config
 
@@ -181,40 +188,32 @@ class TFData2VecVisionEmbeddings(tf.keras.layers.Layer):
         return embeddings
 
 
-# Based on timm implementation, which can be found here:
-# https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
-class TFPatchEmbeddings(tf.keras.layers.Layer):
+class TFData2VecVisionPatchEmbeddings(tf.keras.layers.Layer):
     """
     Image to Patch Embedding.
     """
 
-    def __init__(self, config: Data2VecVisionConfig, image_size: int = 224, patch_size: int = 16, **kwargs):
+    def __init__(self, config: Data2VecVisionConfig, **kwargs):
         super().__init__(**kwargs)
         self.config = config
 
-        image_size = (
-            config.image_size
-            if isinstance(config.image_size, collections.abc.Iterable)
-            else (config.image_size, config.image_size)
-        )
-        patch_size = (
-            config.patch_size
-            if isinstance(config.patch_size, collections.abc.Iterable)
-            else (config.patch_size, config.patch_size)
-        )
+        image_size, patch_size = config.image_size, config.patch_size
+        num_channels, hidden_size = config.num_channels, config.hidden_size
+
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         patch_shape = (image_size[0] // patch_size[0], image_size[1] // patch_size[1])
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_patches = num_patches
         self.patch_shape = patch_shape
-        self.num_channels = config.num_channels
-        self.embed_dim = config.hidden_size
+        self.num_channels = num_channels
 
         self.projection = tf.keras.layers.Conv2D(
-            filters=self.embed_dim,
-            kernel_size=self.patch_size,
-            strides=self.patch_size,
+            filters=hidden_size,
+            kernel_size=patch_size,
+            strides=patch_size,
             padding="valid",
             data_format="channels_last",
             kernel_initializer="glorot_uniform",  # following torch.nn.Linear
@@ -224,7 +223,12 @@ class TFPatchEmbeddings(tf.keras.layers.Layer):
 
     def call(self, pixel_values: tf.Tensor, training: bool = False) -> tf.Tensor:
         batch_size, num_channels, height, width = shape_list(pixel_values)
-        if getattr(height, "numpy", None) and getattr(width, "numpy", None):
+        if tf.executing_eagerly():
+            if num_channels != self.num_channels:
+                raise ValueError(
+                    "Make sure that the channel dimension of the pixel values match with the one set in the"
+                    " configuration."
+                )
             if height != self.image_size[0] or width != self.image_size[1]:
                 raise ValueError(
                     f"Input image size ({height}*{width}) doesn't match model"
@@ -454,7 +458,7 @@ class TFData2VecVisionLayer(tf.keras.layers.Layer):
         # Using `layers.Activation` instead of `tf.identity` to better control `training`
         # behaviour.
         self.drop_path = (
-            TFDropPath(drop_path_rate, name="drop_path")
+            TFData2VecVisionDropPath(drop_path_rate, name="drop_path")
             if drop_path_rate > 0.0
             else tf.keras.layers.Activation("linear", name="drop_path")
         )
@@ -976,5 +980,466 @@ class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TF
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+class TFData2VecVisionConvModule(tf.keras.layers.Layer):
+    """
+    A convolutional block that bundles conv/norm/activation layers. This block simplifies the usage of convolution
+    layers, which are commonly used with a norm layer (e.g., BatchNorm) and activation layer (e.g., ReLU).
+
+    Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
+    """
+
+    def __init__(
+        self,
+        out_channels: int,
+        kernel_size: Union[int, Tuple[int, int]],
+        padding: str = "valid",
+        bias: bool = False,
+        dilation: Union[int, Tuple[int, int]] = 1,
+        **kwargs
+    ) -> None:
+        super().__init__(**kwargs)
+        self.conv = tf.keras.layers.Conv2D(
+            filters=out_channels,
+            kernel_size=kernel_size,
+            padding=padding,
+            use_bias=bias,
+            dilation_rate=dilation,
+            name="conv",
+        )
+        self.bn = tf.keras.layers.BatchNormalization(name="bn")
+        self.activation = tf.nn.relu
+
+    def call(self, input: tf.Tensor) -> tf.Tensor:
+        output = self.conv(input)
+        output = self.bn(output)
+        output = self.activation(output)
+        return output
+
+
+# Copied from:
+# https://gist.github.com/Rocketknight1/43abbe6e73f1008e6e459486e01e0ceb
+class TFAdaptiveAvgPool1D(tf.keras.layers.Layer):
+    def __init__(self, output_dim, mode="dense", **kwargs):
+        super().__init__(**kwargs)
+        self.output_dim = output_dim
+        self.mode = mode
+        self.map = None
+
+    def build(self, input_shape):
+        super().build(input_shape)
+        """We pre-compute the sparse matrix for the build() step once. The below code comes
+        from https://stackoverflow.com/questions/53841509/how-does-adaptive-pooling-in-pytorch-work/63603993#63603993."""
+
+        def get_kernels(ind, outd) -> List:
+            """Returns a List [(kernel_offset_start,kernel_length)] defining all the pooling kernels for a 1-D adaptive
+            pooling layer that takes an input of dimension `ind` and yields an output of dimension `outd`"""
+
+            def start_index(a, b, c):
+                return math.floor((float(a) * float(c)) / b)
+
+            def end_index(a, b, c):
+                return math.ceil((float(a + 1) * float(c)) / b)
+
+            results = []
+            for ow in range(outd):
+                start = start_index(ow, outd, ind)
+                end = end_index(ow, outd, ind)
+                sz = end - start
+                results.append((start, sz))
+            return results
+
+        in_dim = int(input_shape[-1])
+        kernels = get_kernels(in_dim, self.output_dim)
+        sparse_map = np.zeros((in_dim, self.output_dim), dtype=np.float32)
+        for i, kernel in enumerate(kernels):
+            sparse_map[kernel[0] : kernel[0] + kernel[1], i] = 1 / kernel[1]
+        if self.mode == "dense":
+            self.map = tf.constant(sparse_map)
+        else:
+            self.map = tf.sparse.from_dense(sparse_map)
+
+    def call(self, inputs):
+        if self.mode == "dense":
+            return inputs @ self.map
+        else:
+            input_dims = inputs.shape
+            input_matrix = tf.reshape(inputs, (-1, input_dims[-1]))
+            out = tf.sparse.sparse_dense_matmul(input_matrix, self.map)
+            return tf.reshape(out, input_dims[:-1].as_list() + [-1])
+
+    def get_config(self):
+        config = super().get_config()
+        config.update({"output_dim": self.output_dim, "mode": self.mode})
+        return config
+
+
+class TFAdaptiveAvgPool2D(tf.keras.layers.Layer):
+    def __init__(self, output_shape, mode="dense", **kwargs):
+        super().__init__(**kwargs)
+        self.mode = mode
+        self.h_pool = TFAdaptiveAvgPool1D(output_shape[0], mode=mode, name="h_pool")
+        self.w_pool = TFAdaptiveAvgPool1D(output_shape[1], mode=mode, name="w_pool")
+
+    def call(self, inputs):
+        # Rearrange from NHWC -> NCHW
+        inputs = tf.transpose(inputs, perm=[0, 3, 1, 2])
+        # Perform W-pooling
+        inputs = self.w_pool(inputs)
+        # Rearrange NCHW -> NCWH
+        inputs = tf.transpose(inputs, perm=[0, 1, 3, 2])
+        # Perform H-pooling
+        inputs = self.h_pool(inputs)
+        # Rearrange from NCWH -> NHWC
+        inputs = tf.transpose(inputs, perm=[0, 3, 2, 1])
+        return inputs
+
+    def get_config(self):
+        config = super().get_config()
+        config.update({"mode": self.mode})
+        return config
+
+
+class TFData2VecVisionPyramidPoolingModule(tf.keras.layers.Layer):
+    """
+    Pyramid Pooling Module (PPM) used in PSPNet.
+
+    Args:
+        pool_scales (tuple[int]): Pooling scales used in Pooling Pyramid
+            Module.
+        channels (int): Channels after modules, before conv_seg.
+
+    Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
+    """
+
+    def __init__(self, pool_scales: Tuple[int, ...], channels: int, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.pool_scales = pool_scales
+        self.channels = channels
+
+        self.layer_list = []
+        for idx, pool_scale in enumerate(pool_scales):
+            pool_scale = pool_scale if isinstance(pool_scale, collections.abc.Iterable) else (pool_scale, pool_scale)
+            self.layer_list.append(
+                [
+                    TFAdaptiveAvgPool2D(output_shape=pool_scale),
+                    TFData2VecVisionConvModule(out_channels=self.channels, kernel_size=1, name=f"{idx}.1"),
+                ]
+            )
+
+    def call(self, x: tf.Tensor) -> List[tf.Tensor]:
+        ppm_outs = []
+        inputs = x
+
+        for ppm in self.layer_list:
+            for layer_module in ppm:
+                ppm_out = layer_module(x)
+                x = ppm_out
+
+            upsampled_ppm_out = tf.image.resize(ppm_out, size=shape_list(inputs)[1:-1], method="bilinear")
+            ppm_outs.append(upsampled_ppm_out)
+        return ppm_outs
+
+
+class TFData2VecVisionUperHead(tf.keras.layers.Layer):
+    """
+    Unified Perceptual Parsing for Scene Understanding. This head is the implementation of
+    [UPerNet](https://arxiv.org/abs/1807.10221).
+
+    Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
+    """
+
+    def __init__(self, config: Data2VecVisionConfig, **kwargs) -> None:
+        super().__init__(**kwargs)
+
+        self.pool_scales = config.pool_scales  # e.g. (1, 2, 3, 6)
+        self.in_channels = [config.hidden_size] * 4  # e.g. [768, 768, 768, 768]
+        self.channels = config.hidden_size
+        self.classifier = tf.keras.layers.Conv2D(config.num_labels, kernel_size=1, name="classifier")
+
+        # PSP Module
+        self.psp_modules = TFData2VecVisionPyramidPoolingModule(self.pool_scales, self.channels, name="psp_modules")
+        self.bottleneck = TFData2VecVisionConvModule(self.channels, kernel_size=3, padding="same", name="bottleneck")
+        # FPN Module
+        self.lateral_convs = []
+        self.fpn_convs = []
+        for idx, _ in enumerate(self.in_channels[:-1]):  # skip the top layer
+            l_conv = TFData2VecVisionConvModule(out_channels=self.channels, kernel_size=1, name=f"lateral_convs.{idx}")
+            fpn_conv = TFData2VecVisionConvModule(
+                out_channels=self.channels, kernel_size=3, padding="same", name=f"fpn_convs.{idx}"
+            )
+            self.lateral_convs.append(l_conv)
+            self.fpn_convs.append(fpn_conv)
+
+        self.fpn_bottleneck = TFData2VecVisionConvModule(
+            out_channels=self.channels, kernel_size=3, padding="same", name="fpn_bottleneck"
+        )
+
+    def psp_forward(self, inputs):
+        x = inputs[-1]
+        psp_outs = [x]
+        psp_outs.extend(self.psp_modules(x))
+        psp_outs = tf.concat(psp_outs, axis=-1)
+        output = self.bottleneck(psp_outs)
+
+        return output
+
+    def call(self, encoder_hidden_states: tf.Tensor) -> tf.Tensor:
+        # build laterals
+        laterals = [lateral_conv(encoder_hidden_states[i]) for i, lateral_conv in enumerate(self.lateral_convs)]
+
+        laterals.append(self.psp_forward(encoder_hidden_states))
+
+        # build top-down path
+        used_backbone_levels = len(laterals)
+        for i in range(used_backbone_levels - 1, 0, -1):
+            prev_shape = shape_list(laterals[i - 1])[1:-1]
+            laterals[i - 1] = laterals[i - 1] + tf.image.resize(laterals[i], size=prev_shape, method="bilinear")
+
+        # build outputs
+        fpn_outs = [self.fpn_convs[i](laterals[i]) for i in range(used_backbone_levels - 1)]
+        # append psp feature
+        fpn_outs.append(laterals[-1])
+
+        for i in range(used_backbone_levels - 1, 0, -1):
+            fpn_outs[i] = tf.image.resize(fpn_outs[i], size=shape_list(fpn_outs[0])[1:-1], method="bilinear")
+        fpn_outs = tf.concat(fpn_outs, axis=-1)
+        output = self.fpn_bottleneck(fpn_outs)
+        output = self.classifier(output)
+
+        return output
+
+
+class TFData2VecVisionFCNHead(tf.keras.layers.Layer):
+    """
+    Fully Convolution Networks for Semantic Segmentation. This head is implemented from
+    [FCNNet](https://arxiv.org/abs/1411.4038).
+
+    Args:
+        config (Data2VecVisionConfig): Configuration.
+        kernel_size (int): The kernel size for convs in the head. Default: 3.
+        dilation (int): The dilation rate for convs in the head. Default: 1.
+
+
+    Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
+    """
+
+    def __init__(
+        self,
+        config: Data2VecVisionConfig,
+        in_index: int = 2,
+        kernel_size: int = 3,
+        dilation: Union[int, Tuple[int, int]] = 1,
+        **kwargs
+    ) -> None:
+        super().__init__(**kwargs)
+        self.in_channels = config.hidden_size
+        self.channels = config.auxiliary_channels
+        self.num_convs = config.auxiliary_num_convs
+        self.concat_input = config.auxiliary_concat_input
+        self.in_index = in_index
+
+        convs = []
+        convs.append(
+            TFData2VecVisionConvModule(
+                out_channels=self.channels,
+                kernel_size=kernel_size,
+                padding="same",
+                dilation=dilation,
+                name="convs.0",
+            )
+        )
+        for i in range(self.num_convs - 1):
+            convs.append(
+                TFData2VecVisionConvModule(
+                    out_channels=self.channels,
+                    kernel_size=kernel_size,
+                    padding="same",
+                    dilation=dilation,
+                    name=f"conv_module_{i+2}",
+                )
+            )
+        if self.num_convs == 0:
+            self.convs = [tf.identity]
+        else:
+            self.convs = convs
+        if self.concat_input:
+            self.conv_cat = TFData2VecVisionConvModule(
+                out_channels=self.channels, kernel_size=kernel_size, padding="same", name="conv_cat"
+            )
+
+        self.classifier = tf.keras.layers.Conv2D(config.num_labels, kernel_size=1, name="classifier")
+
+    def call(self, encoder_hidden_states: tf.Tensor) -> tf.Tensor:
+        # just take the relevant feature maps
+        hidden_states = encoder_hidden_states[self.in_index]
+        output = hidden_states
+        for layer_module in self.convs:
+            output = layer_module(output)
+        if self.concat_input:
+            output = self.conv_cat(tf.concat([hidden_states, output], axis=-1))
+        output = self.classifier(output)
+        return output
+
+
+@add_start_docstrings(
+    """
+    Data2VecVision Model transformer with a semantic segmentation head on top e.g. for ADE20k, CityScapes.
+    """,
+    DATA2VEC_VISION_START_DOCSTRING,
+)
+class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
+    def __init__(self, config: Data2VecVisionConfig, *inputs, **kwargs) -> None:
+        super().__init__(config, *inputs, **kwargs)
+        self.num_labels = config.num_labels
+        self.data2vec_vision = TFData2VecVisionMainLayer(config, add_pooling_layer=False, name="data2vec_vision")
+
+        # FPNs
+        self.fpn1 = [
+            tf.keras.layers.Conv2DTranspose(config.hidden_size, kernel_size=2, strides=2, name="fpn1.0"),
+            tf.keras.layers.BatchNormalization(name="fpn1.1"),
+            tf.keras.layers.Activation("gelu"),
+            tf.keras.layers.Conv2DTranspose(config.hidden_size, kernel_size=2, strides=2, name="fpn1.3"),
+        ]
+        self.fpn2 = [tf.keras.layers.Conv2DTranspose(config.hidden_size, kernel_size=2, strides=2, name="fpn2.0")]
+
+        self.fpn3 = tf.identity
+        self.fpn4 = tf.keras.layers.MaxPool2D(pool_size=2, strides=2)
+
+        # Semantic segmentation head(s)
+        self.decode_head = TFData2VecVisionUperHead(config, name="decode_head")
+        self.auxiliary_head = (
+            TFData2VecVisionFCNHead(config, name="auxiliary_head") if config.use_auxiliary_head else None
+        )
+
+    def compute_loss(self, logits, auxiliary_logits, labels):
+        # upsample logits to the images' original size
+        if len(shape_list(labels)) > 3:
+            label_interp_shape = shape_list(labels)[1:-1]
+        else:
+            label_interp_shape = shape_list(labels)[-2:]
+
+        upsampled_logits = tf.image.resize(logits, size=label_interp_shape, method="bilinear")
+        if auxiliary_logits is not None:
+            upsampled_auxiliary_logits = tf.image.resize(auxiliary_logits, size=label_interp_shape, method="bilinear")
+        # compute weighted loss
+        loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction="none")
+
+        # Copied from https://www.tensorflow.org/text/tutorials/transformer#loss_and_metrics.
+        # Utility to mask the index to ignore during computing the loss.
+        def masked_loss(real, pred):
+            mask = tf.math.logical_not(tf.math.equal(real, self.config.semantic_loss_ignore_index))
+            loss_ = loss_fct(real, pred)
+            mask = tf.cast(mask, dtype=loss_.dtype)
+            loss_ *= mask
+
+            return tf.reduce_sum(loss_) / tf.reduce_sum(mask)
+
+        main_loss = masked_loss(labels, upsampled_logits)
+        auxiliary_loss = masked_loss(labels, upsampled_auxiliary_logits)
+        loss = main_loss + self.config.auxiliary_loss_weight * auxiliary_loss
+
+        return loss
+
+    @unpack_inputs
+    @add_start_docstrings_to_model_forward(DATA2VEC_VISION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=TFSemanticSegmenterOutput, config_class=_CONFIG_FOR_DOC)
+    def call(
+        self,
+        pixel_values: Optional[tf.Tensor] = None,
+        head_mask: Optional[tf.Tensor] = None,
+        labels: Optional[tf.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[tuple, TFSemanticSegmenterOutput]:
+        r"""
+        labels (`tf.Tensor` of shape `(batch_size, height, width)`, *optional*):
+            Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
+
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoFeatureExtractor, TFData2VecVisionForSemanticSegmentation
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/data2vec-vision-base")
+        >>> model = TFData2VecVisionForSemanticSegmentation.from_pretrained("facebook/data2vec-vision-base")
+
+        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> # logits are of shape (batch_size, num_labels, height, width)
+        >>> logits = outputs.logits
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
+        outputs = self.data2vec_vision(
+            pixel_values,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=True,  # we need the intermediate hidden states
+            return_dict=return_dict,
+        )
+        encoder_hidden_states = outputs.hidden_states if return_dict else outputs[1]
+
+        # only keep certain features, and reshape
+        # note that we do +1 as the encoder_hidden_states also includes the initial embeddings
+        features = [feature for idx, feature in enumerate(encoder_hidden_states) if idx + 1 in self.config.out_indices]
+        batch_size = shape_list(pixel_values)[0]
+        patch_resolution = self.config.image_size // self.config.patch_size
+
+        def reshape_features(x):
+            x = tf.reshape(x, (batch_size, patch_resolution, patch_resolution, -1))
+            return x
+
+        features = [reshape_features(x[:, 1:, :]) for x in features]
+
+        # apply FPNs
+        ops = [self.fpn1, self.fpn2, self.fpn3, self.fpn4]
+        for module in ops[0]:
+            features[0] = module(features[0])
+        features[1] = ops[1][0](features[1])
+        for i in range(len(features[2:])):
+            features[i + 2] = ops[i + 2](features[i + 2])
+
+        logits = self.decode_head(features)
+        # Tranpose the logits to maintain consistency in the output formats.
+        transposed_logits = tf.transpose(logits, perm=[0, 3, 1, 2])
+
+        auxiliary_logits = None
+        if self.auxiliary_head is not None:
+            auxiliary_logits = self.auxiliary_head(features)
+
+        loss = None
+        if labels is not None:
+            if self.config.num_labels == 1:
+                raise ValueError("The number of labels should be greater than one")
+            else:
+                loss = self.compute_loss(logits, auxiliary_logits, labels)
+
+        if not return_dict:
+            if output_hidden_states:
+                output = (logits,) + outputs[1:]
+            else:
+                output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TFSemanticSegmenterOutput(
+            loss=loss,
+            logits=transposed_logits,
+            hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )

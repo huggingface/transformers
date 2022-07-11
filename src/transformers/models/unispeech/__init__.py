@@ -26,9 +26,7 @@ from ...utils import (
 )
 
 
-_import_structure = {
-    "configuration_unispeech": ["UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP", "UniSpeechConfig"],
-}
+_import_structure = {"configuration_unispeech": ["UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP", "UniSpeechConfig"]}
 
 try:
     if not is_torch_available():

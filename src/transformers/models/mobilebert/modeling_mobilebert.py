@@ -226,9 +226,9 @@ class MobileBertEmbeddings(nn.Module):
             # dimensional output.
             inputs_embeds = torch.cat(
                 [
-                    nn.functional.pad(inputs_embeds[:, 1:], [0, 0, 0, 1, 0, 0], value=0),
+                    nn.functional.pad(inputs_embeds[:, 1:], [0, 0, 0, 1, 0, 0], value=0.0),
                     inputs_embeds,
-                    nn.functional.pad(inputs_embeds[:, :-1], [0, 0, 1, 0, 0, 0], value=0),
+                    nn.functional.pad(inputs_embeds[:, :-1], [0, 0, 1, 0, 0, 0], value=0.0),
                 ],
                 dim=2,
             )

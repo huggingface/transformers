@@ -39,6 +39,64 @@ class TextClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestC
         outputs = text_classifier("This is great !")
         self.assertEqual(nested_simplify(outputs), [{"label": "LABEL_0", "score": 0.504}])
 
+        outputs = text_classifier("This is great !", top_k=2)
+        self.assertEqual(
+            nested_simplify(outputs), [{"label": "LABEL_0", "score": 0.504}, {"label": "LABEL_1", "score": 0.496}]
+        )
+
+        outputs = text_classifier(["This is great !", "This is bad"], top_k=2)
+        self.assertEqual(
+            nested_simplify(outputs),
+            [
+                [{"label": "LABEL_0", "score": 0.504}, {"label": "LABEL_1", "score": 0.496}],
+                [{"label": "LABEL_0", "score": 0.504}, {"label": "LABEL_1", "score": 0.496}],
+            ],
+        )
+
+        outputs = text_classifier("This is great !", top_k=1)
+        self.assertEqual(nested_simplify(outputs), [{"label": "LABEL_0", "score": 0.504}])
+
+        # Legacy behavior
+        outputs = text_classifier("This is great !", return_all_scores=False)
+        self.assertEqual(nested_simplify(outputs), [{"label": "LABEL_0", "score": 0.504}])
+
+        outputs = text_classifier("This is great !", return_all_scores=True)
+        self.assertEqual(
+            nested_simplify(outputs), [[{"label": "LABEL_0", "score": 0.504}, {"label": "LABEL_1", "score": 0.496}]]
+        )
+
+        outputs = text_classifier(["This is great !", "Something else"], return_all_scores=True)
+        self.assertEqual(
+            nested_simplify(outputs),
+            [
+                [{"label": "LABEL_0", "score": 0.504}, {"label": "LABEL_1", "score": 0.496}],
+                [{"label": "LABEL_0", "score": 0.504}, {"label": "LABEL_1", "score": 0.496}],
+            ],
+        )
+
+        outputs = text_classifier(["This is great !", "Something else"], return_all_scores=False)
+        self.assertEqual(
+            nested_simplify(outputs),
+            [
+                {"label": "LABEL_0", "score": 0.504},
+                {"label": "LABEL_0", "score": 0.504},
+            ],
+        )
+
+    @require_torch
+    def test_accepts_torch_device(self):
+        import torch
+
+        text_classifier = pipeline(
+            task="text-classification",
+            model="hf-internal-testing/tiny-random-distilbert",
+            framework="pt",
+            device=torch.device("cpu"),
+        )
+
+        outputs = text_classifier("This is great !")
+        self.assertEqual(nested_simplify(outputs), [{"label": "LABEL_0", "score": 0.504}])
+
     @require_tf
     def test_small_model_tf(self):
         text_classifier = pipeline(
@@ -93,3 +151,37 @@ class TextClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestC
         )
         self.assertTrue(outputs[0]["label"] in model.config.id2label.values())
         self.assertTrue(outputs[1]["label"] in model.config.id2label.values())
+
+        # Forcing to get all results with `top_k=None`
+        # This is NOT the legacy format
+        outputs = text_classifier(valid_inputs, top_k=None)
+        N = len(model.config.id2label.values())
+        self.assertEqual(
+            nested_simplify(outputs),
+            [[{"label": ANY(str), "score": ANY(float)}] * N, [{"label": ANY(str), "score": ANY(float)}] * N],
+        )
+
+        valid_inputs = {"text": "HuggingFace is in ", "text_pair": "Paris is in France"}
+        outputs = text_classifier(valid_inputs)
+        self.assertEqual(
+            nested_simplify(outputs),
+            {"label": ANY(str), "score": ANY(float)},
+        )
+        self.assertTrue(outputs["label"] in model.config.id2label.values())
+
+        # This might be used a text pair, but tokenizer + pipe interaction
+        # makes it hard to understand that it's not using the pair properly
+        # https://github.com/huggingface/transformers/issues/17305
+        # We disabled this usage instead as it was outputting wrong outputs.
+        invalid_input = [["HuggingFace is in ", "Paris is in France"]]
+        with self.assertRaises(ValueError):
+            text_classifier(invalid_input)
+
+        # This used to be valid for doing text pairs
+        # We're keeping it working because of backward compatibility
+        outputs = text_classifier([[["HuggingFace is in ", "Paris is in France"]]])
+        self.assertEqual(
+            nested_simplify(outputs),
+            [{"label": ANY(str), "score": ANY(float)}],
+        )
+        self.assertTrue(outputs[0]["label"] in model.config.id2label.values())

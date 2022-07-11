@@ -28,7 +28,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_convnext": ["CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNextConfig"],
+    "configuration_convnext": ["CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNextConfig", "ConvNextOnnxConfig"]
 }
 
 try:
@@ -65,7 +65,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig
+    from .configuration_convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig, ConvNextOnnxConfig
 
     try:
         if not is_vision_available():
