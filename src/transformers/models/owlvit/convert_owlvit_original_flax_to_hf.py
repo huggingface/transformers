@@ -15,7 +15,6 @@
 """Convert OWL-ViT checkpoints from the original repository. URL:
 https://github.com/google-research/scenic/tree/main/scenic/projects/owl_vit"""
 
-import copy
 import argparse
 import collections
 
@@ -37,42 +36,47 @@ from transformers import (
 )
 
 
-
 CONFIGS = {
-    'vit_b32': dict(embed_dim=512,
-                    image_resolution=768,
-                    context_length=16,
-                    vocab_size=49408,
-                    vision_layers=12,
-                    vision_width=768,
-                    vision_patch_size=32,
-                    transformer_width=512,
-                    transformer_heads=8,
-                    transformer_layers=12),
-    'vit_b16': dict(embed_dim=512,
-                    image_resolution=768,
-                    context_length=16,
-                    vocab_size=49408,
-                    vision_layers=12,
-                    vision_width=768,
-                    vision_patch_size=16,
-                    transformer_width=512,
-                    transformer_heads=8,
-                    transformer_layers=12),
-    'vit_l14': dict(embed_dim=768,
-                    image_resolution=840,
-                    context_length=16,
-                    vocab_size=49408,
-                    vision_layers=24,
-                    vision_width=1024,
-                    vision_patch_size=14,
-                    transformer_width=768,
-                    transformer_heads=12,
-                    transformer_layers=12),
+    "vit_b32": dict(
+        embed_dim=512,
+        image_resolution=768,
+        context_length=16,
+        vocab_size=49408,
+        vision_layers=12,
+        vision_width=768,
+        vision_patch_size=32,
+        transformer_width=512,
+        transformer_heads=8,
+        transformer_layers=12,
+    ),
+    "vit_b16": dict(
+        embed_dim=512,
+        image_resolution=768,
+        context_length=16,
+        vocab_size=49408,
+        vision_layers=12,
+        vision_width=768,
+        vision_patch_size=16,
+        transformer_width=512,
+        transformer_heads=8,
+        transformer_layers=12,
+    ),
+    "vit_l14": dict(
+        embed_dim=768,
+        image_resolution=840,
+        context_length=16,
+        vocab_size=49408,
+        vision_layers=24,
+        vision_width=1024,
+        vision_patch_size=14,
+        transformer_width=768,
+        transformer_heads=12,
+        transformer_layers=12,
+    ),
 }
 
 
-def flatten_nested_dict(params, parent_key='', sep='/'):
+def flatten_nested_dict(params, parent_key="", sep="/"):
     items = []
 
     for k, v in params.items():
@@ -232,8 +236,8 @@ def copy_flax_attn_params(hf_backbone, flax_attn_params):
         torch_key = torch_key.replace("value", "v_proj")
         torch_key = torch_key.replace("query", "q_proj")
         torch_key = torch_key.replace("out", "out_proj")
-        
-        if "bias" in torch_key and v.ndim==2:
+
+        if "bias" in torch_key and v.ndim == 2:
             shape = v.shape[0] * v.shape[1]
             v = v.reshape(shape)
 
@@ -255,15 +259,15 @@ def _convert_attn_layers(params):
     processed_attn_layers = []
 
     for k, v in params.items():
-        if 'attn.' in k:
-            base = k[:k.rindex('attn.')+5]
+        if "attn." in k:
+            base = k[: k.rindex("attn.") + 5]
             if base in processed_attn_layers:
                 continue
 
             processed_attn_layers.append(base)
-            dim = params[base + 'out.weight'].shape[-1]
-            new_params[base + 'out_proj.weight'] = params[base + 'out.weight'].reshape(dim, dim).T
-            new_params[base + 'out_proj.bias'] = params[base + 'out.bias']
+            dim = params[base + "out.weight"].shape[-1]
+            new_params[base + "out_proj.weight"] = params[base + "out.weight"].reshape(dim, dim).T
+            new_params[base + "out_proj.bias"] = params[base + "out.bias"]
         else:
             new_params[k] = v
     return new_params
@@ -281,10 +285,12 @@ def convert_clip_backbone(flax_params, torch_config):
         torch_key = flax_key.replace("/", ".")
         torch_key = torch_key.replace("text.token_embedding.embedding", "token_embedding.kernel")
 
-        if (torch_key.startswith("text.transformer") or
-            torch_key.startswith("text.text_projection") or
-            torch_key.startswith("text.ln_final") or
-            torch_key.startswith("text.positional_embedding")):
+        if (
+            torch_key.startswith("text.transformer")
+            or torch_key.startswith("text.text_projection")
+            or torch_key.startswith("text.ln_final")
+            or torch_key.startswith("text.positional_embedding")
+        ):
             torch_key = torch_key[5:]
 
         torch_key = torch_key.replace("text_projection.kernel", "text_projection")
@@ -332,7 +338,6 @@ def convert_owlvit_checkpoint(pt_backbone, flax_params, attn_params, pytorch_dum
 
     hf_backbone = OwlViTModel(config).eval()
     hf_model = OwlViTForObjectDetection(config).eval()
-    orig_params = copy.deepcopy(hf_model.state_dict())
 
     copy_text_model_and_projection(hf_backbone, pt_backbone)
     copy_vision_model_and_projection(hf_backbone, pt_backbone)
@@ -348,11 +353,10 @@ def convert_owlvit_checkpoint(pt_backbone, flax_params, attn_params, pytorch_dum
 
     # Initialize feature extractor
     feature_extractor = OwlViTFeatureExtractor(
-        size=config.vision_config.image_size, 
-        crop_size=config.vision_config.image_size
+        size=config.vision_config.image_size, crop_size=config.vision_config.image_size
     )
     # Initialize tokenizer
-    tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32", pad_token='!', model_max_length=16)
+    tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32", pad_token="!", model_max_length=16)
 
     # Initialize processor
     processor = OwlViTProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
@@ -368,14 +372,16 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--owlvit_version", default=None, type=str, required=True, help="OWL-ViT model name [clip_b16, clip_b32, clip_l14]."
+        "--owlvit_version",
+        default=None,
+        type=str,
+        required=True,
+        help="OWL-ViT model name [clip_b16, clip_b32, clip_l14].",
     )
     parser.add_argument(
         "--owlvit_checkpoint", default=None, type=str, required=True, help="Path to flax model checkpoint."
     )
-    parser.add_argument(
-        "--hf_config", default=None, type=str, required=True, help="Path to HF model config."
-    )
+    parser.add_argument("--hf_config", default=None, type=str, required=True, help="Path to HF model config.")
     parser.add_argument(
         "--pytorch_dump_folder_path", default="hf_model", type=str, help="Path to the output PyTorch model."
     )

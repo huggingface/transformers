@@ -15,7 +15,6 @@
 """ Testing suite for the PyTorch OwlViT model. """
 
 
-import copy
 import inspect
 import os
 import tempfile
@@ -25,16 +24,8 @@ from typing import Dict, List, Tuple
 import numpy as np
 
 import requests
-import transformers
 from transformers import OwlViTConfig, OwlViTTextConfig, OwlViTVisionConfig
-from transformers.testing_utils import (
-    is_flax_available,
-    is_pt_flax_cross_test,
-    require_torch,
-    require_vision,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -224,7 +215,7 @@ class OwlViTTextModelTester:
         use_input_mask=True,
         use_labels=True,
         vocab_size=99,
-        hidden_size=512,
+        hidden_size=64,
         num_hidden_layers=12,
         num_attention_heads=4,
         intermediate_size=37,
@@ -353,34 +344,34 @@ class OwlViTModelTester:
         self.text_model_tester = OwlViTTextModelTester(parent)
         self.vision_model_tester = OwlViTVisionModelTester(parent)
         self.is_training = is_training
+        self.text_config = self.text_model_tester.get_config().to_dict()
+        self.vision_config = self.vision_model_tester.get_config().to_dict()
 
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
         vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
-        config = self.get_config(text_config.to_dict(), vision_config.to_dict())
+        config = self.get_config()
         return config, input_ids, attention_mask, pixel_values
 
-    def get_config(self, text_config, vision_config):
-        return OwlViTConfig.from_text_vision_configs(text_config, vision_config, projection_dim=64)
+    def get_config(self):
+        return OwlViTConfig.from_text_vision_configs(self.text_config, self.vision_config, projection_dim=64)
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
         model = OwlViTModel(config).to(torch_device).eval()
 
         with torch.no_grad():
             result = model(
-                input_ids=input_ids, 
-                pixel_values=pixel_values, 
+                input_ids=input_ids,
+                pixel_values=pixel_values,
                 attention_mask=attention_mask,
             )
 
         image_logits_size = (
             self.vision_model_tester.batch_size,
-            self.text_model_tester.batch_size
-            * self.text_model_tester.num_queries,
+            self.text_model_tester.batch_size * self.text_model_tester.num_queries,
         )
         text_logits_size = (
-            self.text_model_tester.batch_size
-            * self.text_model_tester.num_queries,
+            self.text_model_tester.batch_size * self.text_model_tester.num_queries,
             self.vision_model_tester.batch_size,
         )
         self.parent.assertEqual(result.logits_per_image.shape, image_logits_size)
@@ -390,9 +381,9 @@ class OwlViTModelTester:
         config_and_inputs = self.prepare_config_and_inputs()
         config, input_ids, attention_mask, pixel_values = config_and_inputs
         inputs_dict = {
+            "pixel_values": pixel_values,
             "input_ids": input_ids,
             "attention_mask": attention_mask,
-            "pixel_values": pixel_values,
             "return_loss": False,
         }
         return config, inputs_dict
@@ -524,6 +515,221 @@ class OwlViTModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_from_pretrained(self):
         for model_name in OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = OwlViTModel.from_pretrained(model_name)
+            self.assertIsNotNone(model)
+
+
+class OwlViTForObjectDetectionTester:
+    def __init__(self, parent, is_training=True):
+        self.parent = parent
+        self.text_model_tester = OwlViTTextModelTester(parent)
+        self.vision_model_tester = OwlViTVisionModelTester(parent)
+        self.is_training = is_training
+        self.text_config = self.text_model_tester.get_config().to_dict()
+        self.vision_config = self.vision_model_tester.get_config().to_dict()
+
+    def prepare_config_and_inputs(self):
+        text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
+        vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
+        config = self.get_config()
+        return config, pixel_values, input_ids, attention_mask
+
+    def get_config(self):
+        return OwlViTConfig.from_text_vision_configs(self.text_config, self.vision_config, projection_dim=64)
+
+    def create_and_check_model(self, config, pixel_values, input_ids, attention_mask):
+        model = OwlViTForObjectDetection(config).to(torch_device).eval()
+        with torch.no_grad():
+            result = model(
+                pixel_values=pixel_values,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                return_dict=True,
+            )
+
+        pred_boxes_size = (
+            self.vision_model_tester.batch_size,
+            (self.vision_model_tester.image_size // self.vision_model_tester.patch_size) ** 2,
+            4,
+        )
+        pred_logits_size = (
+            self.vision_model_tester.batch_size,
+            (self.vision_model_tester.image_size // self.vision_model_tester.patch_size) ** 2,
+            4,
+        )
+        pred_class_embeds_size = (
+            self.vision_model_tester.batch_size,
+            (self.vision_model_tester.image_size // self.vision_model_tester.patch_size) ** 2,
+            self.text_model_tester.hidden_size,
+        )
+        self.parent.assertEqual(result.pred_boxes.shape, pred_boxes_size)
+        self.parent.assertEqual(result.logits.shape, pred_logits_size)
+        self.parent.assertEqual(result.class_embeds.shape, pred_class_embeds_size)
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, pixel_values, input_ids, attention_mask = config_and_inputs
+        inputs_dict = {
+            "pixel_values": pixel_values,
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+        }
+        return config, inputs_dict
+
+
+@require_torch
+class OwlViTForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (OwlViTForObjectDetection,) if is_torch_available() else ()
+    fx_compatible = False
+    test_head_masking = False
+    test_pruning = False
+    test_resize_embeddings = False
+    test_attention_outputs = False
+
+    def setUp(self):
+        self.model_tester = OwlViTForObjectDetectionTester(self)
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    @unittest.skip(reason="Hidden_states is tested in individual model tests")
+    def test_hidden_states_output(self):
+        pass
+
+    @unittest.skip(reason="Inputs_embeds is tested in individual model tests")
+    def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="Retain_grad is tested in individual model tests")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+    @unittest.skip(reason="OwlViTModel does not have input/output embeddings")
+    def test_model_common_attributes(self):
+        pass
+
+    @unittest.skip(reason="Test_initialization is tested in individual model tests")
+    def test_initialization(self):
+        pass
+
+    @unittest.skip(reason="Test_forward_signature is tested in individual model tests")
+    def test_forward_signature(self):
+        pass
+
+    @unittest.skip(reason="Test_save_load_fast_init_from_base is tested in individual model tests")
+    def test_save_load_fast_init_from_base(self):
+        pass
+
+    @unittest.skip(reason="OWL-ViT does not support training yet")
+    def test_training(self):
+        pass
+
+    @unittest.skip(reason="OWL-ViT does not support training yet")
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    def _create_and_check_torchscript(self, config, inputs_dict):
+        if not self.test_torchscript:
+            return
+
+        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
+        configs_no_init.torchscript = True
+        configs_no_init.return_dict = False
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            model.to(torch_device)
+            model.eval()
+
+            try:
+                input_ids = inputs_dict["input_ids"]
+                pixel_values = inputs_dict["pixel_values"]  # OWLVIT needs pixel_values
+                traced_model = torch.jit.trace(model, (input_ids, pixel_values))
+            except RuntimeError:
+                self.fail("Couldn't trace module.")
+
+            with tempfile.TemporaryDirectory() as tmp_dir_name:
+                pt_file_name = os.path.join(tmp_dir_name, "traced_model.pt")
+
+                try:
+                    torch.jit.save(traced_model, pt_file_name)
+                except Exception:
+                    self.fail("Couldn't save module.")
+
+                try:
+                    loaded_model = torch.jit.load(pt_file_name)
+                except Exception:
+                    self.fail("Couldn't load module.")
+
+            model.to(torch_device)
+            model.eval()
+
+            loaded_model.to(torch_device)
+            loaded_model.eval()
+
+            model_state_dict = model.state_dict()
+            loaded_model_state_dict = loaded_model.state_dict()
+
+            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
+
+            models_equal = True
+            for layer_name, p1 in model_state_dict.items():
+                p2 = loaded_model_state_dict[layer_name]
+                if p1.data.ne(p2.data).sum() > 0:
+                    models_equal = False
+
+            self.assertTrue(models_equal)
+
+    def test_model_outputs_equivalence(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        def set_nan_tensor_to_zero(t):
+            t[t != t] = 0
+            return t
+
+        def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
+            with torch.no_grad():
+                tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
+                dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
+
+                def recursive_check(tuple_object, dict_object):
+                    if isinstance(tuple_object, (List, Tuple)):
+                        for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
+                            recursive_check(tuple_iterable_value, dict_iterable_value)
+                    elif isinstance(tuple_object, Dict):
+                        for tuple_iterable_value, dict_iterable_value in zip(
+                            tuple_object.values(), dict_object.values()
+                        ):
+                            recursive_check(tuple_iterable_value, dict_iterable_value)
+                    elif tuple_object is None:
+                        return
+                    else:
+                        self.assertTrue(
+                            torch.allclose(
+                                set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
+                            ),
+                            msg=(
+                                "Tuple and dict output are not equal. Difference:"
+                                f" {torch.max(torch.abs(tuple_object - dict_object))}. Tuple has `nan`:"
+                                f" {torch.isnan(tuple_object).any()} and `inf`: {torch.isinf(tuple_object)}. Dict has"
+                                f" `nan`: {torch.isnan(dict_object).any()} and `inf`: {torch.isinf(dict_object)}."
+                            ),
+                        )
+
+                recursive_check(tuple_output, dict_output)
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
+            check_equivalence(model, tuple_inputs, dict_inputs)
+
+    @slow
+    def test_model_from_pretrained(self):
+        for model_name in OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = OwlViTForObjectDetection.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 

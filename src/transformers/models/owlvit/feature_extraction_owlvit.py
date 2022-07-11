@@ -31,7 +31,6 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-# Copied from transformers.models.detr.feature_extraction_detr.center_to_corners_format
 def center_to_corners_format(x):
     """
     Converts a PyTorch tensor of bounding boxes of center format (center_x, center_y, width, height) to corners format
@@ -104,7 +103,6 @@ class OwlViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin
         self.rescale = rescale
         self.do_convert_rgb = do_convert_rgb
 
-    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.post_process
     def post_process(self, outputs, target_sizes):
         """
         Converts the output of [`OwlViTForObjectDetection`] into the format expected by the COCO api.

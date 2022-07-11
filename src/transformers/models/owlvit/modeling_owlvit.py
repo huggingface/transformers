@@ -63,7 +63,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
-# Copied from transformers.models.clip.modeling_clip with clip->owlvit
+# Copied from transformers.models.clip.modeling_clip.contrastive_loss with clip->owlvit
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
     return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
 
@@ -76,7 +76,6 @@ def owlvit_loss(similarity: torch.Tensor) -> torch.Tensor:
 
 
 @dataclass
-# Copied from transformers.models.clip.modeling_clip.CLIPOutput with CLIP->OwlViT
 class OwlViTOutput(ModelOutput):
     """
     Args:
@@ -192,6 +191,7 @@ class OwlViTTextEmbeddings(nn.Module):
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -385,7 +385,6 @@ class OwlViTEncoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPPreTrainedModel with CLIP->OwlViT,clip->owlvit
 class OwlViTPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -458,8 +457,9 @@ OWLVIT_START_DOCSTRING = r"""
 OWLVIT_TEXT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`CLIPTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details. [What are input IDs?](../glossary#input-ids)
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`CLIPTokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
+            IDs?](../glossary#input-ids)
         attention_mask (`torch.Tensor` of shape `(batch_size, num_max_text_queries, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
             - 1 for tokens that are **not masked**,
@@ -492,8 +492,9 @@ OWLVIT_VISION_INPUTS_DOCSTRING = r"""
 OWLVIT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`CLIPTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details. [What are input IDs?](../glossary#input-ids)
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`CLIPTokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
+            IDs?](../glossary#input-ids)
         attention_mask (`torch.Tensor` of shape `(batch_size, num_max_text_queries, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
             - 1 for tokens that are **not masked**,
@@ -518,8 +519,9 @@ OWLVIT_OBJ_DETECTION_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values.
         input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`CLIPTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details. [What are input IDs?](../glossary#input-ids)
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`CLIPTokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
+            IDs?](../glossary#input-ids)
         attention_mask (`torch.Tensor` of shape `(batch_size, num_max_text_queries, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
             - 1 for tokens that are **not masked**,
@@ -527,7 +529,7 @@ OWLVIT_OBJ_DETECTION_INPUTS_DOCSTRING = r"""
             [What are attention masks?](../glossary#attention-mask)
 """
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoder with CLIP->OwlViT
+
 class OwlViTEncoder(nn.Module):
     """
     Args:
@@ -648,6 +650,7 @@ class OwlViTTextTransformer(nn.Module):
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
         Returns:
+
         """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -660,13 +663,13 @@ class OwlViTTextTransformer(nn.Module):
         input_ids = input_ids.view(-1, input_shape[-1])
         hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids)
 
-        bsz, seq_len = input_shape
+        num_samples, seq_len = input_shape  # num_samples = batch_size * num_max_text_queries
         # OWLVIT's text model uses causal mask, prepare it here.
         # https://github.com/openai/CLIP/blob/cfcffb90e69f37bf2ff1e988237a0fbe41f33c04/clip/model.py#L324
-        causal_attention_mask = self._build_causal_attention_mask(bsz, seq_len).to(hidden_states.device)
+        causal_attention_mask = self._build_causal_attention_mask(num_samples, seq_len).to(hidden_states.device)
         # expand attention_mask
         if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            # [num_samples, seq_len] -> [num_samples, 1, tgt_seq_len, src_seq_len]
             attention_mask = _expand_mask(attention_mask, hidden_states.dtype)
 
         encoder_outputs = self.encoder(
@@ -730,7 +733,8 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
-        Returns: 
+        Returns:
+
         Examples:
         ```python
         >>> from transformers import OwlViTProcessor, OwlViTTextModel
@@ -836,7 +840,8 @@ class OwlViTVisionModel(OwlViTPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
-        Returns: 
+        Returns:
+
         Examples:
         ```python
         >>> from PIL import Image
@@ -1002,7 +1007,8 @@ class OwlViTModel(OwlViTPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, OwlViTOutput]:
         r"""
-        Returns: 
+        Returns:
+
         Examples:
         ```python
         >>> from PIL import Image
@@ -1134,6 +1140,7 @@ class OwlViTClassPredictionHead(nn.Module):
 
             pred_logits = pred_logits.to(torch.float64)
             pred_logits = torch.where(query_mask == 0, -1e6, pred_logits)
+            pred_logits = pred_logits.to(torch.float32)
 
         return (pred_logits, image_class_embeds)
 
@@ -1174,6 +1181,9 @@ class OwlViTImageTextEmbedder(nn.Module):
 
 
 class OwlViTForObjectDetection(OwlViTPreTrainedModel):
+    config_class = OwlViTConfig
+    main_input_name = "pixel_values"
+
     def __init__(self, config: OwlViTConfig):
         super().__init__(config)
 
@@ -1292,9 +1302,11 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         pixel_values: torch.FloatTensor,
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor,
+        return_dict: Optional[bool] = None,
     ) -> OwlViTObjectDetectionOutput:
         r"""
-        Returns: 
+        Returns:
+
         Examples:
         ```python
         >>> import requests
@@ -1338,6 +1350,9 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         # Predict object boxes
         pred_boxes = self.box_predictor(image_feats, feature_map)
+
+        if not return_dict:
+            return (pred_logits, pred_boxes, query_embeds, feature_map, class_embeds)
 
         return OwlViTObjectDetectionOutput(
             image_embeds=feature_map,

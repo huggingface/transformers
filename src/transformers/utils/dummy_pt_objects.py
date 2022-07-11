@@ -3452,7 +3452,14 @@ class OPTPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-(OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST,) = None
+OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class OwlViTForObjectDetection(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 class OwlViTModel(metaclass=DummyObject):
@@ -3477,13 +3484,6 @@ class OwlViTTextModel(metaclass=DummyObject):
 
 
 class OwlViTVisionModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class OwlViTForObjectDetection(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

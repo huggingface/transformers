@@ -16,7 +16,7 @@
 
 import copy
 import os
-from typing import Union, Dict
+from typing import Dict, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
