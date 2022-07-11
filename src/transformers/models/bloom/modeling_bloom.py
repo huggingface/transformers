@@ -36,6 +36,9 @@ from .configuration_bloom import BloomConfig
 
 logger = logging.get_logger(__name__)
 
+if torch.backends.cuda.matmul.allow_fp16_reduced_precision_reduction == False:
+    logger.info("allow_fp16_reduced_precision_reduction is set to False, this can lead to slightly inconsistent results (batched/cached) under half precision mode. Use it at your own risk.")
+
 _CHECKPOINT_FOR_DOC = "bigscience/Bloom"
 _CONFIG_FOR_DOC = "BloomConfig"
 _TOKENIZER_FOR_DOC = "BloomTokenizerFast"
@@ -281,7 +284,7 @@ class BloomAttention(nn.Module):
 
         # 3 x [batch_size, seq_length, num_heads, head_dim]
         (query_layer, key_layer, value_layer) = self._split_heads(fused_qkv)
-        query_layer = query_layer * (1 / math.sqrt(self.head_dim))
+        # query_layer = query_layer * (1 / math.sqrt(self.head_dim))
 
         if layer_past is not None:
             past_key, past_value = layer_past
@@ -298,22 +301,51 @@ class BloomAttention(nn.Module):
         else:
             present = None
 
+        beta = 1.0 / self.layer_number
         # [batch_size*num_heads, q_length, k_length]
-        matmul_result = torch.baddbmm(
-            alibi,
-            query_layer.transpose(1, 2).reshape(
-                -1, query_layer.shape[1], query_layer.shape[3]
-            ),  # [batch_size*num_heads, q_length, head_dim]
-            key_layer.permute(0, 2, 3, 1).reshape(
-                -1, key_layer.shape[3], key_layer.shape[1]
-            ),  # [batch_size*num_heads, head_dim, k_length]
+        # matmul_result = torch.baddbmm(
+        #     alibi,
+        #     query_layer.transpose(1, 2).reshape(
+        #         -1, query_layer.shape[1], query_layer.shape[3]
+        #     ),  # [batch_size*num_heads, q_length, head_dim]
+        #     key_layer.permute(0, 2, 3, 1).reshape(
+        #         -1, key_layer.shape[3], key_layer.shape[1]
+        #     ),  # [batch_size*num_heads, head_dim, k_length]
+        #     beta=beta,
+        #     alpha=(1.0 / self.norm_factor),
+        # )
+
+
+        matmul_result = (
+            (1.0 / self.norm_factor) * torch.bmm(
+                query_layer.transpose(1, 2).reshape(
+                    -1, query_layer.shape[1], query_layer.shape[3]
+                ),  # [batch_size*num_heads, q_length, head_dim]
+                key_layer.permute(0, 2, 3, 1).reshape(
+                    -1, key_layer.shape[3], key_layer.shape[1]
+                ),  # [batch_size*num_heads, head_dim, k_length]
+            )
+            + beta * alibi
         )
+
+        # matmul_result = (
+        #     torch.bmm(
+        #         query_layer.transpose(1, 2).reshape(
+        #             -1, query_layer.shape[1], query_layer.shape[3]
+        #         ),  # [batch_size*num_heads, q_length, head_dim]
+        #         key_layer.permute(0, 2, 3, 1).reshape(
+        #             -1, key_layer.shape[3], key_layer.shape[1]
+        #         ),  # [batch_size*num_heads, head_dim, k_length]
+        #     )
+        #     + alibi
+        # )
+
 
         # change view to [batch_size, num_heads, q_length, k_length]
         attention_scores = matmul_result.view(-1, self.num_heads, matmul_result.size(1), matmul_result.size(2))
 
         input_dtype = attention_scores.dtype
-        attn_weights = attention_scores + attention_mask  # [batch_size, num_heads, q_length, k_length]
+        attn_weights = (attention_scores * self.layer_number)  + attention_mask  # [batch_size, num_heads, q_length, k_length]
         attn_weights = torch.max(attn_weights, torch.tensor(torch.finfo(attn_weights.dtype).min))
         attention_probs = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(input_dtype) * (
             ~attention_mask.bool()
