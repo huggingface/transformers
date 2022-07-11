@@ -295,6 +295,7 @@ class GPTNeoXLayer(nn.Module):
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attention = GPTNeoXAttention(config)
         self.mlp = GPTNeoXMLP(config)
+        self.gpt_j_residual = config.gpt_j_residual
 
     def forward(
         self,
@@ -317,9 +318,13 @@ class GPTNeoXLayer(nn.Module):
         )
         attn_output = attention_layer_outputs[0]  # output_attn: a, present, (attentions)
         outputs = attention_layer_outputs[1:]
-
-        mlp_output = self.mlp(self.post_attention_layernorm(hidden_states))
-        hidden_states = mlp_output + attn_output + residual
+        if self.gpt_j_residual:
+            mlp_output = self.mlp(self.post_attention_layernorm(hidden_states))
+            hidden_states = mlp_output + attn_output + residual
+        else:
+            attn_output = attn_output + residual
+            mlp_output = self.mlp(self.post_attention_layernorm(attn_output))
+            hidden_states = mlp_output + attn_output
 
         if use_cache:
             outputs = (hidden_states,) + outputs
