@@ -345,7 +345,10 @@ class TFEncoderDecoderMixin:
             kwargs=kwargs,
         )
         self.assertTrue(
-            all(key not in outputs_encoder_decoder for key in ["encoder_attentions", "decoder_attentions", "cross_attentions"])
+            all(
+                key not in outputs_encoder_decoder
+                for key in ["encoder_attentions", "decoder_attentions", "cross_attentions"]
+            )
         )
 
         config.output_attentions = True  # inner model config -> will work
