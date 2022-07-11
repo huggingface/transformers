@@ -401,19 +401,15 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         tokenizer = BloomTokenizerFast.from_pretrained(path_350m)
 
         input_sentence = "I enjoy walking with my cute dog"
-        EXPECTED_OUTPUT = (  # for bloom-350m
+        # This output has been obtained using fp32 model on the huggingface DGX workstation - NVIDIA A100 GPU
+        EXPECTED_OUTPUT = (
             "I enjoy walking with my cute dog, and I love to watch the kids play with the kids. I am a very "
             "active person, and I enjoy working out, and I am a very active person. I am a very active person, and I"
         )
 
-        # EXPECTED_OUTPUT = (
-        #     "I enjoy walking with my cute dog, but I also enjoy hiking, biking, and swimming. I love to cook and bake."
-        #     " I love to cook and bake. I love to cook and bake. I love to cook and bake. I love"
-        # ) # for bloom-760m
-
         input_ids = tokenizer.encode(input_sentence, return_tensors="pt")
         greedy_output = model.generate(input_ids.cuda(), max_length=50)
-        
+
         self.assertEqual(tokenizer.decode(greedy_output[0], skip_special_tokens=True), EXPECTED_OUTPUT)
 
     @slow
