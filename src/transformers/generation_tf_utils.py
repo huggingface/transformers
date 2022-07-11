@@ -1592,9 +1592,9 @@ class TFGenerationMixin:
         if input_ids_seq_length >= max_length:
             input_ids_string = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
             logger.warning(
-                f"Input length of {input_ids_string} is {input_ids_seq_length}, but ``max_length`` is set to"
+                f"Input length of {input_ids_string} is {input_ids_seq_length}, but `max_length` is set to"
                 f" {max_length}. This can lead to unexpected behavior. You should consider increasing"
-                "``max_new_tokens``."
+                "`max_new_tokens`."
             )
 
         # 6. determine generation mode
