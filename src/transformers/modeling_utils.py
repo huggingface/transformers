@@ -31,8 +31,10 @@ import torch
 from packaging import version
 from torch import Tensor, device, nn
 from torch.nn import CrossEntropyLoss
+from packaging import version
 
 from requests import HTTPError
+
 from transformers.utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
 from transformers.utils.import_utils import is_sagemaker_mp_enabled
 
@@ -88,6 +90,12 @@ logger = logging.get_logger(__name__)
 
 
 _init_weights = True
+
+if is_sagemaker_mp_enabled():
+    import smdistributed.modelparallel.torch as smp
+    from smdistributed.modelparallel import __version__ as SMP_VERSION
+
+    SMP_POST_1_10 = version.parse(SMP_VERSION) >= version.parse("1.10")
 
 
 if is_sagemaker_mp_enabled():

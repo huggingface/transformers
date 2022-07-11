@@ -1057,7 +1057,6 @@ class Trainer:
 
         if is_sagemaker_mp_enabled():
             self.optimizer = smp.DistributedOptimizer(self.optimizer)
-
         return self.optimizer
 
     @staticmethod
@@ -2121,7 +2120,6 @@ class Trainer:
                 reissue_pt_warnings(caught_warnings)
         elif is_sagemaker_mp_enabled():
             opt_state_dict = self.optimizer.local_state_dict(gather_if_shard=False)
-            smp.barrier()
             if smp.rdp_rank() == 0 or smp.state.cfg.shard_optimizer_state:
                 smp.save(
                     opt_state_dict,
@@ -2129,6 +2127,7 @@ class Trainer:
                     partial=True,
                     v3=smp.state.cfg.shard_optimizer_state,
                 )
+
             if self.args.should_save:
                 with warnings.catch_warnings(record=True) as caught_warnings:
                     torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
@@ -2243,6 +2242,7 @@ class Trainer:
                                 opt.load_state_dict(smp.load(os.path.join(checkpoint, OPTIMIZER_NAME), partial=True))
 
                     self.model_wrapped.register_post_step_hook(opt_load_hook)
+
                 else:
                     self.optimizer.load_state_dict(
                         torch.load(os.path.join(checkpoint, OPTIMIZER_NAME), map_location=map_location)
@@ -2533,7 +2533,6 @@ class Trainer:
 
         Will only save from the main process.
         """
-
         if output_dir is None:
             output_dir = self.args.output_dir
 
