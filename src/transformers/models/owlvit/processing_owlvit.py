@@ -42,7 +42,7 @@ class OwlViTProcessor(ProcessorMixin):
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
-    def __call__(self, text=None, images=None, return_tensors=None, **kwargs):
+    def __call__(self, text=None, images=None, return_tensors="np", **kwargs):
         """
         Args:
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
@@ -90,7 +90,7 @@ class OwlViTProcessor(ProcessorMixin):
                 # Pad all batch samples to max number of text queries
                 for t in text:
                     if len(t) != max_num_queries:
-                        t = t + [""] * (max_num_queries - len(t))
+                        t = t + [" "] * (max_num_queries - len(t))
                         encoding = self.tokenizer(t, return_tensors=return_tensors, **kwargs)
                         encodings.append(encoding)
                     else:
@@ -101,26 +101,26 @@ class OwlViTProcessor(ProcessorMixin):
                 raise TypeError("Input text should be a string, a list of strings or a nested list of strings")
 
             if return_tensors == "np":
-                input_ids = np.stack([encoding["input_ids"] for encoding in encodings])
-                attention_mask = np.stack([encoding["attention_mask"] for encoding in encodings])
+                input_ids = np.concatenate([encoding["input_ids"] for encoding in encodings], axis=0)
+                attention_mask = np.concatenate([encoding["attention_mask"] for encoding in encodings], axis=0)
 
             elif return_tensors == "jax" and is_flax_available():
                 import jax.numpy as jnp
 
-                input_ids = jnp.stack([encoding["input_ids"] for encoding in encodings])
-                attention_mask = jnp.stack([encoding["attention_mask"] for encoding in encodings])
+                input_ids = jnp.concatenate([encoding["input_ids"] for encoding in encodings], axis=0)
+                attention_mask = jnp.concatenate([encoding["attention_mask"] for encoding in encodings], axis=0)
 
             elif return_tensors == "pt" and is_torch_available():
                 import torch
 
-                input_ids = torch.stack([encoding["input_ids"] for encoding in encodings])
-                attention_mask = torch.stack([encoding["attention_mask"] for encoding in encodings])
+                input_ids = torch.cat([encoding["input_ids"] for encoding in encodings], dim=0)
+                attention_mask = torch.cat([encoding["attention_mask"] for encoding in encodings], dim=0)
 
             elif return_tensors == "tf" and is_tf_available():
                 import tensorflow as tf
 
-                input_ids = tf.stack([encoding["input_ids"] for encoding in encodings])
-                attention_mask = tf.stack([encoding["attention_mask"] for encoding in encodings])
+                input_ids = tf.stack([encoding["input_ids"] for encoding in encodings], axis=0)
+                attention_mask = tf.stack([encoding["attention_mask"] for encoding in encodings], axis=0)
 
             else:
                 raise ValueError("Target return tensor type could not be returned")

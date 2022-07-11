@@ -65,12 +65,12 @@ class OwlViTVisionModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
-        image_size=36,
-        patch_size=4,
+        batch_size=12,
+        image_size=32,
+        patch_size=2,
         num_channels=3,
         is_training=True,
-        hidden_size=16,
+        hidden_size=32,
         num_hidden_layers=5,
         num_attention_heads=4,
         intermediate_size=37,
@@ -217,7 +217,7 @@ class OwlViTTextModelTester:
     def __init__(
         self,
         parent,
-        batch_size=1,
+        batch_size=12,
         num_queries=4,
         seq_length=16,
         is_training=True,
@@ -253,21 +253,19 @@ class OwlViTTextModelTester:
         self.scope = scope
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.num_queries, self.seq_length], self.vocab_size)
-        input_ids = input_ids.unsqueeze(0)
+        input_ids = ids_tensor([self.batch_size * self.num_queries, self.seq_length], self.vocab_size)
         input_mask = None
 
         if self.use_input_mask:
-            input_mask = random_attention_mask([self.num_queries, self.seq_length])
-            input_mask = input_mask.unsqueeze(0)
+            input_mask = random_attention_mask([self.batch_size * self.num_queries, self.seq_length])
 
         if input_mask is not None:
-            batch_size, num_queries, seq_length = input_mask.shape
-            rnd_start_indices = np.random.randint(1, seq_length - 1, size=(batch_size,))
-            for batch_idx, start_index in enumerate(rnd_start_indices):
-                for query_idx in range(input_mask[batch_idx].shape[0]):
-                    input_mask[batch_idx, query_idx, :start_index] = 1
-                    input_mask[batch_idx, query_idx, start_index:] = 0
+            num_text, seq_length = input_mask.shape
+
+            rnd_start_indices = np.random.randint(1, seq_length - 1, size=(num_text,))
+            for idx, start_index in enumerate(rnd_start_indices):
+                input_mask[idx, :start_index] = 1
+                input_mask[idx, start_index:] = 0
 
         config = self.get_config()
 
@@ -294,9 +292,9 @@ class OwlViTTextModelTester:
             result = model(input_ids, attention_mask=input_mask)
             result = model(input_ids)
         self.parent.assertEqual(
-            result[0].last_hidden_state.shape, (self.num_queries, self.seq_length, self.hidden_size)
+            result.last_hidden_state.shape, (self.batch_size * self.num_queries, self.seq_length, self.hidden_size)
         )
-        self.parent.assertEqual(result[0].pooler_output.shape, (self.num_queries, self.hidden_size))
+        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size * self.num_queries, self.hidden_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -323,371 +321,6 @@ class OwlViTTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_hidden_states_output(self):
-        def check_hidden_states_output(inputs_dict, config, model_class):
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            hidden_states = outputs[0].encoder_hidden_states if config.is_encoder_decoder else outputs[0].hidden_states
-
-            expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
-            )
-            self.assertEqual(len(hidden_states), expected_num_layers)
-
-            if hasattr(self.model_tester, "encoder_seq_length"):
-                seq_length = self.model_tester.encoder_seq_length
-                if hasattr(self.model_tester, "chunk_length") and self.model_tester.chunk_length > 1:
-                    seq_length = seq_length * self.model_tester.chunk_length
-            else:
-                seq_length = self.model_tester.seq_length
-
-            self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
-                [seq_length, self.model_tester.hidden_size],
-            )
-
-            if config.is_encoder_decoder:
-                hidden_states = outputs[0].decoder_hidden_states
-
-                self.assertIsInstance(hidden_states, (list, tuple))
-                self.assertEqual(len(hidden_states), expected_num_layers)
-                seq_len = getattr(self.model_tester, "seq_length", None)
-                decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
-
-                self.assertListEqual(
-                    list(hidden_states[0].shape[-2:]),
-                    [decoder_seq_length, self.model_tester.hidden_size],
-                )
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_hidden_states"] = True
-            check_hidden_states_output(inputs_dict, config, model_class)
-
-            # check that output_hidden_states also work using config
-            del inputs_dict["output_hidden_states"]
-            config.output_hidden_states = True
-
-            check_hidden_states_output(inputs_dict, config, model_class)
-
-    def test_save_load(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            out_2 = outputs[0][0].cpu().numpy()
-            out_2[np.isnan(out_2)] = 0
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname)
-                model.to(torch_device)
-                with torch.no_grad():
-                    after_outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-                # Make sure we don't have nans
-                out_1 = after_outputs[0][0].cpu().numpy()
-                out_1[np.isnan(out_1)] = 0
-                max_diff = np.amax(np.abs(out_1 - out_2))
-                self.assertLessEqual(max_diff, 1e-5)
-
-    def test_determinism(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                first = model(**self._prepare_for_class(inputs_dict, model_class))[0][0]
-                second = model(**self._prepare_for_class(inputs_dict, model_class))[0][0]
-
-            out_1 = first.cpu().numpy()
-            out_2 = second.cpu().numpy()
-            out_1 = out_1[~np.isnan(out_1)]
-            out_2 = out_2[~np.isnan(out_2)]
-            max_diff = np.amax(np.abs(out_1 - out_2))
-            self.assertLessEqual(max_diff, 1e-5)
-
-    def test_model_outputs_equivalence(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        def set_nan_tensor_to_zero(t):
-            t[t != t] = 0
-            return t
-
-        def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
-            with torch.no_grad():
-                tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)[0]
-                dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs)[0].to_tuple()
-
-                def recursive_check(tuple_object, dict_object):
-                    if isinstance(tuple_object, (List, Tuple)):
-                        for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
-                            recursive_check(tuple_iterable_value, dict_iterable_value)
-                    elif isinstance(tuple_object, Dict):
-                        for tuple_iterable_value, dict_iterable_value in zip(
-                            tuple_object.values(), dict_object.values()
-                        ):
-                            recursive_check(tuple_iterable_value, dict_iterable_value)
-                    elif tuple_object is None:
-                        return
-                    else:
-                        self.assertTrue(
-                            torch.allclose(
-                                set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
-                            ),
-                            msg=(
-                                "Tuple and dict output are not equal. Difference:"
-                                f" {torch.max(torch.abs(tuple_object - dict_object))}. Tuple has `nan`:"
-                                f" {torch.isnan(tuple_object).any()} and `inf`: {torch.isinf(tuple_object)}. Dict has"
-                                f" `nan`: {torch.isnan(dict_object).any()} and `inf`: {torch.isinf(dict_object)}."
-                            ),
-                        )
-
-                recursive_check(tuple_output, dict_output)
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
-            check_equivalence(model, tuple_inputs, dict_inputs)
-
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            check_equivalence(model, tuple_inputs, dict_inputs)
-
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
-            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
-
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
-
-            if self.has_attentions:
-                tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
-                dict_inputs = self._prepare_for_class(inputs_dict, model_class)
-                check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
-
-                tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-                dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-                check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
-
-                tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-                dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-                check_equivalence(
-                    model, tuple_inputs, dict_inputs, {"output_hidden_states": True, "output_attentions": True}
-                )
-
-    def test_retain_grad_hidden_states_attentions(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.output_hidden_states = True
-        config.output_attentions = self.has_attentions
-
-        # no need to test all models as different heads yield the same functionality
-        model_class = self.all_model_classes[0]
-        model = model_class(config)
-        model.to(torch_device)
-
-        inputs = self._prepare_for_class(inputs_dict, model_class)
-
-        outputs = model(**inputs)
-        outputs = outputs[0]
-        output = outputs[0]
-
-        if config.is_encoder_decoder:
-            # Seq2Seq models
-            encoder_hidden_states = outputs.encoder_hidden_states[0]
-            encoder_hidden_states.retain_grad()
-
-            decoder_hidden_states = outputs.decoder_hidden_states[0]
-            decoder_hidden_states.retain_grad()
-
-            if self.has_attentions:
-                encoder_attentions = outputs.encoder_attentions[0]
-                encoder_attentions.retain_grad()
-
-                decoder_attentions = outputs.decoder_attentions[0]
-                decoder_attentions.retain_grad()
-
-                cross_attentions = outputs.cross_attentions[0]
-                cross_attentions.retain_grad()
-
-            output.flatten()[0].backward(retain_graph=True)
-
-            self.assertIsNotNone(encoder_hidden_states.grad)
-            self.assertIsNotNone(decoder_hidden_states.grad)
-
-            if self.has_attentions:
-                self.assertIsNotNone(encoder_attentions.grad)
-                self.assertIsNotNone(decoder_attentions.grad)
-                self.assertIsNotNone(cross_attentions.grad)
-        else:
-            # Encoder-/Decoder-only models
-            hidden_states = outputs.hidden_states[0]
-            hidden_states.retain_grad()
-
-            if self.has_attentions:
-                attentions = outputs.attentions[0]
-                attentions.retain_grad()
-
-            output.flatten()[0].backward(retain_graph=True)
-
-            self.assertIsNotNone(hidden_states.grad)
-
-            if self.has_attentions:
-                self.assertIsNotNone(attentions.grad)
-
-    def test_feed_forward_chunking(self):
-        original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            torch.manual_seed(0)
-            config = copy.deepcopy(original_config)
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            hidden_states_no_chunk = model(**self._prepare_for_class(inputs_dict, model_class))[0][0]
-
-            torch.manual_seed(0)
-            config.chunk_size_feed_forward = 1
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            hidden_states_with_chunk = model(**self._prepare_for_class(inputs_dict, model_class))[0][0]
-            self.assertTrue(torch.allclose(hidden_states_no_chunk, hidden_states_with_chunk, atol=1e-3))
-
-    def test_attention_outputs(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.return_dict = True
-
-        seq_len = getattr(self.model_tester, "seq_length", None)
-        decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
-        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
-        decoder_key_length = getattr(self.model_tester, "decoder_key_length", decoder_seq_length)
-        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
-        chunk_length = getattr(self.model_tester, "chunk_length", None)
-        if chunk_length is not None and hasattr(self.model_tester, "num_hashes"):
-            encoder_seq_length = encoder_seq_length * self.model_tester.num_hashes
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = False
-            config.return_dict = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs[0].encoder_attentions if config.is_encoder_decoder else outputs[0].attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-
-            # check that output_attentions also work using config
-            del inputs_dict["output_attentions"]
-            config.output_attentions = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs[0].encoder_attentions if config.is_encoder_decoder else outputs[0].attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-
-            if chunk_length is not None:
-                self.assertListEqual(
-                    list(attentions[0].shape[-4:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
-                )
-            else:
-                self.assertListEqual(
-                    list(attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-                )
-            out_len = len(outputs[0])
-
-            if self.is_encoder_decoder:
-                correct_outlen = 5
-
-                # loss is at first position
-                if "labels" in inputs_dict:
-                    correct_outlen += 1  # loss is added to beginning
-                # Question Answering model returns start_logits and end_logits
-                if model_class in get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING):
-                    correct_outlen += 1  # start_logits and end_logits instead of only 1 output
-                if "past_key_values" in outputs[0]:
-                    correct_outlen += 1  # past_key_values have been returned
-
-                self.assertEqual(out_len, correct_outlen)
-
-                # decoder attentions
-                decoder_attentions = outputs.decoder_attentions
-                self.assertIsInstance(decoder_attentions, (list, tuple))
-                self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
-                self.assertListEqual(
-                    list(decoder_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
-                )
-
-                # cross attentions
-                cross_attentions = outputs[0].cross_attentions
-                self.assertIsInstance(cross_attentions, (list, tuple))
-                self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
-                self.assertListEqual(
-                    list(cross_attentions[0].shape[-3:]),
-                    [
-                        self.model_tester.num_attention_heads,
-                        decoder_seq_length,
-                        encoder_key_length,
-                    ],
-                )
-
-            # Check attention is always last and order is fine
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            if hasattr(self.model_tester, "num_hidden_states_types"):
-                added_hidden_states = self.model_tester.num_hidden_states_types
-            elif self.is_encoder_decoder:
-                added_hidden_states = 2
-            else:
-                added_hidden_states = 1
-            self.assertEqual(out_len + added_hidden_states, len(outputs[0]))
-
-            self_attentions = outputs[0].encoder_attentions if config.is_encoder_decoder else outputs[0].attentions
-
-            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
-            if chunk_length is not None:
-                self.assertListEqual(
-                    list(self_attentions[0].shape[-4:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
-                )
-            else:
-                self.assertListEqual(
-                    list(self_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-                )
 
     def test_training(self):
         pass
@@ -724,30 +357,29 @@ class OwlViTModelTester:
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
         vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
-
-        config = self.get_config()
-
+        config = self.get_config(text_config.to_dict(), vision_config.to_dict())
         return config, input_ids, attention_mask, pixel_values
 
-    def get_config(self):
-        return OwlViTConfig.from_text_vision_configs(
-            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
-        )
+    def get_config(self, text_config, vision_config):
+        return OwlViTConfig.from_text_vision_configs(text_config, vision_config, projection_dim=64)
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
         model = OwlViTModel(config).to(torch_device).eval()
+
         with torch.no_grad():
-            result = model(input_ids, pixel_values, attention_mask)
+            result = model(
+                input_ids=input_ids, 
+                pixel_values=pixel_values, 
+                attention_mask=attention_mask,
+            )
 
         image_logits_size = (
             self.vision_model_tester.batch_size,
-            self.vision_model_tester.batch_size
-            * self.text_model_tester.batch_size
+            self.text_model_tester.batch_size
             * self.text_model_tester.num_queries,
         )
         text_logits_size = (
-            self.vision_model_tester.batch_size
-            * self.text_model_tester.batch_size
+            self.text_model_tester.batch_size
             * self.text_model_tester.num_queries,
             self.vision_model_tester.batch_size,
         )
@@ -761,7 +393,7 @@ class OwlViTModelTester:
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "pixel_values": pixel_values,
-            "return_loss": True,
+            "return_loss": False,
         }
         return config, inputs_dict
 
@@ -796,30 +428,6 @@ class OwlViTModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="OwlViTModel does not have input/output embeddings")
     def test_model_common_attributes(self):
-        pass
-
-    @unittest.skip(reason="OwlViTModel does not support training mode yet")
-    def test_save_load(self):
-        pass
-
-    @unittest.skip(reason="OwlViTModel does not support training mode yet")
-    def test_model(self):
-        pass
-
-    @unittest.skip(reason="OwlViTModel does not support training mode yet")
-    def test_model_outputs_equivalence(self):
-        pass
-
-    @unittest.skip(reason="OwlViTModel does not support training mode yet")
-    def test_feed_forward_chunking(self):
-        pass
-
-    @unittest.skip(reason="OwlViTModel does not support training mode yet")
-    def test_determinism(self):
-        pass
-
-    @unittest.skip(reason="OwlViTModel does not support training mode yet")
-    def test_attention_outputs(self):
         pass
 
     # override as the `logit_scale` parameter initilization is different for OWLVIT

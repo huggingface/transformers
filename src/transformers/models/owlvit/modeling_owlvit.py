@@ -164,10 +164,6 @@ class OwlViTVisionEmbeddings(nn.Module):
         self.patch_embedding = nn.Conv2d(
             in_channels=3, out_channels=self.embed_dim, kernel_size=self.patch_size, stride=self.patch_size, bias=False
         )
-        """
-        self.num_positions = (self.image_size // self.patch_size) ** 2 + 1
-        self.position_embedding = nn.Parameter(torch.rand(self.num_positions, self.embed_dim))
-        """
 
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches + 1
@@ -181,11 +177,8 @@ class OwlViTVisionEmbeddings(nn.Module):
 
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-        """
-        embeddings = embeddings + self.position_embedding
-        """
-
         embeddings = embeddings + self.position_embedding(self.position_ids)
+
         return embeddings
 
 
@@ -193,10 +186,7 @@ class OwlViTTextEmbeddings(nn.Module):
     def __init__(self, config: OwlViTTextConfig):
         super().__init__()
         embed_dim = config.hidden_size
-        """
-        self.token_embedding = nn.Embedding(config.vocab_size, embed_dim)
-        self.position_embedding = nn.Parameter(torch.rand(config.max_position_embeddings, embed_dim))
-        """
+
         self.token_embedding = nn.Embedding(config.vocab_size, embed_dim)
         self.position_embedding = nn.Embedding(config.max_position_embeddings, embed_dim)
 
@@ -208,12 +198,7 @@ class OwlViTTextEmbeddings(nn.Module):
         position_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
     ) -> torch.Tensor:
-        """
-        if inputs_embeds is None:
-            inputs_embeds = self.token_embedding(input_ids)
 
-        embeddings = inputs_embeds + self.position_embedding
-        """
         seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
 
         if position_ids is None:
@@ -472,9 +457,8 @@ OWLVIT_START_DOCSTRING = r"""
 
 OWLVIT_TEXT_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, num_max_text_queries, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it. Indices can be obtained using [`CLIPTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+        input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`CLIPTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details. [What are input IDs?](../glossary#input-ids)
         attention_mask (`torch.Tensor` of shape `(batch_size, num_max_text_queries, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
@@ -507,9 +491,8 @@ OWLVIT_VISION_INPUTS_DOCSTRING = r"""
 
 OWLVIT_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, num_max_text_queries, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it. Indices can be obtained using [`CLIPTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+        input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`CLIPTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details. [What are input IDs?](../glossary#input-ids)
         attention_mask (`torch.Tensor` of shape `(batch_size, num_max_text_queries, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
@@ -534,9 +517,8 @@ OWLVIT_OBJ_DETECTION_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values.
-        input_ids (`torch.LongTensor` of shape `(batch_size, num_max_text_queries, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it. Indices can be obtained using [`CLIPTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+        input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`CLIPTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details. [What are input IDs?](../glossary#input-ids)
         attention_mask (`torch.Tensor` of shape `(batch_size, num_max_text_queries, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
@@ -667,6 +649,7 @@ class OwlViTTextTransformer(nn.Module):
         r"""
         Returns:
         """
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -745,7 +728,7 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[Tuple], Tuple[BaseModelOutputWithPooling]]:
+    ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
         Returns: 
         Examples:
@@ -758,27 +741,18 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
         ...     text=[["a photo of a cat", "a photo of a dog"], ["photo of a astranaut"]], return_tensors="pt"
         ... )
         >>> outputs = model(**inputs)
-        >>> for output in outputs:  # loop over sets of text queries
-        ...     last_hidden_state = output.last_hidden_state
-        ...     pooled_output = output.pooled_output  # pooled (EOS token) states
+        >>> last_hidden_state = outputs.last_hidden_state
+        >>> pooled_output = outputs.pooled_output  # pooled (EOS token) states
         ```"""
-        batch_size = input_ids.shape[0]
 
         # Get embeddings for all text queries in all batch samples
-        output = tuple(
-            [
-                self.text_model(
-                    input_ids=input_ids[idx],
-                    attention_mask=attention_mask[idx] if attention_mask is not None else None,
-                    output_attentions=output_attentions,
-                    output_hidden_states=output_hidden_states,
-                    return_dict=return_dict,
-                )
-                for idx in range(batch_size)
-            ]
+        return self.text_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
-
-        return output
 
 
 class OwlViTVisionTransformer(nn.Module):
@@ -800,6 +774,7 @@ class OwlViTVisionTransformer(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        use_hidden_state: Optional[bool] = True,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
         Returns:
@@ -822,10 +797,10 @@ class OwlViTVisionTransformer(nn.Module):
         last_hidden_state = encoder_outputs[0]
         pooled_output = last_hidden_state[:, 0, :]
 
-        if self.training:
-            pooled_output = self.post_layernorm(pooled_output)
-        else:
+        if use_hidden_state:
             pooled_output = self.post_layernorm(last_hidden_state)
+        else:
+            pooled_output = self.post_layernorm(pooled_output)
 
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
@@ -952,27 +927,17 @@ class OwlViTModel(OwlViTPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        batch_size = input_ids.shape[0]
-
         # Get embeddings for all text queries in all batch samples
-        text_outputs = tuple(
-            [
-                self.text_model(
-                    input_ids=input_ids[idx],
-                    attention_mask=attention_mask[idx],
-                    output_attentions=output_attentions,
-                    output_hidden_states=output_hidden_states,
-                    return_dict=return_dict,
-                )
-                for idx in range(batch_size)
-            ]
+        text_output = self.text_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
 
-        pooled_outputs = [text_output[1] for text_output in text_outputs]
-
-        text_features = [self.text_projection(pooled_output) for pooled_output in pooled_outputs]
-        text_features = torch.stack(text_features)
-
+        pooled_output = text_output[1]
+        text_features = self.text_projection(pooled_output)
         return text_features
 
     @add_start_docstrings_to_model_forward(OWLVIT_VISION_INPUTS_DOCSTRING)
@@ -1035,7 +1000,6 @@ class OwlViTModel(OwlViTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        normalize: Optional[bool] = True,
     ) -> Union[Tuple, OwlViTOutput]:
         r"""
         Returns: 
@@ -1066,38 +1030,28 @@ class OwlViTModel(OwlViTPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            use_hidden_state=False,
         )
 
         # Get embeddings for all text queries in all batch samples
-        batch_size = input_ids.shape[0]
-
-        text_outputs = tuple(
-            [
-                self.text_model(
-                    input_ids=input_ids[idx],
-                    attention_mask=attention_mask[idx],
-                    output_attentions=output_attentions,
-                    output_hidden_states=output_hidden_states,
-                    return_dict=return_dict,
-                )
-                for idx in range(batch_size)
-            ]
+        text_outputs = self.text_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
 
+        text_embeds = text_outputs[1]
+        text_embeds = self.text_projection(text_embeds)
         image_embeds = vision_outputs[1]
         image_embeds = self.visual_projection(image_embeds)
 
-        text_embeds = [text_output[1] for text_output in text_outputs]
-        text_embeds = [self.text_projection(text_embeds[i]) for i in range(batch_size)]
-        text_embeds = torch.cat(text_embeds)
-
         # normalized features
-        if normalize:
-            image_embeds = image_embeds / image_embeds.norm(p=2, dim=-1, keepdim=True)
-            text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
+        image_embeds = image_embeds / image_embeds.norm(p=2, dim=-1, keepdim=True)
+        text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
 
         # cosine similarity as logits
-        logits_per_text, logits_per_image = None, None
         logit_scale = self.logit_scale.exp()
         logits_per_text = torch.matmul(text_embeds, image_embeds.t()) * logit_scale
         logits_per_image = logits_per_text.T
@@ -1107,7 +1061,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
             loss = owlvit_loss(logits_per_text)
 
         if not return_dict:
-            output = (text_embeds, image_embeds, text_outputs, vision_outputs)
+            output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
             return ((loss,) + output) if loss is not None else output
 
         return OwlViTOutput(
@@ -1357,11 +1311,10 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         >>> logits = outputs.logits  # Prediction logits of shape [batch_size, num_patches, 4]
         >>> boxes = outputs.boxes  # Object box boundaries of shape # [batch_size, num_patches, 4]
 
-        >>> sigmoid = nn.Sigmoid()
         >>> for i in range(batch_size):  # Loop over sets of images and text queries
         ...     boxes = outputs["pred_boxes"][i]
         ...     logits = outputs["logits"][i]
-        ...     scores = sigmoid(torch.max(logits, dim=-1).values)
+        ...     scores = nn.functional.sigmoid(torch.max(logits, dim=-1).values)
         ...     labels = logits.indices
         ```"""
         # Embed images
@@ -1372,7 +1325,12 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         # Embed text queries
         query_embeds = self.text_embedder(input_ids, attention_mask)
 
+        # Reshape from [batch_size * max_text_queries, hidden_dim] -> [batch_size, max_text_queries, hidden_dim]
+        max_text_queries = input_ids.shape[0] // batch_size
+        query_embeds = query_embeds.reshape(batch_size, max_text_queries, query_embeds.shape[-1])
+
         # If first token is 0, then this is a padded query [batch_size, num_queries].
+        input_ids = input_ids.reshape(batch_size, max_text_queries, input_ids.shape[-1])
         query_mask = input_ids[..., 0] > 0
 
         # Predict object classes [batch_size, num_patches, num_queries+1]

@@ -16,7 +16,7 @@
 
 import copy
 import os
-from typing import Union
+from typing import Union, Dict
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -302,7 +302,7 @@ class OwlViTConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
     @classmethod
-    def from_text_vision_configs(cls, text_config: OwlViTTextConfig, vision_config: OwlViTVisionConfig, **kwargs):
+    def from_text_vision_configs(cls, text_config: Dict, vision_config: Dict, **kwargs):
         r"""
         Instantiate a [`OwlViTConfig`] (or a derived class) from owlvit text model configuration and owlvit vision
         model configuration.
@@ -310,8 +310,11 @@ class OwlViTConfig(PretrainedConfig):
         Returns:
             [`OwlViTConfig`]: An instance of a configuration object
         """
+        config_dict = {}
+        config_dict["text_config"] = text_config
+        config_dict["vision_config"] = vision_config
 
-        return cls(text_config_dict=text_config.to_dict(), vision_config_dict=vision_config.to_dict(), **kwargs)
+        return cls.from_dict(config_dict, **kwargs)
 
     def to_dict(self):
         """

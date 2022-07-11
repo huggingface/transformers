@@ -39,7 +39,7 @@ class OwlViTProcessorTest(unittest.TestCase):
         self.tmpdirname = tempfile.mkdtemp()
 
         # fmt: off
-        vocab = ["l", "o", "w", "e", "r", "s", "t", "i", "d", "n", "lo", "l</w>", "w</w>", "r</w>", "t</w>", "low</w>", "er</w>", "lowest</w>", "newer</w>", "wider", "<unk>", "<|startoftext|>", "<|endoftext|>"]
+        vocab = ["", "l", "o", "w", "e", "r", "s", "t", "i", "d", "n", "lo", "l</w>", "w</w>", "r</w>", "t</w>", "low</w>", "er</w>", "lowest</w>", "newer</w>", "wider", "<unk>", "<|startoftext|>", "<|endoftext|>"]
         # fmt: on
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         merges = ["#version: 0.2", "l o", "lo w</w>", "e r</w>", ""]
@@ -156,7 +156,7 @@ class OwlViTProcessorTest(unittest.TestCase):
         encoded_tok = tokenizer(input_str, return_tensors="np")
 
         for key in encoded_tok.keys():
-            self.assertListEqual(encoded_tok[key][0].tolist(), encoded_processor[key][0][0].tolist())
+            self.assertListEqual(encoded_tok[key][0].tolist(), encoded_processor[key][0].tolist())
 
     def test_processor(self):
         feature_extractor = self.get_feature_extractor()
