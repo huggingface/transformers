@@ -215,7 +215,7 @@ class FlaxGenerationMixin:
                 The maximum length of the sequence to be generated. Prefer the use of `max_new_tokens`, which ignores
                 the number of tokens in the prompt.
             max_new_tokens (`int`, *optional*, defaults to None):
-                The maximum numbers of tokens to generate, ignoring the current number of tokens.
+                The maximum numbers of tokens to generate, ignoring the number of tokens in the prompt.
             do_sample (`bool`, *optional*, defaults to `False`):
                 Whether or not to use sampling ; use greedy decoding otherwise.
             temperature (`float`, *optional*, defaults to 1.0):

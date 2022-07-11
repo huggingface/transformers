@@ -926,7 +926,7 @@ class GenerationMixin:
                 The maximum length of the sequence to be generated. Prefer the use of `max_new_tokens`, which ignores
                 the number of tokens in the prompt.
             max_new_tokens (`int`, *optional*, defaults to None):
-                The maximum numbers of tokens to generate, ignoring the current number of tokens.
+                The maximum numbers of tokens to generate, ignoring the number of tokens in the prompt.
             min_length (`int`, *optional*, defaults to 10):
                 The minimum length of the sequence to be generated.
             do_sample (`bool`, *optional*, defaults to `False`):
