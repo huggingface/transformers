@@ -18,7 +18,7 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...utils import _LazyModule, OptionalDependencyNotAvailable, is_tokenizers_available
+from ...utils import _LazyModule, OptionalDependencyNotAvailable
 from ...utils import is_torch_available
 
 
@@ -29,14 +29,6 @@ _import_structure = {
     ],
     "tokenization_time_series_transformer": ["TimeSeriesTransformerTokenizer"],
 }
-
-try:
-    if not is_tokenizers_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_time_series_transformer_fast"] = ["TimeSeriesTransformerTokenizerFast"]
 
 try:
     if not is_torch_available():
