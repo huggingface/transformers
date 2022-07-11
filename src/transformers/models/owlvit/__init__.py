@@ -45,7 +45,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_owlvit"] = ["OwlViTFeatureExtractor"]
-    # _import_structure["processing_owlvit"] = ["OwlViTProcessor"]
+    _import_structure["processing_owlvit"] = ["OwlViTProcessor"]
 
 try:
     if not is_torch_available():
@@ -60,7 +60,6 @@ else:
         "OwlViTTextModel",
         "OwlViTVisionModel",
         "OwlViTForObjectDetection",
-        "OwlViTProcessor",
     ]
 
 if TYPE_CHECKING:

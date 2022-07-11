@@ -324,6 +324,8 @@
       title: Nyströmformer
     - local: model_doc/opt
       title: OPT
+    - local: model_doc/owlvit
+      title: OwlViT
     - local: model_doc/pegasus
       title: Pegasus
     - local: model_doc/perceiver

@@ -27,10 +27,11 @@ from ...tokenization_utils_base import BatchEncoding
 
 class OwlViTProcessor(ProcessorMixin):
     r"""
-    Args:
     Constructs an OWL-ViT processor which wraps [`OwlViTFeatureExtractor`] and [`CLIPTokenizer`]/[`CLIPTokenizerFast`]
     into a single processor that interits both the feature extractor and tokenizer functionalities. See the
     [`~OwlViTProcessor.__call__`] and [`~OwlViTProcessor.decode`] for more information.
+
+    Args:
         feature_extractor ([`OwlViTFeatureExtractor`]):
             The feature extractor is a required input.
         tokenizer ([`CLIPTokenizer`, `CLIPTokenizerFast`]):

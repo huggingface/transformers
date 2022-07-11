@@ -1297,6 +1297,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         return text_feats
 
     @add_start_docstrings_to_model_forward(OWLVIT_OBJ_DETECTION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=OwlViTObjectDetectionOutput, config_class=OwlViTConfig)
     def forward(
         self,
         pixel_values: torch.FloatTensor,
