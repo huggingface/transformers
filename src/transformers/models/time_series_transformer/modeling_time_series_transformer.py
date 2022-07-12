@@ -1305,12 +1305,12 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
         super().__init__(config)
         self.config = config
         self.transformer = TimeSeriesTransformerModel(config)
-        if config.distr_output == "StudentT":
-            self.distr_output = StudentTOutput()
-            self.param_proj = self.distr_output.get_args_proj(self.transformer.d_model)
-            self.target_shape = self.distr_output.event_shape
+        if config.distribution_output == "student_t":
+            self.distribution_output = StudentTOutput()
+            self.param_proj = self.distribution_output.get_args_proj(self.transformer.d_model)
+            self.target_shape = self.distribution_output.event_shape
 
-        if config.loss == "NLL":
+        if config.loss == "nll":
             self.loss = NegativeLogLikelihood()
 
     def output_params(self, dec_output):
@@ -1321,7 +1321,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
         sliced_params = params
         if trailing_n is not None:
             sliced_params = [p[:, -trailing_n:] for p in params]
-        return self.distr_output.distribution(sliced_params, scale=scale)
+        return self.distribution_output.distribution(sliced_params, scale=scale)
 
     def forward(self, batch):
         feat_static_cat = batch["feat_static_cat"]

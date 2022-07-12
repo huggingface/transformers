@@ -42,31 +42,31 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
     Args:
         prediction_length (`int`):
             The prediction horizon for the model.
-        context_length (`int`, *optional*, default to `None`):
+        context_length (`int`, *optional*):
             The context length for the encoder. If  `None`, the context length will be the same as the
             `prediction_length`.
-        distr_output (`string` default to `StudentT`):
+        distribution_output (`string`, *optional* defaults to `student_t`):
             The distribution emission head for the model.
-        loss (`string` default to `NLL`):
-            The loss function for the model with corresponding to the `distr_output` head.
-        input_size (`int` default to 1):
+        loss (`string`, *optional* defaults to `nll`):
+            The loss function for the model with corresponding to the `distribution_output` head.
+        input_size (`int`, *optional* defaults to 1):
             The size of the target variable which by default is 1 for univariate targets.
-        scaling (`bool`, *optional* default to `True`):
+        scaling (`bool`, *optional* defaults to `True`):
             Whether to scale the input targets.
-        freq (`str`, *optional* default to `None`):
+        freq (`str`, *optional*):
             The frequency of the input time series. If `None`, the `lags_seq` and `num_time_features` are set at
             the finest temporal resolution of 1 Second.
-        lags_seq (`list` of `int`, *optional* default to `None`):
+        lags_seq (`list` of `int`, *optional*):
             The lags of the input time series. If `None`, the `freq` is used to determine the lags.
-        num_feat_dynamic_real (`int`, *optional* default to `0`):
+        num_feat_dynamic_real (`int`, *optional* defaults to `0`):
             The number of dynamic real valued features.
-        num_feat_static_cat (`int`, *optional* default to `0`):
+        num_feat_static_cat (`int`, *optional* defaults to `0`):
             The number of static categorical features.
-        num_feat_static_real (`int`, *optional* default to `0`):
+        num_feat_static_real (`int`, *optional* defaults to `0`):
             The number of static real valued features.
-        cardinality (`list` of `int`, *optional* default to `None`):
+        cardinality (`list` of `int`, *optional*):
             The cardinality of the categorical features. Cannot be `None` if `num_feat_static_cat` is `> 0`.
-        embedding_dimension (`list` of `int`, *optional* default to `None`):
+        embedding_dimension (`list` of `int`, *optional*):
             The dimension of the embedding for the categorical features. Cannot be `None` if `num_feat_static_cat` is `> 0`.
         encoder_layers (`int`, *optional*, defaults to 2):
             Number of encoder layers.
@@ -104,8 +104,8 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         freq: Optional[str] = None,
         prediction_length: Optional[int] = None,
         context_length: Optional[int] = None,
-        distr_output: str = "StudentT",
-        loss: str = "NLL",
+        distribution_output: str = "StudentT",
+        loss: str = "nll",
         lags_seq: Optional[List[int]] = None,
         scaling: bool = True,
         num_feat_dynamic_real: int = 0,
@@ -127,7 +127,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         self.prediction_length = prediction_length
         self.context_length = context_length or prediction_length
         self.freq = freq or "1S"
-        self.distr_output = distr_output
+        self.distribution_output = distribution_output
         self.loss = loss
         self.input_size = input_size
         self.num_time_features = (
