@@ -1,13 +1,13 @@
 from contextlib import contextmanager
 from typing import Optional, Union
 
-import torch
-import torch.nn as nn
-
 from .utils import is_bitsandbytes_available
 
 
 if is_bitsandbytes_available():
+    import torch
+    import torch.nn as nn
+
     import bitsandbytes as bnb
 
 
