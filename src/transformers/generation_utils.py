@@ -1201,7 +1201,7 @@ class GenerationMixin:
             warnings.warn(
                 "Neither `max_length` nor `max_new_tokens` have been set, `max_length` will default to "
                 f"{self.config.max_length} (`self.config.max_length`). This behavior is deprecated and will be "
-                "removed in v5 of Transformers -- we recommend using `max_new_tokens` to control the maximum length"
+                "removed in v5 of Transformers -- we recommend using `max_new_tokens` to control the maximum length "
                 "of the generation.",
                 UserWarning,
             )
