@@ -298,7 +298,8 @@ def require_intel_extension_for_pytorch(test_case):
     """
     return unittest.skipUnless(
         is_ipex_available(),
-        "test requires Intel Extension for PyTorch to be installed and match current PyTorch version, see https://github.com/intel/intel-extension-for-pytorch",
+        "test requires Intel Extension for PyTorch to be installed and match current PyTorch version, see"
+        " https://github.com/intel/intel-extension-for-pytorch",
     )(test_case)
 
 
