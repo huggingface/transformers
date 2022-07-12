@@ -194,10 +194,11 @@ if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
     from smdistributed.modelparallel import __version__ as SMP_VERSION
 
-    SMP_PRE_1_10 = version.parse(SMP_VERSION) < version.parse("1.10")
-    SMP_POST_1_10 = not SMP_PRE_1_10
+    IS_SAGEMAKER_MP_POST_1_10 = version.parse(SMP_VERSION) >= version.parse("1.10")
 
     from .trainer_pt_utils import smp_forward_backward, smp_forward_only, smp_gather, smp_nested_concat
+else:
+    IS_SAGEMAKER_MP_POST_1_10 = False
 
 
 if TYPE_CHECKING:
@@ -509,7 +510,7 @@ class Trainer:
             if args.bf16:
                 raise ValueError("SageMaker Model Parallelism does not support BF16 yet. Please use FP16 instead ")
 
-            if SMP_POST_1_10:
+            if IS_SAGEMAKER_MP_POST_1_10:
                 # When there's mismatch between SMP config and trainer argument, use SMP config as truth
                 if args.fp16 != smp.state.cfg.fp16:
                     logger.warning(
@@ -1004,23 +1005,12 @@ class Trainer:
         `create_scheduler`) in a subclass.
         """
         self.create_optimizer()
-        if is_sagemaker_mp_enabled():
-            if SMP_POST_1_10:
-                # If smp >= 1.10, then we unwrap the optimizer is fp16 is enabled
-                self.create_scheduler(
-                    num_training_steps=num_training_steps,
-                    optimizer=self.optimizer.optimizer if smp.state.cfg.fp16 else self.optimizer,
-                )
-            else:
-                self.create_scheduler(
-                    num_training_steps=num_training_steps,
-                    optimizer=self.optimizer,
-                )
+        if IS_SAGEMAKER_MP_POST_1_10 and smp.state.cfg.fp16:
+            # If smp >= 1.10 and fp16 is enabled, we unwrap the optimizer
+            optimizer = self.optimizer.optimizer
         else:
-            self.create_scheduler(
-                num_training_steps=num_training_steps,
-                optimizer=self.optimizer,
-            )
+            optimizer = self.optimizer
+        self.create_scheduler(num_training_steps=num_training_steps, optimizer=optimizer)
 
     def create_optimizer(self):
         """
@@ -1067,6 +1057,7 @@ class Trainer:
 
         if is_sagemaker_mp_enabled():
             self.optimizer = smp.DistributedOptimizer(self.optimizer)
+
         return self.optimizer
 
     @staticmethod
@@ -1713,6 +1704,7 @@ class Trainer:
 
             step = -1
             for step, inputs in enumerate(epoch_iterator):
+
                 # Skip past any already trained steps if resuming training
                 if steps_trained_in_current_epoch > 0:
                     steps_trained_in_current_epoch -= 1
@@ -1879,9 +1871,9 @@ class Trainer:
         return TrainOutput(self.state.global_step, train_loss, metrics)
 
     def _load_from_checkpoint(self, resume_from_checkpoint, model=None):
+
         if model is None:
             model = self.model
-        strict_load = is_sagemaker_mp_enabled()
 
         if not os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)) and not os.path.isfile(
             os.path.join(resume_from_checkpoint, WEIGHTS_INDEX_NAME)
@@ -1905,7 +1897,7 @@ class Trainer:
             pass
         elif os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)):
             # If the model is on the GPU, it still works!
-            if strict_load:
+            if is_sagemaker_mp_enabled():
                 if os.path.isfile(os.path.join(resume_from_checkpoint, "user_content.pt")):
                     # If the 'user_content.pt' file exists, load with the new smp api.
                     # Checkpoint must have been saved with the new smp api.
@@ -1915,36 +1907,36 @@ class Trainer:
                 else:
                     # If the 'user_content.pt' file does NOT exist, load with the old smp api.
                     # Checkpoint must have been saved with the old smp api.
-                    if hasattr(self.args, "fp16") and smp.state.cfg.fp16 is True:
+                    if hasattr(self.args, "fp16") and self.args.fp16 is True:
                         logger.warning(
                             "Enabling FP16 and loading from smp < 1.10 checkpoint together is not suppported."
                         )
                     state_dict = torch.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME), map_location="cpu")
                     # Required for smp to not auto-translate state_dict from hf to smp (is already smp).
                     state_dict["_smp_is_partial"] = False
-                    load_result = model.load_state_dict(state_dict, strict=strict_load)
+                    load_result = model.load_state_dict(state_dict, strict=True)
+                    # release memory
                     del state_dict
             else:
                 # We load the model state dict on the CPU to avoid an OOM error.
                 state_dict = torch.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME), map_location="cpu")
-                load_result = model.load_state_dict(state_dict, strict=strict_load)
+                load_result = model.load_state_dict(state_dict)
+                # release memory
                 del state_dict
-            if not strict_load:
                 self._issue_warnings_after_load(load_result)
-            # release memory
         else:
             # We load the sharded checkpoint
-            load_result = load_sharded_checkpoint(model, resume_from_checkpoint, strict=strict_load)
-            if not strict_load:
+            load_result = load_sharded_checkpoint(model, resume_from_checkpoint, strict=is_sagemaker_mp_enabled())
+            if not is_sagemaker_mp_enabled():
                 self._issue_warnings_after_load(load_result)
 
     def _load_best_model(self):
         logger.info(f"Loading best model from {self.state.best_model_checkpoint} (score: {self.state.best_metric}).")
         best_model_path = os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME)
-        strict_load = is_sagemaker_mp_enabled()
         model = self.model_wrapped if is_sagemaker_mp_enabled() else self.model
         if os.path.exists(best_model_path):
             if self.deepspeed:
+
                 if self.model_wrapped is not None:
                     # this removes the pre-hooks from the previous engine
                     self.model_wrapped.destroy()
@@ -1977,18 +1969,19 @@ class Trainer:
                         # Checkpoint must have been saved with the old smp api.
                         state_dict = torch.load(best_model_path, map_location="cpu")
                         state_dict["_smp_is_partial"] = False
-                        load_result = model.load_state_dict(state_dict, strict=strict_load)
+                        load_result = model.load_state_dict(state_dict, strict=True)
                 else:
                     # We load the model state dict on the CPU to avoid an OOM error.
                     state_dict = torch.load(best_model_path, map_location="cpu")
                     # If the model is on the GPU, it still works!
-                    load_result = model.load_state_dict(state_dict, strict=strict_load)
-
-                if not strict_load:
+                    load_result = model.load_state_dict(state_dict)
+                if not is_sagemaker_mp_enabled():
                     self._issue_warnings_after_load(load_result)
         elif os.path.exists(os.path.join(self.state.best_model_checkpoint, WEIGHTS_INDEX_NAME)):
-            load_result = load_sharded_checkpoint(model, self.state.best_model_checkpoint, strict=strict_load)
-            if not strict_load:
+            load_result = load_sharded_checkpoint(
+                model, self.state.best_model_checkpoint, strict=is_sagemaker_mp_enabled()
+            )
+            if not is_sagemaker_mp_enabled():
                 self._issue_warnings_after_load(load_result)
         else:
             logger.warning(
@@ -1997,6 +1990,7 @@ class Trainer:
             )
 
     def _issue_warnings_after_load(self, load_result):
+
         if len(load_result.missing_keys) != 0:
             if self.model._keys_to_ignore_on_save is not None and set(load_result.missing_keys) == set(
                 self.model._keys_to_ignore_on_save
@@ -2127,6 +2121,7 @@ class Trainer:
                 reissue_pt_warnings(caught_warnings)
         elif is_sagemaker_mp_enabled():
             opt_state_dict = self.optimizer.local_state_dict(gather_if_shard=False)
+            smp.barrier()
             if smp.rdp_rank() == 0 or smp.state.cfg.shard_optimizer_state:
                 smp.save(
                     opt_state_dict,
@@ -2134,7 +2129,6 @@ class Trainer:
                     partial=True,
                     v3=smp.state.cfg.shard_optimizer_state,
                 )
-
             if self.args.should_save:
                 with warnings.catch_warnings(record=True) as caught_warnings:
                     torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
@@ -2241,15 +2235,14 @@ class Trainer:
                     else:
                         # Optimizer checkpoint was saved with smp < 1.10
                         def opt_load_hook(mod, opt):
-                            if SMP_PRE_1_10:
-                                opt.load_state_dict(smp.load(os.path.join(checkpoint, OPTIMIZER_NAME), partial=True))
-                            elif SMP_POST_1_10:
+                            if IS_SAGEMAKER_MP_POST_1_10:
                                 opt.load_state_dict(
                                     smp.load(os.path.join(checkpoint, OPTIMIZER_NAME), partial=True, back_compat=True)
                                 )
+                            else:
+                                opt.load_state_dict(smp.load(os.path.join(checkpoint, OPTIMIZER_NAME), partial=True))
 
                     self.model_wrapped.register_post_step_hook(opt_load_hook)
-
                 else:
                     self.optimizer.load_state_dict(
                         torch.load(os.path.join(checkpoint, OPTIMIZER_NAME), map_location=map_location)
@@ -2540,6 +2533,7 @@ class Trainer:
 
         Will only save from the main process.
         """
+
         if output_dir is None:
             output_dir = self.args.output_dir
 
@@ -2551,10 +2545,9 @@ class Trainer:
             state_dict = self.model_wrapped.state_dict()
             if self.args.should_save:
                 self._save(output_dir, state_dict=state_dict)
-            if SMP_POST_1_10:
+            if IS_SAGEMAKER_MP_POST_1_10:
                 # 'user_content.pt' indicates model state_dict saved with smp >= 1.10
-                user_content = {"smp_ver : >= 1.10"}
-                torch.save(user_content, os.path.join(output_dir, "user_content.pt"))
+                Path(os.path.join(output_dir, "user_content.pt")).touch()
         elif (
             ShardedDDPOption.ZERO_DP_2 in self.args.sharded_ddp
             or ShardedDDPOption.ZERO_DP_3 in self.args.sharded_ddp
@@ -2565,6 +2558,7 @@ class Trainer:
             if self.args.should_save:
                 self._save(output_dir, state_dict=state_dict)
         elif self.deepspeed:
+
             # this takes care of everything as long as we aren't under zero3
             if self.args.should_save:
                 self._save(output_dir)
@@ -2859,6 +2853,7 @@ class Trainer:
 
         # if eval is called w/o train init deepspeed here
         if args.deepspeed and not self.deepspeed:
+
             # XXX: eval doesn't have `resume_from_checkpoint` arg but we should be able to do eval
             # from the checkpoint eventually
             deepspeed_engine, _, _ = deepspeed_init(

@@ -28,12 +28,11 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
+from packaging import version
 from torch import Tensor, device, nn
 from torch.nn import CrossEntropyLoss
-from packaging import version
 
 from requests import HTTPError
-
 from transformers.utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
 from transformers.utils.import_utils import is_sagemaker_mp_enabled
 
@@ -90,11 +89,14 @@ logger = logging.get_logger(__name__)
 
 _init_weights = True
 
+
 if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
     from smdistributed.modelparallel import __version__ as SMP_VERSION
 
-    SMP_POST_1_10 = version.parse(SMP_VERSION) >= version.parse("1.10")
+    IS_SAGEMAKER_MP_POST_1_10 = version.parse(SMP_VERSION) >= version.parse("1.10")
+else:
+    IS_SAGEMAKER_MP_POST_1_10 = False
 
 
 @contextmanager
@@ -1529,11 +1531,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if state_dict is None:
             state_dict = model_to_save.state_dict()
 
-        if is_sagemaker_mp_enabled():
-            # Translate state_dict from smp to hf if saving with smp >= 1.10
-            if SMP_POST_1_10:
-                for smp_to_hf, _ in smp.state.module_manager.translate_functions:
-                    state_dict = smp_to_hf(state_dict)
+        # Translate state_dict from smp to hf if saving with smp >= 1.10
+        if IS_SAGEMAKER_MP_POST_1_10:
+            for smp_to_hf, _ in smp.state.module_manager.translate_functions:
+                state_dict = smp_to_hf(state_dict)
 
         # Handle the case where some state_dict keys shouldn't be saved
         if self._keys_to_ignore_on_save is not None:
@@ -2146,6 +2147,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
                 raise
         elif from_pt:
+
             # restore default dtype
             if dtype_orig is not None:
                 torch.set_default_dtype(dtype_orig)
