@@ -51,7 +51,6 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 # Base objects, independent of any specific backend
 _import_structure = {
     "benchmark": [],
-    "bitsandbytes_utils": [],
     "commands": [],
     "configuration_utils": ["PretrainedConfig"],
     "convert_graph_to_onnx": [],
@@ -119,8 +118,8 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     "models": [],
-    # Models
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
+    # Models
     "models.auto": [
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CONFIG_MAPPING",
@@ -454,6 +453,7 @@ _import_structure = {
         "is_vision_available",
         "logging",
     ],
+    "utils.bitsandbytes_utils": [],
 }
 
 # sentencepiece-backed objects

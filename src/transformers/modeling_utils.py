@@ -84,7 +84,11 @@ if is_accelerate_available():
     )
 
 if is_bitsandbytes_available():
-    from .bitsandbytes_utils import init_empty_weights_8bit, replace_8bit_linear, set_module_8bit_tensor_to_device
+    from .utils.bitsandbytes_utils import (
+        init_empty_weights_8bit,
+        replace_8bit_linear,
+        set_module_8bit_tensor_to_device,
+    )
 
 logger = logging.get_logger(__name__)
 
@@ -558,11 +562,10 @@ def _load_state_dict_into_meta_model(
             offload_index = offload_weight(param, param_name, offload_folder, offload_index)
         elif param_device == "cpu" and state_dict_index is not None:
             state_dict_index = offload_weight(param, param_name, state_dict_folder, state_dict_index)
+        elif not load_in_8bit:
+            set_module_tensor_to_device(model, param_name, param_device, value=param)
         else:
-            if not load_in_8bit:
-                set_module_tensor_to_device(model, param_name, param_device, value=param)
-            else:
-                set_module_8bit_tensor_to_device(model, param_name, param_device, value=param)
+            set_module_8bit_tensor_to_device(model, param_name, param_device, value=param)
 
     return error_msgs, offload_index, state_dict_index
 
