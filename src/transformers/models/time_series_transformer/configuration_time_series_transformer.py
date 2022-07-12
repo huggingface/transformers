@@ -32,30 +32,30 @@ TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 class TimeSeriesTransformerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`~TimeSeriesTransformerModel`].
-    It is used to instantiate an TimeSeriesTransformer model according to the specified arguments, defining the model
+    It is used to instantiate a TimeSeriesTransformer model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
     the TimeSeriesTransformer [huggingface/tst-ett](https://huggingface.co/huggingface/tst-ett) architecture.
 
-    Configuration objects inherit from  [`PretrainedConfig`] and can be used
-    to control the model outputs. Read the documentation from  [`PretrainedConfig`]
-    for more information.
-
+    Configuration objects inherit from  [`PretrainedConfig`] can be used to control the model outputs.
+    Read the documentation from  [`PretrainedConfig`]  for more information.
 
     Args:
         prediction_length (`int`):
             The prediction horizon for the model.
         context_length (`int`, *optional*, default to `None`):
-            The context length for the encoder. If  `None`, the context length will be the same as the prediction length.
+            The context length for the encoder. If  `None`, the context length will be the same as the
+            `prediction_length`.
         distr_output (`string` default to `StudentT`):
             The distribution emission head for the model.
         loss (`string` default to `NLL`):
             The loss function for the model with corresponding to the `distr_output` head.
         input_size (`int` default to 1):
             The size of the target variable which by default is 1 for univariate targets.
-        scaling (`bool` default to `True`):
+        scaling (`bool`, *optional* default to `True`):
             Whether to scale the input targets.
         freq (`str`, *optional* default to `None`):
-            The frequency of the input time series. If `None`, the `lags_seq` and `num_time_features` are set at the finest temporal resolution of 1 Second.
+            The frequency of the input time series. If `None`, the `lags_seq` and `num_time_features` are set at
+            the finest temporal resolution of 1 Second.
         lags_seq (`list` of `int`, *optional* default to `None`):
             The lags of the input time series. If `None`, the `freq` is used to determine the lags.
         num_feat_dynamic_real (`int`, *optional* default to `0`):
