@@ -140,7 +140,7 @@ class OwlViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Tes
         # Initialize feature_extractor
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
         # create random numpy tensors
-        image_inputs = self.feature_extract_tester.prepare_inputs(equal_resolution=False, numpify=True)
+        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False, numpify=True)
         for image in image_inputs:
             self.assertIsInstance(image, np.ndarray)
 
@@ -172,7 +172,7 @@ class OwlViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Tes
         # Initialize feature_extractor
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
         # create random PyTorch tensors
-        image_inputs = self.feature_extract_tester.prepare_inputs(equal_resolution=False, torchify=True)
+        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False, torchify=True)
         for image in image_inputs:
             self.assertIsInstance(image, torch.Tensor)
 
