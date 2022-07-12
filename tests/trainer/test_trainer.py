@@ -1846,7 +1846,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     @require_torch_non_multi_gpu
     @require_torchdynamo
-    @require_torch_tensorrt_fx
     def test_torchdynamo_memory(self):
         # torchdynamo at the moment doesn't support DP/DDP, therefore require a single gpu
         class CustomTrainer(Trainer):
@@ -1870,7 +1869,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         mod = MyModule()
 
-        # 1. Default - without TorchDynamo
+        # 1. without TorchDynamo (eager baseline)
         a = torch.ones(1024, 1024, device="cuda", requires_grad=True)
         a.grad = None
         trainer = CustomTrainer(model=mod)
@@ -1878,15 +1877,14 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         for _ in range(10):
             orig_loss = trainer.training_step(mod, {"x": a})
 
-        torch.cuda.reset_peak_memory_stats()
-        orig_loss = trainer.training_step(mod, {"x": a})
-        orig_peak_mem = torch.cuda.max_memory_allocated()
-        del trainer
-
-        # Reset the peak for another measurement
+        # resets
         gc.collect()
         torch.cuda.empty_cache()
         torch.cuda.reset_peak_memory_stats()
+
+        orig_loss = trainer.training_step(mod, {"x": a})
+        orig_peak_mem = torch.cuda.max_memory_allocated()
+        del trainer
 
         # 2. TorchDynamo nvfuser
         a = torch.ones(1024, 1024, device="cuda", requires_grad=True)
@@ -1897,7 +1895,11 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         for _ in range(10):
             loss = trainer.training_step(mod, {"x": a})
 
+        # resets
+        gc.collect()
+        torch.cuda.empty_cache()
         torch.cuda.reset_peak_memory_stats()
+
         loss = trainer.training_step(mod, {"x": a})
         peak_mem = torch.cuda.max_memory_allocated()
         del trainer
