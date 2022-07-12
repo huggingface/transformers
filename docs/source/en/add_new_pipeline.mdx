@@ -123,14 +123,14 @@ PIPELINE_REGISTRY.register_pipeline(
 )
 ```
 
-You can specify a default model if you want, as well was the type:
+You can specify a default model if you want, in which case it should come with a specific revision (which can be the name of a branch or a commit hash, here we took `"abcdef"`) as well was the type:
 
 ```python
 PIPELINE_REGISTRY.register_pipeline(
     "new-task",
     pipeline_class=MyPipeline,
     pt_model=AutoModelForSequenceClassification,
-    default={"pt": ("user/awesome_model", "aaaaaa")},
+    default={"pt": ("user/awesome_model", "abcdef")},
     type="text",  # current support type: text, audio, image, multimodal
 )
 ```
