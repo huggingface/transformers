@@ -55,7 +55,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
             Whether to scale the input targets.
         freq (`str`, *optional*):
             The frequency of the input time series. If `None`, the `lags_seq` and `num_time_features` are set at
-            the finest temporal resolution of 1 Second.
+            the finest temporal resolution of 1 second.
         lags_seq (`list` of `int`, *optional*):
             The lags of the input time series. If `None`, the `freq` is used to determine the lags.
         num_feat_dynamic_real (`int`, *optional* defaults to `0`):
