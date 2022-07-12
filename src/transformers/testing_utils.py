@@ -292,10 +292,15 @@ def require_intel_extension_for_pytorch(test_case):
     """
     Decorator marking a test that requires Intel Extension for PyTorch.
 
-    These tests are skipped when Intel Extension for PyTorch isn't installed.
+    These tests are skipped when Intel Extension for PyTorch isn't installed or it does not match current PyTorch
+    version.
 
     """
-    return unittest.skipUnless(is_ipex_available(), "test requires Intel Extension for PyTorch")(test_case)
+    return unittest.skipUnless(
+        is_ipex_available(),
+        "test requires Intel Extension for PyTorch to be installed and match current PyTorch version, see"
+        " https://github.com/intel/intel-extension-for-pytorch",
+    )(test_case)
 
 
 def require_torch_scatter(test_case):

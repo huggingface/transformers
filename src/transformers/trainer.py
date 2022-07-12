@@ -1211,8 +1211,8 @@ class Trainer:
     def ipex_optimize_model(self, model, training=False, dtype=torch.float32):
         if not is_ipex_available():
             raise ImportError(
-                "Using IPEX but IPEX is not installed, please refer to"
-                " https://github.com/intel/intel-extension-for-pytorch."
+                "Using IPEX but IPEX is not installed or IPEX's version does not match current PyTorch, please refer"
+                " to https://github.com/intel/intel-extension-for-pytorch."
             )
 
         import intel_extension_for_pytorch as ipex
@@ -1223,7 +1223,9 @@ class Trainer:
         else:
             if not model.training:
                 model.train()
-            model, self.optimizer = ipex.optimize(model, dtype=dtype, optimizer=self.optimizer, level="O1")
+            model, self.optimizer = ipex.optimize(
+                model, dtype=dtype, optimizer=self.optimizer, inplace=True, level="O1"
+            )
 
         return model
 
