@@ -88,7 +88,9 @@ def init_empty_weights_8bit(include_buffers=False):
     from the function `init_empty_weights` of accelerate to make it work on `Linear8bitLt` modules from `bitsandbytes`
         include_buffers (`bool`, *optional*, defaults to `False`):
             Whether or not to also put all buffers on the meta device while initializing.
+
     Example:
+
     ```pyton
     import torch.nn as nn
     from transformers.utils.bitsandbytes_utils import init_empty_weights_8bit
