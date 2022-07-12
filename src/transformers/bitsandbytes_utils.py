@@ -1,9 +1,14 @@
-import bitsandbytes as bnb
+from contextlib import contextmanager
+from typing import Optional, Union
+
 import torch
 import torch.nn as nn
-from contextlib import contextmanager
 
-from typing import Optional, Union
+from .utils import is_bitsandbytes_available
+
+
+if is_bitsandbytes_available():
+    import bitsandbytes as bnb
 
 
 def set_module_8bit_tensor_to_device(
@@ -38,20 +43,24 @@ def set_module_8bit_tensor_to_device(
     if old_value.device == torch.device("meta") and device not in ["meta", torch.device("meta")] and value is None:
         raise ValueError(f"{tensor_name} is on the meta device, we need a `value` to put in on {device}.")
 
-    if is_buffer: has_fp16_weights = None
-    else: has_fp16_weights = getattr(module._parameters[tensor_name], 'has_fp16_weights', None)
+    if is_buffer:
+        has_fp16_weights = None
+    else:
+        has_fp16_weights = getattr(module._parameters[tensor_name], "has_fp16_weights", None)
 
     if has_fp16_weights is not None:
         param = module._parameters[tensor_name]
-        if param.device.type != 'cuda':
+        if param.device.type != "cuda":
             with torch.no_grad():
                 if value is None:
                     new_value = old_value.to(device)
                 elif isinstance(value, torch.Tensor):
-                    new_value = value.to('cpu')
+                    new_value = value.to("cpu")
                 else:
-                    new_value = torch.tensor(value, device='cpu')
-                new_value = bnb.nn.Int8Params(new_value, requires_grad=False, has_fp16_weights=has_fp16_weights).to(device)
+                    new_value = torch.tensor(value, device="cpu")
+                new_value = bnb.nn.Int8Params(new_value, requires_grad=False, has_fp16_weights=has_fp16_weights).to(
+                    device
+                )
                 module._parameters[tensor_name] = new_value
     else:
         with torch.no_grad():
@@ -100,9 +109,11 @@ def init_empty_weights_8bit(include_buffers: bool = False):
         old_register_parameter(module, name, param)
         if param is not None:
             param_cls = type(module._parameters[name])
-            has_fp16_weights = getattr(param_cls, 'has_fp16_weights', None)
+            has_fp16_weights = getattr(param_cls, "has_fp16_weights", None)
             if has_fp16_weights is not None:
-                module._parameters[name] = param_cls(module._parameters[name].to(torch.device("meta")), has_fp16_weights=has_fp16_weights)
+                module._parameters[name] = param_cls(
+                    module._parameters[name].to(torch.device("meta")), has_fp16_weights=has_fp16_weights
+                )
             else:
                 module._parameters[name] = param_cls(module._parameters[name].to(torch.device("meta")))
 
@@ -132,6 +143,10 @@ def replace_8bit_linear(model):
         if isinstance(module, nn.Linear) and n != "lm_head":
             with init_empty_weights_8bit():
                 model._modules[n] = bnb.nn.Linear8bitLt(
-                    module.in_features, module.out_features, module.bias is not None, has_fp16_weights=False, threshold=6.0
+                    module.in_features,
+                    module.out_features,
+                    module.bias is not None,
+                    has_fp16_weights=False,
+                    threshold=6.0,
                 )
     return model
