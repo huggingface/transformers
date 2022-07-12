@@ -182,6 +182,15 @@ class FeaturesManager:
             "seq2seq-lm-with-past",
             onnx_config_cls="models.blenderbot_small.BlenderbotSmallOnnxConfig",
         ),
+        "bloom": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "causal-lm",
+            "causal-lm-with-past",
+            "sequence-classification",
+            "token-classification",
+            onnx_config_cls="models.bloom.BloomOnnxConfig",
+        ),
         "camembert": supported_features_mapping(
             "default",
             "masked-lm",
@@ -442,6 +451,11 @@ class FeaturesManager:
             "token-classification",
             "question-answering",
             onnx_config_cls="models.xlm_roberta.XLMRobertaOnnxConfig",
+        ),
+        "yolos": supported_features_mapping(
+            "default",
+            "object-detection",
+            onnx_config_cls="models.yolos.YolosOnnxConfig",
         ),
     }
 
