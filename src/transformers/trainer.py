@@ -1138,16 +1138,14 @@ class Trainer:
             self.args.hf_deepspeed_config = HfTrainerDeepSpeedConfig(self.args.deepspeed)
             self.args.hf_deepspeed_config.trainer_config_process(self.args)
 
-    def _report_to_hp_search(
-        self, trial: Union["optuna.Trial", Dict[str, Any]], epoch: int, metrics: Dict[str, float]
-    ):
+    def _report_to_hp_search(self, trial: Union["optuna.Trial", Dict[str, Any]], step: int, metrics: Dict[str, float]):
         if self.hp_search_backend is None or trial is None:
             return
         self.objective = self.compute_objective(metrics.copy())
         if self.hp_search_backend == HPSearchBackend.OPTUNA:
             import optuna
 
-            trial.report(self.objective, epoch)
+            trial.report(self.objective, step)
             if trial.should_prune():
                 self.callback_handler.on_train_end(self.args, self.state, self.control)
                 raise optuna.TrialPruned()
@@ -1211,8 +1209,8 @@ class Trainer:
     def ipex_optimize_model(self, model, training=False, dtype=torch.float32):
         if not is_ipex_available():
             raise ImportError(
-                "Using IPEX but IPEX is not installed, please refer to"
-                " https://github.com/intel/intel-extension-for-pytorch."
+                "Using IPEX but IPEX is not installed or IPEX's version does not match current PyTorch, please refer"
+                " to https://github.com/intel/intel-extension-for-pytorch."
             )
 
         import intel_extension_for_pytorch as ipex
@@ -1223,7 +1221,9 @@ class Trainer:
         else:
             if not model.training:
                 model.train()
-            model, self.optimizer = ipex.optimize(model, dtype=dtype, optimizer=self.optimizer, level="O1")
+            model, self.optimizer = ipex.optimize(
+                model, dtype=dtype, optimizer=self.optimizer, inplace=True, level="O1"
+            )
 
         return model
 
@@ -1916,7 +1916,7 @@ class Trainer:
         metrics = None
         if self.control.should_evaluate:
             metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
-            self._report_to_hp_search(trial, epoch, metrics)
+            self._report_to_hp_search(trial, self.state.global_step, metrics)
 
         if self.control.should_save:
             self._save_checkpoint(model, trial, metrics=metrics)
