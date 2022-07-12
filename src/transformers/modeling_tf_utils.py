@@ -206,11 +206,9 @@ class TFCausalLanguageModelingLoss:
         unmasked_loss = loss_fn(tf.nn.relu(labels), logits)
         # make sure only labels that are not equal to -100 affect the loss
         loss_mask = tf.cast(labels != -100, dtype=unmasked_loss.dtype)
-        # Avoid division by zero later
-        loss_denominator = tf.math.maximum(tf.cast(1, loss_mask.dtype), tf.reduce_sum(loss_mask, axis=1))
         masked_loss = unmasked_loss * loss_mask
-        reduced_masked_loss = tf.reduce_sum(masked_loss, axis=1) / loss_denominator
-        return reduced_masked_loss
+        reduced_masked_loss = tf.reduce_sum(masked_loss) / tf.reduce_sum(loss_mask)
+        return tf.reshape(reduced_masked_loss, (1,))
 
 
 class TFQuestionAnsweringLoss:
@@ -266,11 +264,10 @@ class TFTokenClassificationLoss:
         # are taken into account as loss
         loss_mask = tf.cast(labels >= 0, dtype=unmasked_loss.dtype)
         # Avoid possible division by zero later
-        loss_denominator = tf.math.maximum(tf.cast(1, loss_mask.dtype), tf.reduce_sum(loss_mask, axis=1))
         # Masked positions will have a loss of NaN because -100 and -1 are not valid labels
         masked_loss = unmasked_loss * loss_mask
-        reduced_masked_loss = tf.reduce_sum(masked_loss, axis=1) / loss_denominator
-        return reduced_masked_loss
+        reduced_masked_loss = tf.reduce_sum(masked_loss) / tf.reduce_sum(loss_mask)
+        return tf.reshape(reduced_masked_loss, (1,))
 
 
 class TFSequenceClassificationLoss:
@@ -1192,7 +1189,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         prefetch: bool = True,
     ):
         """
-        Wraps a HuggingFace `datasets.Dataset` as a `tf.data.Dataset` with collation and batching. This method is
+        Wraps a HuggingFace [`~datasets.Dataset`] as a `tf.data.Dataset` with collation and batching. This method is
         designed to create a "ready-to-use" dataset that can be passed directly to Keras methods like `fit()` without
         further modification. The method will drop columns from the dataset if they don't match input names for the
         model. If you want to specify the column names to return rather than using the names that match this model, we
@@ -1200,7 +1197,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         Args:
             dataset (`Any`):
-                A `datasets.Dataset` to be wrapped as a `tf.data.Dataset`.
+                A [~`datasets.Dataset`] to be wrapped as a `tf.data.Dataset`.
             batch_size (`int`, defaults to 8):
                 The size of batches to return.
             shuffle (`bool`, defaults to `True`):
@@ -1241,18 +1238,26 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             raise TypeError("Dataset argument should be a datasets.Dataset!")
         model_inputs = list(dict(inspect.signature(self.call).parameters).keys())
         model_labels = find_labels(self.__class__)
-        unwanted_columns = [
-            feature
-            for feature in dataset.features
-            if feature not in model_inputs and feature not in ("label_ids", "label")
-        ]
-        dataset = dataset.remove_columns(unwanted_columns)
-        output_signature, _ = dataset._get_output_signature(
-            dataset,
-            batch_size=None,
-            collate_fn=collate_fn,
-            collate_fn_args=collate_fn_args,
-        )
+        if "cols_to_retain" in list(inspect.signature(dataset._get_output_signature).parameters.keys()):
+            output_signature, _ = dataset._get_output_signature(
+                dataset,
+                batch_size=None,
+                collate_fn=collate_fn,
+                collate_fn_args=collate_fn_args,
+                cols_to_retain=model_inputs,
+            )
+        else:
+            # TODO Matt: This is a workaround for older versions of datasets that are missing the `cols_to_retain`
+            #            argument. We should remove this once the minimum supported version of datasets is > 2.3.2
+            unwanted_columns = [
+                feature
+                for feature in dataset.features
+                if feature not in model_inputs and feature not in ("label_ids", "label")
+            ]
+            dataset = dataset.remove_columns(unwanted_columns)
+            output_signature, _ = dataset._get_output_signature(
+                dataset, batch_size=None, collate_fn=collate_fn, collate_fn_args=collate_fn_args
+            )
         output_columns = list(output_signature.keys())
         feature_cols = [col for col in output_columns if col in model_inputs and col not in model_labels]
         label_cols = [col for col in output_columns if col in model_labels]

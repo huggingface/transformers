@@ -417,12 +417,12 @@ class TFXLNetModelTest(TFModelTesterMixin, unittest.TestCase):
                 input_ids = prepared_for_class.pop(input_name)
 
                 loss = model(input_ids, **prepared_for_class)[0]
-                self.assertEqual(loss.shape.as_list(), expected_loss_size)
+                self.assertTrue(loss.shape.as_list() == expected_loss_size or loss.shape.as_list() == [1])
 
                 # Test that model correctly compute the loss with a dict
                 prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
                 loss = model(prepared_for_class)[0]
-                self.assertEqual(loss.shape.as_list(), expected_loss_size)
+                self.assertTrue(loss.shape.as_list() == expected_loss_size or loss.shape.as_list() == [1])
 
                 # Test that model correctly compute the loss with a tuple
                 prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
@@ -453,7 +453,7 @@ class TFXLNetModelTest(TFModelTesterMixin, unittest.TestCase):
                 # Send to model
                 loss = model(tuple_input[:-1])[0]
 
-                self.assertEqual(loss.shape.as_list(), expected_loss_size)
+                self.assertTrue(loss.shape.as_list() == expected_loss_size or loss.shape.as_list() == [1])
 
 
 @require_tf
