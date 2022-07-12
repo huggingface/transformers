@@ -130,7 +130,7 @@ PIPELINE_REGISTRY.register_pipeline(
     "new-task",
     pipeline_class=MyPipeline,
     pt_model=AutoModelForSequenceClassification,
-    default={"pt": "user/awesome_model"},
+    default={"pt": ("user/awesome_model", "aaaaaa")},
     type="text",  # current support type: text, audio, image, multimodal
 )
 ```
