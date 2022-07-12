@@ -130,11 +130,13 @@ Git](https://git-scm.com/book/en/v2) is a very good reference.
 
 Follow these steps to start contributing:
 
-1. Fork the [repository](https://github.com/huggingface/transformers) by
+1. Verify that your python version is `3.8.x` or lower with `python --version`.
+
+2. Fork the [repository](https://github.com/huggingface/transformers) by
    clicking on the 'Fork' button on the repository's page. This creates a copy of the code
    under your GitHub user account.
 
-2. Clone your fork to your local disk, and add the base repository as a remote:
+3. Clone your fork to your local disk, and add the base repository as a remote:
 
    ```bash
    $ git clone git@github.com:<your Github handle>/transformers.git
@@ -142,7 +144,7 @@ Follow these steps to start contributing:
    $ git remote add upstream https://github.com/huggingface/transformers.git
    ```
 
-3. Create a new branch to hold your development changes:
+4. Create a new branch to hold your development changes:
 
    ```bash
    $ git checkout -b a-descriptive-name-for-my-changes
@@ -150,7 +152,7 @@ Follow these steps to start contributing:
 
    **Do not** work on the `main` branch.
 
-4. Set up a development environment by running the following command in a virtual environment:
+5. Set up a development environment by running the following command in a virtual environment:
 
    ```bash
    $ pip install -e ".[dev]"
@@ -172,7 +174,7 @@ Follow these steps to start contributing:
    If you have already cloned that repo, you might need to `git pull` to get the most recent changes in the `datasets`
    library.
 
-5. Develop the features on your branch.
+6. Develop the features on your branch.
 
    As you work on the features, you should make sure that the test suite
    passes. You should run the tests impacted by your changes like this:
@@ -276,11 +278,11 @@ Follow these steps to start contributing:
    $ git push -u origin a-descriptive-name-for-my-changes
    ```
 
-6. Once you are satisfied (**and the checklist below is happy too**), go to the
+7. Once you are satisfied (**and the checklist below is happy too**), go to the
    webpage of your fork on GitHub. Click on 'Pull request' to send your changes
    to the project maintainers for review.
 
-7. It's ok if maintainers ask you for changes. It happens to core contributors
+8. It's ok if maintainers ask you for changes. It happens to core contributors
    too! So everyone can see the changes in the Pull request, work in your local
    branch and push the changes to your fork. They will automatically appear in
    the pull request.
