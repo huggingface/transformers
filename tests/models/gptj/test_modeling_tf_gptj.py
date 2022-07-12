@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import datetime
 import unittest
 
 from transformers import AutoTokenizer, GPTJConfig, is_tf_available
@@ -48,6 +47,7 @@ class TFGPTJModelTester:
         self.use_mc_token_ids = True
         self.vocab_size = 99
         self.hidden_size = 32
+        self.rotary_dim = 4
         self.num_hidden_layers = 5
         self.num_attention_heads = 4
         self.intermediate_size = 37
@@ -103,6 +103,7 @@ class TFGPTJModelTester:
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
+            rotary_dim=self.rotary_dim,
             return_dict=True,
         )
 
@@ -359,10 +360,10 @@ class TFGPTJModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
 
 
 @require_tf
+@tooslow
+# Marked as @tooslow due to GPU OOM -- but still useful to run locally. Requires ~39GB of RAM.
 class TFGPTJModelLanguageGenerationTest(unittest.TestCase):
-    @tooslow
     def test_lm_generate_gptj(self):
-        # Marked as @tooslow due to GPU OOM
         model = TFGPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", from_pt=True)
         input_ids = tf.convert_to_tensor([[464, 3290]], dtype=tf.int32)  # The dog
         # fmt: off
@@ -372,74 +373,20 @@ class TFGPTJModelLanguageGenerationTest(unittest.TestCase):
         output_ids = model.generate(input_ids, do_sample=False)
         self.assertListEqual(output_ids[0].numpy().tolist(), expected_output_ids)
 
-    @tooslow
     def test_gptj_sample(self):
-        # Marked as @tooslow due to GPU OOM (issue #13676)
         tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B", revision="float16")
         model = TFGPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", revision="float16", from_pt=True)
 
-        tf.random.set_seed(0)
-        tokenized = tokenizer("Today is a nice day and", return_tensors="tf", return_token_type_ids=True)
-        input_ids, token_type_ids = tokenized.input_ids, tokenized.token_type_ids
-        output_ids = model.generate(input_ids, do_sample=True)
+        tokenized = tokenizer("Today is a nice day and", return_tensors="tf")
+        # forces the generation to happen on CPU, to avoid GPU-related quirks
+        with tf.device(":/CPU:0"):
+            output_ids = model.generate(**tokenized, do_sample=True, seed=[42, 0])
         output_str = tokenizer.decode(output_ids[0], skip_special_tokens=True)
 
-        output_seq = model.generate(input_ids=input_ids, do_sample=True, num_return_sequences=5)
-        output_seq_tt = model.generate(
-            input_ids=input_ids, token_type_ids=token_type_ids, do_sample=True, num_return_sequences=5
-        )
-        output_seq_strs = tokenizer.batch_decode(output_seq, skip_special_tokens=True)
-        output_seq_tt_strs = tokenizer.batch_decode(output_seq_tt, skip_special_tokens=True)
-
-        EXPECTED_OUTPUT_STR = "Today is a nice day and I am taking an hour to sit in the hammock and just enjoy"
-
+        EXPECTED_OUTPUT_STR = "Today is a nice day and I’m going to go for a walk. I’"
         self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
-        self.assertTrue(
-            all([output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs))])
-        )  # token_type_ids should change output
 
-    @slow
-    @unittest.skip(reason="TF generate currently has no time-based stopping criteria")
-    def test_gptj_sample_max_time(self):
-        tokenizer = AutoTokenizer.from_pretrained("anton-l/gpt-j-tiny-random")
-        model = TFGPTJForCausalLM.from_pretrained("anton-l/gpt-j-tiny-random", from_pt=True)
-
-        input_ids = tokenizer("Today is a nice day and", return_tensors="tf", return_token_type_ids=True).input_ids
-
-        MAX_TIME = 0.5
-
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=True, max_time=MAX_TIME, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=False, max_time=MAX_TIME, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=False, num_beams=2, max_time=MAX_TIME, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=True, num_beams=2, max_time=MAX_TIME, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=False, max_time=None, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-    @tooslow
-    def test_batch_generation(self):
-        # Marked as @tooslow due to GPU OOM
+    def _get_beam_search_test_objects(self):
         model = TFGPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", revision="float16", from_pt=True)
         tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B", revision="float16")
 
@@ -454,42 +401,46 @@ class TFGPTJModelLanguageGenerationTest(unittest.TestCase):
             "Hello, my dog is a little",
             "Today, I",
         ]
+        expected_output_sentences = [
+            "Hello, my dog is a little over a year old and has been diagnosed with hip dysplasia",
+            "Today, I’m going to be talking about a topic that’",
+        ]
+        return model, tokenizer, sentences, expected_output_sentences
+
+    def test_batch_beam_search(self):
+        # Confirms that we get the expected results with left-padded beam search
+        model, tokenizer, sentences, expected_output_sentences = self._get_beam_search_test_objects()
 
         inputs = tokenizer(sentences, return_tensors="tf", padding=True)
-        input_ids = inputs["input_ids"]
-        token_type_ids = tf.concat(
-            [
-                tf.zeros((input_ids.shape[0], input_ids.shape[1] - 1), dtype=tf.int64),
-                500 * tf.ones((input_ids.shape[0], 1), dtype=tf.int64),
-            ],
-            axis=-1,
-        )
-
-        outputs = model.generate(input_ids=input_ids, attention_mask=inputs["attention_mask"])
-        outputs_tt = model.generate(
-            input_ids=input_ids,
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=token_type_ids,
-        )
-
-        inputs_non_padded = tokenizer(sentences[0], return_tensors="tf").input_ids
-        output_non_padded = model.generate(input_ids=inputs_non_padded)
-
-        num_paddings = (
-            shape_list(inputs_non_padded)[-1] - tf.reduce_sum(tf.cast(inputs["attention_mask"][-1], tf.int64)).numpy()
-        )
-        inputs_padded = tokenizer(sentences[1], return_tensors="tf").input_ids
-        output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
-
+        outputs = model.generate(**inputs, do_sample=False, num_beams=2)
         batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        batch_out_sentence_tt = tokenizer.batch_decode(outputs_tt, skip_special_tokens=True)
+        self.assertListEqual(expected_output_sentences, batch_out_sentence)
+
+    def test_batch_left_padding(self):
+        # Confirms that left-padding is working properly
+        model, tokenizer, sentences, expected_output_sentences = self._get_beam_search_test_objects()
+
+        inputs = tokenizer(sentences, return_tensors="tf", padding=True)
+        inputs_non_padded = tokenizer(sentences[0], return_tensors="tf")
+        output_non_padded = model.generate(**inputs_non_padded, do_sample=False, num_beams=2)
+        num_paddings = (
+            shape_list(inputs_non_padded["input_ids"])[-1]
+            - tf.reduce_sum(tf.cast(inputs["attention_mask"][-1], tf.int64)).numpy()
+        )
+        inputs_padded = tokenizer(sentences[1], return_tensors="tf")
+        output_padded = model.generate(
+            **inputs_padded, do_sample=False, num_beams=2, max_length=model.config.max_length - num_paddings
+        )
         non_padded_sentence = tokenizer.decode(output_non_padded[0], skip_special_tokens=True)
         padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
+        self.assertListEqual(expected_output_sentences, [non_padded_sentence, padded_sentence])
 
-        expected_output_sentence = [
-            "Hello, my dog is a little over a year old and has been diagnosed with a heart murmur",
-            "Today, I’m going to share with you a few of my favorite",
-        ]
-        self.assertListEqual(expected_output_sentence, batch_out_sentence)
-        self.assertTrue(batch_out_sentence_tt != batch_out_sentence)  # token_type_ids should change output
-        self.assertListEqual(expected_output_sentence, [non_padded_sentence, padded_sentence])
+    def test_xla_beam_search(self):
+        # Confirms that XLA is working properly
+        model, tokenizer, sentences, expected_output_sentences = self._get_beam_search_test_objects()
+
+        inputs = tokenizer(sentences, return_tensors="tf", padding=True)
+        xla_generate = tf.function(model.generate, jit_compile=True)
+        outputs_xla = xla_generate(**inputs, do_sample=False, num_beams=2)
+        xla_sentence = tokenizer.batch_decode(outputs_xla, skip_special_tokens=True)
+        self.assertListEqual(expected_output_sentences, xla_sentence)

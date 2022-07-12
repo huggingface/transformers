@@ -202,6 +202,7 @@ PYTORCH_EXPORT_MODELS = {
     ("data2vec-text", "facebook/data2vec-text-base"),
     ("perceiver", "deepmind/language-perceiver", ("masked-lm", "sequence-classification")),
     ("perceiver", "deepmind/vision-perceiver-conv", ("image-classification",)),
+    ("yolos", "hustvl/yolos-tiny"),
 }
 
 PYTORCH_EXPORT_WITH_PAST_MODELS = {
