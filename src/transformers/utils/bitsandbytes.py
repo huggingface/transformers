@@ -93,7 +93,7 @@ def init_empty_weights_8bit(include_buffers=False):
 
     ```pyton
     import torch.nn as nn
-    from transformers.utils.bitsandbytes_utils import init_empty_weights_8bit
+    from transformers.utils.bitsandbytes import init_empty_weights_8bit
 
     # Initialize a model with 100 billions parameters in no time and without using any RAM.
     with init_empty_weights_8bit():

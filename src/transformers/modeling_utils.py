@@ -84,11 +84,7 @@ if is_accelerate_available():
     )
 
 if is_bitsandbytes_available():
-    from .utils.bitsandbytes_utils import (
-        init_empty_weights_8bit,
-        replace_8bit_linear,
-        set_module_8bit_tensor_to_device,
-    )
+    from .utils.bitsandbytes import init_empty_weights_8bit, replace_8bit_linear, set_module_8bit_tensor_to_device
 
 logger = logging.get_logger(__name__)
 
