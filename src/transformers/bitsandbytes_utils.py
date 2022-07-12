@@ -1,5 +1,4 @@
 from contextlib import contextmanager
-from typing import Optional, Union
 
 from .utils import is_bitsandbytes_available
 
@@ -11,9 +10,7 @@ if is_bitsandbytes_available():
     import bitsandbytes as bnb
 
 
-def set_module_8bit_tensor_to_device(
-    module: nn.Module, tensor_name: str, device: Union[int, str, torch.device], value: Optional[torch.Tensor] = None
-):
+def set_module_8bit_tensor_to_device(module, tensor_name, device, value=None):
     """
     Args:
     A helper function to set a given tensor (parameter of buffer) of a module on a specific device (note that doing
@@ -78,7 +75,7 @@ def set_module_8bit_tensor_to_device(
 
 
 @contextmanager
-def init_empty_weights_8bit(include_buffers: bool = False):
+def init_empty_weights_8bit(include_buffers=False):
     """
     Args:
     A context manager under which models are initialized with all parameters on the meta device, therefore creating an
