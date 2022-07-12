@@ -104,7 +104,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         freq: Optional[str] = None,
         prediction_length: Optional[int] = None,
         context_length: Optional[int] = None,
-        distribution_output: str = "StudentT",
+        distribution_output: str = "student_t",
         loss: str = "nll",
         lags_seq: Optional[List[int]] = None,
         scaling: bool = True,
