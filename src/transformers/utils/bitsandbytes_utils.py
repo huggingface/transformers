@@ -18,13 +18,13 @@ def set_module_8bit_tensor_to_device(module, tensor_name, device, value=None):
     class `Int8Params` from `bitsandbytes`.
 
     Args:
-        module (`torch.nn.Module`): 
+        module (`torch.nn.Module`):
             The module in which the tensor we want to move lives.
         tensor_name (`str`): The full
             name of the parameter/buffer.
-        device (`int`, `str` or `torch.device`): 
+        device (`int`, `str` or `torch.device`):
             The device on which to set the tensor.
-        value (`torch.Tensor`, *optional*): 
+        value (`torch.Tensor`, *optional*):
             The value of the tensor (useful when going from the meta device to any other device).
     """
     # Recurse if needed
@@ -84,8 +84,8 @@ def init_empty_weights_8bit(include_buffers=False):
     """
     Args:
     A context manager under which models are initialized with all parameters on the meta device, therefore creating an
-    empty model. Useful when just initializing the model would blow the available RAM. This function is adapted
-    from the function `init_empty_weights` of accelerate to make it work on `Linear8bitLt` modules from `bitsandbytes`
+    empty model. Useful when just initializing the model would blow the available RAM. This function is adapted from
+    the function `init_empty_weights` of accelerate to make it work on `Linear8bitLt` modules from `bitsandbytes`
         include_buffers (`bool`, *optional*, defaults to `False`):
             Whether or not to also put all buffers on the meta device while initializing.
 
@@ -94,7 +94,7 @@ def init_empty_weights_8bit(include_buffers=False):
     ```pyton
     import torch.nn as nn
     from transformers.utils.bitsandbytes_utils import init_empty_weights_8bit
-    
+
     # Initialize a model with 100 billions parameters in no time and without using any RAM.
     with init_empty_weights_8bit():
         tst = nn.Sequential(*[nn.Linear(10000, 10000) for _ in range(1000)])
