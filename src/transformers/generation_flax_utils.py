@@ -214,7 +214,7 @@ class FlaxGenerationMixin:
             max_length (`int`, *optional*, defaults to `model.config.max_length`):
                 The maximum length of the sequence to be generated. Prefer the use of `max_new_tokens`, which ignores
                 the number of tokens in the prompt.
-            max_new_tokens (`int`, *optional*, defaults to None):
+            max_new_tokens (`int`, *optional*):
                 The maximum numbers of tokens to generate, ignoring the number of tokens in the prompt.
             do_sample (`bool`, *optional*, defaults to `False`):
                 Whether or not to use sampling ; use greedy decoding otherwise.
@@ -295,8 +295,9 @@ class FlaxGenerationMixin:
             max_length = max_new_tokens + input_ids_seq_length
         elif max_length is not None and max_new_tokens is not None:
             raise ValueError(
-                "Both `max_new_tokens` and `max_length` have been set but they serve the same purpose -- setting a "
-                "limit to the generated output length. Please refer to the documentation for more information."
+                "Both `max_new_tokens` and `max_length` have been set but they serve the same purpose -- setting a"
+                " limit to the generated output length. Remove one of those arguments. Please refer to the"
+                " documentation for more information."
             )
         # default to config if still None
         max_length = max_length if max_length is not None else self.config.max_length
