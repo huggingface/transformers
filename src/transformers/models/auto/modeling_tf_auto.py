@@ -62,7 +62,9 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("openai-gpt", "TFOpenAIGPTModel"),
         ("opt", "TFOPTModel"),
         ("pegasus", "TFPegasusModel"),
+        ("regnet", "TFRegNetModel"),
         ("rembert", "TFRemBertModel"),
+        ("resnet", "TFResNetModel"),
         ("roberta", "TFRobertaModel"),
         ("roformer", "TFRoFormerModel"),
         ("speech_to_text", "TFSpeech2TextModel"),
@@ -173,6 +175,8 @@ TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         # Model for Image-classsification
         ("convnext", "TFConvNextForImageClassification"),
         ("data2vec-vision", "TFData2VecVisionForImageClassification"),
+        ("regnet", "TFRegNetForImageClassification"),
+        ("resnet", "TFResNetForImageClassification"),
         ("swin", "TFSwinForImageClassification"),
         ("vit", "TFViTForImageClassification"),
     ]

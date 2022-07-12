@@ -45,8 +45,8 @@ class Seq2SeqTrainer(Trainer):
 
         Args:
             eval_dataset (`Dataset`, *optional*):
-                Pass a dataset if you wish to override `self.eval_dataset`. If it is an `datasets.Dataset`, columns not
-                accepted by the `model.forward()` method are automatically removed. It must implement the `__len__`
+                Pass a dataset if you wish to override `self.eval_dataset`. If it is an [`~datasets.Dataset`], columns
+                not accepted by the `model.forward()` method are automatically removed. It must implement the `__len__`
                 method.
             ignore_keys (`List[str]`, *optional*):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
@@ -93,7 +93,7 @@ class Seq2SeqTrainer(Trainer):
 
         Args:
             test_dataset (`Dataset`):
-                Dataset to run the predictions on. If it is an `datasets.Dataset`, columns not accepted by the
+                Dataset to run the predictions on. If it is a [`~datasets.Dataset`], columns not accepted by the
                 `model.forward()` method are automatically removed. Has to implement the method `__len__`
             ignore_keys (`List[str]`, *optional*):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when

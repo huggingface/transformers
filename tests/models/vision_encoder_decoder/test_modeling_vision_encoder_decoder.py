@@ -20,7 +20,7 @@ import unittest
 from datasets import load_dataset
 from packaging import version
 
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import require_torch, require_vision, slow, to_2tuple, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
@@ -48,7 +48,6 @@ if is_torch_available():
         ViTModel,
     )
     from transformers.modeling_outputs import BaseModelOutput
-    from transformers.models.vit.modeling_vit import to_2tuple
 
 
 if is_vision_available():
