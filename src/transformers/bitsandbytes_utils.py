@@ -82,7 +82,9 @@ def init_empty_weights_8bit(include_buffers=False):
     empty model. Useful when just initializing the model would blow the available RAM.
         include_buffers (`bool`, *optional*, defaults to `False`):
             Whether or not to also put all buffers on the meta device while initializing.
+
     Example:
+
     ```pyton
     import torch.nn as nn
     from accelerate import init_empty_weights
