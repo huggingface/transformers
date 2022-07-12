@@ -65,6 +65,7 @@ from .utils import (
     has_file,
     hf_bucket_url,
     is_accelerate_available,
+    is_bitsandbytes_available,
     is_offline_mode,
     is_remote_url,
     logging,
@@ -81,6 +82,9 @@ if is_accelerate_available():
         save_offload_index,
         set_module_tensor_to_device,
     )
+
+if is_bitsandbytes_available():
+    from .bitsandbytes_utils import init_empty_weights_8bit, replace_8bit_linear, set_module_8bit_tensor_to_device
 
 logger = logging.get_logger(__name__)
 
@@ -116,21 +120,6 @@ except ImportError:
 
         def forward(self, input):
             return input
-
-
-def replace_8bit_linear(model):
-    import bitsandbytes as bnb
-
-    for n, module in model.named_children():
-        if len(list(module.children())) > 0:
-            replace_8bit_linear(module)
-
-        if isinstance(module, nn.Linear):
-            with init_empty_weights():
-                model._modules[n] = bnb.nn.Linear8bitLt(
-                    module.in_features, module.out_features, module.bias is not None, has_fp16_weights=True
-                )
-    return model
 
 
 def get_parameter_device(parameter: Union[nn.Module, GenerationMixin, "ModuleUtilsMixin"]):
@@ -505,6 +494,7 @@ def _load_state_dict_into_meta_model(
     state_dict_folder=None,
     state_dict_index=None,
     dtype=None,
+    load_in_8bit=False,
 ):
     """
     This is somewhat similar to `_load_state_dict_into_model`, but deals with a model that has some or all of its
@@ -569,7 +559,10 @@ def _load_state_dict_into_meta_model(
         elif param_device == "cpu" and state_dict_index is not None:
             state_dict_index = offload_weight(param, param_name, state_dict_folder, state_dict_index)
         else:
-            set_module_tensor_to_device(model, param_name, param_device, value=param)
+            if not load_in_8bit:
+                set_module_tensor_to_device(model, param_name, param_device, value=param)
+            else:
+                set_module_8bit_tensor_to_device(model, param_name, param_device, value=param)
 
     return error_msgs, offload_index, state_dict_index
 
@@ -2078,9 +2071,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
             init_contexts = [deepspeed.zero.Init(config_dict_or_path=deepspeed_config())] + init_contexts
         elif load_in_8bit:
-
-            init_contexts = [init_empty_weights()]  # Force enable init empty weights
-
+            init_contexts = [init_empty_weights_8bit()]  # Force enable init empty weights
             logger.info("Detected 8-bit loading: activating 8-bit loading for this model")
         elif low_cpu_mem_usage:
             init_contexts.append(init_empty_weights())
@@ -2253,7 +2244,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     key = ".".join(key.split(".")[1:])
                 param = model_state_dict[key]
                 if param.device == torch.device("meta"):
-                    set_module_tensor_to_device(model, key, "cpu", torch.empty(*param.size()))
+                    if not load_in_8bit:
+                        set_module_tensor_to_device(model, key, "cpu", torch.empty(*param.size()))
+                    else:
+                        set_module_8bit_tensor_to_device(model, key, "cpu", torch.empty(*param.size()))
 
         # retrieve unintialized modules and initialize before maybe overriding that with the pretrained weights.
         if _fast_init:
@@ -2362,6 +2356,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         state_dict_folder=state_dict_folder,
                         state_dict_index=state_dict_index,
                         dtype=dtype,
+                        load_in_8bit=load_in_8bit,
                     )
                     error_msgs += new_error_msgs
                 else:
