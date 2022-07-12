@@ -518,7 +518,7 @@ class Trainer:
                 if hasattr(smp.state.cfg, "fp16"):
                     logger.warning(
                         f"FP16 provided in SM_HP_MP_PARAMETERS is {smp.state.cfg.fp16}, "
-                        f"but SageMaker Model Parallelism < 1.10 does not support FP16 in trainer."
+                        "but SageMaker Model Parallelism < 1.10 does not support FP16 in trainer."
                     )
 
         if args.fp16 or args.bf16:
@@ -965,12 +965,18 @@ class Trainer:
         `create_scheduler`) in a subclass.
         """
         self.create_optimizer()
-        if is_sagemaker_mp_enabled and SMP_POST_1_10:
-            # If smp >= 1.10, then we unwrap the optimizer is fp16 is enabled
-            self.create_scheduler(
-                num_training_steps=num_training_steps,
-                optimizer=self.optimizer.optimizer if smp.state.cfg.fp16 else self.optimizer,
-            )
+        if is_sagemaker_mp_enabled():
+            if SMP_POST_1_10:
+                # If smp >= 1.10, then we unwrap the optimizer is fp16 is enabled
+                self.create_scheduler(
+                    num_training_steps=num_training_steps,
+                    optimizer=self.optimizer.optimizer if smp.state.cfg.fp16 else self.optimizer,
+                )
+            else:
+                self.create_scheduler(
+                    num_training_steps=num_training_steps,
+                    optimizer=self.optimizer,
+                )
         else:
             self.create_scheduler(
                 num_training_steps=num_training_steps,
@@ -1643,7 +1649,6 @@ class Trainer:
 
             step = -1
             for step, inputs in enumerate(epoch_iterator):
-
                 # Skip past any already trained steps if resuming training
                 if steps_trained_in_current_epoch > 0:
                     steps_trained_in_current_epoch -= 1
@@ -1810,7 +1815,6 @@ class Trainer:
         return TrainOutput(self.state.global_step, train_loss, metrics)
 
     def _load_from_checkpoint(self, resume_from_checkpoint, model=None):
-
         if model is None:
             model = self.model
         strict_load = is_sagemaker_mp_enabled()
@@ -1847,9 +1851,9 @@ class Trainer:
                 else:
                     # If the 'user_content.pt' file does NOT exist, load with the old smp api.
                     # Checkpoint must have been saved with the old smp api.
-                    if hasattr(self.args, "fp16") and smp.state.cfg.fp16 == True:
+                    if hasattr(self.args, "fp16") and smp.state.cfg.fp16 is True:
                         logger.warning(
-                            f"Enabling FP16 and loading from smp < 1.10 checkpoint together is not suppported."
+                            "Enabling FP16 and loading from smp < 1.10 checkpoint together is not suppported."
                         )
                     state_dict = torch.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME), map_location="cpu")
                     # Required for smp to not auto-translate state_dict from hf to smp (is already smp).
@@ -1877,7 +1881,6 @@ class Trainer:
         model = self.model_wrapped if is_sagemaker_mp_enabled() else self.model
         if os.path.exists(best_model_path):
             if self.deepspeed:
-
                 if self.model_wrapped is not None:
                     # this removes the pre-hooks from the previous engine
                     self.model_wrapped.destroy()
@@ -1930,7 +1933,6 @@ class Trainer:
             )
 
     def _issue_warnings_after_load(self, load_result):
-
         if len(load_result.missing_keys) != 0:
             if self.model._keys_to_ignore_on_save is not None and set(load_result.missing_keys) == set(
                 self.model._keys_to_ignore_on_save
@@ -2505,7 +2507,6 @@ class Trainer:
             if self.args.should_save:
                 self._save(output_dir, state_dict=state_dict)
         elif self.deepspeed:
-
             # this takes care of everything as long as we aren't under zero3
             if self.args.should_save:
                 self._save(output_dir)
@@ -2799,7 +2800,6 @@ class Trainer:
 
         # if eval is called w/o train init deepspeed here
         if args.deepspeed and not self.deepspeed:
-
             # XXX: eval doesn't have `resume_from_checkpoint` arg but we should be able to do eval
             # from the checkpoint eventually
             deepspeed_engine, _, _ = deepspeed_init(
