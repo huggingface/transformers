@@ -74,7 +74,9 @@ class OPTModelTester:
         pad_token_id=1,
         bos_token_id=0,
         embed_dim=16,
+        num_labels=3,
         word_embed_proj_dim=16,
+        type_sequence_label_size=2,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -94,11 +96,12 @@ class OPTModelTester:
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.embed_dim = embed_dim
+        self.num_labels=num_labels
+        self.type_sequence_label_size = type_sequence_label_size
         self.word_embed_proj_dim = word_embed_proj_dim
         self.is_encoder_decoder = False
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
             3,
         )
@@ -172,17 +175,6 @@ class OPTModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_opt_for_sequence_classification(
-        self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
-    ):
-        config.num_labels = self.num_labels
-        model = OPTForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
-
-
 @require_torch
 class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (OPTModel, OPTForCausalLM, OPTForSequenceClassification) if is_torch_available() else ()
@@ -252,6 +244,18 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
+    def test_gpt2_sequence_classification_model(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs()
+        config.num_labels = 3
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+        model = OPTForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
+        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
 
 def assert_tensors_close(a, b, atol=1e-12, prefix=""):
     """If tensors have different shapes, different values or a and b are not both tensors, raise a nice Assertion error."""
@@ -301,7 +305,7 @@ class OPTModelIntegrationTests(unittest.TestCase):
 
 
 @require_torch
-@slow
+@slowÏ
 class OPTEmbeddingsTest(unittest.TestCase):
     def setUp(self):
         super().setUp()

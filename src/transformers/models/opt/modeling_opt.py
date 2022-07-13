@@ -33,7 +33,6 @@ from ...utils import (
 )
 from .configuration_opt import OPTConfig
 
-
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "facebook/opt-350m"
@@ -42,7 +41,6 @@ _TOKENIZER_FOR_DOC = "OPTTokenizer"
 
 # Base model docstring
 _EXPECTED_OUTPUT_SHAPE = [1, 8, 1024]
-
 
 OPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/opt-125m",
@@ -113,12 +111,12 @@ class OPTAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
-        self,
-        embed_dim: int,
-        num_heads: int,
-        dropout: float = 0.0,
-        is_decoder: bool = False,
-        bias: bool = True,
+            self,
+            embed_dim: int,
+            num_heads: int,
+            dropout: float = 0.0,
+            is_decoder: bool = False,
+            bias: bool = True,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -131,7 +129,7 @@ class OPTAttention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {num_heads})."
             )
-        self.scaling = self.head_dim**-0.5
+        self.scaling = self.head_dim ** -0.5
         self.is_decoder = is_decoder
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -143,13 +141,13 @@ class OPTAttention(nn.Module):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
+            self,
+            hidden_states: torch.Tensor,
+            key_value_states: Optional[torch.Tensor] = None,
+            past_key_value: Optional[Tuple[torch.Tensor]] = None,
+            attention_mask: Optional[torch.Tensor] = None,
+            layer_head_mask: Optional[torch.Tensor] = None,
+            output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -284,13 +282,13 @@ class OPTDecoderLayer(nn.Module):
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+            self,
+            hidden_states: torch.Tensor,
+            attention_mask: Optional[torch.Tensor] = None,
+            layer_head_mask: Optional[torch.Tensor] = None,
+            output_attentions: Optional[bool] = False,
+            use_cache: Optional[bool] = False,
+            past_key_value: Optional[Tuple[torch.Tensor]] = None,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
@@ -537,16 +535,16 @@ class OPTDecoder(OPTPreTrainedModel):
         return combined_attention_mask
 
     def forward(
-        self,
-        input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+            self,
+            input_ids: torch.LongTensor = None,
+            attention_mask: Optional[torch.Tensor] = None,
+            head_mask: Optional[torch.Tensor] = None,
+            past_key_values: Optional[List[torch.FloatTensor]] = None,
+            inputs_embeds: Optional[torch.FloatTensor] = None,
+            use_cache: Optional[bool] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         r"""
         Args:
@@ -729,7 +727,7 @@ class OPTModel(OPTPreTrainedModel):
     def __init__(self, config: OPTConfig):
         super().__init__(config)
         self.decoder = OPTDecoder(config)
-
+        self.embed_dim = config.hidden_size
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -751,18 +749,17 @@ class OPTModel(OPTPreTrainedModel):
         expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
-        self,
-        input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+            self,
+            input_ids: torch.LongTensor = None,
+            attention_mask: Optional[torch.Tensor] = None,
+            head_mask: Optional[torch.Tensor] = None,
+            past_key_values: Optional[List[torch.FloatTensor]] = None,
+            inputs_embeds: Optional[torch.FloatTensor] = None,
+            use_cache: Optional[bool] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -802,7 +799,7 @@ class OPTForCausalLM(OPTPreTrainedModel):
         self.model = OPTModel(config)
 
         # the lm_head weight is automatically tied to the embed tokens weight
-        self.lm_head = nn.Linear(config.word_embed_proj_dim, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.embed_dim, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -827,17 +824,17 @@ class OPTForCausalLM(OPTPreTrainedModel):
 
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
-        self,
-        input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+            self,
+            input_ids: torch.LongTensor = None,
+            attention_mask: Optional[torch.Tensor] = None,
+            head_mask: Optional[torch.Tensor] = None,
+            past_key_values: Optional[List[torch.FloatTensor]] = None,
+            inputs_embeds: Optional[torch.FloatTensor] = None,
+            labels: Optional[torch.LongTensor] = None,
+            use_cache: Optional[bool] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -996,11 +993,11 @@ class OPTForCausalLM(OPTPreTrainedModel):
 class OPTForSequenceClassification(OPTPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
 
-    def __init__(self, config):
+    def __init__(self, config: OPTConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = OPTModel(config)
-        self.score = nn.Linear(config.n_embd, self.num_labels, bias=False)
+        self.score = nn.Linear(config.word_embed_proj_dim, self.num_labels, bias=False)
 
         # Model parallel
         self.model_parallel = False
@@ -1018,19 +1015,17 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
         expected_loss=5.28,
     )
     def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+            self,
+            input_ids: Optional[torch.LongTensor] = None,
+            past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+            attention_mask: Optional[torch.FloatTensor] = None,
+            head_mask: Optional[torch.FloatTensor] = None,
+            inputs_embeds: Optional[torch.FloatTensor] = None,
+            labels: Optional[torch.LongTensor] = None,
+            use_cache: Optional[bool] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
     ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1044,8 +1039,6 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
@@ -1062,7 +1055,7 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
             batch_size, sequence_length = inputs_embeds.shape[:2]
 
         assert (
-            self.config.pad_token_id is not None or batch_size == 1
+                self.config.pad_token_id is not None or batch_size == 1
         ), "Cannot handle batch sizes > 1 if no padding token is defined."
         if self.config.pad_token_id is None:
             sequence_lengths = -1
