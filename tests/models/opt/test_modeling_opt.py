@@ -305,7 +305,7 @@ class OPTModelIntegrationTests(unittest.TestCase):
 
 
 @require_torch
-@slowÏ
+@slow
 class OPTEmbeddingsTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
