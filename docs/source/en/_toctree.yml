@@ -22,7 +22,7 @@
   title: Tutorials
 - sections:
   - local: fast_tokenizers
-    title: "Use tokenizers from 🤗 Tokenizers"
+    title: Use tokenizers from 🤗 Tokenizers
   - local: create_a_model
     title: Create a custom architecture
   - local: custom_models
@@ -94,15 +94,15 @@
   - local: debugging
     title: Debugging
   - local: notebooks
-    title: "🤗 Transformers Notebooks"
+    title: 🤗 Transformers Notebooks
   - local: community
     title: Community
   - local: contributing
     title: How to contribute to transformers?
   - local: add_new_model
-    title: "How to add a model to 🤗 Transformers?"
+    title: How to add a model to 🤗 Transformers?
   - local: add_new_pipeline
-    title: "How to add a pipeline to 🤗 Transformers?"
+    title: How to add a pipeline to 🤗 Transformers?
   - local: testing
     title: Testing
   - local: pr_checks
@@ -254,14 +254,14 @@
       title: GLPN
     - local: model_doc/openai-gpt
       title: GPT
-    - local: model_doc/gpt2
-      title: GPT2
-    - local: model_doc/gptj
-      title: GPT-J
     - local: model_doc/gpt_neo
       title: GPT Neo
     - local: model_doc/gpt_neox
       title: GPT NeoX
+    - local: model_doc/gptj
+      title: GPT-J
+    - local: model_doc/gpt2
+      title: GPT2
     - local: model_doc/groupvit
       title: GroupViT
     - local: model_doc/herbert
