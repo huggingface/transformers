@@ -553,7 +553,6 @@ def _load_state_dict_into_meta_model(
                 # TODO: group all errors and raise at the end.
                 raise ValueError(f"{param_name} doesn't have any device set.")
             param_device = device_map[module_name]
-
         if param_device == "disk":
             offload_index = offload_weight(param, param_name, offload_folder, offload_index)
         elif param_device == "cpu" and state_dict_index is not None:
@@ -1784,6 +1783,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         offload_folder = kwargs.pop("offload_folder", None)
         offload_state_dict = kwargs.pop("offload_state_dict", False)
         load_in_8bit = kwargs.pop("load_in_8bit", False)
+        int8_threshold = kwargs.pop("int8_threshold", None)
 
         if device_map is not None:
             if low_cpu_mem_usage is None:
@@ -1810,6 +1810,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "Using `load_in_8bit=True` requires Accelerate: `pip install accelerate` and the latest version of"
                     " bitsandbytes `pip install bitsandbytes`"
                 )
+            if not int8_threshold:
+                int8_threshold = 6.0
 
         from_pt = not (from_tf | from_flax)
 
@@ -2088,7 +2090,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model = cls(config, *model_args, **model_kwargs)
 
         if load_in_8bit:
-            model = replace_8bit_linear(model)
+            model = replace_8bit_linear(model, threshold=int8_threshold)
 
         if device_map == "auto":
             if model._no_split_modules is None:

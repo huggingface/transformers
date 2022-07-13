@@ -80,11 +80,11 @@ def set_module_8bit_tensor_to_device(module, tensor_name, device, value=None):
             module._parameters[tensor_name] = new_value
 
 
-def replace_8bit_linear(model):
+def replace_8bit_linear(model, threshold=6.0):
 
     for n, module in model.named_children():
         if len(list(module.children())) > 0:
-            replace_8bit_linear(module)
+            replace_8bit_linear(module, threshold)
 
         if isinstance(module, nn.Linear) and n != "lm_head":
             with init_empty_weights():
@@ -93,6 +93,6 @@ def replace_8bit_linear(model):
                     module.out_features,
                     module.bias is not None,
                     has_fp16_weights=False,
-                    threshold=6.0,
+                    threshold=threshold,
                 )
     return model
