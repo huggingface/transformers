@@ -452,6 +452,11 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls="models.xlm_roberta.XLMRobertaOnnxConfig",
         ),
+        "yolos": supported_features_mapping(
+            "default",
+            "object-detection",
+            onnx_config_cls="models.yolos.YolosOnnxConfig",
+        ),
     }
 
     AVAILABLE_FEATURES = sorted(reduce(lambda s1, s2: s1 | s2, (v.keys() for v in _SUPPORTED_MODEL_TYPE.values())))

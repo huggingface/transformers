@@ -164,12 +164,12 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             [
                 {
                     "score": 0.004,
-                    "label": "LABEL_0",
+                    "label": "LABEL_215",
                     "mask": "34eecd16bbfb0f476083ef947d81bf66",
                 },
                 {
                     "score": 0.004,
-                    "label": "LABEL_0",
+                    "label": "LABEL_215",
                     "mask": "34eecd16bbfb0f476083ef947d81bf66",
                 },
             ],
@@ -192,24 +192,24 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
                 [
                     {
                         "score": 0.004,
-                        "label": "LABEL_0",
+                        "label": "LABEL_215",
                         "mask": "34eecd16bbfb0f476083ef947d81bf66",
                     },
                     {
                         "score": 0.004,
-                        "label": "LABEL_0",
+                        "label": "LABEL_215",
                         "mask": "34eecd16bbfb0f476083ef947d81bf66",
                     },
                 ],
                 [
                     {
                         "score": 0.004,
-                        "label": "LABEL_0",
+                        "label": "LABEL_215",
                         "mask": "34eecd16bbfb0f476083ef947d81bf66",
                     },
                     {
                         "score": 0.004,
-                        "label": "LABEL_0",
+                        "label": "LABEL_215",
                         "mask": "34eecd16bbfb0f476083ef947d81bf66",
                     },
                 ],
