@@ -78,8 +78,9 @@ jobs:
             # - run: sudo apt-get install -y python3-pip
             - run: pip install --upgrade pip
             - run: pip uninstall -y torch torchvision torchaudio torch-scatter
-            - run: cd transformers && pip install .[sklearn,torch,sentencepiece,testing,torch-speech]
-            - run: cd transformers && pip install -r examples/pytorch/_tests_requirements.txt
+            - run: ls -l .
+            - run: cd ./transformers && pip install .[sklearn,torch,sentencepiece,testing,torch-speech]
+            - run: cd ./transformers && pip install -r examples/pytorch/_tests_requirements.txt
             - run: pip install -U resampy==0.3.1
             #- run: pip uninstall -y numpy resampy
             #- run: git clone https://github.com/bmcfee/resampy.git && cd resampy && git checkout a36275670f284e8f09d71ef3515dc7513aeba6e6 && pip install -U -e . && cd ..
