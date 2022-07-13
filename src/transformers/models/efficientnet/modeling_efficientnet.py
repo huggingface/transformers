@@ -56,22 +56,43 @@ class EfficientNetCNNBlock(nn.Module):
         return self.act(self.bn(self.conv(x)))
 
 
-class EfficientNetSqueezeExcitationBlock(nn.Module):
-    def __init__(self, in_channels, reduced_dim, config):
-        super().__init__()
-        self.config = config
-        self.in_channels = in_channels
-        self.reduced_dim = reduced_dim
-        self.se = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Conv2d(in_channels, reduced_dim, kernel_size=1),
-            nn.SiLU(),
-            nn.Conv2d(reduced_dim, in_channels, 1),
-            nn.Sigmoid(),
-        )
+class EfficientNetSqueezeExciteBlock(nn.Module):
+    """Squeeze-and-Excitation w/ specific features for EfficientNet/MobileNet family
+    Args:
+        in_chs (int): input channels to layer
+        rd_ratio (float): ratio of squeeze reduction
+        act_layer (nn.Module): activation layer of containing block
+        gate_layer (Callable): attention gate function
+        force_act_layer (nn.Module): override block's activation fn if this is set/bound
+        rd_round_fn (Callable): specify a fn to calculate rounding of reduced chs
+    """
+
+    def __init__(
+        self,
+        in_chs,
+        rd_ratio=0.25,
+        rd_channels=None,
+        act_layer=nn.ReLU,
+        gate_layer=nn.Sigmoid,
+        force_act_layer=None,
+        rd_round_fn=None,
+    ):
+        super(SqueezeExcite, self).__init__()
+        if rd_channels is None:
+            rd_round_fn = rd_round_fn or round
+            rd_channels = rd_round_fn(in_chs * rd_ratio)
+        act_layer = force_act_layer or act_layer
+        self.conv_reduce = nn.Conv2d(in_chs, rd_channels, 1, bias=True)
+        self.act1 = create_act_layer(act_layer, inplace=True)
+        self.conv_expand = nn.Conv2d(rd_channels, in_chs, 1, bias=True)
+        self.gate = create_act_layer(gate_layer)
 
     def forward(self, x):
-        return x * self.se(x)
+        x_se = x.mean((2, 3), keepdim=True)
+        x_se = self.conv_reduce(x_se)
+        x_se = self.act1(x_se)
+        x_se = self.conv_expand(x_se)
+        return x * self.gate(x_se)
 
 
 class EfficientNetSelfOutput(nn.Module):
