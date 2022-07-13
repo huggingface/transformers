@@ -1192,6 +1192,8 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFXLNetMainLayer(config, name="transformer")
         self.lm_loss = TFXLNetLMHead(config, self.transformer.word_embedding, name="lm_loss")
+        # generate fails to convert to a graph with XLNet
+        self.supports_xla_generation = False
 
     def get_lm_head(self):
         return self.lm_loss
@@ -1202,7 +1204,6 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
 
     def prepare_inputs_for_generation(self, inputs, past=None, use_mems=None, **kwargs):
         # Add dummy token at the end (no attention on this one)
-
         effective_batch_size = inputs.shape[0]
         dummy_token = tf.zeros((effective_batch_size, 1), dtype=inputs.dtype)
 
@@ -1212,12 +1213,12 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
         offset = 2
 
         if past:
-            inputs = tf.concat([inputs[:, -offset:], dummy_token], axis=1)
+            input_ids = tf.concat([inputs[:, -offset:], dummy_token], axis=1)
         else:
-            inputs = tf.concat([inputs, dummy_token], axis=1)
+            input_ids = tf.concat([inputs, dummy_token], axis=1)
 
         # Build permutation mask so that previous tokens don't see last token
-        sequence_length = inputs.shape[1]
+        sequence_length = input_ids.shape[1]
         perm_mask = tf.zeros((effective_batch_size, sequence_length, sequence_length - 1))
         perm_mask_seq_end = tf.ones((effective_batch_size, sequence_length, 1))
         perm_mask = tf.concat([perm_mask, perm_mask_seq_end], axis=-1)
@@ -1228,7 +1229,7 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
         target_mapping = tf.concat([target_mapping, target_mapping_seq_end], axis=-1)
 
         inputs = {
-            "input_ids": inputs,
+            "input_ids": input_ids,
             "perm_mask": perm_mask,
             "target_mapping": target_mapping,
             "use_mems": use_mems,

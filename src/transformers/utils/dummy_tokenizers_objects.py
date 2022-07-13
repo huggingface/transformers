@@ -87,6 +87,13 @@ class CLIPTokenizerFast(metaclass=DummyObject):
         requires_backends(self, ["tokenizers"])
 
 
+class CodeGenTokenizerFast(metaclass=DummyObject):
+    _backends = ["tokenizers"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+
 class ConvBertTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
@@ -263,6 +270,13 @@ class MPNetTokenizerFast(metaclass=DummyObject):
 
 
 class MT5TokenizerFast(metaclass=DummyObject):
+    _backends = ["tokenizers"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+
+class MvpTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
     def __init__(self, *args, **kwargs):

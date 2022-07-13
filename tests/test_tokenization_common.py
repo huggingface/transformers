@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
 
 from huggingface_hub import HfFolder, Repository, delete_repo, set_access_token
+from parameterized import parameterized
 from requests.exceptions import HTTPError
 from transformers import (
     AlbertTokenizer,
@@ -578,6 +579,25 @@ class TokenizerTesterMixin:
                 self.assertListEqual(getattr(tokenizer, "additional_special_tokens"), [token_to_test_setters])
                 self.assertListEqual(getattr(tokenizer, "additional_special_tokens_ids"), [token_id_to_test_setters])
 
+    @parameterized.expand([(True,), (False,)])
+    def test_tokenizers_special_tokens_properties_unset(self, verbose):
+        tokenizers = self.get_tokenizers(verbose=verbose)
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                attributes_list = [
+                    "bos_token",
+                    "eos_token",
+                    "unk_token",
+                    "sep_token",
+                    "pad_token",
+                    "cls_token",
+                    "mask_token",
+                    "additional_special_tokens",
+                ]
+                for attr in attributes_list:
+                    setattr(tokenizer, attr, None)
+                    self.assertIsNone(getattr(tokenizer, attr))
+
     def test_save_and_load_tokenizer(self):
         # safety check on max_len default value so we are sure the test works
         tokenizers = self.get_tokenizers()
@@ -970,7 +990,9 @@ class TokenizerTesterMixin:
                 sequence = tokenizer.encode(seq_0, add_special_tokens=False)
                 total_length = len(sequence)
 
-                self.assertGreater(total_length, 4, "Issue with the testing sequence, please update it it's too short")
+                self.assertGreater(
+                    total_length, 4, "Issue with the testing sequence, please update it, it's too short"
+                )
 
                 # Test with max model input length
                 model_max_length = tokenizer.model_max_length
@@ -980,7 +1002,9 @@ class TokenizerTesterMixin:
                 sequence1 = tokenizer(seq_1, add_special_tokens=False)
                 total_length1 = len(sequence1["input_ids"])
                 self.assertGreater(
-                    total_length1, model_max_length, "Issue with the testing sequence, please update it it's too short"
+                    total_length1,
+                    model_max_length,
+                    "Issue with the testing sequence, please update it, it's too short",
                 )
 
                 # Simple

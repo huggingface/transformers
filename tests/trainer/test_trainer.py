@@ -649,14 +649,14 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             # Regular training has n_epochs * len(train_dl) steps
             trainer = get_regression_trainer(learning_rate=0.1, use_ipex=True, bf16=mix_bf16, no_cuda=True)
             train_output = trainer.train()
-            self.assertEqual(train_output.global_step, self.n_epochs * 64 / self.batch_size)
+            self.assertEqual(train_output.global_step, self.n_epochs * 64 / trainer.args.train_batch_size)
 
             # Check passing num_train_epochs works (and a float version too):
             trainer = get_regression_trainer(
                 learning_rate=0.1, num_train_epochs=1.5, use_ipex=True, bf16=mix_bf16, no_cuda=True
             )
             train_output = trainer.train()
-            self.assertEqual(train_output.global_step, int(1.5 * 64 / self.batch_size))
+            self.assertEqual(train_output.global_step, int(1.5 * 64 / trainer.args.train_batch_size))
 
             # If we pass a max_steps, num_train_epochs is ignored
             trainer = get_regression_trainer(
@@ -1249,8 +1249,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer.train(resume_from_checkpoint=os.path.join(tmp_dir, "checkpoint-15"))
             (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
 
-            self.assertAlmostEqual(a, a1, delta=1e-8)
-            self.assertAlmostEqual(b, b1, delta=1e-8)
+            self.assertAlmostEqual(a, a1, delta=1e-5)
+            self.assertAlmostEqual(b, b1, delta=1e-5)
 
         with self.subTest("Test every epoch"):
             config = RegressionModelConfig(a=0, b=2, random_torch=random_torch)
@@ -1274,8 +1274,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer.train(resume_from_checkpoint=os.path.join(tmp_dir, checkpoint_dir))
             (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
 
-            self.assertAlmostEqual(a, a1, delta=1e-8)
-            self.assertAlmostEqual(b, b1, delta=1e-8)
+            self.assertAlmostEqual(a, a1, delta=1e-5)
+            self.assertAlmostEqual(b, b1, delta=1e-5)
 
     @slow
     @require_torch_non_multi_gpu

@@ -227,23 +227,6 @@ class TFT5ModelTester:
         # test that outputs are equal for slice
         tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
 
-    def create_and_check_t5_xla_generate_fast(self, config, input_ids, *args):
-        config.eos_token_id = None  # Generate until max length
-        config.max_length = 10
-        config.do_sample = False
-        config.num_beams = 1
-        model = TFT5ForConditionalGeneration(config=config)
-
-        # make sure there are no pad tokens in prompt
-        input_ids = tf.where(input_ids != config.pad_token_id, input_ids, config.pad_token_id + 5)
-
-        generated = model.generate(input_ids)
-
-        generate_xla = tf.function(model.generate, jit_compile=True)
-        generated_xla = generate_xla(input_ids)
-
-        self.parent.assertListEqual(generated.numpy().tolist(), generated_xla.numpy().tolist())
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (config, input_ids, input_mask, token_labels) = config_and_inputs
@@ -303,10 +286,6 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = (config, input_ids, None, input_mask)
 
         self.model_tester.create_and_check_t5_decoder_model_past_large_inputs(*config_and_inputs)
-
-    def test_t5_model_xla_generate_fast(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_t5_xla_generate_fast(*config_and_inputs)
 
     def test_model_common_attributes(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -595,6 +574,39 @@ class TFT5GenerationIntegrationTests(unittest.TestCase):
         self.assertListEqual(expected_output_string, output_strings)
 
     @slow
+    def test_beam_search_xla_generate_simple(self):
+        model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
+        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+
+        # tests XLA with task specific arguments
+        task_specific_config = getattr(model.config, "task_specific_params", {})
+        translation_config = task_specific_config.get("translation_en_to_fr", {})
+        model.config.update(translation_config)
+
+        # two examples with different lengths to confirm that attention masks are operational in XLA
+        sentences = [
+            model.config.prefix + "Today is a beautiful day.",
+            model.config.prefix + "I have four cats, three dogs, two birds, and a horse.",
+        ]
+        input_ids = tokenizer(sentences, return_tensors="tf", padding=True).input_ids
+
+        xla_generate = tf.function(model.generate, jit_compile=True)
+
+        output_ids = model.generate(input_ids, num_beams=2)
+        output_ids_xla = xla_generate(input_ids, num_beams=2)
+
+        output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        output_strings_xla = tokenizer.batch_decode(output_ids_xla, skip_special_tokens=True)
+
+        expected_output_string = [
+            "Aujourd'hui est une belle journée.",
+            "J'ai quatre chats, trois chiens, deux oiseaux et un cheval.",
+        ]
+
+        self.assertListEqual(expected_output_string, output_strings)
+        self.assertListEqual(expected_output_string, output_strings_xla)
+
+    @slow
     def test_beam_search_generate(self):
         model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
         tokenizer = T5Tokenizer.from_pretrained("t5-small")
@@ -647,9 +659,9 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
         labels = tokenizer("Hi I am", return_tensors="tf").input_ids
 
         loss = model(input_ids, labels=labels).loss
-        mtf_score = -tf.math.reduce_sum(loss).numpy()
+        mtf_score = -tf.math.reduce_mean(loss).numpy()
 
-        EXPECTED_SCORE = -19.0845
+        EXPECTED_SCORE = -4.7710114
         self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
 
     @slow
@@ -673,9 +685,9 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
         labels = tokenizer("Hi I am", return_tensors="tf").input_ids
 
         loss = model(input_ids, labels=labels).loss
-        mtf_score = -tf.math.reduce_sum(loss).numpy()
+        mtf_score = -tf.math.reduce_mean(loss).numpy()
 
-        EXPECTED_SCORE = -59.0293
+        EXPECTED_SCORE = -14.759922
         self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
 
     @slow
@@ -697,9 +709,9 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
         labels = tokenizer("Hi I am", return_tensors="tf").input_ids
 
         loss = model(input_ids, labels=labels).loss
-        mtf_score = -tf.math.reduce_sum(loss).numpy()
+        mtf_score = -tf.math.reduce_mean(loss).numpy()
 
-        EXPECTED_SCORE = -60.7397
+        EXPECTED_SCORE = -7.594554
         self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
 
     @slow
