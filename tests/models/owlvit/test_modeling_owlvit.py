@@ -119,9 +119,7 @@ class OwlViTVisionModelTester:
         with torch.no_grad():
             result = model(pixel_values)
         # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
-        image_size = (self.image_size, self.image_size)
-        patch_size = (self.patch_size, self.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        num_patches = (self.image_size // self.patch_size) ** 2
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, num_patches + 1, self.hidden_size))
 
@@ -183,9 +181,11 @@ class OwlViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip(reason="OWL-ViT does not support training yet")
     def test_training(self):
         pass
 
+    @unittest.skip(reason="OWL-ViT does not support training yet")
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -313,9 +313,11 @@ class OwlViTTextModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip(reason="OWL-ViT does not support training yet")
     def test_training(self):
         pass
 
+    @unittest.skip(reason="OWL-ViT does not support training yet")
     def test_training_gradient_checkpointing(self):
         pass
 

@@ -46,7 +46,7 @@ The [`OwlViTFeatureExtractor`] can be used to resize (or rescale) and normalize 
 
 >>> outputs = model(**inputs)
 >>> logits = outputs["logits"]  # Prediction logits of shape [batch_size, num_patches, num_max_text_queries]
->>> boxes = outputs["pred_boxes"]  # Object box boundaries of shape # [batch_size, num_patches, 4]
+>>> boxes = outputs["pred_boxes"]  # Object box boundaries of shape [batch_size, num_patches, 4]
 
 >>> batch_size = boxes.shape[0]
 >>> for i in range(batch_size):  # Loop over sets of images and text queries

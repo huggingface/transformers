@@ -64,14 +64,14 @@ class OwlViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin
             Desired output size when applying center-cropping. Only has an effect if `do_center_crop` is set to `True`.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to normalize the input with `image_mean` and `image_std`.
-        image_mean (`List[int]`, defaults to `[0.485, 0.456, 0.406]`):
+        image_mean (`List[int]`, *optional*, defaults to `[0.485, 0.456, 0.406]`):
             The sequence of means for each channel, to be used when normalizing images.
-        image_std (`List[int]`, defaults to `[0.229, 0.224, 0.225]`):
+        image_std (`List[int]`, *optional*, defaults to `[0.229, 0.224, 0.225]`):
             The sequence of standard deviations for each channel, to be used when normalizing images.
-        rescale (`bool`, defaults to `True`):
+        rescale (`bool`, *optional*, defaults to `True`):
             Whether or not to rescale input images to between 0-1 range. `PIL.Image.Image` inputs are automatically
             scaled.
-        do_convert_rgb (`bool`, defaults to `True`):
+        do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether or not to convert `PIL.Image.Image` into `RGB` format.
     """
 
@@ -207,8 +207,6 @@ class OwlViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin
                 images = [image.astype(np.float32) / 255.0 for image in images]
             elif is_torch_tensor(images[0]):
                 images = [image.to(torch.float32) / 255.0 for image in images]
-            else:
-                pass
 
         # transformations (convert rgb + resizing + center cropping + normalization)
         if self.do_convert_rgb:

@@ -540,7 +540,6 @@ class OwlViTEncoder(nn.Module):
 
     def __init__(self, config: OwlViTConfig):
         super().__init__()
-        self.config = config
         self.layers = nn.ModuleList([OwlViTEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
@@ -588,7 +587,7 @@ class OwlViTEncoder(nn.Module):
         all_attentions = () if output_attentions else None
 
         hidden_states = inputs_embeds
-        for idx, encoder_layer in enumerate(self.layers):
+        for encoder_layer in self.layers:
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             if self.gradient_checkpointing and self.training:
@@ -631,7 +630,6 @@ class OwlViTEncoder(nn.Module):
 class OwlViTTextTransformer(nn.Module):
     def __init__(self, config: OwlViTTextConfig):
         super().__init__()
-        self.config = config
         embed_dim = config.hidden_size
         self.embeddings = OwlViTTextEmbeddings(config)
         self.encoder = OwlViTEncoder(config)
