@@ -579,8 +579,8 @@ class DataCollatorForSeq2Seq:
                     np_input_ids.shape[0] != 1
                 ), f"""
                 Feature shape cannot be collated: expected shape=( > 1, ... ), found shape={str(np_input_ids.shape)}.
-                You may want to remove excessively nested layers from your features. Or simply wrap you `DatasetDict`
-                with `remove_excess_nesting` function from `transformers.utils.generic`.
+                You may want to remove excessively nested layers from your features. Or if using the `datasets` library
+                with `DatasetDict` simply use the `remove_excess_nesting` method.
                 """
 
                 remainder = [self.label_pad_token_id] * (max_label_length - len(feature["labels"]))

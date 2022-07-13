@@ -325,22 +325,3 @@ def flatten_dict(d: MutableMapping, parent_key: str = "", delimiter: str = "."):
                 yield key, v
 
     return dict(_flatten_dict(d, parent_key, delimiter))
-
-
-def remove_excess_nesting(dataset):
-    """
-    Flattens any leading dimensions of shape 1 for all features in the dataset.
-    """
-
-    def clean_row_nesting(row):
-        row_keys = row.keys()
-        for key in row_keys:
-            arr = np.array(row[key])
-            for _ in range(arr.ndim - 1):
-                arr = arr[0] if arr.shape[0] == 1 else arr
-            row[key] = arr.tolist()
-        return row
-
-    claned_dataset = dataset.map(clean_row_nesting)
-
-    return claned_dataset
