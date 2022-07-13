@@ -3029,7 +3029,6 @@ if TYPE_CHECKING:
     from .models.time_series_transformer import (
         TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TimeSeriesTransformerConfig,
-        TimeSeriesTransformerTokenizer,
     )
     from .models.trajectory_transformer import (
         TRAJECTORY_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -3253,7 +3252,6 @@ if TYPE_CHECKING:
         from .models.splinter import SplinterTokenizerFast
         from .models.squeezebert import SqueezeBertTokenizerFast
         from .models.t5 import T5TokenizerFast
-        from .models.time_series_transformer import TimeSeriesTransformerTokenizerFast
         from .models.xglm import XGLMTokenizerFast
         from .models.xlm_roberta import XLMRobertaTokenizerFast
         from .models.xlnet import XLNetTokenizerFast
@@ -3404,6 +3402,8 @@ if TYPE_CHECKING:
         )
         from .generation_utils import top_k_top_p_filtering
         from .modeling_utils import PreTrainedModel
+
+        # PyTorch model imports
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlbertForMaskedLM,
