@@ -2,10 +2,11 @@ import inspect
 import unittest
 import torch
 from torch.fx.experimental.migrate_gradual_types.transform_to_z3 import transform_all_constraints
-from torch.fx.experimental.migrate_gradual_types.z3_types import tensor_type
+from torch.fx.experimental.migrate_gradual_types.z3_types import tensor_type, D
 from torch.fx.passes.shape_prop import ShapeProp
 from torch.fx import GraphModule
 from enum import Enum
+
 from src.transformers import *
 import src.transformers.utils.fx as fx
 import z3
@@ -156,7 +157,25 @@ class HFModels(unittest.TestCase):
         self.assertEqual(s.check(), z3.sat)
         layer_norm = z3.Const(82, tensor_type)
 
-        # the first dimension is lost due to view
+        # we annotated the first dimension of the input with Dyn but the first dimension is lost due to view anyway.
         self.assertEqual(s.model()[layer_norm].arg(0).arg(0), 0)
         self.assertEqual(s.model()[layer_norm].arg(1).arg(1), layer_norm_size[1])
         self.assertEqual(s.model()[layer_norm].arg(2).arg(1), layer_norm_size[2])
+
+        # we can also consider different dimensions for the input after we trace
+        # first we can check if the input could be 2
+        input = z3.Const(1, tensor_type)
+
+        s1, s2, s3, s4 = z3.Ints('s1 s2 s3 s4')
+
+        s.add(input == tensor_type.tensor2(D(s1, s2), D(s3, s4)))
+
+        # we want the second input to not be dyn so we change
+        # the first parameter to not equal 0 and we will get one satisfying assignment
+        # by looking at s.model()
+        s.add(s1 != 0)
+        self.assertEqual(s.check(), z3.sat)
+
+        # we can also check a particular assignment
+        s.add(s2 == 4)
+        self.assertEqual(s.check(), z3.sat)
