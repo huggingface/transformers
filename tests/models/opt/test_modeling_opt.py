@@ -96,7 +96,7 @@ class OPTModelTester:
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.embed_dim = embed_dim
-        self.num_labels=num_labels
+        self.num_labels = num_labels
         self.type_sequence_label_size = type_sequence_label_size
         self.word_embed_proj_dim = word_embed_proj_dim
         self.is_encoder_decoder = False
@@ -174,6 +174,7 @@ class OPTModelTester:
 
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
 
 @require_torch
 class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
