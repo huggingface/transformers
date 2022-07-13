@@ -23,7 +23,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 from .debug_utils import DebugOption
-from .integrations import get_torchdynamo_ctx
 from .trainer_utils import (
     EvaluationStrategy,
     FSDPOption,
