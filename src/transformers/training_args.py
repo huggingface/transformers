@@ -42,10 +42,8 @@ from .utils import (
     is_torch_available,
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
-    is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
-    is_torchdynamo_available,
     logging,
     torch_required,
 )
@@ -1220,13 +1218,6 @@ class TrainingArguments:
                 f"{self.hub_model_id}).",
                 FutureWarning,
             )
-
-        if self.torchdynamo:
-            if not is_torchdynamo_available():
-                raise RuntimeError("Torchdynamo is not installed.")
-            self.ctx_manager_torchdynamo = get_torchdynamo_ctx(self.torchdynamo)
-        else:
-            self.ctx_manager_torchdynamo = contextlib.nullcontext()
 
     def __str__(self):
         self_as_dict = asdict(self)

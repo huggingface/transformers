@@ -1015,28 +1015,3 @@ def get_reporting_integration_callbacks(report_to):
                 f"{integration} is not supported, only {', '.join(INTEGRATION_TO_CALLBACK.keys())} are supported."
             )
     return [INTEGRATION_TO_CALLBACK[integration] for integration in report_to]
-
-
-def get_torchdynamo_ctx(torchdynamo_str):
-    import torchdynamo
-    from torchdynamo.optimizations import backends
-    from torchdynamo.optimizations.training import aot_autograd_speedup_strategy
-
-    def get_ctx():
-        # Normal
-        if torchdynamo_str == "eager":
-            return torchdynamo.optimize("eager")
-        elif torchdynamo_str == "nvfuser":
-            return torchdynamo.optimize(aot_autograd_speedup_strategy)
-        # TensorRT
-        if torchdynamo_str in ["fx2trt-fp16", "fx2trt"]:
-            if not is_torch_tensorrt_fx_available():
-                raise RuntimeError("Torch-TensorRT FX path is not installed.")
-            if torchdynamo_str == "fx2trt-fp16":
-                return torchdynamo.optimize(backends.fx2trt_compiler_fp16)
-            elif torchdynamo_str == "fx2trt":
-                return torchdynamo.optimize(backends.fx2trt_compiler)
-        else:
-            raise RuntimeError(f"Torchdynamo backend {torchdynamo_str} is not supported.")
-
-    return get_ctx()

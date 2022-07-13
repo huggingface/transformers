@@ -142,6 +142,8 @@ from .utils import (
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_torch_tpu_available,
+    is_torchdynamo_available,
+    is_torch_tensorrt_fx_available,
     logging,
 )
 from .utils.generic import ContextManagers
@@ -596,6 +598,35 @@ class Trainer:
 
         # very last
         self._memory_tracker.stop_and_update_metrics()
+
+        # torchdynamo
+        if self.args.torchdynamo:
+            if not is_torchdynamo_available():
+                raise RuntimeError("Torchdynamo is not installed.")
+            import torchdynamo
+            from torchdynamo.optimizations import backends
+            from torchdynamo.optimizations.training import aot_autograd_speedup_strategy
+
+            def get_ctx():
+                # Normal
+                if self.args.torchdynamo == "eager":
+                    return torchdynamo.optimize("eager")
+                elif self.args.torchdynamo == "nvfuser":
+                    return torchdynamo.optimize(aot_autograd_speedup_strategy)
+                # TensorRT
+                if self.args.torchdynamo in ["fx2trt-fp16", "fx2trt"]:
+                    if not is_torch_tensorrt_fx_available():
+                        raise RuntimeError("Torch-TensorRT FX path is not installed.")
+                    if self.args.torchdynamo == "fx2trt-fp16":
+                        return torchdynamo.optimize(backends.fx2trt_compiler_fp16)
+                    elif self.args.torchdynamo == "fx2trt":
+                        return torchdynamo.optimize(backends.fx2trt_compiler)
+                else:
+                    raise RuntimeError(f"Torchdynamo backend {self.args.torchdynamo} is not supported.")
+
+            self.ctx_manager_torchdynamo = get_ctx()
+        else:
+            self.ctx_manager_torchdynamo = contextlib.nullcontext()
 
     def add_callback(self, callback):
         """
@@ -2290,7 +2321,7 @@ class Trainer:
         """
         A helper wrapper that creates an appropriate context manager for `torchdynamo`.
         """
-        return self.args.ctx_manager_torchdynamo
+        return self.ctx_manager_torchdynamo
 
     def autocast_smart_context_manager(self):
         """
