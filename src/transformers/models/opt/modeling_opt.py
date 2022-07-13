@@ -1012,7 +1012,7 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
     @add_start_docstrings_to_model_forward(OPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="microsoft/DialogRPT-updown",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
         expected_output="'LABEL_0'",
