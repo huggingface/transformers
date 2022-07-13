@@ -175,6 +175,39 @@ class OwlViTProcessorTest(unittest.TestCase):
         with pytest.raises(ValueError):
             processor()
 
+    def test_processor_with_text_list(self):
+        model_name = "adirik/owlvit-base-patch32"
+        processor = OwlViTProcessor.from_pretrained(model_name)
+
+        input_text = ["cat", "nasa badge"]
+        inputs = processor(text=input_text)
+
+        seq_length = 16
+        self.assertListEqual(list(inputs.keys()), ["input_ids", "attention_mask"])
+        self.assertEqual(inputs["input_ids"].shape, (2, seq_length))
+
+        # test if it raises when no input is passed
+        with pytest.raises(ValueError):
+            processor()
+
+    def test_processor_with_nestedt_text_list(self):
+        model_name = "adirik/owlvit-base-patch32"
+        processor = OwlViTProcessor.from_pretrained(model_name)
+
+        input_texts = [["cat", "nasa badge"], ["person"]]
+        inputs = processor(text=input_texts)
+
+        seq_length = 16
+        batch_size = len(input_texts)
+        num_max_text_queries = max([len(texts) for texts in input_texts])
+
+        self.assertListEqual(list(inputs.keys()), ["input_ids", "attention_mask"])
+        self.assertEqual(inputs["input_ids"].shape, (batch_size * num_max_text_queries, seq_length))
+
+        # test if it raises when no input is passed
+        with pytest.raises(ValueError):
+            processor()
+
     def test_tokenizer_decode(self):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()

@@ -80,7 +80,7 @@ class OwlViTProcessor(ProcessorMixin):
 
         if text is not None:
             if isinstance(text, str) or (isinstance(text, List) and not isinstance(text[0], List)):
-                encodings = [self.tokenizer(text, return_tensors=return_tensors, **kwargs)]
+                encodings = [self.tokenizer(text, padding="max_length", return_tensors=return_tensors, **kwargs)]
 
             elif isinstance(text, List) and isinstance(text[0], List):
                 encodings = []
@@ -93,9 +93,8 @@ class OwlViTProcessor(ProcessorMixin):
                     if len(t) != max_num_queries:
                         t = t + [" "] * (max_num_queries - len(t))
 
-                    encoding = self.tokenizer(t, return_tensors=return_tensors, **kwargs)
+                    encoding = self.tokenizer(t, padding="max_length", return_tensors=return_tensors, **kwargs)
                     encodings.append(encoding)
-
             else:
                 raise TypeError("Input text should be a string, a list of strings or a nested list of strings")
 

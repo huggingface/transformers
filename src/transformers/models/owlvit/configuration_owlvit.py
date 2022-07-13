@@ -111,15 +111,15 @@ class OwlViTTextConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
-        self.dropout = dropout
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.max_position_embeddings = max_position_embeddings
-        self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
+        self.layer_norm_eps = layer_norm_eps
+        self.dropout = dropout
+        self.attention_dropout = attention_dropout
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
-        self.attention_dropout = attention_dropout
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -214,16 +214,16 @@ class OwlViTVisionConfig(PretrainedConfig):
 
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
-        self.dropout = dropout
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.patch_size = patch_size
         self.image_size = image_size
+        self.patch_size = patch_size
+        self.hidden_act = hidden_act
+        self.layer_norm_eps = layer_norm_eps
+        self.dropout = dropout
+        self.attention_dropout = attention_dropout
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
-        self.attention_dropout = attention_dropout
-        self.layer_norm_eps = layer_norm_eps
-        self.hidden_act = hidden_act
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -270,12 +270,12 @@ class OwlViTConfig(PretrainedConfig):
     is_composition = True
 
     def __init__(
-        self, 
-        text_config=None, 
-        vision_config=None, 
-        projection_dim=512, 
-        logit_scale_init_value=2.6592, 
-        return_dict = True,
+        self,
+        text_config=None,
+        vision_config=None,
+        projection_dim=512,
+        logit_scale_init_value=2.6592,
+        return_dict=True,
         **kwargs
     ):
         super().__init__(text_config=text_config, vision_config=vision_config, **kwargs)
