@@ -85,7 +85,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         Example:
 
     ```python
-    >>> from transformers import TimeSeriesTransformerModel, TimeSeriesTransformerConfig
+    >>> from transformers import TimeSeriesTransformerConfig, TimeSeriesTransformerModel
 
     >>> # Initializing a TimeSeriesTransformer huggingface/tst-ett style configuration
     >>> configuration = TimeSeriesTransformerConfig()
