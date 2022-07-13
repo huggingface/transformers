@@ -1155,17 +1155,22 @@ class OwlViTImageTextEmbedder(nn.Module):
         pixel_values: Optional[torch.FloatTensor] = None,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
     ) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
 
         image_embeds, text_embeds = None, None
 
         # Encode text
         if input_ids is not None:
-            text_embeds = self.clip.get_text_features(input_ids=input_ids, attention_mask=attention_mask)
+            text_embeds = self.clip.get_text_features(
+                input_ids=input_ids, attention_mask=attention_mask, output_attentions=output_attentions
+            )
 
         # Encode image
         if pixel_values is not None:
-            image_embeds = self.clip.get_image_features(pixel_values, return_projected=False)
+            image_embeds = self.clip.get_image_features(
+                pixel_values, return_projected=False, output_attentions=output_attentions
+            )
 
             # Resize class token
             new_size = tuple(np.array(image_embeds.shape) - np.array((0, 1, 0)))
@@ -1268,9 +1273,13 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         return (pred_logits, image_class_embeds)
 
-    def image_embedder(self, pixel_values: torch.FloatTensor) -> torch.FloatTensor:
+    def image_embedder(
+        self,
+        pixel_values: torch.FloatTensor,
+        output_attentions: Optional[bool] = None,
+    ) -> torch.FloatTensor:
         # Returns a 2D map of image features.
-        (image_embeds, _) = self.embedder(pixel_values=pixel_values)
+        (image_embeds, _) = self.embedder(pixel_values=pixel_values, output_attentions=output_attentions)
 
         # Resize to [batch_size, num_patches, num_patches, hidden_size]
         new_size = (
@@ -1287,10 +1296,13 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         self,
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor,
+        output_attentions: Optional[bool] = None,
     ) -> torch.FloatTensor:
 
         # Returns text embeddings
-        (_, text_feats) = self.embedder(input_ids=input_ids, attention_mask=attention_mask)
+        (_, text_feats) = self.embedder(
+            input_ids=input_ids, attention_mask=attention_mask, output_attentions=output_attentions
+        )
 
         return text_feats
 
@@ -1301,6 +1313,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         pixel_values: torch.FloatTensor,
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> OwlViTObjectDetectionOutput:
         r"""
@@ -1329,13 +1343,17 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         ...     scores = torch.sigmoid(logits.values)
         ...     labels = logits.indices
         ```"""
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
         # Embed images
-        feature_map = self.image_embedder(pixel_values)
+        feature_map = self.image_embedder(pixel_values=pixel_values, output_attentions=output_attentions)
         batch_size, height, width, hidden_dim = feature_map.shape
         image_feats = torch.reshape(feature_map, (batch_size, height * width, hidden_dim))
 
         # Embed text queries
-        query_embeds = self.text_embedder(input_ids, attention_mask)
+        query_embeds = self.text_embedder(
+            input_ids=input_ids, attention_mask=attention_mask, output_attentions=output_attentions
+        )
 
         # Reshape from [batch_size * max_text_queries, hidden_dim] -> [batch_size, max_text_queries, hidden_dim]
         max_text_queries = input_ids.shape[0] // batch_size
@@ -1350,8 +1368,6 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         # Predict object boxes
         pred_boxes = self.box_predictor(image_feats, feature_map)
-
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if not return_dict:
             return (pred_logits, pred_boxes, query_embeds, feature_map, class_embeds)
