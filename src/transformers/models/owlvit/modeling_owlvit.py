@@ -1353,6 +1353,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         # Predict object boxes
         pred_boxes = self.box_predictor(image_feats, feature_map)
 
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
         if not return_dict:
             return (pred_logits, pred_boxes, query_embeds, feature_map, class_embeds)
 
