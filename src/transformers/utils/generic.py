@@ -24,7 +24,6 @@ from enum import Enum
 from typing import Any, ContextManager, List, Tuple
 
 import numpy as np
-from datasets.dataset_dict import DatasetDict
 
 from .import_utils import is_flax_available, is_tf_available, is_torch_available, is_torch_fx_proxy
 
@@ -328,7 +327,7 @@ def flatten_dict(d: MutableMapping, parent_key: str = "", delimiter: str = "."):
     return dict(_flatten_dict(d, parent_key, delimiter))
 
 
-def remove_excess_nesting(dataset: DatasetDict) -> DatasetDict:
+def remove_excess_nesting(dataset):
     """
     Flattens any leading dimensions of shape 1 for all features in the dataset.
     """
