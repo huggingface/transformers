@@ -128,7 +128,7 @@ You will need basic `git` proficiency to be able to contribute to
 manual. Type `git --help` in a shell and enjoy. If you prefer books, [Pro
 Git](https://git-scm.com/book/en/v2) is a very good reference.
 
-Follow these steps to start contributing ([supported versions](https://github.com/huggingface/transformers/blob/fcefa200b2d9636d98fd21ea3b176a09fe801c29/setup.py#L426)):
+Follow these steps to start contributing ([supported Python versions](https://github.com/huggingface/transformers/blob/main/setup.py#L426)):
 
 1. Fork the [repository](https://github.com/huggingface/transformers) by
    clicking on the 'Fork' button on the repository's page. This creates a copy of the code
