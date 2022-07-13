@@ -32,7 +32,7 @@ from ...test_modeling_common import ModelTesterMixin, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import GPT2Tokenizer, OPTForCausalLM, OPTModel
+    from transformers import GPT2Tokenizer, OPTForCausalLM, OPTForSequenceClassification, OPTModel
 
 
 def prepare_opt_inputs_dict(
@@ -172,10 +172,20 @@ class OPTModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
+    def create_and_check_opt_for_sequence_classification(
+        self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
+    ):
+        config.num_labels = self.num_labels
+        model = OPTForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
 
 @require_torch
 class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (OPTModel, OPTForCausalLM) if is_torch_available() else ()
+    all_model_classes = (OPTModel, OPTForCausalLM,OPTForSequenceClassification) if is_torch_available() else ()
     all_generative_model_classes = (OPTForCausalLM,) if is_torch_available() else ()
     is_encoder_decoder = False
     fx_compatible = True
