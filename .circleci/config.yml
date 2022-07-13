@@ -79,16 +79,16 @@ jobs:
             - run: pip install --upgrade pip
             - run: pip uninstall -y torch torchvision torchaudio torch-scatter
             - run: pwd
-            - run: ls -l .
-            - run: cd ./transformers && pip install .[sklearn,torch,sentencepiece,testing,torch-speech]
-            - run: cd ./transformers && pip install -r examples/pytorch/_tests_requirements.txt
+            - run: ls -l /root/transformers
+            - run: cd /root/transformers && pip install .[sklearn,torch,sentencepiece,testing,torch-speech]
+            - run: cd /root/transformers && pip install -r examples/pytorch/_tests_requirements.txt
             - run: pip install -U resampy==0.3.1
             #- run: pip uninstall -y numpy resampy
             #- run: git clone https://github.com/bmcfee/resampy.git && cd resampy && git checkout a36275670f284e8f09d71ef3515dc7513aeba6e6 && pip install -U -e . && cd ..
             - run: pip install -U numpy==1.21.6
             - run: pip freeze
             - run: |
-                    cd transformers && python3 -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/test_pytorch_examples.py -k "(test_run_audio_classification or test_run_clm)"
+                    cd /root/transformers && python3 -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/test_pytorch_examples.py -k "(test_run_audio_classification or test_run_clm)"
 
 workflow_filters: &workflow_filters
     filters:
