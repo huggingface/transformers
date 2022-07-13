@@ -241,7 +241,7 @@ class TFDeiTModelTest(TFModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in TF_DEIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFDeiTModel.from_pretrained(model_name, from_pt=True)
+            model = TFDeiTModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
@@ -264,9 +264,7 @@ class DeiTModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head(self):
-        model = TFDeiTForImageClassificationWithTeacher.from_pretrained(
-            "facebook/deit-base-distilled-patch16-224", from_pt=True
-        )
+        model = TFDeiTForImageClassificationWithTeacher.from_pretrained("facebook/deit-base-distilled-patch16-224")
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
