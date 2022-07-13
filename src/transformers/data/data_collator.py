@@ -21,7 +21,6 @@ from typing import Any, Callable, Dict, List, NewType, Optional, Tuple, Union
 from ..models.bert import BertTokenizer, BertTokenizerFast
 from ..tokenization_utils_base import PreTrainedTokenizerBase
 from ..utils import PaddingStrategy
-from ..utils.generic import remove_excess_nesting
 
 
 InputDataClass = NewType("InputDataClass", Any)
@@ -559,8 +558,8 @@ class DataCollatorForSeq2Seq:
         import numpy as np
 
         if return_tensors is None:
-            return_tensors = self.return_tensors
-        labels = [remove_excess_nesting(feature["labels"]) for feature in features] if "labels" in features[0].keys() else None
+            return_tensors = self.return_tensors            
+        labels = [feature["labels"] for feature in features] if "labels" in features[0].keys() else None
         # We have to pad the labels before calling `tokenizer.pad` as this method won't pad them and needs them of the
         # same length to return tensors.
         if labels is not None:
@@ -574,7 +573,14 @@ class DataCollatorForSeq2Seq:
 
             padding_side = self.tokenizer.padding_side
             for feature in features:
-                feature["labels"] = remove_excess_nesting(feature["labels"])
+
+                np_input_ids = np.array(feature["input_ids"])
+                assert np_input_ids.shape[0] != 1, f"""
+                Feature shape cannot be collated: expected shape=( > 1, ... ), found shape={str(np_input_ids.shape)}.
+                You may want to remove excessively nested layers from your features.
+                Or simply wrap you `DatasetDict` with `remove_excess_nesting` function from `transformers.utils.generic`.
+                """
+
                 remainder = [self.label_pad_token_id] * (max_label_length - len(feature["labels"]))
                 if isinstance(feature["labels"], list):
                     feature["labels"] = (
