@@ -22,9 +22,9 @@ from contextlib import ExitStack
 from dataclasses import fields
 from enum import Enum
 from typing import Any, ContextManager, List, Tuple
-from datasets.dataset_dict import DatasetDict
 
 import numpy as np
+from datasets.dataset_dict import DatasetDict
 
 from .import_utils import is_flax_available, is_tf_available, is_torch_available, is_torch_fx_proxy
 
@@ -330,14 +330,14 @@ def flatten_dict(d: MutableMapping, parent_key: str = "", delimiter: str = "."):
 
 def remove_excess_nesting(dataset: DatasetDict) -> DatasetDict:
     """
-    Flattens any leading dimensions of shape 1 for all features 
-    in the dataset.
+    Flattens any leading dimensions of shape 1 for all features in the dataset.
     """
+
     def clean_row_nesting(row):
         row_keys = row.keys()
         for key in row_keys:
             arr = np.array(row[key])
-            for _ in range(arr.ndim-1):
+            for _ in range(arr.ndim - 1):
                 arr = arr[0] if arr.shape[0] == 1 else arr
             row[key] = arr.tolist()
         return row

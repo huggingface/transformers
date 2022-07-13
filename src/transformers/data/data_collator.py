@@ -558,7 +558,7 @@ class DataCollatorForSeq2Seq:
         import numpy as np
 
         if return_tensors is None:
-            return_tensors = self.return_tensors            
+            return_tensors = self.return_tensors
         labels = [feature["labels"] for feature in features] if "labels" in features[0].keys() else None
         # We have to pad the labels before calling `tokenizer.pad` as this method won't pad them and needs them of the
         # same length to return tensors.
@@ -575,10 +575,12 @@ class DataCollatorForSeq2Seq:
             for feature in features:
 
                 np_input_ids = np.array(feature["input_ids"])
-                assert np_input_ids.shape[0] != 1, f"""
+                assert (
+                    np_input_ids.shape[0] != 1
+                ), f"""
                 Feature shape cannot be collated: expected shape=( > 1, ... ), found shape={str(np_input_ids.shape)}.
-                You may want to remove excessively nested layers from your features.
-                Or simply wrap you `DatasetDict` with `remove_excess_nesting` function from `transformers.utils.generic`.
+                You may want to remove excessively nested layers from your features. Or simply wrap you `DatasetDict`
+                with `remove_excess_nesting` function from `transformers.utils.generic`.
                 """
 
                 remainder = [self.label_pad_token_id] * (max_label_length - len(feature["labels"]))
