@@ -1312,7 +1312,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         ```python
         >>> import requests
         >>> from PIL import Image
-        >>> import torch.nn as nn
+        >>> import torch
         >>> from transformers import OwlViTProcessor, OwlViTForObjectDetection
 
         >>> model = OwlViTModel.from_pretrained("adirik/owlvit-base-patch32")
@@ -1321,13 +1321,14 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> inputs = processor(text=[["a photo of a cat", "a photo of a dog"]], images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
-        >>> logits = outputs.logits  # Prediction logits of shape [batch_size, num_patches, 4]
-        >>> boxes = outputs.boxes  # Object box boundaries of shape # [batch_size, num_patches, 4]
+        >>> logits = outputs["logits"]  # Prediction logits of shape [batch_size, num_patches, num_max_text_queries]
+        >>> boxes = outputs["pred_boxes"]  # Object box boundaries of shape # [batch_size, num_patches, 4]
 
+        >>> batch_size = boxes.shape[0]
         >>> for i in range(batch_size):  # Loop over sets of images and text queries
         ...     boxes = outputs["pred_boxes"][i]
-        ...     logits = outputs["logits"][i]
-        ...     scores = nn.functional.sigmoid(torch.max(logits, dim=-1).values)
+        ...     logits = torch.max(outputs["logits"][0], dim=-1)
+        ...     scores = torch.sigmoid(logits.values)
         ...     labels = logits.indices
         ```"""
         # Embed images

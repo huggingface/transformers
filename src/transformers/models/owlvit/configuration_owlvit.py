@@ -270,7 +270,13 @@ class OwlViTConfig(PretrainedConfig):
     is_composition = True
 
     def __init__(
-        self, text_config=None, vision_config=None, projection_dim=512, logit_scale_init_value=2.6592, **kwargs
+        self, 
+        text_config=None, 
+        vision_config=None, 
+        projection_dim=512, 
+        logit_scale_init_value=2.6592, 
+        return_dict = True,
+        **kwargs
     ):
         super().__init__(text_config=text_config, vision_config=vision_config, **kwargs)
 
@@ -287,6 +293,7 @@ class OwlViTConfig(PretrainedConfig):
 
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
+        self.return_dict = return_dict
         self.initializer_factor = 1.0
 
     @classmethod
