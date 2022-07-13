@@ -24,9 +24,11 @@ import warnings
 from typing import Any, Callable, Dict, List, Optional, Type, Union
 
 import torch
+import z3
 from packaging import version
 from torch import nn
 from torch.fx import Graph, GraphModule, Proxy, Tracer
+from torch.fx.experimental.migrate_gradual_types.transform_to_z3 import evaluate_conditional_with_constraints
 from torch.fx.proxy import ParameterProxy
 
 from .. import PretrainedConfig, PreTrainedModel, logging
@@ -547,9 +549,25 @@ class HFProxy(Proxy):
         return super().__len__()
 
     def __bool__(self):
-        if hasattr(self, "_metadata") and self._metadata is not None:
-            return self._metadata
-        return super().__bool__()
+        positive, negative = evaluate_conditional_with_constraints(self.tracer.root, self.node.graph, self.node)
+        # print(positive)
+        # print(negative)
+
+        # if hasattr(self, "_metadata") and self._metadata is not None:
+        #     print(self._metadata)
+        #     print('\n')
+            # return self._metadata
+        #
+        # return super().__bool__()
+
+        if positive == z3.sat and negative == z3.unsat:
+            return True
+        elif positive == z3.unsat and negative == z3.sat:
+            return False
+        else:
+            raise RuntimeError('Not enough information')
+
+
 
     def __getattr__(self, k):
         if k == "_metadata":
@@ -930,7 +948,9 @@ class HFTracer(Tracer):
                     node.args = ()
                     # Without this, torch.jit.script fails because the inputs type is Optional[torch.Tensor].
                     # It cannot infer on the attributes and methods the input should have, and fails.
-                    node.type = torch.Tensor
+
+                    # we comment this out since it modifies our gradual type annotation
+                    # node.type = torch.Tensor
                 # It is a concrete arg so it is not used and should be removed.
                 else:
                     if hasattr(torch.fx._symbolic_trace, "_assert_is_none"):
