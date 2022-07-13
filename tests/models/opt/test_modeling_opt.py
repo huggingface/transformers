@@ -185,7 +185,7 @@ class OPTModelTester:
 
 @require_torch
 class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (OPTModel, OPTForCausalLM,OPTForSequenceClassification) if is_torch_available() else ()
+    all_model_classes = (OPTModel, OPTForCausalLM, OPTForSequenceClassification) if is_torch_available() else ()
     all_generative_model_classes = (OPTForCausalLM,) if is_torch_available() else ()
     is_encoder_decoder = False
     fx_compatible = True
