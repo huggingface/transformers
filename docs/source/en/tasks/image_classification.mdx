@@ -95,7 +95,7 @@ Create a preprocessing function that will apply the transforms and return the `p
 ...     return examples
 ```
 
-Use 🤗 Dataset's [`with_transform`](https://huggingface.co/docs/datasets/package_reference/main_classes.html?#datasets.Dataset.with_transform) method to apply the transforms over the entire dataset. The transforms are applied on-the-fly when you load an element of the dataset:
+Use 🤗 Dataset's [`~datasets.Dataset.with_transform`] method to apply the transforms over the entire dataset. The transforms are applied on-the-fly when you load an element of the dataset:
 
 ```py
 >>> food = food.with_transform(transforms)

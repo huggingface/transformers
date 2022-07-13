@@ -584,6 +584,7 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
             model = LongT5Model.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    @slow
     def test_export_to_onnx(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         model = LongT5Model(config_and_inputs[0]).to(torch_device)
