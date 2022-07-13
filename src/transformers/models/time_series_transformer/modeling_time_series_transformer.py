@@ -56,7 +56,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "huggingface/tst-ett"
 _CONFIG_FOR_DOC = "TimeSeriesTransformerConfig"
-_TOKENIZER_FOR_DOC = "TimeSeriesTransformerTokenizer"
 
 
 TIME_SERIES_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -1096,34 +1095,34 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
     def __init__(self, config: TimeSeriesTransformerConfig):
         super().__init__(config)
 
-        if self.config.scaling:
+        if config.scaling:
             self.scaler = MeanScaler(dim=1, keepdim=True)
         else:
             self.scaler = NOPScaler(dim=1, keepdim=True)
 
         self.embedder = FeatureEmbedder(
-            cardinalities=self.config.cardinality,
-            embedding_dims=self.config.embedding_dimension,
+            cardinalities=config.cardinality,
+            embedding_dims=config.embedding_dimension,
         )
 
-        self.d_model = self.config.input_size * len(self.config.lags_seq) + self._number_of_features
+        self.d_model = config.input_size * len(config.lags_seq) + self._number_of_features
 
         # transformer enc-decoder and mask initializer
         self.transformer = nn.Transformer(
             d_model=self.d_model,
-            nhead=self.config.nhead,
-            num_encoder_layers=self.config.encoder_layers,
-            num_decoder_layers=self.config.decoder_layers,
-            dim_feedforward=self.config.ffn_dim,
-            dropout=self.config.dropout,
-            activation=self.config.activation_function,
+            nhead=config.nhead,
+            num_encoder_layers=config.encoder_layers,
+            num_decoder_layers=config.decoder_layers,
+            dim_feedforward=config.ffn_dim,
+            dropout=config.dropout,
+            activation=config.activation_function,
             batch_first=True,
         )
 
         # causal decoder tgt mask
         self.register_buffer(
             "tgt_mask",
-            self.transformer.generate_square_subsequent_mask(self.config.prediction_length),
+            self.transformer.generate_square_subsequent_mask(config.prediction_length),
         )
 
         # Initialize weights and apply final processing
