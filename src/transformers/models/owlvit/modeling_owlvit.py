@@ -136,9 +136,14 @@ class OwlViTObjectDetectionOutput(ModelOutput):
         image_embeds(`torch.FloatTensor` of shape `(batch_size, patch_size, patch_size, output_dim`):
             Pooled output of [`OwlViTVisionModel`]. OWL-ViT represents images as a set of image patches and computes
             image embeddings for each patch.
-        class_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):
+        class_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`):
             Class embeddings of all image patches. OWL-ViT represents images as a set of image patches where the total
             number of patches is (image_size / patch_size)**2.
+        text_model_last_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`)):
+            Last hidden states extracted from the [`OwlViTTextModel`].
+        vision_model_last_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_patches + 1, hidden_size)`)):
+            Last hidden states extracted from the [`OwlViTVisionModel`]. OWL-ViT represents images as a set of image
+            patches where the total number of patches is (image_size / patch_size)**2.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -148,6 +153,8 @@ class OwlViTObjectDetectionOutput(ModelOutput):
     text_embeds: torch.FloatTensor = None
     image_embeds: torch.FloatTensor = None
     class_embeds: torch.FloatTensor = None
+    text_model_last_hidden_states: Optional[torch.FloatTensor] = None
+    vision_model_last_hidden_states: Optional[torch.FloatTensor] = None
 
 
 class OwlViTVisionEmbeddings(nn.Module):
@@ -1308,6 +1315,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> OwlViTObjectDetectionOutput:
         r"""
@@ -1336,7 +1344,26 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         ...     scores = torch.sigmoid(logits.values)
         ...     labels = logits.indices
         ```"""
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
         return_dict = return_dict if return_dict is not None else self.config.return_dict
+
+        # Return last hidden states of text and vision transformers
+        text_model_last_hidden_states = None
+        vision_model_last_hidden_states = None
+
+        if output_hidden_states:
+            outputs = self.embedder.clip(
+                pixel_values=pixel_values,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+            )
+
+            text_model_last_hidden_states = outputs[-2][0]
+            vision_model_last_hidden_states = outputs[-1][0]
 
         # Embed images
         feature_map = self.image_embedder(pixel_values=pixel_values, output_attentions=output_attentions)
@@ -1363,7 +1390,15 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         pred_boxes = self.box_predictor(image_feats, feature_map)
 
         if not return_dict:
-            return (pred_logits, pred_boxes, query_embeds, feature_map, class_embeds)
+            return (
+                pred_logits,
+                pred_boxes,
+                query_embeds,
+                feature_map,
+                class_embeds,
+                text_model_last_hidden_states,
+                vision_model_last_hidden_states,
+            )
 
         return OwlViTObjectDetectionOutput(
             image_embeds=feature_map,
@@ -1371,4 +1406,6 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             pred_boxes=pred_boxes,
             logits=pred_logits,
             class_embeds=class_embeds,
+            text_model_last_hidden_states=text_model_last_hidden_states,
+            vision_model_last_hidden_states=vision_model_last_hidden_states,
         )
