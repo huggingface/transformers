@@ -125,10 +125,10 @@ class NllbTokenizer(PreTrainedTokenizer):
         self.vocab_file = vocab_file
 
         # Original fairseq vocab and spm vocab must be "aligned":
-        # Vocab    |    0    |    1    |   2    |    3    |  4  |  5  |  6  |   7   |   8   |  9
-        # -------- | ------- | ------- | ------ | ------- | --- | --- | --- | ----- | ----- | ----
-        # fairseq  | '<s>'   | '<pad>' | '</s>' | '<unk>' | ',' | '.' | '▁' | 's'   | '▁de' | '-'
-        # spm      | '<unk>' | '<s>'   | '</s>' | ','     | '.' | '▁' | 's' | '▁de' | '-'   | '▁a'
+        # Vocab    |    0    |    1    |   2    |    3    |  4   |  5   |  6   |   7  |   8  |  9
+        # -------- | ------- | ------- | ------ | ------- | ---- | ---- | ---- | ---- | ---- | ----
+        # fairseq  | '<s>'   | '<pad>' | '</s>' | '<unk>' | 'an' | '▁n' | '▁m' | '▁t' | '▁k' | '▁a'
+        # spm      | '<unk>' | '<s>'   | '</s>' | 'an'    | '▁n' | '▁m' | '▁t' | '▁k' | '▁a' | '▁s'
 
         # Mimic fairseq token-to-id alignment for the first 4 token
         self.fairseq_tokens_to_ids = {"<s>": 0, "<pad>": 1, "</s>": 2, "<unk>": 3}
