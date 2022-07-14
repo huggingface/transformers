@@ -2167,6 +2167,16 @@ else:
             "TFDebertaV2PreTrainedModel",
         ]
     )
+    _import_structure["models.deit"].extend(
+        [
+            "TF_DEIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFDeiTForImageClassification",
+            "TFDeiTForImageClassificationWithTeacher",
+            "TFDeiTForMaskedImageModeling",
+            "TFDeiTModel",
+            "TFDeiTPreTrainedModel",
+        ]
+    )
     _import_structure["models.distilbert"].extend(
         [
             "TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2378,6 +2388,14 @@ else:
             "TFRemBertLayer",
             "TFRemBertModel",
             "TFRemBertPreTrainedModel",
+        ]
+    )
+    _import_structure["models.resnet"].extend(
+        [
+            "TF_RESNET_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFResNetForImageClassification",
+            "TFResNetModel",
+            "TFResNetPreTrainedModel",
         ]
     )
     _import_structure["models.roberta"].extend(
@@ -4566,6 +4584,14 @@ if TYPE_CHECKING:
             TFDebertaV2Model,
             TFDebertaV2PreTrainedModel,
         )
+        from .models.deit import (
+            TF_DEIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFDeiTForImageClassification,
+            TFDeiTForImageClassificationWithTeacher,
+            TFDeiTForMaskedImageModeling,
+            TFDeiTModel,
+            TFDeiTPreTrainedModel,
+        )
         from .models.distilbert import (
             TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFDistilBertForMaskedLM,
@@ -4720,6 +4746,12 @@ if TYPE_CHECKING:
             TFRemBertLayer,
             TFRemBertModel,
             TFRemBertPreTrainedModel,
+        )
+        from .models.resnet import (
+            TF_RESNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFResNetForImageClassification,
+            TFResNetModel,
+            TFResNetPreTrainedModel,
         )
         from .models.roberta import (
             TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
