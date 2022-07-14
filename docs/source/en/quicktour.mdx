@@ -304,7 +304,7 @@ All models are a standard [`torch.nn.Module`](https://pytorch.org/docs/stable/nn
 
 <Tip>
 
-For TensorFlow, convert the dataset into a TensorFlow compatible format with [`~datasets.to_tf_dataset`]. Then you can compile and fit your model with the usual Keras methods. Take a look at the [fine-tuning tutorial](./training#convert-dataset-to-tensorflow-format) for more details.
+For TensorFlow, convert the dataset into a TensorFlow compatible format with [`~datasets.Dataset.to_tf_dataset`]. Then you can compile and fit your model with the usual Keras methods. Take a look at the [fine-tuning tutorial](./training#convert-dataset-to-tensorflow-format) for more details.
 
 </Tip>
 
@@ -316,7 +316,7 @@ Before you can use the [`Trainer`], load and prepare a dataset. This example use
 >>> dataset = load_dataset("yelp_review_full")
 ```
 
-Tokenize the dataset with [`~datasets.map`]:
+Tokenize the dataset with [`~datasets.Dataset.map`]:
 
 ```py
 >>> from transformers import AutoTokenizer
@@ -357,19 +357,19 @@ Now create a [`Trainer`] with the model, training arguments, and train and test 
 
 ### Save a model
 
-Once your model is fine-tuned, you can save it with its tokenizer using [`PreTrainedModel.save_pretrained`]:
+Once your model is fine-tuned, you can save it with its tokenizer using [`~PreTrainedModel.save_pretrained`]:
 
 ```py
 >>> pt_save_directory = "./pt_save_pretrained"
 >>> tokenizer.save_pretrained(pt_save_directory)  # doctest: +IGNORE_RESULT
 >>> pt_model.save_pretrained(pt_save_directory)
-===PT-TF-SPLIT
+===PT-TF-SPLIT===
 >>> tf_save_directory = "./tf_save_pretrained"
 >>> tokenizer.save_pretrained(tf_save_directory)  # doctest: +IGNORE_RESULT
 >>> tf_model.save_pretrained(tf_save_directory)
 ```
 
-When you are ready to use the model again, reload it with [`PreTrainedModel.from_pretrained`]:
+When you are ready to use the model again, reload it with [`~PreTrainedModel.from_pretrained`]:
 
 ```py
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained("./pt_save_pretrained")
