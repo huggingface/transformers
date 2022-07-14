@@ -52,7 +52,7 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     rust_tokenizer_class = NllbTokenizerFast
     test_rust_tokenizer = True
     test_sentencepiece = True
-    from_pretrained_kwargs = {"use_auth_token": True}
+    from_pretrained_kwargs = {}
 
     def setUp(self):
         super().setUp()
@@ -146,7 +146,7 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.tokenizers_list[0] = (
             self.rust_tokenizer_class,
             "hf-internal-testing/tiny-random-nllb",
-            {"use_auth_token": True},
+            {}
         )
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -337,7 +337,7 @@ class NllbDistilledIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tokenizer: NllbTokenizer = NllbTokenizer.from_pretrained(
-            cls.checkpoint_name, src_lang="eng_Latn", tgt_lang="ron_Latn", use_auth_token=True
+            cls.checkpoint_name, src_lang="eng_Latn", tgt_lang="ron_Latn"
         )
         cls.pad_token_id = 1
         return cls
