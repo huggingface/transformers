@@ -157,7 +157,6 @@ class OwlViTObjectDetectionOutput(ModelOutput):
     vision_model_last_hidden_states: Optional[torch.FloatTensor] = None
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings with CLIP->OwlViT
 class OwlViTVisionEmbeddings(nn.Module):
     def __init__(self, config: OwlViTVisionConfig):
         super().__init__()
