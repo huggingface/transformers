@@ -143,11 +143,7 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
             return
 
-        self.tokenizers_list[0] = (
-            self.rust_tokenizer_class,
-            "hf-internal-testing/tiny-random-nllb",
-            {}
-        )
+        self.tokenizers_list[0] = (self.rust_tokenizer_class, "hf-internal-testing/tiny-random-nllb", {})
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
