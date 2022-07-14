@@ -209,6 +209,7 @@ class TextGenerationPipeline(Pipeline):
         # Allow empty prompts
         if input_ids.shape[1] == 0:
             input_ids = None
+            attention_mask = None
             in_b = 1
         else:
             in_b = input_ids.shape[0]
