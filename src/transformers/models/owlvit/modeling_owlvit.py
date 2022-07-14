@@ -157,9 +157,11 @@ class OwlViTObjectDetectionOutput(ModelOutput):
     vision_model_last_hidden_states: Optional[torch.FloatTensor] = None
 
 
+# Copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings with CLIP->OwlViT
 class OwlViTVisionEmbeddings(nn.Module):
     def __init__(self, config: OwlViTVisionConfig):
         super().__init__()
+        self.config = config
         self.embed_dim = config.hidden_size
         self.image_size = config.image_size
         self.patch_size = config.patch_size
@@ -219,11 +221,13 @@ class OwlViTTextEmbeddings(nn.Module):
         return embeddings
 
 
+# Copied from transformers.models.clip.modeling_clip.CLIPAttention with CLIP->OwlViT
 class OwlViTAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config):
         super().__init__()
+        self.config = config
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_heads
@@ -322,9 +326,11 @@ class OwlViTAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
+# Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->OwlViT
 class OwlViTMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
         self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
         self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
@@ -632,6 +638,7 @@ class OwlViTEncoder(nn.Module):
 class OwlViTTextTransformer(nn.Module):
     def __init__(self, config: OwlViTTextConfig):
         super().__init__()
+        self.config = config
         embed_dim = config.hidden_size
         self.embeddings = OwlViTTextEmbeddings(config)
         self.encoder = OwlViTEncoder(config)
@@ -762,6 +769,7 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
 class OwlViTVisionTransformer(nn.Module):
     def __init__(self, config: OwlViTVisionConfig):
         super().__init__()
+        self.config = config
         embed_dim = config.hidden_size
 
         self.embeddings = OwlViTVisionEmbeddings(config)
