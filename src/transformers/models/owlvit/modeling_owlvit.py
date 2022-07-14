@@ -1315,7 +1315,6 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> OwlViTObjectDetectionOutput:
         r"""
