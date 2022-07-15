@@ -305,41 +305,32 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
 
 
 def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
+    os.environ["SIGOPT_PROJECT"] = "huggingface"
+    import sigopt
 
-    from sigopt import Connection
-
-    conn = Connection()
-    proxies = kwargs.pop("proxies", None)
-    if proxies is not None:
-        conn.set_proxies(proxies)
-
-    experiment = conn.experiments().create(
+    experiment = sigopt.create_experiment(
         name="huggingface-tune",
+        type="offline",
         parameters=trainer.hp_space(None),
         metrics=[dict(name="objective", objective=direction, strategy="optimize")],
         parallel_bandwidth=1,
-        observation_budget=n_trials,
-        project="huggingface",
+        budget=n_trials,
     )
+
     logger.info(f"created experiment: https://app.sigopt.com/experiment/{experiment.id}")
 
-    while experiment.progress.observation_count < experiment.observation_budget:
-        suggestion = conn.experiments(experiment.id).suggestions().create()
-        trainer.objective = None
-        trainer.train(resume_from_checkpoint=None, trial=suggestion)
-        # If there hasn't been any evaluation during the training loop.
-        if getattr(trainer, "objective", None) is None:
-            metrics = trainer.evaluate()
-            trainer.objective = trainer.compute_objective(metrics)
+    for run in experiment.loop():
+        with run:
+            trainer.objective = None
+            trainer.train(resume_from_checkpoint=None, trial=run.run)
+            # If there hasn't been any evaluation during the training loop.
+            if getattr(trainer, "objective", None) is None:
+                metrics = trainer.evaluate()
+                trainer.objective = trainer.compute_objective(metrics)
+            run.log_metric("objective", trainer.objective)
 
-        values = [dict(name="objective", value=trainer.objective)]
-        obs = conn.experiments(experiment.id).observations().create(suggestion=suggestion.id, values=values)
-        logger.info(f"[suggestion_id, observation_id]: [{suggestion.id}, {obs.id}]")
-        experiment = conn.experiments(experiment.id).fetch()
-
-    best = list(conn.experiments(experiment.id).best_assignments().fetch().iterate_pages())[0]
-    best_run = BestRun(best.id, best.value, best.assignments)
-
+    best = list(experiment.get_best_runs())[0]
+    best_run = BestRun(best.id, best.values["objective"].value, best.assignments)
     return best_run
 
 
