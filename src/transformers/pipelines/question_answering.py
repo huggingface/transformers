@@ -5,12 +5,17 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-import tokenizers
-
 from ..data import SquadExample, SquadFeatures, squad_convert_examples_to_features
 from ..modelcard import ModelCard
 from ..tokenization_utils import PreTrainedTokenizer
-from ..utils import PaddingStrategy, add_end_docstrings, is_tf_available, is_torch_available, logging
+from ..utils import (
+    PaddingStrategy,
+    add_end_docstrings,
+    is_tf_available,
+    is_tokenizers_available,
+    is_torch_available,
+    logging,
+)
 from .base import PIPELINE_INIT_ARGS, ArgumentHandler, ChunkPipeline
 
 
@@ -19,6 +24,9 @@ logger = logging.get_logger(__name__)
 if TYPE_CHECKING:
     from ..modeling_tf_utils import TFPreTrainedModel
     from ..modeling_utils import PreTrainedModel
+
+    if is_tokenizers_available():
+        import tokenizers
 
 if is_tf_available():
     import tensorflow as tf
