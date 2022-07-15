@@ -18,7 +18,7 @@
 import math
 from dataclasses import dataclass
 from functools import partial
-from typing import Optional, Tuple, Union
+from typing import Optional
 
 import torch
 import torch.utils.checkpoint
@@ -27,13 +27,7 @@ from torch import nn
 from ...activations import SiLUActivation
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import logging
 from .configuration_vqgan import VQGANConfig
 
 
