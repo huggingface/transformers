@@ -201,10 +201,10 @@ class AttnBlock(nn.Module):
         # compute attentions
         batch, channels, height, width = query.shape
         query = query.reshape((batch, channels, height * width))
-        query = query.permute(0, 2, 1) # (b, hw, c)
+        query = query.permute(0, 2, 1)  # (b, hw, c)
         key = key.reshape((batch, channels, height * width))
 
-        attn_weights = torch.bmm(query, key)  # b,hw,hw 
+        attn_weights = torch.bmm(query, key)  # b,hw,hw
         attn_weights = attn_weights * (int(channels) ** -0.5)
         attn_weights = nn.functional.softmax(attn_weights, dim=2)
 

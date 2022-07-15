@@ -2615,13 +2615,6 @@ else:
 
     # Flax models structure
 
-    _import_structure["models.vqgan"].extend(
-        [
-            "FlaxVQGANModel",
-            "FlaxVQGANPreTrainedModel",
-        ]
-    )
-
     _import_structure["models.bart"].extend(
         [
             "FlaxBartDecoderPreTrainedModel",
@@ -5053,7 +5046,6 @@ if TYPE_CHECKING:
         from .models.vision_encoder_decoder import FlaxVisionEncoderDecoderModel
         from .models.vision_text_dual_encoder import FlaxVisionTextDualEncoderModel
         from .models.vit import FlaxViTForImageClassification, FlaxViTModel, FlaxViTPreTrainedModel
-        from .models.vqgan import FlaxVQGANModel, FlaxVQGANPreTrainedModel
         from .models.wav2vec2 import (
             FlaxWav2Vec2ForCTC,
             FlaxWav2Vec2ForPreTraining,
