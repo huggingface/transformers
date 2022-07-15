@@ -1333,26 +1333,81 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
         future_observed_values: Optional[torch.Tensor] = None,
     ):
 
-        dec_output, scale = self.transformer(
-            feat_static_cat,
-            feat_static_real,
-            past_time_feat,
-            past_target,
-            past_observed_values,
-            future_time_feat,
-            future_target,
-        )
-        params = self.output_params(dec_output)
-        distr = self.output_distribution(params, scale)
+        loss = None
 
-        loss_values = self.loss(distr, future_target)
+        if future_target is not None and future_observed_values is not None:
+            # training
+            dec_output, scale = self.transformer(
+                feat_static_cat,
+                feat_static_real,
+                past_time_feat,
+                past_target,
+                past_observed_values,
+                future_time_feat,
+                future_target,
+            )
+            params = self.output_params(dec_output)
+            distr = self.output_distribution(params, scale)
 
-        if len(self.target_shape) == 0:
-            loss_weights = future_observed_values
+            loss = self.loss(distr, future_target)
+
+            if len(self.target_shape) == 0:
+                loss_weights = future_observed_values
+            else:
+                loss_weights = future_observed_values.min(dim=-1, keepdim=False)
+
+            return weighted_average(loss, weights=loss_weights)
         else:
-            loss_weights = future_observed_values.min(dim=-1, keepdim=False)
+            # prediction
+            num_parallel_samples = self.config.num_parallel_samples
 
-        return weighted_average(loss_values, weights=loss_weights)
+            encoder_inputs, scale, static_feat = self.create_network_inputs(
+                feat_static_cat,
+                feat_static_real,
+                past_time_feat,
+                past_target,
+                past_observed_values,
+            )
+            enc_out = self.transformer.encoder(encoder_inputs)
+
+            repeated_scale = scale.repeat_interleave(repeats=num_parallel_samples, dim=0)
+
+            repeated_past_target = past_target.repeat_interleave(repeats=num_parallel_samples, dim=0) / repeated_scale
+
+            expanded_static_feat = static_feat.unsqueeze(1).expand(-1, future_time_feat.shape[1], -1)
+            features = torch.cat((expanded_static_feat, future_time_feat), dim=-1)
+            repeated_features = features.repeat_interleave(repeats=num_parallel_samples, dim=0)
+
+            repeated_enc_out = enc_out.repeat_interleave(repeats=num_parallel_samples, dim=0)
+
+            future_samples = []
+
+            # greedy decoding
+            for k in range(self.prediction_length):
+                lagged_sequence = self.get_lagged_subsequences(
+                    sequence=repeated_past_target,
+                    subsequences_length=1 + k,
+                    shift=1,
+                )
+
+                lags_shape = lagged_sequence.shape
+                reshaped_lagged_sequence = lagged_sequence.reshape(lags_shape[0], lags_shape[1], -1)
+
+                decoder_input = torch.cat((reshaped_lagged_sequence, repeated_features[:, : k + 1]), dim=-1)
+
+                output = self.transformer.decoder(decoder_input, repeated_enc_out)
+
+                params = self.param_proj(output[:, -1:])
+                distr = self.output_distribution(params, scale=repeated_scale)
+                next_sample = distr.sample()
+
+                repeated_past_target = torch.cat((repeated_past_target, next_sample / repeated_scale), dim=1)
+                future_samples.append(next_sample)
+
+            concat_future_samples = torch.cat(future_samples, dim=1)
+            return concat_future_samples.reshape(
+                (-1, num_parallel_samples, self.config.prediction_length) + self.target_shape,
+            )
 
 
 @add_start_docstrings(

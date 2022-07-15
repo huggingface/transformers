@@ -81,6 +81,8 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
             `"gelu"` and `"relu"` are supported.
         dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the encoder, and decoder.
+        num_parallel_samples (`int`, *optional*, defaults to 100):
+            The number of samples to generate in parallel for each time step of inference.
 
         Example:
 
@@ -120,6 +122,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         is_encoder_decoder: bool = True,
         activation_function: str = "gelu",
         dropout: float = 0.1,
+        num_parallel_samples: int = 100,
         init_std: float = 0.02,
         **kwargs
     ):
@@ -140,6 +143,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         self.num_feat_static_cat = num_feat_static_cat
         self.cardinality = cardinality if cardinality and num_feat_static_cat > 0 else [1]
         self.embedding_dimension = embedding_dimension or [min(50, (cat + 1) // 2) for cat in self.cardinality]
+        self.num_parallel_samples = num_parallel_samples
 
         # Transformer architecture parameters
         self.nhead = nhead
