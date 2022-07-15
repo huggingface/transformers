@@ -250,7 +250,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
                 Whether or not we accept impossible as an answer.
             align_to_words (`bool`, *optional*, defaults to `True`):
                 Attempts to align the answer to real words. Improves quality on space separated langages. Might hurt on
-                non space separated languages (like Japanese or Chinese)
+                non-space-separated languages (like Japanese or Chinese)
 
         Return:
             A `dict` or a list of `dict`: Each result comes as a dictionary with the following keys:
