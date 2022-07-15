@@ -197,7 +197,7 @@ class VQGANModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_masked_lm(self):
-        model = VQGANModel.from_pretrained("valhalla/vqgan-imagenet-f16-1024")
+        model = VQGANModel.from_pretrained("valhalla/vqgan_imagenet_f16_16384")
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
