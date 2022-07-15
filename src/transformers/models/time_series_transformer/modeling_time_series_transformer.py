@@ -1321,15 +1321,17 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
             sliced_params = [p[:, -trailing_n:] for p in params]
         return self.distribution_output.distribution(sliced_params, scale=scale)
 
-    def forward(self, batch):
-        feat_static_cat = batch["feat_static_cat"]
-        feat_static_real = batch["feat_static_real"]
-        past_time_feat = batch["past_time_feat"]
-        past_target = batch["past_target"]
-        future_time_feat = batch["future_time_feat"]
-        future_target = batch["future_target"]
-        past_observed_values = batch["past_observed_values"]
-        future_observed_values = batch["future_observed_values"]
+    def forward(
+        self,
+        feat_static_cat: torch.Tensor,
+        feat_static_real: torch.Tensor,
+        past_time_feat: torch.Tensor,
+        past_target: torch.Tensor,
+        past_observed_values: torch.Tensor,
+        future_time_feat: Optional[torch.Tensor] = None,
+        future_target: Optional[torch.Tensor] = None,
+        future_observed_values: Optional[torch.Tensor] = None,
+    ):
 
         dec_output, scale = self.transformer(
             feat_static_cat,
