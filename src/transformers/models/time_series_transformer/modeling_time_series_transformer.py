@@ -1359,6 +1359,9 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
             return weighted_average(loss, weights=loss_weights)
         else:
             # prediction
+            encoder = self.transformer.get_encoder()
+            decoder = self.transformer.get_decoder()
+
             num_parallel_samples = self.config.num_parallel_samples
 
             encoder_inputs, scale, static_feat = self.create_network_inputs(
@@ -1368,7 +1371,8 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
                 past_target,
                 past_observed_values,
             )
-            enc_out = self.transformer.encoder(encoder_inputs)
+
+            enc_out = encoder(encoder_inputs)
 
             repeated_scale = scale.repeat_interleave(repeats=num_parallel_samples, dim=0)
 
@@ -1383,7 +1387,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
             future_samples = []
 
             # greedy decoding
-            for k in range(self.prediction_length):
+            for k in range(self.config.prediction_length):
                 lagged_sequence = self.get_lagged_subsequences(
                     sequence=repeated_past_target,
                     subsequences_length=1 + k,
@@ -1395,7 +1399,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
 
                 decoder_input = torch.cat((reshaped_lagged_sequence, repeated_features[:, : k + 1]), dim=-1)
 
-                output = self.transformer.decoder(decoder_input, repeated_enc_out)
+                output = decoder(decoder_input, repeated_enc_out)
 
                 params = self.param_proj(output[:, -1:])
                 distr = self.output_distribution(params, scale=repeated_scale)
