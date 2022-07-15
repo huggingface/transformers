@@ -15,13 +15,17 @@
 """ Testing suite for the PyTorch VQGAN model. """
 
 
+import inspect
+import tempfile
 import unittest
+
+import numpy as np
 
 from transformers import VQGANConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, floats_tensor
 
 
 if is_torch_available():
@@ -35,190 +39,132 @@ class VQGANModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_token_type_ids=True,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=5,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
+        ch = 64,
+        out_ch = 3,
+        in_channels = 3,
+        num_res_blocks = 2,
+        resolution = 64,
+        z_channels = 64,
+        ch_mult = (1, 2, 4),
+        attn_resolutions = (8,),
+        n_embed = 128,
+        embed_dim = 64,
+        dropout = 0.0,
+        double_z = False,
+        resamp_with_conv = True,
+        give_pre_end = False,
         scope=None,
     ):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
+        self.ch = ch
+        self.out_ch = out_ch
+        self.in_channels = in_channels
+        self.num_res_blocks = num_res_blocks
+        self.resolution = resolution
+        self.z_channels = z_channels
+        self.ch_mult = ch_mult
+        self.attn_resolutions = attn_resolutions
+        self.n_embed = n_embed
+        self.embed_dim = embed_dim
+        self.dropout = dropout
+        self.double_z = double_z
+        self.resamp_with_conv = resamp_with_conv
+        self.give_pre_end = give_pre_end
         self.scope = scope
+        self.batch_size = 4
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-
-        input_mask = None
-        if self.use_input_mask:
-            input_mask = random_attention_mask([self.batch_size, self.seq_length])
-
-        token_type_ids = None
-        if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
-
-        sequence_labels = None
-        token_labels = None
-        choice_labels = None
-        if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-            choice_labels = ids_tensor([self.batch_size], self.num_choices)
-
+        pixel_values = floats_tensor((self.batch_size, self.in_channels, self.resolution, self.resolution))
         config = self.get_config()
-
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return config, pixel_values
 
     def get_config(self):
         return VQGANConfig(
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            intermediate_size=self.intermediate_size,
-            hidden_act=self.hidden_act,
-            hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            max_position_embeddings=self.max_position_embeddings,
-            type_vocab_size=self.type_vocab_size,
-            is_decoder=False,
-            initializer_range=self.initializer_range,
+            ch=self.ch,
+            out_ch=self.out_ch,
+            in_channels=self.in_channels,
+            num_res_blocks=self.num_res_blocks,
+            resolution=self.resolution,
+            z_channels=self.z_channels,
+            ch_mult=self.ch_mult,
+            attn_resolutions=self.attn_resolutions,
+            n_embed=self.n_embed,
+            embed_dim=self.embed_dim,
+            dropout=self.dropout,
+            double_z=self.double_z,
+            resamp_with_conv=self.resamp_with_conv,
+            give_pre_end=self.give_pre_end,
         )
 
-    def prepare_config_and_inputs_for_decoder(self):
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = self.prepare_config_and_inputs()
-
-        config.is_decoder = True
-        encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
-        encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
-
-        return (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
-        )
-
-    def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
+    def create_and_check_model(self, config, pixel_values):
         model = VQGANModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-        result = model(input_ids, token_type_ids=token_type_ids)
-        result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    def create_and_check_model_as_decoder(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        config.add_cross_attention = True
-        model = VQGANModel(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            token_type_ids=token_type_ids,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
+        result = model(pixel_values)
+        result = model(pixel_values, return_loss=True)
+        self.parent.assertEqual(
+            result.reconstructed_pixel_values.shape, 
+            (self.batch_size, self.out_ch, self.resolution, self.resolution)
         )
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            token_type_ids=token_type_ids,
-            encoder_hidden_states=encoder_hidden_states,
-        )
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
+        config, pixel_values = config_and_inputs
+        inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
 
 @require_torch
-class VQGANModelTest(ModelTesterMixin, unittest.TestCase):
+class VQGANModelTest(unittest.TestCase):
 
     all_model_classes = (VQGANModel,) if is_torch_available() else ()
 
     def setUp(self):
         self.model_tester = VQGANModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=VQGANConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=VQGANConfig, has_text_modality=False)
 
     def test_config(self):
-        self.config_tester.run_common_tests()
+        self.config_tester.create_and_test_config_to_json_string()
+        self.config_tester.create_and_test_config_to_json_file()
+        self.config_tester.create_and_test_config_from_and_save_pretrained()
+        self.config_tester.create_and_test_config_with_num_labels()
+        self.config_tester.check_config_can_be_init_without_params()
+        self.config_tester.check_config_arguments_init()
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+    
+    def test_save_load(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        model = VQGANModel(config)
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            outputs = model(**inputs_dict)
+
+        out_2 = outputs[0].cpu().numpy()
+        out_2[np.isnan(out_2)] = 0
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            model = VQGANModel.from_pretrained(tmpdirname)
+            model.to(torch_device)
+            with torch.no_grad():
+                after_outputs = model(**inputs_dict)
+
+            # Make sure we don't have nans
+            out_1 = after_outputs[0].cpu().numpy()
+            out_1[np.isnan(out_1)] = 0
+            max_diff = np.amax(np.abs(out_1 - out_2))
+            self.assertLessEqual(max_diff, 1e-5)
+    
+    def test_model_main_input_name(self):
+        model_signature = inspect.signature(getattr(VQGANModel, "forward"))
+        # The main input is the name of the argument after `self`
+        observed_main_input_name = list(model_signature.parameters.keys())[1]
+        self.assertEqual(VQGANModel.main_input_name, observed_main_input_name)
 
     @slow
     def test_model_from_pretrained(self):
@@ -227,6 +173,7 @@ class VQGANModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsNotNone(model)
 
 
+# TODO (patil-suraj): Fix this test
 @require_torch
 class VQGANModelIntegrationTest(unittest.TestCase):
     @slow
