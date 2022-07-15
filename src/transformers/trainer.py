@@ -1334,9 +1334,8 @@ class Trainer:
                     )
                     auto_wrap_policy = functools.partial(
                         transformer_auto_wrap_policy,
-                        transformer_layer_cls={
-                            transformer_cls_to_wrap,  # < ---- Transformer layer class to wrap
-                        },
+                        # Transformer layer class to wrap
+                        transformer_layer_cls={transformer_cls_to_wrap},
                     )
             mixed_precision_policy = None
             dtype = None
