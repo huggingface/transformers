@@ -16,26 +16,16 @@
 
 
 import math
-import os
+from dataclasses import dataclass
 from functools import partial
 from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
-from packaging import version
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import SiLUActivation
-from ...modeling_outputs import (
-    BaseModelOutputWithPastAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions,
-    MaskedLMOutput,
-    MultipleChoiceModelOutput,
-    QuestionAnsweringModelOutput,
-    SequenceClassifierOutput,
-    TokenClassifierOutput,
-)
+from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_code_sample_docstrings,
@@ -51,12 +41,26 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "vqgan-imagenet-f16-1024"
 _CONFIG_FOR_DOC = "VQGANConfig"
-_TOKENIZER_FOR_DOC = "VQGANTokenizer"
 
 VQGAN_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "vqgan-imagenet-f16-1024",
     # See all VQGAN models at https://huggingface.co/models?filter=vqgan
 ]
+
+
+@dataclass
+class VQGANQuantizerOutput(ModelOutput):
+    quantized_states: torch.FloatTensor = None
+    codebook_indices: torch.LongTensor = None
+    codebook_loss: Optional[torch.FloatTensor] = None
+
+
+@dataclass
+class VQGANModelOutput(ModelOutput):
+    reconstructed_pixel_values: torch.FloatTensor = None
+    codebook_indices: torch.LongTensor = None
+    quantized_states: torch.FloatTensor = None
+    codebook_loss: Optional[torch.FloatTensor] = None
 
 
 class Upsample(nn.Module):
@@ -466,8 +470,9 @@ class VectorQuantizer(nn.Module):
         self.config = config
         self.embedding = nn.Embedding(self.config.n_embed, self.config.embed_dim)  # TODO: init
         self.embedding.weight.data.uniform_(-1.0 / self.config.n_embed, 1.0 / self.config.n_embed)
+        self.beta = 0.2
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states, return_loss=False):
         """
         Inputs the output of the encoder network z and maps it to a discrete one-hot vector that is the index of the
         closest embedding vector e_j z (continuous) -> z_q (discrete) z.shape = (batch, channel, height, width)
@@ -495,17 +500,26 @@ class VectorQuantizer(nn.Module):
         # z_q = self.embedding(min_encoding_indices).reshape(hidden_states.shape)
         z_q = torch.matmul(min_encodings, self.embedding.weight).view(hidden_states.shape)
 
-        # reshape back to match original input shape
-        z_q = z_q.permute(0, 3, 1, 2).contiguous()
-
         # reshape to (batch, num_tokens)
         min_encoding_indices = min_encoding_indices.reshape(hidden_states.shape[0], -1)
 
+        # compute loss for embedding
+        loss = None
+        if return_loss:
+            loss = torch.mean((z_q.detach() - hidden_states) ** 2) + self.beta * torch.mean(
+                (z_q - hidden_states.detach()) ** 2
+            )
+            # preserve gradients
+            z_q = hidden_states + (z_q - hidden_states).detach()
+
+        # reshape back to match original input shape
+        z_q = z_q.permute(0, 3, 1, 2).contiguous()
+
         # compute the codebook_loss (q_loss) outside the model
         # here we return the embeddings and indices
-        return z_q, min_encoding_indices
+        return z_q, min_encoding_indices, loss
 
-    def get_codebook_entry(self, indices, shape=None):
+    def get_codebook_entry(self, indices):
         # indices are expected to be of shape (batch, num_tokens)
         # get quantized latent vectors
         batch, num_tokens = indices.shape
@@ -522,7 +536,8 @@ class VQGANPreTrainedModel(PreTrainedModel):
 
     config_class = VQGANConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    main_input_name = "pixel_values"
+    supports_gradient_checkpointing = False
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
@@ -548,23 +563,47 @@ class VQGANModel(VQGANPreTrainedModel):
             kernel_size=1,
         )
 
-    def encode(self, pixel_values):
+    def encode(self, pixel_values, return_loss=False, return_dict=True):
         hidden_states = self.encoder(pixel_values)
         hidden_states = self.quant_conv(hidden_states)
-        quant_states, indices = self.quantize(hidden_states)
-        return quant_states, indices
+        quantized_states, codebook_indices, codebook_loss = self.quantize(hidden_states, return_loss)
 
-    def decode(self, hidden_states):
-        hidden_states = self.post_quant_conv(hidden_states)
-        hidden_states = self.decoder(hidden_states)
-        return hidden_states
+        if return_dict:
+            return VQGANQuantizerOutput(
+                quantized_states=quantized_states,
+                codebook_indices=codebook_indices,
+                codebook_loss=None,
+            )
+        output = (quantized_states, codebook_indices)
+        if return_loss:
+            output = output + (codebook_loss,)
+        return output
 
-    def decode_code(self, code_b):
-        hidden_states = self.quantize.get_codebook_entry(code_b)
-        hidden_states = self.decode(hidden_states)
-        return hidden_states
+    def decode(self, quantized_states):
+        hidden_states = self.post_quant_conv(quantized_states)
+        reconstructed_pixel_values = self.decoder(hidden_states)
+        return reconstructed_pixel_values
 
-    def forward(self, pixel_values):
-        quant_states, indices = self.encode(pixel_values)
-        hidden_states = self.decode(quant_states)
-        return hidden_states, indices
+    def decode_code(self, codebook_indices):
+        quantized_states = self.quantize.get_codebook_entry(codebook_indices)
+        reconstructed_pixel_values = self.decode(quantized_states)
+        return reconstructed_pixel_values
+
+    def forward(self, pixel_values, return_loss=False, return_dict=True):
+        hidden_states = self.encoder(pixel_values)
+        hidden_states = self.quant_conv(hidden_states)
+        quantized_states, codebook_indices, codebook_loss = self.quantize(hidden_states, return_loss)
+        reconstructed_pixel_values = self.decode(quantized_states)
+
+        if return_dict:
+            return VQGANModelOutput(
+                reconstructed_pixel_values=reconstructed_pixel_values,
+                quantized_states=quantized_states,
+                codebook_indices=codebook_indices,
+                codebook_loss=codebook_loss,
+            )
+
+        outputs = (reconstructed_pixel_values, quantized_states, codebook_indices)
+        if return_loss:
+            outputs = outputs + (codebook_loss,)
+        return outputs
