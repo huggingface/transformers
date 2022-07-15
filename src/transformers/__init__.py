@@ -645,6 +645,7 @@ else:
     _import_structure["models.vilt"].append("ViltFeatureExtractor")
     _import_structure["models.vilt"].append("ViltProcessor")
     _import_structure["models.vit"].append("ViTFeatureExtractor")
+    _import_structure["models.vqgan"].append("VQGANFeatureExtractor")
     _import_structure["models.yolos"].append("YolosFeatureExtractor")
 
 # Timm-backed objects
@@ -3327,6 +3328,7 @@ if TYPE_CHECKING:
         from .models.segformer import SegformerFeatureExtractor
         from .models.vilt import ViltFeatureExtractor, ViltProcessor
         from .models.vit import ViTFeatureExtractor
+        from .models.vqgan import VQGANFeatureExtractor
         from .models.yolos import YolosFeatureExtractor
 
     # Modeling

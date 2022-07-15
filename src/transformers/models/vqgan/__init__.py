@@ -18,12 +18,20 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
 _import_structure = {
     "configuration_vqgan": ["VQGAN_PRETRAINED_CONFIG_ARCHIVE_MAP", "VQGANConfig"],
 }
+
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["feature_extraction_vqgan"] = ["VQGANFeatureExtractor"]
 
 try:
     if not is_torch_available():
@@ -40,6 +48,14 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_vqgan import VQGAN_PRETRAINED_CONFIG_ARCHIVE_MAP, VQGANConfig
+
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .feature_extraction_vqgan import VQGANFeatureExtractor
 
     try:
         if not is_torch_available():
