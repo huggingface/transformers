@@ -43,6 +43,7 @@ from . import (
     cpm,
     ctrl,
     cvt,
+    dallemega,
     data2vec,
     deberta,
     deberta_v2,

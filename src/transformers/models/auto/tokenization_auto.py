@@ -103,6 +103,7 @@ else:
                 ),
             ),
             ("ctrl", ("CTRLTokenizer", None)),
+            ("dallemega", ("BartTokenizer", "BartTokenizerFast")),
             ("data2vec-text", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
             ("deberta", ("DebertaTokenizer", "DebertaTokenizerFast" if is_tokenizers_available() else None)),
             (
