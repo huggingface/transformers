@@ -37,11 +37,11 @@ _CHECKPOINT_FOR_DOC = "vqgan-imagenet-f16-1024"
 _CONFIG_FOR_DOC = "VQGANConfig"
 
 VQGAN_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "vqgan-imagenet-f16-1024",
+    "valhalla/vqgan-imagenet-f16-1024",
     # See all VQGAN models at https://huggingface.co/models?filter=vqgan
 ]
 
-# TODO (patil-suraj): 
+# TODO (patil-suraj):
 # 1. Write docstrings
 # 2. Add output_hidden_states to VQGANModel
 # 3. Make tests more robust

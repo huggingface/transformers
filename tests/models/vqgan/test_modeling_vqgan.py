@@ -21,11 +21,12 @@ import unittest
 
 import numpy as np
 
-from transformers import VQGANConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers import VQGANConfig
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor
+from ...test_modeling_common import floats_tensor
 
 
 if is_torch_available():
@@ -34,25 +35,30 @@ if is_torch_available():
     from transformers import VQGANModel
     from transformers.models.vqgan.modeling_vqgan import VQGAN_PRETRAINED_MODEL_ARCHIVE_LIST
 
+if is_vision_available():
+    from PIL import Image
+
+    from transformers import AutoFeatureExtractor
+
 
 class VQGANModelTester:
     def __init__(
         self,
         parent,
-        ch = 64,
-        out_ch = 3,
-        in_channels = 3,
-        num_res_blocks = 2,
-        resolution = 64,
-        z_channels = 64,
-        ch_mult = (1, 2, 4),
-        attn_resolutions = (8,),
-        n_embed = 128,
-        embed_dim = 64,
-        dropout = 0.0,
-        double_z = False,
-        resamp_with_conv = True,
-        give_pre_end = False,
+        ch=64,
+        out_ch=3,
+        in_channels=3,
+        num_res_blocks=2,
+        resolution=64,
+        z_channels=64,
+        ch_mult=(1, 2, 4),
+        attn_resolutions=(8,),
+        n_embed=128,
+        embed_dim=64,
+        dropout=0.0,
+        double_z=False,
+        resamp_with_conv=True,
+        give_pre_end=False,
         scope=None,
     ):
         self.parent = parent
@@ -103,8 +109,7 @@ class VQGANModelTester:
         result = model(pixel_values)
         result = model(pixel_values, return_loss=True)
         self.parent.assertEqual(
-            result.reconstructed_pixel_values.shape, 
-            (self.batch_size, self.out_ch, self.resolution, self.resolution)
+            result.reconstructed_pixel_values.shape, (self.batch_size, self.out_ch, self.resolution, self.resolution)
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -134,7 +139,7 @@ class VQGANModelTest(unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-    
+
     def test_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -159,7 +164,7 @@ class VQGANModelTest(unittest.TestCase):
             out_1[np.isnan(out_1)] = 0
             max_diff = np.amax(np.abs(out_1 - out_2))
             self.assertLessEqual(max_diff, 1e-5)
-    
+
     def test_model_main_input_name(self):
         model_signature = inspect.signature(getattr(VQGANModel, "forward"))
         # The main input is the name of the argument after `self`
@@ -173,24 +178,41 @@ class VQGANModelTest(unittest.TestCase):
             self.assertIsNotNone(model)
 
 
-# TODO (patil-suraj): Fix this test
+# We will verify our results on an image of cute cats
+def prepare_img():
+    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+    return image
+
+
 @require_torch
+@require_vision
 class VQGANModelIntegrationTest(unittest.TestCase):
-    @slow
-    def test_inference_masked_lm(self):
-        model = VQGANModel.from_pretrained("vqgan-imagenet-f16-1024")
-        input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
-        output = model(input_ids)[0]
-
-        # TODO Replace vocab size
-        vocab_size = 32000
-
-        expected_shape = torch.Size((1, 6, vocab_size))
-        self.assertEqual(output.shape, expected_shape)
-
-        # TODO Replace values below with what was printed above.
-        expected_slice = torch.tensor(
-            [[[-0.0483, 0.1188, -0.0313], [-0.0606, 0.1435, 0.0199], [-0.0235, 0.1519, 0.0175]]]
+    @cached_property
+    def default_feature_extractor(self):
+        return (
+            AutoFeatureExtractor.from_pretrained(VQGAN_PRETRAINED_MODEL_ARCHIVE_LIST[0])
+            if is_vision_available()
+            else None
         )
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+    @slow
+    def test_inference_masked_lm(self):
+        model = VQGANModel.from_pretrained("valhalla/vqgan-imagenet-f16-1024")
+
+        feature_extractor = self.default_feature_extractor
+        image = prepare_img()
+        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        # verify the logits
+        expected_shape = torch.Size((1, 3, 256, 256))
+        self.assertEqual(outputs.reconstructed_pixel_values.shape, expected_shape)
+
+        expected_slice = torch.tensor([0.7532, 0.7453, 0.7901, 0.8110, 0.7729, 0.6804, 1.0291, 0.7947, 0.7244]).to(
+            torch_device
+        )
+
+        self.assertTrue(torch.allclose(outputs.reconstructed_pixel_values[0, 0, -3:, -3:], expected_slice, atol=1e-3))

@@ -20,11 +20,7 @@ import numpy as np
 from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...image_utils import (
-    ImageFeatureExtractionMixin,
-    ImageInput,
-    is_torch_tensor,
-)
+from ...image_utils import ImageFeatureExtractionMixin, ImageInput, is_torch_tensor
 from ...utils import TensorType, logging
 
 
@@ -149,7 +145,7 @@ class VQGANFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
 
         return encoded_inputs
-    
+
     def normalize(self, image):
         """
         Normalizes `image`. Note that this will trigger a conversion of `image` to a NumPy array
@@ -163,4 +159,4 @@ class VQGANFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
 
         if isinstance(image, Image.Image):
             image = self.to_numpy_array(image)
-        return 2. * image - 1.
+        return 2.0 * image - 1.0
