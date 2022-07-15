@@ -205,6 +205,19 @@ class TFModelTesterMixin:
 
             self.assert_outputs_same(after_outputs, outputs)
 
+    def test_prepare_serving_output(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+        config.output_attentions = self.has_attentions
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            outputs = model(self._prepare_for_class(inputs_dict, model_class))
+            serving_outputs = model.serving_output(outputs)
+
+            for k, v in serving_outputs.items():
+                self.assertIsInstance(v, (tf.Tensor, None), msg=f"{k} is not a Tensor or None")
+
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 

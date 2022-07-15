@@ -288,6 +288,24 @@ class TFResNetPreTrainedModel(TFPreTrainedModel):
         VISION_DUMMY_INPUTS = tf.random.uniform(shape=(3, self.config.num_channels, 224, 224), dtype=tf.float32)
         return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
 
+    @tf.function(
+        input_signature=[
+            {
+                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        """
+        Method used for serving the model.
+
+        Args:
+            inputs (`Dict[str, tf.Tensor]`):
+                The input of the saved model as a dictionary of tensors.
+        """
+        output = self.call(inputs)
+        return self.serving_output(output)
+
 
 RESNET_START_DOCSTRING = r"""
     This model is a TensorFlow
@@ -413,6 +431,17 @@ class TFResNetModel(TFResNetPreTrainedModel):
         )
         return resnet_outputs
 
+    def serving_output(
+        self, output: TFBaseModelOutputWithPoolingAndNoAttention
+    ) -> TFBaseModelOutputWithPoolingAndNoAttention:
+        # In TF transformer models, the tuple of hidden states are normally transformed to a single tensor using:
+        # hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        # We don't return the hidden states here as they all have different dimensions so can be concatenated like
+        # this.
+        return TFBaseModelOutputWithPoolingAndNoAttention(
+            last_hidden_state=output.last_hidden_state, pooler_output=output.pooler_output
+        )
+
 
 @add_start_docstrings(
     """
@@ -477,3 +506,10 @@ class TFResNetForImageClassification(TFResNetPreTrainedModel, TFSequenceClassifi
             return (loss,) + output if loss is not None else output
 
         return TFImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+
+    def serving_output(self, output: TFImageClassifierOutputWithNoAttention) -> TFImageClassifierOutputWithNoAttention:
+        # In TF transformer models, the tuple of hidden states are normally transformed to a single tensor using:
+        # hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        # We don't return the hidden states here as they all have different dimensions so can be concatenated like
+        # this.
+        return TFImageClassifierOutputWithNoAttention(logits=output.logits)

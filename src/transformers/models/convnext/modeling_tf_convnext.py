@@ -383,7 +383,8 @@ class TFConvNextPreTrainedModel(TFPreTrainedModel):
             inputs (`Dict[str, tf.Tensor]`):
                 The input of the saved model as a dictionary of tensors.
         """
-        return self.call(inputs)
+        output = self.call(inputs)
+        return self.serving_output(output)
 
 
 CONVNEXT_START_DOCSTRING = r"""
@@ -492,6 +493,13 @@ class TFConvNextModel(TFConvNextPreTrainedModel):
             hidden_states=outputs.hidden_states,
         )
 
+    def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+
+        TFBaseModelOutputWithPooling(
+            last_hidden_state=output.last_hidden_state, pooler_output=output.pooler_output, hidden_states=hs
+        )
+
 
 @add_start_docstrings(
     """
@@ -584,3 +592,8 @@ class TFConvNextForImageClassification(TFConvNextPreTrainedModel, TFSequenceClas
             logits=logits,
             hidden_states=outputs.hidden_states,
         )
+
+    def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+
+        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs)
