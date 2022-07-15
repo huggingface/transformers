@@ -47,6 +47,11 @@ VQGAN_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all VQGAN models at https://huggingface.co/models?filter=vqgan
 ]
 
+# TODO (patil-suraj): 
+# 1. Write docstrings
+# 2. Add output_hidden_states to VQGANModel
+# 3. Make tests more robust
+
 
 @dataclass
 class VQGANQuantizerOutput(ModelOutput):
