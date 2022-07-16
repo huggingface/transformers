@@ -124,7 +124,7 @@ class DataTrainingArguments:
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
 
-    lang: str = field(default=None, metadata={"help": "Language id for summarization."})
+    lang: Optional[str] = field(default=None, metadata={"help": "Language id for summarization."})
 
     dataset_name: Optional[str] = field(
         default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
