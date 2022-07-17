@@ -141,6 +141,7 @@ from .utils import (
     is_ipex_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
+    is_torch_tensorrt_fx_available,
     is_torch_tpu_available,
     is_torchdynamo_available,
     logging,
@@ -597,6 +598,35 @@ class Trainer:
 
         # very last
         self._memory_tracker.stop_and_update_metrics()
+
+        # torchdynamo
+        if args.torchdynamo:
+            if not is_torchdynamo_available():
+                raise RuntimeError("Torchdynamo is not installed.")
+            import torchdynamo
+            from torchdynamo.optimizations import backends
+            from torchdynamo.optimizations.training import aot_autograd_speedup_strategy
+
+            def get_ctx():
+                # Normal
+                if args.torchdynamo == "eager":
+                    return torchdynamo.optimize("eager")
+                elif args.torchdynamo == "nvfuser":
+                    return torchdynamo.optimize(aot_autograd_speedup_strategy)
+                # TensorRT
+                if args.torchdynamo in ["fx2trt-fp16", "fx2trt"]:
+                    if not is_torch_tensorrt_fx_available():
+                        raise RuntimeError("Torch-TensorRT FX path is not installed.")
+                    if args.torchdynamo == "fx2trt-fp16":
+                        return torchdynamo.optimize(backends.fx2trt_compiler_fp16)
+                    elif args.torchdynamo == "fx2trt":
+                        return torchdynamo.optimize(backends.fx2trt_compiler)
+                else:
+                    raise RuntimeError(f"Torchdynamo backend {args.torchdynamo} is not supported.")
+
+            self.ctx_manager_torchdynamo = get_ctx()
+        else:
+            self.ctx_manager_torchdynamo = contextlib.nullcontext()
 
     def add_callback(self, callback):
         """
@@ -1138,16 +1168,14 @@ class Trainer:
             self.args.hf_deepspeed_config = HfTrainerDeepSpeedConfig(self.args.deepspeed)
             self.args.hf_deepspeed_config.trainer_config_process(self.args)
 
-    def _report_to_hp_search(
-        self, trial: Union["optuna.Trial", Dict[str, Any]], epoch: int, metrics: Dict[str, float]
-    ):
+    def _report_to_hp_search(self, trial: Union["optuna.Trial", Dict[str, Any]], step: int, metrics: Dict[str, float]):
         if self.hp_search_backend is None or trial is None:
             return
         self.objective = self.compute_objective(metrics.copy())
         if self.hp_search_backend == HPSearchBackend.OPTUNA:
             import optuna
 
-            trial.report(self.objective, epoch)
+            trial.report(self.objective, step)
             if trial.should_prune():
                 self.callback_handler.on_train_end(self.args, self.state, self.control)
                 raise optuna.TrialPruned()
@@ -1211,8 +1239,8 @@ class Trainer:
     def ipex_optimize_model(self, model, training=False, dtype=torch.float32):
         if not is_ipex_available():
             raise ImportError(
-                "Using IPEX but IPEX is not installed, please refer to"
-                " https://github.com/intel/intel-extension-for-pytorch."
+                "Using IPEX but IPEX is not installed or IPEX's version does not match current PyTorch, please refer"
+                " to https://github.com/intel/intel-extension-for-pytorch."
             )
 
         import intel_extension_for_pytorch as ipex
@@ -1223,7 +1251,9 @@ class Trainer:
         else:
             if not model.training:
                 model.train()
-            model, self.optimizer = ipex.optimize(model, dtype=dtype, optimizer=self.optimizer, level="O1")
+            model, self.optimizer = ipex.optimize(
+                model, dtype=dtype, optimizer=self.optimizer, inplace=True, level="O1"
+            )
 
         return model
 
@@ -1916,7 +1946,7 @@ class Trainer:
         metrics = None
         if self.control.should_evaluate:
             metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
-            self._report_to_hp_search(trial, epoch, metrics)
+            self._report_to_hp_search(trial, self.state.global_step, metrics)
 
         if self.control.should_save:
             self._save_checkpoint(model, trial, metrics=metrics)
@@ -2291,16 +2321,7 @@ class Trainer:
         """
         A helper wrapper that creates an appropriate context manager for `torchdynamo`.
         """
-        ctx_manager = contextlib.nullcontext()
-        if is_torchdynamo_available():
-            import torchdynamo
-            from torchdynamo.optimizations.training import aot_autograd_speedup_strategy
-
-            if self.args.torchdynamo == "eager":
-                ctx_manager = torchdynamo.optimize("eager")
-            elif self.args.torchdynamo == "nvfuser":
-                ctx_manager = torchdynamo.optimize(aot_autograd_speedup_strategy)
-        return ctx_manager
+        return self.ctx_manager_torchdynamo
 
     def autocast_smart_context_manager(self):
         """

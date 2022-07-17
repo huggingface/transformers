@@ -62,6 +62,7 @@ from transformers.testing_utils import (
     require_torch_gpu,
     require_torch_multi_gpu,
     require_torch_non_multi_gpu,
+    require_torch_tensorrt_fx,
     require_torch_tf32,
     require_torch_up_to_2_gpus,
     require_torchdynamo,
@@ -642,7 +643,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         train_output = trainer.train()
         self.assertEqual(train_output.global_step, 10)
 
-    @unittest.skip(reason="skip temporarily until intel_extension_for_pytorch works with torch 1.12")
     @require_torch_bf16_cpu
     @require_intel_extension_for_pytorch
     def test_number_of_steps_in_training_with_ipex(self):
@@ -887,7 +887,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         expected_acc = AlmostAccuracy()((pred + 1, y))["accuracy"]
         self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
-    @unittest.skip(reason="skip temporarily until intel_extension_for_pytorch works with torch 1.12")
     @require_torch_bf16_cpu
     @require_intel_extension_for_pytorch
     def test_evaluate_with_ipex(self):
@@ -1008,7 +1007,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertTrue(np.array_equal(labels[0], trainer.eval_dataset.ys[0]))
         self.assertTrue(np.array_equal(labels[1], trainer.eval_dataset.ys[1]))
 
-    @unittest.skip(reason="skip temporarily until intel_extension_for_pytorch works with torch 1.12")
     @require_torch_bf16_cpu
     @require_intel_extension_for_pytorch
     def test_predict_with_ipex(self):
@@ -1799,6 +1797,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     @require_torch_non_multi_gpu
     @require_torchdynamo
+    @require_torch_tensorrt_fx
     def test_torchdynamo_full_eval(self):
         # torchdynamo at the moment doesn't support DP/DDP, therefore require a single gpu
         n_gpus = get_gpu_count()
@@ -1827,6 +1826,21 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         metrics = trainer.evaluate()
         self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss)
 
+        # 4. TorchDynamo fx2trt
+        trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, torchdynamo="fx2trt")
+        metrics = trainer.evaluate()
+        t1 = metrics["eval_loss"]
+        t2 = original_eval_loss
+        self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss)
+
+        # 5. TorchDynamo fx2trt-fp16
+        trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, torchdynamo="fx2trt-fp16")
+        metrics = trainer.evaluate()
+        t1 = metrics["eval_loss"]
+        t2 = original_eval_loss
+        # fp16 has accuracy accuracy degradation
+        self.assertLess(np.max(np.abs(t1 - t2)), 1e-3)
+
     @require_torch_non_multi_gpu
     @require_torchdynamo
     def test_torchdynamo_memory(self):
@@ -1852,7 +1866,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         mod = MyModule()
 
-        # 1. Default - without TorchDynamo
+        # 1. without TorchDynamo (eager baseline)
         a = torch.ones(1024, 1024, device="cuda", requires_grad=True)
         a.grad = None
         trainer = CustomTrainer(model=mod)
@@ -1860,15 +1874,14 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         for _ in range(10):
             orig_loss = trainer.training_step(mod, {"x": a})
 
-        torch.cuda.reset_peak_memory_stats()
-        orig_loss = trainer.training_step(mod, {"x": a})
-        orig_peak_mem = torch.cuda.max_memory_allocated()
-        del trainer
-
-        # Reset the peak for another measurement
+        # resets
         gc.collect()
         torch.cuda.empty_cache()
         torch.cuda.reset_peak_memory_stats()
+
+        orig_loss = trainer.training_step(mod, {"x": a})
+        orig_peak_mem = torch.cuda.max_memory_allocated()
+        del trainer
 
         # 2. TorchDynamo nvfuser
         a = torch.ones(1024, 1024, device="cuda", requires_grad=True)
@@ -1879,7 +1892,11 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         for _ in range(10):
             loss = trainer.training_step(mod, {"x": a})
 
+        # resets
+        gc.collect()
+        torch.cuda.empty_cache()
         torch.cuda.reset_peak_memory_stats()
+
         loss = trainer.training_step(mod, {"x": a})
         peak_mem = torch.cuda.max_memory_allocated()
         del trainer
