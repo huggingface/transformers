@@ -127,16 +127,13 @@ abs min  abs max  metadata
 
 L'output di esempio è stato tagliato al centro per brevità.
 
-The second column shows the value of the absolute largest element, so if you have a closer look at the last few frames,
-the inputs and outputs were in the range of `1e4`. So when this training was done under fp16 mixed precision the very
-last step overflowed (since under `fp16` the largest number before `inf` is `64e3`). To avoid overflows under
-`fp16` the activations must remain way below `1e4`, because `1e4 * 1e4 = 1e8` so any matrix multiplication with
-large activations is going to lead to a numerical overflow condition.
+La seconda colonna mostra il valore dell'elemento più grande in assoluto,così se osserviamo da vicino gli ultimi istanti,
+input e output sono nel range di `1e4`. Questo addestramento è stato eseguito con una mixed precision fp16 e l'ultimo passo usciva fuori (sotto `fp16` il valore più grande prima di `inf` è `64e3`). Per evitare overflows sotto `fp16` le attivazionioni devono rimanere molto al di sotto di `1e4`, perché `1e4 * 1e4 = 1e8` quindi qualsiasi moltiplicazione di matrice con grandi attivazioni porterà a una condizione di overflow numerico.
 
-At the very start of the trace you can discover at which batch number the problem occurred (here `Detected inf/nan during batch_number=0` means the problem occurred on the first batch).
+All'inizio della traccia è possibile scoprire a quale lotto si è verificato il problema (questo `Detected inf/nan during batch_number=0` significa che il problema si è verificato nel primo lotto).
 
-Each reported frame starts by declaring the fully qualified entry for the corresponding module this frame is reporting
-for. If we look just at this frame:
+Ogni frame segnalato inizia dichiarando la voce completamente qualificata per il modulo corrispondente per il quale il frame è stato segnalato. 
+Se osserviamo il seguente frame:
 
 ```
                   encoder.block.2.layer.1.layer_norm T5LayerNorm
@@ -145,10 +142,9 @@ for. If we look just at this frame:
 1.79e-06 4.65e+00 output
 ```
 
-Here, `encoder.block.2.layer.1.layer_norm` indicates that it was a layer norm for the first layer, of the second
-block of the encoder. And the specific calls of the `forward` is `T5LayerNorm`.
+Questo, `encoder.block.2.layer.1.layer_norm` indica che si tratta di un layer norm nel primo layer, del secondo blocco dell'encoder. E le chiamata specifica di `forward` è `T5LayerNorm`.
 
-Let's look at the last few frames of that report:
+Osserviamo gli ultimi frame del report:
 
 ```
 Detected inf/nan during batch_number=0
