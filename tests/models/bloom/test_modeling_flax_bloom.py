@@ -262,7 +262,7 @@ class FlaxBloomConversionTest(unittest.TestCase):
         seq_len = single_attention_mask.shape[-1]
         num_attention_heads = 16
 
-        alibi = build_alibi_tensor(seq_len, num_attention_heads, torch.float16, device=torch.device("cpu"))
+        alibi = build_alibi_tensor(single_attention_mask, num_attention_heads, torch.float16, device=torch.device("cpu"))
         alibi_flax = build_alibi_tensor_flax(single_attention_mask, num_attention_heads, dtype)[0]
 
         self.assertTrue(jnp.equal(alibi_flax, alibi.numpy()).all())
