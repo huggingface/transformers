@@ -852,6 +852,9 @@ class CustomPipelineTest(unittest.TestCase):
                     }
                 },
             )
+            # Fails if the user forget to pass along `trust_remote_code=True`
+            with self.assertRaises(ValueError):
+                _ = pipeline(model=tmp_dir)
 
             new_classifier = pipeline(model=tmp_dir, trust_remote_code=True)
         # Can't make an isinstance check because the new_classifier is from the PairClassificationPipeline class of a
@@ -924,6 +927,10 @@ class DynamicPipelineTester(unittest.TestCase):
             )
 
             repo.push_to_hub()
+
+        # Fails if the user forget to pass along `trust_remote_code=True`
+        with self.assertRaises(ValueError):
+            _ = pipeline(model=f"{USER}/test-dynamic-pipeline")
 
         new_classifier = pipeline(model=f"{USER}/test-dynamic-pipeline", trust_remote_code=True)
         # Can't make an isinstance check because the new_classifier is from the PairClassificationPipeline class of a
