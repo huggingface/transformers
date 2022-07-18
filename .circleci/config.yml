@@ -67,14 +67,17 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
-            - run: pip install --upgrade pip
-            - run: pip install .[sklearn,torch,sentencepiece,testing,torch-speech]
-            - run: pip install -r examples/pytorch/_tests_requirements.txt
-            - run: git clone https://github.com/bmcfee/resampy.git && cd resampy && git checkout f8d4bb93d99a3edc2be972a07a9055ac4248f15a && pip install -U -e . && cd ..
-            - run: pip install -U numpy==1.21.6
-            - run: |
-                    python -m pytest -n 1 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/test_pytorch_examples.py -k "(test_run_audio_classification or test_run_clm)"
+            - run: whoami
+            - run: cd .. && ls -l && cd transformers
+            - run: ls -l .
+#            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
+#            - run: pip install --upgrade pip
+#            - run: pip install .[sklearn,torch,sentencepiece,testing,torch-speech]
+#            - run: pip install -r examples/pytorch/_tests_requirements.txt
+#            - run: git clone https://github.com/bmcfee/resampy.git && cd resampy && git checkout f8d4bb93d99a3edc2be972a07a9055ac4248f15a && pip install -U -e . && cd ..
+#            - run: pip install -U numpy==1.21.6
+#            - run: |
+#                    python -m pytest -n 1 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/test_pytorch_examples.py -k "(test_run_audio_classification or test_run_clm)"
 
 workflow_filters: &workflow_filters
     filters:
