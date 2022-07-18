@@ -790,10 +790,10 @@ class TFSegformerForSemanticSegmentation(TFSegformerPreTrainedModel):
         def masked_loss(real, pred):
             unmasked_loss = loss_fct(real, pred)
             mask = tf.cast(real != self.config.semantic_loss_ignore_index, dtype=unmasked_loss.dtype)
-            unmasked_loss *= mask
+            masked_loss = unmasked_loss * mask
             # Reduction strategy in the similar spirit with
             # https://github.com/huggingface/transformers/blob/main/src/transformers/modeling_tf_utils.py#L210
-            reduced_masked_loss = tf.reduce_sum(unmasked_loss) / tf.reduce_sum(mask)
+            reduced_masked_loss = tf.reduce_sum(masked_loss) / tf.reduce_sum(mask)
             return tf.reshape(reduced_masked_loss, (1,))
 
         return masked_loss(labels, upsampled_logits)
