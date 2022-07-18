@@ -14,3 +14,6 @@
   - local: preprocessing
     title: Preprocess
   title: Esercitazione
+- sections:
+  - local: multilingual
+    title: Modelli multilingua per l'inferenza
