@@ -14,7 +14,13 @@
 # limitations under the License.
 """ LeViT model configuration"""
 
+from collections import OrderedDict
+from typing import Mapping
+
+from packaging import version
+
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -120,3 +126,21 @@ class LevitConfig(PretrainedConfig):
             ["Subsample", key_dim[0], hidden_sizes[0] // key_dim[0], 4, 2, 2],
             ["Subsample", key_dim[0], hidden_sizes[1] // key_dim[0], 4, 2, 2],
         ]
+
+
+# Copied from transformers.models.vit.configuration_vit.ViTOnnxConfig
+class LevitOnnxConfig(OnnxConfig):
+
+    torch_onnx_minimum_version = version.parse("1.11")
+
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        return OrderedDict(
+            [
+                ("pixel_values", {0: "batch", 1: "sequence"}),
+            ]
+        )
+
+    @property
+    def atol_for_validation(self) -> float:
+        return 1e-4
