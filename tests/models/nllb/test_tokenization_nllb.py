@@ -105,7 +105,6 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             [
                 value + tokenizer.fairseq_offset
                 for value in [8, 21, 84, 55, 24, 19, 7, 2, 602, 347, 347, 347, 3, 12, 66, 46, 72, 80, 6, 2, 4]
-                #                                       ^ unk: 2 + 1 = 3                  unk: 2 + 1 = 3 ^
             ],
         )
 
@@ -139,10 +138,6 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     # overwrite from test_tokenization_common to speed up test
     def test_save_pretrained(self):
-        if not self.test_slow_tokenizer:
-            # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
-
         self.tokenizers_list[0] = (self.rust_tokenizer_class, "hf-internal-testing/tiny-random-nllb", {})
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -166,8 +161,6 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # Check special tokens are set accordingly on Rust and Python
                 for key in tokenizer_pp.special_tokens_map:
                     self.assertTrue(hasattr(tokenizer_rp, key))
-                    # self.assertEqual(getattr(tokenizer_rp, key), getattr(tokenizer_pp, key))
-                    # self.assertEqual(getattr(tokenizer_rp, key + "_id"), getattr(tokenizer_pp, key + "_id"))
 
                 shutil.rmtree(tmpdirname2)
 
