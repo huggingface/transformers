@@ -494,6 +494,9 @@ class PretrainedConfig(PushToHubMixin):
                 If `True`, then this functions returns a `Tuple(config, unused_kwargs)` where *unused_kwargs* is a
                 dictionary consisting of the key/value pairs whose keys are not configuration attributes: i.e., the
                 part of `kwargs` which has not been used to update `config` and is otherwise ignored.
+            subfolder (`str`, *optional*):
+                In case the relevant files are located inside a subfolder of the model repo on huggingface.co,
+                you can specify the folder name here.
             kwargs (`Dict[str, Any]`, *optional*):
                 The values in kwargs of any keys which are configuration attributes will be used to override the loaded
                 values. Behavior concerning key/value pairs whose keys are *not* configuration attributes is controlled
