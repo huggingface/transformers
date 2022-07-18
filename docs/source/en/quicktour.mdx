@@ -14,42 +14,68 @@ specific language governing permissions and limitations under the License.
 
 [[open-in-colab]]
 
-The 🤗 Transformers library is built around four main ideas to maximize user-friendliness and customization for research and experiments:
-
-* Perform inference with the [`pipeline`].
-* Load and use pretrained models from the [Hub](https://huggingface.co/models).
-* Build a custom model by modifying the base configuration, preprocessing, and model classes.
-* Train a model with the [`Trainer`] class, an optimized training loop for 🤗 Transformers models.
-
-Whether you're a new user or an experienced developer, this quick tour will help you get started and show you the most important features. If you're a beginner, we recommend starting with our tutorials or the [Hugging Face course](https://huggingface.co/course/chapter1/1) for a more in-depth introduction.
-
-Let's take a look at each of these features and get up and running!
-
-Before you begin, make sure you have 🤗 Transformers installed:
-
-```bash
-pip install transformers
-```
-
-You'll also want to install 🤗 Datasets to load a dataset to train on quickly:
-
-```bash
-pip install datasets
-```
-
-## Pipeline
-
-The [`pipeline`] is the easiest way to use a pretrained model for inference. You can use the [`pipeline`] out-of-the-box for many tasks such as text generation, image classification, automatic speech recognition, and many more. 
-
-<Youtube id="tiZFewofSLM"/>
+Get up and running with 🤗 Transformers! Start using the [`pipeline`] for rapid inference, and quickly load a pretrained model and tokenizer with an [AutoClass](./model_doc/auto) to solve your text, vision or audio task.
 
 <Tip>
 
-For more details about tasks supported by [`pipeline`], take a look at the [pipelines API reference](./main_classes/pipelines).
+All code examples presented in the documentation have a toggle on the top left for PyTorch and TensorFlow. If
+not, the code is expected to work for both backends without any change.
 
 </Tip>
 
-To use a [`pipeline`], create an instance of it and specify a task you want to complete, like sentiment analysis, for example:
+## Pipeline
+
+[`pipeline`] is the easiest way to use a pretrained model for a given task.
+
+<Youtube id="tiZFewofSLM"/>
+
+The [`pipeline`] supports many common tasks out-of-the-box:
+
+**Text**:
+* Sentiment analysis: classify the polarity of a given text.
+* Text generation (in English): generate text from a given input.
+* Name entity recognition (NER): label each word with the entity it represents (person, date, location, etc.).
+* Question answering: extract the answer from the context, given some context and a question.
+* Fill-mask: fill in the blank given a text with masked words.
+* Summarization: generate a summary of a long sequence of text or document.
+* Translation: translate text into another language.
+* Feature extraction: create a tensor representation of the text.
+
+**Image**:
+* Image classification: classify an image.
+* Image segmentation: classify every pixel in an image.
+* Object detection: detect objects within an image.
+
+**Audio**:
+* Audio classification: assign a label to a given segment of audio.
+* Automatic speech recognition (ASR): transcribe audio data into text.
+
+<Tip>
+
+For more details about the [`pipeline`] and associated tasks, refer to the documentation [here](./main_classes/pipelines).
+
+</Tip>
+
+### Pipeline usage
+
+In the following example, you will use the [`pipeline`] for sentiment analysis.
+
+Install the following dependencies if you haven't already:
+
+<frameworkcontent>
+<pt>
+```bash
+pip install torch
+```
+</pt>
+<tf>
+```bash
+pip install tensorflow
+```
+</tf>
+</frameworkcontent>
+
+Import [`pipeline`] and specify the task you want to complete:
 
 ```py
 >>> from transformers import pipeline
@@ -57,14 +83,14 @@ To use a [`pipeline`], create an instance of it and specify a task you want to c
 >>> classifier = pipeline("sentiment-analysis")
 ```
 
-For sentiment analysis, the [`pipeline`] downloads and caches a default [pretrained model](https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english) and tokenizer. Now you can use the `classifier` on your target text:
+The pipeline downloads and caches a default [pretrained model](https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english) and tokenizer for sentiment analysis. Now you can use the `classifier` on your target text:
 
 ```py
 >>> classifier("We are very happy to show you the 🤗 Transformers library.")
 [{'label': 'POSITIVE', 'score': 0.9998}]
 ```
 
-If you have more than one input, pass your inputs as a list to the [`pipeline`] to return a list of dictionaries:
+For more than one sentence, pass a list of sentences to the [`pipeline`] which returns a list of dictionaries:
 
 ```py
 >>> results = classifier(["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."])
@@ -74,7 +100,13 @@ label: POSITIVE, with score: 0.9998
 label: NEGATIVE, with score: 0.5309
 ```
 
-The [`pipeline`] can also iterate over an entire dataset for a task like automatic speech recognition:
+The [`pipeline`] can also iterate over an entire dataset. Start by installing the [🤗 Datasets](https://huggingface.co/docs/datasets/) library:
+
+```bash
+pip install datasets 
+```
+
+Create a [`pipeline`] with the task you want to solve for and the model you want to use.
 
 ```py
 >>> import torch
@@ -83,7 +115,7 @@ The [`pipeline`] can also iterate over an entire dataset for a task like automat
 >>> speech_recognizer = pipeline("automatic-speech-recognition", model="facebook/wav2vec2-base-960h")
 ```
 
-Load an audio dataset (see the 🤗 Datasets [Quickstart](https://huggingface.co/docs/datasets/quickstart#audio) for more details) you'd like to iterate over. For example, load the [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) dataset:
+Next, load a dataset (see the 🤗 Datasets [Quick Start](https://huggingface.co/docs/datasets/quickstart.html) for more details) you'd like to iterate over. For example, let's load the [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) dataset:
 
 ```py
 >>> from datasets import load_dataset, Audio
@@ -91,15 +123,15 @@ Load an audio dataset (see the 🤗 Datasets [Quickstart](https://huggingface.co
 >>> dataset = load_dataset("PolyAI/minds14", name="en-US", split="train")  # doctest: +IGNORE_RESULT
 ```
 
-You need to make sure the sampling rate of the dataset matches the sampling 
-rate the model, [`facebook/wav2vec2-base-960h`](https://huggingface.co/facebook/wav2vec2-base-960h), was trained on:
+We need to make sure that the sampling rate of the dataset matches the sampling 
+rate `facebook/wav2vec2-base-960h` was trained on.
 
 ```py
 >>> dataset = dataset.cast_column("audio", Audio(sampling_rate=speech_recognizer.feature_extractor.sampling_rate))
 ```
 
-The audio files are automatically loaded and resampled when you call the `audio` column.
-Extract the raw waveform arrays from the first 4 samples and pass it as a list to the pipeline:
+Audio files are automatically loaded and resampled when calling the `"audio"` column.
+Let's extract the raw waveform arrays of the first 4 samples and pass it as a list to the pipeline:
 
 ```py
 >>> result = speech_recognizer(dataset[:4]["audio"])
@@ -107,31 +139,40 @@ Extract the raw waveform arrays from the first 4 samples and pass it as a list t
 ['I WOULD LIKE TO SET UP A JOINT ACCOUNT WITH MY PARTNER HOW DO I PROCEED WITH DOING THAT', "FONDERING HOW I'D SET UP A JOIN TO HET WITH MY WIFE AND WHERE THE AP MIGHT BE", "I I'D LIKE TOY SET UP A JOINT ACCOUNT WITH MY PARTNER I'M NOT SEEING THE OPTION TO DO IT ON THE APSO I CALLED IN TO GET SOME HELP CAN I JUST DO IT OVER THE PHONE WITH YOU AND GIVE YOU THE INFORMATION OR SHOULD I DO IT IN THE AP AND I'M MISSING SOMETHING UQUETTE HAD PREFERRED TO JUST DO IT OVER THE PHONE OF POSSIBLE THINGS", 'HOW DO I TURN A JOIN A COUNT']
 ```
 
-For larger datasets with big inputs (like speech or vision), you'll want to pass a generator instead of a list to load all the inputs in memory. Take a look at the [pipeline API reference](./main_classes/pipelines) for more information.
+For a larger dataset where the inputs are big (like in speech or vision), you will want to pass along a generator instead of a list that loads all the inputs in memory. See the [pipeline documentation](./main_classes/pipelines) for more information.
 
 ### Use another model and tokenizer in the pipeline
 
-The [`pipeline`] can accommodate any model from the [Hub](https://huggingface.co/models), making it easy to adapt the [`pipeline`] for other use-cases. For example, if you'd like a model capable of handling French text, use the tags on the Hub to filter for an appropriate model. The top filtered result returns a multilingual [BERT model](https://huggingface.co/nlptown/bert-base-multilingual-uncased-sentiment) fine-tuned for sentiment analysis that you can use for French text:
+The [`pipeline`] can accommodate any model from the [Model Hub](https://huggingface.co/models), making it easy to adapt the [`pipeline`] for other use-cases. For example, if you'd like a model capable of handling French text, use the tags on the Model Hub to filter for an appropriate model. The top filtered result returns a multilingual [BERT model](https://huggingface.co/nlptown/bert-base-multilingual-uncased-sentiment) fine-tuned for sentiment analysis. Great, let's use this model!
 
 ```py
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
 ```
 
-Now load the pretrained model and it's associated tokenizer with [`AutoModelForSequenceClassification`] and [`AutoTokenizer`]:
+<frameworkcontent>
+<pt>
+Use the [`AutoModelForSequenceClassification`] and [`AutoTokenizer`] to load the pretrained model and it's associated tokenizer (more on an `AutoClass` below):
 
 ```py
 >>> from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
 >>> model = AutoModelForSequenceClassification.from_pretrained(model_name)
 >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
-===PT-TF-SPLIT===
+```
+</pt>
+<tf>
+Use the [`TFAutoModelForSequenceClassification`] and [`AutoTokenizer`] to load the pretrained model and it's associated tokenizer (more on an `TFAutoClass` below):
+
+```py
 >>> from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
 
 >>> model = TFAutoModelForSequenceClassification.from_pretrained(model_name)
 >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
 ```
+</tf>
+</frameworkcontent>
 
-Specify the model and tokenizer in the [`pipeline`], and apply the `classifier` to the text:
+Then you can specify the model and tokenizer in the [`pipeline`], and apply the `classifier` on your target text:
 
 ```py
 >>> classifier = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer)
@@ -139,25 +180,19 @@ Specify the model and tokenizer in the [`pipeline`], and apply the `classifier` 
 [{'label': '5 stars', 'score': 0.7273}]
 ```
 
-If you can't find a model for your use-case, you'll need to fine-tune a pretrained model on your data. Take a look at our [fine-tuning tutorial](./training) to learn how. Finally, after you've fine-tuned your pretrained model, please consider [sharing](./model_sharing) the model with the community on the Hub to democratize machine learning for everyone! 🤗
+If you can't find a model for your use-case, you will need to fine-tune a pretrained model on your data. Take a look at our [fine-tuning tutorial](./training) to learn how. Finally, after you've fine-tuned your pretrained model, please consider sharing it (see tutorial [here](./model_sharing)) with the community on the Model Hub to democratize NLP for everyone! 🤗
 
 ## AutoClass
 
 <Youtube id="AhChOFRegn4"/>
 
-Under the hood, the [`AutoModelForSequenceClassification`] and [`AutoTokenizer`] classes work together to power the [`pipeline`] you used in the example above. An [AutoClass](./model_doc/auto) is a shortcut that automatically retrieves the architecture of a pretrained model from its name or path. You only need to select the appropriate `AutoClass` for your task and its associated preprocessing class. 
+Under the hood, the [`AutoModelForSequenceClassification`] and [`AutoTokenizer`] classes work together to power the [`pipeline`]. An [AutoClass](./model_doc/auto) is a shortcut that automatically retrieves the architecture of a pretrained model from it's name or path. You only need to select the appropriate `AutoClass` for your task and it's associated tokenizer with [`AutoTokenizer`]. 
 
-Let's return to the example from the previous section and see how you can use the `AutoClass` to replicate the results of the [`pipeline`].
+Let's return to our example and see how you can use the `AutoClass` to replicate the results of the [`pipeline`].
 
 ### AutoTokenizer
 
-A tokenizer is responsible for preprocessing text into an array of numbers as inputs to a model. There are multiple rules that govern the tokenization process, including how to split a word and at what level words should be split (learn more about tokenization in the [tokenizer summary](./tokenizer_summary)). The most important thing to remember is to instantiate a tokenizer with the same name as the model you're using. This ensures you're applying the same tokenization rules a model was pretrained with.
-
-<Tip>
-
-Check out the [preprocess](./preprocessing) tutorial for more details about tokenization and how to use an [`AutoFeatureExtractor`] and [`AutoProcessor`] to preprocess image, audio, and multimodal inputs.
-
-</Tip>
+A tokenizer is responsible for preprocessing text into a format that is understandable to the model. First, the tokenizer will split the text into words called *tokens*. There are multiple rules that govern the tokenization process, including how to split a word and at what level (learn more about tokenization [here](./tokenizer_summary)). The most important thing to remember though is you need to instantiate the tokenizer with the same model name to ensure you're using the same tokenization rules a model was pretrained with.
 
 Load a tokenizer with [`AutoTokenizer`]:
 
@@ -167,6 +202,8 @@ Load a tokenizer with [`AutoTokenizer`]:
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
 >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
 ```
+
+Next, the tokenizer converts the tokens into numbers in order to construct a tensor as input to the model. This is known as the model's *vocabulary*.
 
 Pass your text to the tokenizer:
 
@@ -178,13 +215,15 @@ Pass your text to the tokenizer:
  'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
 ```
 
-The tokenizer returns a dictionary containing:
+The tokenizer will return a dictionary containing:
 
 * [input_ids](./glossary#input-ids): numerical representions of your tokens.
 * [atttention_mask](.glossary#attention-mask): indicates which tokens should be attended to.
 
-A tokenizer accepts a list of inputs, and it can also pad and truncate the text to return a batch with uniform length:
+Just like the [`pipeline`], the tokenizer will accept a list of inputs. In addition, the tokenizer can also pad and truncate the text to return a batch with uniform length:
 
+<frameworkcontent>
+<pt>
 ```py
 >>> pt_batch = tokenizer(
 ...     ["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."],
@@ -193,7 +232,10 @@ A tokenizer accepts a list of inputs, and it can also pad and truncate the text 
 ...     max_length=512,
 ...     return_tensors="pt",
 ... )
-===PT-TF-SPLIT===
+```
+</pt>
+<tf>
+```py
 >>> tf_batch = tokenizer(
 ...     ["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."],
 ...     padding=True,
@@ -202,12 +244,16 @@ A tokenizer accepts a list of inputs, and it can also pad and truncate the text 
 ...     return_tensors="tf",
 ... )
 ```
+</tf>
+</frameworkcontent>
+
+Read the [preprocessing](./preprocessing) tutorial for more details about tokenization.
 
 ### AutoModel
 
 <frameworkcontent>
 <pt>
-🤗 Transformers provides a simple and unified way to load pretrained instances, which means you can load an [`AutoModel`] like you would load an [`AutoTokenizer`]. The only difference is selecting the correct [`AutoModel`] for the task. For text (or sequence) classification, load [`AutoModelForSequenceClassification`]:
+🤗 Transformers provides a simple and unified way to load pretrained instances. This means you can load an [`AutoModel`] like you would load an [`AutoTokenizer`]. The only difference is selecting the correct [`AutoModel`] for the task. Since you are doing text - or sequence - classification, load [`AutoModelForSequenceClassification`]:
 
 ```py
 >>> from transformers import AutoModelForSequenceClassification
@@ -218,17 +264,17 @@ A tokenizer accepts a list of inputs, and it can also pad and truncate the text 
 
 <Tip>
 
-See the [task summary](./task_summary) for tasks supported by an [`AutoModel`] class.
+See the [task summary](./task_summary) for which [`AutoModel`] class to use for which task.
 
 </Tip>
 
-Now pass your preprocessed batch of inputs directly to the model, and unpack the dictionary by adding `**`:
+Now you can pass your preprocessed batch of inputs directly to the model. You just have to unpack the dictionary by adding `**`:
 
 ```py
 >>> pt_outputs = pt_model(**pt_batch)
 ```
 
-The model outputs the final activations in the `logits` attribute. Apply a softmax function to the `logits` to retrieve the probabilities:
+The model outputs the final activations in the `logits` attribute. Apply the softmax function to the `logits` to retrieve the probabilities:
 
 ```py
 >>> from torch import nn
@@ -240,7 +286,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 ```
 </pt>
 <tf>
-🤗 Transformers provides a simple and unified way to load pretrained instances, which means you can load an [`TFAutoModel`] like you would load an [`AutoTokenizer`]. The only difference is selecting the correct [`TFAutoModel`] for the task. For text (or sequence) classification, load [`TFAutoModelForSequenceClassification`]:
+🤗 Transformers provides a simple and unified way to load pretrained instances. This means you can load an [`TFAutoModel`] like you would load an [`AutoTokenizer`]. The only difference is selecting the correct [`TFAutoModel`] for the task. Since you are doing text - or sequence - classification, load [`TFAutoModelForSequenceClassification`]:
 
 ```py
 >>> from transformers import TFAutoModelForSequenceClassification
@@ -251,17 +297,17 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 
 <Tip>
 
-See the [task summary](./task_summary) for tasks supported by an [`AutoModel`] class.
+See the [task summary](./task_summary) for which [`AutoModel`] class to use for which task.
 
 </Tip>
 
-Now pass your preprocessed batch of inputs directly to the model by passing the dictionary keys directly to the tensors:
+Now you can pass your preprocessed batch of inputs directly to the model by passing the dictionary keys directly to the tensors:
 
 ```py
 >>> tf_outputs = tf_model(tf_batch)
 ```
 
-The model outputs the final activations in the `logits` attribute. Apply a softmax function to the `logits` to retrieve the probabilities:
+The model outputs the final activations in the `logits` attribute. Apply the softmax function to the `logits` to retrieve the probabilities:
 
 ```py
 >>> import tensorflow as tf
@@ -272,13 +318,81 @@ The model outputs the final activations in the `logits` attribute. Apply a softm
 </tf>
 </frameworkcontent>
 
+<Tip>
 
-All 🤗 Transformers models (PyTorch or TensorFlow) output the tensors *before* the final activation
-function (like softmax) because the final activation function is often fused with the loss. Model outputs are special dataclasses, so their attributes are autocompleted in an IDE. The model outputs behave like a tuple or a dictionary (you can index with an integer, a slice, or a string), and attributes that are `None` are ignored.
+All 🤗 Transformers models (PyTorch or TensorFlow) outputs the tensors *before* the final activation
+function (like softmax) because the final activation function is often fused with the loss.
+
+</Tip>
+
+Models are a standard [`torch.nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) or a [`tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) so you can use them in your usual training loop. However, to make things easier, 🤗 Transformers provides a [`Trainer`] class for PyTorch that adds functionality for distributed training, mixed precision, and more. For TensorFlow, you can use the `fit` method from [Keras](https://keras.io/). Refer to the [training tutorial](./training) for more details.
+
+<Tip>
+
+🤗 Transformers model outputs are special dataclasses so their attributes are autocompleted in an IDE.
+The model outputs also behave like a tuple or a dictionary (e.g., you can index with an integer, a slice or a string) in which case the attributes that are `None` are ignored.
+
+</Tip>
+
+### Save a model
+
+<frameworkcontent>
+<pt>
+Once your model is fine-tuned, you can save it with its tokenizer using [`PreTrainedModel.save_pretrained`]:
+
+```py
+>>> pt_save_directory = "./pt_save_pretrained"
+>>> tokenizer.save_pretrained(pt_save_directory)  # doctest: +IGNORE_RESULT
+>>> pt_model.save_pretrained(pt_save_directory)
+```
+
+When you are ready to use the model again, reload it with [`PreTrainedModel.from_pretrained`]:
+
+```py
+>>> pt_model = AutoModelForSequenceClassification.from_pretrained("./pt_save_pretrained")
+```
+</pt>
+<tf>
+Once your model is fine-tuned, you can save it with its tokenizer using [`TFPreTrainedModel.save_pretrained`]:
+
+```py
+>>> tf_save_directory = "./tf_save_pretrained"
+>>> tokenizer.save_pretrained(tf_save_directory)  # doctest: +IGNORE_RESULT
+>>> tf_model.save_pretrained(tf_save_directory)
+```
+
+When you are ready to use the model again, reload it with [`TFPreTrainedModel.from_pretrained`]:
+
+```py
+>>> tf_model = TFAutoModelForSequenceClassification.from_pretrained("./tf_save_pretrained")
+```
+</tf>
+</frameworkcontent>
+
+One particularly cool 🤗 Transformers feature is the ability to save a model and reload it as either a PyTorch or TensorFlow model. The `from_pt` or `from_tf` parameter can convert the model from one framework to the other:
+
+<frameworkcontent>
+<pt>
+```py
+>>> from transformers import AutoModel
+
+>>> tokenizer = AutoTokenizer.from_pretrained(tf_save_directory)
+>>> pt_model = AutoModelForSequenceClassification.from_pretrained(tf_save_directory, from_tf=True)
+```
+</pt>
+<tf>
+```py
+>>> from transformers import TFAutoModel
+
+>>> tokenizer = AutoTokenizer.from_pretrained(pt_save_directory)
+>>> tf_model = TFAutoModelForSequenceClassification.from_pretrained(pt_save_directory, from_pt=True)
+```
+</tf>
+</frameworkcontent>
 
 ## Custom model builds
 
-You can modify the model's configuration class to change how a model is built. The configuration specifies a model's attributes, such as the number of hidden layers or attention heads. When you initialize a model from a custom configuration class, you are starting from scratch. The model attributes are randomly initialized, and you'll need to train the model before you can use it to get meaningful results.
+You can modify the model's configuration class to change how a model is built. The configuration specifies a model's attributes, such as the number of hidden layers or attention heads. You start from scratch when you initialize a model from a custom configuration class. The model attributes are randomly initialized, and you'll need to train the model before you can use it to get meaningful results.
 
 Start by importing a model's configuration class, and then you can change the number of attention heads, for instance:
 
@@ -288,6 +402,8 @@ Start by importing a model's configuration class, and then you can change the nu
 >>> my_config = DistilBertConfig(n_heads=12)
 ```
 
+<frameworkcontent>
+<pt>
 Create a model from your custom configuration:
 
 ```py
@@ -295,101 +411,19 @@ Create a model from your custom configuration:
 
 >>> my_model = DistilBertForSequenceClassification(my_config)
 ```
+</pt>
+<tf>
+Create a model from your custom configuration:
+
+```py
+>>> from transformers import TFDistilBertForSequenceClassification
+
+>>> my_model = TFDistilBertForSequenceClassification(my_config)
+```
+</tf>
+</frameworkcontent>
 
 Take a look at the [Create a custom architecture](./create_a_model) guide for more information about building custom configurations.
-
-## Trainer
-
-All models are a standard [`torch.nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) or a [`tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) so you can use them in any standard training loop. However, to make things easier, 🤗 Transformers provides a [`Trainer`] class for PyTorch, which adds functionality for distributed training, mixed precision, and more. 
-
-<Tip>
-
-For TensorFlow, convert the dataset into a TensorFlow compatible format with [`~datasets.Dataset.to_tf_dataset`]. Then you can compile and fit your model with the usual Keras methods. Take a look at the [fine-tuning tutorial](./training#convert-dataset-to-tensorflow-format) for more details.
-
-</Tip>
-
-Before you can use the [`Trainer`], load and prepare a dataset. This example uses the [Yelp Review](https://huggingface.co/datasets/yelp_review_full) dataset:
-
-```py
->>> from datasets import load_dataset
-
->>> dataset = load_dataset("yelp_review_full")
-```
-
-Tokenize the dataset with [`~datasets.Dataset.map`]:
-
-```py
->>> from transformers import AutoTokenizer
-
->>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
-
-
->>> def tokenize_function(examples):
-...     return tokenizer(examples["text"], padding="max_length", truncation=True)
-
-
->>> tokenized_datasets = dataset.map(tokenize_function, batched=True)
-```
-
-Import your model and the expected number of labels:
-
-```py
->>> from transformers import AutoModelForSequenceClassification
-
->>> model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", num_labels=5)
-```
-
-The [`TrainingArguments`] class holds all the available hyperparameters and flags for activating different training options. You can adjust the learning rate, whether you want to use mixed-precision training and options for pushing a model to the Hub, and many more. Take a look at the [`TrainingArguments` API reference](./main_classes/trainer#transformers.TrainingArguments) for a full list of options.
-
-In this example, you'll use the default values and save the model checkpoints to an output directory:
-
-```py
->>> from transformers import TrainingArguments
-
->>> training_args = TrainingArguments(output_dir="test_trainer")
-```
-
-Now create a [`Trainer`] with the model, training arguments, and train and test datasets. Then call [`~Trainer.train`] to fine-tune your model:
-
-```py
->>> trainer.train()
-```
-
-### Save a model
-
-Once your model is fine-tuned, you can save it with its tokenizer using [`~PreTrainedModel.save_pretrained`]:
-
-```py
->>> pt_save_directory = "./pt_save_pretrained"
->>> tokenizer.save_pretrained(pt_save_directory)  # doctest: +IGNORE_RESULT
->>> pt_model.save_pretrained(pt_save_directory)
-===PT-TF-SPLIT===
->>> tf_save_directory = "./tf_save_pretrained"
->>> tokenizer.save_pretrained(tf_save_directory)  # doctest: +IGNORE_RESULT
->>> tf_model.save_pretrained(tf_save_directory)
-```
-
-When you are ready to use the model again, reload it with [`~PreTrainedModel.from_pretrained`]:
-
-```py
->>> pt_model = AutoModelForSequenceClassification.from_pretrained("./pt_save_pretrained")
-===PT-TF-SPLIT===
->>> tf_model = TFAutoModelForSequenceClassification.from_pretrained("./tf_save_pretrained")
-```
-
-One particularly cool 🤗 Transformers feature is the ability to save a model and reload it as either a PyTorch or TensorFlow model. The `from_pt` or `from_tf` parameter can convert the model from one framework to the other:
-
-```py
->>> from transformers import AutoModel
-
->>> tokenizer = AutoTokenizer.from_pretrained(tf_save_directory)
->>> pt_model = AutoModelForSequenceClassification.from_pretrained(tf_save_directory, from_tf=True)
-===PT-TF-SPLIT===
->>> from transformers import TFAutoModel
-
->>> tokenizer = AutoTokenizer.from_pretrained(pt_save_directory)
->>> tf_model = TFAutoModelForSequenceClassification.from_pretrained(pt_save_directory, from_pt=True)
-```
 
 ## What's next?
 
