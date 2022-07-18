@@ -61,10 +61,10 @@ references:
 jobs:
     run_examples_torch:
         working_directory: ~/transformers
-        machine:
-          image: ubuntu-2004:202201-02
-#        docker:
-#            - image: cimg/python:3.7.12
+#        machine:
+#          image: ubuntu-2004:202201-02
+        docker:
+            - image: cimg/python:3.7.12
         resource_class: xlarge
         parallelism: 1
         steps:
@@ -79,7 +79,7 @@ jobs:
             - run: pip3 install --upgrade pip
             - run: pip3 install .[sklearn,torch,sentencepiece,testing,torch-speech]
             - run: pip3 install -r examples/pytorch/_tests_requirements.txt
-            - run: git clone https://github.com/bmcfee/resampy.git && cd resampy && git checkout a36275670f284e8f09d71ef3515dc7513aeba6e6 && pip3 install -U -e . && cd ..
+            - run: git clone https://github.com/ydshieh/resampy.git && cd resampy && git checkout bfd788dd60cdf4c94d6d0e33de57d58685570f72 && pip3 install -U -e . && cd ..
             - run: pip3 install -U numpy==1.21.6
             - run: |
                     python3 -m pytest -n 1 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/test_pytorch_examples.py -k "(test_run_audio_classification or test_run_clm)"
