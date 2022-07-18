@@ -23,7 +23,7 @@ from packaging import version
 
 from transformers import BeitConfig
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -210,6 +210,11 @@ class BeitModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="BEiT does not use inputs_embeds")
     def test_inputs_embeds(self):
+        pass
+
+    @require_torch_multi_gpu
+    @unittest.skip(reason="BEiT has some layers using `add_module` which doesn't work well with `nn.DataParallel`")
+    def test_multi_gpu_data_parallel_forward(self):
         pass
 
     def test_model_common_attributes(self):
