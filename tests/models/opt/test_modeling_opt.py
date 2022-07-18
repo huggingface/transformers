@@ -245,7 +245,7 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
-    def test_gpt2_sequence_classification_model(self):
+    def test_opt_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         config.num_labels = 3
         input_ids = input_dict["input_ids"]
