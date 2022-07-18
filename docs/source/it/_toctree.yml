@@ -11,4 +11,6 @@
     title: Pipeline per l'inferenza
   - local: autoclass_tutorial
     title: Carica istanze pre-allenate con AutoClass
+  - local: preprocessing
+    title: Preprocess
   title: Esercitazione
