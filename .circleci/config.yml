@@ -79,7 +79,7 @@ jobs:
             - run: pip3 install --upgrade pip
             - run: pip3 install .[sklearn,torch,sentencepiece,testing,torch-speech]
             - run: pip3 install -r examples/pytorch/_tests_requirements.txt
-            - run: git clone https://github.com/ydshieh/resampy.git && cd resampy && git checkout 6b76bab1592ff3664babaf45a6c1a075d55e6987 && pip3 install -U -e . && cd ..
+            - run: git clone https://github.com/ydshieh/resampy.git && cd resampy && git checkout 5cbf6b67b0f007d1567926578c18e743669cf54f && pip3 install -U -e . && cd ..
             - run: pip3 install -U numpy==1.21.6
             - run: |
                     python3 -m pytest -n 1 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/test_pytorch_examples.py -k "(test_run_audio_classification or test_run_clm)"
