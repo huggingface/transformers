@@ -67,8 +67,8 @@ class NllbTokenizerFast(PreTrainedTokenizerFast):
     This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
     refer to this superclass for more information regarding those methods.
 
-    The tokenization method is `<tokens> <eos> <language code>` for source language documents, and ``<language code>
-    <tokens> <eos>``` for target language documents.
+    The tokenization method is `<tokens> <eos> <language code>` for source language documents, and `<language code>
+    <tokens> <eos>` for target language documents.
 
     Examples:
 
