@@ -303,7 +303,9 @@ class BloomAttention(nn.Module):
         # We replace the scaled softmax by just a few line of code - [batch_size, num_heads, q_length, k_length]
         input_dtype = attention_scores.dtype
         attn_weights = (attention_scores * self.layer_number) + attention_mask
-        attn_weights = torch.clip(attn_weights, torch.finfo(attn_weights.dtype).min, torch.finfo(attn_weights.dtype).max) 
+        attn_weights = torch.clip(
+            attn_weights, torch.finfo(attn_weights.dtype).min, torch.finfo(attn_weights.dtype).max
+        )
         attention_probs = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(input_dtype)
         attention_probs = attention_probs * (~attention_mask.bool())
         # [batch_size, num_heads, q_length, k_length]
