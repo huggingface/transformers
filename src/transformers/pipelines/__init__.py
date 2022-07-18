@@ -30,7 +30,7 @@ from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, Aut
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
 from ..tokenization_utils_fast import PreTrainedTokenizerFast
-from ..utils import http_get, is_tf_available, is_torch_available, logging
+from ..utils import HUGGINGFACE_CO_RESOLVE_ENDPOINT, http_get, is_tf_available, is_torch_available, logging
 from .audio_classification import AudioClassificationPipeline
 from .automatic_speech_recognition import AutomaticSpeechRecognitionPipeline
 from .base import (
@@ -41,7 +41,8 @@ from .base import (
     Pipeline,
     PipelineDataFormat,
     PipelineException,
-    get_default_model,
+    PipelineRegistry,
+    get_default_model_and_revision,
     infer_framework_load_model,
 )
 from .conversational import Conversation, ConversationalPipeline
@@ -61,6 +62,7 @@ from .token_classification import (
     TokenClassificationArgumentHandler,
     TokenClassificationPipeline,
 )
+from .visual_question_answering import VisualQuestionAnsweringPipeline
 from .zero_shot_classification import ZeroShotClassificationArgumentHandler, ZeroShotClassificationPipeline
 from .zero_shot_image_classification import ZeroShotImageClassificationPipeline
 
@@ -94,6 +96,7 @@ if is_torch_available():
         MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+        MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING,
         AutoModel,
         AutoModelForAudioClassification,
         AutoModelForCausalLM,
@@ -109,6 +112,7 @@ if is_torch_available():
         AutoModelForSpeechSeq2Seq,
         AutoModelForTableQuestionAnswering,
         AutoModelForTokenClassification,
+        AutoModelForVisualQuestionAnswering,
     )
 if TYPE_CHECKING:
     from ..modeling_tf_utils import TFPreTrainedModel
@@ -121,27 +125,28 @@ logger = logging.get_logger(__name__)
 TASK_ALIASES = {
     "sentiment-analysis": "text-classification",
     "ner": "token-classification",
+    "vqa": "visual-question-answering",
 }
 SUPPORTED_TASKS = {
     "audio-classification": {
         "impl": AudioClassificationPipeline,
         "tf": (),
         "pt": (AutoModelForAudioClassification,) if is_torch_available() else (),
-        "default": {"model": {"pt": "superb/wav2vec2-base-superb-ks"}},
+        "default": {"model": {"pt": ("superb/wav2vec2-base-superb-ks", "372e048")}},
         "type": "audio",
     },
     "automatic-speech-recognition": {
         "impl": AutomaticSpeechRecognitionPipeline,
         "tf": (),
         "pt": (AutoModelForCTC, AutoModelForSpeechSeq2Seq) if is_torch_available() else (),
-        "default": {"model": {"pt": "facebook/wav2vec2-base-960h"}},
+        "default": {"model": {"pt": ("facebook/wav2vec2-base-960h", "55bb623")}},
         "type": "multimodal",
     },
     "feature-extraction": {
         "impl": FeatureExtractionPipeline,
         "tf": (TFAutoModel,) if is_tf_available() else (),
         "pt": (AutoModel,) if is_torch_available() else (),
-        "default": {"model": {"pt": "distilbert-base-cased", "tf": "distilbert-base-cased"}},
+        "default": {"model": {"pt": ("distilbert-base-cased", "935ac13"), "tf": ("distilbert-base-cased", "935ac13")}},
         "type": "multimodal",
     },
     "text-classification": {
@@ -150,8 +155,8 @@ SUPPORTED_TASKS = {
         "pt": (AutoModelForSequenceClassification,) if is_torch_available() else (),
         "default": {
             "model": {
-                "pt": "distilbert-base-uncased-finetuned-sst-2-english",
-                "tf": "distilbert-base-uncased-finetuned-sst-2-english",
+                "pt": ("distilbert-base-uncased-finetuned-sst-2-english", "af0f99b"),
+                "tf": ("distilbert-base-uncased-finetuned-sst-2-english", "af0f99b"),
             },
         },
         "type": "text",
@@ -162,8 +167,8 @@ SUPPORTED_TASKS = {
         "pt": (AutoModelForTokenClassification,) if is_torch_available() else (),
         "default": {
             "model": {
-                "pt": "dbmdz/bert-large-cased-finetuned-conll03-english",
-                "tf": "dbmdz/bert-large-cased-finetuned-conll03-english",
+                "pt": ("dbmdz/bert-large-cased-finetuned-conll03-english", "f2482bf"),
+                "tf": ("dbmdz/bert-large-cased-finetuned-conll03-english", "f2482bf"),
             },
         },
         "type": "text",
@@ -173,7 +178,10 @@ SUPPORTED_TASKS = {
         "tf": (TFAutoModelForQuestionAnswering,) if is_tf_available() else (),
         "pt": (AutoModelForQuestionAnswering,) if is_torch_available() else (),
         "default": {
-            "model": {"pt": "distilbert-base-cased-distilled-squad", "tf": "distilbert-base-cased-distilled-squad"},
+            "model": {
+                "pt": ("distilbert-base-cased-distilled-squad", "626af31"),
+                "tf": ("distilbert-base-cased-distilled-squad", "626af31"),
+            },
         },
         "type": "text",
     },
@@ -183,25 +191,33 @@ SUPPORTED_TASKS = {
         "tf": (TFAutoModelForTableQuestionAnswering,) if is_tf_available() else (),
         "default": {
             "model": {
-                "pt": "google/tapas-base-finetuned-wtq",
-                "tokenizer": "google/tapas-base-finetuned-wtq",
-                "tf": "google/tapas-base-finetuned-wtq",
+                "pt": ("google/tapas-base-finetuned-wtq", "69ceee2"),
+                "tf": ("google/tapas-base-finetuned-wtq", "69ceee2"),
             },
         },
         "type": "text",
+    },
+    "visual-question-answering": {
+        "impl": VisualQuestionAnsweringPipeline,
+        "pt": (AutoModelForVisualQuestionAnswering,) if is_torch_available() else (),
+        "tf": (),
+        "default": {
+            "model": {"pt": ("dandelin/vilt-b32-finetuned-vqa", "4355f59")},
+        },
+        "type": "multimodal",
     },
     "fill-mask": {
         "impl": FillMaskPipeline,
         "tf": (TFAutoModelForMaskedLM,) if is_tf_available() else (),
         "pt": (AutoModelForMaskedLM,) if is_torch_available() else (),
-        "default": {"model": {"pt": "distilroberta-base", "tf": "distilroberta-base"}},
+        "default": {"model": {"pt": ("distilroberta-base", "ec58a5b"), "tf": ("distilroberta-base", "ec58a5b")}},
         "type": "text",
     },
     "summarization": {
         "impl": SummarizationPipeline,
         "tf": (TFAutoModelForSeq2SeqLM,) if is_tf_available() else (),
         "pt": (AutoModelForSeq2SeqLM,) if is_torch_available() else (),
-        "default": {"model": {"pt": "sshleifer/distilbart-cnn-12-6", "tf": "t5-small"}},
+        "default": {"model": {"pt": ("sshleifer/distilbart-cnn-12-6", "a4f8f3e"), "tf": ("t5-small", "d769bba")}},
         "type": "text",
     },
     # This task is a special case as it's parametrized by SRC, TGT languages.
@@ -210,9 +226,9 @@ SUPPORTED_TASKS = {
         "tf": (TFAutoModelForSeq2SeqLM,) if is_tf_available() else (),
         "pt": (AutoModelForSeq2SeqLM,) if is_torch_available() else (),
         "default": {
-            ("en", "fr"): {"model": {"pt": "t5-base", "tf": "t5-base"}},
-            ("en", "de"): {"model": {"pt": "t5-base", "tf": "t5-base"}},
-            ("en", "ro"): {"model": {"pt": "t5-base", "tf": "t5-base"}},
+            ("en", "fr"): {"model": {"pt": ("t5-base", "686f1db"), "tf": ("t5-base", "686f1db")}},
+            ("en", "de"): {"model": {"pt": ("t5-base", "686f1db"), "tf": ("t5-base", "686f1db")}},
+            ("en", "ro"): {"model": {"pt": ("t5-base", "686f1db"), "tf": ("t5-base", "686f1db")}},
         },
         "type": "text",
     },
@@ -220,14 +236,14 @@ SUPPORTED_TASKS = {
         "impl": Text2TextGenerationPipeline,
         "tf": (TFAutoModelForSeq2SeqLM,) if is_tf_available() else (),
         "pt": (AutoModelForSeq2SeqLM,) if is_torch_available() else (),
-        "default": {"model": {"pt": "t5-base", "tf": "t5-base"}},
+        "default": {"model": {"pt": ("t5-base", "686f1db"), "tf": ("t5-base", "686f1db")}},
         "type": "text",
     },
     "text-generation": {
         "impl": TextGenerationPipeline,
         "tf": (TFAutoModelForCausalLM,) if is_tf_available() else (),
         "pt": (AutoModelForCausalLM,) if is_torch_available() else (),
-        "default": {"model": {"pt": "gpt2", "tf": "gpt2"}},
+        "default": {"model": {"pt": ("gpt2", "6c0e608"), "tf": ("gpt2", "6c0e608")}},
         "type": "text",
     },
     "zero-shot-classification": {
@@ -235,9 +251,8 @@ SUPPORTED_TASKS = {
         "tf": (TFAutoModelForSequenceClassification,) if is_tf_available() else (),
         "pt": (AutoModelForSequenceClassification,) if is_torch_available() else (),
         "default": {
-            "model": {"pt": "facebook/bart-large-mnli", "tf": "roberta-large-mnli"},
-            "config": {"pt": "facebook/bart-large-mnli", "tf": "roberta-large-mnli"},
-            "tokenizer": {"pt": "facebook/bart-large-mnli", "tf": "roberta-large-mnli"},
+            "model": {"pt": ("facebook/bart-large-mnli", "c626438"), "tf": ("roberta-large-mnli", "130fb28")},
+            "config": {"pt": ("facebook/bart-large-mnli", "c626438"), "tf": ("roberta-large-mnli", "130fb28")},
         },
         "type": "text",
     },
@@ -245,35 +260,42 @@ SUPPORTED_TASKS = {
         "impl": ZeroShotImageClassificationPipeline,
         "tf": (TFAutoModel,) if is_tf_available() else (),
         "pt": (AutoModel,) if is_torch_available() else (),
-        "default": {"model": {"pt": "openai/clip-vit-base-patch32", "tf": "openai/clip-vit-base-patch32"}},
+        "default": {
+            "model": {
+                "pt": ("openai/clip-vit-base-patch32", "f4881ba"),
+                "tf": ("openai/clip-vit-base-patch32", "f4881ba"),
+            }
+        },
         "type": "multimodal",
     },
     "conversational": {
         "impl": ConversationalPipeline,
         "tf": (TFAutoModelForSeq2SeqLM, TFAutoModelForCausalLM) if is_tf_available() else (),
         "pt": (AutoModelForSeq2SeqLM, AutoModelForCausalLM) if is_torch_available() else (),
-        "default": {"model": {"pt": "microsoft/DialoGPT-medium", "tf": "microsoft/DialoGPT-medium"}},
+        "default": {
+            "model": {"pt": ("microsoft/DialoGPT-medium", "8bada3b"), "tf": ("microsoft/DialoGPT-medium", "8bada3b")}
+        },
         "type": "text",
     },
     "image-classification": {
         "impl": ImageClassificationPipeline,
         "tf": (),
         "pt": (AutoModelForImageClassification,) if is_torch_available() else (),
-        "default": {"model": {"pt": "google/vit-base-patch16-224"}},
+        "default": {"model": {"pt": ("google/vit-base-patch16-224", "5dca96d")}},
         "type": "image",
     },
     "image-segmentation": {
         "impl": ImageSegmentationPipeline,
         "tf": (),
         "pt": (AutoModelForImageSegmentation, AutoModelForSemanticSegmentation) if is_torch_available() else (),
-        "default": {"model": {"pt": "facebook/detr-resnet-50-panoptic"}},
+        "default": {"model": {"pt": ("facebook/detr-resnet-50-panoptic", "fc15262")}},
         "type": "image",
     },
     "object-detection": {
         "impl": ObjectDetectionPipeline,
         "tf": (),
         "pt": (AutoModelForObjectDetection,) if is_torch_available() else (),
-        "default": {"model": {"pt": "facebook/detr-resnet-50"}},
+        "default": {"model": {"pt": ("facebook/detr-resnet-50", "2729413")}},
         "type": "image",
     },
 }
@@ -288,14 +310,14 @@ for task, values in SUPPORTED_TASKS.items():
     elif values["type"] != "multimodal":
         raise ValueError(f"SUPPORTED_TASK {task} contains invalid type {values['type']}")
 
+PIPELINE_REGISTRY = PipelineRegistry(supported_tasks=SUPPORTED_TASKS, task_aliases=TASK_ALIASES)
+
 
 def get_supported_tasks() -> List[str]:
     """
     Returns a list of supported task strings.
     """
-    supported_tasks = list(SUPPORTED_TASKS.keys()) + list(TASK_ALIASES.keys())
-    supported_tasks.sort()
-    return supported_tasks
+    return PIPELINE_REGISTRY.get_supported_tasks()
 
 
 def get_task(model: str, use_auth_token: Optional[str] = None) -> str:
@@ -354,20 +376,7 @@ def check_task(task: str) -> Tuple[Dict, Any]:
 
 
     """
-    if task in TASK_ALIASES:
-        task = TASK_ALIASES[task]
-    if task in SUPPORTED_TASKS:
-        targeted_task = SUPPORTED_TASKS[task]
-        return targeted_task, None
-
-    if task.startswith("translation"):
-        tokens = task.split("_")
-        if len(tokens) == 4 and tokens[0] == "translation" and tokens[2] == "to":
-            targeted_task = SUPPORTED_TASKS["translation"]
-            return targeted_task, (tokens[1], tokens[3])
-        raise KeyError(f"Invalid translation task {task}, use 'translation_XX_to_YY' format")
-
-    raise KeyError(f"Unknown task {task}, available tasks are {get_supported_tasks() + ['translation_XX_to_YY']}")
+    return PIPELINE_REGISTRY.check_task(task)
 
 
 def pipeline(
@@ -380,6 +389,8 @@ def pipeline(
     revision: Optional[str] = None,
     use_fast: bool = True,
     use_auth_token: Optional[Union[str, bool]] = None,
+    device_map=None,
+    torch_dtype=None,
     model_kwargs: Dict[str, Any] = None,
     pipeline_class: Optional[Any] = None,
     **kwargs
@@ -463,6 +474,20 @@ def pipeline(
         use_auth_token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
             when running `transformers-cli login` (stored in `~/.huggingface`).
+        device_map (`str` or `Dict[str, Union[int, str, torch.device]`, *optional*):
+            Sent directly as `model_kwargs` (just a simpler shortcut). When `accelerate` library is present, set
+            `device_map="auto"` to compute the most optimized `device_map` automatically. [More
+            information](https://huggingface.co/docs/accelerate/main/en/big_modeling#accelerate.cpu_offload)
+
+            <Tip warning={true}>
+
+            Do not use `device_map` AND `device` at the same time as they will conflict
+
+            </Tip>
+
+        torch_dtype (`str` or `torch.dtype`, *optional*):
+            Sent directly as `model_kwargs` (just a simpler shortcut) to use the available precision for this model
+            (`torch.float16`, `torch.bfloat16`, ... or `"auto"`).
         model_kwargs:
             Additional dictionary of keyword arguments passed along to the model's `from_pretrained(...,
             **model_kwargs)` function.
@@ -528,11 +553,30 @@ def pipeline(
     # Use default model/config/tokenizer for the task if no model is provided
     if model is None:
         # At that point framework might still be undetermined
-        model = get_default_model(targeted_task, framework, task_options)
-        logger.warning(f"No model was supplied, defaulted to {model} (https://huggingface.co/{model})")
+        model, default_revision = get_default_model_and_revision(targeted_task, framework, task_options)
+        revision = revision if revision is not None else default_revision
+        logger.warning(
+            f"No model was supplied, defaulted to {model} and revision"
+            f" {revision} ({HUGGINGFACE_CO_RESOLVE_ENDPOINT}/{model}).\n"
+            "Using a pipeline without specifying a model name and revision in production is not recommended."
+        )
 
     # Retrieve use_auth_token and add it to model_kwargs to be used in .from_pretrained
     model_kwargs["use_auth_token"] = model_kwargs.get("use_auth_token", use_auth_token)
+    if device_map is not None:
+        if "device_map" in model_kwargs:
+            raise ValueError(
+                'You cannot use both `pipeline(... device_map=..., model_kwargs={"device_map":...})` as those'
+                " arguments might conflict, use only one.)"
+            )
+        model_kwargs["device_map"] = device_map
+    if torch_dtype is not None:
+        if "torch_dtype" in model_kwargs:
+            raise ValueError(
+                'You cannot use both `pipeline(... torch_dtype=..., model_kwargs={"torch_dtype":...})` as those'
+                " arguments might conflict, use only one.)"
+            )
+        model_kwargs["torch_dtype"] = torch_dtype
 
     # Config is the primordial information item.
     # Instantiate config if needed

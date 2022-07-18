@@ -447,8 +447,6 @@ class LongformerEmbeddings(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-        # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
 
         self.padding_idx = config.pad_token_id
@@ -469,13 +467,8 @@ class LongformerEmbeddings(nn.Module):
         else:
             input_shape = inputs_embeds.size()[:-1]
 
-        seq_length = input_shape[1]
-
-        if position_ids is None:
-            position_ids = self.position_ids[:, :seq_length]
-
         if token_type_ids is None:
-            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
+            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=position_ids.device)
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
@@ -586,7 +579,7 @@ class LongformerSelfAttention(nn.Module):
 
         # cast to fp32/fp16 then replace 1's with -inf
         float_mask = remove_from_windowed_attention_mask.type_as(query_vectors).masked_fill(
-            remove_from_windowed_attention_mask, -10000.0
+            remove_from_windowed_attention_mask, torch.finfo(query_vectors.dtype).min
         )
         # diagonal mask with zeros everywhere and -inf inplace of padding
         diagonal_mask = self._sliding_chunks_query_key_matmul(
@@ -958,7 +951,7 @@ class LongformerSelfAttention(nn.Module):
 
         attn_probs_from_global_key[
             is_local_index_no_global_attn_nonzero[0], :, :, is_local_index_no_global_attn_nonzero[1]
-        ] = -10000.0
+        ] = torch.finfo(attn_probs_from_global_key.dtype).min
 
         return attn_probs_from_global_key
 
@@ -1054,11 +1047,11 @@ class LongformerSelfAttention(nn.Module):
 
         global_attn_scores[
             is_local_index_no_global_attn_nonzero[0], :, is_local_index_no_global_attn_nonzero[1], :
-        ] = -10000.0
+        ] = torch.finfo(global_attn_scores.dtype).min
 
         global_attn_scores = global_attn_scores.masked_fill(
             is_index_masked[:, None, None, :],
-            -10000.0,
+            torch.finfo(global_attn_scores.dtype).min,
         )
 
         global_attn_scores = global_attn_scores.view(batch_size * self.num_heads, max_num_global_attn_indices, seq_len)
@@ -1392,7 +1385,7 @@ class LongformerPreTrainedModel(PreTrainedModel):
     config_class = LongformerConfig
     base_model_prefix = "longformer"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
+    _keys_to_ignore_on_load_unexpected = [r"position_ids"]
 
     def _init_weights(self, module):
         """Initialize the weights"""

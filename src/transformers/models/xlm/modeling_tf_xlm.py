@@ -797,6 +797,8 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFXLMMainLayer(config, name="transformer")
         self.pred_layer = TFXLMPredLayer(config, self.transformer.embeddings, name="pred_layer_._proj")
+        # XLM does not have past caching features
+        self.supports_xla_generation = False
 
     def get_lm_head(self):
         return self.pred_layer

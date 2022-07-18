@@ -869,8 +869,8 @@ class RealmReaderProjection(nn.Module):
 
             return starts, ends, span_masks
 
-        def mask_to_score(mask):
-            return (1.0 - mask.type(torch.float32)) * -10000.0
+        def mask_to_score(mask, dtype=torch.float32):
+            return (1.0 - mask.type(dtype)) * torch.finfo(dtype).min
 
         # [reader_beam_size, max_sequence_len, span_hidden_size * 2]
         hidden_states = self.dense_intermediate(hidden_states)
@@ -890,7 +890,7 @@ class RealmReaderProjection(nn.Module):
         # [reader_beam_size, num_candidates]
         reader_logits = self.dense_output(candidate_hidden).squeeze(-1)
         # [reader_beam_size, num_candidates]
-        reader_logits += mask_to_score(candidate_mask)
+        reader_logits += mask_to_score(candidate_mask, dtype=reader_logits.dtype)
 
         return reader_logits, candidate_starts, candidate_ends
 
@@ -1634,11 +1634,11 @@ class RealmReader(RealmPreTrainedModel):
             def marginal_log_loss(logits, is_correct):
                 """Loss based on the negative marginal log-likelihood."""
 
-                def mask_to_score(mask):
-                    return (1.0 - mask.type(torch.float32)) * -10000.0
+                def mask_to_score(mask, dtype=torch.float32):
+                    return (1.0 - mask.type(dtype)) * torch.finfo(dtype).min
 
                 # []
-                log_numerator = torch.logsumexp(logits + mask_to_score(is_correct), dim=-1)
+                log_numerator = torch.logsumexp(logits + mask_to_score(is_correct, dtype=logits.dtype), dim=-1)
                 log_denominator = torch.logsumexp(logits, dim=-1)
                 return log_denominator - log_numerator
 

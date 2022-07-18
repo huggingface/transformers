@@ -959,13 +959,13 @@ class LxmertModel(LxmertPreTrainedModel):
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
         extended_attention_mask = extended_attention_mask.to(dtype=self.dtype)
-        extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
+        extended_attention_mask = (1.0 - extended_attention_mask) * torch.finfo(self.dtype).min
 
         # Process the visual attention mask
         if visual_attention_mask is not None:
             extended_visual_attention_mask = visual_attention_mask.unsqueeze(1).unsqueeze(2)
             extended_visual_attention_mask = extended_visual_attention_mask.to(dtype=self.dtype)
-            extended_visual_attention_mask = (1.0 - extended_visual_attention_mask) * -10000.0
+            extended_visual_attention_mask = (1.0 - extended_visual_attention_mask) * torch.finfo(self.dtype).min
         else:
             extended_visual_attention_mask = None
 
@@ -1110,7 +1110,7 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
 
     def get_qa_logit_layer(self) -> nn.Module:
         """
-        Returns the the linear layer that produces question answering logits.
+        Returns the linear layer that produces question answering logits.
 
         Returns:
             `nn.Module`: A torch module mapping the question answering prediction hidden states or `None` if LXMERT
@@ -1341,7 +1341,7 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
 
     def get_qa_logit_layer(self) -> nn.Module:
         """
-        Returns the the linear layer that produces question answering logits
+        Returns the linear layer that produces question answering logits
 
         Returns:
             `nn.Module`: A torch module mapping the question answering prediction hidden states. `None`: A NoneType

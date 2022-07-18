@@ -34,7 +34,7 @@ from ...modeling_outputs import (
     Seq2SeqModelOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import ALL_LAYERNORM_LAYERS, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
@@ -274,6 +274,8 @@ except ImportError:
 except Exception:
     logger.warning("discovered apex but it failed to load, falling back to T5LayerNorm")
     pass
+
+ALL_LAYERNORM_LAYERS.append(T5LayerNorm)
 
 
 class T5DenseActDense(nn.Module):
@@ -1266,11 +1268,11 @@ num_heads)`.
 )
 class T5Model(T5PreTrainedModel):
     _keys_to_ignore_on_load_missing = [
-        r"encoder\.embed_tokens\.weight",
-        r"decoder\.embed_tokens\.weight",
+        r"encoder.embed_tokens.weight",
+        r"decoder.embed_tokens.weight",
     ]
     _keys_to_ignore_on_load_unexpected = [
-        r"decoder\.block\.0\.layer\.1\.EncDecAttention\.relative_attention_bias\.weight",
+        r"decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
     ]
 
     def __init__(self, config: T5Config):
@@ -1408,8 +1410,7 @@ class T5Model(T5PreTrainedModel):
             )
 
         hidden_states = encoder_outputs[0]
-        if self.model_parallel:
-            torch.cuda.set_device(self.decoder.first_device)
+
         # Set device for model parallelism
         if self.model_parallel:
             torch.cuda.set_device(self.decoder.first_device)
@@ -1455,12 +1456,12 @@ class T5Model(T5PreTrainedModel):
 @add_start_docstrings("""T5 Model with a `language modeling` head on top.""", T5_START_DOCSTRING)
 class T5ForConditionalGeneration(T5PreTrainedModel):
     _keys_to_ignore_on_load_missing = [
-        r"encoder\.embed_tokens\.weight",
-        r"decoder\.embed_tokens\.weight",
-        r"lm_head\.weight",
+        r"encoder.embed_tokens.weight",
+        r"decoder.embed_tokens.weight",
+        r"lm_head.weight",
     ]
     _keys_to_ignore_on_load_unexpected = [
-        r"decoder\.block\.0\.layer\.1\.EncDecAttention\.relative_attention_bias\.weight",
+        r"decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
     ]
 
     def __init__(self, config: T5Config):
@@ -1749,7 +1750,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
 )
 class T5EncoderModel(T5PreTrainedModel):
     authorized_missing_keys = [
-        r"encoder\.embed_tokens\.weight",
+        r"encoder.embed_tokens.weight",
     ]
 
     def __init__(self, config: T5Config):

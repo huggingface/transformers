@@ -69,7 +69,9 @@ from .deepspeed import deepspeed_init, is_deepspeed_zero3_enabled
 from .dependency_versions_check import dep_version_check
 from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
+from .models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from .optimization import Adafactor, get_scheduler
+from .pytorch_utils import ALL_LAYERNORM_LAYERS
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
@@ -139,6 +141,7 @@ from .utils import (
     is_ipex_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
+    is_torch_tensorrt_fx_available,
     is_torch_tpu_available,
     is_torchdynamo_available,
     logging,
@@ -171,7 +174,7 @@ if version.parse(torch.__version__) >= version.parse("1.10"):
 if is_datasets_available():
     import datasets
 
-if is_torch_tpu_available():
+if is_torch_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
     import torch_xla.debug.metrics as met
     import torch_xla.distributed.parallel_loader as pl
@@ -230,7 +233,7 @@ class Trainer:
             default to [`default_data_collator`] if no `tokenizer` is provided, an instance of
             [`DataCollatorWithPadding`] otherwise.
         train_dataset (`torch.utils.data.Dataset` or `torch.utils.data.IterableDataset`, *optional*):
-            The dataset to use for training. If it is an `datasets.Dataset`, columns not accepted by the
+            The dataset to use for training. If it is a [`~datasets.Dataset`], columns not accepted by the
             `model.forward()` method are automatically removed.
 
             Note that if it's a `torch.utils.data.IterableDataset` with some randomization and you are training in a
@@ -239,7 +242,7 @@ class Trainer:
             manually set the seed of this `generator` at each epoch) or have a `set_epoch()` method that internally
             sets the seed of the RNGs used.
         eval_dataset (`torch.utils.data.Dataset`, *optional*):
-             The dataset to use for evaluation. If it is an `datasets.Dataset`, columns not accepted by the
+             The dataset to use for evaluation. If it is a [`~datasets.Dataset`], columns not accepted by the
              `model.forward()` method are automatically removed.
         tokenizer ([`PreTrainedTokenizerBase`], *optional*):
             The tokenizer used to preprocess the data. If provided, will be used to automatically pad the inputs the
@@ -384,13 +387,12 @@ class Trainer:
             if args.local_rank == -1:
                 raise ValueError("Using fsdp only works in distributed training.")
 
-            #  dep_version_check("torch>=1.12.0.dev20220418+cu113")
-            # Would have to update setup.py with torch>=1.12.0.dev20220418+cu113
-            # which isn't ideally given that it's a dev version
-            # and it will force people not using FSDP to also use torch>=1.12.0.dev20220418+cu113
+            # dep_version_check("torch>=1.12.0")
+            # Would have to update setup.py with torch>=1.12.0
+            # which isn't ideally given that it will force people not using FSDP to also use torch>=1.12.0
             # below is the current alternative.
-            if version.parse(torch.__version__) < version.parse("1.12.0.dev20220418+cu113"):
-                raise ValueError("FSDP requires PyTorch >= 1.12.0.dev20220418+cu113")
+            if version.parse(torch.__version__) < version.parse("1.12.0"):
+                raise ValueError("FSDP requires PyTorch >= 1.12.0")
 
             from torch.distributed.fsdp.fully_sharded_data_parallel import ShardingStrategy
 
@@ -494,6 +496,20 @@ class Trainer:
         self.use_cuda_amp = False
         self.use_cpu_amp = False
 
+        # Mixed precision setup for SageMaker Model Parallel
+        if is_sagemaker_mp_enabled():
+            # BF16 + model parallelism in SageMaker: currently not supported, raise an error
+            if args.bf16:
+                raise ValueError("SageMaker Model Parallelism does not support BF16 yet. Please use FP16 instead ")
+            # When there's mismatch between SMP config and trainer argument, use SMP config as truth
+            if args.fp16 != smp.state.cfg.fp16:
+                logger.warning(
+                    f"FP16 provided in SM_HP_MP_PARAMETERS is {smp.state.cfg.fp16},"
+                    f"but FP16 provided in trainer argument is {args.fp16},"
+                    f"setting to {smp.state.cfg.fp16}"
+                )
+                args.fp16 = smp.state.cfg.fp16
+
         if args.fp16 or args.bf16:
             if self.fsdp is not None:
                 raise ValueError(
@@ -519,14 +535,13 @@ class Trainer:
             logger.info(f"Using {args.half_precision_backend} half precision backend")
 
         self.do_grad_scaling = False
-        if (args.fp16 or args.bf16) and not args.deepspeed:  # deepspeed manages its own half precision
+        if (args.fp16 or args.bf16) and not (args.deepspeed or is_sagemaker_mp_enabled()):
+            # deepspeed and SageMaker Model Parallel manage their own half precision
             if args.half_precision_backend == "cuda_amp":
                 self.use_cuda_amp = True
                 self.amp_dtype = torch.float16 if args.fp16 else torch.bfloat16
                 self.do_grad_scaling = True
-                if is_sagemaker_mp_enabled():
-                    self.scaler = smp.amp.GradScaler()
-                elif self.sharded_ddp is not None:
+                if self.sharded_ddp is not None:
                     self.scaler = ShardedGradScaler()
                 elif is_torch_tpu_available():
                     from torch_xla.amp import GradScaler
@@ -583,6 +598,35 @@ class Trainer:
 
         # very last
         self._memory_tracker.stop_and_update_metrics()
+
+        # torchdynamo
+        if args.torchdynamo:
+            if not is_torchdynamo_available():
+                raise RuntimeError("Torchdynamo is not installed.")
+            import torchdynamo
+            from torchdynamo.optimizations import backends
+            from torchdynamo.optimizations.training import aot_autograd_speedup_strategy
+
+            def get_ctx():
+                # Normal
+                if args.torchdynamo == "eager":
+                    return torchdynamo.optimize("eager")
+                elif args.torchdynamo == "nvfuser":
+                    return torchdynamo.optimize(aot_autograd_speedup_strategy)
+                # TensorRT
+                if args.torchdynamo in ["fx2trt-fp16", "fx2trt"]:
+                    if not is_torch_tensorrt_fx_available():
+                        raise RuntimeError("Torch-TensorRT FX path is not installed.")
+                    if args.torchdynamo == "fx2trt-fp16":
+                        return torchdynamo.optimize(backends.fx2trt_compiler_fp16)
+                    elif args.torchdynamo == "fx2trt":
+                        return torchdynamo.optimize(backends.fx2trt_compiler)
+                else:
+                    raise RuntimeError(f"Torchdynamo backend {args.torchdynamo} is not supported.")
+
+            self.ctx_manager_torchdynamo = get_ctx()
+        else:
+            self.ctx_manager_torchdynamo = contextlib.nullcontext()
 
     def add_callback(self, callback):
         """
@@ -840,8 +884,8 @@ class Trainer:
 
         Args:
             eval_dataset (`torch.utils.data.Dataset`, *optional*):
-                If provided, will override `self.eval_dataset`. If it is an `datasets.Dataset`, columns not accepted by
-                the `model.forward()` method are automatically removed. It must implement `__len__`.
+                If provided, will override `self.eval_dataset`. If it is a [`~datasets.Dataset`], columns not accepted
+                by the `model.forward()` method are automatically removed. It must implement `__len__`.
         """
         if eval_dataset is None and self.eval_dataset is None:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
@@ -890,8 +934,8 @@ class Trainer:
 
         Args:
             test_dataset (`torch.utils.data.Dataset`, *optional*):
-                The test dataset to use. If it is an `datasets.Dataset`, columns not accepted by the `model.forward()`
-                method are automatically removed. It must implement `__len__`.
+                The test dataset to use. If it is a [`~datasets.Dataset`], columns not accepted by the
+                `model.forward()` method are automatically removed. It must implement `__len__`.
         """
         data_collator = self.data_collator
 
@@ -926,6 +970,7 @@ class Trainer:
             batch_size=self.args.eval_batch_size,
             collate_fn=data_collator,
             drop_last=self.args.dataloader_drop_last,
+            num_workers=self.args.dataloader_num_workers,
             pin_memory=self.args.dataloader_pin_memory,
         )
 
@@ -938,7 +983,10 @@ class Trainer:
         `create_scheduler`) in a subclass.
         """
         self.create_optimizer()
-        self.create_scheduler(num_training_steps=num_training_steps, optimizer=self.optimizer)
+        self.create_scheduler(
+            num_training_steps=num_training_steps,
+            optimizer=self.optimizer.optimizer if is_sagemaker_mp_enabled() and smp.state.cfg.fp16 else self.optimizer,
+        )
 
     def create_optimizer(self):
         """
@@ -950,7 +998,7 @@ class Trainer:
         opt_model = self.model_wrapped if is_sagemaker_mp_enabled() else self.model
 
         if self.optimizer is None:
-            decay_parameters = get_parameter_names(opt_model, [nn.LayerNorm])
+            decay_parameters = get_parameter_names(opt_model, ALL_LAYERNORM_LAYERS)
             decay_parameters = [name for name in decay_parameters if "bias" not in name]
             optimizer_grouped_parameters = [
                 {
@@ -1071,6 +1119,10 @@ class Trainer:
         dataloader.dataset does not exist or has no length, estimates as best it can
         """
         try:
+            dataset = dataloader.dataset
+            # Special case for IterableDatasetShard, we need to dig deeper
+            if isinstance(dataset, IterableDatasetShard):
+                return len(dataloader.dataset.dataset)
             return len(dataloader.dataset)
         except (NameError, AttributeError, TypeError):  # no dataset or length, estimate by length of dataloader
             return len(dataloader) * self.args.per_device_train_batch_size
@@ -1116,16 +1168,14 @@ class Trainer:
             self.args.hf_deepspeed_config = HfTrainerDeepSpeedConfig(self.args.deepspeed)
             self.args.hf_deepspeed_config.trainer_config_process(self.args)
 
-    def _report_to_hp_search(
-        self, trial: Union["optuna.Trial", Dict[str, Any]], epoch: int, metrics: Dict[str, float]
-    ):
+    def _report_to_hp_search(self, trial: Union["optuna.Trial", Dict[str, Any]], step: int, metrics: Dict[str, float]):
         if self.hp_search_backend is None or trial is None:
             return
         self.objective = self.compute_objective(metrics.copy())
         if self.hp_search_backend == HPSearchBackend.OPTUNA:
             import optuna
 
-            trial.report(self.objective, epoch)
+            trial.report(self.objective, step)
             if trial.should_prune():
                 self.callback_handler.on_train_end(self.args, self.state, self.control)
                 raise optuna.TrialPruned()
@@ -1163,11 +1213,34 @@ class Trainer:
 
         return model
 
+    def torch_jit_model_eval(self, model, dataloader, training=False):
+        if not training:
+            if dataloader is None:
+                logger.warning("failed to use PyTorch jit mode due to current dataloader is none.")
+                return model
+            jit_inputs = []
+            example_batch = next(iter(dataloader))
+            for key in example_batch:
+                example_tensor = torch.ones_like(example_batch[key])
+                jit_inputs.append(example_tensor)
+            jit_inputs = tuple(jit_inputs)
+            try:
+                jit_model = model.eval()
+                with ContextManagers([self.autocast_smart_context_manager(), torch.no_grad()]):
+                    jit_model = torch.jit.trace(jit_model, jit_inputs, strict=False)
+                jit_model = torch.jit.freeze(jit_model)
+                jit_model(**example_batch)
+                model = jit_model
+            except (RuntimeError, TypeError) as e:
+                logger.warning(f"failed to use PyTorch jit mode due to: {e}.")
+
+        return model
+
     def ipex_optimize_model(self, model, training=False, dtype=torch.float32):
         if not is_ipex_available():
             raise ImportError(
-                "Using IPEX but IPEX is not installed, please refer to"
-                " https://github.com/intel/intel-extension-for-pytorch."
+                "Using IPEX but IPEX is not installed or IPEX's version does not match current PyTorch, please refer"
+                " to https://github.com/intel/intel-extension-for-pytorch."
             )
 
         import intel_extension_for_pytorch as ipex
@@ -1178,14 +1251,19 @@ class Trainer:
         else:
             if not model.training:
                 model.train()
-            model, self.optimizer = ipex.optimize(model, dtype=dtype, optimizer=self.optimizer, level="O1")
+            model, self.optimizer = ipex.optimize(
+                model, dtype=dtype, optimizer=self.optimizer, inplace=True, level="O1"
+            )
 
         return model
 
-    def _wrap_model(self, model, training=True):
+    def _wrap_model(self, model, training=True, dataloader=None):
         if self.args.use_ipex:
             dtype = torch.bfloat16 if self.use_cpu_amp else torch.float32
             model = self.ipex_optimize_model(model, training, dtype=dtype)
+
+        if self.args.jit_mode_eval:
+            model = self.torch_jit_model_eval(model, dataloader, training)
 
         if is_sagemaker_mp_enabled():
             # Wrapping the base model twice in a DistributedModel will raise an error.
@@ -1238,7 +1316,7 @@ class Trainer:
             # PyTorch FSDP!
             from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload
             from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
-            from torch.distributed.fsdp.wrap import default_auto_wrap_policy
+            from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy
 
             if FSDPOption.OFFLOAD in self.args.fsdp:
                 cpu_offload = CPUOffload(offload_params=True)
@@ -1249,7 +1327,7 @@ class Trainer:
             if FSDPOption.AUTO_WRAP in self.args.fsdp:
                 if self.args.fsdp_min_num_params > 0:
                     auto_wrap_policy = functools.partial(
-                        default_auto_wrap_policy, min_num_params=self.args.fsdp_min_num_params
+                        size_based_auto_wrap_policy, min_num_params=self.args.fsdp_min_num_params
                     )
 
             if type(model) != FSDP:
@@ -1641,7 +1719,9 @@ class Trainer:
                             # AMP: gradients need unscaling
                             self.scaler.unscale_(self.optimizer)
 
-                        if hasattr(self.optimizer, "clip_grad_norm"):
+                        if is_sagemaker_mp_enabled() and args.fp16:
+                            self.optimizer.clip_master_grads(args.max_grad_norm)
+                        elif hasattr(self.optimizer, "clip_grad_norm"):
                             # Some optimizers (like the sharded optimizer) have a specific way to do gradient clipping
                             self.optimizer.clip_grad_norm(args.max_grad_norm)
                         elif hasattr(model, "clip_grad_norm_"):
@@ -1866,7 +1946,7 @@ class Trainer:
         metrics = None
         if self.control.should_evaluate:
             metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
-            self._report_to_hp_search(trial, epoch, metrics)
+            self._report_to_hp_search(trial, self.state.global_step, metrics)
 
         if self.control.should_save:
             self._save_checkpoint(model, trial, metrics=metrics)
@@ -1877,12 +1957,12 @@ class Trainer:
         if checkpoint is None:
             return
 
-        local_rank = xm.get_local_ordinal() if is_torch_tpu_available() else self.args.local_rank
-        if local_rank != -1:
-            rng_file = os.path.join(checkpoint, f"rng_state_{local_rank}.pth")
+        if self.args.world_size > 1:
+            process_index = self.args.process_index
+            rng_file = os.path.join(checkpoint, f"rng_state_{process_index}.pth")
             if not os.path.isfile(rng_file):
                 logger.info(
-                    f"Didn't find an RNG file for process {local_rank}, if you are resuming a training that "
+                    f"Didn't find an RNG file for process {process_index}, if you are resuming a training that "
                     "wasn't launched in a distributed fashion, reproducibility is not guaranteed."
                 )
                 return
@@ -2022,11 +2102,10 @@ class Trainer:
         # not yet exist.
         os.makedirs(output_dir, exist_ok=True)
 
-        local_rank = xm.get_local_ordinal() if is_torch_tpu_available() else self.args.local_rank
-        if local_rank == -1:
+        if self.args.world_size <= 1:
             torch.save(rng_states, os.path.join(output_dir, "rng_state.pth"))
         else:
-            torch.save(rng_states, os.path.join(output_dir, f"rng_state_{local_rank}.pth"))
+            torch.save(rng_states, os.path.join(output_dir, f"rng_state_{self.args.process_index}.pth"))
 
         if self.args.push_to_hub:
             self._push_from_checkpoint(output_dir)
@@ -2068,7 +2147,9 @@ class Trainer:
                 if is_sagemaker_mp_enabled():
 
                     def opt_load_hook(mod, opt):
-                        opt.load_state_dict(smp.load(os.path.join(checkpoint, OPTIMIZER_NAME), partial=True))
+                        opt.load_state_dict(
+                            smp.load(os.path.join(checkpoint, OPTIMIZER_NAME), partial=True), gather_if_shard=False
+                        )
 
                     self.model_wrapped.register_post_step_hook(opt_load_hook)
                 else:
@@ -2240,16 +2321,7 @@ class Trainer:
         """
         A helper wrapper that creates an appropriate context manager for `torchdynamo`.
         """
-        ctx_manager = contextlib.nullcontext()
-        if is_torchdynamo_available():
-            import torchdynamo
-            from torchdynamo.optimizations.training import aot_autograd_speedup_strategy
-
-            if self.args.torchdynamo == "eager":
-                ctx_manager = torchdynamo.optimize("eager")
-            elif self.args.torchdynamo == "nvfuser":
-                ctx_manager = torchdynamo.optimize(aot_autograd_speedup_strategy)
-        return ctx_manager
+        return self.ctx_manager_torchdynamo
 
     def autocast_smart_context_manager(self):
         """
@@ -2292,8 +2364,7 @@ class Trainer:
         inputs = self._prepare_inputs(inputs)
 
         if is_sagemaker_mp_enabled():
-            scaler = self.scaler if self.do_grad_scaling else None
-            loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps, scaler=scaler)
+            loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps)
             return loss_mb.reduce_mean().detach().to(self.args.device)
 
         with self.compute_loss_context_manager():
@@ -2336,7 +2407,10 @@ class Trainer:
             self._past = outputs[self.args.past_index]
 
         if labels is not None:
-            loss = self.label_smoother(outputs, labels)
+            if unwrap_model(model)._get_name() in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
+                loss = self.label_smoother(outputs, labels, shift_labels=True)
+            else:
+                loss = self.label_smoother(outputs, labels)
         else:
             # We don't use .loss here since the model may return tuples instead of ModelOutput.
             loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
@@ -2552,8 +2626,8 @@ class Trainer:
 
         Args:
             eval_dataset (`Dataset`, *optional*):
-                Pass a dataset if you wish to override `self.eval_dataset`. If it is an `datasets.Dataset`, columns not
-                accepted by the `model.forward()` method are automatically removed. It must implement the `__len__`
+                Pass a dataset if you wish to override `self.eval_dataset`. If it is a [`~datasets.Dataset`], columns
+                not accepted by the `model.forward()` method are automatically removed. It must implement the `__len__`
                 method.
             ignore_keys (`Lst[str]`, *optional*):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
@@ -2660,6 +2734,7 @@ class Trainer:
             )
         )
 
+        self.control = self.callback_handler.on_predict(self.args, self.state, self.control, output.metrics)
         self._memory_tracker.stop_and_update_metrics(output.metrics)
 
         return PredictionOutput(predictions=output.predictions, label_ids=output.label_ids, metrics=output.metrics)
@@ -2693,7 +2768,7 @@ class Trainer:
             self.model_wrapped = deepspeed_engine
             self.deepspeed = deepspeed_engine
 
-        model = self._wrap_model(self.model, training=False)
+        model = self._wrap_model(self.model, training=False, dataloader=dataloader)
 
         # if full fp16 or bf16 eval is wanted and this ``evaluation`` or ``predict`` isn't called
         # while ``train`` is running, cast it to the right dtype first and then put on device
@@ -2751,7 +2826,7 @@ class Trainer:
 
             # Prediction step
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
-            inputs_decode = inputs["input_ids"] if args.include_inputs_for_metrics else None
+            inputs_decode = self._prepare_input(inputs["input_ids"]) if args.include_inputs_for_metrics else None
 
             if is_torch_tpu_available():
                 xm.mark_step()
@@ -3254,7 +3329,7 @@ class Trainer:
             deepspeed_engine.optimizer.optimizer = None
             deepspeed_engine.lr_scheduler = None
 
-        model = self._wrap_model(self.model, training=False)
+        model = self._wrap_model(self.model, training=False, dataloader=dataloader)
 
         # if full fp16 or bf16 eval is wanted and this ``evaluation`` or ``predict`` isn't called
         # while ``train`` is running, cast it to the right dtype first and then put on device
@@ -3299,7 +3374,7 @@ class Trainer:
 
         for step, inputs in enumerate(dataloader):
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
-            inputs_decode = inputs["input_ids"] if args.include_inputs_for_metrics else None
+            inputs_decode = self._prepare_input(inputs["input_ids"]) if args.include_inputs_for_metrics else None
 
             if loss is not None:
                 losses = loss.repeat(batch_size)
