@@ -62,7 +62,7 @@ jobs:
     run_examples_torch:
         working_directory: ~/transformers
         machine:
-          image: ubuntu-2004:current
+          image: ubuntu-2004:202201-02
 #        docker:
 #            - image: cimg/python:3.7.12
         resource_class: xlarge
