@@ -551,8 +551,10 @@ class EarlyStoppingCallback(TrainerCallback):
             and abs(metric_value - state.best_metric) > self.early_stopping_threshold
         ):
             self.early_stopping_patience_counter = 0
+            control.should_save = True
         else:
             self.early_stopping_patience_counter += 1
+            control.should_save = False
 
     def on_train_begin(self, args, state, control, **kwargs):
         assert args.load_best_model_at_end, "EarlyStoppingCallback requires load_best_model_at_end = True"
