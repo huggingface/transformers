@@ -164,7 +164,6 @@ class FlaxBloomAttention(nn.Module):
         self.hidden_size = self.config.hidden_size
         self.num_heads = self.config.n_head
         self.head_dim = self.hidden_size // self.num_heads
-        self.attention_softmax_in_fp32 = self.config.attention_softmax_in_fp32
 
         if self.head_dim * self.num_heads != self.hidden_size:
             raise ValueError(
