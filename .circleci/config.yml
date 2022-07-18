@@ -62,33 +62,19 @@ jobs:
     run_examples_torch:
         working_directory: ~/transformers
         docker:
-            # - image: cimg/base:current-20.04
-            # - image: ubuntu:20.04
-            - image: huggingface/transformers-all-latest-gpu
+            - image: circleci/python:3.7
         resource_class: xlarge
+        parallelism: 1
         steps:
-            - run: whoami
-            - run: apt-get -y update && apt-get install -y sudo git
-            # - run: git clone https://github.com/huggingface/transformers.git && cd transformers
-            - run: export DEBIAN_FRONTEND=noninteractive
-            - run: export TZ=Europe/Minsk
-            - run: ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
-            - run: sudo DEBIAN_FRONTEND=noninteractive sudo apt-get install -y tzdata
+            - checkout
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
-            # - run: sudo apt-get install -y python3-pip
             - run: pip install --upgrade pip
-            - run: pip uninstall -y torch torchvision torchaudio torch-scatter
-            - run: pwd
-            - run: ls -l /root/transformers
-            - run: cd /root/transformers && pip install .[sklearn,torch,sentencepiece,testing,torch-speech]
-            - run: cd /root/transformers && pip install -r examples/pytorch/_tests_requirements.txt
-            - run: pip install -U resampy==0.3.1
-            #- run: pip uninstall -y numpy resampy
-            #- run: git clone https://github.com/bmcfee/resampy.git && cd resampy && git checkout a36275670f284e8f09d71ef3515dc7513aeba6e6 && pip install -U -e . && cd ..
+            - run: pip install .[sklearn,torch,sentencepiece,testing,torch-speech]
+            - run: pip install -r examples/pytorch/_tests_requirements.txt
+            - run: git clone https://github.com/bmcfee/resampy.git && cd resampy && git checkout a36275670f284e8f09d71ef3515dc7513aeba6e6 && pip install -U -e . && cd ..
             - run: pip install -U numpy==1.21.6
-            - run: pip freeze
             - run: |
-                    cd /root/transformers && python3 -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/test_pytorch_examples.py -k "(test_run_audio_classification or test_run_clm)"
+                    python -m pytest ./examples/pytorch/test_pytorch_examples.py -k "(test_run_audio_classification or test_run_clm)"
 
 workflow_filters: &workflow_filters
     filters:
