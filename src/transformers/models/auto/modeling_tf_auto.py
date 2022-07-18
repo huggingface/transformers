@@ -42,6 +42,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("data2vec-vision", "TFData2VecVisionModel"),
         ("deberta", "TFDebertaModel"),
         ("deberta-v2", "TFDebertaV2Model"),
+        ("deit", "TFDeiTModel"),
         ("distilbert", "TFDistilBertModel"),
         ("dpr", "TFDPRQuestionEncoder"),
         ("electra", "TFElectraModel"),
@@ -64,6 +65,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("pegasus", "TFPegasusModel"),
         ("regnet", "TFRegNetModel"),
         ("rembert", "TFRemBertModel"),
+        ("resnet", "TFResNetModel"),
         ("roberta", "TFRobertaModel"),
         ("roformer", "TFRoFormerModel"),
         ("speech_to_text", "TFSpeech2TextModel"),
@@ -165,6 +167,7 @@ TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
 
 TF_MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
     [
+        ("deit", "TFDeiTForMaskedImageModeling"),
         ("swin", "TFSwinForMaskedImageModeling"),
     ]
 )
@@ -174,7 +177,9 @@ TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         # Model for Image-classsification
         ("convnext", "TFConvNextForImageClassification"),
         ("data2vec-vision", "TFData2VecVisionForImageClassification"),
+        ("deit", ("TFDeiTForImageClassification", "TFDeiTForImageClassificationWithTeacher")),
         ("regnet", "TFRegNetForImageClassification"),
+        ("resnet", "TFResNetForImageClassification"),
         ("swin", "TFSwinForImageClassification"),
         ("vit", "TFViTForImageClassification"),
     ]
