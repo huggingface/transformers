@@ -410,7 +410,7 @@ def pipeline(
     use_auth_token: Optional[Union[str, bool]] = None,
     device_map=None,
     torch_dtype=None,
-    trust_remote_code: bool = False,
+    trust_remote_code: Optional[bool] = None,
     model_kwargs: Dict[str, Any] = None,
     pipeline_class: Optional[Any] = None,
     **kwargs
@@ -575,7 +575,7 @@ def pipeline(
     custom_tasks = {}
     if config is not None and len(getattr(config, "custom_pipelines", {})) > 0:
         custom_tasks = config.custom_pipelines
-        if task is None:
+        if task is None and trust_remote_code is not False:
             if len(custom_tasks) == 1:
                 task = list(custom_tasks.keys())[0]
             else:

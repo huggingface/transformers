@@ -857,6 +857,8 @@ class CustomPipelineTest(unittest.TestCase):
                 _ = pipeline(model=tmp_dir)
 
             new_classifier = pipeline(model=tmp_dir, trust_remote_code=True)
+            # Using trust_remote_code=False forces the traditional pipeline tag
+            old_classifier = pipeline("text-classification", model=tmp_dir, trust_remote_code=False)
         # Can't make an isinstance check because the new_classifier is from the PairClassificationPipeline class of a
         # dynamic module
         self.assertEqual(new_classifier.__class__.__name__, "PairClassificationPipeline")
@@ -865,6 +867,14 @@ class CustomPipelineTest(unittest.TestCase):
         self.assertDictEqual(
             nested_simplify(results),
             {"label": "LABEL_0", "score": 0.505, "logits": [-0.003, -0.024]},
+        )
+
+        self.assertEqual(old_classifier.__class__.__name__, "TextClassificationPipeline")
+        self.assertEqual(old_classifier.task, "text-classification")
+        results = old_classifier("I hate you", text_pair="I love you")
+        self.assertListEqual(
+            nested_simplify(results),
+            [{"label": "LABEL_0", "score": 0.505}],
         )
 
 
@@ -940,3 +950,14 @@ class DynamicPipelineTester(unittest.TestCase):
         results = classifier("I hate you", second_text="I love you")
         new_results = new_classifier("I hate you", second_text="I love you")
         self.assertDictEqual(nested_simplify(results), nested_simplify(new_results))
+
+        # Using trust_remote_code=False forces the traditional pipeline tag
+        old_classifier = pipeline(
+            "text-classification", model=f"{USER}/test-dynamic-pipeline", trust_remote_code=False
+        )
+        self.assertEqual(old_classifier.__class__.__name__, "TextClassificationPipeline")
+        self.assertEqual(old_classifier.task, "text-classification")
+        new_results = old_classifier("I hate you", text_pair="I love you")
+        self.assertListEqual(
+            nested_simplify([{"label": results["label"], "score": results["score"]}]), nested_simplify(new_results)
+        )
