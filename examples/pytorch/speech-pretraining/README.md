@@ -43,7 +43,7 @@ A good metric to observe during training is the gradient norm which should ideal
 
 When training a model on large datasets it is recommended to run the data preprocessing 
 in a first run in a **non-distributed** mode via `--preprocessing_only` so that 
-when running the  model in **distributed** mode in a second step the preprocessed data
+when running the model in **distributed** mode in a second step the preprocessed data
 can easily be loaded on each distributed device.
 
 ---

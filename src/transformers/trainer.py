@@ -71,6 +71,7 @@ from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
 from .models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from .optimization import Adafactor, get_scheduler
+from .pytorch_utils import ALL_LAYERNORM_LAYERS
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
@@ -140,6 +141,7 @@ from .utils import (
     is_ipex_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
+    is_torch_tensorrt_fx_available,
     is_torch_tpu_available,
     is_torchdynamo_available,
     logging,
@@ -231,7 +233,7 @@ class Trainer:
             default to [`default_data_collator`] if no `tokenizer` is provided, an instance of
             [`DataCollatorWithPadding`] otherwise.
         train_dataset (`torch.utils.data.Dataset` or `torch.utils.data.IterableDataset`, *optional*):
-            The dataset to use for training. If it is an `datasets.Dataset`, columns not accepted by the
+            The dataset to use for training. If it is a [`~datasets.Dataset`], columns not accepted by the
             `model.forward()` method are automatically removed.
 
             Note that if it's a `torch.utils.data.IterableDataset` with some randomization and you are training in a
@@ -240,7 +242,7 @@ class Trainer:
             manually set the seed of this `generator` at each epoch) or have a `set_epoch()` method that internally
             sets the seed of the RNGs used.
         eval_dataset (`torch.utils.data.Dataset`, *optional*):
-             The dataset to use for evaluation. If it is an `datasets.Dataset`, columns not accepted by the
+             The dataset to use for evaluation. If it is a [`~datasets.Dataset`], columns not accepted by the
              `model.forward()` method are automatically removed.
         tokenizer ([`PreTrainedTokenizerBase`], *optional*):
             The tokenizer used to preprocess the data. If provided, will be used to automatically pad the inputs the
@@ -597,6 +599,35 @@ class Trainer:
         # very last
         self._memory_tracker.stop_and_update_metrics()
 
+        # torchdynamo
+        if args.torchdynamo:
+            if not is_torchdynamo_available():
+                raise RuntimeError("Torchdynamo is not installed.")
+            import torchdynamo
+            from torchdynamo.optimizations import backends
+            from torchdynamo.optimizations.training import aot_autograd_speedup_strategy
+
+            def get_ctx():
+                # Normal
+                if args.torchdynamo == "eager":
+                    return torchdynamo.optimize("eager")
+                elif args.torchdynamo == "nvfuser":
+                    return torchdynamo.optimize(aot_autograd_speedup_strategy)
+                # TensorRT
+                if args.torchdynamo in ["fx2trt-fp16", "fx2trt"]:
+                    if not is_torch_tensorrt_fx_available():
+                        raise RuntimeError("Torch-TensorRT FX path is not installed.")
+                    if args.torchdynamo == "fx2trt-fp16":
+                        return torchdynamo.optimize(backends.fx2trt_compiler_fp16)
+                    elif args.torchdynamo == "fx2trt":
+                        return torchdynamo.optimize(backends.fx2trt_compiler)
+                else:
+                    raise RuntimeError(f"Torchdynamo backend {args.torchdynamo} is not supported.")
+
+            self.ctx_manager_torchdynamo = get_ctx()
+        else:
+            self.ctx_manager_torchdynamo = contextlib.nullcontext()
+
     def add_callback(self, callback):
         """
         Add a callback to the current list of [`~transformer.TrainerCallback`].
@@ -853,8 +884,8 @@ class Trainer:
 
         Args:
             eval_dataset (`torch.utils.data.Dataset`, *optional*):
-                If provided, will override `self.eval_dataset`. If it is an `datasets.Dataset`, columns not accepted by
-                the `model.forward()` method are automatically removed. It must implement `__len__`.
+                If provided, will override `self.eval_dataset`. If it is a [`~datasets.Dataset`], columns not accepted
+                by the `model.forward()` method are automatically removed. It must implement `__len__`.
         """
         if eval_dataset is None and self.eval_dataset is None:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
@@ -903,8 +934,8 @@ class Trainer:
 
         Args:
             test_dataset (`torch.utils.data.Dataset`, *optional*):
-                The test dataset to use. If it is an `datasets.Dataset`, columns not accepted by the `model.forward()`
-                method are automatically removed. It must implement `__len__`.
+                The test dataset to use. If it is a [`~datasets.Dataset`], columns not accepted by the
+                `model.forward()` method are automatically removed. It must implement `__len__`.
         """
         data_collator = self.data_collator
 
@@ -967,7 +998,7 @@ class Trainer:
         opt_model = self.model_wrapped if is_sagemaker_mp_enabled() else self.model
 
         if self.optimizer is None:
-            decay_parameters = get_parameter_names(opt_model, [nn.LayerNorm])
+            decay_parameters = get_parameter_names(opt_model, ALL_LAYERNORM_LAYERS)
             decay_parameters = [name for name in decay_parameters if "bias" not in name]
             optimizer_grouped_parameters = [
                 {
@@ -1137,16 +1168,14 @@ class Trainer:
             self.args.hf_deepspeed_config = HfTrainerDeepSpeedConfig(self.args.deepspeed)
             self.args.hf_deepspeed_config.trainer_config_process(self.args)
 
-    def _report_to_hp_search(
-        self, trial: Union["optuna.Trial", Dict[str, Any]], epoch: int, metrics: Dict[str, float]
-    ):
+    def _report_to_hp_search(self, trial: Union["optuna.Trial", Dict[str, Any]], step: int, metrics: Dict[str, float]):
         if self.hp_search_backend is None or trial is None:
             return
         self.objective = self.compute_objective(metrics.copy())
         if self.hp_search_backend == HPSearchBackend.OPTUNA:
             import optuna
 
-            trial.report(self.objective, epoch)
+            trial.report(self.objective, step)
             if trial.should_prune():
                 self.callback_handler.on_train_end(self.args, self.state, self.control)
                 raise optuna.TrialPruned()
@@ -1210,8 +1239,8 @@ class Trainer:
     def ipex_optimize_model(self, model, training=False, dtype=torch.float32):
         if not is_ipex_available():
             raise ImportError(
-                "Using IPEX but IPEX is not installed, please refer to"
-                " https://github.com/intel/intel-extension-for-pytorch."
+                "Using IPEX but IPEX is not installed or IPEX's version does not match current PyTorch, please refer"
+                " to https://github.com/intel/intel-extension-for-pytorch."
             )
 
         import intel_extension_for_pytorch as ipex
@@ -1222,7 +1251,9 @@ class Trainer:
         else:
             if not model.training:
                 model.train()
-            model, self.optimizer = ipex.optimize(model, dtype=dtype, optimizer=self.optimizer, level="O1")
+            model, self.optimizer = ipex.optimize(
+                model, dtype=dtype, optimizer=self.optimizer, inplace=True, level="O1"
+            )
 
         return model
 
@@ -1915,7 +1946,7 @@ class Trainer:
         metrics = None
         if self.control.should_evaluate:
             metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
-            self._report_to_hp_search(trial, epoch, metrics)
+            self._report_to_hp_search(trial, self.state.global_step, metrics)
 
         if self.control.should_save:
             self._save_checkpoint(model, trial, metrics=metrics)
@@ -2290,16 +2321,7 @@ class Trainer:
         """
         A helper wrapper that creates an appropriate context manager for `torchdynamo`.
         """
-        ctx_manager = contextlib.nullcontext()
-        if is_torchdynamo_available():
-            import torchdynamo
-            from torchdynamo.optimizations.training import aot_autograd_speedup_strategy
-
-            if self.args.torchdynamo == "eager":
-                ctx_manager = torchdynamo.optimize("eager")
-            elif self.args.torchdynamo == "nvfuser":
-                ctx_manager = torchdynamo.optimize(aot_autograd_speedup_strategy)
-        return ctx_manager
+        return self.ctx_manager_torchdynamo
 
     def autocast_smart_context_manager(self):
         """
@@ -2604,8 +2626,8 @@ class Trainer:
 
         Args:
             eval_dataset (`Dataset`, *optional*):
-                Pass a dataset if you wish to override `self.eval_dataset`. If it is an `datasets.Dataset`, columns not
-                accepted by the `model.forward()` method are automatically removed. It must implement the `__len__`
+                Pass a dataset if you wish to override `self.eval_dataset`. If it is a [`~datasets.Dataset`], columns
+                not accepted by the `model.forward()` method are automatically removed. It must implement the `__len__`
                 method.
             ignore_keys (`Lst[str]`, *optional*):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
@@ -2712,6 +2734,7 @@ class Trainer:
             )
         )
 
+        self.control = self.callback_handler.on_predict(self.args, self.state, self.control, output.metrics)
         self._memory_tracker.stop_and_update_metrics(output.metrics)
 
         return PredictionOutput(predictions=output.predictions, label_ids=output.label_ids, metrics=output.metrics)
@@ -2803,7 +2826,7 @@ class Trainer:
 
             # Prediction step
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
-            inputs_decode = inputs["input_ids"] if args.include_inputs_for_metrics else None
+            inputs_decode = self._prepare_input(inputs["input_ids"]) if args.include_inputs_for_metrics else None
 
             if is_torch_tpu_available():
                 xm.mark_step()
@@ -3351,7 +3374,7 @@ class Trainer:
 
         for step, inputs in enumerate(dataloader):
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
-            inputs_decode = inputs["input_ids"] if args.include_inputs_for_metrics else None
+            inputs_decode = self._prepare_input(inputs["input_ids"]) if args.include_inputs_for_metrics else None
 
             if loss is not None:
                 losses = loss.repeat(batch_size)
