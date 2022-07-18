@@ -935,7 +935,7 @@ class TrainingArguments:
                 " are two options - eager and nvfuser. Eager defaults to pytorch eager and is useful for debugging."
                 " nvfuser path uses AOT Autograd and nvfuser compiler to optimize the models."
             ),
-            "choices": ["eager", "nvfuser"],
+            "choices": ["eager", "nvfuser", "fx2trt", "fx2trt-fp16"],
         },
     )
     ray_scope: Optional[str] = field(

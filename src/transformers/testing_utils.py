@@ -71,6 +71,7 @@ from .utils import (
     is_torch_available,
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
+    is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
     is_torchaudio_available,
@@ -497,6 +498,11 @@ else:
 def require_torchdynamo(test_case):
     """Decorator marking a test that requires TorchDynamo"""
     return unittest.skipUnless(is_torchdynamo_available(), "test requires TorchDynamo")(test_case)
+
+
+def require_torch_tensorrt_fx(test_case):
+    """Decorator marking a test that requires Torch-TensorRT FX"""
+    return unittest.skipUnless(is_torch_tensorrt_fx_available(), "test requires Torch-TensorRT FX")(test_case)
 
 
 def require_torch_gpu(test_case):
