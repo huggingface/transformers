@@ -495,8 +495,8 @@ class PretrainedConfig(PushToHubMixin):
                 dictionary consisting of the key/value pairs whose keys are not configuration attributes: i.e., the
                 part of `kwargs` which has not been used to update `config` and is otherwise ignored.
             subfolder (`str`, *optional*):
-                In case the relevant files are located inside a subfolder of the model repo on huggingface.co,
-                you can specify the folder name here.
+                In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
+                specify the folder name here.
             kwargs (`Dict[str, Any]`, *optional*):
                 The values in kwargs of any keys which are configuration attributes will be used to override the loaded
                 values. Behavior concerning key/value pairs whose keys are *not* configuration attributes is controlled
@@ -594,7 +594,9 @@ class PretrainedConfig(PushToHubMixin):
 
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
         maybe_subfolder_path = subfolder if subfolder is not None else ""
-        if os.path.isfile(os.path.join(maybe_subfolder_path, pretrained_model_name_or_path)) or is_remote_url(pretrained_model_name_or_path):
+        if os.path.isfile(os.path.join(maybe_subfolder_path, pretrained_model_name_or_path)) or is_remote_url(
+            pretrained_model_name_or_path
+        ):
             config_file = pretrained_model_name_or_path
         else:
             configuration_file = kwargs.pop("_configuration_file", CONFIG_NAME)
@@ -603,7 +605,11 @@ class PretrainedConfig(PushToHubMixin):
                 config_file = os.path.join(pretrained_model_name_or_path, maybe_subfolder_path, configuration_file)
             else:
                 config_file = hf_bucket_url(
-                    pretrained_model_name_or_path, filename=configuration_file, revision=revision, subfolder=subfolder, mirror=None
+                    pretrained_model_name_or_path,
+                    filename=configuration_file,
+                    revision=revision,
+                    subfolder=subfolder,
+                    mirror=None,
                 )
 
         try:
