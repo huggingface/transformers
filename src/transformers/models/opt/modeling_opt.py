@@ -383,8 +383,9 @@ OPT_START_DOCSTRING = r"""
     OPT_START_DOCSTRING,
 )
 class OPTPreTrainedModel(PreTrainedModel):
+
     config_class = OPTConfig
-    base_model_prefix = "model"
+    base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["OPTDecoderLayer"]
     _keys_to_ignore_on_load_unexpected = [r"decoder\.version"]
@@ -1102,7 +1103,7 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
         )
 
     def get_input_embeddings(self):
-        return self.model.decoder.embed_tokens
+        return self.transformer.decoder.embed_tokens
 
     def set_input_embeddings(self, value):
-        self.model.decoder.embed_tokens = value
+        self.transformer.decoder.embed_tokens = value

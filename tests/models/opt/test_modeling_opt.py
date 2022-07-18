@@ -257,6 +257,19 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
+    def test_opt_sequence_classification_model_for_multi_label(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs()
+        config.num_labels = 3
+        config.problem_type = 'multi_label_classification'
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        sequence_labels = ids_tensor([self.model_tester.batch_size,config.num_labels], self.model_tester.type_sequence_label_size).to(torch.float)
+        model = OPTForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
+        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
 
 def assert_tensors_close(a, b, atol=1e-12, prefix=""):
     """If tensors have different shapes, different values or a and b are not both tensors, raise a nice Assertion error."""
