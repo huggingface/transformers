@@ -69,5 +69,5 @@ class TFMT5ModelIntegrationTest(unittest.TestCase):
         loss = model(input_ids, labels=labels).loss
         mtf_score = -tf.math.reduce_mean(loss).numpy()
 
-        EXPECTED_SCORE = -21.210594
+        EXPECTED_SCORE = -21.228168
         self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 2e-4)
