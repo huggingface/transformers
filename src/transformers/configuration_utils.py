@@ -494,7 +494,7 @@ class PretrainedConfig(PushToHubMixin):
                 If `True`, then this functions returns a `Tuple(config, unused_kwargs)` where *unused_kwargs* is a
                 dictionary consisting of the key/value pairs whose keys are not configuration attributes: i.e., the
                 part of `kwargs` which has not been used to update `config` and is otherwise ignored.
-            subfolder (`str`, *optional*):
+            subfolder (`str`, *optional*, defaults to `""`):
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
                 specify the folder name here.
             kwargs (`Dict[str, Any]`, *optional*):
@@ -580,7 +580,7 @@ class PretrainedConfig(PushToHubMixin):
         use_auth_token = kwargs.pop("use_auth_token", None)
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
-        subfolder = kwargs.pop("subfolder", None)
+        subfolder = kwargs.pop("subfolder", "")
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
 
@@ -593,22 +593,21 @@ class PretrainedConfig(PushToHubMixin):
             local_files_only = True
 
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
-        maybe_subfolder_path = subfolder if subfolder is not None else ""
-        if os.path.isfile(os.path.join(maybe_subfolder_path, pretrained_model_name_or_path)) or is_remote_url(
+        if os.path.isfile(os.path.join(subfolder, pretrained_model_name_or_path)) or is_remote_url(
             pretrained_model_name_or_path
         ):
             config_file = pretrained_model_name_or_path
         else:
             configuration_file = kwargs.pop("_configuration_file", CONFIG_NAME)
 
-            if os.path.isdir(os.path.join(pretrained_model_name_or_path, maybe_subfolder_path)):
-                config_file = os.path.join(pretrained_model_name_or_path, maybe_subfolder_path, configuration_file)
+            if os.path.isdir(os.path.join(pretrained_model_name_or_path, subfolder)):
+                config_file = os.path.join(pretrained_model_name_or_path, subfolder, configuration_file)
             else:
                 config_file = hf_bucket_url(
                     pretrained_model_name_or_path,
                     filename=configuration_file,
                     revision=revision,
-                    subfolder=subfolder,
+                    subfolder=subfolder or None,
                     mirror=None,
                 )
 

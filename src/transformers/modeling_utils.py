@@ -1690,7 +1690,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             offload_state_dict (`bool`, *optional*, defaults to `False`):
                 If `True`, will temporarily offload the CPU state dict to the hard drive to avoid getting out of CPU
                 RAM if the weight of the CPU state dict + the biggest shard of the checkpoint does not fit.
-            subfolder (`str`, *optional*):
+            subfolder (`str`, *optional*, defaults to `""`):
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
                 specify the folder name here.
 
@@ -1779,7 +1779,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         max_memory = kwargs.pop("max_memory", None)
         offload_folder = kwargs.pop("offload_folder", None)
         offload_state_dict = kwargs.pop("offload_state_dict", False)
-        subfolder = kwargs.pop("subfolder", None)
+        subfolder = kwargs.pop("subfolder", "")
 
         if device_map is not None:
             if low_cpu_mem_usage is None:
@@ -1840,50 +1840,39 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if pretrained_model_name_or_path is not None:
             pretrained_model_name_or_path = str(pretrained_model_name_or_path)
-            maybe_subfolder_path = subfolder if subfolder is not None else ""
             if os.path.isdir(pretrained_model_name_or_path):
                 if from_tf and os.path.isfile(
-                    os.path.join(pretrained_model_name_or_path, maybe_subfolder_path, TF_WEIGHTS_NAME + ".index")
+                    os.path.join(pretrained_model_name_or_path, subfolder, TF_WEIGHTS_NAME + ".index")
                 ):
                     # Load from a TF 1.0 checkpoint in priority if from_tf
-                    archive_file = os.path.join(
-                        pretrained_model_name_or_path, maybe_subfolder_path, TF_WEIGHTS_NAME + ".index"
-                    )
+                    archive_file = os.path.join(pretrained_model_name_or_path, subfolder, TF_WEIGHTS_NAME + ".index")
                 elif from_tf and os.path.isfile(
-                    os.path.join(pretrained_model_name_or_path, maybe_subfolder_path, TF2_WEIGHTS_NAME)
+                    os.path.join(pretrained_model_name_or_path, subfolder, TF2_WEIGHTS_NAME)
                 ):
                     # Load from a TF 2.0 checkpoint in priority if from_tf
-                    archive_file = os.path.join(pretrained_model_name_or_path, maybe_subfolder_path, TF2_WEIGHTS_NAME)
+                    archive_file = os.path.join(pretrained_model_name_or_path, subfolder, TF2_WEIGHTS_NAME)
                 elif from_flax and os.path.isfile(
-                    os.path.join(pretrained_model_name_or_path, maybe_subfolder_path, FLAX_WEIGHTS_NAME)
+                    os.path.join(pretrained_model_name_or_path, subfolder, FLAX_WEIGHTS_NAME)
                 ):
                     # Load from a Flax checkpoint in priority if from_flax
-                    archive_file = os.path.join(pretrained_model_name_or_path, maybe_subfolder_path, FLAX_WEIGHTS_NAME)
-                elif os.path.isfile(os.path.join(pretrained_model_name_or_path, maybe_subfolder_path, WEIGHTS_NAME)):
+                    archive_file = os.path.join(pretrained_model_name_or_path, subfolder, FLAX_WEIGHTS_NAME)
+                elif os.path.isfile(os.path.join(pretrained_model_name_or_path, subfolder, WEIGHTS_NAME)):
                     # Load from a PyTorch checkpoint
-                    archive_file = os.path.join(pretrained_model_name_or_path, maybe_subfolder_path, WEIGHTS_NAME)
-                elif os.path.isfile(
-                    os.path.join(pretrained_model_name_or_path, maybe_subfolder_path, WEIGHTS_INDEX_NAME)
-                ):
+                    archive_file = os.path.join(pretrained_model_name_or_path, subfolder, WEIGHTS_NAME)
+                elif os.path.isfile(os.path.join(pretrained_model_name_or_path, subfolder, WEIGHTS_INDEX_NAME)):
                     # Load from a sharded PyTorch checkpoint
-                    archive_file = os.path.join(
-                        pretrained_model_name_or_path, maybe_subfolder_path, WEIGHTS_INDEX_NAME
-                    )
+                    archive_file = os.path.join(pretrained_model_name_or_path, subfolder, WEIGHTS_INDEX_NAME)
                     is_sharded = True
                 # At this stage we don't have a weight file so we will raise an error.
                 elif os.path.isfile(
-                    os.path.join(pretrained_model_name_or_path, maybe_subfolder_path, TF_WEIGHTS_NAME + ".index")
-                ) or os.path.isfile(
-                    os.path.join(pretrained_model_name_or_path, maybe_subfolder_path, TF2_WEIGHTS_NAME)
-                ):
+                    os.path.join(pretrained_model_name_or_path, subfolder, TF_WEIGHTS_NAME + ".index")
+                ) or os.path.isfile(os.path.join(pretrained_model_name_or_path, subfolder, TF2_WEIGHTS_NAME)):
                     raise EnvironmentError(
                         f"Error no file named {WEIGHTS_NAME} found in directory {pretrained_model_name_or_path} but "
                         "there is a file for TensorFlow weights. Use `from_tf=True` to load this model from those "
                         "weights."
                     )
-                elif os.path.isfile(
-                    os.path.join(pretrained_model_name_or_path, maybe_subfolder_path, FLAX_WEIGHTS_NAME)
-                ):
+                elif os.path.isfile(os.path.join(pretrained_model_name_or_path, subfolder, FLAX_WEIGHTS_NAME)):
                     raise EnvironmentError(
                         f"Error no file named {WEIGHTS_NAME} found in directory {pretrained_model_name_or_path} but "
                         "there is a file for Flax weights. Use `from_flax=True` to load this model from those "
@@ -1894,17 +1883,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         f"Error no file named {WEIGHTS_NAME}, {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME + '.index'} or "
                         f"{FLAX_WEIGHTS_NAME} found in directory {pretrained_model_name_or_path}."
                     )
-            elif os.path.isfile(os.path.join(maybe_subfolder_path, pretrained_model_name_or_path)) or is_remote_url(
+            elif os.path.isfile(os.path.join(subfolder, pretrained_model_name_or_path)) or is_remote_url(
                 pretrained_model_name_or_path
             ):
                 archive_file = pretrained_model_name_or_path
-            elif os.path.isfile(os.path.join(maybe_subfolder_path, pretrained_model_name_or_path + ".index")):
+            elif os.path.isfile(os.path.join(subfolder, pretrained_model_name_or_path + ".index")):
                 if not from_tf:
                     raise ValueError(
                         f"We found a TensorFlow checkpoint at {pretrained_model_name_or_path + '.index'}, please set "
                         "from_tf to True to load from this checkpoint."
                     )
-                archive_file = os.path.join(maybe_subfolder_path, pretrained_model_name_or_path + ".index")
+                archive_file = os.path.join(subfolder, pretrained_model_name_or_path + ".index")
             else:
                 # set correct filename
                 if from_tf:
@@ -1919,7 +1908,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     filename=filename,
                     revision=revision,
                     mirror=mirror,
-                    subfolder=subfolder,
+                    subfolder=subfolder or None,
                 )
 
             try:
@@ -1957,6 +1946,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             filename=WEIGHTS_INDEX_NAME,
                             revision=revision,
                             mirror=mirror,
+                            subfolder=subfolder or None,
                         )
                         resolved_archive_file = cached_path(
                             archive_file,
@@ -2043,6 +2033,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 user_agent=user_agent,
                 revision=revision,
                 mirror=mirror,
+                subfolder=subfolder,
             )
 
         # load pt weights early so that we know which dtype to init the model under

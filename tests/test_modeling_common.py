@@ -2531,6 +2531,62 @@ class ModelUtilsTest(TestCasePlus):
             self.assertEqual(model.config.output_hidden_states, True)
             self.assertEqual(model.config, config)
 
+    def test_model_from_pretrained_subfolder(self):
+        config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
+        model = BertModel(config)
+        sum_all_params = sum(p.abs().sum() for p in model.parameters())
+
+        subfolder = "bert"
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(os.path.join(tmp_dir, subfolder))
+
+            with self.assertRaises(OSError):
+                _ = BertModel.from_pretrained(tmp_dir)
+
+            model = BertModel.from_pretrained(tmp_dir, subfolder=subfolder)
+
+        sum_all_params_loaded = sum(p.abs().sum() for p in model.parameters())
+
+        self.assertTrue(sum_all_params - sum_all_params_loaded < 1e-5)
+
+    def test_model_from_pretrained_subfolder_sharded(self):
+        config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
+        model = BertModel(config)
+        sum_all_params = sum(p.abs().sum() for p in model.parameters())
+
+        subfolder = "bert"
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(os.path.join(tmp_dir, subfolder), max_shard_size="10KB")
+
+            with self.assertRaises(OSError):
+                _ = BertModel.from_pretrained(tmp_dir)
+
+            model = BertModel.from_pretrained(tmp_dir, subfolder=subfolder)
+
+        sum_all_params_loaded = sum(p.abs().sum() for p in model.parameters())
+
+        self.assertTrue(sum_all_params - sum_all_params_loaded < 1e-5)
+
+    def test_model_from_pretrained_hub_subfolder(self):
+        subfolder = "bert"
+        model_id = "hf-internal-testing/tiny-random-bert-subfolder"
+        with self.assertRaises(OSError):
+            _ = BertModel.from_pretrained(model_id)
+
+        model = BertModel.from_pretrained(model_id, subfolder=subfolder)
+
+        self.assertIsNotNone(model)
+
+    def test_model_from_pretrained_hub_subfolder_sharded(self):
+        subfolder = "bert"
+        model_id = "hf-internal-testing/tiny-random-bert-sharded-subfolder"
+        with self.assertRaises(OSError):
+            _ = BertModel.from_pretrained(model_id)
+
+        model = BertModel.from_pretrained(model_id, subfolder=subfolder)
+
+        self.assertIsNotNone(model)
+
     def test_model_from_pretrained_with_different_pretrained_model_name(self):
         model = T5ForConditionalGeneration.from_pretrained(TINY_T5)
         self.assertIsNotNone(model)
