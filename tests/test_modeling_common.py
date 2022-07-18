@@ -1642,8 +1642,8 @@ class ModelTesterMixin:
             # TODO: remove this method and this line after issues are fixed
             tf_outputs, pt_outputs = self._postprocessing_to_ignore_test_cases(tf_outputs, pt_outputs, model_class)
 
-            tf_keys = tuple([k for k, v in tf_outputs.items() if v is not None])
-            pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
+            tf_keys = [k for k, v in tf_outputs.items() if v is not None]
+            pt_keys = [k for k, v in pt_outputs.items() if v is not None]
 
             self.assertEqual(tf_keys, pt_keys, f"{name}: Output keys differ between TF and PyTorch")
 

@@ -338,8 +338,8 @@ class TFVisionEncoderDecoderMixin:
                 f"{name}: `pt_outputs` should an instance of `ModelOutput` when `tf_outputs` is",
             )
 
-            tf_keys = tuple([k for k, v in tf_outputs.items() if v is not None])
-            pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
+            tf_keys = [k for k, v in tf_outputs.items() if v is not None]
+            pt_keys = [k for k, v in pt_outputs.items() if v is not None]
 
             self.assertEqual(tf_keys, pt_keys, f"{name}: Output keys differ between TF and PyTorch")
 
