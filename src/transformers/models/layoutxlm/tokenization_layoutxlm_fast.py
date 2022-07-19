@@ -19,9 +19,7 @@ import os
 from shutil import copyfile
 from typing import Dict, List, Optional, Tuple, Union
 
-from transformers.models.layoutxlm.tokenization_layoutxlm import (
-    LAYOUTXLM_ENCODE_KWARGS_DOCSTRING,
-)
+from transformers.models.layoutxlm.tokenization_layoutxlm import LAYOUTXLM_ENCODE_KWARGS_DOCSTRING
 
 from ...tokenization_utils import AddedToken
 from ...tokenization_utils_base import (
