@@ -88,7 +88,8 @@ def build_alibi_tensor(attention_mask: torch.Tensor, n_head: int, dtype, device)
     Link to paper: https://arxiv.org/abs/2108.12409 Alibi tensor is not causal as the original paper mentions, it
     relies on a translation invariance of softmax for quick implementation: with l being a tensor, and a fixed value
     `softmax(l+a) = softmax(l)`. Based on
-    https://github.com/ofirpress/attention_with_linear_biases/blob/a35aaca144e0eb6b789dfcb46784c4b8e31b7983/fairseq/models/transformer.py#L742
+    https:
+        //github.com/ofirpress/attention_with_linear_biases/blob/a35aaca144e0eb6b789dfcb46784c4b8e31b7983/fairseq/models/transformer.py#L742
 
     Args:
     Returns tensor shaped (batch_size * n_head, 1, max_seq_len)
@@ -571,14 +572,15 @@ class BloomModel(BloomPreTrainedModel):
     def get_input_embeddings(self):
         return self.word_embeddings
 
-    def _prepare_attn_mask(self, 
-        attention_mask, 
-        input_shape, 
-        inputs_embeds, 
+    def _prepare_attn_mask(
+        self,
+        attention_mask,
+        input_shape,
+        inputs_embeds,
         past_key_values_length,
         causal_mask=None,
         prefix_length=None,
-        ):
+    ):
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         combined_attention_mask = None
@@ -674,7 +676,9 @@ class BloomModel(BloomPreTrainedModel):
 
         alibi = build_alibi_tensor(attention_mask, self.n_head, hidden_states.dtype, hidden_states.device)
 
-        causal_mask = self._prepare_attn_mask(attention_mask, input_shape, inputs_embeds, past_key_values_length, causal_mask=causal_mask)
+        causal_mask = self._prepare_attn_mask(
+            attention_mask, input_shape, inputs_embeds, past_key_values_length, causal_mask=causal_mask
+        )
 
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
 
