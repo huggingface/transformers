@@ -478,7 +478,6 @@ class DebertaV2Encoder(nn.Module):
         rel_embeddings = self.get_rel_embedding()
         output_states = next_kv
         for i, layer_module in enumerate(self.layer):
-
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (output_states,)
 
@@ -535,11 +534,11 @@ class DebertaV2Encoder(nn.Module):
 
 
 def make_log_bucket_position(relative_pos, bucket_size, max_position):
-    sign = np.sign(relative_pos)
-    mid = bucket_size // 2
-    abs_pos = np.where((relative_pos < mid) & (relative_pos > -mid), mid - 1, np.abs(relative_pos))
-    log_pos = np.ceil(np.log(abs_pos / mid) / np.log((max_position - 1) / mid) * (mid - 1)) + mid
-    bucket_pos = np.where(abs_pos <= mid, relative_pos, log_pos * sign).astype(np.int)
+    sign = torch.sign(relative_pos)
+    mid = torch.div(bucket_size, 2, rounding_mode="floor")
+    abs_pos = torch.where((relative_pos < mid) & (relative_pos > -mid), mid - 1, torch.abs(relative_pos))
+    log_pos = torch.ceil(torch.log(abs_pos / mid) / torch.log((max_position - 1) / mid) * (mid - 1)) + mid
+    bucket_pos = torch.where(abs_pos <= mid, relative_pos, log_pos * sign).to(torch.int)
     return bucket_pos
 
 
@@ -561,12 +560,12 @@ def build_relative_position(query_size, key_size, bucket_size=-1, max_position=-
         `torch.LongTensor`: A tensor with shape [1, query_size, key_size]
 
     """
-    q_ids = np.arange(0, query_size)
-    k_ids = np.arange(0, key_size)
-    rel_pos_ids = q_ids[:, None] - np.tile(k_ids, (q_ids.shape[0], 1))
+    q_ids = torch.arange(0, query_size)
+    k_ids = torch.arange(0, key_size)
+    rel_pos_ids = q_ids[:, None] - torch.tile(k_ids, (q_ids.shape[0], 1))
     if bucket_size > 0 and max_position > 0:
         rel_pos_ids = make_log_bucket_position(rel_pos_ids, bucket_size, max_position)
-    rel_pos_ids = torch.tensor(rel_pos_ids, dtype=torch.long)
+    rel_pos_ids = rel_pos_ids.to(torch.long)
     rel_pos_ids = rel_pos_ids[:query_size, :]
     rel_pos_ids = rel_pos_ids.unsqueeze(0)
     return rel_pos_ids
@@ -695,7 +694,7 @@ class DisentangledSelfAttention(nn.Module):
             scale_factor += 1
         if "p2c" in self.pos_att_type:
             scale_factor += 1
-        scale = math.sqrt(query_layer.size(-1) * scale_factor)
+        scale = torch.sqrt(query_layer.size(-1) * scale_factor)
         attention_scores = torch.bmm(query_layer, key_layer.transpose(-1, -2)) / scale
         if self.relative_attention:
             rel_embeddings = self.pos_dropout(rel_embeddings)
@@ -749,28 +748,28 @@ class DisentangledSelfAttention(nn.Module):
         if self.share_att_key:
             pos_query_layer = self.transpose_for_scores(
                 self.query_proj(rel_embeddings), self.num_attention_heads
-            ).repeat(query_layer.size(0) // self.num_attention_heads, 1, 1)
+            ).repeat(torch.div(query_layer.size(0), self.num_attention_heads, rounding_mode="floor"), 1, 1)
             pos_key_layer = self.transpose_for_scores(self.key_proj(rel_embeddings), self.num_attention_heads).repeat(
-                query_layer.size(0) // self.num_attention_heads, 1, 1
+                torch.div(query_layer.size(0), self.num_attention_heads, rounding_mode="floor"), 1, 1
             )
         else:
             if "c2p" in self.pos_att_type:
                 pos_key_layer = self.transpose_for_scores(
                     self.pos_key_proj(rel_embeddings), self.num_attention_heads
                 ).repeat(
-                    query_layer.size(0) // self.num_attention_heads, 1, 1
+                    torch.div(query_layer.size(0), self.num_attention_heads, rounding_mode="floor"), 1, 1
                 )  # .split(self.all_head_size, dim=-1)
             if "p2c" in self.pos_att_type:
                 pos_query_layer = self.transpose_for_scores(
                     self.pos_query_proj(rel_embeddings), self.num_attention_heads
                 ).repeat(
-                    query_layer.size(0) // self.num_attention_heads, 1, 1
+                    torch.div(query_layer.size(0), self.num_attention_heads, rounding_mode="floor"), 1, 1
                 )  # .split(self.all_head_size, dim=-1)
 
         score = 0
         # content->position
         if "c2p" in self.pos_att_type:
-            scale = math.sqrt(pos_key_layer.size(-1) * scale_factor)
+            scale = torch.sqrt(pos_key_layer.size(-1) * scale_factor)
             c2p_att = torch.bmm(query_layer, pos_key_layer.transpose(-1, -2))
             c2p_pos = torch.clamp(relative_pos + att_span, 0, att_span * 2 - 1)
             c2p_att = torch.gather(
@@ -782,7 +781,7 @@ class DisentangledSelfAttention(nn.Module):
 
         # position->content
         if "p2c" in self.pos_att_type:
-            scale = math.sqrt(pos_query_layer.size(-1) * scale_factor)
+            scale = torch.sqrt(pos_query_layer.size(-1) * scale_factor)
             if key_layer.size(-2) != query_layer.size(-2):
                 r_pos = build_relative_position(
                     key_layer.size(-2),
