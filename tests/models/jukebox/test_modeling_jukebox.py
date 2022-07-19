@@ -297,38 +297,14 @@ class JukeboxDummyModelTest(unittest.TestCase):
 
     def test_model(self):
         set_seed(0)
-
-        config = JukeboxConfig(
-            n_ctx=(256, 256, 256),
-            width=[128, 64, 32],
-            depth=[2, 2, 2],
-            priors_width=[128, 64, 32],
-            cond_width=[128, 128, 64],
-            l_bins=128,
-            vq_vae_codebook_dimension=128,
-            vq_vae_emmbedding_width=128,
-            sr=44100,
-            attn_order=[12, 2, 2],
-            n_heads=[2, 1, 1],
-            t_bins=64,
-            single_enc_dec=[True, False, False],
-            labels=True,
-            n_vocab=79,
-            sample_length=44032
-            # allows the use of label conditionning. Has to be
-            # True if the single_enc_dec is set to true apparently
-            # ntokens also have to be set to the nb of lyric tokens
-        )
-
         model = JukeboxModel.from_pretrained("ArthurZ/jukebox-dummy").eval()
         tokenizer = JukeboxTokenizer.from_pretrained("ArthurZ/jukebox")
         tokens = tokenizer(
             "Alan Jackson",
             "rock",
             "old town road",
-            total_length=config.sample_length_in_seconds * config.sr,
+            total_length=model.config.sample_length_in_seconds * model.config.sr,
         )
-
         # Checks
         set_seed(0)
 
@@ -341,7 +317,6 @@ class JukeboxDummyModelTest(unittest.TestCase):
         self.assertTrue(torch.allclose(first_100, self.expected_x, atol=1e-4))
 
 
-        model.config.hop_fraction = [0.125, 0.5, 0.5]
         inputs, _ = tokens["input_ids"], tokens["attention_masks"]
         start = timeit.default_timer()
         zs = model.ancestral_sample(inputs, chunk_size = 32)
