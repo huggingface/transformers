@@ -1908,7 +1908,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     filename=filename,
                     revision=revision,
                     mirror=mirror,
-                    subfolder=subfolder or None,
+                    subfolder=subfolder if len(subfolder) > 0 else None,
                 )
 
             try:
@@ -1946,7 +1946,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             filename=WEIGHTS_INDEX_NAME,
                             revision=revision,
                             mirror=mirror,
-                            subfolder=subfolder or None,
+                            subfolder=subfolder if len(subfolder) > 0 else None,
                         )
                         resolved_archive_file = cached_path(
                             archive_file,
