@@ -1103,7 +1103,8 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
         )
 
     def get_input_embeddings(self):
-        return self.transformer.decoder.embed_tokens
+        return self.embed_tokens
 
     def set_input_embeddings(self, value):
-        self.transformer.decoder.embed_tokens = value
+        self.embed_tokens = value
+
