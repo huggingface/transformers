@@ -394,31 +394,31 @@ One particularly cool 🤗 Transformers feature is the ability to save a model a
 
 You can modify the model's configuration class to change how a model is built. The configuration specifies a model's attributes, such as the number of hidden layers or attention heads. You start from scratch when you initialize a model from a custom configuration class. The model attributes are randomly initialized, and you'll need to train the model before you can use it to get meaningful results.
 
-Start by importing a model's configuration class, and then you can change the number of attention heads, for instance:
+Start by importing [`AutoConfig`], and then load the pretrained model you want to modify. Within [`AutoConfig.from_pretrained`], you can specify the attribute you want to change, such as the number of attention heads:
 
 ```py
->>> from transformers import DistilBertConfig
+>>> from transformers import AutoConfig
 
->>> my_config = DistilBertConfig(n_heads=12)
+>>> my_config = AutoConfig.from_pretrained("distilbert-base-uncased", n_heads=12)
 ```
 
 <frameworkcontent>
 <pt>
-Create a model from your custom configuration:
+Create a model from your custom configuration with [`AutoModel.from_config`]:
 
 ```py
->>> from transformers import DistilBertForSequenceClassification
+>>> from transformers import AutoModel
 
->>> my_model = DistilBertForSequenceClassification(my_config)
+>>> my_model = AutoModel.from_config(my_config)
 ```
 </pt>
 <tf>
-Create a model from your custom configuration:
+Create a model from your custom configuration with [`TFAutoModel.from_config`]:
 
 ```py
->>> from transformers import TFDistilBertForSequenceClassification
+>>> from transformers import TFAutoModel
 
->>> my_model = TFDistilBertForSequenceClassification(my_config)
+>>> my_model = TFAutoModel.from_config(my_config)
 ```
 </tf>
 </frameworkcontent>
