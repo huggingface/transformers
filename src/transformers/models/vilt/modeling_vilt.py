@@ -1446,7 +1446,7 @@ class ViltForTokenClassification(ViltPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        labels (`torch.LongTensor` of shape `(batch_size, text_sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
 
         Returns:
