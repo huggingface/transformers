@@ -266,6 +266,7 @@ _import_structure = {
     "models.mt5": ["MT5Config"],
     "models.mvp": ["MvpConfig", "MvpTokenizer"],
     "models.nezha": ["NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP", "NezhaConfig"],
+    "models.nllb": [],
     "models.nystromformer": [
         "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "NystromformerConfig",
@@ -479,6 +480,7 @@ else:
     _import_structure["models.m2m_100"].append("M2M100Tokenizer")
     _import_structure["models.marian"].append("MarianTokenizer")
     _import_structure["models.mbart"].append("MBartTokenizer")
+    _import_structure["models.nllb"].append("NllbTokenizer")
     _import_structure["models.mbart50"].append("MBart50Tokenizer")
     _import_structure["models.mluke"].append("MLukeTokenizer")
     _import_structure["models.mt5"].append("MT5Tokenizer")
@@ -543,6 +545,7 @@ else:
     _import_structure["models.mpnet"].append("MPNetTokenizerFast")
     _import_structure["models.mt5"].append("MT5TokenizerFast")
     _import_structure["models.mvp"].append("MvpTokenizerFast")
+    _import_structure["models.nllb"].append("NllbTokenizerFast")
     _import_structure["models.openai"].append("OpenAIGPTTokenizerFast")
     _import_structure["models.pegasus"].append("PegasusTokenizerFast")
     _import_structure["models.realm"].append("RealmTokenizerFast")
@@ -3188,6 +3191,7 @@ if TYPE_CHECKING:
         from .models.mbart import MBart50Tokenizer, MBartTokenizer
         from .models.mluke import MLukeTokenizer
         from .models.mt5 import MT5Tokenizer
+        from .models.nllb import NllbTokenizer
         from .models.pegasus import PegasusTokenizer
         from .models.plbart import PLBartTokenizer
         from .models.reformer import ReformerTokenizer
@@ -3242,6 +3246,7 @@ if TYPE_CHECKING:
         from .models.mpnet import MPNetTokenizerFast
         from .models.mt5 import MT5TokenizerFast
         from .models.mvp import MvpTokenizerFast
+        from .models.nllb import NllbTokenizerFast
         from .models.openai import OpenAIGPTTokenizerFast
         from .models.pegasus import PegasusTokenizerFast
         from .models.realm import RealmTokenizerFast

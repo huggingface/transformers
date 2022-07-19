@@ -1142,6 +1142,7 @@ def get_checkpoint_shard_files(
     user_agent=None,
     revision=None,
     mirror=None,
+    subfolder="",
 ):
     """
     For a given model:
@@ -1167,14 +1168,18 @@ def get_checkpoint_shard_files(
 
     # First, let's deal with local folder.
     if os.path.isdir(pretrained_model_name_or_path):
-        shard_filenames = [os.path.join(pretrained_model_name_or_path, f) for f in shard_filenames]
+        shard_filenames = [os.path.join(pretrained_model_name_or_path, subfolder, f) for f in shard_filenames]
         return shard_filenames, sharded_metadata
 
     # At this stage pretrained_model_name_or_path is a model identifier on the Hub
     cached_filenames = []
     for shard_filename in shard_filenames:
         shard_url = hf_bucket_url(
-            pretrained_model_name_or_path, filename=shard_filename, revision=revision, mirror=mirror
+            pretrained_model_name_or_path,
+            filename=shard_filename,
+            revision=revision,
+            mirror=mirror,
+            subfolder=subfolder if len(subfolder) > 0 else None,
         )
 
         try:

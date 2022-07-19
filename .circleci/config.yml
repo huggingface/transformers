@@ -65,7 +65,7 @@ jobs:
     run_tests_torch_and_tf:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             RUN_PT_TF_CROSS_TESTS: yes
@@ -105,7 +105,7 @@ jobs:
     run_tests_torch_and_tf_all:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             RUN_PT_TF_CROSS_TESTS: yes
@@ -140,7 +140,7 @@ jobs:
     run_tests_torch_and_flax:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             RUN_PT_FLAX_CROSS_TESTS: yes
@@ -178,7 +178,7 @@ jobs:
     run_tests_torch_and_flax_all:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             RUN_PT_FLAX_CROSS_TESTS: yes
@@ -211,7 +211,7 @@ jobs:
     run_tests_torch:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
@@ -248,7 +248,7 @@ jobs:
     run_tests_torch_all:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
@@ -280,7 +280,7 @@ jobs:
     run_tests_tf:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
@@ -316,7 +316,7 @@ jobs:
     run_tests_tf_all:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
@@ -347,7 +347,7 @@ jobs:
     run_tests_flax:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
@@ -382,7 +382,7 @@ jobs:
     run_tests_flax_all:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
@@ -412,7 +412,7 @@ jobs:
     run_tests_pipelines_torch:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             RUN_PIPELINE_TESTS: yes
@@ -449,7 +449,7 @@ jobs:
     run_tests_pipelines_torch_all:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             RUN_PIPELINE_TESTS: yes
@@ -481,7 +481,7 @@ jobs:
     run_tests_pipelines_tf:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             RUN_PIPELINE_TESTS: yes
@@ -516,7 +516,7 @@ jobs:
     run_tests_pipelines_tf_all:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             RUN_PIPELINE_TESTS: yes
@@ -546,7 +546,7 @@ jobs:
     run_tests_custom_tokenizers:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             RUN_CUSTOM_TOKENIZERS: yes
             TRANSFORMERS_IS_CI: yes
@@ -579,7 +579,7 @@ jobs:
     run_examples_torch:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
@@ -614,7 +614,7 @@ jobs:
     run_examples_torch_all:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
@@ -644,7 +644,7 @@ jobs:
     run_examples_flax:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
@@ -657,7 +657,7 @@ jobs:
                     - v0.4-flax_examples-{{ checksum "setup.py" }}
                     - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: sudo pip install .[flax,testing,sentencepiece]
+            - run: pip install .[flax,testing,sentencepiece]
             - run: pip install -r examples/flax/_tests_requirements.txt
             - save_cache:
                   key: v0.4-flax_examples-{{ checksum "setup.py" }}
@@ -678,7 +678,7 @@ jobs:
     run_examples_flax_all:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
@@ -691,7 +691,7 @@ jobs:
                     - v0.4-flax_examples-{{ checksum "setup.py" }}
                     - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: sudo pip install .[flax,testing,sentencepiece]
+            - run: pip install .[flax,testing,sentencepiece]
             - run: pip install -r examples/flax/_tests_requirements.txt
             - save_cache:
                   key: v0.4-flax_examples-{{ checksum "setup.py" }}
@@ -707,7 +707,7 @@ jobs:
     run_tests_hub:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             HUGGINGFACE_CO_STAGING: yes
             RUN_GIT_LFS_TESTS: yes
@@ -720,7 +720,7 @@ jobs:
                   keys:
                       - v0.4-hub-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get install git-lfs
+            - run: sudo apt-get -y update && sudo apt-get install git-lfs
             - run: |
                 git config --global user.email "ci@dummy.com"
                 git config --global user.name "ci"
@@ -745,7 +745,7 @@ jobs:
     run_tests_hub_all:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             HUGGINGFACE_CO_STAGING: yes
             RUN_GIT_LFS_TESTS: yes
@@ -758,7 +758,7 @@ jobs:
                   keys:
                       - v0.4-hub-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get install git-lfs
+            - run: sudo apt-get -y update && sudo apt-get install git-lfs
             - run: |
                 git config --global user.email "ci@dummy.com"
                 git config --global user.name "ci"
@@ -778,7 +778,7 @@ jobs:
     run_tests_onnxruntime:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
@@ -811,7 +811,7 @@ jobs:
     run_tests_onnxruntime_all:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
@@ -839,7 +839,7 @@ jobs:
     check_code_quality:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         resource_class: large
         environment:
             TRANSFORMERS_IS_CI: yes
@@ -867,7 +867,7 @@ jobs:
     check_repository_consistency:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         resource_class: large
         environment:
             TRANSFORMERS_IS_CI: yes
@@ -896,7 +896,7 @@ jobs:
     run_tests_layoutlmv2_and_v3:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
@@ -934,7 +934,7 @@ jobs:
 # TPU JOBS
     run_examples_tpu:
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
@@ -954,7 +954,7 @@ jobs:
 
     cleanup-gke-jobs:
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         steps:
             - gcp-gke/install
             - gcp-gke/update-kubeconfig-with-credentials:
