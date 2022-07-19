@@ -1,0 +1,15 @@
+python -m torch.distributed.launch --nproc_per_node=1 /cb/home/vinayr/ws/global_rigl/mlresearch/transformers/examples/pytorch/language-modeling/run_clm.py \
+    --model_type gpt2 \
+    --config_overrides="n_embd=768,n_head=12,n_layer=12,n_positions=1024,mup=True" \
+    --optim adamw_mup \
+    --dataset_name wikitext \
+    --dataset_config_name wikitext-103-raw-v1 \
+    --per_device_train_batch_size 2 \
+    --per_device_eval_batch_size 2 \
+    --do_train \
+    --do_eval \
+    --output_dir /tmp/test-clm \
+    --max_steps 50 \
+    --logging_steps 5 \
+    --overwrite_output_dir \
+    --tokenizer_name gpt2

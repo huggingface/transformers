@@ -113,6 +113,7 @@ class GPT2Config(PretrainedConfig):
         reorder_and_upcast_attn (`bool`, *optional*, defaults to `False`):
             Whether to scale keys (K) prior to computing attention (dot-product) and upcast attention
             dot-product/softmax to float() when training with mixed precision.
+        mup (`bool`, *optional*, defaults to `False`): Whether to use muP.
 
     Example:
 
@@ -163,6 +164,8 @@ class GPT2Config(PretrainedConfig):
         eos_token_id=50256,
         scale_attn_by_inverse_layer_idx=False,
         reorder_and_upcast_attn=False,
+        mup=False,
+        attn_mult=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -189,6 +192,17 @@ class GPT2Config(PretrainedConfig):
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+
+        self.mup = mup
+        self.attn_mult = None
+        print('*' * 10 + f'{self.mup}', flush=True)
+         ### muP
+        if self.mup:
+            if attn_mult is None:
+                # defaults back to 1/sqrt(d) attn
+                self.attn_mult = (self.hidden_size / self.num_attention_heads)**0.5
+            else:
+                self.attn_mult = attn_mult
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 

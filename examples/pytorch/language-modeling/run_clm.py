@@ -383,6 +383,15 @@ def main():
         )
     else:
         model = AutoModelForCausalLM.from_config(config)
+        ### mup
+        # TODO: Only works for GPT-style models right now
+        if config.mup:
+            from mup import make_base_shapes, set_base_shapes
+            delta_config = CONFIG_MAPPING[model_args.model_type](mup=True)
+            delta_config.update(dict(n_embd=200, n_head=5))
+            delta_model = model = AutoModelForCausalLM.from_config(delta_config)
+            base_shapes = make_base_shapes(model, delta_model, savefile=f'{training_args.output_dir}/mup.bsh')
+            set_base_shapes(model, base_shapes)
         n_params = sum(dict((p.data_ptr(), p.numel()) for p in model.parameters()).values())
         logger.info(f"Training new model from scratch - Total size={n_params/2**20:.2f}M params")
 

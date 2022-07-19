@@ -1092,6 +1092,14 @@ class Trainer:
             optimizer_cls = torch.optim.SGD
         elif args.optim == OptimizerNames.ADAGRAD:
             optimizer_cls = torch.optim.Adagrad
+        elif args.optim == OptimizerNames.ADAMW_MUP:
+            from .optimization import MuAdamW
+            optimizer_cls = MuAdamW
+            optimizer_kwargs.update(adam_kwargs)
+        elif args.optim == OptimizerNames.ADAM_MUP:
+            from .optimization import MuAdam
+            optimizer_cls = MuAdam
+            optimizer_kwargs.update(adam_kwargs)
         else:
             raise ValueError(f"Trainer cannot instantiate unsupported optimizer: {args.optim}")
         return optimizer_cls, optimizer_kwargs

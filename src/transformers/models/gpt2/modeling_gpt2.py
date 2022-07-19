@@ -26,6 +26,8 @@ from packaging import version
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from mup import MuReadout, normal_
+
 
 if version.parse(torch.__version__) >= version.parse("1.6"):
     is_amp_available = True
@@ -152,6 +154,14 @@ class GPT2Attention(nn.Module):
 
         self.scale_attn_weights = config.scale_attn_weights
         self.is_cross_attention = is_cross_attention
+        self.mup = config.mup
+        if self.mup:
+            ### muP
+            self.attn_mult = config.attn_mult
+            self.attn_score = nn.Identity() # just for coordcheck
+            self.query = nn.Identity() # just for coordcheck
+            self.key = nn.Identity() # just for coordcheck
+            self.value = nn.Identity() # just for coordcheck
 
         # Layer-wise attention scaling, reordering, and upcasting
         self.scale_attn_by_inverse_layer_idx = config.scale_attn_by_inverse_layer_idx
@@ -189,7 +199,13 @@ class GPT2Attention(nn.Module):
         attn_weights = torch.matmul(query, key.transpose(-1, -2))
 
         if self.scale_attn_weights:
-            attn_weights = attn_weights / (value.size(-1) ** 0.5)
+            if self.mup:
+                ### muP: attn scaling
+                attn_weights = attn_weights * self.attn_mult / float(value.size(-1))
+                ### no-op, but allows tracking for coord check
+                attn_weights = self.attn_score(attn_weights)
+            else:
+                attn_weights = attn_weights / (value.size(-1) ** 0.5)
 
         # Layer-wise attention scaling
         if self.scale_attn_by_inverse_layer_idx:
@@ -323,6 +339,11 @@ class GPT2Attention(nn.Module):
         query = self._split_heads(query, self.num_heads, self.head_dim)
         key = self._split_heads(key, self.num_heads, self.head_dim)
         value = self._split_heads(value, self.num_heads, self.head_dim)
+
+        ### muP: just for coord check
+        query = self.query(query)
+        key = self.key(key)
+        value = self.value(value)
 
         if layer_past is not None:
             past_key, past_value = layer_past
@@ -461,9 +482,15 @@ class GPT2PreTrainedModel(PreTrainedModel):
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
 
-    def _init_weights(self, module):
+    def _init_weights(self, module, query_zero_init=False, readout_zero_init=False):
         """Initialize the weights."""
-        if isinstance(module, (nn.Linear, Conv1D)):
+        ### muP: swap constant std normal init with normal_ from `mup.init`.
+        ### Because `_init_weights` is called in `__init__`, before `infshape` is set,
+        ### we need to manually call `self.apply(self._init_weights)` after calling
+        ### `set_base_shape(model, base)`
+        if isinstance(module, MuReadout) and readout_zero_init:
+            module.weight.data.zero_()
+        elif isinstance(module, (nn.Linear, Conv1D)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -477,16 +504,35 @@ class GPT2PreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
+        ### muP
+        if self.mup:
+            if isinstance(module, GPT2Attention):
+                if query_zero_init:
+                    _, fanout = module.c_attn.weight.shape
+                    assert fanout % 3 == 0
+                    module.c_attn.weight.data[:, :fanout//3] = 0
+
         # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
         #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
         #   > the weights of residual layers at initialization by a factor of 1/√N where N is the # of residual layers.
         #   >   -- GPT-2 :: https://openai.com/blog/better-language-models/
         #
         # Reference (Megatron-LM): https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/gpt_model.py
-        for name, p in module.named_parameters():
-            if name == "c_proj.weight":
-                # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
-                p.data.normal_(mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.n_layer)))
+        if self.mup:
+             ### muP
+            depth_std = self.config.initializer_range / math.sqrt(2 * self.config.n_layer)
+            for name, p in module.named_parameters():
+                if "c_proj" in name and "weight" in name:
+                    # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
+                    if hasattr(p, 'infshape'):
+                        normal_(p, mean=0.0, std=depth_std)
+                    else:
+                        p.data.normal_(mean=0.0, std=depth_std)
+        else:
+            for name, p in module.named_parameters():
+                if name == "c_proj.weight":
+                    # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
+                    p.data.normal_(mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.n_layer)))
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, GPT2Model):
@@ -678,6 +724,7 @@ class GPT2Model(GPT2PreTrainedModel):
     _keys_to_ignore_on_load_missing = ["attn.masked_bias"]
 
     def __init__(self, config):
+        self.mup = config.mup
         super().__init__(config)
 
         self.embed_dim = config.hidden_size
@@ -956,9 +1003,14 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"attn.masked_bias", r"attn.bias", r"lm_head.weight"]
 
     def __init__(self, config):
+        self.mup = config.mup
         super().__init__(config)
         self.transformer = GPT2Model(config)
-        self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
+        if config.mup:
+            ### muP: swap nn.Linear with MuReadout
+            self.lm_head = MuReadout(config.n_embd, config.vocab_size, bias=False)
+        else:
+            self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
 
         # Model parallel
         self.model_parallel = False
@@ -1125,10 +1177,22 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"attn.masked_bias", r"attn.bias", r"lm_head.weight"]
 
     def __init__(self, config):
+        self.mup = config.mup
         super().__init__(config)
         config.num_labels = 1
         self.transformer = GPT2Model(config)
-        self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
+        if config.mup:
+            ### muP: swap nn.Linear with MuReadout
+            self.lm_head = MuReadout(config.n_embd, config.vocab_size, bias=False)
+            raise NotImplementedError(
+                'GPT2DoubleHeadsModel has a multiple-choice head implemented by SequenceSummary, '
+                'which is defined outside of this file. So we decline to rig it with muP '
+                'to avoid changes outside the model definition. '
+                'You can do it yourself if this is something crucial. '
+                'We leave that as an exercise.'
+            )
+        else:
+            self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
         self.multiple_choice_head = SequenceSummary(config)
 
         # Model parallel
@@ -1339,10 +1403,15 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"lm_head.weight"]
 
     def __init__(self, config):
+        self.mup = config.mup
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = GPT2Model(config)
-        self.score = nn.Linear(config.n_embd, self.num_labels, bias=False)
+        if config.mup:
+            ### muP: swap nn.Linear with MuReadout
+            self.score = MuReadout(config.n_embd, self.num_labels, bias=False)
+        else:
+            self.score = nn.Linear(config.n_embd, self.num_labels, bias=False)
 
         # Model parallel
         self.model_parallel = False
@@ -1465,6 +1534,7 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
 )
 class GPT2ForTokenClassification(GPT2PreTrainedModel):
     def __init__(self, config):
+        self.mup = config.mup
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1476,7 +1546,11 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
         else:
             classifier_dropout = 0.1
         self.dropout = nn.Dropout(classifier_dropout)
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+        if config.mup:
+            ### muP: swap nn.Linear with MuReadout
+            self.classifier = MuReadout(config.hidden_size, config.num_labels)
+        else:
+            self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         # Model parallel
         self.model_parallel = False
