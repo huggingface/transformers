@@ -222,7 +222,7 @@ class TFGPTJAttention(tf.keras.layers.Layer):
         key = self._split_heads(key, True)
         value = self._split_heads(value, False)
 
-        sincos = tf.gather(self.embed_positions, position_ids, axis=0)
+        sincos = tf.cast(tf.gather(self.embed_positions, position_ids, axis=0), hidden_states.dtype)
         sincos = tf.split(sincos, 2, axis=-1)
         if self.rotary_dim is not None:
             k_rot = key[:, :, :, : self.rotary_dim]
