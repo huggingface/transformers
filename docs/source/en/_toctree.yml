@@ -101,7 +101,7 @@
     - local: debugging
       title: Debugging
     title: "Performance and scalability"
-  - section:
+  - sections:
     - local: contributing
       title: How to contribute to transformers?
     - local: add_new_model
@@ -174,6 +174,7 @@
   - sections:
     - local: model_doc/auto
       title: Auto Classes
+<<<<<<< HEAD
     - isExpanded: false
       sections:
       - local: model_doc/albert
