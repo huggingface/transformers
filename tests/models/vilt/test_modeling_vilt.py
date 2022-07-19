@@ -174,6 +174,23 @@ class ViltModelTester:
             result.last_hidden_state.shape, (self.batch_size, self.expected_seq_len, self.hidden_size)
         )
 
+    def create_and_check_for_token_classification(
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        pixel_values,
+        token_labels,
+    ):
+        model = ViltForTokenClassification(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, pixel_values=pixel_values)
+        result = model(input_ids, token_type_ids=token_type_ids, pixel_values=pixel_values)
+        result = model(input_ids, pixel_values=pixel_values)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -218,9 +235,6 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
-        # if model_class.__name__ == "ViltForNaturalLanguageVisualReasonining":
-        #     inputs_dict["pixel_values"] = floats_tensor([self.model_tester.batch_size, self.model_tester.num_images, self.model_tester.num_channels, self.model_tester.image_size, self.model_tester.image_size])
-
         if return_labels:
             if model_class.__name__ == "ViltForQuestionAnswering":
                 inputs_dict["labels"] = torch.zeros(
@@ -247,6 +261,10 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_for_token_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
 
     def test_training(self):
         if not self.model_tester.is_training:
@@ -503,6 +521,10 @@ class ViltForImagesAndTextClassificationModelTest(ViltModelTest, unittest.TestCa
 
     @unittest.skip("We only test the model that takes in multiple images")
     def test_model(self):
+        pass
+
+    @unittest.skip("We only test the model that takes in multiple images")
+    def test_for_token_classification(self):
         pass
 
 
