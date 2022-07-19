@@ -11,7 +11,7 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 
 # Efficient Training on a Single GPU
 
-This guide focuses on training large models efficiently on a single GPU. These approaches are still valid if you have access to a machine with multiple GPUs but you will also have access to additional methods outlined in the [multi-GPU section](perf_train_gpu_many). 
+This guide focuses on training large models efficiently on a single GPU. These approaches are still valid if you have access to a machine with multiple GPUs but you will also have access to additional methods outlined in the [multi-GPU section](perf_train_gpu_many).
 
 In this section we have a look at a few tricks to reduce the memory footprint and speed up training for large models and how they are integrated in the [`Trainer`] and [🤗 Accelerate](https://huggingface.co/docs/accelerate/). Each method can improve speed or memory usage which is summarized in the table below:
 
@@ -367,7 +367,7 @@ Samples/second: 10.09
 GPU memory occupied: 7275 MB.
 ```
 
-We can see that with these tweaks we use about half the GPU memory as at the beginning while also being slightly faster. 
+We can see that with these tweaks we use about half the GPU memory as at the beginning while also being slightly faster.
 
 ### BF16
 If you have access to a Ampere or newer hardware you can use bf16 for your training and evaluation. While bf16 has a worse precision than fp16, it has a much much bigger dynamic range. Therefore, if in the past you were experiencing overflow issues while training the model, bf16 will prevent this from happening most of the time. Remember that in fp16 the biggest number you can have is `65535` and any number above that will overflow. A bf16 number can be as large as `3.39e+38` (!) which is about the same as fp32 - because both have 8-bits used for the numerical range.
@@ -394,7 +394,7 @@ Like all cases with reduced precision this may or may not be satisfactory for yo
 
 If you're already using fp16 or bf16 mixed precision it may help with the throughput as well.
 
-You can enable this mode in the 🤗 Trainer with: 
+You can enable this mode in the 🤗 Trainer with:
 ```python
 TrainingArguments(tf32=True)
 ```
@@ -654,7 +654,7 @@ https://github.com/huggingface/transformers/blob/master/src/transformers/trainer
 
 
 ## Choice of GPU
-Sometimes, even when applying all the above tweaks the throughput on a given GPU might still not be good enough. One easy solution is to change the type of GPU. For example switching from let's say a K80 (which you typically get on Google Colab) to a fancier GPU such as the V100 or A100. Although they are more expensive they are usually more cost effective than cheaper GPUs due to their larger memory and faster architecture. 
+Sometimes, even when applying all the above tweaks the throughput on a given GPU might still not be good enough. One easy solution is to change the type of GPU. For example switching from let's say a K80 (which you typically get on Google Colab) to a fancier GPU such as the V100 or A100. Although they are more expensive they are usually more cost effective than cheaper GPUs due to their larger memory and faster architecture.
 
 Now, let's take a step back and discuss what we should optimize for when scaling the training of large models.
 
@@ -718,3 +718,15 @@ For some applications, such as pretraining large language models, applying all t
 
 Another use case for training on many GPUs is if the model does not fit on a single GPU with all the mentioned tricks. There are still more methods we can apply although life starts to get a bit more complicated. This usually involves some form of pipeline or tensor parallelism where the model itself is distributed across several GPUs. One can also make use of DeepSpeed which implements some of these parallelism strategies along with some more optimization to reduce the memory footprint such as partitioning the optimizer states. You can read more about this in the ["Multi-GPU training" section](perf_train_gpu_many).
 
+## Inference with torchdynamo
+TorchDynamo is a new tracer that uses Python’s frame evaluation API to automatically create FX traces from existing PyTorch programs. After capturing the FX graph, different backends can be deployed to lower the graph to an optimized engine. One solution is using the [TensorRT](https://developer.nvidia.com/tensorrt) or NVFuser as backend. You can choose one option below for performance boost.
+```
+TrainingArguments(torchdynamo="eager")      #enable eager model GPU. No performance boost
+TrainingArguments(torchdynamo="nvfuser")    #enable nvfuser
+TrainingArguments(torchdynamo="fx2trt")     #enable tensorRT fp32
+TrainingArguments(torchdynamo="fx2trt-f16") #enable tensorRT fp16
+```
+This feature involves 3 different libraries. To install them, please follow the instructions below:  
+- [Torchdynamo installation](https://github.com/pytorch/torchdynamo#requirements-and-setup)  
+- [Functorch installation](https://github.com/pytorch/functorch#install)  
+- [Torch-TensorRT(FX) installation](https://github.com/pytorch/TensorRT/blob/master/docsrc/tutorials/getting_started_with_fx_path.rst#installation)  

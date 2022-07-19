@@ -418,6 +418,12 @@ def is_torchdynamo_available():
     return importlib.util.find_spec("torchdynamo") is not None
 
 
+def is_torch_tensorrt_fx_available():
+    if importlib.util.find_spec("torch_tensorrt") is None:
+        return False
+    return importlib.util.find_spec("torch_tensorrt.fx") is not None
+
+
 def is_datasets_available():
     return _datasets_available
 

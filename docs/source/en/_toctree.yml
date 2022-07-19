@@ -320,6 +320,8 @@
       title: MVP
     - local: model_doc/nezha
       title: NEZHA
+    - local: model_doc/nllb
+      title: NLLB
     - local: model_doc/nystromformer
       title: Nyströmformer
     - local: model_doc/opt
