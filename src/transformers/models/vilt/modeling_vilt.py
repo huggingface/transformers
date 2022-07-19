@@ -1422,9 +1422,7 @@ class ViltForTokenClassification(ViltPreTrainedModel):
         self.num_labels = config.num_labels
         self.vilt = ViltModel(config, add_pooling_layer=False)
 
-        classifier_dropout = config.hidden_dropout_prob
-
-        self.dropout = nn.Dropout(classifier_dropout)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
