@@ -78,6 +78,8 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "MegatronBertEncoder",  # Building part of bigger (tested) model.
     "MegatronBertDecoder",  # Building part of bigger (tested) model.
     "MegatronBertDecoderWrapper",  # Building part of bigger (tested) model.
+    "MvpDecoderWrapper",  # Building part of bigger (tested) model.
+    "MvpEncoder",  # Building part of bigger (tested) model.
     "PegasusEncoder",  # Building part of bigger (tested) model.
     "PegasusDecoderWrapper",  # Building part of bigger (tested) model.
     "DPREncoder",  # Building part of bigger (tested) model.
@@ -142,6 +144,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "BeitForMaskedImageModeling",
     "CLIPTextModel",
     "CLIPVisionModel",
+    "GroupViTTextModel",
+    "GroupViTVisionModel",
     "TFCLIPTextModel",
     "TFCLIPVisionModel",
     "FlaxCLIPTextModel",

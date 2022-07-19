@@ -1,11 +1,15 @@
 from functools import partial, reduce
-from typing import Callable, Dict, Optional, Tuple, Type, Union
+from typing import TYPE_CHECKING, Callable, Dict, Optional, Tuple, Type, Union
 
 import transformers
 
-from .. import PretrainedConfig, PreTrainedModel, TFPreTrainedModel, is_tf_available, is_torch_available
+from .. import PretrainedConfig, is_tf_available, is_torch_available
 from ..utils import logging
 from .config import OnnxConfig
+
+
+if TYPE_CHECKING:
+    from transformers import PreTrainedModel, TFPreTrainedModel
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -178,6 +182,15 @@ class FeaturesManager:
             "seq2seq-lm-with-past",
             onnx_config_cls="models.blenderbot_small.BlenderbotSmallOnnxConfig",
         ),
+        "bloom": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "causal-lm",
+            "causal-lm-with-past",
+            "sequence-classification",
+            "token-classification",
+            onnx_config_cls="models.bloom.BloomOnnxConfig",
+        ),
         "camembert": supported_features_mapping(
             "default",
             "masked-lm",
@@ -313,6 +326,16 @@ class FeaturesManager:
             "token-classification",
             onnx_config_cls="models.layoutlm.LayoutLMOnnxConfig",
         ),
+        "layoutlmv3": supported_features_mapping(
+            "default",
+            "question-answering",
+            "sequence-classification",
+            "token-classification",
+            onnx_config_cls="models.layoutlmv3.LayoutLMv3OnnxConfig",
+        ),
+        "levit": supported_features_mapping(
+            "default", "image-classification", onnx_config_cls="models.levit.LevitOnnxConfig"
+        ),
         "longt5": supported_features_mapping(
             "default",
             "default-with-past",
@@ -348,6 +371,11 @@ class FeaturesManager:
             "token-classification",
             "question-answering",
             onnx_config_cls="models.mobilebert.MobileBertOnnxConfig",
+        ),
+        "mobilevit": supported_features_mapping(
+            "default",
+            "image-classification",
+            onnx_config_cls="models.mobilevit.MobileViTOnnxConfig",
         ),
         "m2m-100": supported_features_mapping(
             "default",
@@ -427,6 +455,11 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls="models.xlm_roberta.XLMRobertaOnnxConfig",
         ),
+        "yolos": supported_features_mapping(
+            "default",
+            "object-detection",
+            onnx_config_cls="models.yolos.YolosOnnxConfig",
+        ),
     }
 
     AVAILABLE_FEATURES = sorted(reduce(lambda s1, s2: s1 | s2, (v.keys() for v in _SUPPORTED_MODEL_TYPE.values())))
@@ -505,7 +538,7 @@ class FeaturesManager:
     @staticmethod
     def get_model_from_feature(
         feature: str, model: str, framework: str = "pt", cache_dir: str = None
-    ) -> Union[PreTrainedModel, TFPreTrainedModel]:
+    ) -> Union["PreTrainedModel", "TFPreTrainedModel"]:
         """
         Attempts to retrieve a model from a model's name and the feature to be enabled.
 
@@ -533,7 +566,7 @@ class FeaturesManager:
 
     @staticmethod
     def check_supported_model_or_raise(
-        model: Union[PreTrainedModel, TFPreTrainedModel], feature: str = "default"
+        model: Union["PreTrainedModel", "TFPreTrainedModel"], feature: str = "default"
     ) -> Tuple[str, Callable]:
         """
         Check whether or not the model has the requested features.

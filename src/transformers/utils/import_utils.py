@@ -396,23 +396,32 @@ def is_ftfy_available():
     return _ftfy_available
 
 
-def is_torch_tpu_available():
+def is_torch_tpu_available(check_device=True):
+    "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
     if not _torch_available:
         return False
-    if importlib.util.find_spec("torch_xla") is None:
-        return False
-    import torch_xla.core.xla_model as xm
+    if importlib.util.find_spec("torch_xla") is not None:
+        if check_device:
+            # We need to check if `xla_device` can be found, will raise a RuntimeError if not
+            try:
+                import torch_xla.core.xla_model as xm
 
-    # We need to check if `xla_device` can be found, will raise a RuntimeError if not
-    try:
-        xm.xla_device()
+                _ = xm.xla_device()
+                return True
+            except RuntimeError:
+                return False
         return True
-    except RuntimeError:
-        return False
+    return False
 
 
 def is_torchdynamo_available():
     return importlib.util.find_spec("torchdynamo") is not None
+
+
+def is_torch_tensorrt_fx_available():
+    if importlib.util.find_spec("torch_tensorrt") is None:
+        return False
+    return importlib.util.find_spec("torch_tensorrt.fx") is not None
 
 
 def is_datasets_available():
@@ -440,7 +449,25 @@ def is_apex_available():
 
 
 def is_ipex_available():
-    return importlib.util.find_spec("intel_extension_for_pytorch") is not None
+    def get_major_and_minor_from_version(full_version):
+        return str(version.parse(full_version).major) + "." + str(version.parse(full_version).minor)
+
+    if not is_torch_available() or importlib.util.find_spec("intel_extension_for_pytorch") is None:
+        return False
+    _ipex_version = "N/A"
+    try:
+        _ipex_version = importlib_metadata.version("intel_extension_for_pytorch")
+    except importlib_metadata.PackageNotFoundError:
+        return False
+    torch_major_and_minor = get_major_and_minor_from_version(_torch_version)
+    ipex_major_and_minor = get_major_and_minor_from_version(_ipex_version)
+    if torch_major_and_minor != ipex_major_and_minor:
+        logger.warning(
+            f"Intel Extension for PyTorch {ipex_major_and_minor} needs to work with PyTorch {ipex_major_and_minor}.*,"
+            f" but PyTorch {_torch_version} is found. Please switch to the matching version and run again."
+        )
+        return False
+    return True
 
 
 def is_bitsandbytes_available():
@@ -503,7 +530,9 @@ def is_in_notebook():
             raise ImportError("console")
         if "VSCODE_PID" in os.environ:
             raise ImportError("vscode")
-        if "DATABRICKS_RUNTIME_VERSION" in os.environ:
+        if "DATABRICKS_RUNTIME_VERSION" in os.environ and os.environ["DATABRICKS_RUNTIME_VERSION"] < "11.0":
+            # Databricks Runtime 11.0 and above uses IPython kernel by default so it should be compatible with Jupyter notebook
+            # https://docs.microsoft.com/en-us/azure/databricks/notebooks/ipython-kernel
             raise ImportError("databricks")
 
         return importlib.util.find_spec("IPython") is not None

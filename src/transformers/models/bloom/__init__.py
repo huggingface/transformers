@@ -22,10 +22,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_
 
 
 _import_structure = {
-    "configuration_bloom": [
-        "BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "BloomConfig",
-    ],
+    "configuration_bloom": ["BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP", "BloomConfig", "BloomOnnxConfig"],
 }
 try:
     if not is_tokenizers_available():
@@ -52,7 +49,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_bloom import BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP, BloomConfig
+    from .configuration_bloom import BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP, BloomConfig, BloomOnnxConfig
 
     try:
         if not is_tokenizers_available():

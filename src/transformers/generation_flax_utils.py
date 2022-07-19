@@ -78,7 +78,7 @@ class FlaxBeamSearchOutput(ModelOutput):
         sequences (`jnp.ndarray` of shape `(batch_size, max_length)`):
             The generated sequences.
         scores (`jnp.ndarray` of shape `(batch_size,)`):
-            The scores (log probabilites) of the generated sequences.
+            The scores (log probabilities) of the generated sequences.
     """
 
     sequences: jnp.ndarray = None

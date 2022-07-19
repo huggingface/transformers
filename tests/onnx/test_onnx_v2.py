@@ -195,15 +195,19 @@ PYTORCH_EXPORT_MODELS = {
     ("xlm", "xlm-clm-ende-1024"),
     ("xlm-roberta", "xlm-roberta-base"),
     ("layoutlm", "microsoft/layoutlm-base-uncased"),
+    ("layoutlmv3", "microsoft/layoutlmv3-base"),
+    ("levit", "facebook/levit-128S"),
     ("vit", "google/vit-base-patch16-224"),
     ("deit", "facebook/deit-small-patch16-224"),
     ("beit", "microsoft/beit-base-patch16-224"),
     ("data2vec-text", "facebook/data2vec-text-base"),
     ("perceiver", "deepmind/language-perceiver", ("masked-lm", "sequence-classification")),
     ("perceiver", "deepmind/vision-perceiver-conv", ("image-classification",)),
+    ("yolos", "hustvl/yolos-tiny"),
 }
 
 PYTORCH_EXPORT_WITH_PAST_MODELS = {
+    ("bloom", "bigscience/bloom-350m"),
     ("gpt2", "gpt2"),
     ("gpt-neo", "EleutherAI/gpt-neo-125M"),
 }

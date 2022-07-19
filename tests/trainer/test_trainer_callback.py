@@ -66,6 +66,9 @@ class MyTestTrainerCallback(TrainerCallback):
     def on_evaluate(self, args, state, control, **kwargs):
         self.events.append("on_evaluate")
 
+    def on_predict(self, args, state, control, **kwargs):
+        self.events.append("on_predict")
+
     def on_save(self, args, state, control, **kwargs):
         self.events.append("on_save")
 
