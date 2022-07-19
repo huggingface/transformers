@@ -1179,7 +1179,7 @@ def get_checkpoint_shard_files(
             filename=shard_filename,
             revision=revision,
             mirror=mirror,
-            subfolder=subfolder or None,
+            subfolder=subfolder if len(subfolder) > 0 else None,
         )
 
         try:
