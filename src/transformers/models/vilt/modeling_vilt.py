@@ -1407,7 +1407,7 @@ class ViltForImagesAndTextClassification(ViltPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Vilt Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
+    ViLT Model with a token classification head on top (a linear layer on top of the final hidden-states of the text tokens) e.g. for
     Named-Entity-Recognition (NER) tasks.
     """,
     VILT_START_DOCSTRING,
