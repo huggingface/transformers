@@ -51,6 +51,7 @@ quality:
 	python utils/sort_auto_mappings.py --check_only
 	flake8 $(check_dirs)
 	doc-builder style src/transformers docs/source --max_len 119 --check_only --path_to_docs docs/source
+	python utils/check_doc_toc.py
 
 # Format source code automatically and check is there are any problems left that need manual fixing
 
@@ -58,6 +59,7 @@ extra_style_checks:
 	python utils/custom_init_isort.py
 	python utils/sort_auto_mappings.py
 	doc-builder style src/transformers docs/source --max_len 119 --path_to_docs docs/source
+	python utils/check_doc_toc.py --fix_and_overwrite
 
 # this target runs checks on all files and potentially modifies some of them
 

@@ -116,22 +116,46 @@ To immediately use a model on a given input (text, image, audio, ...), we provid
 
 The second line of code downloads and caches the pretrained model used by the pipeline, while the third evaluates it on the given text. Here the answer is "positive" with a confidence of 99.97%.
 
-Many NLP tasks have a pre-trained `pipeline` ready to go. For example, we can easily extract question answers given context:
+Many tasks have a pre-trained `pipeline` ready to go, in NLP but also in computer vision and speech. For example, we can easily extract detect objects in an image:
 
 ``` python
+>>> import requests
+>>> from PIL import Image
 >>> from transformers import pipeline
 
-# Allocate a pipeline for question-answering
->>> question_answerer = pipeline('question-answering')
->>> question_answerer({
-...     'question': 'What is the name of the repository ?',
-...     'context': 'Pipeline has been included in the huggingface/transformers repository'
-... })
-{'score': 0.30970096588134766, 'start': 34, 'end': 58, 'answer': 'huggingface/transformers'}
+# Download an image with cute cats
+>>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png"
+>>> image_data = requests.get(url, stream=True).raw
+>>> image = Image.open(image_data)
 
+# Allocate a pipeline for object detection
+>>> object_detector = pipeline('object_detection')
+>>> object_detector(image)
+[{'score': 0.9982201457023621,
+  'label': 'remote',
+  'box': {'xmin': 40, 'ymin': 70, 'xmax': 175, 'ymax': 117}},
+ {'score': 0.9960021376609802,
+  'label': 'remote',
+  'box': {'xmin': 333, 'ymin': 72, 'xmax': 368, 'ymax': 187}},
+ {'score': 0.9954745173454285,
+  'label': 'couch',
+  'box': {'xmin': 0, 'ymin': 1, 'xmax': 639, 'ymax': 473}},
+ {'score': 0.9988006353378296,
+  'label': 'cat',
+  'box': {'xmin': 13, 'ymin': 52, 'xmax': 314, 'ymax': 470}},
+ {'score': 0.9986783862113953,
+  'label': 'cat',
+  'box': {'xmin': 345, 'ymin': 23, 'xmax': 640, 'ymax': 368}}]
 ```
 
-In addition to the answer, the pretrained model used here returned its confidence score, along with the start position and end position of the answer in the tokenized sentence. You can learn more about the tasks supported by the `pipeline` API in [this tutorial](https://huggingface.co/docs/transformers/task_summary).
+Here we get a list of objects detected in the image, with a box surrounding the object and a confidence score. Here is the original image on the right, with the predictions displayed on the left:
+
+<h3 align="center">
+    <a><img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png" width="400"></a>
+    <a><img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample_post_processed.png" width="400"></a>
+</h3>
+
+You can learn more about the tasks supported by the `pipeline` API in [this tutorial](https://huggingface.co/docs/transformers/task_summary).
 
 To download and use any of the pretrained models on your given task, all it takes is three lines of code. Here is the PyTorch version:
 ```python
@@ -143,6 +167,7 @@ To download and use any of the pretrained models on your given task, all it take
 >>> inputs = tokenizer("Hello world!", return_tensors="pt")
 >>> outputs = model(**inputs)
 ```
+
 And here is the equivalent code for TensorFlow:
 ```python
 >>> from transformers import AutoTokenizer, TFAutoModel
@@ -304,6 +329,7 @@ Current number of checkpoints: ![](https://img.shields.io/endpoint?url=https://h
 1. **[MT5](https://huggingface.co/docs/transformers/model_doc/mt5)** (from Google AI) released with the paper [mT5: A massively multilingual pre-trained text-to-text transformer](https://arxiv.org/abs/2010.11934) by Linting Xue, Noah Constant, Adam Roberts, Mihir Kale, Rami Al-Rfou, Aditya Siddhant, Aditya Barua, Colin Raffel.
 1. **[MVP](https://huggingface.co/docs/transformers/main/model_doc/mvp)** (from RUC AI Box) released with the paper [MVP: Multi-task Supervised Pre-training for Natural Language Generation](https://arxiv.org/abs/2206.12131) by Tianyi Tang, Junyi Li, Wayne Xin Zhao and Ji-Rong Wen.
 1. **[Nezha](https://huggingface.co/docs/transformers/main/model_doc/nezha)** (from Huawei Noah’s Ark Lab) released with the paper [NEZHA: Neural Contextualized Representation for Chinese Language Understanding](https://arxiv.org/abs/1909.00204) by Junqiu Wei, Xiaozhe Ren, Xiaoguang Li, Wenyong Huang, Yi Liao, Yasheng Wang, Jiashu Lin, Xin Jiang, Xiao Chen and Qun Liu.
+1. **[NLLB](https://huggingface.co/docs/transformers/main/model_doc/nllb)** (from Meta) released with the paper [No Language Left Behind: Scaling Human-Centered Machine Translation](https://arxiv.org/abs/2207.04672) by the NLLB team.
 1. **[Nyströmformer](https://huggingface.co/docs/transformers/model_doc/nystromformer)** (from the University of Wisconsin - Madison) released with the paper [Nyströmformer: A Nyström-Based Algorithm for Approximating Self-Attention](https://arxiv.org/abs/2102.03902) by Yunyang Xiong, Zhanpeng Zeng, Rudrasis Chakraborty, Mingxing Tan, Glenn Fung, Yin Li, Vikas Singh.
 1. **[OPT](https://huggingface.co/docs/transformers/master/model_doc/opt)** (from Meta AI) released with the paper [OPT: Open Pre-trained Transformer Language Models](https://arxiv.org/abs/2205.01068) by Susan Zhang, Stephen Roller, Naman Goyal, Mikel Artetxe, Moya Chen, Shuohui Chen et al.
 1. **[Pegasus](https://huggingface.co/docs/transformers/model_doc/pegasus)** (from Google) released with the paper [PEGASUS: Pre-training with Extracted Gap-sentences for Abstractive Summarization](https://arxiv.org/abs/1912.08777) by Jingqing Zhang, Yao Zhao, Mohammad Saleh and Peter J. Liu.
