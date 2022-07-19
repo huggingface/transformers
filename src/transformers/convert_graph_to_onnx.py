@@ -120,7 +120,7 @@ def check_onnxruntime_requirements(minimum_version: Version):
             raise ImportError(
                 f"We found an older version of onnxruntime ({onnxruntime.__version__}) "
                 f"but we require onnxruntime to be >= {minimum_version} to enable all the conversions options.\n"
-                f"Please update onnxruntime by running `pip install --upgrade onnxruntime`"
+                "Please update onnxruntime by running `pip install --upgrade onnxruntime`"
             )
 
     except ImportError:
@@ -376,7 +376,8 @@ def convert(
 
     """
     warnings.warn(
-        "The `transformers.convert_graph_to_onnx` package is deprecated and will be removed in version 5 of Transformers",
+        "The `transformers.convert_graph_to_onnx` package is deprecated and will be removed in version 5 of"
+        " Transformers",
         FutureWarning,
     )
     print(f"ONNX opset version set to: {opset}")

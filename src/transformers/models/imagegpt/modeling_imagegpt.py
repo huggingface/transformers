@@ -200,7 +200,8 @@ class ImageGPTAttention(nn.Module):
         self.split_size = self.embed_dim
         if self.head_dim * self.num_heads != self.embed_dim:
             raise ValueError(
-                f"`embed_dim` must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
+                f"`embed_dim` must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {self.num_heads})."
             )
 
         self.scale_attn_weights = config.scale_attn_weights
@@ -252,7 +253,11 @@ class ImageGPTAttention(nn.Module):
             # if only "normal" attention layer implements causal mask
             query_length, key_length = query.size(-2), key.size(-2)
             causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].bool()
-            attn_weights = torch.where(causal_mask, attn_weights, self.masked_bias.to(attn_weights.dtype))
+            mask_value = torch.finfo(attn_weights.dtype).min
+            # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
+            # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
+            mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
+            attn_weights = torch.where(causal_mask, attn_weights, mask_value)
 
         if attention_mask is not None:
             # Apply the attention mask
@@ -303,7 +308,11 @@ class ImageGPTAttention(nn.Module):
             # if only "normal" attention layer implements causal mask
             query_length, key_length = query.size(-2), key.size(-2)
             causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].bool()
-            attn_weights = torch.where(causal_mask, attn_weights, self.masked_bias.to(attn_weights.dtype))
+            mask_value = torch.finfo(attn_weights.dtype).min
+            # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
+            # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
+            mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
+            attn_weights = torch.where(causal_mask, attn_weights, mask_value)
 
         if attention_mask is not None:
             # Apply the attention mask
@@ -699,14 +708,14 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
 
         if "pixel_values" in kwargs:
             warnings.warn(
-                "The `pixel_values` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                "The `pixel_values` argument is deprecated and will be removed in a future version, use `input_ids`"
+                " instead.",
                 FutureWarning,
             )
 
             if input_ids is not None:
                 raise ValueError(
-                    "You cannot pass both `pixel_values` and `input_ids`. "
-                    "Please make sure to only pass `input_ids`."
+                    "You cannot pass both `pixel_values` and `input_ids`. Please make sure to only pass `input_ids`."
                 )
 
             input_ids = kwargs.pop("pixel_values")
@@ -764,7 +773,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
             # Since we are adding it to the raw scores before the softmax, this is
             # effectively the same as removing these entirely.
             attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-            attention_mask = (1.0 - attention_mask) * -10000.0
+            attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
@@ -1010,14 +1019,14 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
 
         if "pixel_values" in kwargs:
             warnings.warn(
-                "The `pixel_values` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                "The `pixel_values` argument is deprecated and will be removed in a future version, use `input_ids`"
+                " instead.",
                 FutureWarning,
             )
 
             if input_ids is not None:
                 raise ValueError(
-                    "You cannot pass both `pixel_values` and `input_ids`. "
-                    "Please make sure to only pass `input_ids`."
+                    "You cannot pass both `pixel_values` and `input_ids`. Please make sure to only pass `input_ids`."
                 )
 
             input_ids = kwargs.pop("pixel_values")
@@ -1086,7 +1095,7 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
     IMAGEGPT_START_DOCSTRING,
 )
 class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"lm_head\.weight"]
+    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"lm_head.weight"]
 
     def __init__(self, config: ImageGPTConfig):
         super().__init__(config)
@@ -1143,14 +1152,14 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
 
         if "pixel_values" in kwargs:
             warnings.warn(
-                "The `pixel_values` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                "The `pixel_values` argument is deprecated and will be removed in a future version, use `input_ids`"
+                " instead.",
                 FutureWarning,
             )
 
             if input_ids is not None:
                 raise ValueError(
-                    "You cannot pass both `pixel_values` and `input_ids`. "
-                    "Please make sure to only pass `input_ids`."
+                    "You cannot pass both `pixel_values` and `input_ids`. Please make sure to only pass `input_ids`."
                 )
 
             input_ids = kwargs.pop("pixel_values")

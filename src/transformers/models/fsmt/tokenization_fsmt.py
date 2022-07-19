@@ -21,8 +21,6 @@ import re
 import unicodedata
 from typing import Dict, List, Optional, Tuple
 
-import sacremoses as sm
-
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
 
@@ -212,6 +210,16 @@ class FSMTTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
+        try:
+            import sacremoses
+        except ImportError:
+            raise ImportError(
+                "You need to install sacremoses to use XLMTokenizer. "
+                "See https://pypi.org/project/sacremoses/ for installation."
+            )
+
+        self.sm = sacremoses
+
         self.src_vocab_file = src_vocab_file
         self.tgt_vocab_file = tgt_vocab_file
         self.merges_file = merges_file
@@ -254,13 +262,13 @@ class FSMTTokenizer(PreTrainedTokenizer):
 
     def moses_punct_norm(self, text, lang):
         if lang not in self.cache_moses_punct_normalizer:
-            punct_normalizer = sm.MosesPunctNormalizer(lang=lang)
+            punct_normalizer = self.sm.MosesPunctNormalizer(lang=lang)
             self.cache_moses_punct_normalizer[lang] = punct_normalizer
         return self.cache_moses_punct_normalizer[lang].normalize(text)
 
     def moses_tokenize(self, text, lang):
         if lang not in self.cache_moses_tokenizer:
-            moses_tokenizer = sm.MosesTokenizer(lang=lang)
+            moses_tokenizer = self.sm.MosesTokenizer(lang=lang)
             self.cache_moses_tokenizer[lang] = moses_tokenizer
         return self.cache_moses_tokenizer[lang].tokenize(
             text, aggressive_dash_splits=True, return_str=False, escape=True
@@ -268,7 +276,7 @@ class FSMTTokenizer(PreTrainedTokenizer):
 
     def moses_detokenize(self, tokens, lang):
         if lang not in self.cache_moses_tokenizer:
-            moses_detokenizer = sm.MosesDetokenizer(lang=self.tgt_lang)
+            moses_detokenizer = self.sm.MosesDetokenizer(lang=self.tgt_lang)
             self.cache_moses_detokenizer[lang] = moses_detokenizer
         return self.cache_moses_detokenizer[lang].detokenize(tokens)
 
@@ -497,11 +505,11 @@ class FSMTTokenizer(PreTrainedTokenizer):
         )
 
         with open(src_vocab_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(self.encoder, ensure_ascii=False))
+            f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
         with open(tgt_vocab_file, "w", encoding="utf-8") as f:
             tgt_vocab = {v: k for k, v in self.decoder.items()}
-            f.write(json.dumps(tgt_vocab, ensure_ascii=False))
+            f.write(json.dumps(tgt_vocab, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
         index = 0
         with open(merges_file, "w", encoding="utf-8") as writer:
@@ -516,3 +524,21 @@ class FSMTTokenizer(PreTrainedTokenizer):
                 index += 1
 
         return src_vocab_file, tgt_vocab_file, merges_file
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["sm"] = None
+        return state
+
+    def __setstate__(self, d):
+        self.__dict__ = d
+
+        try:
+            import sacremoses
+        except ImportError:
+            raise ImportError(
+                "You need to install sacremoses to use XLMTokenizer. "
+                "See https://pypi.org/project/sacremoses/ for installation."
+            )
+
+        self.sm = sacremoses

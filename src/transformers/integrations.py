@@ -16,13 +16,14 @@ Integrations with other Python libraries.
 """
 import functools
 import importlib.util
+import json
 import numbers
 import os
 import sys
 import tempfile
 from pathlib import Path
 
-from .utils import is_datasets_available, logging
+from .utils import flatten_dict, is_datasets_available, logging
 
 
 logger = logging.get_logger(__name__)
@@ -53,7 +54,7 @@ def is_wandb_available():
     # any value of WANDB_DISABLED disables wandb
     if os.getenv("WANDB_DISABLED", "").upper() in ENV_VARS_TRUE_VALUES:
         logger.warning(
-            "Using the `WAND_DISABLED` environment variable is deprecated and will be removed in v5. Use the "
+            "Using the `WANDB_DISABLED` environment variable is deprecated and will be removed in v5. Use the "
             "--report_to flag to control the integrations used for logging result (for instance --report_to none)."
         )
         return False
@@ -296,7 +297,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
         num_samples=n_trials,
         **kwargs,
     )
-    best_trial = analysis.get_best_trial(metric="objective", mode=direction[:3])
+    best_trial = analysis.get_best_trial(metric="objective", mode=direction[:3], scope=trainer.args.ray_scope)
     best_run = BestRun(best_trial.trial_id, best_trial.last_result["objective"], best_trial.config)
     if _tb_writer is not None:
         trainer.add_callback(_tb_writer)
@@ -304,41 +305,69 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
 
 
 def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
+    import sigopt
+    from transformers.utils.versions import importlib_metadata
 
-    from sigopt import Connection
+    if importlib_metadata.version("sigopt") >= "8.0.0":
+        sigopt.set_project("huggingface")
 
-    conn = Connection()
-    proxies = kwargs.pop("proxies", None)
-    if proxies is not None:
-        conn.set_proxies(proxies)
+        experiment = sigopt.create_experiment(
+            name="huggingface-tune",
+            type="offline",
+            parameters=trainer.hp_space(None),
+            metrics=[dict(name="objective", objective=direction, strategy="optimize")],
+            parallel_bandwidth=1,
+            budget=n_trials,
+        )
 
-    experiment = conn.experiments().create(
-        name="huggingface-tune",
-        parameters=trainer.hp_space(None),
-        metrics=[dict(name="objective", objective=direction, strategy="optimize")],
-        parallel_bandwidth=1,
-        observation_budget=n_trials,
-        project="huggingface",
-    )
-    logger.info(f"created experiment: https://app.sigopt.com/experiment/{experiment.id}")
+        logger.info(f"created experiment: https://app.sigopt.com/experiment/{experiment.id}")
 
-    while experiment.progress.observation_count < experiment.observation_budget:
-        suggestion = conn.experiments(experiment.id).suggestions().create()
-        trainer.objective = None
-        trainer.train(resume_from_checkpoint=None, trial=suggestion)
-        # If there hasn't been any evaluation during the training loop.
-        if getattr(trainer, "objective", None) is None:
-            metrics = trainer.evaluate()
-            trainer.objective = trainer.compute_objective(metrics)
+        for run in experiment.loop():
+            with run:
+                trainer.objective = None
+                trainer.train(resume_from_checkpoint=None, trial=run.run)
+                # If there hasn't been any evaluation during the training loop.
+                if getattr(trainer, "objective", None) is None:
+                    metrics = trainer.evaluate()
+                    trainer.objective = trainer.compute_objective(metrics)
+                run.log_metric("objective", trainer.objective)
 
-        values = [dict(name="objective", value=trainer.objective)]
-        obs = conn.experiments(experiment.id).observations().create(suggestion=suggestion.id, values=values)
-        logger.info(f"[suggestion_id, observation_id]: [{suggestion.id}, {obs.id}]")
-        experiment = conn.experiments(experiment.id).fetch()
+        best = list(experiment.get_best_runs())[0]
+        best_run = BestRun(best.id, best.values["objective"].value, best.assignments)
+    else:
+        from sigopt import Connection
 
-    best = list(conn.experiments(experiment.id).best_assignments().fetch().iterate_pages())[0]
-    best_run = BestRun(best.id, best.value, best.assignments)
+        conn = Connection()
+        proxies = kwargs.pop("proxies", None)
+        if proxies is not None:
+            conn.set_proxies(proxies)
 
+        experiment = conn.experiments().create(
+            name="huggingface-tune",
+            parameters=trainer.hp_space(None),
+            metrics=[dict(name="objective", objective=direction, strategy="optimize")],
+            parallel_bandwidth=1,
+            observation_budget=n_trials,
+            project="huggingface",
+        )
+        logger.info(f"created experiment: https://app.sigopt.com/experiment/{experiment.id}")
+
+        while experiment.progress.observation_count < experiment.observation_budget:
+            suggestion = conn.experiments(experiment.id).suggestions().create()
+            trainer.objective = None
+            trainer.train(resume_from_checkpoint=None, trial=suggestion)
+            # If there hasn't been any evaluation during the training loop.
+            if getattr(trainer, "objective", None) is None:
+                metrics = trainer.evaluate()
+                trainer.objective = trainer.compute_objective(metrics)
+
+            values = [dict(name="objective", value=trainer.objective)]
+            obs = conn.experiments(experiment.id).observations().create(suggestion=suggestion.id, values=values)
+            logger.info(f"[suggestion_id, observation_id]: [{suggestion.id}, {obs.id}]")
+            experiment = conn.experiments(experiment.id).fetch()
+
+        best = list(conn.experiments(experiment.id).best_assignments().fetch().iterate_pages())[0]
+        best_run = BestRun(best.id, best.value, best.assignments)
     return best_run
 
 
@@ -388,7 +417,8 @@ def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> Bes
             format_metrics = rewrite_logs(metrics)
             if metric not in format_metrics:
                 logger.warning(
-                    f"Provided metric {metric} not found. This might result in unexpected sweeps charts. The available metrics are {format_metrics.keys()}"
+                    f"Provided metric {metric} not found. This might result in unexpected sweeps charts. The available"
+                    f" metrics are {format_metrics.keys()}"
                 )
         best_score = False
         if best_trial["run_id"] is not None:
@@ -457,7 +487,8 @@ class TensorBoardCallback(TrainerCallback):
         has_tensorboard = is_tensorboard_available()
         if not has_tensorboard:
             raise RuntimeError(
-                "TensorBoardCallback requires tensorboard to be installed. Either update your PyTorch version or install tensorboardX."
+                "TensorBoardCallback requires tensorboard to be installed. Either update your PyTorch version or"
+                " install tensorboardX."
             )
         if has_tensorboard:
             try:
@@ -726,12 +757,13 @@ class CometCallback(TrainerCallback):
     def on_train_end(self, args, state, control, **kwargs):
         if self._initialized and state.is_world_process_zero:
             experiment = comet_ml.config.get_global_experiment()
-            if (experiment is not None) and (self._log_assets is True):
-                logger.info("Logging checkpoints. This may take time.")
-                experiment.log_asset_folder(
-                    args.output_dir, recursive=True, log_file_name=True, step=state.global_step
-                )
-            experiment.end()
+            if experiment is not None:
+                if self._log_assets is True:
+                    logger.info("Logging checkpoints. This may take time.")
+                    experiment.log_asset_folder(
+                        args.output_dir, recursive=True, log_file_name=True, step=state.global_step
+                    )
+                experiment.end()
 
 
 class AzureMLCallback(TrainerCallback):
@@ -772,6 +804,7 @@ class MLflowCallback(TrainerCallback):
         self._MAX_PARAMS_TAGS_PER_BATCH = mlflow.utils.validation.MAX_PARAMS_TAGS_PER_BATCH
 
         self._initialized = False
+        self._auto_end_run = False
         self._log_artifacts = False
         self._ml_flow = mlflow
 
@@ -781,37 +814,69 @@ class MLflowCallback(TrainerCallback):
 
         Environment:
             HF_MLFLOW_LOG_ARTIFACTS (`str`, *optional*):
-                Whether to use MLflow .log_artifact() facility to log artifacts.
-
-                This only makes sense if logging to a remote server, e.g. s3 or GCS. If set to `True` or *1*, will copy
-                whatever is in [`TrainingArguments`]'s `output_dir` to the local or remote artifact storage. Using it
-                without a remote storage will just copy the files to your artifact location.
+                Whether to use MLflow .log_artifact() facility to log artifacts. This only makes sense if logging to a
+                remote server, e.g. s3 or GCS. If set to `True` or *1*, will copy each saved checkpoint on each save in
+                [`TrainingArguments`]'s `output_dir` to the local or remote artifact storage. Using it without a remote
+                storage will just copy the files to your artifact location.
+            MLFLOW_EXPERIMENT_NAME (`str`, *optional*):
+                Whether to use an MLflow experiment_name under which to launch the run. Default to "None" which will
+                point to the "Default" experiment in MLflow. Otherwise, it is a case sensitive name of the experiment
+                to be activated. If an experiment with this name does not exist, a new experiment with this name is
+                created.
+            MLFLOW_TAGS (`str`, *optional*):
+                A string dump of a dictionary of key/value pair to be added to the MLflow run as tags. Example:
+                os.environ['MLFLOW_TAGS']='{"release.candidate": "RC1", "release.version": "2.2.0"}'
+            MLFLOW_NESTED_RUN (`str`, *optional*):
+                Whether to use MLflow nested runs. If set to `True` or *1*, will create a nested run inside the current
+                run.
+            MLFLOW_RUN_ID (`str`, *optional*):
+                Allow to reattach to an existing run which can be usefull when resuming training from a checkpoint.
+                When MLFLOW_RUN_ID environment variable is set, start_run attempts to resume a run with the specified
+                run ID and other parameters are ignored.
+            MLFLOW_FLATTEN_PARAMS (`str`, *optional*):
+                Whether to flatten the parameters dictionary before logging. Default to `False`.
         """
-        log_artifacts = os.getenv("HF_MLFLOW_LOG_ARTIFACTS", "FALSE").upper()
-        if log_artifacts in {"TRUE", "1"}:
-            self._log_artifacts = True
+        self._log_artifacts = os.getenv("HF_MLFLOW_LOG_ARTIFACTS", "FALSE").upper() in ENV_VARS_TRUE_VALUES
+        self._nested_run = os.getenv("MLFLOW_NESTED_RUN", "FALSE").upper() in ENV_VARS_TRUE_VALUES
+        self._experiment_name = os.getenv("MLFLOW_EXPERIMENT_NAME", None)
+        self._flatten_params = os.getenv("MLFLOW_FLATTEN_PARAMS", "FALSE").upper() in ENV_VARS_TRUE_VALUES
+        self._run_id = os.getenv("MLFLOW_RUN_ID", None)
+        logger.debug(
+            f"MLflow experiment_name={self._experiment_name}, run_name={args.run_name}, nested={self._nested_run},"
+            f" tags={self._nested_run}"
+        )
         if state.is_world_process_zero:
-            if self._ml_flow.active_run is None:
-                self._ml_flow.start_run(run_name=args.run_name)
+            if self._ml_flow.active_run() is None or self._nested_run or self._run_id:
+                if self._experiment_name:
+                    # Use of set_experiment() ensure that Experiment is created if not exists
+                    self._ml_flow.set_experiment(self._experiment_name)
+                self._ml_flow.start_run(run_name=args.run_name, nested=self._nested_run)
+                logger.debug(f"MLflow run started with run_id={self._ml_flow.active_run().info.run_id}")
+                self._auto_end_run = True
             combined_dict = args.to_dict()
             if hasattr(model, "config") and model.config is not None:
                 model_config = model.config.to_dict()
                 combined_dict = {**model_config, **combined_dict}
+            combined_dict = flatten_dict(combined_dict) if self._flatten_params else combined_dict
             # remove params that are too long for MLflow
             for name, value in list(combined_dict.items()):
                 # internally, all values are converted to str in MLflow
                 if len(str(value)) > self._MAX_PARAM_VAL_LENGTH:
                     logger.warning(
-                        f"Trainer is attempting to log a value of "
-                        f'"{value}" for key "{name}" as a parameter. '
-                        f"MLflow's log_param() only accepts values no longer than "
-                        f"250 characters so we dropped this attribute."
+                        f'Trainer is attempting to log a value of "{value}" for key "{name}" as a parameter. MLflow\'s'
+                        " log_param() only accepts values no longer than 250 characters so we dropped this attribute."
+                        " You can use `MLFLOW_FLATTEN_PARAMS` environment variable to flatten the parameters and"
+                        " avoid this message."
                     )
                     del combined_dict[name]
             # MLflow cannot log more than 100 values in one go, so we have to split it
             combined_dict_items = list(combined_dict.items())
             for i in range(0, len(combined_dict_items), self._MAX_PARAMS_TAGS_PER_BATCH):
                 self._ml_flow.log_params(dict(combined_dict_items[i : i + self._MAX_PARAMS_TAGS_PER_BATCH]))
+            mlflow_tags = os.getenv("MLFLOW_TAGS", None)
+            if mlflow_tags:
+                mlflow_tags = json.loads(mlflow_tags)
+                self._ml_flow.set_tags(mlflow_tags)
         self._initialized = True
 
     def on_train_begin(self, args, state, control, model=None, **kwargs):
@@ -828,23 +893,35 @@ class MLflowCallback(TrainerCallback):
                     metrics[k] = v
                 else:
                     logger.warning(
-                        f"Trainer is attempting to log a value of "
-                        f'"{v}" of type {type(v)} for key "{k}" as a metric. '
-                        f"MLflow's log_metric() only accepts float and "
-                        f"int types so we dropped this attribute."
+                        f'Trainer is attempting to log a value of "{v}" of type {type(v)} for key "{k}" as a metric. '
+                        "MLflow's log_metric() only accepts float and int types so we dropped this attribute."
                     )
             self._ml_flow.log_metrics(metrics=metrics, step=state.global_step)
 
     def on_train_end(self, args, state, control, **kwargs):
         if self._initialized and state.is_world_process_zero:
-            if self._log_artifacts:
-                logger.info("Logging artifacts. This may take time.")
-                self._ml_flow.log_artifacts(args.output_dir)
+            if self._auto_end_run and self._ml_flow.active_run():
+                self._ml_flow.end_run()
+
+    def on_save(self, args, state, control, **kwargs):
+        if self._initialized and state.is_world_process_zero and self._log_artifacts:
+            ckpt_dir = f"checkpoint-{state.global_step}"
+            artifact_path = os.path.join(args.output_dir, ckpt_dir)
+            logger.info(f"Logging checkpoint artifacts in {ckpt_dir}. This may take time.")
+            self._ml_flow.pyfunc.log_model(
+                ckpt_dir,
+                artifacts={"model_path": artifact_path},
+                python_model=self._ml_flow.pyfunc.PythonModel(),
+            )
 
     def __del__(self):
         # if the previous run is not terminated correctly, the fluent API will
         # not let you start a new run before the previous one is killed
-        if self._ml_flow.active_run is not None:
+        if (
+            self._auto_end_run
+            and callable(getattr(self._ml_flow, "active_run", None))
+            and self._ml_flow.active_run() is not None
+        ):
             self._ml_flow.end_run()
 
 

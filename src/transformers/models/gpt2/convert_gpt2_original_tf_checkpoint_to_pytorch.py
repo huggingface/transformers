@@ -60,8 +60,10 @@ if __name__ == "__main__":
         "--gpt2_config_file",
         default="",
         type=str,
-        help="An optional config json file corresponding to the pre-trained OpenAI model. \n"
-        "This specifies the model architecture.",
+        help=(
+            "An optional config json file corresponding to the pre-trained OpenAI model. \n"
+            "This specifies the model architecture."
+        ),
     )
     args = parser.parse_args()
     convert_gpt2_checkpoint_to_pytorch(args.gpt2_checkpoint_path, args.gpt2_config_file, args.pytorch_dump_folder_path)

@@ -874,7 +874,8 @@ LUKE_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare LUKE model transformer outputting raw hidden-states for both word tokens and entities without any specific head on top.",
+    "The bare LUKE model transformer outputting raw hidden-states for both word tokens and entities without any"
+    " specific head on top.",
     LUKE_START_DOCSTRING,
 )
 class LukeModel(LukePreTrainedModel):
@@ -1075,7 +1076,7 @@ class LukeModel(LukePreTrainedModel):
             raise ValueError(f"Wrong shape for attention_mask (shape {attention_mask.shape})")
 
         extended_attention_mask = extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-        extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
+        extended_attention_mask = (1.0 - extended_attention_mask) * torch.finfo(self.dtype).min
         return extended_attention_mask
 
 
@@ -1228,13 +1229,15 @@ class LukeForMaskedLM(LukePreTrainedModel):
                 loss = mlm_loss
 
         mep_loss = None
-        entity_logits = self.entity_predictions(outputs.entity_last_hidden_state)
-        if entity_labels is not None:
-            mep_loss = self.loss_fn(entity_logits.view(-1, self.config.entity_vocab_size), entity_labels.view(-1))
-            if loss is None:
-                loss = mep_loss
-            else:
-                loss = loss + mep_loss
+        entity_logits = None
+        if outputs.entity_last_hidden_state is not None:
+            entity_logits = self.entity_predictions(outputs.entity_last_hidden_state)
+            if entity_labels is not None:
+                mep_loss = self.loss_fn(entity_logits.view(-1, self.config.entity_vocab_size), entity_labels.view(-1))
+                if loss is None:
+                    loss = mep_loss
+                else:
+                    loss = loss + mep_loss
 
         if not return_dict:
             output = (logits, entity_logits, outputs.hidden_states, outputs.entity_hidden_states, outputs.attentions)

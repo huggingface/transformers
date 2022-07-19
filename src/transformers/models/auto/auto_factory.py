@@ -560,10 +560,17 @@ class _LazyAutoMapping(OrderedDict):
         if key in self._extra_content:
             return self._extra_content[key]
         model_type = self._reverse_config_mapping[key.__name__]
-        if model_type not in self._model_mapping:
-            raise KeyError(key)
-        model_name = self._model_mapping[model_type]
-        return self._load_attr_from_module(model_type, model_name)
+        if model_type in self._model_mapping:
+            model_name = self._model_mapping[model_type]
+            return self._load_attr_from_module(model_type, model_name)
+
+        # Maybe there was several model types associated with this config.
+        model_types = [k for k, v in self._config_mapping.items() if v == key.__name__]
+        for mtype in model_types:
+            if mtype in self._model_mapping:
+                model_name = self._model_mapping[mtype]
+                return self._load_attr_from_module(mtype, model_name)
+        raise KeyError(key)
 
     def _load_attr_from_module(self, model_type, attr):
         module_name = model_type_to_module_name(model_type)

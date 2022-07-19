@@ -99,7 +99,9 @@ class DataTrainingArguments:
     validation_split_name: Optional[str] = field(
         default="validation",
         metadata={
-            "help": "The name of the validation data set split to use (via the datasets library). Defaults to 'validation'"
+            "help": (
+                "The name of the validation data set split to use (via the datasets library). Defaults to 'validation'"
+            )
         },
     )
     target_text_column: Optional[str] = field(
@@ -121,7 +123,10 @@ class DataTrainingArguments:
     orthography: Optional[str] = field(
         default="librispeech",
         metadata={
-            "help": "Orthography used for normalization and tokenization: 'librispeech' (default), 'timit', or 'buckwalter'."
+            "help": (
+                "Orthography used for normalization and tokenization: 'librispeech' (default), 'timit', or"
+                " 'buckwalter'."
+            )
         },
     )
     overwrite_cache: bool = field(
@@ -392,11 +397,13 @@ def main():
         val_dataset = val_dataset.filter(filter_by_max_duration, remove_columns=["duration_in_seconds"])
         if len(train_dataset) > old_train_size:
             logger.warning(
-                f"Filtered out {len(train_dataset) - old_train_size} train example(s) longer than {data_args.max_duration_in_seconds} second(s)."
+                f"Filtered out {len(train_dataset) - old_train_size} train example(s) longer than"
+                f" {data_args.max_duration_in_seconds} second(s)."
             )
         if len(val_dataset) > old_val_size:
             logger.warning(
-                f"Filtered out {len(val_dataset) - old_val_size} validation example(s) longer than {data_args.max_duration_in_seconds} second(s)."
+                f"Filtered out {len(val_dataset) - old_val_size} validation example(s) longer than"
+                f" {data_args.max_duration_in_seconds} second(s)."
             )
     logger.info(f"Split sizes: {len(train_dataset)} train and {len(val_dataset)} validation.")
 

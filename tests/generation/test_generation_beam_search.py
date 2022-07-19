@@ -126,7 +126,11 @@ class BeamSearchTester:
 
         tokens = next_tokens.clone()
         tokens[:, : self.num_beams] = self.eos_token_id
-        beam_scorer.process(input_ids, next_scores, tokens, next_indices, eos_token_id=self.eos_token_id)
+        beam_indices = torch.zeros_like(input_ids) + torch.arange(input_ids.shape[-1], device=input_ids.device)
+        beam_indices = tuple(tuple(b) for b in beam_indices)
+        beam_scorer.process(
+            input_ids, next_scores, tokens, next_indices, eos_token_id=self.eos_token_id, beam_indices=beam_indices
+        )
         # beam scorer should be done
         self.parent.assertTrue(beam_scorer.is_done)
 
@@ -136,7 +140,7 @@ class BeamSearchTester:
         tokens = next_tokens.clone()
         tokens[:, 1] = self.eos_token_id
         beam_outputs = beam_scorer.process(
-            input_ids, next_scores, tokens, next_indices, eos_token_id=self.eos_token_id
+            input_ids, next_scores, tokens, next_indices, eos_token_id=self.eos_token_id, beam_indices=beam_indices
         )
         output_scores = beam_outputs["next_beam_scores"]
         output_tokens = beam_outputs["next_beam_tokens"]
@@ -161,10 +165,15 @@ class BeamSearchTester:
         self.parent.assertTrue(torch.allclose(expected_output_scores, output_scores, atol=1e-3))
 
         # make sure ids of eos token are correctly saved in beam_hyps of beam scorer
+        expected_beam_indices = list(range(10))
         for batch_idx in range(self.batch_size):
             correct_idx = batch_idx * self.num_beams + next_indices[batch_idx, 1]
             self.parent.assertListEqual(
-                input_ids[correct_idx].tolist(), beam_scorer._beam_hyps[batch_idx].beams[0][-1].tolist()
+                input_ids[correct_idx].tolist(), beam_scorer._beam_hyps[batch_idx].beams[0][1].tolist()
+            )
+            self.parent.assertListEqual(
+                expected_beam_indices + [next_indices[batch_idx, 1].item()],
+                torch.tensor(beam_scorer._beam_hyps[batch_idx].beams[0][2]).tolist(),
             )
 
     def check_beam_scores_finalize(self, input_ids, next_tokens, next_indices, next_scores):
@@ -188,6 +197,8 @@ class BeamSearchTester:
         input_ids = torch.cat([input_ids[output_indices, :], output_tokens.unsqueeze(-1)], dim=-1)
 
         # finalize
+        beam_indices = torch.zeros_like(input_ids) + torch.arange(input_ids.shape[-1], device=input_ids.device)
+        beam_indices = tuple(tuple(b) for b in beam_indices)
         sequence_output = beam_scorer.finalize(
             input_ids,
             output_scores,
@@ -196,6 +207,7 @@ class BeamSearchTester:
             pad_token_id=self.pad_token_id,
             eos_token_id=self.eos_token_id,
             max_length=max_length,
+            beam_indices=beam_indices,
         )
 
         sequences = sequence_output["sequences"]
@@ -225,6 +237,7 @@ class BeamSearchTester:
             pad_token_id=self.pad_token_id,
             eos_token_id=self.eos_token_id,
             max_length=max_length,
+            beam_indices=beam_indices,
         )
         sequences = sequence_output["sequences"]
         sequence_scores = sequence_output["sequence_scores"]
@@ -394,7 +407,7 @@ class ConstrainedBeamSearchTester:
         for batch_idx in range(self.batch_size):
             correct_idx = batch_idx * self.num_beams + next_indices[batch_idx, 1]
             self.parent.assertListEqual(
-                input_ids[correct_idx].tolist(), constrained_beam_scorer._beam_hyps[batch_idx].beams[0][-1].tolist()
+                input_ids[correct_idx].tolist(), constrained_beam_scorer._beam_hyps[batch_idx].beams[0][1].tolist()
             )
 
     def check_constrained_beam_scorer_finalize(
@@ -464,7 +477,7 @@ class ConstrainedBeamSearchTester:
         self.parent.assertNotEqual(sequences[2, -1].item(), self.eos_token_id)
 
         # test that the constraint is indeed fulfilled
-        for (output, constraint) in [(s, c) for s in sequences for c in constraints]:
+        for output, constraint in [(s, c) for s in sequences for c in constraints]:
             forced_token_ids = constraint.token_ids
             if isinstance(forced_token_ids[0], list):
                 # disjunctive case

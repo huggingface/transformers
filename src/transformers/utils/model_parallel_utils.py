@@ -32,13 +32,15 @@ def assert_device_map(device_map, num_blocks):
 
     if len(duplicate_blocks) != 0:
         raise ValueError(
-            "Duplicate attention blocks specified in device_map. Attention blocks must be specified to one device. These "
-            "attention blocks were specified more than once: " + str(duplicate_blocks)
+            "Duplicate attention blocks specified in device_map. Attention blocks must be specified to one device."
+            " These attention blocks were specified more than once: "
+            + str(duplicate_blocks)
         )
     if len(missing_blocks) != 0:
         raise ValueError(
             "There are attention blocks for this model that are not specified in the device_map. Add these attention "
-            "blocks to a device on the device_map: " + str(missing_blocks)
+            "blocks to a device on the device_map: "
+            + str(missing_blocks)
         )
     if len(extra_blocks) != 0:
         raise ValueError(

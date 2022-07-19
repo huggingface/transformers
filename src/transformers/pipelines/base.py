@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 from packaging import version
 
+from ..dynamic_module_utils import custom_object_save
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..modelcard import ModelCard
 from ..models.auto.configuration_auto import AutoConfig
@@ -75,14 +76,19 @@ def _pad(items, key, padding_value, padding_side):
         # Others include `attention_mask` etc...
         shape = items[0][key].shape
         dim = len(shape)
-        if dim == 4:
+        if key == "pixel_values":
             # This is probable image so padding shouldn't be necessary
             # B, C, H, W
             return torch.cat([item[key] for item in items], dim=0)
         max_length = max(item[key].shape[1] for item in items)
+        min_length = min(item[key].shape[1] for item in items)
         dtype = items[0][key].dtype
 
         if dim == 2:
+            if max_length == min_length:
+                # Bypass for `ImageGPT` which doesn't provide a padding value, yet
+                # we can consistently pad since the size should be matching
+                return torch.cat([item[key] for item in items], dim=0)
             tensor = torch.zeros((batch_size, max_length), dtype=dtype) + padding_value
         elif dim == 3:
             tensor = torch.zeros((batch_size, max_length, shape[-1]), dtype=dtype) + padding_value
@@ -139,13 +145,18 @@ def pad_collate_fn(tokenizer, feature_extractor):
         for item in items:
             if set(item.keys()) != keys:
                 raise ValueError(
-                    f"The elements of the batch contain different keys. Cannot batch them ({set(item.keys())} != {keys})"
+                    f"The elements of the batch contain different keys. Cannot batch them ({set(item.keys())} !="
+                    f" {keys})"
                 )
         # input_values, input_pixels, input_ids, ...
         padded = {}
         for key in keys:
             if key in {"input_ids"}:
-                _padding_value = t_padding_value
+                # ImageGPT uses a feature extractor
+                if feature_extractor is not None:
+                    _padding_value = f_padding_value
+                else:
+                    _padding_value = t_padding_value
             elif key in {"input_values", "pixel_values", "input_features"}:
                 _padding_value = f_padding_value
             elif key in {"p_mask", "special_tokens_mask"}:
@@ -331,7 +342,9 @@ def get_framework(model, revision: Optional[str] = None):
     return framework
 
 
-def get_default_model(targeted_task: Dict, framework: Optional[str], task_options: Optional[Any]) -> str:
+def get_default_model_and_revision(
+    targeted_task: Dict, framework: Optional[str], task_options: Optional[Any]
+) -> Union[str, Tuple[str, str]]:
     """
     Select a default model to use for a given task. Defaults to pytorch if ambiguous.
 
@@ -692,7 +705,7 @@ PIPELINE_INIT_ARGS = r"""
             Reference to the object in charge of parsing supplied pipeline parameters.
         device (`int`, *optional*, defaults to -1):
             Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the model on
-            the associated CUDA device id.
+            the associated CUDA device id. You can pass native `torch.device` too.
         binary_output (`bool`, *optional*, defaults to `False`):
             Flag indicating if the output the pipeline should happen in a binary format (i.e., pickle) or as raw text.
 """
@@ -749,7 +762,10 @@ class Pipeline(_ScikitCompat):
         self.feature_extractor = feature_extractor
         self.modelcard = modelcard
         self.framework = framework
-        self.device = device if framework == "tf" else torch.device("cpu" if device < 0 else f"cuda:{device}")
+        if is_torch_available() and isinstance(device, torch.device):
+            self.device = device
+        else:
+            self.device = device if framework == "tf" else torch.device("cpu" if device < 0 else f"cuda:{device}")
         self.binary_output = binary_output
 
         # Special handling
@@ -778,6 +794,27 @@ class Pipeline(_ScikitCompat):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
         os.makedirs(save_directory, exist_ok=True)
+
+        if hasattr(self, "_registered_impl"):
+            # Add info to the config
+            pipeline_info = self._registered_impl.copy()
+            custom_pipelines = {}
+            for task, info in pipeline_info.items():
+                if info["impl"] != self.__class__:
+                    continue
+
+                info = info.copy()
+                module_name = info["impl"].__module__
+                last_module = module_name.split(".")[-1]
+                # Change classes into their names/full names
+                info["impl"] = f"{last_module}.{info['impl'].__name__}"
+                info["pt"] = tuple(c.__name__ for c in info["pt"])
+                info["tf"] = tuple(c.__name__ for c in info["tf"])
+
+                custom_pipelines[task] = info
+            self.model.config.custom_pipelines = custom_pipelines
+            # Save the pipeline custom code
+            custom_object_save(self, save_directory)
 
         self.model.save_pretrained(save_directory)
 
@@ -856,6 +893,8 @@ class Pipeline(_ScikitCompat):
         elif isinstance(inputs, tuple):
             return tuple([self._ensure_tensor_on_device(item, device) for item in inputs])
         elif isinstance(inputs, torch.Tensor):
+            if device == torch.device("cpu") and inputs.dtype in {torch.float16, torch.bfloat16}:
+                inputs = inputs.float()
             return inputs.to(device)
         else:
             return inputs
@@ -879,7 +918,8 @@ class Pipeline(_ScikitCompat):
             supported_models = supported_models_names
         if self.model.__class__.__name__ not in supported_models:
             logger.error(
-                f"The model '{self.model.__class__.__name__}' is not supported for {self.task}. Supported models are {supported_models}."
+                f"The model '{self.model.__class__.__name__}' is not supported for {self.task}. Supported models are"
+                f" {supported_models}."
             )
 
     @abstractmethod
@@ -994,7 +1034,8 @@ class Pipeline(_ScikitCompat):
         self.call_count += 1
         if self.call_count > 10 and self.framework == "pt" and self.device.type == "cuda":
             warnings.warn(
-                "You seem to be using the pipelines sequentially on GPU. In order to maximize efficiency please use a dataset",
+                "You seem to be using the pipelines sequentially on GPU. In order to maximize efficiency please use a"
+                " dataset",
                 UserWarning,
             )
 
@@ -1058,7 +1099,8 @@ class ChunkPipeline(Pipeline):
             os.environ["TOKENIZERS_PARALLELISM"] = "false"
         if num_workers > 1:
             logger.warning(
-                "For ChunkPipeline using num_workers>0 is likely to result in errors since everything is iterable, setting `num_workers=1` to guarantee correctness."
+                "For ChunkPipeline using num_workers>0 is likely to result in errors since everything is iterable,"
+                " setting `num_workers=1` to guarantee correctness."
             )
             num_workers = 1
         dataset = PipelineChunkIterator(inputs, self.preprocess, preprocess_params)
@@ -1067,3 +1109,70 @@ class ChunkPipeline(Pipeline):
         model_iterator = PipelinePackIterator(dataloader, self.forward, forward_params, loader_batch_size=batch_size)
         final_iterator = PipelineIterator(model_iterator, self.postprocess, postprocess_params)
         return final_iterator
+
+
+class PipelineRegistry:
+    def __init__(self, supported_tasks: Dict[str, Any], task_aliases: Dict[str, str]) -> None:
+        self.supported_tasks = supported_tasks
+        self.task_aliases = task_aliases
+
+    def get_supported_tasks(self) -> List[str]:
+        supported_task = list(self.supported_tasks.keys()) + list(self.task_aliases.keys())
+        supported_task.sort()
+        return supported_task
+
+    def check_task(self, task: str) -> Tuple[Dict, Any]:
+        if task in self.task_aliases:
+            task = self.task_aliases[task]
+        if task in self.supported_tasks:
+            targeted_task = self.supported_tasks[task]
+            return targeted_task, None
+
+        if task.startswith("translation"):
+            tokens = task.split("_")
+            if len(tokens) == 4 and tokens[0] == "translation" and tokens[2] == "to":
+                targeted_task = self.supported_tasks["translation"]
+                return targeted_task, (tokens[1], tokens[3])
+            raise KeyError(f"Invalid translation task {task}, use 'translation_XX_to_YY' format")
+
+        raise KeyError(
+            f"Unknown task {task}, available tasks are {self.get_supported_tasks() + ['translation_XX_to_YY']}"
+        )
+
+    def register_pipeline(
+        self,
+        task: str,
+        pipeline_class: type,
+        pt_model: Optional[Union[type, Tuple[type]]] = None,
+        tf_model: Optional[Union[type, Tuple[type]]] = None,
+        default: Optional[Dict] = None,
+        type: Optional[str] = None,
+    ) -> None:
+        if task in self.supported_tasks:
+            logger.warning(f"{task} is already registered. Overwriting pipeline for task {task}...")
+
+        if pt_model is None:
+            pt_model = ()
+        elif not isinstance(pt_model, tuple):
+            pt_model = (pt_model,)
+
+        if tf_model is None:
+            tf_model = ()
+        elif not isinstance(tf_model, tuple):
+            tf_model = (tf_model,)
+
+        task_impl = {"impl": pipeline_class, "pt": pt_model, "tf": tf_model}
+
+        if default is not None:
+            if "model" not in default and ("pt" in default or "tf" in default):
+                default = {"model": default}
+            task_impl["default"] = default
+
+        if type is not None:
+            task_impl["type"] = type
+
+        self.supported_tasks[task] = task_impl
+        pipeline_class._registered_impl = {task: task_impl}
+
+    def to_dict(self):
+        return self.supported_tasks

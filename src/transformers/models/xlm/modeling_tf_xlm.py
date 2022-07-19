@@ -92,8 +92,8 @@ def get_masks(slen, lengths, causal, padding_mask=None):
         mask = padding_mask
     else:
         # assert lengths.max().item() <= slen
-        alen = tf.range(slen)
-        mask = tf.math.less(alen, tf.expand_dims(lengths, axis=1))
+        alen = tf.range(slen, dtype=lengths.dtype)
+        mask = alen < tf.expand_dims(lengths, axis=1)
 
     # attention mask is the same as mask, or triangular inferior attention (causal)
     if causal:
@@ -797,6 +797,8 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFXLMMainLayer(config, name="transformer")
         self.pred_layer = TFXLMPredLayer(config, self.transformer.embeddings, name="pred_layer_._proj")
+        # XLM does not have past caching features
+        self.supports_xla_generation = False
 
     def get_lm_head(self):
         return self.pred_layer

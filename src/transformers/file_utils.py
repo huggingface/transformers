@@ -92,6 +92,7 @@ from .utils import (
     is_flax_available,
     is_ftfy_available,
     is_in_notebook,
+    is_ipex_available,
     is_librosa_available,
     is_local_clone,
     is_offline_mode,

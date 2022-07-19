@@ -46,8 +46,8 @@ nbclient==0.5.0
 nbconvert==6.0.1
 nbformat==5.0.7
 nest-asyncio==1.4.0
-notebook==6.4.1
-numpy==1.21.0
+notebook==6.4.12
+numpy==1.22.0
 opencv-python==4.4.0.42
 packaging==20.3
 pandas==1.1.2

@@ -228,8 +228,8 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             max_answer_len (`int`, *optional*, defaults to 15):
                 The maximum length of predicted answers (e.g., only answers with a shorter length are considered).
             max_seq_len (`int`, *optional*, defaults to 384):
-                The maximum length of the total sentence (context + question) after tokenization. The context will be
-                split in several chunks (using `doc_stride`) if needed.
+                The maximum length of the total sentence (context + question) in tokens of each chunk passed to the
+                model. The context will be split in several chunks (using `doc_stride` as overlap) if needed.
             max_question_len (`int`, *optional*, defaults to 64):
                 The maximum length of the question after tokenization. It will be truncated if needed.
             handle_impossible_answer (`bool`, *optional*, defaults to `False`):
@@ -279,7 +279,6 @@ class QuestionAnsweringPipeline(ChunkPipeline):
                 truncation="only_second" if question_first else "only_first",
                 max_length=max_seq_len,
                 stride=doc_stride,
-                return_tensors="np",
                 return_token_type_ids=True,
                 return_overflowing_tokens=True,
                 return_offsets_mapping=True,
@@ -294,12 +293,10 @@ class QuestionAnsweringPipeline(ChunkPipeline):
 
             # p_mask: mask with 1 for token than cannot be in the answer (0 for token which can be in an answer)
             # We put 0 on the tokens from the context and 1 everywhere else (question and special tokens)
-            p_mask = np.asarray(
-                [
-                    [tok != 1 if question_first else 0 for tok in encoded_inputs.sequence_ids(span_id)]
-                    for span_id in range(num_spans)
-                ]
-            )
+            p_mask = [
+                [tok != 1 if question_first else 0 for tok in encoded_inputs.sequence_ids(span_id)]
+                for span_id in range(num_spans)
+            ]
 
             features = []
             for span_idx in range(num_spans):
@@ -316,8 +313,6 @@ class QuestionAnsweringPipeline(ChunkPipeline):
                     for cls_index in cls_indices:
                         p_mask[span_idx][cls_index] = 0
                 submask = p_mask[span_idx]
-                if isinstance(submask, np.ndarray):
-                    submask = submask.tolist()
                 features.append(
                     SquadFeatures(
                         input_ids=input_ids_span_idx,
@@ -344,7 +339,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         for i, feature in enumerate(features):
             fw_args = {}
             others = {}
-            model_input_names = self.tokenizer.model_input_names + ["p_mask"]
+            model_input_names = self.tokenizer.model_input_names + ["p_mask", "token_type_ids"]
 
             for k, v in feature.__dict__.items():
                 if k in model_input_names:
@@ -398,8 +393,11 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             end_ = np.where(undesired_tokens_mask, -10000.0, end_)
 
             # Normalize logits and spans to retrieve the answer
-            start_ = np.exp(start_ - np.log(np.sum(np.exp(start_), axis=-1, keepdims=True)))
-            end_ = np.exp(end_ - np.log(np.sum(np.exp(end_), axis=-1, keepdims=True)))
+            start_ = np.exp(start_ - start_.max(axis=-1, keepdims=True))
+            start_ = start_ / start_.sum()
+
+            end_ = np.exp(end_ - end_.max(axis=-1, keepdims=True))
+            end_ = end_ / end_.sum()
 
             if handle_impossible_answer:
                 min_null_score = min(min_null_score, (start_[0, 0] * end_[0, 0]).item())

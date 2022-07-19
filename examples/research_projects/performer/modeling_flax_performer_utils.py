@@ -535,7 +535,7 @@ class FastAttentionviaLowRankDecomposition(FastAttention):
         assert key.ndim == value.ndim
         for ax in axis:
             if not (query.ndim >= 3 and 1 <= ax < query.ndim - 2):
-                raise ValueError("Attention axis must be between the batch " "axis and the last-two axes.")
+                raise ValueError("Attention axis must be between the batch axis and the last-two axes.")
         n = key.ndim
 
         # Constructing projection tensor.

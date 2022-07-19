@@ -277,7 +277,10 @@ if __name__ == "__main__":
         "--model_name",
         default=None,
         type=str,
-        help="The name of the model you wish to convert, it must be one of the supported regnet* architecture, currently: regnetx-*, regnety-*. If `None`, all of them will the converted.",
+        help=(
+            "The name of the model you wish to convert, it must be one of the supported regnet* architecture,"
+            " currently: regnetx-*, regnety-*. If `None`, all of them will the converted."
+        ),
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",

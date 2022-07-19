@@ -86,18 +86,17 @@ class LEDConfig(PretrainedConfig):
     Example:
 
     ```python
+    >>> from transformers import LEDModel, LEDConfig
 
-    ```
+    >>> # Initializing a LED allenai/led-base-16384 style configuration
+    >>> configuration = LEDConfig()
 
-        >>> from transformers import LEDModel, LEDConfig
+    >>> # Initializing a model from the allenai/led-base-16384 style configuration
+    >>> model = LEDModel(configuration)
 
-        >>> # Initializing a LED allenai/led-base-16384 style configuration >>> configuration = LEDConfig()
-
-        >>> # Initializing a model from the allenai/led-base-16384 style configuration >>> model =
-        LEDModel(configuration)
-
-        >>> # Accessing the model configuration >>> configuration = model.config
-    """
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
     model_type = "led"
     attribute_map = {
         "num_attention_heads": "encoder_attention_heads",

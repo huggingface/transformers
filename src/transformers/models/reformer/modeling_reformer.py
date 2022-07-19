@@ -380,9 +380,10 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
 
         # check if cache shall be used and that hidden states are already cached
         if do_cached_attention:
-            assert (
-                sequence_length == 1
-            ), f"At the moment, auto-regressive language generation is only possible one word at a time. Make sure that input sequence length {sequence_length} equals 1, when `past_buckets_states` is passed."
+            assert sequence_length == 1, (
+                "At the moment, auto-regressive language generation is only possible one word at a time. Make sure"
+                f" that input sequence length {sequence_length} equals 1, when `past_buckets_states` is passed."
+            )
             past_buckets = past_buckets_states[0]
             past_states = past_buckets_states[1]
 
@@ -505,9 +506,10 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             )
 
             if self.chunk_length is None:
-                assert (
-                    self.num_chunks_before == 0 and self.num_chunks_after == 0
-                ), "If `config.chunk_length` is `None`, make sure `config.num_chunks_after` and `config.num_chunks_before` are set to 0."
+                assert self.num_chunks_before == 0 and self.num_chunks_after == 0, (
+                    "If `config.chunk_length` is `None`, make sure `config.num_chunks_after` and"
+                    " `config.num_chunks_before` are set to 0."
+                )
         elif do_cached_attention and past_buckets is not None:
             # use max sequence length
             sorted_bucket_idx_per_hash = sorted_bucket_idx
@@ -577,7 +579,10 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             self.num_attention_heads,
             sequence_length,
             self.attention_head_size,
-        ), "out_vectors have be of shape `[batch_size, config.num_attention_heads, sequence_length, config.attention_head_size]`."
+        ), (
+            "out_vectors have be of shape `[batch_size, config.num_attention_heads, sequence_length,"
+            " config.attention_head_size]`."
+        )
 
         out_vectors = self._merge_hidden_size_dims(out_vectors, self.num_attention_heads, self.attention_head_size)
 
@@ -891,7 +896,10 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             self.num_attention_heads,
             num_hashes,
             sequence_length,
-        ), f"bucket_idx should have shape {(batch_size, self.num_attention_heads, num_hashes, sequence_length)}, but has shape {bucket_idx.shape}."
+        ), (
+            f"bucket_idx should have shape {(batch_size, self.num_attention_heads, num_hashes, sequence_length)}, but"
+            f" has shape {bucket_idx.shape}."
+        )
 
         # find indices of new bucket indices
         relevant_bucket_idx = (bucket_idx == (bucket_idx.shape[-1] - 1)).nonzero()
@@ -925,12 +933,20 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         assert (
             relevant_hidden_states.shape[2]
             == (self.num_chunks_before + self.num_chunks_after + 1) * self.chunk_length * num_hashes
-        ), f"There should be {(self.num_chunks_before + self.num_chunks_after + 1) * self.chunk_length * num_hashes} `hidden_states`, there are {relevant_hidden_states.shape[2]} `hidden_states`."
+        ), (
+            "There should be"
+            f" {(self.num_chunks_before + self.num_chunks_after + 1) * self.chunk_length * num_hashes} `hidden_states`,"
+            f" there are {relevant_hidden_states.shape[2]} `hidden_states`."
+        )
 
         assert (
             relevant_bucket_idx_chunk.shape[-1]
             == (self.num_chunks_before + self.num_chunks_after + 1) * self.chunk_length
-        ), f"There should be {(self.num_chunks_before + self.num_chunks_after + 1) * self.chunk_length} `hidden_states`, there are {relevant_bucket_idx_chunk.shape[-1]} `bucket_idx`."
+        ), (
+            "There should be"
+            f" {(self.num_chunks_before + self.num_chunks_after + 1) * self.chunk_length} `hidden_states`, there are"
+            f" {relevant_bucket_idx_chunk.shape[-1]} `bucket_idx`."
+        )
 
         return relevant_hidden_states, relevant_bucket_idx_chunk, query_buckets
 
@@ -1054,9 +1070,10 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
 
         # check if cache shall be used and that hidden states are already cached
         if use_cache and past_buckets_states[1] is not None:
-            assert (
-                past_buckets_states[0] is None
-            ), "LocalSelfAttention should not make use of `buckets`. There seems to be an error when caching hidden_states_and_buckets."
+            assert past_buckets_states[0] is None, (
+                "LocalSelfAttention should not make use of `buckets`. There seems to be an error when caching"
+                " hidden_states_and_buckets."
+            )
             key_value_hidden_states = self._retrieve_relevant_hidden_states(
                 past_buckets_states[1], self.chunk_length, self.num_chunks_before
             )
@@ -1092,9 +1109,10 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
         ), f"last dim of query_key_vectors is {value_vectors.shape[-1]} but should be {self.attention_head_size}."
 
         if self.chunk_length is None:
-            assert (
-                self.num_chunks_before == 0 and self.num_chunks_after == 0
-            ), "If `config.chunk_length` is `None`, make sure `config.num_chunks_after` and `config.num_chunks_before` are set to 0."
+            assert self.num_chunks_before == 0 and self.num_chunks_after == 0, (
+                "If `config.chunk_length` is `None`, make sure `config.num_chunks_after` and"
+                " `config.num_chunks_before` are set to 0."
+            )
 
         # normalize key vectors
         key_vectors = key_vectors / torch.sqrt(
@@ -1514,9 +1532,10 @@ class ReformerLayer(nn.Module):
         # Implementation of RevNet (see Fig. 6 in https://towardsdatascience.com/illustrating-the-reformer-393575ac6ba0)
         # This code is heavily inspired by https://github.com/lucidrains/reformer-pytorch/blob/master/reformer_pytorch/reversible.py
 
-        assert (
-            self.training
-        ), "If you want to train `ReformerModel` and its variations, make sure to use `model.train()` to put the model into training mode."
+        assert self.training, (
+            "If you want to train `ReformerModel` and its variations, make sure to use `model.train()` to put the"
+            " model into training mode."
+        )
 
         with torch.enable_grad():
             next_attn_output.requires_grad = True
@@ -1957,7 +1976,7 @@ REFORMER_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare Reformer Model transformer outputting raw hidden-states" "without any specific head on top.",
+    "The bare Reformer Model transformer outputting raw hidden-stateswithout any specific head on top.",
     REFORMER_START_DOCSTRING,
 )
 class ReformerModel(ReformerPreTrainedModel):
@@ -2176,12 +2195,14 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         assert config.is_decoder, "If you want to use `ReformerModelWithLMHead` make sure that `is_decoder=True`."
-        assert (
-            "local" not in self.config.attn_layers or config.local_num_chunks_after == 0
-        ), f"If causal mask is enabled, make sure that `config.local_num_chunks_after` is set to 0 and not {config.local_num_chunks_after}."
-        assert (
-            "lsh" not in self.config.attn_layers or config.lsh_num_chunks_after == 0
-        ), f"If causal mask is enabled, make sure that `config.lsh_num_chunks_after` is set to 1 and not {config.lsh_num_chunks_after}."
+        assert "local" not in self.config.attn_layers or config.local_num_chunks_after == 0, (
+            "If causal mask is enabled, make sure that `config.local_num_chunks_after` is set to 0 and not"
+            f" {config.local_num_chunks_after}."
+        )
+        assert "lsh" not in self.config.attn_layers or config.lsh_num_chunks_after == 0, (
+            "If causal mask is enabled, make sure that `config.lsh_num_chunks_after` is set to 1 and not"
+            f" {config.lsh_num_chunks_after}."
+        )
 
         self.reformer = ReformerModel(config)
         self.lm_head = ReformerOnlyLMHead(config)
@@ -2296,9 +2317,10 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
 class ReformerForMaskedLM(ReformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        assert (
-            not config.is_decoder
-        ), "If you want to use `ReformerForMaskedLM` make sure `config.is_decoder=False` for bi-directional self-attention."
+        assert not config.is_decoder, (
+            "If you want to use `ReformerForMaskedLM` make sure `config.is_decoder=False` for bi-directional"
+            " self-attention."
+        )
         self.reformer = ReformerModel(config)
         self.lm_head = ReformerOnlyLMHead(config)
 

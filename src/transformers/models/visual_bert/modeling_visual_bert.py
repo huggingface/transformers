@@ -158,7 +158,8 @@ class VisualBertEmbeddings(nn.Module):
                 if (image_text_alignment_mask == 0).sum() != 0:
                     image_text_alignment_mask[image_text_alignment_mask == 0] = 1  # Avoid divide by zero error
                     logger.warning(
-                        "Found 0 values in `image_text_alignment_mask`. Setting them to 1 to avoid divide-by-zero error."
+                        "Found 0 values in `image_text_alignment_mask`. Setting them to 1 to avoid divide-by-zero"
+                        " error."
                     )
                 visual_position_embeddings = visual_position_embeddings / image_text_alignment_mask.unsqueeze(-1)
 
@@ -794,12 +795,12 @@ class VisualBertModel(VisualBertPreTrainedModel):
         if visual_embeds is not None:
             combined_attention_mask = torch.cat((attention_mask, visual_attention_mask), dim=-1)
             extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
-                combined_attention_mask, [batch_size, input_shape + visual_input_shape], device
+                combined_attention_mask, (batch_size, input_shape + visual_input_shape)
             )
 
         else:
             extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
-                attention_mask, [batch_size, input_shape], device
+                attention_mask, (batch_size, input_shape)
             )
 
         # Prepare head mask if needed
@@ -928,7 +929,7 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
         tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
         model = VisualBertForPreTraining.from_pretrained("uclanlp/visualbert-vqa-coco-pre")
 
-        inputs = tokenizer("The capital of France is {mask}.", return_tensors="pt")
+        inputs = tokenizer("The capital of France is [MASK].", return_tensors="pt")
         visual_embeds = get_visual_embeddings(image).unsqueeze(0)
         visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long)
         visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
@@ -978,7 +979,7 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
             total_size = attention_mask.size(-1) + visual_attention_mask.size(-1)
             if labels.size(-1) != total_size:
                 raise ValueError(
-                    f"The labels provided should have same sequence length as total attention mask. "
+                    "The labels provided should have same sequence length as total attention mask. "
                     f"Found labels with sequence length {labels.size(-1)}, expected {total_size}."
                 )
 
@@ -991,7 +992,7 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
             total_size = attention_mask.size(-1) + visual_attention_mask.size(-1)
             if labels.size(-1) != total_size:
                 raise ValueError(
-                    f"The labels provided should have same sequence length as total attention mask. "
+                    "The labels provided should have same sequence length as total attention mask. "
                     f"Found labels with sequence length {labels.size(-1)}, expected {total_size}."
                 )
 
@@ -1432,7 +1433,7 @@ class VisualBertRegionToPhraseAttention(nn.Module):
     def forward(self, query, key, attention_mask):
         attention_mask = attention_mask.to(query.dtype)
         attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
-        attention_mask = (1.0 - attention_mask) * -10000.0
+        attention_mask = (1.0 - attention_mask) * torch.finfo(query.dtype).min
 
         mixed_query_layer = self.query(query)
         mixed_key_layer = self.key(key)

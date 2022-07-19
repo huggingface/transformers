@@ -25,7 +25,13 @@ import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import TFBaseModelOutput, TFCausalLMOutput
-from ...modeling_tf_utils import TFPreTrainedModel, booleans_processing, get_initializer, keras_serializable
+from ...modeling_tf_utils import (
+    TFPreTrainedModel,
+    booleans_processing,
+    get_initializer,
+    keras_serializable,
+    unpack_inputs,
+)
 from ...tf_utils import shape_list, stable_softmax
 from ...utils import (
     ModelOutput,
@@ -133,12 +139,14 @@ def input_values_processing(func, config, input_values, **kwargs):
                 output[parameter_names[i]] = input
             else:
                 raise ValueError(
-                    f"Data of type {type(input)} is not allowed only {allowed_types} is accepted for {parameter_names[i]}."
+                    f"Data of type {type(input)} is not allowed only {allowed_types} is accepted for"
+                    f" {parameter_names[i]}."
                 )
     elif isinstance(input_values, Mapping):
         if "inputs" in input_values:
             warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_values` instead.",
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_values`"
+                " instead.",
                 FutureWarning,
             )
 
@@ -146,7 +154,8 @@ def input_values_processing(func, config, input_values, **kwargs):
 
         if "decoder_cached_states" in input_values:
             warnings.warn(
-                "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
+                "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use"
+                " `past_key_values` instead.",
                 FutureWarning,
             )
             output["past_key_values"] = input_values.pop("decoder_cached_states")
@@ -166,7 +175,8 @@ def input_values_processing(func, config, input_values, **kwargs):
             output[parameter_names[0]] = input_values
         else:
             raise ValueError(
-                f"Data of type {type(input_values)} is not allowed only {allowed_types} is accepted for {parameter_names[0]}."
+                f"Data of type {type(input_values)} is not allowed only {allowed_types} is accepted for"
+                f" {parameter_names[0]}."
             )
 
     for name in parameter_names:
@@ -234,7 +244,7 @@ def _compute_mask_indices(
     Computes random mask spans for a given shape
 
     Args:
-        shape: the the shape for which to compute masks.
+        shape: the shape for which to compute masks.
             should be of size 2 where first element is batch size and 2nd is timesteps
         attention_mask: optional padding mask of the same size as shape, which will prevent masking padded elements
         mask_prob:
@@ -254,7 +264,8 @@ def _compute_mask_indices(
 
     if mask_length > sequence_length:
         raise ValueError(
-            f"`mask_length` has to be smaller than `sequence_length`, but got `mask_length`: {mask_length} and `sequence_length`: {sequence_length}`"
+            f"`mask_length` has to be smaller than `sequence_length`, but got `mask_length`: {mask_length} and"
+            f" `sequence_length`: {sequence_length}`"
         )
     # compute number of masked spans in batch
     num_masked_spans = int(mask_prob * sequence_length / mask_length + tf.random.uniform((1,)))
@@ -292,7 +303,8 @@ def _compute_mask_indices(
     return spec_aug_mask
 
 
-def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values_length: int = 0):
+# Copied from transformers.models.bart.modeling_tf_bart._expand_mask
+def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
@@ -441,9 +453,11 @@ class TFWav2Vec2GroupNorm(tf.keras.layers.Layer):
         dim = input_shape[self.axis]
         if dim is None:
             raise ValueError(
-                "Axis " + str(self.axis) + " of "
-                "input tensor should have a defined dimension "
-                "but the layer received an input with shape " + str(input_shape) + "."
+                "Axis "
+                + str(self.axis)
+                + " of input tensor should have a defined dimension but the layer received an input with shape "
+                + str(input_shape)
+                + "."
             )
 
     def _set_number_of_groups_for_instance_norm(self, input_shape):
@@ -457,22 +471,27 @@ class TFWav2Vec2GroupNorm(tf.keras.layers.Layer):
         dim = input_shape[self.axis]
         if dim < self.groups:
             raise ValueError(
-                "Number of groups (" + str(self.groups) + ") cannot be "
-                "more than the number of channels (" + str(dim) + ")."
+                "Number of groups ("
+                + str(self.groups)
+                + ") cannot be more than the number of channels ("
+                + str(dim)
+                + ")."
             )
 
         if dim % self.groups != 0:
             raise ValueError(
-                "Number of groups (" + str(self.groups) + ") must be a "
-                "multiple of the number of channels (" + str(dim) + ")."
+                "Number of groups ("
+                + str(self.groups)
+                + ") must be a multiple of the number of channels ("
+                + str(dim)
+                + ")."
             )
 
     def _check_axis(self):
 
         if self.axis == 0:
             raise ValueError(
-                "You are trying to normalize your batch axis. Do you want to "
-                "use tf.layer.batch_normalization instead"
+                "You are trying to normalize your batch axis. Do you want to use tf.layer.batch_normalization instead"
             )
 
     def _create_input_spec(self, input_shape):
@@ -838,7 +857,10 @@ class TFWav2Vec2Attention(tf.keras.layers.Layer):
             tf.debugging.assert_equal(
                 shape_list(attn_weights),
                 [bsz * self.num_heads, tgt_len, src_len],
-                message=f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {shape_list(attn_weights)}",
+                message=(
+                    f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
+                    f" {shape_list(attn_weights)}"
+                ),
             )
 
         if attention_mask is not None:
@@ -848,7 +870,10 @@ class TFWav2Vec2Attention(tf.keras.layers.Layer):
                 tf.debugging.assert_equal(
                     shape_list(attention_mask),
                     [bsz, 1, tgt_len, src_len],
-                    message=f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {shape_list(attention_mask)}",
+                    message=(
+                        f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is"
+                        f" {shape_list(attention_mask)}"
+                    ),
                 )
 
             attention_mask = tf.cast(attention_mask, dtype=attn_weights.dtype)
@@ -864,7 +889,10 @@ class TFWav2Vec2Attention(tf.keras.layers.Layer):
                 tf.debugging.assert_equal(
                     shape_list(layer_head_mask),
                     [self.num_heads],
-                    message=f"Head mask for a single layer should be of size {(self.num_heads)}, but is {shape_list(layer_head_mask)}",
+                    message=(
+                        f"Head mask for a single layer should be of size {(self.num_heads)}, but is"
+                        f" {shape_list(layer_head_mask)}"
+                    ),
                 )
 
             attn_weights = tf.reshape(layer_head_mask, (1, -1, 1, 1)) * tf.reshape(
@@ -881,7 +909,10 @@ class TFWav2Vec2Attention(tf.keras.layers.Layer):
             tf.debugging.assert_equal(
                 shape_list(attn_output),
                 [bsz * self.num_heads, tgt_len, self.head_dim],
-                message=f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {shape_list(attn_output)}",
+                message=(
+                    f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
+                    f" {shape_list(attn_output)}"
+                ),
             )
 
         attn_output = tf.transpose(
@@ -1555,6 +1586,7 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
         """
         self.wav2vec2.feature_extractor.trainable = False
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFCausalLMOutput, config_class=_CONFIG_FOR_DOC)
     def call(
@@ -1677,6 +1709,8 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
                 loss = tf.reduce_sum(loss)
             if self.config.ctc_loss_reduction == "mean":
                 loss = tf.reduce_mean(loss)
+
+            loss = tf.reshape(loss, (1,))
         else:
             loss = None
 

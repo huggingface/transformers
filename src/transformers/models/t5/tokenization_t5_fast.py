@@ -16,6 +16,7 @@
 
 
 import os
+import warnings
 from shutil import copyfile
 from typing import List, Optional, Tuple
 
@@ -50,6 +51,8 @@ PRETRAINED_VOCAB_FILES_MAP = {
     },
 }
 
+
+# TODO(PVP) - this should be removed in Transformers v5
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "t5-small": 512,
     "t5-base": 512,
@@ -123,8 +126,9 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
             extra_tokens = len(set(filter(lambda x: bool("extra_id_" in str(x)), additional_special_tokens)))
             if extra_tokens != extra_ids:
                 raise ValueError(
-                    f"Both extra_ids ({extra_ids}) and additional_special_tokens ({additional_special_tokens}) are provided to T5Tokenizer. "
-                    "In this case the additional_special_tokens must include the extra_ids tokens"
+                    f"Both extra_ids ({extra_ids}) and additional_special_tokens ({additional_special_tokens}) are"
+                    " provided to T5Tokenizer. In this case the additional_special_tokens must include the extra_ids"
+                    " tokens"
                 )
 
         super().__init__(
@@ -141,6 +145,28 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
         self.vocab_file = vocab_file
         self.can_save_slow_tokenizer = False if not self.vocab_file else True
         self._extra_ids = extra_ids
+
+    @staticmethod
+    def _eventually_correct_t5_max_length(pretrained_model_name_or_path, max_model_length, init_max_model_length):
+        if pretrained_model_name_or_path in T5TokenizerFast.max_model_input_sizes:
+            deprecated_max_model_length = T5TokenizerFast.max_model_input_sizes[pretrained_model_name_or_path]
+            if init_max_model_length is not None and init_max_model_length != max_model_length:
+                return init_max_model_length
+            elif init_max_model_length is None:
+                warnings.warn(
+                    "This tokenizer was incorrectly instantiated with a model max length of"
+                    f" {deprecated_max_model_length} which will be corrected in Transformers v5.\nFor now, this"
+                    " behavior is kept to avoid breaking backwards compatibility when padding/encoding with"
+                    " `truncation is True`.\n- Be aware that you SHOULD NOT rely on"
+                    f" {pretrained_model_name_or_path} automatically truncating your input to"
+                    f" {deprecated_max_model_length} when padding/encoding.\n- If you want to encode/pad to sequences"
+                    f" longer than {deprecated_max_model_length} you can either instantiate this tokenizer with"
+                    " `model_max_length` or pass `max_length` when encoding/padding.\n- To avoid this warning, please"
+                    " instantiate this tokenizer with `model_max_length` set to your preferred value.",
+                    FutureWarning,
+                )
+
+        return max_model_length
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not self.can_save_slow_tokenizer:

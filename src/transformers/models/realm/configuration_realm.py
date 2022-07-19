@@ -21,10 +21,18 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 REALM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/realm-cc-news-pretrained-embedder": "https://huggingface.co/google/realm-cc-news-pretrained-embedder/resolve/main/config.json",
-    "google/realm-cc-news-pretrained-encoder": "https://huggingface.co/google/realm-cc-news-pretrained-encoder/resolve/main/config.json",
-    "google/realm-cc-news-pretrained-scorer": "https://huggingface.co/google/realm-cc-news-pretrained-scorer/resolve/main/config.json",
-    "google/realm-cc-news-pretrained-openqa": "https://huggingface.co/google/realm-cc-news-pretrained-openqa/aresolve/main/config.json",
+    "google/realm-cc-news-pretrained-embedder": (
+        "https://huggingface.co/google/realm-cc-news-pretrained-embedder/resolve/main/config.json"
+    ),
+    "google/realm-cc-news-pretrained-encoder": (
+        "https://huggingface.co/google/realm-cc-news-pretrained-encoder/resolve/main/config.json"
+    ),
+    "google/realm-cc-news-pretrained-scorer": (
+        "https://huggingface.co/google/realm-cc-news-pretrained-scorer/resolve/main/config.json"
+    ),
+    "google/realm-cc-news-pretrained-openqa": (
+        "https://huggingface.co/google/realm-cc-news-pretrained-openqa/aresolve/main/config.json"
+    ),
     "google/realm-orqa-nq-openqa": "https://huggingface.co/google/realm-orqa-nq-openqa/resolve/main/config.json",
     "google/realm-orqa-nq-reader": "https://huggingface.co/google/realm-orqa-nq-reader/resolve/main/config.json",
     "google/realm-orqa-wq-openqa": "https://huggingface.co/google/realm-orqa-wq-openqa/resolve/main/config.json",

@@ -34,40 +34,84 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "bert-large-uncased": "https://huggingface.co/bert-large-uncased/resolve/main/vocab.txt",
         "bert-base-cased": "https://huggingface.co/bert-base-cased/resolve/main/vocab.txt",
         "bert-large-cased": "https://huggingface.co/bert-large-cased/resolve/main/vocab.txt",
-        "bert-base-multilingual-uncased": "https://huggingface.co/bert-base-multilingual-uncased/resolve/main/vocab.txt",
+        "bert-base-multilingual-uncased": (
+            "https://huggingface.co/bert-base-multilingual-uncased/resolve/main/vocab.txt"
+        ),
         "bert-base-multilingual-cased": "https://huggingface.co/bert-base-multilingual-cased/resolve/main/vocab.txt",
         "bert-base-chinese": "https://huggingface.co/bert-base-chinese/resolve/main/vocab.txt",
         "bert-base-german-cased": "https://huggingface.co/bert-base-german-cased/resolve/main/vocab.txt",
-        "bert-large-uncased-whole-word-masking": "https://huggingface.co/bert-large-uncased-whole-word-masking/resolve/main/vocab.txt",
-        "bert-large-cased-whole-word-masking": "https://huggingface.co/bert-large-cased-whole-word-masking/resolve/main/vocab.txt",
-        "bert-large-uncased-whole-word-masking-finetuned-squad": "https://huggingface.co/bert-large-uncased-whole-word-masking-finetuned-squad/resolve/main/vocab.txt",
-        "bert-large-cased-whole-word-masking-finetuned-squad": "https://huggingface.co/bert-large-cased-whole-word-masking-finetuned-squad/resolve/main/vocab.txt",
-        "bert-base-cased-finetuned-mrpc": "https://huggingface.co/bert-base-cased-finetuned-mrpc/resolve/main/vocab.txt",
+        "bert-large-uncased-whole-word-masking": (
+            "https://huggingface.co/bert-large-uncased-whole-word-masking/resolve/main/vocab.txt"
+        ),
+        "bert-large-cased-whole-word-masking": (
+            "https://huggingface.co/bert-large-cased-whole-word-masking/resolve/main/vocab.txt"
+        ),
+        "bert-large-uncased-whole-word-masking-finetuned-squad": (
+            "https://huggingface.co/bert-large-uncased-whole-word-masking-finetuned-squad/resolve/main/vocab.txt"
+        ),
+        "bert-large-cased-whole-word-masking-finetuned-squad": (
+            "https://huggingface.co/bert-large-cased-whole-word-masking-finetuned-squad/resolve/main/vocab.txt"
+        ),
+        "bert-base-cased-finetuned-mrpc": (
+            "https://huggingface.co/bert-base-cased-finetuned-mrpc/resolve/main/vocab.txt"
+        ),
         "bert-base-german-dbmdz-cased": "https://huggingface.co/bert-base-german-dbmdz-cased/resolve/main/vocab.txt",
-        "bert-base-german-dbmdz-uncased": "https://huggingface.co/bert-base-german-dbmdz-uncased/resolve/main/vocab.txt",
-        "TurkuNLP/bert-base-finnish-cased-v1": "https://huggingface.co/TurkuNLP/bert-base-finnish-cased-v1/resolve/main/vocab.txt",
-        "TurkuNLP/bert-base-finnish-uncased-v1": "https://huggingface.co/TurkuNLP/bert-base-finnish-uncased-v1/resolve/main/vocab.txt",
-        "wietsedv/bert-base-dutch-cased": "https://huggingface.co/wietsedv/bert-base-dutch-cased/resolve/main/vocab.txt",
+        "bert-base-german-dbmdz-uncased": (
+            "https://huggingface.co/bert-base-german-dbmdz-uncased/resolve/main/vocab.txt"
+        ),
+        "TurkuNLP/bert-base-finnish-cased-v1": (
+            "https://huggingface.co/TurkuNLP/bert-base-finnish-cased-v1/resolve/main/vocab.txt"
+        ),
+        "TurkuNLP/bert-base-finnish-uncased-v1": (
+            "https://huggingface.co/TurkuNLP/bert-base-finnish-uncased-v1/resolve/main/vocab.txt"
+        ),
+        "wietsedv/bert-base-dutch-cased": (
+            "https://huggingface.co/wietsedv/bert-base-dutch-cased/resolve/main/vocab.txt"
+        ),
     },
     "tokenizer_file": {
         "bert-base-uncased": "https://huggingface.co/bert-base-uncased/resolve/main/tokenizer.json",
         "bert-large-uncased": "https://huggingface.co/bert-large-uncased/resolve/main/tokenizer.json",
         "bert-base-cased": "https://huggingface.co/bert-base-cased/resolve/main/tokenizer.json",
         "bert-large-cased": "https://huggingface.co/bert-large-cased/resolve/main/tokenizer.json",
-        "bert-base-multilingual-uncased": "https://huggingface.co/bert-base-multilingual-uncased/resolve/main/tokenizer.json",
-        "bert-base-multilingual-cased": "https://huggingface.co/bert-base-multilingual-cased/resolve/main/tokenizer.json",
+        "bert-base-multilingual-uncased": (
+            "https://huggingface.co/bert-base-multilingual-uncased/resolve/main/tokenizer.json"
+        ),
+        "bert-base-multilingual-cased": (
+            "https://huggingface.co/bert-base-multilingual-cased/resolve/main/tokenizer.json"
+        ),
         "bert-base-chinese": "https://huggingface.co/bert-base-chinese/resolve/main/tokenizer.json",
         "bert-base-german-cased": "https://huggingface.co/bert-base-german-cased/resolve/main/tokenizer.json",
-        "bert-large-uncased-whole-word-masking": "https://huggingface.co/bert-large-uncased-whole-word-masking/resolve/main/tokenizer.json",
-        "bert-large-cased-whole-word-masking": "https://huggingface.co/bert-large-cased-whole-word-masking/resolve/main/tokenizer.json",
-        "bert-large-uncased-whole-word-masking-finetuned-squad": "https://huggingface.co/bert-large-uncased-whole-word-masking-finetuned-squad/resolve/main/tokenizer.json",
-        "bert-large-cased-whole-word-masking-finetuned-squad": "https://huggingface.co/bert-large-cased-whole-word-masking-finetuned-squad/resolve/main/tokenizer.json",
-        "bert-base-cased-finetuned-mrpc": "https://huggingface.co/bert-base-cased-finetuned-mrpc/resolve/main/tokenizer.json",
-        "bert-base-german-dbmdz-cased": "https://huggingface.co/bert-base-german-dbmdz-cased/resolve/main/tokenizer.json",
-        "bert-base-german-dbmdz-uncased": "https://huggingface.co/bert-base-german-dbmdz-uncased/resolve/main/tokenizer.json",
-        "TurkuNLP/bert-base-finnish-cased-v1": "https://huggingface.co/TurkuNLP/bert-base-finnish-cased-v1/resolve/main/tokenizer.json",
-        "TurkuNLP/bert-base-finnish-uncased-v1": "https://huggingface.co/TurkuNLP/bert-base-finnish-uncased-v1/resolve/main/tokenizer.json",
-        "wietsedv/bert-base-dutch-cased": "https://huggingface.co/wietsedv/bert-base-dutch-cased/resolve/main/tokenizer.json",
+        "bert-large-uncased-whole-word-masking": (
+            "https://huggingface.co/bert-large-uncased-whole-word-masking/resolve/main/tokenizer.json"
+        ),
+        "bert-large-cased-whole-word-masking": (
+            "https://huggingface.co/bert-large-cased-whole-word-masking/resolve/main/tokenizer.json"
+        ),
+        "bert-large-uncased-whole-word-masking-finetuned-squad": (
+            "https://huggingface.co/bert-large-uncased-whole-word-masking-finetuned-squad/resolve/main/tokenizer.json"
+        ),
+        "bert-large-cased-whole-word-masking-finetuned-squad": (
+            "https://huggingface.co/bert-large-cased-whole-word-masking-finetuned-squad/resolve/main/tokenizer.json"
+        ),
+        "bert-base-cased-finetuned-mrpc": (
+            "https://huggingface.co/bert-base-cased-finetuned-mrpc/resolve/main/tokenizer.json"
+        ),
+        "bert-base-german-dbmdz-cased": (
+            "https://huggingface.co/bert-base-german-dbmdz-cased/resolve/main/tokenizer.json"
+        ),
+        "bert-base-german-dbmdz-uncased": (
+            "https://huggingface.co/bert-base-german-dbmdz-uncased/resolve/main/tokenizer.json"
+        ),
+        "TurkuNLP/bert-base-finnish-cased-v1": (
+            "https://huggingface.co/TurkuNLP/bert-base-finnish-cased-v1/resolve/main/tokenizer.json"
+        ),
+        "TurkuNLP/bert-base-finnish-uncased-v1": (
+            "https://huggingface.co/TurkuNLP/bert-base-finnish-uncased-v1/resolve/main/tokenizer.json"
+        ),
+        "wietsedv/bert-base-dutch-cased": (
+            "https://huggingface.co/wietsedv/bert-base-dutch-cased/resolve/main/tokenizer.json"
+        ),
     },
 }
 

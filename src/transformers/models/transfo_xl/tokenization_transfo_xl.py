@@ -680,10 +680,9 @@ class TransfoXLCorpus(object):
             resolved_corpus_file = cached_path(corpus_file, cache_dir=cache_dir)
         except EnvironmentError:
             logger.error(
-                f"Corpus '{pretrained_model_name_or_path}' was not found in corpus list "
-                f"({', '.join(PRETRAINED_CORPUS_ARCHIVE_MAP.keys())}. "
-                f"We assumed '{pretrained_model_name_or_path}' was a path or url but couldn't find files {corpus_file} "
-                "at this path or url."
+                f"Corpus '{pretrained_model_name_or_path}' was not found in corpus list"
+                f" ({', '.join(PRETRAINED_CORPUS_ARCHIVE_MAP.keys())}. We assumed '{pretrained_model_name_or_path}'"
+                f" was a path or url but couldn't find files {corpus_file} at this path or url."
             )
             return None
         if resolved_corpus_file == corpus_file:

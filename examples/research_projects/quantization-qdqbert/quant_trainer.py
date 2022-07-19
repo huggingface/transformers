@@ -51,8 +51,10 @@ def add_arguments(parser):
     group.add_argument(
         "--recalibrate-weights",
         action="store_true",
-        help="recalibrate weight amaxes by taking the max of the weights."
-        " amaxes will be computed with the current quantization granularity (axis).",
+        help=(
+            "recalibrate weight amaxes by taking the max of the weights."
+            " amaxes will be computed with the current quantization granularity (axis)."
+        ),
     )
 
 
