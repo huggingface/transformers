@@ -494,10 +494,10 @@ class TFConvNextModel(TFConvNextPreTrainedModel):
         )
 
     def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-
-        TFBaseModelOutputWithPooling(
-            last_hidden_state=output.last_hidden_state, pooler_output=output.pooler_output, hidden_states=hs
+        return TFBaseModelOutputWithPooling(
+            last_hidden_state=output.last_hidden_state,
+            pooler_output=output.pooler_output,
+            hidden_states=output.hidden_states
         )
 
 
@@ -594,6 +594,4 @@ class TFConvNextForImageClassification(TFConvNextPreTrainedModel, TFSequenceClas
         )
 
     def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-
-        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs)
+        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=output.hidden_states)
