@@ -2719,7 +2719,7 @@ class JukeboxPrior(nn.Module):
         # assert ys.shape[0] == len(labels)
         if self.n_tokens > 0:
             # total_length, offset, duration):
-            tokens_list = torch.zeros((1, self.n_tokens), dtype=torch.long)
+            tokens_list = torch.zeros((1, self.n_tokens), dtype=torch.long, device=labels.device)
             indices_list = []  # whats the index of each current character in original array
             for i in range(labels.shape[0]):
                 full_tokens = labels.clone()[:, 4 + self.y_emb.max_bow_genre_size :]
