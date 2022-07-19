@@ -598,9 +598,9 @@ def pipeline(
         if pipeline_class is None:
             if not trust_remote_code:
                 raise ValueError(
-                    f"Loading this pipeline requires you to execute the code in the pipeline file in that"
-                    f" repo on your local machine. Make sure you have read the code there to avoid malicious use, then"
-                    f" set the option `trust_remote_code=True` to remove this error."
+                    "Loading this pipeline requires you to execute the code in the pipeline file in that"
+                    " repo on your local machine. Make sure you have read the code there to avoid malicious use, then"
+                    " set the option `trust_remote_code=True` to remove this error."
                 )
             class_ref = targeted_task["impl"]
             module_file, class_name = class_ref.split(".")
