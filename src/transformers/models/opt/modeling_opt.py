@@ -1000,7 +1000,7 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
     def __init__(self, config: OPTConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.transformer = OPTModel(config)
+        self.model = OPTModel(config)
         self.score = nn.Linear(config.word_embed_proj_dim, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
@@ -1103,7 +1103,7 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
         )
 
     def get_input_embeddings(self):
-        return self.embed_tokens
+        return self.model.decoder.embed_tokens
 
     def set_input_embeddings(self, value):
-        self.embed_tokens = value
+        self.model.decoder.embed_tokens = value
