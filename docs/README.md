@@ -52,7 +52,13 @@ Markdown editor.
 
 ## Previewing the documentation
 
-To preview the docs, use the following command:
+To preview the docs, first install the `watchdog` module with:
+
+```bash
+pip install watchdog
+```
+
+Then run the following command:
 
 ```bash
 doc-builder preview {package_name} {path_to_docs}
