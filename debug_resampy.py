@@ -80,38 +80,38 @@ def _resample_loop(x, t_out, interp_win, interp_delta, num_table, scale, y):
             y[t] += weight * x[n + k + 1]
 
 
-_resample_loop_p = jit(nopython=True, nogil=True, parallel=True)(_resample_loop)
+_resample_loop_p = jit(nopython=True, nogil=True, parallel=True, cache=True)(_resample_loop)
 
 
-# @guvectorize(
-#     [
-#         (int16[:], float64[:], float64[:], float64[:], int32, float32, int16[:]),
-#         (int32[:], float64[:], float64[:], float64[:], int32, float32, int32[:]),
-#         (int64[:], float64[:], float64[:], float64[:], int32, float32, int64[:]),
-#         (float32[:], float64[:], float64[:], float64[:], int32, float32, float32[:]),
-#         (float64[:], float64[:], float64[:], float64[:], int32, float32, float64[:]),
-#         (
-#             complex64[:],
-#             float64[:],
-#             float64[:],
-#             float64[:],
-#             int32,
-#             float32,
-#             complex64[:],
-#         ),
-#         (
-#             complex128[:],
-#             float64[:],
-#             float64[:],
-#             float64[:],
-#             int32,
-#             float32,
-#             complex128[:],
-#         ),
-#     ],
-#     "(n),(m),(p),(p),(),()->(m)",
-#     nopython=True,
-# )
+@guvectorize(
+    [
+        (int16[:], float64[:], float64[:], float64[:], int32, float32, int16[:]),
+        (int32[:], float64[:], float64[:], float64[:], int32, float32, int32[:]),
+        (int64[:], float64[:], float64[:], float64[:], int32, float32, int64[:]),
+        (float32[:], float64[:], float64[:], float64[:], int32, float32, float32[:]),
+        (float64[:], float64[:], float64[:], float64[:], int32, float32, float64[:]),
+        (
+            complex64[:],
+            float64[:],
+            float64[:],
+            float64[:],
+            int32,
+            float32,
+            complex64[:],
+        ),
+        (
+            complex128[:],
+            float64[:],
+            float64[:],
+            float64[:],
+            int32,
+            float32,
+            complex128[:],
+        ),
+    ],
+    "(n),(m),(p),(p),(),()->(m)",
+    nopython=True,
+)
 def resample_f_p(x, t_out, interp_win, interp_delta, num_table, scale, y):
     _resample_loop_p(x, t_out, interp_win, interp_delta, num_table, scale, y)
 
