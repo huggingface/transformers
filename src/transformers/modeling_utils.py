@@ -2163,7 +2163,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         model.eval()
 
         # Dispatch model with hooks on all devices if necessary
-        if device_map is not None:
+        if device_map is not None and not load_in_8bit:
             dispatch_model(model, device_map=device_map, offload_dir=offload_folder)
 
         if output_loading_info:
