@@ -607,7 +607,7 @@ class PretrainedConfig(PushToHubMixin):
                     pretrained_model_name_or_path,
                     filename=configuration_file,
                     revision=revision,
-                    subfolder=subfolder if len(subfolder)>0 else None,
+                    subfolder=subfolder if len(subfolder) > 0 else None,
                     mirror=None,
                 )
 

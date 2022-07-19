@@ -2503,6 +2503,15 @@ def floats_tensor(shape, scale=1.0, rng=None, name=None):
     return torch.tensor(data=values, dtype=torch.float, device=torch_device).view(shape).contiguous()
 
 
+def check_models_equal(model1, model2):
+    models_are_equal = True
+    for model1_p, model2_p in zip(model1.parameters(), model2.parameters()):
+        if model1_p.data.ne(model2_p.data).sum() > 0:
+            models_are_equal = False
+
+    return models_are_equal
+
+
 @require_torch
 class ModelUtilsTest(TestCasePlus):
     @slow
@@ -2534,7 +2543,6 @@ class ModelUtilsTest(TestCasePlus):
     def test_model_from_pretrained_subfolder(self):
         config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
         model = BertModel(config)
-        sum_all_params = sum(p.abs().sum() for p in model.parameters())
 
         subfolder = "bert"
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -2543,16 +2551,13 @@ class ModelUtilsTest(TestCasePlus):
             with self.assertRaises(OSError):
                 _ = BertModel.from_pretrained(tmp_dir)
 
-            model = BertModel.from_pretrained(tmp_dir, subfolder=subfolder)
+            model_loaded = BertModel.from_pretrained(tmp_dir, subfolder=subfolder)
 
-        sum_all_params_loaded = sum(p.abs().sum() for p in model.parameters())
-
-        self.assertTrue(sum_all_params - sum_all_params_loaded < 1e-5)
+        self.assertTrue(check_models_equal(model, model_loaded))
 
     def test_model_from_pretrained_subfolder_sharded(self):
         config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
         model = BertModel(config)
-        sum_all_params = sum(p.abs().sum() for p in model.parameters())
 
         subfolder = "bert"
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -2561,11 +2566,9 @@ class ModelUtilsTest(TestCasePlus):
             with self.assertRaises(OSError):
                 _ = BertModel.from_pretrained(tmp_dir)
 
-            model = BertModel.from_pretrained(tmp_dir, subfolder=subfolder)
+            model_loaded = BertModel.from_pretrained(tmp_dir, subfolder=subfolder)
 
-        sum_all_params_loaded = sum(p.abs().sum() for p in model.parameters())
-
-        self.assertTrue(sum_all_params - sum_all_params_loaded < 1e-5)
+        self.assertTrue(check_models_equal(model, model_loaded))
 
     def test_model_from_pretrained_hub_subfolder(self):
         subfolder = "bert"
