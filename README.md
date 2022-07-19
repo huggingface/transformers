@@ -116,22 +116,46 @@ To immediately use a model on a given input (text, image, audio, ...), we provid
 
 The second line of code downloads and caches the pretrained model used by the pipeline, while the third evaluates it on the given text. Here the answer is "positive" with a confidence of 99.97%.
 
-Many NLP tasks have a pre-trained `pipeline` ready to go. For example, we can easily extract question answers given context:
+Many tasks have a pre-trained `pipeline` ready to go, in NLP but also in computer vision and speech. For example, we can easily extract detect objects in an image:
 
 ``` python
+>>> import requests
+>>> from PIL import Image
 >>> from transformers import pipeline
 
-# Allocate a pipeline for question-answering
->>> question_answerer = pipeline('question-answering')
->>> question_answerer({
-...     'question': 'What is the name of the repository ?',
-...     'context': 'Pipeline has been included in the huggingface/transformers repository'
-... })
-{'score': 0.30970096588134766, 'start': 34, 'end': 58, 'answer': 'huggingface/transformers'}
+# Download an image with cute cats
+>>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png"
+>>> image_data = requests.get(url, stream=True).raw
+>>> image = Image.open(image_data)
 
+# Allocate a pipeline for object detection
+>>> object_detector = pipeline('object_detection')
+>>> object_detector(image)
+[{'score': 0.9982201457023621,
+  'label': 'remote',
+  'box': {'xmin': 40, 'ymin': 70, 'xmax': 175, 'ymax': 117}},
+ {'score': 0.9960021376609802,
+  'label': 'remote',
+  'box': {'xmin': 333, 'ymin': 72, 'xmax': 368, 'ymax': 187}},
+ {'score': 0.9954745173454285,
+  'label': 'couch',
+  'box': {'xmin': 0, 'ymin': 1, 'xmax': 639, 'ymax': 473}},
+ {'score': 0.9988006353378296,
+  'label': 'cat',
+  'box': {'xmin': 13, 'ymin': 52, 'xmax': 314, 'ymax': 470}},
+ {'score': 0.9986783862113953,
+  'label': 'cat',
+  'box': {'xmin': 345, 'ymin': 23, 'xmax': 640, 'ymax': 368}}]
 ```
 
-In addition to the answer, the pretrained model used here returned its confidence score, along with the start position and end position of the answer in the tokenized sentence. You can learn more about the tasks supported by the `pipeline` API in [this tutorial](https://huggingface.co/docs/transformers/task_summary).
+Here we get a list of objects detected in the image, with a box surrounding the object and a confidence score. Here is the original image on the right, with the predictions displayed on the left:
+
+<h3 align="center">
+    <a><img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png" width="400"></a>
+    <a><img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample_post_processed.png" width="400"></a>
+</h3>
+
+You can learn more about the tasks supported by the `pipeline` API in [this tutorial](https://huggingface.co/docs/transformers/task_summary).
 
 To download and use any of the pretrained models on your given task, all it takes is three lines of code. Here is the PyTorch version:
 ```python
@@ -143,6 +167,7 @@ To download and use any of the pretrained models on your given task, all it take
 >>> inputs = tokenizer("Hello world!", return_tensors="pt")
 >>> outputs = model(**inputs)
 ```
+
 And here is the equivalent code for TensorFlow:
 ```python
 >>> from transformers import AutoTokenizer, TFAutoModel

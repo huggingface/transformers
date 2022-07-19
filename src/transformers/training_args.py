@@ -787,10 +787,10 @@ class TrainingArguments:
         metadata={
             "help": (
                 "Whether or not to use PyTorch Fully Sharded Data Parallel (FSDP) training (in distributed training"
-                " only). The base option should be `full_shard` or `shard_grad_op` and you can add CPU-offload to"
-                " `full_shard` or `shard_grad_op` like this: full_shard offload` or `shard_grad_op offload`. You can"
-                " add auto-wrap to `full_shard` or `shard_grad_op` with the same syntax: full_shard auto_wrap` or"
-                " `shard_grad_op auto_wrap`."
+                " only). The base option should be `full_shard`, `shard_grad_op` or `no_shard` and you can add"
+                " CPU-offload to `full_shard` or `shard_grad_op` like this: full_shard offload` or `shard_grad_op"
+                " offload`. You can add auto-wrap to `full_shard` or `shard_grad_op` with the same syntax: full_shard"
+                " auto_wrap` or `shard_grad_op auto_wrap`."
             ),
         },
     )
@@ -800,6 +800,15 @@ class TrainingArguments:
             "help": (
                 "FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `fsdp` field is"
                 " passed)."
+            )
+        },
+    )
+    fsdp_transformer_layer_cls_to_wrap: str = field(
+        default=None,
+        metadata={
+            "help": (
+                "Transformer layer class name (case-sensitive) to wrap ,e.g, `BertLayer`, `GPTJBlock`, `T5Block` .... "
+                "(useful only when `fsdp` flag is passed).",
             )
         },
     )
@@ -1159,6 +1168,14 @@ class TrainingArguments:
 
         if len(self.fsdp) == 0 and self.fsdp_min_num_params > 0:
             warnings.warn("`--fsdp_min_num_params` is useful only when `--fsdp` is specified.")
+
+        if len(self.fsdp) == 0 and self.fsdp_transformer_layer_cls_to_wrap is not None:
+            warnings.warn("`--fsdp_transformer_layer_cls_to_wrap` is useful only when `--fsdp` is specified.")
+
+        if len(self.fsdp) > 0 and self.fsdp_min_num_params > 0 and self.fsdp_transformer_layer_cls_to_wrap is not None:
+            raise ValueError(
+                "`--fsdp_min_num_params` and `--fsdp_transformer_layer_cls_to_wrap` are mutually exclusive."
+            )
 
         if self.tpu_metrics_debug:
             warnings.warn(
