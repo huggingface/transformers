@@ -3255,9 +3255,50 @@ class JukeboxModel(JukeboxPreTrainedModel):
         return zs
 
     # Sample multiple levels
-    def _sample(self, zs, labels, sampling_kwargs, sample_levels, hps):
-
-        alignments = None
+    def _sample(
+        self,
+        zs,
+        labels,
+        sample_levels,
+        chunk_size=32,
+        sampling_temperature=0.98,
+        lower_batch_size=16,
+        max_batch_size=16,
+        sample_length_in_seconds=24,
+        alignments=None,
+        sample_tokens=None,
+    ):
+        top_prior = self.priors[-1]
+        sampling_kwargs = [
+            dict(
+                temp=0.99,
+                fp16=False,
+                max_batch_size=lower_batch_size,
+                chunk_size=chunk_size,
+                sample_tokens=sample_tokens,
+                total_length=(int(sample_length_in_seconds * self.config.sr) // top_prior.raw_to_tokens)
+                * top_prior.raw_to_tokens,
+            ),
+            dict(
+                temp=0.99,
+                fp16=False,
+                max_batch_size=lower_batch_size,
+                chunk_size=chunk_size,
+                sample_tokens=sample_tokens,
+                total_length=(int(sample_length_in_seconds * self.config.sr) // top_prior.raw_to_tokens)
+                * top_prior.raw_to_tokens,
+            ),
+            dict(
+                temp=sampling_temperature,
+                fp16=False,
+                max_batch_size=max_batch_size,
+                chunk_size=chunk_size,
+                sample_tokens=sample_tokens,
+                total_length=(int(sample_length_in_seconds * self.config.sr) // top_prior.raw_to_tokens)
+                * top_prior.raw_to_tokens,
+            ),
+        ]
+        hps = self.config
         for level in reversed(sample_levels):
             self.total_length = sampling_kwargs[level].pop("total_length")
             prior = self.priors[level]
@@ -3294,28 +3335,28 @@ class JukeboxModel(JukeboxPreTrainedModel):
         return zs
 
     # Generate ancestral samples given a list of artists and genres
-    def ancestral_sample(self, labels, sampling_kwargs, hps):
+    def ancestral_sample(self, labels, n_samples=1, **sampling_kwargs):
         priors = self.priors
         sample_levels = list(range(len(priors)))
-        zs = [torch.zeros(hps.n_samples, 0, dtype=torch.long, device=self.device) for _ in range(len(priors))]
-        zs = self._sample(zs, labels, sampling_kwargs, sample_levels, hps)
+        zs = [torch.zeros(n_samples, 0, dtype=torch.long, device=self.device) for _ in range(len(priors))]
+        zs = self._sample(zs, labels, sample_levels, **sampling_kwargs)
         return zs
 
     # Continue ancestral sampling from previously saved codes
-    def continue_sample(self, zs, labels, sampling_kwargs, hps):
+    def continue_sample(self, zs, labels, **sampling_kwargs):
         sample_levels = list(range(len(self.priors)))
-        zs = self._sample(zs, labels, sampling_kwargs, sample_levels, hps)
+        zs = self._sample(zs, labels, sample_levels, **sampling_kwargs)
         return zs
 
     # Upsample given already generated upper-level codes
-    def upsample(self, zs, labels, sampling_kwargs, hps):
+    def upsample(self, zs, labels, **sampling_kwargs):
         sample_levels = list(range(len(self.priors) - 1))
-        zs = self._sample(zs, labels, sampling_kwargs, sample_levels, hps)
+        zs = self._sample(zs, labels, sample_levels, **sampling_kwargs)
         return zs
 
     # Prompt the model with raw audio input (dimension: NTC) and generate continuations
-    def primed_sample(self, x, labels, sampling_kwargs, hps):
+    def primed_sample(self, x, labels, **sampling_kwargs):
         sample_levels = list(range(len(self.priors)))
         zs = self.priors[-1].encode(x, start_level=0, end_level=len(self.priors), bs_chunks=x.shape[0])
-        zs = self._sample(zs, labels, sampling_kwargs, sample_levels, hps)
+        zs = self._sample(zs, labels, sample_levels, **sampling_kwargs)
         return zs

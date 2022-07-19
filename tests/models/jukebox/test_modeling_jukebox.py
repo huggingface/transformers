@@ -86,68 +86,32 @@ class Jukebox1bModelTester(unittest.TestCase):
     )
     # fmt: on
 
-    def prepare_inputs(self, model, model_id, chunk_size=32):
+    def prepare_inputs(self, model_id):
         tokenizer = JukeboxTokenizer.from_pretrained(model_id)
-        top_prior = model.priors[-1]
-        # create sampling parameters
-        sampling_temperature = 0.98
-        lower_batch_size = 16
-        max_batch_size = 16
-        sample_length_in_seconds = 24
-        sampling_kwargs = [
-            dict(
-                temp=0.99,
-                fp16=False,
-                max_batch_size=lower_batch_size,
-                chunk_size=chunk_size,
-                sample_tokens=10,
-                total_length=(int(sample_length_in_seconds * model.config.sr) // top_prior.raw_to_tokens)
-                * top_prior.raw_to_tokens,
-            ),
-            dict(
-                temp=0.99,
-                fp16=False,
-                max_batch_size=lower_batch_size,
-                chunk_size=chunk_size,
-                sample_tokens=10,
-                total_length=(int(sample_length_in_seconds * model.config.sr) // top_prior.raw_to_tokens)
-                * top_prior.raw_to_tokens,
-            ),
-            dict(
-                temp=sampling_temperature,
-                fp16=False,
-                max_batch_size=max_batch_size,
-                chunk_size=chunk_size,
-                sample_tokens=10,
-                total_length=(int(sample_length_in_seconds * model.config.sr) // top_prior.raw_to_tokens)
-                * top_prior.raw_to_tokens,
-            ),
-        ]
-
         tokens = tokenizer(**self.metas)["input_ids"]
-        return tokens, sampling_kwargs
+        return tokens
 
     def test_sampling(self):
         model_id = "ArthurZ/jukebox-1b-lyrics"
         model = JukeboxModel.from_pretrained(model_id, cond_res_scale=[None, True, False]).eval()
 
-        labels, sampling_kwargs = self.prepare_inputs(model, model_id)
+        labels = self.prepare_inputs(model_id)
         set_seed(0)
         zs = [torch.zeros(1, 0, dtype=torch.long).cpu() for _ in range(3)]
-        zs = model._sample(zs, labels, sampling_kwargs, [2], model.config)
+        zs = model._sample(zs, labels, [2], model.config, sample_tokens = 10)
         assert torch.allclose(zs[-1][0], self.EXPECTED_OUTPUT_2)
 
         zs[-1] = self.EXPECTED_OUTPUT_2.unsqueeze(0)
         set_seed(0)
         zs[-1] = torch.cat((zs[-1], torch.zeros(1, 1000000 - zs[-1].shape[-1]).cpu()), dim=-1).long()
-        zs = model._sample(zs, labels, sampling_kwargs, [1], model.config)
+        zs = model._sample(zs, labels, [1], model.config, sample_tokens = 10)
         assert torch.allclose(zs[-2][0, :40], self.EXPECTED_OUTPUT_1)
 
         zs[-2] = self.EXPECTED_OUTPUT_1.unsqueeze(0)
 
         set_seed(0)
         zs[-2] = torch.cat((zs[-2], torch.zeros(1, 1000000 - zs[-2].shape[-1]).cpu()), dim=-1).long()
-        zs = model._sample(zs, labels, sampling_kwargs, [0], model.config)
+        zs = model._sample(zs, labels, [0], model.config, sample_tokens = 10)
         assert torch.allclose(zs[0][0, :40], self.EXPECTED_OUTPUT_0)
 
     @slow
@@ -156,10 +120,10 @@ class Jukebox1bModelTester(unittest.TestCase):
         model_id = "ArthurZ/jukebox-1b-lyrics"
         model = JukeboxModel.from_pretrained(model_id).eval().to("cuda")
 
-        labels, sampling_kwargs = self.prepare_inputs(model, model_id, chunk_size=32)
+        labels = self.prepare_inputs(model_id)
         set_seed(0)
         zs = [torch.zeros(1, 0, dtype=torch.long).cuda() for _ in range(3)]
-        zs = model._sample(zs, labels, sampling_kwargs, [2], model.config)
+        zs = model._sample(zs, labels, [2], model.config, sample_tokens = 10)
         assert torch.allclose(zs[-1][0], self.EXPECTED_OUTPUT_2)
 
     def test_vqvae(self):
@@ -221,68 +185,32 @@ class Jukebox5bModelTester(unittest.TestCase):
     )
     # fmt: on
 
-    def prepare_inputs(self, model, model_id, chunk_size=32):
+    def prepare_inputs(self, model_id):
         tokenizer = JukeboxTokenizer.from_pretrained(model_id)
-        top_prior = model.priors[-1]
-        # create sampling parameters
-        sampling_temperature = 0.98
-        lower_batch_size = 16
-        max_batch_size = 16
-        sample_length_in_seconds = 24
-        sampling_kwargs = [
-            dict(
-                temp=0.99,
-                fp16=False,
-                max_batch_size=lower_batch_size,
-                chunk_size=chunk_size,
-                sample_tokens=10,
-                total_length=(int(sample_length_in_seconds * model.config.sr) // top_prior.raw_to_tokens)
-                * top_prior.raw_to_tokens,
-            ),
-            dict(
-                temp=0.99,
-                fp16=False,
-                max_batch_size=lower_batch_size,
-                chunk_size=chunk_size,
-                sample_tokens=10,
-                total_length=(int(sample_length_in_seconds * model.config.sr) // top_prior.raw_to_tokens)
-                * top_prior.raw_to_tokens,
-            ),
-            dict(
-                temp=sampling_temperature,
-                fp16=False,
-                max_batch_size=max_batch_size,
-                chunk_size=chunk_size,
-                sample_tokens=10,
-                total_length=(int(sample_length_in_seconds * model.config.sr) // top_prior.raw_to_tokens)
-                * top_prior.raw_to_tokens,
-            ),
-        ]
-
         tokens = tokenizer(**self.metas)["input_ids"]
-        return tokens, sampling_kwargs
+        return tokens
 
     def test_sampling(self):
         model_id = "ArthurZ/jukebox-5b-lyrics"
         model = JukeboxModel.from_pretrained(model_id).eval()
 
-        labels, sampling_kwargs = self.prepare_inputs(model, model_id, chunk_size=32)
+        labels = self.prepare_inputs(model_id)
         set_seed(0)
         zs = [torch.zeros(1, 0, dtype=torch.long).cpu() for _ in range(3)]
-        zs = model._sample(zs, labels, sampling_kwargs, [2], model.config)
+        zs = model._sample(zs, labels, [2], model.config, sample_tokens = 10)
         assert torch.allclose(zs[-1][0], self.EXPECTED_OUTPUT_2)
 
         zs[-1] = self.EXPECTED_OUTPUT_2.unsqueeze(0)
         set_seed(0)
         zs[-1] = torch.cat((zs[-1], torch.zeros(1, 1000000 - zs[-1].shape[-1]).cpu()), dim=-1).long()
-        zs = model._sample(zs, labels, sampling_kwargs, [1], model.config)
+        zs = model._sample(zs, labels, [1], model.config, sample_tokens = 10)
         assert torch.allclose(zs[-2][0, :80], self.EXPECTED_OUTPUT_1)
 
         zs[-2] = self.EXPECTED_OUTPUT_1.unsqueeze(0)
 
         set_seed(0)
         zs[-2] = torch.cat((zs[-2], torch.zeros(1, 1000000 - zs[-2].shape[-1]).cpu()), dim=-1).long()
-        zs = model._sample(zs, labels, sampling_kwargs, [0], model.config)
+        zs = model._sample(zs, labels, [0], model.config, sample_tokens = 10)
         assert torch.allclose(zs[0][0, :80], self.EXPECTED_OUTPUT_0)
 
     @slow
@@ -291,10 +219,10 @@ class Jukebox5bModelTester(unittest.TestCase):
         model_id = "ArthurZ/jukebox-5b-lyrics"
         model = JukeboxModel.from_pretrained(model_id).eval().to("cuda")
 
-        labels, sampling_kwargs = self.prepare_inputs(model, model_id, chunk_size=32)
+        labels = self.prepare_inputs(model_id)
         set_seed(0)
         zs = [torch.zeros(1, 0, dtype=torch.long).cuda() for _ in range(3)]
-        zs = model._sample(zs, labels, sampling_kwargs, [2], model.config)
+        zs = model._sample(zs, labels, [2], model.config, sample_tokens = 10)
         assert torch.allclose(zs[-1][0], self.EXPECTED_OUTPUT_2)
 
     def test_vqvae(self):
@@ -303,7 +231,7 @@ class Jukebox5bModelTester(unittest.TestCase):
 
 
 @require_torch
-class JukeboxModelTest(unittest.TestCase):
+class JukeboxDummyModelTest(unittest.TestCase):
     all_model_classes = (JukeboxModel,) if is_torch_available() else ()
 
     metas = dict(
@@ -325,7 +253,46 @@ class JukeboxModelTest(unittest.TestCase):
     The lone and level sands stretch far away
     """,
     )
-
+    # fmt : off
+    top_50_expected_zs = torch.tensor(
+        [ 33,  90,  94,  17,  88,  88,  31,  65, 127, 112,  26,  58, 107,   5,
+        89,  53,  80,  48,  98,  68,   1,  33,  80,  80, 126,   2,  53,   8,
+        16,  45,  35,  64,  75,  10,  16,  11,  65,  39,  85,  17, 112,  44,
+        68,  63,  16, 127,  35,  90,  51,  27
+        ]
+    )
+    expected_samples = torch.Tensor([
+        [
+            121,  67,  16, 111,  54,  84,   0,   0,  41,   0,  14,   0,   0,  49,
+            20,  12,   5,   0,  58,  83,   0,  61,   0,  29,   0,  36,  42,  62,
+            75,   0,  88,  51,   0,   0,  20, 110,  39,  20,  85,   0,   0,   0,
+            76,   0,  32,  17,  99,   0, 127, 103,  78,   0,   0, 125,  82,   0,
+            38,  74,   0,  41,  38,   0,   0, 127,  45,   0,   2,  99,   0,  88,
+            84,  86,   5,  70,   0,   0,   0,   0,  23,   0,   0,   5,   0,   0,
+            3,  28,  47,   1,  32,   0,   9,  98, 111,   0,  66,   0,   0,   0,
+            59,  48,   0, 123,  61,  37,  13, 121,  24, 122, 101,   0,  68,  13,
+            31,   0,  57,   0,  24,  13,  85,   0,   0,  68,   0, 105,   0, 105,
+            0,  50,   0,   0,  64,   0,  14, 103,   0,   0,   0,  77,  26,  33,
+            0,  79,  55,  57,   0,  37,   0,   0,  79,  53,   0, 111,  83,  58,
+            41,  70,   1,  28, 109,  56,   0,  98,  80,   0, 100,  62, 126,   0,
+            0,  23,   0,   0,  43, 114,  23,  44,   0,  68,  53,   0,   0,  84,
+            0,   0,   0,   4, 123,   0,   0,  99,  36,  78,   0,   0,  45,  16,
+            75, 111,  95,  62,  36,   0,  52,  92,  33,  71,   3,   0, 110,   0,
+            0,   0, 124,   0,   0,   0,   2,   0, 101, 125,   0,   0,   0,   3,
+            0,   0, 123,   0,   0,  85,   0,  99,   0,  36, 107,  77,   0,   4,
+            41,  73,   0,  66,  43,  19,   0,   0, 124,   0,  55,  32,   0,   0,
+            0,   0,  90,  96
+        ]]
+    )
+    top_50_expected_zs = torch.tensor(
+        [ 33,  90,  94,  17,  88,  88,  31,  65, 127, 112,  26,  58, 107,   5,
+        89,  53,  80,  48,  98,  68,   1,  33,  80,  80, 126,   2,  53,   8,
+        16,  45,  35,  64,  75,  10,  16,  11,  65,  39,  85,  17, 112,  44,
+        68,  63,  16, 127,  35,  90,  51,  27
+        ]
+    )
+    # fmt : on
+    
     # @slow
 
     def test_model(self):
@@ -355,534 +322,33 @@ class JukeboxModelTest(unittest.TestCase):
 
         model = JukeboxModel.from_pretrained("ArthurZ/jukebox-dummy").eval()
         tokenizer = JukeboxTokenizer.from_pretrained("ArthurZ/jukebox")
-
-        # Checks
-
-        import random
-
-        seed = 0
-        random.seed(seed)
-        np.random.seed(seed)
-
-        torch.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)
-
-        sample = model.priors[2].sample(1, y=torch.Tensor([[44100.0, 0, 44100.0] + 514 * [0]]).long(), chunk_size=32)
-
-        expected_samples = torch.Tensor(
-            [
-                [
-                    121,
-                    67,
-                    16,
-                    111,
-                    54,
-                    84,
-                    0,
-                    0,
-                    41,
-                    0,
-                    14,
-                    0,
-                    0,
-                    49,
-                    20,
-                    12,
-                    5,
-                    0,
-                    58,
-                    83,
-                    0,
-                    61,
-                    0,
-                    29,
-                    0,
-                    36,
-                    42,
-                    62,
-                    75,
-                    0,
-                    88,
-                    51,
-                    0,
-                    0,
-                    20,
-                    110,
-                    39,
-                    20,
-                    85,
-                    0,
-                    0,
-                    0,
-                    76,
-                    0,
-                    32,
-                    17,
-                    99,
-                    0,
-                    127,
-                    103,
-                    78,
-                    0,
-                    0,
-                    125,
-                    82,
-                    0,
-                    38,
-                    74,
-                    0,
-                    41,
-                    38,
-                    0,
-                    0,
-                    127,
-                    45,
-                    0,
-                    2,
-                    99,
-                    0,
-                    88,
-                    84,
-                    86,
-                    5,
-                    70,
-                    0,
-                    0,
-                    0,
-                    0,
-                    23,
-                    0,
-                    0,
-                    5,
-                    0,
-                    0,
-                    3,
-                    28,
-                    47,
-                    1,
-                    32,
-                    0,
-                    9,
-                    98,
-                    111,
-                    0,
-                    66,
-                    0,
-                    0,
-                    0,
-                    59,
-                    48,
-                    0,
-                    123,
-                    61,
-                    37,
-                    13,
-                    121,
-                    24,
-                    122,
-                    101,
-                    0,
-                    68,
-                    13,
-                    31,
-                    0,
-                    57,
-                    0,
-                    24,
-                    13,
-                    85,
-                    0,
-                    0,
-                    68,
-                    0,
-                    105,
-                    0,
-                    105,
-                    0,
-                    50,
-                    0,
-                    0,
-                    64,
-                    0,
-                    14,
-                    103,
-                    0,
-                    0,
-                    0,
-                    77,
-                    26,
-                    33,
-                    0,
-                    79,
-                    55,
-                    57,
-                    0,
-                    37,
-                    0,
-                    0,
-                    79,
-                    53,
-                    0,
-                    111,
-                    83,
-                    58,
-                    41,
-                    70,
-                    1,
-                    28,
-                    109,
-                    56,
-                    0,
-                    98,
-                    80,
-                    0,
-                    100,
-                    62,
-                    126,
-                    0,
-                    0,
-                    23,
-                    0,
-                    0,
-                    43,
-                    114,
-                    23,
-                    44,
-                    0,
-                    68,
-                    53,
-                    0,
-                    0,
-                    84,
-                    0,
-                    0,
-                    0,
-                    4,
-                    123,
-                    0,
-                    0,
-                    99,
-                    36,
-                    78,
-                    0,
-                    0,
-                    45,
-                    16,
-                    75,
-                    111,
-                    95,
-                    62,
-                    36,
-                    0,
-                    52,
-                    92,
-                    33,
-                    71,
-                    3,
-                    0,
-                    110,
-                    0,
-                    0,
-                    0,
-                    124,
-                    0,
-                    0,
-                    0,
-                    2,
-                    0,
-                    101,
-                    125,
-                    0,
-                    0,
-                    0,
-                    3,
-                    0,
-                    0,
-                    123,
-                    0,
-                    0,
-                    85,
-                    0,
-                    99,
-                    0,
-                    36,
-                    107,
-                    77,
-                    0,
-                    4,
-                    41,
-                    73,
-                    0,
-                    66,
-                    43,
-                    19,
-                    0,
-                    0,
-                    124,
-                    0,
-                    55,
-                    32,
-                    0,
-                    0,
-                    0,
-                    0,
-                    90,
-                    96,
-                ]
-            ]
-        )
-
-        self.assertTrue(np.allclose(sample, expected_samples))
-
-        with torch.no_grad():
-            x = model.vqvae.decode([sample], start_level=1, end_level=2, bs_chunks=sample.shape[0])
-
-        expected_x = torch.Tensor(
-            [
-                0.0595,
-                0.0952,
-                0.0354,
-                0.1182,
-                0.0312,
-                0.1063,
-                0.0306,
-                0.1336,
-                0.0369,
-                0.0902,
-                0.0332,
-                0.1230,
-                0.0322,
-                0.1036,
-                0.0332,
-                0.1352,
-                0.0382,
-                0.0941,
-                0.0302,
-                0.1226,
-                0.0313,
-                0.1077,
-                0.0316,
-                0.1375,
-                0.0392,
-                0.0961,
-                0.0303,
-                0.1233,
-                0.0342,
-                0.1067,
-                0.0334,
-                0.1359,
-                0.0404,
-                0.0963,
-                0.0309,
-                0.1218,
-                0.0319,
-                0.1069,
-                0.0323,
-                0.1373,
-                0.0398,
-                0.0952,
-                0.0310,
-                0.1237,
-                0.0348,
-                0.1058,
-                0.0336,
-                0.1370,
-                0.0410,
-                0.0954,
-                0.0306,
-                0.1224,
-                0.0331,
-                0.1081,
-                0.0323,
-                0.1365,
-                0.0410,
-                0.0982,
-                0.0331,
-                0.1223,
-                0.0368,
-                0.1070,
-                0.0338,
-                0.1359,
-                0.0416,
-                0.0976,
-                0.0328,
-                0.1214,
-                0.0346,
-                0.1087,
-                0.0328,
-                0.1364,
-                0.0393,
-                0.0973,
-                0.0333,
-                0.1236,
-                0.0361,
-                0.1074,
-                0.0337,
-                0.1361,
-                0.0409,
-                0.0967,
-                0.0322,
-                0.1222,
-                0.0342,
-                0.1090,
-                0.0320,
-                0.1374,
-                0.0398,
-                0.0985,
-                0.0331,
-                0.1231,
-                0.0362,
-                0.1074,
-                0.0335,
-                0.1360,
-                0.0410,
-                0.0971,
-                0.0325,
-                0.1220,
-            ]
-        )
-
-        first_100 = x.squeeze(-1)[0][0:100]
-        self.assertTrue(torch.allclose(first_100, expected_x, atol=1e-4))
-
-        sampling_temperature = 0.98
-        lower_batch_size = 16
-        max_batch_size = 16
-        lower_level_chunk_size = 32
-        chunk_size = 32
-        sampling_kwargs = [
-            dict(temp=0.99, fp16=False, max_batch_size=lower_batch_size, chunk_size=lower_level_chunk_size),
-            dict(temp=0.99, fp16=False, max_batch_size=lower_batch_size, chunk_size=lower_level_chunk_size),
-            dict(temp=sampling_temperature, fp16=False, max_batch_size=max_batch_size, chunk_size=chunk_size),
-        ]
-        config.hop_fraction = [0.125, 0.5, 0.5]
-        config.n_samples = 1
-
         tokens = tokenizer(
             "Alan Jackson",
             "rock",
             "old town road",
             total_length=config.sample_length_in_seconds * config.sr,
-            sample_length=32768,
-            offset=0,
-            duration=1,
         )
 
+        # Checks
+        set_seed(0)
+
+        sample = model.priors[2].sample(1, y=torch.Tensor([[44100.0, 0, 44100.0] + 514 * [0]]).long(), chunk_size=32)
+        self.assertTrue(np.allclose(sample, self.expected_samples))
+
+        with torch.no_grad():
+            x = model.vqvae.decode([sample], start_level=1, end_level=2, bs_chunks=sample.shape[0])
+        first_100 = x.squeeze(-1)[0][0:100]
+        self.assertTrue(torch.allclose(first_100, self.expected_x, atol=1e-4))
+
+
+        model.config.hop_fraction = [0.125, 0.5, 0.5]
         inputs, _ = tokens["input_ids"], tokens["attention_masks"]
-
-        ys = np.array([[inputs]] * 3, dtype=np.int64)
-        ys = torch.stack([torch.from_numpy(y) for y in ys], dim=0).to("cpu").long()
-
         start = timeit.default_timer()
-        zs = model.ancestral_sample(ys, sampling_kwargs, config)
+        zs = model.ancestral_sample(inputs, chunk_size = 32)
         print(f"time to sample : {timeit.default_timer() - start}")
-        print(zs)
-        top_50_expected_zs = torch.Tensor(
-            [
-                33,
-                90,
-                94,
-                17,
-                88,
-                88,
-                31,
-                65,
-                127,
-                112,
-                26,
-                58,
-                107,
-                5,
-                89,
-                53,
-                80,
-                48,
-                98,
-                68,
-                1,
-                33,
-                80,
-                80,
-                126,
-                2,
-                53,
-                8,
-                16,
-                45,
-                35,
-                64,
-                75,
-                10,
-                16,
-                11,
-                65,
-                39,
-                85,
-                17,
-                112,
-                44,
-                68,
-                63,
-                16,
-                127,
-                35,
-                90,
-                51,
-                27,
-            ]
-        )
-
-        self.assertTrue(torch.allclose(zs[0][0][0:50], top_50_expected_zs.long(), atol=1e-4))
-
-    def test_conditioning(self):
-        pass
-        # x,x_conds and y_conds should be the same  before calling the sampling
-        # start and end embeding
-        # expected conditioning to match
-
-    def prepare_inputs(self, model, model_id, chunk_size=32):
-        tokenizer = JukeboxTokenizer.from_pretrained(model_id)
-        top_prior = model.priors[-1]
-        # create sampling parameters
-        sampling_temperature = 0.98
-        lower_batch_size = 16
-        max_batch_size = 16
-        sample_length_in_seconds = 24
-        sampling_kwargs = [
-            dict(
-                temp=0.99,
-                fp16=False,
-                max_batch_size=lower_batch_size,
-                chunk_size=chunk_size,
-                sample_tokens=10,
-                total_length=(int(sample_length_in_seconds * model.config.sr) // top_prior.raw_to_tokens)
-                * top_prior.raw_to_tokens,
-            ),
-            dict(
-                temp=0.99,
-                fp16=False,
-                max_batch_size=lower_batch_size,
-                chunk_size=chunk_size,
-                sample_tokens=10,
-                total_length=(int(sample_length_in_seconds * model.config.sr) // top_prior.raw_to_tokens)
-                * top_prior.raw_to_tokens,
-            ),
-            dict(
-                temp=sampling_temperature,
-                fp16=False,
-                max_batch_size=max_batch_size,
-                chunk_size=chunk_size,
-                sample_tokens=10,
-                total_length=(int(sample_length_in_seconds * model.config.sr) // top_prior.raw_to_tokens)
-                * top_prior.raw_to_tokens,
-            ),
-        ]
-
-        tokens = tokenizer(**self.metas)["input_ids"]
-        return tokens, sampling_kwargs
-
+        self.assertTrue(torch.allclose(zs[0][0][0:50], self.top_50_expected_zs.long(), atol=1e-4))
 
 if __name__ == "__main__":
     tester = Jukebox5bModelTester()
-    # tester.test_1b_lyrics()
+    tester.test_1b_lyrics()
     tester.test_slow_sampling()
