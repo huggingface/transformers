@@ -1429,7 +1429,7 @@ class ViltForTokenClassification(ViltPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(VILT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=TokenClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
