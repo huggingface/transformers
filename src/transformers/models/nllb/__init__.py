@@ -17,58 +17,51 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_sentencepiece_available,
+    is_tokenizers_available,
+    is_torch_available,
+)
 
 
-_import_structure = {"configuration_levit": ["LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LevitConfig", "LevitOnnxConfig"]}
+_import_structure = {}
 
 try:
-    if not is_vision_available():
+    if not is_sentencepiece_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_levit"] = ["LevitFeatureExtractor"]
+    _import_structure["tokenization_nllb"] = ["NllbTokenizer"]
 
 try:
-    if not is_torch_available():
+    if not is_tokenizers_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_levit"] = [
-        "LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "LevitForImageClassification",
-        "LevitForImageClassificationWithTeacher",
-        "LevitModel",
-        "LevitPreTrainedModel",
-    ]
+    _import_structure["tokenization_nllb_fast"] = ["NllbTokenizerFast"]
 
 
 if TYPE_CHECKING:
-    from .configuration_levit import LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, LevitConfig, LevitOnnxConfig
-
     try:
-        if not is_vision_available():
+        if not is_sentencepiece_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_levit import LevitFeatureExtractor
+        from .tokenization_nllb import NllbTokenizer
 
     try:
-        if not is_torch_available():
+        if not is_tokenizers_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_levit import (
-            LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            LevitForImageClassification,
-            LevitForImageClassificationWithTeacher,
-            LevitModel,
-            LevitPreTrainedModel,
-        )
+        from .tokenization_nllb_fast import NllbTokenizerFast
+
 else:
     import sys
 
