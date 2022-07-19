@@ -260,10 +260,12 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_opt_sequence_classification_model_for_multi_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         config.num_labels = 3
-        config.problem_type = 'multi_label_classification'
+        config.problem_type = "multi_label_classification"
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor([self.model_tester.batch_size,config.num_labels], self.model_tester.type_sequence_label_size).to(torch.float)
+        sequence_labels = ids_tensor(
+            [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
+        ).to(torch.float)
         model = OPTForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
