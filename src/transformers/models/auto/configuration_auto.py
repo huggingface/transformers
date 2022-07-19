@@ -345,6 +345,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("mt5", "MT5"),
         ("mvp", "MVP"),
         ("nezha", "Nezha"),
+        ("nllb", "NLLB"),
         ("nystromformer", "Nyströmformer"),
         ("openai-gpt", "OpenAI GPT"),
         ("opt", "OPT"),
