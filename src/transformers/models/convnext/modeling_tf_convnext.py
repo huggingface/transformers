@@ -497,7 +497,7 @@ class TFConvNextModel(TFConvNextPreTrainedModel):
         return TFBaseModelOutputWithPooling(
             last_hidden_state=output.last_hidden_state,
             pooler_output=output.pooler_output,
-            hidden_states=output.hidden_states
+            hidden_states=output.hidden_states,
         )
 
 

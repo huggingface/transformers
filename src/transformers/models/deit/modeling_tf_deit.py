@@ -868,11 +868,7 @@ class TFDeiTForMaskedImageModeling(TFDeiTPreTrainedModel):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFMaskedLMOutput(
-            logits=output.logits,
-            hidden_states=hs,
-            attentions=attns
-        )
+        return TFMaskedLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -975,11 +971,7 @@ class TFDeiTForImageClassification(TFDeiTPreTrainedModel, TFSequenceClassificati
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFImageClassifierOutput(
-            logits=output.logits,
-            hidden_states=hs,
-            attentions=attns
-        )
+        return TFImageClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -1062,7 +1054,9 @@ class TFDeiTForImageClassificationWithTeacher(TFDeiTPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def serving_output(self, output: TFDeiTForImageClassificationWithTeacherOutput) -> TFDeiTForImageClassificationWithTeacherOutput:
+    def serving_output(
+        self, output: TFDeiTForImageClassificationWithTeacherOutput
+    ) -> TFDeiTForImageClassificationWithTeacherOutput:
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
@@ -1071,5 +1065,5 @@ class TFDeiTForImageClassificationWithTeacher(TFDeiTPreTrainedModel):
             cls_logits=output.cls_logits,
             distillation_logits=output.distillation_logits,
             hidden_states=hs,
-            attentions=attns
+            attentions=attns,
         )

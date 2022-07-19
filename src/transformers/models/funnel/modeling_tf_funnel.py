@@ -1176,7 +1176,11 @@ class TFFunnelModel(TFFunnelPreTrainedModel):
         )
 
     def serving_output(self, output):
-        return TFBaseModelOutput(last_hidden_state=output.last_hidden_state, hidden_states=output.hidden_states, attentions=output.attentions)
+        return TFBaseModelOutput(
+            last_hidden_state=output.last_hidden_state,
+            hidden_states=output.hidden_states,
+            attentions=output.attentions,
+        )
 
 
 @add_start_docstrings(
@@ -1245,7 +1249,9 @@ class TFFunnelForPreTraining(TFFunnelPreTrainedModel):
         )
 
     def serving_output(self, output):
-        return TFFunnelForPreTrainingOutput(logits=output.logits, hidden_states=output.hidden_states, attentions=output.attentions)
+        return TFFunnelForPreTrainingOutput(
+            logits=output.logits, hidden_states=output.hidden_states, attentions=output.attentions
+        )
 
 
 @add_start_docstrings("""Funnel Model with a `language modeling` head on top.""", FUNNEL_START_DOCSTRING)
@@ -1582,7 +1588,9 @@ class TFFunnelForTokenClassification(TFFunnelPreTrainedModel, TFTokenClassificat
         )
 
     def serving_output(self, output: TFTokenClassifierOutput) -> TFTokenClassifierOutput:
-        return TFTokenClassifierOutput(logits=output.logits, hidden_states=output.hidden_states, attentions=output.attentions)
+        return TFTokenClassifierOutput(
+            logits=output.logits, hidden_states=output.hidden_states, attentions=output.attentions
+        )
 
 
 @add_start_docstrings(
@@ -1670,5 +1678,8 @@ class TFFunnelForQuestionAnswering(TFFunnelPreTrainedModel, TFQuestionAnsweringL
 
     def serving_output(self, output: TFQuestionAnsweringModelOutput) -> TFQuestionAnsweringModelOutput:
         return TFQuestionAnsweringModelOutput(
-            start_logits=output.start_logits, end_logits=output.end_logits, hidden_states=output.hidden_states, attentions=output.attentions
+            start_logits=output.start_logits,
+            end_logits=output.end_logits,
+            hidden_states=output.hidden_states,
+            attentions=output.attentions,
         )

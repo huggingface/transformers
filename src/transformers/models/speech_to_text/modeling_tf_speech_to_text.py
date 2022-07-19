@@ -143,7 +143,9 @@ class TFConv1dSubsampler(tf.keras.layers.Layer):
         ]
 
     def call(self, input_features: tf.Tensor) -> tf.Tensor:
-        hidden_states = tf.cast(input_features, tf.float32)  # TF Conv1D assumes Batch x Time x Channels, same as the input
+        hidden_states = tf.cast(
+            input_features, tf.float32
+        )  # TF Conv1D assumes Batch x Time x Channels, same as the input
         for i, conv in enumerate(self.conv_layers):
             # equivalent to `padding=k // 2` on PT's `nn.Conv1d`
             pad_len = self.kernel_sizes[i] // 2
@@ -187,7 +189,9 @@ class TFSpeech2TextSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
             # zero pad
             emb = tf.concat([emb, tf.zeros(num_embeddings, 1)], axis=1)
         if padding_idx is not None:
-            emb = tf.concat([emb[:padding_idx, :], tf.zeros((1, shape_list(emb)[1])), emb[padding_idx + 1 :, :]], axis=0)
+            emb = tf.concat(
+                [emb[:padding_idx, :], tf.zeros((1, shape_list(emb)[1])), emb[padding_idx + 1 :, :]], axis=0
+            )
         return emb
 
     def build(self, input_shape: tf.TensorShape):
