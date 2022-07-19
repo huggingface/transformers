@@ -333,6 +333,9 @@ class FeaturesManager:
             "token-classification",
             onnx_config_cls="models.layoutlmv3.LayoutLMv3OnnxConfig",
         ),
+        "levit": supported_features_mapping(
+            "default", "image-classification", onnx_config_cls="models.levit.LevitOnnxConfig"
+        ),
         "longt5": supported_features_mapping(
             "default",
             "default-with-past",
