@@ -152,7 +152,7 @@ LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
 
               [What are attention masks?](../glossary#attention-mask)
 
-            - **labels** -- List of labels to be fed to a model. (when a `word_labels` is specified).
+            - **labels** -- List of labels to be fed to a model. (when `word_labels` is specified).
             - **overflowing_tokens** -- List of overflowing tokens sequences (when a `max_length` is specified and
               `return_overflowing_tokens=True`).
             - **num_truncated_tokens** -- Number of tokens truncated (when a `max_length` is specified and

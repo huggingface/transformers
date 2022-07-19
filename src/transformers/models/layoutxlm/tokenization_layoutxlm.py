@@ -89,9 +89,6 @@ LAYOUTXLM_ENCODE_KWARGS_DOCSTRING = r"""
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
-"""
-
-LAYOUTXLM_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
             return_token_type_ids (`bool`, *optional*):
                 Whether to return token type IDs. If left to the default, will return the token type IDs according to
                 the specific tokenizer's default, defined by the `return_outputs` attribute.
@@ -138,7 +135,7 @@ LAYOUTXLM_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
 
               [What are attention masks?](../glossary#attention-mask)
 
-            - **labels** -- List of labels to be fed to a model. (when a `word_labels` is specified).
+            - **labels** -- List of labels to be fed to a model. (when `word_labels` is specified).
             - **overflowing_tokens** -- List of overflowing tokens sequences (when a `max_length` is specified and
               `return_overflowing_tokens=True`).
             - **num_truncated_tokens** -- Number of tokens truncated (when a `max_length` is specified and
@@ -444,7 +441,7 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
 
         return (out_vocab_file,)
 
-    @add_end_docstrings(LAYOUTXLM_ENCODE_KWARGS_DOCSTRING, LAYOUTXLM_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    @add_end_docstrings(LAYOUTXLM_ENCODE_KWARGS_DOCSTRING)
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
@@ -647,7 +644,7 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
 
         return BatchEncoding(batch_outputs)
 
-    @add_end_docstrings(LAYOUTXLM_ENCODE_KWARGS_DOCSTRING, LAYOUTXLM_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    @add_end_docstrings(LAYOUTXLM_ENCODE_KWARGS_DOCSTRING)
     def _batch_prepare_for_model(
         self,
         batch_text_or_text_pairs,
@@ -770,7 +767,7 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
             verbose=verbose,
         )
 
-    @add_end_docstrings(LAYOUTXLM_ENCODE_KWARGS_DOCSTRING, LAYOUTXLM_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    @add_end_docstrings(LAYOUTXLM_ENCODE_KWARGS_DOCSTRING)
     def prepare_for_model(
         self,
         text: Union[TextInput, PreTokenizedInput],
