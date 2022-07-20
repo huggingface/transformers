@@ -983,15 +983,13 @@ class BloomForPrefixLM(BloomPreTrainedModel):
         current_causal_mask = None
         if causal_mask is None and self.causal_mask is None:
             # No custom mask provided. Falling back to default prefix-LM mask.
-            inputs = input_ids if input_ids else inputs_embeds
+            inputs = input_ids if input_ids is not None else inputs_embeds
             # TODO: don't hardcode max_positions = 1024
             causal_mask = (torch.tril(torch.ones((1024, 1024), dtype=torch.bool)).view(1, 1, 1024, 1024)).to(
                 inputs.device
             )
             if prefix_length is not None:
-                prefix_mask = torch.zeros((prefix_length.shape[0], 1, 1024, 1024), dtype=torch.bool).to(
-                    inputs.device
-                )
+                prefix_mask = torch.zeros((prefix_length.shape[0], 1, 1024, 1024), dtype=torch.bool).to(inputs.device)
                 for idx in range(prefix_length.shape[0]):
                     prefix_mask_length = int(prefix_length[idx])
                     prefix_mask[idx, :, :prefix_mask_length, :prefix_mask_length] = 1
@@ -999,11 +997,11 @@ class BloomForPrefixLM(BloomPreTrainedModel):
                 causal_mask = (causal_mask + prefix_mask).bool()
 
             self.causal_mask = causal_mask
-            current_causal_mask = self.causal_mask[:, :, :inputs.shape[-1], :inputs.shape[-1]]
+            current_causal_mask = self.causal_mask[:, :, : inputs.shape[-1], : inputs.shape[-1]]
         elif self.causal_mask is None:
             inputs = input_ids if input_ids else inputs_embeds
-            current_causal_mask = causal_mask[:, :, :inputs.shape[-1], :inputs.shape[-1]]
-        
+            current_causal_mask = causal_mask[:, :, : inputs.shape[-1], : inputs.shape[-1]]
+
         transformer_outputs = self.transformer(
             input_ids,
             past_key_values=past_key_values,
