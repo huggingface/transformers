@@ -263,10 +263,7 @@ class TFResNetEncoder(tf.keras.layers.Layer):
         if not return_dict:
             return tuple(v for v in [hidden_state, hidden_states] if v is not None)
 
-        return TFBaseModelOutputWithNoAttention(
-            last_hidden_state=hidden_state,
-            hidden_states=hidden_states,
-        )
+        return TFBaseModelOutputWithNoAttention(last_hidden_state=hidden_state, hidden_states=hidden_states)
 
 
 class TFResNetPreTrainedModel(TFPreTrainedModel):
@@ -429,7 +426,9 @@ class TFResNetModel(TFResNetPreTrainedModel):
     ) -> TFBaseModelOutputWithPoolingAndNoAttention:
         # hidden_states not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
         return TFBaseModelOutputWithPoolingAndNoAttention(
-            last_hidden_state=output.last_hidden_state, pooler_output=output.pooler_output
+            last_hidden_state=output.last_hidden_state,
+            pooler_output=output.pooler_output,
+            hidden_states=output.hidden_states,
         )
 
 
@@ -499,4 +498,4 @@ class TFResNetForImageClassification(TFResNetPreTrainedModel, TFSequenceClassifi
 
     def serving_output(self, output: TFImageClassifierOutputWithNoAttention) -> TFImageClassifierOutputWithNoAttention:
         # hidden_states not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
-        return TFImageClassifierOutputWithNoAttention(logits=output.logits)
+        return TFImageClassifierOutputWithNoAttention(logits=output.logits, hidden_states=output.hidden_states)
