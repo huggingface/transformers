@@ -237,7 +237,7 @@ jobs:
             - store_artifacts:
                   path: ~/transformers/test_preparation.txt
             - run: |
-                  python -m pytest -n 3 --max-worker-restart=0 --dist=loadfile -s --make-reports=tests_torch tests/models/albert tests/models/bart tests/models/barthez tests/models/bartpho tests/models/beit tests/models/bert tests/models/bertweet tests/models/bert_generation tests/models/bert_japanese tests/models/bigbird_pegasus tests/models/big_bird tests/models/blenderbot tests/models/blenderbot_small tests/models/bloom tests/models/bort tests/models/byt5 | tee tests_output.txt
+                  python -m pytest -n 3 --max-worker-restart=0 --dist=loadfile -s --make-reports=tests_torch tests/models/albert tests/models/bart tests/models/barthez tests/models/bartpho tests/models/beit tests/models/bert tests/models/bertweet tests/models/bert_generation tests/models/bert_japanese tests/models/bigbird_pegasus tests/models/big_bird tests/models/blenderbot tests/models/blenderbot_small tests/models/bloom | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
