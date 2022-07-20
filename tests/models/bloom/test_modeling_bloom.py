@@ -379,7 +379,8 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     def test_simple_generation(self):
         # This test is a bit flaky. For some GPU architectures, pytorch sets by default allow_fp16_reduced_precision_reduction = True and some operations
         # do not give the same results under this configuration, especially torch.baddmm and torch.bmm. https://pytorch.org/docs/stable/notes/numerical_accuracy.html#fp16-on-mi200
-        # We set allow_fp16_reduced_precision_reduction = True. Please see: https://pytorch.org/docs/stable/notes/cuda.html#reduced-precision-reduction-in-fp16-gemms
+        # As we leave the default value (True) for allow_fp16_reduced_precision_reduction , the tests failed when running in half-precision with smaller models (350m)
+        # Please see: https://pytorch.org/docs/stable/notes/cuda.html#reduced-precision-reduction-in-fp16-gemms
         # This discrepancy is observed only when using small models and seems to be stable for larger models.
         # Our conclusion is that these operations are flaky for small inputs but seems to be stable for larger inputs (for the functions `baddmm` and `bmm`), and therefore for larger models.
 
@@ -396,7 +397,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         # >=760m + allow_fp16_reduced_precision_reduction = False  + torch.bmm  ==> PASS
 
         path_350m = "bigscience/bloom-350m"
-        model = BloomForCausalLM.from_pretrained(path_350m, use_cache=True).cuda()
+        model = BloomForCausalLM.from_pretrained(path_350m, use_cache=True, revision="gs555750").cuda()
         model = model.eval()
         tokenizer = BloomTokenizerFast.from_pretrained(path_350m)
 
@@ -416,7 +417,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     @require_torch_gpu
     def test_batch_generation(self):
         path_350m = "bigscience/bloom-350m"
-        model = BloomForCausalLM.from_pretrained(path_350m, use_cache=True).cuda()
+        model = BloomForCausalLM.from_pretrained(path_350m, use_cache=True, revision="gs555750").cuda()
         model = model.eval()
         tokenizer = BloomTokenizerFast.from_pretrained(path_350m, padding_side="left")
 
@@ -437,7 +438,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     def test_batch_generation_padd(self):
 
         path_350m = "bigscience/bloom-350m"
-        model = BloomForCausalLM.from_pretrained(path_350m, use_cache=True).cuda()
+        model = BloomForCausalLM.from_pretrained(path_350m, use_cache=True, revision="gs555750").cuda()
         model = model.eval()
         tokenizer = BloomTokenizerFast.from_pretrained(path_350m, padding_side="left")
 
@@ -459,33 +460,6 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         self.assertEqual(
             tokenizer.decode(greedy_output[-1, 3:], skip_special_tokens=True),
             tokenizer.decode(greedy_output_without_pad[0, :-3], skip_special_tokens=True),
-        )
-
-    @slow
-    def test_right_left_batched_input(self):
-        path_1b3 = "bigscience/bloom-1b3"
-        model = BloomForCausalLM.from_pretrained(path_1b3, use_cache=True)
-        model = model.eval()
-
-        tokenizer = BloomTokenizerFast.from_pretrained(path_1b3)
-        tokenizer.padding_side = "right"
-
-        inputs = ["Hello there", "Joe Biden is the president of the"]
-        inputs_right = tokenizer(inputs, return_tensors="pt", padding=True)
-
-        tokenizer.padding_side = "left"
-        inputs_left = tokenizer(inputs, return_tensors="pt", padding=True)
-
-        # test token values are different
-        self.assertNotEqual(inputs_right["input_ids"].tolist(), inputs_left["input_ids"].tolist())
-
-        # test reconstructions are the same
-        outputs_right = model.generate(**inputs_right, max_length=10, do_sample=False)
-        outputs_left = model.generate(**inputs_left, max_length=10, do_sample=False)
-
-        self.assertEqual(
-            tokenizer.decode(outputs_right[0], skip_special_tokens=True),
-            tokenizer.decode(outputs_left[0], skip_special_tokens=True),
         )
 
 

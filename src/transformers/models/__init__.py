@@ -97,6 +97,7 @@ from . import (
     mt5,
     mvp,
     nezha,
+    nllb,
     nystromformer,
     openai,
     opt,
