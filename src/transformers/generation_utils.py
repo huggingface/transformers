@@ -846,7 +846,7 @@ class GenerationMixin:
         # Excludes arguments that are handled before calling the any model function
         if self.config.is_encoder_decoder:
             for key in ["decoder_input_ids"]:
-                model_kwargs.pop(key)
+                model_kwargs.pop(key, None)
 
         unused_model_args = []
         model_args = set(inspect.signature(self.prepare_inputs_for_generation).parameters)
