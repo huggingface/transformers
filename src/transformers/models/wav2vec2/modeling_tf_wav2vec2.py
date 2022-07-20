@@ -278,6 +278,7 @@ def _compute_mask_indices(
         true_fn=lambda: sequence_length // mask_length,
         false_fn=lambda: num_masked_spans,
     )
+    num_masked_spans = tf.squeeze(num_masked_spans)
 
     # SpecAugment mask to fill
     spec_aug_mask = tf.zeros((batch_size, sequence_length), dtype=tf.int32)
