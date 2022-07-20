@@ -1788,7 +1788,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         offload_state_dict = kwargs.pop("offload_state_dict", False)
         load_in_8bit = kwargs.pop("load_in_8bit", False)
         int8_threshold = kwargs.pop("int8_threshold", None)
-
+subfolder = kwargs.pop("subfolder", "")
         if device_map is not None:
             if low_cpu_mem_usage is None:
                 low_cpu_mem_usage = True
