@@ -296,13 +296,6 @@ class TFResNetPreTrainedModel(TFPreTrainedModel):
         ]
     )
     def serving(self, inputs):
-        """
-        Method used for serving the model.
-
-        Args:
-            inputs (`Dict[str, tf.Tensor]`):
-                The input of the saved model as a dictionary of tensors.
-        """
         output = self.call(inputs)
         return self.serving_output(output)
 
@@ -434,10 +427,7 @@ class TFResNetModel(TFResNetPreTrainedModel):
     def serving_output(
         self, output: TFBaseModelOutputWithPoolingAndNoAttention
     ) -> TFBaseModelOutputWithPoolingAndNoAttention:
-        # In TF transformer models, the tuple of hidden states are normally transformed to a single tensor using:
-        # hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        # We don't return the hidden states here as they all have different dimensions so can be concatenated like
-        # this.
+        # hidden_states not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
         return TFBaseModelOutputWithPoolingAndNoAttention(
             last_hidden_state=output.last_hidden_state, pooler_output=output.pooler_output
         )
@@ -508,8 +498,5 @@ class TFResNetForImageClassification(TFResNetPreTrainedModel, TFSequenceClassifi
         return TFImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
 
     def serving_output(self, output: TFImageClassifierOutputWithNoAttention) -> TFImageClassifierOutputWithNoAttention:
-        # In TF transformer models, the tuple of hidden states are normally transformed to a single tensor using:
-        # hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        # We don't return the hidden states here as they all have different dimensions so can be concatenated like
-        # this.
+        # hidden_states not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
         return TFImageClassifierOutputWithNoAttention(logits=output.logits)

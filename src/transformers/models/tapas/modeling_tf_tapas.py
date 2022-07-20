@@ -873,7 +873,6 @@ class TFTapasPreTrainedModel(TFPreTrainedModel):
     )
     def serving(self, inputs):
         output = self.call(inputs)
-
         return self.serving_output(output)
 
 

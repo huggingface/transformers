@@ -448,6 +448,7 @@ class TFRegNetModel(TFRegNetPreTrainedModel):
     def serving_output(
         self, output: TFBaseModelOutputWithPoolingAndNoAttention
     ) -> TFBaseModelOutputWithPoolingAndNoAttention:
+        # hidden_states not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
         return TFBaseModelOutputWithPoolingAndNoAttention(
             last_hidden_state=output.last_hidden_state,
             pooler_output=output.pooler_output,
@@ -518,4 +519,5 @@ class TFRegNetForImageClassification(TFRegNetPreTrainedModel, TFSequenceClassifi
         return TFSequenceClassifierOutput(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
 
     def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
+        # hidden_states not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
         return TFSequenceClassifierOutput(logits=output.logits, hidden_states=output.hidden_states)

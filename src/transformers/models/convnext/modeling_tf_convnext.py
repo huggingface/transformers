@@ -494,6 +494,7 @@ class TFConvNextModel(TFConvNextPreTrainedModel):
         )
 
     def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
+        # hidden_states not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
         return TFBaseModelOutputWithPooling(
             last_hidden_state=output.last_hidden_state,
             pooler_output=output.pooler_output,
@@ -594,4 +595,5 @@ class TFConvNextForImageClassification(TFConvNextPreTrainedModel, TFSequenceClas
         )
 
     def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
+        # hidden_states not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
         return TFSequenceClassifierOutput(logits=output.logits, hidden_states=output.hidden_states)
