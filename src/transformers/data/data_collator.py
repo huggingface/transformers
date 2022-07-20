@@ -573,15 +573,6 @@ class DataCollatorForSeq2Seq:
 
             padding_side = self.tokenizer.padding_side
             for feature in features:
-
-                np_input_ids = np.array(feature["input_ids"])
-                assert (
-                    np_input_ids.shape[0] != 1
-                ), f"""
-                Feature shape cannot be collated: expected shape=( > 1, ... ), found shape={str(np_input_ids.shape)}.
-                You may want to remove excessively nested layers from your features.
-                """
-
                 remainder = [self.label_pad_token_id] * (max_label_length - len(feature["labels"]))
                 if isinstance(feature["labels"], list):
                     feature["labels"] = (
