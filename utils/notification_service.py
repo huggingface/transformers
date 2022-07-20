@@ -313,6 +313,24 @@ class Message:
             {"type": "section", "text": {"type": "mrkdwn", "text": module_failures_report}},
         ]
 
+        # Save complete tables - to be uploaded as artifacts
+        model_failures_report = prepare_reports(
+            title="These following model modules had failures",
+            header=model_header,
+            reports=sorted_model_reports,
+            to_truncate=False,
+        )
+        module_failures_report = prepare_reports(
+            title="The following non-model modules had failures",
+            header=module_header,
+            reports=sorted_module_reports,
+            to_truncate=False,
+        )
+        with open("model_failures_report.txt", "w", encoding="UTF-8") as fp:
+            fp.write(model_failures_report)
+        with open("module_failures_report.txt", "w", encoding="UTF-8") as fp:
+            fp.write(module_failures_report)
+
         return model_failure_sections
 
     @property
@@ -578,13 +596,16 @@ def retrieve_available_artifacts():
     return _available_artifacts
 
 
-def prepare_reports(title, header, reports):
+def prepare_reports(title, header, reports, to_truncate=True):
     report = ""
+
+    MAX_ERROR_TEXT = 3000 - len("[Truncated]")
+    if not to_truncate:
+        MAX_ERROR_TEXT = float('inf')
 
     if len(reports) > 0:
         # `text` must be less than 3001 characters in Slack SDK
         # keep some room for adding "[Truncated]" when necessary
-        MAX_ERROR_TEXT = 3000 - len("[Truncated]")
 
         for idx in range(len(reports)):
             _report = header + "\n".join(reports[:idx])
