@@ -175,8 +175,8 @@ class TFSegformerEfficientSelfAttention(tf.keras.layers.Layer):
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = tf.matmul(query_layer, key_layer, transpose_b=True)
 
-        dk = tf.cast(self.sqrt_att_head_size, dtype=attention_scores.dtype)
-        attention_scores = tf.divide(attention_scores, dk)
+        scale = tf.cast(self.sqrt_att_head_size, dtype=attention_scores.dtype)
+        attention_scores = tf.divide(attention_scores, scale)
 
         # Normalize the attention scores to probabilities.
         attention_probs = stable_softmax(logits=attention_scores, axis=-1)
@@ -224,14 +224,14 @@ class TFSegformerAttention(tf.keras.layers.Layer):
             sequence_reduction_ratio=sequence_reduction_ratio,
             name="self",
         )
-        self.sa_output = TFSegformerSelfOutput(config, hidden_size=hidden_size, name="output")
+        self.dense_output = TFSegformerSelfOutput(config, hidden_size=hidden_size, name="output")
 
     def call(
         self, hidden_states: tf.Tensor, height: int, width: int, output_attentions: bool = False
     ) -> Union[tf.Tensor, Tuple[tf.Tensor, tf.Tensor]]:
         self_outputs = self.self(hidden_states, height, width, output_attentions)
 
-        attention_output = self.sa_output(self_outputs[0])
+        attention_output = self.dense_output(self_outputs[0])
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
@@ -241,7 +241,7 @@ class TFSegformerDWConv(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.dwconv = tf.keras.layers.Conv2D(
             filters=dim, kernel_size=3, strides=1, padding="same", groups=dim, name="dwconv"
-        )
+        )  # `dwconv` stands for depth-wise conv.
 
     def call(self, hidden_states: tf.Tensor, height: int, width: int) -> tf.Tensor:
         batch_size = shape_list(hidden_states)[0]
@@ -487,7 +487,7 @@ class TFSegformerMainLayer(tf.keras.layers.Layer):
             training=training,
         )
         sequence_output = encoder_outputs[0]
-        # Change to NCHW output format have uniformity in the modules
+        # Change to NCHW output format to have uniformity in the modules
         sequence_output = tf.transpose(sequence_output, perm=[0, 3, 1, 2])
 
         # Change the other hidden state outputs to NCHW as well
@@ -526,8 +526,7 @@ class TFSegformerPreTrainedModel(TFPreTrainedModel):
         Returns:
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
-        # todo: change the batch size back to 3 (sayakpaul).
-        VISION_DUMMY_INPUTS = tf.random.uniform(shape=(1, self.config.num_channels, 512, 512), dtype=tf.float32)
+        VISION_DUMMY_INPUTS = tf.random.uniform(shape=(3, self.config.num_channels, 512, 512), dtype=tf.float32)
         return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
 
     @tf.function(
@@ -853,7 +852,7 @@ class TFSegformerForSemanticSegmentation(TFSegformerPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.config.num_labels == 1:
+            if not self.config.num_labels > 1:
                 raise ValueError("The number of labels should be greater than one")
             else:
                 loss = self.hf_compute_loss(logits=logits, labels=labels)
