@@ -239,15 +239,15 @@ class TFSegformerAttention(tf.keras.layers.Layer):
 class TFSegformerDWConv(tf.keras.layers.Layer):
     def __init__(self, dim: int = 768, **kwargs):
         super().__init__(**kwargs)
-        self.dwconv = tf.keras.layers.Conv2D(
+        self.depthwise_convolution = tf.keras.layers.Conv2D(
             filters=dim, kernel_size=3, strides=1, padding="same", groups=dim, name="dwconv"
-        )  # `dwconv` stands for depth-wise conv.
+        )
 
     def call(self, hidden_states: tf.Tensor, height: int, width: int) -> tf.Tensor:
         batch_size = shape_list(hidden_states)[0]
         num_channels = shape_list(hidden_states)[-1]
         hidden_states = tf.reshape(hidden_states, (batch_size, height, width, num_channels))
-        hidden_states = self.dwconv(hidden_states)
+        hidden_states = self.depthwise_convolution(hidden_states)
 
         new_height = shape_list(hidden_states)[1]
         new_width = shape_list(hidden_states)[2]
@@ -268,7 +268,7 @@ class TFSegformerMixFFN(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         out_features = out_features or in_features
         self.dense1 = tf.keras.layers.Dense(hidden_features, name="dense1")
-        self.dwconv = TFSegformerDWConv(hidden_features, name="dwconv")
+        self.depthwise_convolution = TFSegformerDWConv(hidden_features, name="dwconv")
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = get_tf_activation(config.hidden_act)
         else:
@@ -278,7 +278,7 @@ class TFSegformerMixFFN(tf.keras.layers.Layer):
 
     def call(self, hidden_states: tf.Tensor, height: int, width: int) -> tf.Tensor:
         hidden_states = self.dense1(hidden_states)
-        hidden_states = self.dwconv(hidden_states, height, width)
+        hidden_states = self.depthwise_convolution(hidden_states, height, width)
         hidden_states = self.intermediate_act_fn(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.dense2(hidden_states)
@@ -833,6 +833,8 @@ class TFSegformerForSemanticSegmentation(TFSegformerPreTrainedModel):
         >>> outputs = model(**inputs, training=False)
         >>> # logits are of shape (batch_size, num_labels, height, width)
         >>> logits = outputs.logits
+        >>> logits.shape
+        (1, 150, 128, 128)
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
