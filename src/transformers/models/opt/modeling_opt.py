@@ -730,7 +730,6 @@ class OPTModel(OPTPreTrainedModel):
     def __init__(self, config: OPTConfig):
         super().__init__(config)
         self.decoder = OPTDecoder(config)
-        self.embed_dim = config.hidden_size
         # Initialize weights and apply final processing
         self.post_init()
 
