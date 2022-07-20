@@ -280,7 +280,6 @@ class SegformerAttention(nn.Module):
 class SegformerDWConv(nn.Module):
     def __init__(self, dim=768):
         super().__init__()
-        # `dwconv` stands for depth-wise conv.
         self.dwconv = nn.Conv2d(dim, dim, 3, 1, 1, bias=True, groups=dim)
 
     def forward(self, hidden_states, height, width):
