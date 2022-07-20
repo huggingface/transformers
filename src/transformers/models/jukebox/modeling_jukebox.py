@@ -3099,8 +3099,7 @@ def get_alignment(x, zs, labels, prior, level, fp16, hps):
     attn_layers = set([alignment_layer])
     alignment_hops = {}
     indices_hops = {}
-    prior = prior.to(zs.device)
-    # prior.cuda()
+    prior.to(zs.device)
     empty_cache()
     for start in get_starts(total_length, n_ctx, hop_length):
         end = start + n_ctx
@@ -3332,9 +3331,9 @@ class JukeboxModel(JukeboxPreTrainedModel):
         
         for level in reversed(sample_levels):
             self.total_length = sampling_kwargs[level].pop("total_length")
-            self.priors[level] = self.priors[level].to(zs[0].device).eval()
+            self.priors[level].to(zs[0].device).eval()
             empty_cache()
-            hps.sample_length = sample_length_in_seconds*self.priors[level].raw_to_tokens
+            hps.sample_length = self.total_length
             # Set correct total_length, hop_length, labels and sampling_kwargs for level
             assert (
                 hps.sample_length % self.priors[level].raw_to_tokens == 0
@@ -3344,15 +3343,14 @@ class JukeboxModel(JukeboxPreTrainedModel):
 
             zs = self.sample_level(zs, labels[level], sampling_kwargs[level], level, total_length, hop_length, hps)
 
-            self.priors[level].to(zs[-1].device)
             empty_cache()
-            self.vqvae.to(zs[-1].device)
+            self.vqvae.to(zs[level].device)
             # Decode sample
             with torch.no_grad():
                 x = self.vqvae.decode(zs[level:], start_level=level, bs_chunks=zs[level].shape[0])
             self.vqvae.to('cpu')
-
-            logdir = f"{hps.name}/level_{level}"
+            import time
+            logdir = f"{time.strftime('%Y-%m-%d-%Hh%M')}/level_{level}"
             if not os.path.exists(logdir):
                 os.makedirs(logdir)
             torch.save(dict(zs=zs, labels=labels, sampling_kwargs=sampling_kwargs, x=x), f"{logdir}/data.pth.tar")
@@ -3387,8 +3385,9 @@ class JukeboxModel(JukeboxPreTrainedModel):
     # Prompt the model with raw audio input (dimension: NTC) and generate continuations
     def primed_sample(self, x, labels, **sampling_kwargs):
         sample_levels = list(range(len(self.priors)))
+        self.vqvae.to(x.device)
         with torch.no_grad():
-            self.vqvae = self.vqvae.to(x.device)
-        zs = self.vqvae.encode(x, start_level=0, end_level=len(self.priors), bs_chunks=x.shape[0])
+            zs = self.vqvae.encode(x, start_level=0, end_level=len(self.priors), bs_chunks=x.shape[0])
+        self.vqvae.to('cpu')
         zs = self._sample(zs, labels, sample_levels, **sampling_kwargs)
         return zs
