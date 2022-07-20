@@ -9,7 +9,10 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 -->
 
-# How to add a pipeline to 🤗 Transformers?
+# How to create a custom pipeline?
+
+In this guide, we will see how to create a custom pipeline and share it on the [Hub](hf.co/models) or add it to the
+Transformers library.
 
 First and foremost, you need to decide the raw entries the pipeline will be able to take. It can be strings, raw bytes,
 dictionaries or whatever seems to be the most likely desired input. Try to keep these inputs as pure Python as possible
@@ -111,39 +114,123 @@ of arguments for ease of use (audio files, can be filenames, URLs or pure bytes)
 
 ## Adding it to the list of supported tasks
 
-To register your `new-task` to the list of supported tasks, provide the
-following task template:
-
-```python
-my_new_task = {
-    "impl": MyPipeline,
-    "tf": (),
-    "pt": (AutoModelForAudioClassification,) if is_torch_available() else (),
-    "default": {"model": {"pt": "user/awesome_model"}},
-    "type": "audio",  # current support type: text, audio, image, multimodal
-}
-```
-
-<Tip>
-
-Take a look at the `src/transformers/pipelines/__init__.py` and the dictionary `SUPPORTED_TASKS` to see how a task is defined.
-If possible your custom task should provide a default model.
-
-</Tip>
-
-Then add your custom task to the list of supported tasks via
-`PIPELINE_REGISTRY.register_pipeline()`:
+To register your `new-task` to the list of supported tasks, you have to add it to the `PIPELINE_REGISTRY`:
 
 ```python
 from transformers.pipelines import PIPELINE_REGISTRY
 
-PIPELINE_REGISTRY.register_pipeline("new-task", my_new_task)
+PIPELINE_REGISTRY.register_pipeline(
+    "new-task",
+    pipeline_class=MyPipeline,
+    pt_model=AutoModelForSequenceClassification,
+)
 ```
 
+You can specify a default model if you want, in which case it should come with a specific revision (which can be the name of a branch or a commit hash, here we took `"abcdef"`) as well was the type:
 
-## Adding tests
+```python
+PIPELINE_REGISTRY.register_pipeline(
+    "new-task",
+    pipeline_class=MyPipeline,
+    pt_model=AutoModelForSequenceClassification,
+    default={"pt": ("user/awesome_model", "abcdef")},
+    type="text",  # current support type: text, audio, image, multimodal
+)
+```
 
-Create a new file `tests/test_pipelines_MY_PIPELINE.py` with example with the other tests.
+## Share your pipeline on the Hub
+
+To share your custom pipeline on the Hub, you just have to save the custom code of your `Pipeline` subclass in a
+python file. For instance, let's say we want to use a custom pipeline for sentence pair classification like this:
+
+```py
+import numpy as np
+
+from transformers import Pipeline
+
+
+def softmax(outputs):
+    maxes = np.max(outputs, axis=-1, keepdims=True)
+    shifted_exp = np.exp(outputs - maxes)
+    return shifted_exp / shifted_exp.sum(axis=-1, keepdims=True)
+
+
+class PairClassificationPipeline(Pipeline):
+    def _sanitize_parameters(self, **kwargs):
+        preprocess_kwargs = {}
+        if "second_text" in kwargs:
+            preprocess_kwargs["second_text"] = kwargs["second_text"]
+        return preprocess_kwargs, {}, {}
+
+    def preprocess(self, text, second_text=None):
+        return self.tokenizer(text, text_pair=second_text, return_tensors=self.framework)
+
+    def _forward(self, model_inputs):
+        return self.model(**model_inputs)
+
+    def postprocess(self, model_outputs):
+        logits = model_outputs.logits[0].numpy()
+        probabilities = softmax(logits)
+
+        best_class = np.argmax(probabilities)
+        label = self.model.config.id2label[best_class]
+        score = probabilities[best_class].item()
+        logits = logits.tolist()
+        return {"label": label, "score": score, "logits": logits}
+```
+
+The implementation is framework agnostic, and will work for PyTorch and TensorFlow models. If we have saved this in
+a file named `pair_classification.py`, we can then import it and register it like this:
+
+```py
+from pair_classification import PairClassificationPipeline
+from transformers.pipelines import PIPELINE_REGISTRY
+from transformers import AutoModelForSequenceClassification, TFAutoModelForSequenceClassification
+
+PIPELINE_REGISTRY.register_pipeline(
+    "pair-classification",
+    pipeline_class=PairClassificationPipeline,
+    pt_model=AutoModelForSequenceClassification,
+    tf_model=TFAutoModelForSequenceClassification,
+)
+```
+
+Once this is done, we can use it with a pretrained model. For instance `sgugger/finetuned-bert-mrpc` has been
+fine-tuned on the MRPC dataset, which classifies pairs of sentences as paraphrases or not.
+
+```py
+from transformers import pipeline
+
+classifier = pipeline("pair-classification", model="sgugger/finetuned-bert-mrpc")
+```
+
+Then we can share it on the Hub by using the `save_pretrained` method in a `Repository`:
+
+```py
+from huggingface_hub import Repository
+
+repo = Repository("test-dynamic-pipeline", clone_from="{your_username}/test-dynamic-pipeline")
+classifier.save_pretrained("test-dynamic-pipeline")
+repo.push_to_hub()
+```
+
+This will copy the file where you defined `PairClassificationPipeline` inside the folder `"test-dynamic-pipeline"`,
+along with saving the model and tokenizer of the pipeline, before pushing everything in the repository
+`{your_username}/test-dynamic-pipeline`. After that anyone can use it as long as they provide the option
+`trust_remote_code=True`:
+
+```py
+from transformers import pipeline
+
+classifier = pipeline(model="{your_username}/test-dynamic-pipeline", trust_remote_code=True)
+```
+
+## Add the pipeline to Transformers
+
+If you want to contribute your pipeline to Transformers, you will need to add a new module in the `pipelines` submodule
+with the code of your pipeline, then add it in the list of tasks defined in `pipelines/__init__.py`.
+
+Then you will need to add tests. Create a new file `tests/test_pipelines_MY_PIPELINE.py` with example with the other tests.
 
 The `run_pipeline_test` function will be very generic and run on small random models on every possible
 architecture as defined by `model_mapping` and `tf_model_mapping`.
