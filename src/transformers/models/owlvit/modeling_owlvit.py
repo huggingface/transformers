@@ -161,15 +161,21 @@ class OwlViTObjectDetectionOutput(ModelOutput):
 class OwlViTVisionEmbeddings(nn.Module):
     def __init__(self, config: OwlViTVisionConfig):
         super().__init__()
+        self.config = config
+        self.embed_dim = config.hidden_size
         self.class_embedding = nn.Parameter(torch.randn(config.hidden_size))
 
         self.patch_embedding = nn.Conv2d(
-            in_channels=3, out_channels=config.hidden_size, kernel_size=config.patch_size, stride=config.patch_size, bias=False
+            in_channels=3,
+            out_channels=self.embed_dim,
+            kernel_size=config.patch_size,
+            stride=config.patch_size,
+            bias=False,
         )
 
         self.num_patches = (config.image_size // config.patch_size) ** 2
         self.num_positions = self.num_patches + 1
-        self.position_embedding = nn.Embedding(self.num_positions, config.hidden_size)
+        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
         self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)))
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
@@ -219,6 +225,7 @@ class OwlViTAttention(nn.Module):
 
     def __init__(self, config):
         super().__init__()
+        self.config = config
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_heads
@@ -320,6 +327,7 @@ class OwlViTAttention(nn.Module):
 class OwlViTMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
         self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
         self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
@@ -739,7 +747,7 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
         ... )
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooled_output  # pooled (EOS token) states
+        >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
         ```"""
 
         # Get embeddings for all text queries in all batch samples
@@ -849,7 +857,7 @@ class OwlViTVisionModel(OwlViTPreTrainedModel):
 
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooled_output  # pooled CLS states
+        >>> pooled_output = outputs.pooler_output  # pooled CLS states
         ```"""
         return self.vision_model(
             pixel_values=pixel_values,
@@ -878,11 +886,18 @@ class OwlViTModel(OwlViTPreTrainedModel):
                 f" {type(config.vision_config)}."
             )
 
-        self.text_model = OwlViTTextTransformer(config.text_config)
-        self.vision_model = OwlViTVisionTransformer(config.vision_config)
+        text_config = config.text_config
+        vision_config = config.vision_config
 
-        self.visual_projection = nn.Linear(vision_config.hidden_size, config.projection_dim, bias=False)
-        self.text_projection = nn.Linear(text_config.hidden_size, config.projection_dim, bias=False)
+        self.projection_dim = config.projection_dim
+        self.text_embed_dim = text_config.hidden_size
+        self.vision_embed_dim = vision_config.hidden_size
+
+        self.text_model = OwlViTTextTransformer(text_config)
+        self.vision_model = OwlViTVisionTransformer(vision_config)
+
+        self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
+        self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
         self.logit_scale = nn.Parameter(torch.ones([]) * config.logit_scale_init_value)
 
         # Initialize weights and apply final processing
@@ -1330,7 +1345,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         >>> batch_size = boxes.shape[0]
         >>> for i in range(batch_size):  # Loop over sets of images and text queries
         ...     boxes = outputs["pred_boxes"][i]
-        ...     logits = torch.max(outputs["logits"][0], dim=-1)
+        ...     logits = torch.max(outputs["logits"][i], dim=-1)
         ...     scores = torch.sigmoid(logits.values)
         ...     labels = logits.indices
         ```"""

@@ -49,17 +49,17 @@ class OwlViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin
     should refer to this superclass for more information regarding those methods.
 
     Args:
-        size (`int`, *optional*, defaults to 224):
+        size (`int`, *optional*, defaults to 768):
             Resize the shorter edge of the input to the given size. Only has an effect if `do_resize` is set to `True`.
         resample (`int`, *optional*, defaults to `PIL.Image.BICUBIC`):
             An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
             `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`. Only has an effect
             if `do_resize` is set to `True`.
-        crop_size (`int`, *optional*, defaults to 224):
+        crop_size (`int`, *optional*, defaults to 768):
             Desired output size when applying center-cropping. Only has an effect if `do_center_crop` is set to `True`.
-        image_mean (`List[int]`, *optional*, defaults to `[0.485, 0.456, 0.406]`):
+        image_mean (`List[int]`, *optional*, defaults to `[0.48145466, 0.4578275, 0.40821073]`):
             The sequence of means for each channel, to be used when normalizing images.
-        image_std (`List[int]`, *optional*, defaults to `[0.229, 0.224, 0.225]`):
+        image_std (`List[int]`, *optional*, defaults to `[0.26862954, 0.26130258, 0.27577711]`):
             The sequence of standard deviations for each channel, to be used when normalizing images.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether or not to rescale input images to between 0-1 range. `PIL.Image.Image` inputs are automatically

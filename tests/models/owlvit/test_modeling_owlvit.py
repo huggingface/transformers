@@ -280,8 +280,8 @@ class OwlViTTextModelTester:
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
-            result = model(input_ids, attention_mask=input_mask)
-            result = model(input_ids)
+            result = model(input_ids=input_ids, attention_mask=input_mask)
+
         self.parent.assertEqual(
             result.last_hidden_state.shape, (self.batch_size * self.num_queries, self.seq_length, self.hidden_size)
         )

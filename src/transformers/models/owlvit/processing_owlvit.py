@@ -43,7 +43,7 @@ class OwlViTProcessor(ProcessorMixin):
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
-    def __call__(self, text=None, images=None, return_tensors="np", **kwargs):
+    def __call__(self, text=None, images=None, padding="max_length", return_tensors="np", **kwargs):
         """
         Main method to prepare for the model one or several text(s) and image(s). This method forwards the `text` and
         `kwargs` arguments to CLIPTokenizerFast's [`~CLIPTokenizerFast.__call__`] if `text` is not `None` to encode:
@@ -81,7 +81,7 @@ class OwlViTProcessor(ProcessorMixin):
 
         if text is not None:
             if isinstance(text, str) or (isinstance(text, List) and not isinstance(text[0], List)):
-                encodings = [self.tokenizer(text, padding="max_length", return_tensors=return_tensors, **kwargs)]
+                encodings = [self.tokenizer(text, padding=padding, return_tensors=return_tensors, **kwargs)]
 
             elif isinstance(text, List) and isinstance(text[0], List):
                 encodings = []
@@ -94,7 +94,7 @@ class OwlViTProcessor(ProcessorMixin):
                     if len(t) != max_num_queries:
                         t = t + [" "] * (max_num_queries - len(t))
 
-                    encoding = self.tokenizer(t, padding="max_length", return_tensors=return_tensors, **kwargs)
+                    encoding = self.tokenizer(t, padding=padding, return_tensors=return_tensors, **kwargs)
                     encodings.append(encoding)
             else:
                 raise TypeError("Input text should be a string, a list of strings or a nested list of strings")

@@ -190,7 +190,7 @@ class OwlViTProcessorTest(unittest.TestCase):
         with pytest.raises(ValueError):
             processor()
 
-    def test_processor_with_nestedt_text_list(self):
+    def test_processor_with_nested_text_list(self):
         model_name = "adirik/owlvit-base-patch32"
         processor = OwlViTProcessor.from_pretrained(model_name)
 
