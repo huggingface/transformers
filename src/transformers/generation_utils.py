@@ -843,6 +843,11 @@ class GenerationMixin:
 
     def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
         """Validates model kwargs for generation."""
+        # Excludes arguments that are handled before calling the any model function
+        if self.config.is_encoder_decoder:
+            for key in ["decoder_input_ids"]:
+                model_kwargs.pop(key)
+
         unused_model_args = []
         model_args = set(inspect.signature(self.prepare_inputs_for_generation).parameters)
         # `kwargs`` if often used to handle optional forward pass inputs like `attention_mask`. If
@@ -890,6 +895,10 @@ class GenerationMixin:
         generation_method_args = set(inspect.signature(generation_method).parameters)
         for supporting_object in supporting_objects:
             generation_method_args |= set(inspect.signature(supporting_object).parameters)
+        # Ad hoc replacement of supporting object argument to match the corresponding generation argument
+        if "do_early_stopping" in generation_method_args:
+            generation_method_args.remove("do_early_stopping")
+            generation_method_args.add("early_stopping")
         for key, value in generation_inputs.items():
             if value is not None and key not in generation_method_args:
                 unused_args.append(key)
@@ -1181,7 +1190,7 @@ class GenerationMixin:
         ```"""
         # 0. Store generation inputs for posterior submethod validation and validate model kwargs
         generation_inputs = locals().copy()
-        self._validate_model_kwargs(model_kwargs)
+        self._validate_model_kwargs(model_kwargs.copy())
 
         # 1. Set generation parameters if not already defined
         bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
