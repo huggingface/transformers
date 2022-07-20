@@ -213,12 +213,12 @@ class JukeboxTokenizer(PreTrainedTokenizer):
             duration (`_type_`):
                 _description_
         """
-        artists_id = [self.artists_encoder.get(artist) for artist in list_artists]
+        artists_id = [self.artists_encoder.get(artist,0) for artist in list_artists]
         for genres in range(len(list_genres)):
-            list_genres[genres] = [self.genres_encoder.get(genre) for genre in list_genres[genres]]
+            list_genres[genres] = [self.genres_encoder.get(genre,0) for genre in list_genres[genres]]
             list_genres[genres] = list_genres[genres] + [-1] * (self.n_genres - len(list_genres[genres]))
 
-        lyric_ids = [[], [], [self.lyrics_encoder.get(character) for character in list_lyrics[-1]]]
+        lyric_ids = [[], [], [self.lyrics_encoder.get(character,0) for character in list_lyrics[-1]]]
         return artists_id, list_genres, lyric_ids
 
     def _tokenize(self, lyrics):
