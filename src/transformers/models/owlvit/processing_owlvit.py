@@ -45,12 +45,13 @@ class OwlViTProcessor(ProcessorMixin):
 
     def __call__(self, text=None, images=None, return_tensors="np", **kwargs):
         """
-        Args:
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to CLIPTokenizerFast's [`~CLIPTokenizerFast.__call__`] if `text` is not `None` to encode:
+        Main method to prepare for the model one or several text(s) and image(s). This method forwards the `text` and
+        `kwargs` arguments to CLIPTokenizerFast's [`~CLIPTokenizerFast.__call__`] if `text` is not `None` to encode:
         the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
         CLIPFeatureExtractor's [`~CLIPFeatureExtractor.__call__`] if `images` is not `None`. Please refer to the
         doctsring of the above two methods for more information.
+
+        Args:
             text (`str`, `List[str]`, `List[List[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
@@ -76,7 +77,7 @@ class OwlViTProcessor(ProcessorMixin):
         """
 
         if text is None and images is None:
-            raise ValueError("You have to specify at least one of text or images. Both cannot be none.")
+            raise ValueError("You have to specify at least one text or image. Both cannot be none.")
 
         if text is not None:
             if isinstance(text, str) or (isinstance(text, List) and not isinstance(text[0], List)):

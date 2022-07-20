@@ -33,9 +33,9 @@ OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class OwlViTTextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`OwlViTModel`]. It is used to instantiate an
-    OwlViT model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the OwlViT
+    This is the configuration class to store the configuration of an [`OwlViTTextModel`]. It is used to instantiate an
+    OwlViT text encoder according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the OwlViT
     [adirik/owlvit-base-patch32](https://huggingface.co/adirik/owlvit-base-patch32) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -45,7 +45,7 @@ class OwlViTTextConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 49408):
             Vocabulary size of the OWL-ViT text model. Defines the number of different tokens that can be represented
-            by the `inputs_ids` passed when calling [`OwlViTModel`].
+            by the `inputs_ids` passed when calling [`OwlViTTextModel`].
         hidden_size (`int`, *optional*, defaults to 512):
             Dimensionality of the encoder layers and the pooler layer.
         intermediate_size (`int`, *optional*, defaults to 2048):
@@ -148,7 +148,6 @@ class OwlViTVisionConfig(PretrainedConfig):
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
-
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
