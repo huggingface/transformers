@@ -244,8 +244,8 @@ class TFPegasusModelTest(TFModelTesterMixin, unittest.TestCase):
                 name = model.get_bias()
                 assert name is None
 
+    @unittest.skip(reason="Test takes too long to run (>30sec) causing the CI to fail.")
     def test_saved_model_creation(self):
-        # This test is too long (>30sec) and makes fail the CI
         pass
 
     def test_resize_token_embeddings(self):

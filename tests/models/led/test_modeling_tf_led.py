@@ -365,8 +365,8 @@ class TFLEDModelTest(TFModelTesterMixin, unittest.TestCase):
         # TODO JP: Make LED XLA compliant
         pass
 
+    @unittest.skip(reason="Test takes too long to run (>30sec) causing the CI to fail.")
     def test_saved_model_creation(self):
-        # This test is too long (>30sec) and makes fail the CI
         pass
 
     def test_generate_with_headmasking(self):
