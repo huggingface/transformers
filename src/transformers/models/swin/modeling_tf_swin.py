@@ -735,7 +735,9 @@ class TFSwinLayer(tf.keras.layers.Layer):
         # partition windows
         hidden_states_windows = window_partition(shifted_hidden_states, window_size)
         hidden_states_windows = tf.reshape(hidden_states_windows, (-1, window_size * window_size, channels))
-        attn_mask = self.get_attn_mask(height=height_pad, width=width_pad, window_size=window_size, shift_size=shift_size)
+        attn_mask = self.get_attn_mask(
+            height=height_pad, width=width_pad, window_size=window_size, shift_size=shift_size
+        )
 
         attention_outputs = self.attention(
             hidden_states_windows, attn_mask, head_mask, output_attentions=output_attentions, training=training

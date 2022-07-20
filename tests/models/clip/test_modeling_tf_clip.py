@@ -611,6 +611,11 @@ class TFCLIPModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_saved_model_creation_extended(self):
         pass
 
+    @unittest.skip(reason="`saved_model` doesn't work with nested outputs so no preparation happens.")
+    @slow
+    def test_prepare_serving_output(self):
+        pass
+
 
 # We will verify our results on an image of cute cats
 def prepare_img():
