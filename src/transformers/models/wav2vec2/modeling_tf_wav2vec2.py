@@ -268,12 +268,16 @@ def _compute_mask_indices(
             f" `sequence_length`: {sequence_length}`"
         )
     # compute number of masked spans in batch
-    num_masked_spans = int(mask_prob * sequence_length / mask_length + np.random.uniform(size=(1,)))
-    num_masked_spans = max(num_masked_spans, min_masks)
+    num_masked_spans = mask_prob * sequence_length / mask_length + tf.random.uniform((1,))
+    num_masked_spans = tf.maximum(num_masked_spans, min_masks)
+    num_masked_spans = tf.cast(num_masked_spans, tf.int32)
 
     # make sure num masked indices <= sequence_length
-    if num_masked_spans * mask_length > sequence_length:
-        num_masked_spans = sequence_length // mask_length
+    num_masked_spans = tf.cond(
+        num_masked_spans * mask_length > sequence_length,
+        true_fn=lambda: sequence_length // mask_length,
+        false_fn=lambda: num_masked_spans,
+    )
 
     # SpecAugment mask to fill
     spec_aug_mask = tf.zeros((batch_size, sequence_length), dtype=tf.int32)
