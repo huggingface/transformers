@@ -114,7 +114,7 @@ class Jukebox1bModelTester(unittest.TestCase):
         model_id = "ArthurZ/jukebox-1b-lyrics"
         model = JukeboxModel.from_pretrained(model_id).eval().to("cuda")
 
-        labels = [ i.cuda() for i in self.prepare_inputs(model_id)]
+        labels = [i.cuda() for i in self.prepare_inputs(model_id)]
         set_seed(0)
         zs = [torch.zeros(1, 0, dtype=torch.long).cuda() for _ in range(3)]
         zs = model._sample(zs, labels, [2], sample_tokens=10)
@@ -214,7 +214,7 @@ class Jukebox5bModelTester(unittest.TestCase):
         model_id = "ArthurZ/jukebox-5b-lyrics"
         model = JukeboxModel.from_pretrained(model_id).eval().to("cuda")
 
-        labels = [ i.cuda() for i in self.prepare_inputs(model_id)]
+        labels = [i.cuda() for i in self.prepare_inputs(model_id)]
         set_seed(0)
         zs = [torch.zeros(1, 0, dtype=torch.long).cuda() for _ in range(3)]
         zs = model._sample(zs, labels, [2], sample_tokens=10)

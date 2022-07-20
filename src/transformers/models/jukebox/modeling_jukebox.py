@@ -3153,26 +3153,29 @@ def get_alignment(x, zs, labels, prior, level, fp16, hps):
         alignments.append(alignment)
     return alignments
 
+
 def load_audio(file, sr, offset, duration, mono=False):
     import librosa
+
     # Librosa loads more filetypes than soundfile
-    x, _ = librosa.load(file, sr=sr, mono=mono, offset=offset/sr, duration=duration/sr)
+    x, _ = librosa.load(file, sr=sr, mono=mono, offset=offset / sr, duration=duration / sr)
     if len(x.shape) == 1:
         x = x.reshape((1, -1))
-    return x    
+    return x
 
 
 def load_prompts(audio_files, duration, hps):
     xs = []
     for audio_file in audio_files:
         x = load_audio(audio_file, sr=hps.sr, duration=duration, offset=0.0, mono=True)
-        x = x.T # CT -> TC
+        x = x.T  # CT -> TC
         xs.append(x)
     while len(xs) < hps.n_samples:
         xs.extend(xs)
-    xs = xs[:hps.n_samples]
+    xs = xs[: hps.n_samples]
     x = torch.stack([torch.from_numpy(x) for x in xs])
     return x
+
 
 @add_start_docstrings(
     "The bare JUKEBOX Model from which you can sample",
@@ -3220,7 +3223,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         if "sample_tokens" in sampling_kwargs:
             # Support sampling a window shorter than n_ctx
             sample_tokens = sampling_kwargs["sample_tokens"]
-            if sample_tokens is None : 
+            if sample_tokens is None:
                 sample_tokens = end - start
 
         else:
