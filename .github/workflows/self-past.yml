@@ -177,3 +177,14 @@ jobs:
         run: |
           pip install slack_sdk
           python utils/notification_service.py "${{ needs.setup.outputs.matrix }}"
+
+      # Create a directory to store test failure tables in the next step
+      - run: mkdir test_failure_tables
+
+      # Upload complete failure tables, as they might be big and only truncated versions could be sent to Slack.
+      - name: Failure table artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: test_failure_tables
+          path: /transformers/test_failure_tables

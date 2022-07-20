@@ -326,9 +326,10 @@ class Message:
             reports=sorted_module_reports,
             to_truncate=False,
         )
-        with open("model_failures_report.txt", "w", encoding="UTF-8") as fp:
+        # TODO: Pass the target path from GitHub workflow files
+        with open("test_failure_tables/model_failures_report.txt", "w", encoding="UTF-8") as fp:
             fp.write(model_failures_report)
-        with open("module_failures_report.txt", "w", encoding="UTF-8") as fp:
+        with open("test_failure_tables/module_failures_report.txt", "w", encoding="UTF-8") as fp:
             fp.write(module_failures_report)
 
         return model_failure_sections
