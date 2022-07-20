@@ -205,6 +205,7 @@ class TFModelTesterMixin:
 
             self.assert_outputs_same(after_outputs, outputs)
 
+    @slow
     def test_saved_model_creation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = False
