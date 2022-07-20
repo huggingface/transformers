@@ -316,7 +316,7 @@ class Encoder(nn.Module):
         # 64, 32, ...
         iterator = zip(list(range(self.levels)), self.downs_t, self.strides_t)
         for level, down_t, stride_t in iterator:
-            level_block = self.level_blocks[-level - 1]
+            level_block = self.level_blocks[level]
             x = level_block(x)
             xs.append(x)
 
@@ -3153,6 +3153,26 @@ def get_alignment(x, zs, labels, prior, level, fp16, hps):
         alignments.append(alignment)
     return alignments
 
+def load_audio(file, sr, offset, duration, mono=False):
+    import librosa
+    # Librosa loads more filetypes than soundfile
+    x, _ = librosa.load(file, sr=sr, mono=mono, offset=offset/sr, duration=duration/sr)
+    if len(x.shape) == 1:
+        x = x.reshape((1, -1))
+    return x    
+
+
+def load_prompts(audio_files, duration, hps):
+    xs = []
+    for audio_file in audio_files:
+        x = load_audio(audio_file, sr=hps.sr, duration=duration, offset=0.0, mono=True)
+        x = x.T # CT -> TC
+        xs.append(x)
+    while len(xs) < hps.n_samples:
+        xs.extend(xs)
+    xs = xs[:hps.n_samples]
+    x = torch.stack([torch.from_numpy(x) for x in xs])
+    return x
 
 @add_start_docstrings(
     "The bare JUKEBOX Model from which you can sample",
@@ -3200,6 +3220,9 @@ class JukeboxModel(JukeboxPreTrainedModel):
         if "sample_tokens" in sampling_kwargs:
             # Support sampling a window shorter than n_ctx
             sample_tokens = sampling_kwargs["sample_tokens"]
+            if sample_tokens is None : 
+                sample_tokens = end - start
+
         else:
             sample_tokens = end - start
         conditioning_tokens, new_tokens = z.shape[1], sample_tokens - z.shape[1]
@@ -3301,20 +3324,19 @@ class JukeboxModel(JukeboxPreTrainedModel):
         hps = self.config
         for level in reversed(sample_levels):
             self.total_length = sampling_kwargs[level].pop("total_length")
-            prior = self.priors[level]
-            prior = prior.to(zs[0].device).eval()
+            self.priors[level] = self.priors[level].to(zs[0].device).eval()
             empty_cache()
 
             # Set correct total_length, hop_length, labels and sampling_kwargs for level
             assert (
-                hps.sample_length % prior.raw_to_tokens == 0
-            ), f"Expected sample_length {hps.sample_length} to be multiple of {prior.raw_to_tokens}"
-            total_length = hps.sample_length // prior.raw_to_tokens
-            hop_length = int(hps.hop_fraction[-level - 1] * prior.n_ctx)
+                hps.sample_length % self.priors[level].raw_to_tokens == 0
+            ), f"Expected sample_length {hps.sample_length} to be multiple of {self.priors[level].raw_to_tokens}"
+            total_length = hps.sample_length // self.priors[level].raw_to_tokens
+            hop_length = int(hps.hop_fraction[-level - 1] * self.priors[level].n_ctx)
 
             zs = self.sample_level(zs, labels[level], sampling_kwargs[level], level, total_length, hop_length, hps)
 
-            prior.to(zs[-1].device)
+            # self.priors[level].to(zs[-1].device)
             empty_cache()
 
             # Decode sample
@@ -3357,6 +3379,8 @@ class JukeboxModel(JukeboxPreTrainedModel):
     # Prompt the model with raw audio input (dimension: NTC) and generate continuations
     def primed_sample(self, x, labels, **sampling_kwargs):
         sample_levels = list(range(len(self.priors)))
-        zs = self.priors[-1].encode(x, start_level=0, end_level=len(self.priors), bs_chunks=x.shape[0])
+        with torch.no_grad():
+            self.vqvae = self.vqvae.to(x.device)
+        zs = self.vqvae.encode(x, start_level=0, end_level=len(self.priors), bs_chunks=x.shape[0])
         zs = self._sample(zs, labels, sample_levels, **sampling_kwargs)
         return zs
