@@ -572,14 +572,14 @@ class GenerationMixin:
     @staticmethod
     def _expand_inputs_for_generation(
         input_ids: torch.LongTensor,
-        expand_size: int = 1,
+        num_return_sequences: int = 1,
         is_encoder_decoder: bool = False,
         attention_mask: Optional[torch.LongTensor] = None,
         encoder_outputs: Optional[ModelOutput] = None,
         **model_kwargs,
     ) -> Tuple[torch.LongTensor, Dict[str, Any]]:
         expanded_return_idx = (
-            torch.arange(input_ids.shape[0]).view(-1, 1).repeat(1, expand_size).view(-1).to(input_ids.device)
+            torch.arange(input_ids.shape[0]).view(-1, 1).repeat(1, num_return_sequences).view(-1).to(input_ids.device)
         )
         input_ids = input_ids.index_select(0, expanded_return_idx)
 
@@ -840,6 +840,66 @@ class GenerationMixin:
         transition_scores[beam_indices_mask] = 0
 
         return transition_scores
+
+    def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
+        """Validates model kwargs for generation."""
+        unused_model_args = []
+        model_args = set(inspect.signature(self.prepare_inputs_for_generation).parameters)
+        # `kwargs`` if often used to handle optional forward pass inputs like `attention_mask`. If
+        # `prepare_inputs_for_generation` doesn't accept `kwargs`, then a stricter check can be made ;)
+        if "kwargs" in model_args:
+            model_args |= set(inspect.signature(self.forward).parameters)
+        for key, value in model_kwargs.items():
+            if value is not None and key not in model_args:
+                unused_model_args.append(key)
+
+        if unused_model_args:
+            raise ValueError(
+                f"The following `model_kwargs` are not used by the model: {unused_model_args} (note: typos in the"
+                " generate arguments will also show up in this list)"
+            )
+
+    def _validate_generation_inputs(
+        self,
+        generation_inputs: Dict[str, Any],
+        generation_method_name: str,
+        supporting_objects: List[Callable],
+    ):
+        """
+        Validates the generation inputs for the generation submethod. If there are arguments that were passed but will
+        not be used by the generation method or its supporting objects, an informative exception will be thrown. A
+        supporting object is a class or function that precedes the generation submethod itself.
+        """
+        # Excludes arguments that are handled before calling the submethods
+        unused_keys = ["self"]
+        keys_processed_before_method = [
+            "inputs",
+            "bos_token_id",
+            "max_new_tokens",
+            "decoder_start_token_id",
+            "do_sample",
+            "model_kwargs",
+        ]
+        keys_passed_to_model_kwargs = ["use_cache", "output_attentions", "output_hidden_states"]
+        for key in unused_keys + keys_processed_before_method + keys_passed_to_model_kwargs:
+            generation_inputs.pop(key)
+
+        # Validates that the remainder arguments are used by the generation submethod
+        unused_args = []
+        generation_method = getattr(self, generation_method_name)
+        generation_method_args = set(inspect.signature(generation_method).parameters)
+        for supporting_object in supporting_objects:
+            generation_method_args |= set(inspect.signature(supporting_object).parameters)
+        for key, value in generation_inputs.items():
+            if value is not None and key not in generation_method_args:
+                unused_args.append(key)
+
+        if unused_args:
+            raise ValueError(
+                f"From the generation arguments, `{generation_method_name}` was triggered. The following arguments are"
+                f" not used by `{generation_method_name}`: {unused_args}. Please remove them from the generation"
+                " arguments or check the documentation for more information."
+            )
 
     @torch.no_grad()
     def generate(
@@ -1119,6 +1179,10 @@ class GenerationMixin:
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
         ['Paris ist eines der dichtesten besiedelten Gebiete Europas.']
         ```"""
+        # 0. Store generation inputs for posterior submethod validation and validate model kwargs
+        generation_inputs = locals().copy()
+        self._validate_model_kwargs(model_kwargs)
+
         # 1. Set generation parameters if not already defined
         bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
         num_beams = num_beams if num_beams is not None else self.config.num_beams
@@ -1244,10 +1308,6 @@ class GenerationMixin:
 
         if num_beam_groups > num_beams:
             raise ValueError("`num_beam_groups` has to be smaller or equal to `num_beams`")
-        if is_group_beam_gen_mode and do_sample is True:
-            raise ValueError(
-                "Diverse beam search cannot be used in sampling mode. Make sure that `do_sample` is set to `False`."
-            )
 
         # 7. prepare distribution pre_processing samplers
         logits_processor = self._get_logits_processor(
@@ -1279,10 +1339,11 @@ class GenerationMixin:
 
         # 9. go into different generation modes
         if is_greedy_gen_mode:
-            if num_return_sequences > 1:
-                raise ValueError(
-                    f"num_return_sequences has to be 1, but is {num_return_sequences} when doing greedy search."
-                )
+            self._validate_generation_inputs(
+                generation_inputs=generation_inputs,
+                generation_method_name="greedy_search",
+                supporting_objects=[self._get_logits_processor, self._get_stopping_criteria],
+            )
 
             # 10. run greedy search
             return self.greedy_search(
@@ -1298,6 +1359,17 @@ class GenerationMixin:
             )
 
         elif is_sample_gen_mode:
+            self._validate_generation_inputs(
+                generation_inputs=generation_inputs,
+                generation_method_name="sample",
+                supporting_objects=[
+                    self._get_logits_processor,
+                    self._get_stopping_criteria,
+                    self._get_logits_warper,
+                    self._expand_inputs_for_generation,
+                ],
+            )
+
             # 10. prepare logits warper
             logits_warper = self._get_logits_warper(
                 top_k=top_k,
@@ -1311,7 +1383,7 @@ class GenerationMixin:
             # 11. expand input_ids with `num_return_sequences` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
                 input_ids,
-                expand_size=num_return_sequences,
+                num_return_sequences=num_return_sequences,
                 is_encoder_decoder=self.config.is_encoder_decoder,
                 **model_kwargs,
             )
@@ -1331,6 +1403,17 @@ class GenerationMixin:
             )
 
         elif is_beam_gen_mode:
+            self._validate_generation_inputs(
+                generation_inputs=generation_inputs,
+                generation_method_name="beam_search",
+                supporting_objects=[
+                    self._get_logits_processor,
+                    self._get_stopping_criteria,
+                    BeamSearchScorer,
+                    self._expand_inputs_for_generation,
+                ],
+            )
+
             if num_return_sequences > num_beams:
                 raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
 
@@ -1348,7 +1431,10 @@ class GenerationMixin:
             )
             # 11. interleave input_ids with `num_beams` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
-                input_ids, expand_size=num_beams, is_encoder_decoder=self.config.is_encoder_decoder, **model_kwargs
+                input_ids,
+                num_return_sequences=num_beams,
+                is_encoder_decoder=self.config.is_encoder_decoder,
+                **model_kwargs,
             )
             # 12. run beam search
             return self.beam_search(
@@ -1365,6 +1451,18 @@ class GenerationMixin:
             )
 
         elif is_beam_sample_gen_mode:
+            self._validate_generation_inputs(
+                generation_inputs=generation_inputs,
+                generation_method_name="beam_sample",
+                supporting_objects=[
+                    self._get_logits_processor,
+                    self._get_stopping_criteria,
+                    self._get_logits_warper,
+                    BeamSearchScorer,
+                    self._expand_inputs_for_generation,
+                ],
+            )
+
             # 10. prepare logits warper
             logits_warper = self._get_logits_warper(
                 top_k=top_k,
@@ -1389,7 +1487,7 @@ class GenerationMixin:
             # 12. interleave input_ids with `num_beams` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
                 input_ids,
-                expand_size=num_beams * num_return_sequences,
+                num_return_sequences=num_beams * num_return_sequences,
                 is_encoder_decoder=self.config.is_encoder_decoder,
                 **model_kwargs,
             )
@@ -1410,6 +1508,23 @@ class GenerationMixin:
             )
 
         elif is_group_beam_gen_mode:
+            self._validate_generation_inputs(
+                generation_inputs=generation_inputs,
+                generation_method_name="group_beam_search",
+                supporting_objects=[
+                    self._get_logits_processor,
+                    self._get_stopping_criteria,
+                    BeamSearchScorer,
+                    self._expand_inputs_for_generation,
+                ],
+            )
+
+            if do_sample is True:
+                raise ValueError(
+                    "Diverse beam search cannot be used in sampling mode. Make sure that `do_sample` is set to"
+                    " `False`."
+                )
+
             if num_return_sequences > num_beams:
                 raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
 
@@ -1432,7 +1547,10 @@ class GenerationMixin:
             )
             # 11. interleave input_ids with `num_beams` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
-                input_ids, expand_size=num_beams, is_encoder_decoder=self.config.is_encoder_decoder, **model_kwargs
+                input_ids,
+                num_return_sequences=num_beams,
+                is_encoder_decoder=self.config.is_encoder_decoder,
+                **model_kwargs,
             )
             # 12. run beam search
             return self.group_beam_search(
@@ -1449,6 +1567,17 @@ class GenerationMixin:
             )
 
         elif is_constraint_gen_mode:
+            self._validate_generation_inputs(
+                generation_inputs=generation_inputs,
+                generation_method_name="constrained_beam_search",
+                supporting_objects=[
+                    self._get_logits_processor,
+                    self._get_stopping_criteria,
+                    ConstrainedBeamSearchScorer,
+                    self._expand_inputs_for_generation,
+                ],
+            )
+
             if num_return_sequences > num_beams:
                 raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
 
@@ -1457,12 +1586,6 @@ class GenerationMixin:
 
             if num_beams <= 1:
                 raise ValueError("`num_beams` needs to be greater than 1 for constrained generation.")
-
-            if do_sample:
-                raise ValueError("`do_sample` needs to be false for constrained generation.")
-
-            if num_beam_groups is not None and num_beam_groups > 1:
-                raise ValueError("`num_beam_groups` not supported yet for constrained generation.")
 
             final_constraints = []
             if constraints is not None:
@@ -1513,7 +1636,10 @@ class GenerationMixin:
             )
             # 11. interleave input_ids with `num_beams` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
-                input_ids, expand_size=num_beams, is_encoder_decoder=self.config.is_encoder_decoder, **model_kwargs
+                input_ids,
+                num_return_sequences=num_beams,
+                is_encoder_decoder=self.config.is_encoder_decoder,
+                **model_kwargs,
             )
             # 12. run beam search
             return self.constrained_beam_search(
