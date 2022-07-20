@@ -132,6 +132,7 @@ from .import_utils import (
     is_torch_fx_available,
     is_torch_fx_proxy,
     is_torch_onnx_dict_inputs_support_available,
+    is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
     is_torchaudio_available,
