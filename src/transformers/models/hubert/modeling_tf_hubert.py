@@ -227,7 +227,7 @@ def _compute_mask_indices(
             f" `sequence_length`: {sequence_length}`"
         )
     # compute number of masked spans in batch
-    num_masked_spans = int(mask_prob * sequence_length / mask_length + np.random.uniform((1,)))
+    num_masked_spans = int(mask_prob * sequence_length / mask_length + np.random.uniform(size=(1,)))
     num_masked_spans = max(num_masked_spans, min_masks)
 
     # make sure num masked indices <= sequence_length
