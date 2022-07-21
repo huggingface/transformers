@@ -164,6 +164,11 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: actions/download-artifact@v2
+
+      # Create a directory to store test failure tables in the next step
+      - name: Create directory
+        run: mkdir test_failure_tables
+
       - name: Send message to Slack
         env:
           CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
@@ -177,3 +182,11 @@ jobs:
         run: |
           pip install slack_sdk
           python utils/notification_service.py "${{ needs.setup.outputs.matrix }}"
+
+      # Upload complete failure tables, as they might be big and only truncated versions could be sent to Slack.
+      - name: Failure table artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: test_failure_tables_${{ inputs.framework }}-${{ inputs.version }}
+          path: test_failure_tables
