@@ -157,6 +157,12 @@ class PreprocessingArguments:
         default="lvwerra/codeparrot",
         metadata={"help": "Name or path to the tokenizer."},
     )
+    near_deduplication: Optional[bool] = field(
+        default=False, metadata={"help": "If True, near-duplicate samples are removed."}
+    )
+    jaccard_threshold: Optional[float] = field(
+        default=0.85, metadata={"help": "Jaccard threshold for near-duplicate samples."}
+    )
 
 
 @dataclass

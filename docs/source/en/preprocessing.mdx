@@ -244,7 +244,7 @@ For example, the [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) data
  'sampling_rate': 8000}
 ```
 
-1. Use 🤗 Datasets' [`cast_column`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.cast_column) method to upsample the sampling rate to 16kHz:
+1. Use 🤗 Datasets' [`~datasets.Dataset.cast_column`] method to upsample the sampling rate to 16kHz:
 
 ```py
 >>> dataset = dataset.cast_column("audio", Audio(sampling_rate=16_000))

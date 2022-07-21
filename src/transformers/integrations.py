@@ -54,7 +54,7 @@ def is_wandb_available():
     # any value of WANDB_DISABLED disables wandb
     if os.getenv("WANDB_DISABLED", "").upper() in ENV_VARS_TRUE_VALUES:
         logger.warning(
-            "Using the `WAND_DISABLED` environment variable is deprecated and will be removed in v5. Use the "
+            "Using the `WANDB_DISABLED` environment variable is deprecated and will be removed in v5. Use the "
             "--report_to flag to control the integrations used for logging result (for instance --report_to none)."
         )
         return False
@@ -297,7 +297,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
         num_samples=n_trials,
         **kwargs,
     )
-    best_trial = analysis.get_best_trial(metric="objective", mode=direction[:3])
+    best_trial = analysis.get_best_trial(metric="objective", mode=direction[:3], scope=trainer.args.ray_scope)
     best_run = BestRun(best_trial.trial_id, best_trial.last_result["objective"], best_trial.config)
     if _tb_writer is not None:
         trainer.add_callback(_tb_writer)
@@ -305,41 +305,69 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
 
 
 def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
+    import sigopt
+    from transformers.utils.versions import importlib_metadata
 
-    from sigopt import Connection
+    if importlib_metadata.version("sigopt") >= "8.0.0":
+        sigopt.set_project("huggingface")
 
-    conn = Connection()
-    proxies = kwargs.pop("proxies", None)
-    if proxies is not None:
-        conn.set_proxies(proxies)
+        experiment = sigopt.create_experiment(
+            name="huggingface-tune",
+            type="offline",
+            parameters=trainer.hp_space(None),
+            metrics=[dict(name="objective", objective=direction, strategy="optimize")],
+            parallel_bandwidth=1,
+            budget=n_trials,
+        )
 
-    experiment = conn.experiments().create(
-        name="huggingface-tune",
-        parameters=trainer.hp_space(None),
-        metrics=[dict(name="objective", objective=direction, strategy="optimize")],
-        parallel_bandwidth=1,
-        observation_budget=n_trials,
-        project="huggingface",
-    )
-    logger.info(f"created experiment: https://app.sigopt.com/experiment/{experiment.id}")
+        logger.info(f"created experiment: https://app.sigopt.com/experiment/{experiment.id}")
 
-    while experiment.progress.observation_count < experiment.observation_budget:
-        suggestion = conn.experiments(experiment.id).suggestions().create()
-        trainer.objective = None
-        trainer.train(resume_from_checkpoint=None, trial=suggestion)
-        # If there hasn't been any evaluation during the training loop.
-        if getattr(trainer, "objective", None) is None:
-            metrics = trainer.evaluate()
-            trainer.objective = trainer.compute_objective(metrics)
+        for run in experiment.loop():
+            with run:
+                trainer.objective = None
+                trainer.train(resume_from_checkpoint=None, trial=run.run)
+                # If there hasn't been any evaluation during the training loop.
+                if getattr(trainer, "objective", None) is None:
+                    metrics = trainer.evaluate()
+                    trainer.objective = trainer.compute_objective(metrics)
+                run.log_metric("objective", trainer.objective)
 
-        values = [dict(name="objective", value=trainer.objective)]
-        obs = conn.experiments(experiment.id).observations().create(suggestion=suggestion.id, values=values)
-        logger.info(f"[suggestion_id, observation_id]: [{suggestion.id}, {obs.id}]")
-        experiment = conn.experiments(experiment.id).fetch()
+        best = list(experiment.get_best_runs())[0]
+        best_run = BestRun(best.id, best.values["objective"].value, best.assignments)
+    else:
+        from sigopt import Connection
 
-    best = list(conn.experiments(experiment.id).best_assignments().fetch().iterate_pages())[0]
-    best_run = BestRun(best.id, best.value, best.assignments)
+        conn = Connection()
+        proxies = kwargs.pop("proxies", None)
+        if proxies is not None:
+            conn.set_proxies(proxies)
 
+        experiment = conn.experiments().create(
+            name="huggingface-tune",
+            parameters=trainer.hp_space(None),
+            metrics=[dict(name="objective", objective=direction, strategy="optimize")],
+            parallel_bandwidth=1,
+            observation_budget=n_trials,
+            project="huggingface",
+        )
+        logger.info(f"created experiment: https://app.sigopt.com/experiment/{experiment.id}")
+
+        while experiment.progress.observation_count < experiment.observation_budget:
+            suggestion = conn.experiments(experiment.id).suggestions().create()
+            trainer.objective = None
+            trainer.train(resume_from_checkpoint=None, trial=suggestion)
+            # If there hasn't been any evaluation during the training loop.
+            if getattr(trainer, "objective", None) is None:
+                metrics = trainer.evaluate()
+                trainer.objective = trainer.compute_objective(metrics)
+
+            values = [dict(name="objective", value=trainer.objective)]
+            obs = conn.experiments(experiment.id).observations().create(suggestion=suggestion.id, values=values)
+            logger.info(f"[suggestion_id, observation_id]: [{suggestion.id}, {obs.id}]")
+            experiment = conn.experiments(experiment.id).fetch()
+
+        best = list(conn.experiments(experiment.id).best_assignments().fetch().iterate_pages())[0]
+        best_run = BestRun(best.id, best.value, best.assignments)
     return best_run
 
 
@@ -787,7 +815,7 @@ class MLflowCallback(TrainerCallback):
         Environment:
             HF_MLFLOW_LOG_ARTIFACTS (`str`, *optional*):
                 Whether to use MLflow .log_artifact() facility to log artifacts. This only makes sense if logging to a
-                remote server, e.g. s3 or GCS. If set to `True` or *1*, will copy whatever is in
+                remote server, e.g. s3 or GCS. If set to `True` or *1*, will copy each saved checkpoint on each save in
                 [`TrainingArguments`]'s `output_dir` to the local or remote artifact storage. Using it without a remote
                 storage will just copy the files to your artifact location.
             MLFLOW_EXPERIMENT_NAME (`str`, *optional*):
@@ -872,11 +900,19 @@ class MLflowCallback(TrainerCallback):
 
     def on_train_end(self, args, state, control, **kwargs):
         if self._initialized and state.is_world_process_zero:
-            if self._log_artifacts:
-                logger.info("Logging artifacts. This may take time.")
-                self._ml_flow.log_artifacts(args.output_dir)
             if self._auto_end_run and self._ml_flow.active_run():
                 self._ml_flow.end_run()
+
+    def on_save(self, args, state, control, **kwargs):
+        if self._initialized and state.is_world_process_zero and self._log_artifacts:
+            ckpt_dir = f"checkpoint-{state.global_step}"
+            artifact_path = os.path.join(args.output_dir, ckpt_dir)
+            logger.info(f"Logging checkpoint artifacts in {ckpt_dir}. This may take time.")
+            self._ml_flow.pyfunc.log_model(
+                ckpt_dir,
+                artifacts={"model_path": artifact_path},
+                python_model=self._ml_flow.pyfunc.PythonModel(),
+            )
 
     def __del__(self):
         # if the previous run is not terminated correctly, the fluent API will

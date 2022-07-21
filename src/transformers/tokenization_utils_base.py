@@ -291,7 +291,10 @@ class BatchEncoding(UserDict):
             `List[str]`: The list of tokens at that index.
         """
         if not self._encodings:
-            raise ValueError("tokens() is not available when using Python-based tokenizers")
+            raise ValueError(
+                "tokens() is not available when using non-fast tokenizers (e.g. instance of a `XxxTokenizerFast`"
+                " class)."
+            )
         return self._encodings[batch_index].tokens
 
     def sequence_ids(self, batch_index: int = 0) -> List[Optional[int]]:
@@ -312,7 +315,10 @@ class BatchEncoding(UserDict):
             sequence.
         """
         if not self._encodings:
-            raise ValueError("sequence_ids() is not available when using Python-based tokenizers")
+            raise ValueError(
+                "sequence_ids() is not available when using non-fast tokenizers (e.g. instance of a `XxxTokenizerFast`"
+                " class)."
+            )
         return self._encodings[batch_index].sequence_ids
 
     def words(self, batch_index: int = 0) -> List[Optional[int]]:
@@ -328,7 +334,10 @@ class BatchEncoding(UserDict):
             (several tokens will be mapped to the same word index if they are parts of that word).
         """
         if not self._encodings:
-            raise ValueError("words() is not available when using Python-based tokenizers")
+            raise ValueError(
+                "words() is not available when using non-fast tokenizers (e.g. instance of a `XxxTokenizerFast`"
+                " class)."
+            )
         warnings.warn(
             "`BatchEncoding.words()` property is deprecated and should be replaced with the identical, "
             "but more self-explanatory `BatchEncoding.word_ids()` property.",
@@ -349,7 +358,10 @@ class BatchEncoding(UserDict):
             (several tokens will be mapped to the same word index if they are parts of that word).
         """
         if not self._encodings:
-            raise ValueError("word_ids() is not available when using Python-based tokenizers")
+            raise ValueError(
+                "word_ids() is not available when using non-fast tokenizers (e.g. instance of a `XxxTokenizerFast`"
+                " class)."
+            )
         return self._encodings[batch_index].word_ids
 
     def token_to_sequence(self, batch_or_token_index: int, token_index: Optional[int] = None) -> int:
@@ -721,8 +733,10 @@ class BatchEncoding(UserDict):
                         "Please see if a fast version of this tokenizer is available to have this feature available."
                     )
                 raise ValueError(
-                    "Unable to create tensor, you should probably activate truncation and/or padding "
-                    "with 'padding=True' 'truncation=True' to have batched tensors with the same length."
+                    "Unable to create tensor, you should probably activate truncation and/or padding with"
+                    " 'padding=True' 'truncation=True' to have batched tensors with the same length. Perhaps your"
+                    f" features (`{key}` in this case) have excessive nesting (inputs type `list` where type `int` is"
+                    " expected)."
                 )
 
         return self
@@ -956,8 +970,9 @@ class SpecialTokensMixin:
         """
         `str`: Beginning of sentence token. Log an error if used while not having been set.
         """
-        if self._bos_token is None and self.verbose:
-            logger.error("Using bos_token, but it is not set yet.")
+        if self._bos_token is None:
+            if self.verbose:
+                logger.error("Using bos_token, but it is not set yet.")
             return None
         return str(self._bos_token)
 
@@ -966,8 +981,9 @@ class SpecialTokensMixin:
         """
         `str`: End of sentence token. Log an error if used while not having been set.
         """
-        if self._eos_token is None and self.verbose:
-            logger.error("Using eos_token, but it is not set yet.")
+        if self._eos_token is None:
+            if self.verbose:
+                logger.error("Using eos_token, but it is not set yet.")
             return None
         return str(self._eos_token)
 
@@ -976,8 +992,9 @@ class SpecialTokensMixin:
         """
         `str`: Unknown token. Log an error if used while not having been set.
         """
-        if self._unk_token is None and self.verbose:
-            logger.error("Using unk_token, but it is not set yet.")
+        if self._unk_token is None:
+            if self.verbose:
+                logger.error("Using unk_token, but it is not set yet.")
             return None
         return str(self._unk_token)
 
@@ -987,8 +1004,9 @@ class SpecialTokensMixin:
         `str`: Separation token, to separate context and query in an input sequence. Log an error if used while not
         having been set.
         """
-        if self._sep_token is None and self.verbose:
-            logger.error("Using sep_token, but it is not set yet.")
+        if self._sep_token is None:
+            if self.verbose:
+                logger.error("Using sep_token, but it is not set yet.")
             return None
         return str(self._sep_token)
 
@@ -997,8 +1015,9 @@ class SpecialTokensMixin:
         """
         `str`: Padding token. Log an error if used while not having been set.
         """
-        if self._pad_token is None and self.verbose:
-            logger.error("Using pad_token, but it is not set yet.")
+        if self._pad_token is None:
+            if self.verbose:
+                logger.error("Using pad_token, but it is not set yet.")
             return None
         return str(self._pad_token)
 
@@ -1008,8 +1027,9 @@ class SpecialTokensMixin:
         `str`: Classification token, to extract a summary of an input sequence leveraging self-attention along the full
         depth of the model. Log an error if used while not having been set.
         """
-        if self._cls_token is None and self.verbose:
-            logger.error("Using cls_token, but it is not set yet.")
+        if self._cls_token is None:
+            if self.verbose:
+                logger.error("Using cls_token, but it is not set yet.")
             return None
         return str(self._cls_token)
 
@@ -1019,8 +1039,9 @@ class SpecialTokensMixin:
         `str`: Mask token, to use when training a model with masked-language modeling. Log an error if used while not
         having been set.
         """
-        if self._mask_token is None and self.verbose:
-            logger.error("Using mask_token, but it is not set yet.")
+        if self._mask_token is None:
+            if self.verbose:
+                logger.error("Using mask_token, but it is not set yet.")
             return None
         return str(self._mask_token)
 
@@ -1030,8 +1051,9 @@ class SpecialTokensMixin:
         `List[str]`: All the additional special tokens you may want to use. Log an error if used while not having been
         set.
         """
-        if self._additional_special_tokens is None and self.verbose:
-            logger.error("Using additional_special_tokens, but it is not set yet.")
+        if self._additional_special_tokens is None:
+            if self.verbose:
+                logger.error("Using additional_special_tokens, but it is not set yet.")
             return None
         return [str(tok) for tok in self._additional_special_tokens]
 

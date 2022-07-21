@@ -40,6 +40,7 @@ The source of the dataset is the GitHub dump available on Google's [BigQuery](ht
 The raw dataset contains many duplicates. We deduplicated and filtered the dataset using the heuristics proposed in OpenAI's Codex [paper](https://arxiv.org/abs/2107.03374) and some new ones:
 
 - exact deduplication using each file's hash
+- near deduplication using MinHash and Jaccard similarity. MinHash with a Jaccard threshold (default=0.85) is first used to create duplicate clusters. Then these clusters are then reduced to unique files based on the exact Jaccard similarity. See `deduplicate_dataset` in `minhash_deduplication.py` for a detailed description.
 - filtering files with max line length > 1000
 - filtering files with mean line length > 100
 - fraction of alphanumeric characters < 0.25
@@ -90,7 +91,7 @@ python scripts/initialize_model.py \
 --model_name codeparrot \
 --push_to_hub True
 ```
-This will initialize a new model with the architecture and configuration of `gpt2-large` and use the tokenizer to appropriately size the input embeddings. Finally, the initilaized model is pushed the the hub.
+This will initialize a new model with the architecture and configuration of `gpt2-large` and use the tokenizer to appropriately size the input embeddings. Finally, the initilaized model is pushed the hub.
 
 We can either pass the name of a text dataset or a pretokenized dataset which speeds up training a bit.
 Now that the tokenizer and model are also ready we can start training the model. The main training script is built with `accelerate` to scale across a wide range of platforms and infrastructure scales. We train two models with [110M](https://huggingface.co/lvwerra/codeparrot-small/) and [1.5B](https://huggingface.co/lvwerra/codeparrot/) parameters for 25-30B tokens on a 16xA100 (40GB) machine which takes 1 day and 1 week, respectively.
@@ -165,7 +166,7 @@ python scripts/validation_loss.py \
 In addition we evaluate the model on OpenAI's _HumanEval_ benchmark. You can run the evaluation with the following command:
 
 ```bash
-python scripts/human_eval.py --model_ckpt lvwerra/codeparrot \
+accelerate launch  scripts/human_eval.py --model_ckpt lvwerra/codeparrot \
 --do_sample True \
 --temperature 0.2 \
 --top_p 0.95 \
@@ -178,7 +179,7 @@ The results as well as reference values are shown in the following table:
 | Model | pass@1 | pass@10 | pass@100|
 |-------|--------|---------|---------|
 |CodeParrot 🦜 (110M) | 3.80% | 6.57% | 12.78% |
-|CodeParrot 🦜 (1.5B) | 3.58% | 8.03% | 14.96% |
+|CodeParrot 🦜 (1.5B) | 3.99% | 8.69% | 17.88% |
 |||||
 |Codex (25M)| 3.21% | 7.1% |	12.89%|
 |Codex (85M)| 8.22%	| 12.81% | 22.40% |

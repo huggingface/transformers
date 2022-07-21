@@ -19,11 +19,10 @@ import os
 from shutil import copyfile
 from typing import Dict, List, Optional, Tuple, Union
 
-from transformers.models.layoutlmv2.tokenization_layoutlmv2 import LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING
+from transformers.models.layoutxlm.tokenization_layoutxlm import LAYOUTXLM_ENCODE_KWARGS_DOCSTRING
 
 from ...tokenization_utils import AddedToken
 from ...tokenization_utils_base import (
-    ENCODE_KWARGS_DOCSTRING,
     BatchEncoding,
     EncodedInput,
     PreTokenizedInput,
@@ -166,7 +165,7 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
         self.pad_token_label = pad_token_label
         self.only_label_first_subword = only_label_first_subword
 
-    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    @add_end_docstrings(LAYOUTXLM_ENCODE_KWARGS_DOCSTRING)
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
