@@ -1601,6 +1601,9 @@ class GenerationMixin:
             if num_beams <= 1:
                 raise ValueError("`num_beams` needs to be greater than 1 for constrained generation.")
 
+            if do_sample:
+                raise ValueError("`do_sample` needs to be false for constrained generation.")
+
             final_constraints = []
             if constraints is not None:
                 final_constraints = constraints
