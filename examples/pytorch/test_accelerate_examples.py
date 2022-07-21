@@ -26,8 +26,9 @@ import tempfile
 import torch
 
 from accelerate.utils import write_basic_config
-from transformers.testing_utils import TestCasePlus, get_gpu_count, slow, torch_device
+from transformers.testing_utils import TestCasePlus, get_gpu_count, slow, torch_device, run_command
 from transformers.utils import is_apex_available
+from unittest import mock
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -75,6 +76,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdir)
 
+    @mock.patch.dict(os.environ, {"WANDB_MODE": "offline"})
     def test_run_glue_no_trainer(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
@@ -94,12 +96,13 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         if is_cuda_and_apex_available():
             testargs.append("--fp16")
 
-        _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
+        run_command(self._launch_args + testargs)
         result = get_results(tmp_dir)
         self.assertGreaterEqual(result["eval_accuracy"], 0.75)
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "glue_no_trainer")))
 
+    @mock.patch.dict(os.environ, {"WANDB_MODE": "offline"})
     def test_run_clm_no_trainer(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
@@ -120,12 +123,13 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             # Skipping because there are not enough batches to train the model + would need a drop_last to work.
             return
 
-        _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
+        run_command(self._launch_args + testargs)
         result = get_results(tmp_dir)
         self.assertLess(result["perplexity"], 100)
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "clm_no_trainer")))
 
+    @mock.patch.dict(os.environ, {"WANDB_MODE": "offline"})
     def test_run_mlm_no_trainer(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
@@ -139,12 +143,13 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             --with_tracking
         """.split()
 
-        _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
+        run_command(self._launch_args + testargs)
         result = get_results(tmp_dir)
         self.assertLess(result["perplexity"], 42)
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "mlm_no_trainer")))
 
+    @mock.patch.dict(os.environ, {"WANDB_MODE": "offline"})
     def test_run_ner_no_trainer(self):
         # with so little data distributed training needs more epochs to get the score on par with 0/1 gpu
         epochs = 7 if get_gpu_count() > 1 else 2
@@ -165,13 +170,14 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             --with_tracking
         """.split()
 
-        _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
+        run_command(self._launch_args + testargs)
         result = get_results(tmp_dir)
         self.assertGreaterEqual(result["eval_accuracy"], 0.75)
         self.assertLess(result["train_loss"], 0.5)
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "ner_no_trainer")))
 
+    @mock.patch.dict(os.environ, {"WANDB_MODE": "offline"})
     def test_run_squad_no_trainer(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
@@ -190,7 +196,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             --with_tracking
         """.split()
 
-        _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
+        run_command(self._launch_args + testargs)
         result = get_results(tmp_dir)
         # Because we use --version_2_with_negative the testing script uses SQuAD v2 metrics.
         self.assertGreaterEqual(result["eval_f1"], 28)
@@ -198,6 +204,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "qa_no_trainer")))
 
+    @mock.patch.dict(os.environ, {"WANDB_MODE": "offline"})
     def test_run_swag_no_trainer(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
@@ -214,12 +221,13 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             --with_tracking
         """.split()
 
-        _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
+        run_command(self._launch_args + testargs)
         result = get_results(tmp_dir)
         self.assertGreaterEqual(result["eval_accuracy"], 0.8)
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "swag_no_trainer")))
 
     @slow
+    @mock.patch.dict(os.environ, {"WANDB_MODE": "offline"})
     def test_run_summarization_no_trainer(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
@@ -237,7 +245,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             --with_tracking
         """.split()
 
-        _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
+        run_command(self._launch_args + testargs)
         result = get_results(tmp_dir)
         self.assertGreaterEqual(result["eval_rouge1"], 10)
         self.assertGreaterEqual(result["eval_rouge2"], 2)
@@ -247,6 +255,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "summarization_no_trainer")))
 
     @slow
+    @mock.patch.dict(os.environ, {"WANDB_MODE": "offline"})
     def test_run_translation_no_trainer(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
@@ -268,7 +277,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             --with_tracking
         """.split()
 
-        _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
+        run_command(self._launch_args + testargs)
         result = get_results(tmp_dir)
         self.assertGreaterEqual(result["eval_bleu"], 30)
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
@@ -292,10 +301,11 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             --checkpointing_steps epoch
         """.split()
 
-        _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
+        run_command(self._launch_args + testargs)
         result = get_results(tmp_dir)
         self.assertGreaterEqual(result["eval_overall_accuracy"], 0.10)
 
+    @mock.patch.dict(os.environ, {"WANDB_MODE": "offline"})
     def test_run_image_classification_no_trainer(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
@@ -316,9 +326,9 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         if is_cuda_and_apex_available():
             testargs.append("--fp16")
 
-        _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
+        run_command(self._launch_args + testargs)
         result = get_results(tmp_dir)
         # The base model scores a 25%
-        self.assertGreaterEqual(result["eval_accuracy"], 0.625)
+        self.assertGreaterEqual(result["eval_accuracy"], 0.6)
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "step_1")))
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "image_classification_no_trainer")))
