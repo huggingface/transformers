@@ -188,5 +188,5 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@v2
         with:
-          name: test_failure_tables
-          path: /transformers/test_failure_tables
+          name: test_failure_tables_${{ inputs.framework }}-${{ inputs.version }}
+          path: test_failure_tables
