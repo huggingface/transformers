@@ -173,15 +173,11 @@ abs min  abs max  metadata
 
 L'ultimo frame report per la funzione `Dropout.forward` con la prima voce per l'unico input e la seconda per l'unico output. Si può notare che è stato richiamato da un attibuto `dropout` dentro la classe `DenseReluDense`. Si può notare che ciò è avvenuto durante il primo strato, del 2° blocco, durante il primissimo lotto. Infine, gli elementi di input più grandi in assoluto sono stati `6.27e+04` e l'equivalente per l'output era `inf`.
 
-You can see here, that `T5DenseGatedGeluDense.forward` resulted in output activations, whose absolute max value was
-around 62.7K, which is very close to fp16's top limit of 64K. In the next frame we have `Dropout` which renormalizes
-the weights, after it zeroed some of the elements, which pushes the absolute max value to more than 64K, and we get an
-overflow (`inf`).
+Puoi vedere qui, che `T5DenseGatedGeluDense.forward` risulta in output activations, il cui valore massimo assoluto era circa 62,7K, che è molto vicino al limite massimo di 64K di fp16. Nel prossimo frame abbiamo `Dropout` che rinormalizza i pesi, dopo aver azzerato alcuni elementi, il che spinge il valore massimo assoluto a più di 64K e si verifica un overflow.(`inf`).
 
-As you can see it's the previous frames that we need to look into when the numbers start going into very large for fp16
-numbers.
+Come puoi notare, è nei frames precedenti che occorre esaminare quando i numeri iniziano a diventare molto grandi per i valori fp16.
 
-Let's match the report to the code from `models/t5/modeling_t5.py`:
+Confrontiamo il report al codice `models/t5/modeling_t5.py`:
 
 ```python
 class T5DenseGatedGeluDense(nn.Module):
@@ -202,15 +198,11 @@ class T5DenseGatedGeluDense(nn.Module):
         return hidden_states
 ```
 
-Now it's easy to see the `dropout` call, and all the previous calls as well.
+Ora è facile vedere la chiamata `dropout`, e tutte le chiamate precedenti.
 
-Since the detection is happening in a forward hook, these reports are printed immediately after each `forward`
-returns.
+Poiché il rilevamento avviene in un avanzamento (forward hook in eng.), i rapporti vengono creati immeditamente dopo ogni rientro da `forward` (forward returns in eng.).
 
-Going back to the full report, to act on it and to fix the problem, we need to go a few frames up where the numbers
-started to go up and most likely switch to the `fp32` mode here, so that the numbers don't overflow when multiplied
-or summed up. Of course, there might be other solutions. For example, we could turn off `amp` temporarily if it's
-enabled, after moving the original `forward` into a helper wrapper, like so:
+Tornando al rapporto completo, per agire e risolvere il problema, dobbiamo andare qualche frame più in alto, dove i numeri hanno iniziato a salire, e probabilmente passare alla modalità `fp32`, in modo che i numeri non trabocchino quando vengono moltiplicati o sommati. Naturalmente, potrebbero esserci altre soluzioni. Per esempio, potremmo spegnere temporanemante `amp` se è abilitato, successivamente spostare `forward` in un helper wrapper, come:
 
 ```python
 def _forward(self, hidden_states):
@@ -233,9 +225,8 @@ def forward(self, hidden_states):
         return self._forward(hidden_states)
 ```
 
-Since the automatic detector only reports on inputs and outputs of full frames, once you know where to look, you may
-want to analyse the intermediary stages of any specific `forward` function as well. In such a case you can use the
-`detect_overflow` helper function to inject the detector where you want it, for example:
+Poiché il rilevatore automatico riporta solo gli ingressi e le uscite di fotogrammi completi, una volta che si sa dove cercare, si può
+analizzare anche le fasi intermedie di una specifica funzione `forward`. In alcuni casi puoi usare la funzione di supporto `detect_overflow` per indirizzare il rilevatore dove preferisci, ad esempio:
 
 ```python
 from debug_utils import detect_overflow
@@ -252,14 +243,14 @@ class T5LayerFF(nn.Module):
         return hidden_states + self.dropout(forwarded_states)
 ```
 
-You can see that we added 2 of these and now we track if `inf` or `nan` for `forwarded_states` was detected
-somewhere in between.
+Si può vedere che abbiamo aggiunto 2 di questi e ora teniamo traccia se `inf` o `nan` per `forwarded_states` è stato rilevato
+da qualche parte.
 
-Actually, the detector already reports these because each of the calls in the example above is a `nn.Module`, but
-let's say if you had some local direct calculations this is how you'd do that.
+In realtà, il rilevatore li riporta già, perché ciascuna delle chiamate nell'esempio precedente è un `nn.Module`, ma
+diciamo che se avessimo dei calcoli diretti locali, questo è il modo in cui lo faremmo.
 
-Additionally, if you're instantiating the debugger in your own code, you can adjust the number of frames printed from
-its default, e.g.:
+Inoltre, se si istanzia il debugger nel proprio codice, è possibile modificare il numero di fotogrammi stampati rispetto a
+predefinito, ad esempio.:
 
 ```python
 from .debug_utils import DebugUnderflowOverflow
@@ -267,23 +258,23 @@ from .debug_utils import DebugUnderflowOverflow
 debug_overflow = DebugUnderflowOverflow(model, max_frames_to_save=100)
 ```
 
-### Specific batch absolute mix and max value tracing
+### Tracciamento della mistura assoluta del lotto specifico e del valore massimo
 
-The same debugging class can be used for per-batch tracing with the underflow/overflow detection feature turned off.
+La stessa classe di debug può essere utilizzata per il tracciamento per-batch con la funzione di rilevamento di underflow/overflow disattivata.
 
-Let's say you want to watch the absolute min and max values for all the ingredients of each `forward` call of a given
-batch, and only do that for batches 1 and 3. Then you instantiate this class as:
+Supponiamo di voler osservare i valori minimi e massimi assoluti per tutti gli ingredienti di ogni chiamata `forward` di un dato lotto.
+lotto, e che lo si voglia fare solo per i lotti 1 e 3. Si istanzia questa classe come:
 
 ```python
 debug_overflow = DebugUnderflowOverflow(model, trace_batch_nums=[1, 3])
 ```
 
-And now full batches 1 and 3 will be traced using the same format as the underflow/overflow detector does.
+Ora i batch completi 1 e 3 saranno tracciati utilizzando lo stesso formato del rilevatore di underflow/overflow.
 
-Batches are 0-indexed.
+I batches sono 0-indexed.
 
-This is helpful if you know that the program starts misbehaving after a certain batch number, so you can fast-forward
-right to that area. Here is a sample truncated output for such configuration:
+Questo è utile se si sa che il programma inizia a comportarsi male dopo un certo numero di batch, in modo da poter avanzare velocemente fino a quell'area.
+direttamente a quell'area. Ecco un esempio di output troncato per questa configurazione:
 
 ```
                   *** Starting batch number=1 ***
@@ -314,12 +305,9 @@ abs min  abs max  metadata
 [...]
 ```
 
-Here you will get a huge number of frames dumped - as many as there were forward calls in your model, so it may or may
-not what you want, but sometimes it can be easier to use for debugging purposes than a normal debugger. For example, if
-a problem starts happening at batch number 150. So you can dump traces for batches 149 and 150 and compare where
-numbers started to diverge.
+Qui verrà scaricato un numero enorme di fotogrammi, tanti quanti sono le chiamate in avanti nel modello, quindi può essere o non essere quello che volete, ma a volte può essere più utile usarlo di un classico debugger. Per esempio, se il problema inizia a verificarsi a partire dal lotto numero 150. Quindi è possibile scaricare le tracce dei lotti 149 e 150 e confrontare i punti in cui i numeri hanno iniziato a divergere.
 
-You can also specify the batch number after which to stop the training, with:
+È inoltre possibile specificare il numero di batch dopo il quale interrompere l'addestramento, con:
 
 ```python
 debug_overflow = DebugUnderflowOverflow(model, trace_batch_nums=[1, 3], abort_after_batch_num=3)
