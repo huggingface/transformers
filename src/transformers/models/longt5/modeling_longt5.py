@@ -32,7 +32,8 @@ from ...modeling_outputs import (
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
-from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import ALL_LAYERNORM_LAYERS, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
@@ -177,7 +178,7 @@ def _make_global_fixed_block_ids(
     fixed_block_mask = torch.cumsum(fixed_block_mask, axis=1) - fixed_block_mask
     mask = torch.where(attention_mask != 0.0, 1.0, -1000.0).type(attention_mask.dtype)
     global_block_ids = torch.floor(mask + fixed_block_mask - 1.0).type(attention_mask.dtype)
-    _global_block_ids_lower_bound = torch.tensor(-1.0, dtype=global_block_ids.dtype, device=global_block_ids.device)
+    _global_block_ids_lower_bound = torch.tensor(-1, dtype=global_block_ids.dtype, device=global_block_ids.device)
     global_block_ids = torch.where(
         global_block_ids > _global_block_ids_lower_bound, global_block_ids, _global_block_ids_lower_bound
     )
@@ -259,6 +260,8 @@ except ImportError:
 except Exception:
     logger.warning("discovered apex but it failed to load, falling back to LongT5LayerNorm")
     pass
+
+ALL_LAYERNORM_LAYERS.append(LongT5LayerNorm)
 
 
 # Copied from transformers.models.t5.modeling_t5.T5DenseActDense with T5->LongT5

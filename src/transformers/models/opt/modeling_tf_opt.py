@@ -506,6 +506,14 @@ class TFOPTDecoder(tf.keras.layers.Layer):
             name="embed_positions",
         )
 
+        # Note that the only purpose of `config._remove_final_layer_norm` is to keep backward compatibility
+        # with checkpoints that have been fine-tuned before transformers v4.20.1
+        # see https://github.com/facebookresearch/metaseq/pull/164
+        if config.do_layer_norm_before and not config._remove_final_layer_norm:
+            self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
+        else:
+            self.final_layer_norm = None
+
         if config.word_embed_proj_dim != config.hidden_size:
             self.project_out = tf.keras.layers.Dense(config.word_embed_proj_dim, name="project_out", use_bias=False)
             self.project_in = tf.keras.layers.Dense(config.hidden_size, name="project_in", use_bias=False)
@@ -680,6 +688,9 @@ class TFOPTDecoder(tf.keras.layers.Layer):
 
             if output_attentions:
                 all_self_attns += (layer_self_attn,)
+
+        if self.final_layer_norm is not None:
+            hidden_states = self.final_layer_norm(hidden_states)
 
         if self.project_out is not None:
             hidden_states = self.project_out(hidden_states)

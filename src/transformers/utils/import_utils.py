@@ -19,6 +19,7 @@ import importlib.util
 import json
 import os
 import sys
+import warnings
 from collections import OrderedDict
 from functools import wraps
 from itertools import chain
@@ -323,7 +324,14 @@ def is_torch_bf16_cpu_available():
 
 
 def is_torch_bf16_available():
-    return is_torch_bf16_cpu_available() or is_torch_bf16_gpu_available()
+    # the original bf16 check was for gpu only, but later a cpu/bf16 combo has emerged so this util
+    # has become ambiguous and therefore deprecated
+    warnings.warn(
+        "The util is_torch_bf16_available is deprecated, please use is_torch_bf16_gpu_available "
+        "or is_torch_bf16_cpu_available instead according to whether it's used with cpu or gpu",
+        FutureWarning,
+    )
+    return is_torch_bf16_gpu_available()
 
 
 def is_torch_tf32_available():
@@ -388,19 +396,32 @@ def is_ftfy_available():
     return _ftfy_available
 
 
-def is_torch_tpu_available():
+def is_torch_tpu_available(check_device=True):
+    "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
     if not _torch_available:
         return False
-    # This test is probably enough, but just in case, we unpack a bit.
-    if importlib.util.find_spec("torch_xla") is None:
-        return False
-    if importlib.util.find_spec("torch_xla.core") is None:
-        return False
-    return importlib.util.find_spec("torch_xla.core.xla_model") is not None
+    if importlib.util.find_spec("torch_xla") is not None:
+        if check_device:
+            # We need to check if `xla_device` can be found, will raise a RuntimeError if not
+            try:
+                import torch_xla.core.xla_model as xm
+
+                _ = xm.xla_device()
+                return True
+            except RuntimeError:
+                return False
+        return True
+    return False
 
 
 def is_torchdynamo_available():
     return importlib.util.find_spec("torchdynamo") is not None
+
+
+def is_torch_tensorrt_fx_available():
+    if importlib.util.find_spec("torch_tensorrt") is None:
+        return False
+    return importlib.util.find_spec("torch_tensorrt.fx") is not None
 
 
 def is_datasets_available():
@@ -428,7 +449,25 @@ def is_apex_available():
 
 
 def is_ipex_available():
-    return importlib.util.find_spec("intel_extension_for_pytorch") is not None
+    def get_major_and_minor_from_version(full_version):
+        return str(version.parse(full_version).major) + "." + str(version.parse(full_version).minor)
+
+    if not is_torch_available() or importlib.util.find_spec("intel_extension_for_pytorch") is None:
+        return False
+    _ipex_version = "N/A"
+    try:
+        _ipex_version = importlib_metadata.version("intel_extension_for_pytorch")
+    except importlib_metadata.PackageNotFoundError:
+        return False
+    torch_major_and_minor = get_major_and_minor_from_version(_torch_version)
+    ipex_major_and_minor = get_major_and_minor_from_version(_ipex_version)
+    if torch_major_and_minor != ipex_major_and_minor:
+        logger.warning(
+            f"Intel Extension for PyTorch {ipex_major_and_minor} needs to work with PyTorch {ipex_major_and_minor}.*,"
+            f" but PyTorch {_torch_version} is found. Please switch to the matching version and run again."
+        )
+        return False
+    return True
 
 
 def is_bitsandbytes_available():
@@ -479,6 +518,10 @@ def is_spacy_available():
     return importlib.util.find_spec("spacy") is not None
 
 
+def is_tensorflow_text_available():
+    return importlib.util.find_spec("tensorflow_text") is not None
+
+
 def is_in_notebook():
     try:
         # Test adapted from tqdm.autonotebook: https://github.com/tqdm/tqdm/blob/master/tqdm/autonotebook.py
@@ -487,7 +530,9 @@ def is_in_notebook():
             raise ImportError("console")
         if "VSCODE_PID" in os.environ:
             raise ImportError("vscode")
-        if "DATABRICKS_RUNTIME_VERSION" in os.environ:
+        if "DATABRICKS_RUNTIME_VERSION" in os.environ and os.environ["DATABRICKS_RUNTIME_VERSION"] < "11.0":
+            # Databricks Runtime 11.0 and above uses IPython kernel by default so it should be compatible with Jupyter notebook
+            # https://docs.microsoft.com/en-us/azure/databricks/notebooks/ipython-kernel
             raise ImportError("databricks")
 
         return importlib.util.find_spec("IPython") is not None
@@ -709,6 +754,12 @@ TENSORFLOW_PROBABILITY_IMPORT_ERROR = """
 explained here: https://github.com/tensorflow/probability.
 """
 
+# docstyle-ignore
+TENSORFLOW_TEXT_IMPORT_ERROR = """
+{0} requires the tensorflow_text library but it was not found in your environment. You can install it with pip as
+explained here: https://www.tensorflow.org/text/guide/tf_text_intro.
+"""
+
 
 # docstyle-ignore
 PANDAS_IMPORT_ERROR = """
@@ -788,6 +839,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("speech", (is_speech_available, SPEECH_IMPORT_ERROR)),
         ("tensorflow_probability", (is_tensorflow_probability_available, TENSORFLOW_PROBABILITY_IMPORT_ERROR)),
         ("tf", (is_tf_available, TENSORFLOW_IMPORT_ERROR)),
+        ("tensorflow_text", (is_tensorflow_text_available, TENSORFLOW_TEXT_IMPORT_ERROR)),
         ("timm", (is_timm_available, TIMM_IMPORT_ERROR)),
         ("tokenizers", (is_tokenizers_available, TOKENIZERS_IMPORT_ERROR)),
         ("torch", (is_torch_available, PYTORCH_IMPORT_ERROR)),

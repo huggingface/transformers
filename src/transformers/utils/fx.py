@@ -115,6 +115,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "megatron-bert",
     "mobilebert",
     "mt5",
+    "nezha",
     "opt",
     "pegasus",
     "plbart",
