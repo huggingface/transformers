@@ -428,7 +428,7 @@ class TFModelTesterMixin:
         return new_tf_outputs, new_pt_outputs
 
     def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=1e-5, name="outputs", attributes=None):
-        """Check the outputs from PyTorch and TensorFlow models are closed enough. Checks are done in a recursive way.
+        """Check the outputs from PyTorch and TensorFlow models are close enough. Checks are done in a recursive way.
 
         Args:
             model_class: The class of the model that is currently testing. For example, `TFBertModel`,
@@ -454,8 +454,8 @@ class TFModelTesterMixin:
             # TODO: remove this method and this line after issues are fixed
             tf_outputs, pt_outputs = self._postprocessing_to_ignore_test_cases(tf_outputs, pt_outputs, model_class)
 
-            tf_keys = tuple([k for k, v in tf_outputs.items() if v is not None])
-            pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
+            tf_keys = [k for k, v in tf_outputs.items() if v is not None]
+            pt_keys = [k for k, v in pt_outputs.items() if v is not None]
 
             self.assertEqual(tf_keys, pt_keys, f"{name}: Output keys differ between TF and PyTorch")
 
@@ -1881,6 +1881,7 @@ class UtilsFunctionsTest(unittest.TestCase):
             def __init__(self):
                 config_kwargs = {"output_attentions": False, "output_hidden_states": False, "return_dict": False}
                 self.config = PretrainedConfig(**config_kwargs)
+                self.main_input_name = "input_ids"
 
             @unpack_inputs
             def call(
@@ -1888,9 +1889,14 @@ class UtilsFunctionsTest(unittest.TestCase):
             ):
                 return input_ids, past, output_attentions, output_hidden_states, return_dict
 
+            @unpack_inputs
+            def foo(self, pixel_values, output_attentions=None, output_hidden_states=None, return_dict=None):
+                return pixel_values, output_attentions, output_hidden_states, return_dict
+
         dummy_model = DummyModel()
         input_ids = tf.constant([0, 1, 2, 3])
         past = tf.constant([4, 5, 6, 7])
+        pixel_values = tf.constant([8, 9, 10, 11])
 
         # test case 1: Pass inputs as keyword arguments; Booleans are inherited from the config.
         output = dummy_model.call(input_ids=input_ids, past=past)
@@ -1936,6 +1942,14 @@ class UtilsFunctionsTest(unittest.TestCase):
         self.assertFalse(output[2])
         self.assertFalse(output[3])
         self.assertFalse(output[4])
+
+        # test case 7: the decorator is independent from `main_input_name` -- it treats the first argument of the
+        # decorated function as its main input.
+        output = dummy_model.foo(pixel_values=pixel_values)
+        tf.debugging.assert_equal(output[0], pixel_values)
+        self.assertFalse(output[1])
+        self.assertFalse(output[2])
+        self.assertFalse(output[3])
 
     # Tests whether the stable softmax is stable on CPU, with and without XLA
     def test_xla_stable_softmax(self):
