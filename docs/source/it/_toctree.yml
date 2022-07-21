@@ -19,3 +19,6 @@
 - sections:
   - local: multilingual
     title: Modelli multilingua per l'inferenza
+- sections:
+  - local: debugging
+    title: Debugging
