@@ -1611,7 +1611,6 @@ class JukeboxTransformer(nn.Module):
         self.encoder_dims = encoder_dims
         self.blocks = blocks
         if blocks is not None:
-            assert n_ctx % blocks == 0
             self.block_ctx = n_ctx // blocks
         self.prime_len = prime_len
         self.n_head = n_head
@@ -1963,26 +1962,12 @@ class JukeboxConditionalAutoregressive(nn.Module):
         get_preds=False,
         sample_tokens=None,
     ):
-        assert self.training is False
-
         if sample_tokens is None:
             sample_tokens = self.input_dims
         N, D = n_samples, self.input_dims
-        if self.y_cond:
-            assert y_cond is not None
-            assert y_cond.shape == (N, 1, self.width)
-        else:
-            assert y_cond is None
 
-        if self.x_cond:
-            assert x_cond is not None
-            assert x_cond.shape == (N, D, self.width) or x_cond.shape == (
-                N,
-                1,
-                self.width,
-            ), f"Got {x_cond.shape}, expected ({N}, {D}/{1}, {self.width})"
-        else:
-            assert x_cond is None
+
+        if not self.x_cond:
             x_cond = torch.zeros((N, 1, self.width), dtype=torch.float).to(
                 "cpu" if torch.cuda.is_available() else "cpu"
             )
@@ -2044,30 +2029,14 @@ class JukeboxConditionalAutoregressive(nn.Module):
         # Preprocess.
         with torch.no_grad():
             x = self.preprocess(x)
-        # assert isinstance(x, torch.cuda.LongTensor)
-        assert (0 <= x).all() and (x < self.bins).all()
-        assert x.shape[0] == n_samples
+
         xs = torch.split(x, 1, dim=1)
         xs = list(xs)
-        assert len(xs) < sample_tokens
 
         N, D = n_samples, self.input_dims
-        if self.y_cond:
-            assert y_cond is not None
-            assert y_cond.shape == (N, 1, self.width)
-        else:
-            assert y_cond is None
 
-        if self.x_cond:
-            assert x_cond is not None
-            assert x_cond.shape == (N, D, self.width) or x_cond.shape == (
-                N,
-                1,
-                self.width,
-            ), f"Got {x_cond.shape}, expected ({N}, {D}/{1}, {self.width})"
-        else:
-            assert x_cond is None
-            x_cond = torch.zeros((N, 1, self.width), dtype=torch.float).to(x.device)  # .cuda()
+        if not self.x_cond:
+            x_cond = torch.zeros((N, 1, self.width), dtype=torch.float).to(x.device)
 
         with torch.no_grad():
             if get_preds:
@@ -2094,8 +2063,6 @@ class JukeboxConditionalAutoregressive(nn.Module):
                 start = start + current_chunk_size
 
                 x_prime, cond_prime = torch.cat(xs_prime, dim=1), torch.cat(conds_prime, dim=1)
-                assert x_prime.shape == (n_samples, current_chunk_size, self.width)
-                assert cond_prime.shape == (n_samples, current_chunk_size, self.width)
                 del xs_prime
                 del conds_prime
                 if not get_preds:
@@ -2105,7 +2072,6 @@ class JukeboxConditionalAutoregressive(nn.Module):
                 if get_preds:
                     if self.add_cond_after_transformer:
                         x_prime = x_prime + cond_prime
-                    assert x_prime.shape == (n_samples, current_chunk_size, self.width)
                     del cond_prime
                     x_primes.append(x_prime)
                 else:
@@ -2113,7 +2079,6 @@ class JukeboxConditionalAutoregressive(nn.Module):
 
             if get_preds:
                 x_prime = torch.cat(x_primes, dim=1)
-                assert x_prime.shape == (n_samples, len(xs), self.width)
                 x_prime = self.x_out(x_prime)  # Predictions
                 preds.append(x_prime)
 
@@ -2406,14 +2371,7 @@ class LabelConditioner(nn.Module):
             )
 
     def forward(self, y):
-        assert len(y.shape) == 2, f"Expected shape with 2 dims, got {y.shape}"
-        assert (
-            y.shape[-1] == 4 + self.max_bow_genre_size
-        ), f"Expected shape (N,{4 + self.max_bow_genre_size}), got {y.shape}"
-        # assert isinstance(y, torch.cuda.LongTensor), f"Expected dtype {t.cuda.LongTensor}, got {y.dtype}"
-        # N = y.shape[0]
         total_length, offset, length, artist, genre = y[:, 0:1], y[:, 1:2], y[:, 2:3], y[:, 3:4], y[:, 4:]
-
         # Start embedding of length 1
         artist_emb = self.artist_emb(artist)
         # Empty genre slots are denoted by -1. We mask these out.
@@ -2431,7 +2389,6 @@ class LabelConditioner(nn.Module):
                 + self.absolute_pos_emb(start, end)
                 + self.relative_pos_emb(start / total_length, end / total_length)
             )
-            # assert_shape(pos_emb, (N, self.n_time, self.out_width))
         else:
             pos_emb = None
         return start_emb, pos_emb
@@ -2683,20 +2640,12 @@ class JukeboxPrior(nn.Module):
     def prior_preprocess(self, xs, conds):
         N = xs[0].shape[0]
         for i in range(len(xs)):
-            x, _, dims = xs[i], self.prior_shapes[i], self.prior_dims[i]
-            bins, bins_shift = int(self.prior_bins[i]), int(self.prior_bins_shift[i])
-            # assert isinstance(x, torch.cuda.LongTensor), x
-            assert (0 <= x).all() and (x < bins).all()
-            # assert_shape(x, (N, *shape))
-            xs[i] = (xs[i] + bins_shift).view(N, -1)
+            xs[i] = (xs[i] + int(self.prior_bins_shift[i])).view(N, -1)
 
         for i in range(len(conds)):
             cond, _, dims = conds[i], self.prior_shapes[i], self.prior_dims[i]
-            if cond is not None:
-                # assert_shape(cond, (N, dims, self.prior_width))
-                pass
-            else:
-                conds[i] = torch.zeros((N, dims, self.prior_width), dtype=torch.float, device=xs[0].device)
+            if cond is  None:
+               conds[i] = torch.zeros((N, dims, self.prior_width), dtype=torch.float, device=xs[0].device)
 
         return torch.cat(xs, dim=1), torch.cat(conds, dim=1)
 
@@ -2707,8 +2656,7 @@ class JukeboxPrior(nn.Module):
         xs = list(torch.split(z, dims, dim=1))
 
         for i in range(len(xs)):
-            # x, shape, dims, bins, bins_shift = xs[i], self.prior_shapes[i], self.prior_dims[i], self.prior_bins[i], self.prior_bins_shift[i]
-            # assert_shape(x, (N, dims))
+
             shape = self.prior_shapes[i]
             _, bins_shift = int(self.prior_bins[i]), int(self.prior_bins_shift[i])  # bins, -> _,
             # xs[i] = (xs[i] - bins_shift).view(N, *shape) #view(N, -1, *shape[1:])
@@ -2716,15 +2664,11 @@ class JukeboxPrior(nn.Module):
             xs[i] = torch.clamp(
                 xs[i], min=0
             )  # If not masking loss, model may have generated lyric/midi tokens which are now shifted <0 by bin_shift
-            # assert (xs[i] < bins).all(), f'rank: {dist.get_rank()}, bins: {bins}, dims {dims}, shape {shape}, prior_shape {self.prior_shapes}, bins_shift {bins_shift}, xs[i]: {xs[i]}'
 
         return xs[-1]
 
     def x_emb(self, z_conds):
         z_conds = z_conds[: self.cond_level - self.level]
-        assert (
-            len(z_conds) == len(self.conditioner_blocks) == self.cond_level - self.level
-        ), f"Expected {len(z_conds)} == {len(self.conditioner_blocks)} == {self.cond_level} - {self.level}"
         x_cond = None
         for z_cond, conditioner_block in reversed(list(zip(z_conds, self.conditioner_blocks))):
             x_cond = conditioner_block(z_cond, x_cond)
@@ -2747,18 +2691,12 @@ class JukeboxPrior(nn.Module):
             start_level = self.level
         if end_level is None:
             end_level = self.levels
-
-        assert len(zs) == end_level - start_level
         with torch.no_grad():
             x_out = self.decoder(zs, start_level=start_level, end_level=end_level, bs_chunks=bs_chunks)
         return x_out
 
     def get_cond(self, z_conds, y):
         if y is not None:
-            # assert (
-            #     y.shape[1] == 4 + self.y_emb.max_bow_genre_size + self.n_tokens
-            # ), f"Expected {4} + {self.y_emb.max_bow_genre_size} + {self.n_tokens}, got {y.shape[1]}"
-            # removed the labeler so there are no y_emb
             n_labels = y.shape[1] - self.n_tokens
             y, prime = y[:, :n_labels], y[:, n_labels:]
         else:
@@ -2780,15 +2718,6 @@ class JukeboxPrior(nn.Module):
         chunk_size=None,
         sample_tokens=None,
     ):
-        N = n_samples
-        if z is not None:
-            assert z.shape[0] == N, f"Expected shape ({N},**), got shape {z.shape}"
-        if y is not None:
-            assert y.shape[0] == N, f"Expected shape ({N},**), got shape {y.shape}"
-        if z_conds is not None:
-            for z_cond in z_conds:
-                assert z_cond.shape[0] == N, f"Expected shape ({N},**), got shape {z_cond.shape}"
-
         no_past_context = z is None or z.shape[1] == 0
         name = {True: "Ancestral", False: "Primed"}[no_past_context]
         print(f"{name} sampling {n_samples} samples with temp={temp}, top_k={top_k}, top_p={top_p}")
@@ -2797,7 +2726,6 @@ class JukeboxPrior(nn.Module):
             # Currently x_cond only uses immediately above layer
             x_cond, y_cond, prime = self.get_cond(z_conds, y)
             if self.single_enc_dec:
-                # assert chunk_size % self.prime_loss_dims == 0. TODO: Check if needed
                 if no_past_context:
                     z, x_cond = self.prior_preprocess([prime], [None, x_cond])
                 else:
@@ -2845,23 +2773,14 @@ class JukeboxPrior(nn.Module):
                         chunk_size=chunk_size,
                         sample_tokens=sample_tokens,
                     )
-            if sample_tokens is None:
-                # assert_shape(z, (N, *self.z_shape))
-                pass
         return z
 
     def get_encoder_kv(self, prime, fp16=False, sample=False):
         if self.n_tokens != 0 and self.use_tokens:
             if sample:
                 self.prime_prior = self.prime_prior.to(prime.device)
-                # self.prime_prior.cuda()
-                pass
-            # N = prime.shape[0]
             prime_acts = self.prime_prior(prime, None, None, None, fp16=fp16)
-            # assert_shape(prime_acts, (N, self.prime_loss_dims, self.prime_acts_width))
-            assert prime_acts.dtype == torch.float, f"Expected  torch.float, got {prime_acts.dtype}"
             encoder_kv = self.prime_state_ln(self.prime_state_proj(prime_acts))
-            assert encoder_kv.dtype == torch.float, f"Expected  torch.float, got {encoder_kv.dtype}"
             if sample:
                 self.prime_prior.cpu()
                 if fp16:
@@ -2888,7 +2807,6 @@ class JukeboxPrior(nn.Module):
                 self-attention softmaxes to self.prior.transformer.ws. Either a set of layer indices indicating which
                 layers to store, or a boolean value indicating whether to dump all.
         """
-        assert isinstance(get_attn_weights, (bool, set))
         if get_attn_weights:
             self.prior.transformer.set_record_attn(get_attn_weights)
         x_cond, y_cond, prime = self.get_cond(z_conds, y)
@@ -2940,37 +2858,6 @@ class JukeboxPreTrainedModel(PreTrainedModel):
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
-
-    # def _init_weights(self, module):
-    #     """Initialize the weights."""
-    #     if isinstance(module, (nn.Linear, Conv1D)):
-    #         # Slightly different from the TF version which uses truncated_normal for initialization
-    #         # cf https://github.com/pytorch/pytorch/pull/5617
-    #         module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-    #         if module.bias is not None:
-    #             module.bias.data.zero_()
-    #     elif isinstance(module, nn.Embedding):
-    #         module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-    #         if module.padding_idx is not None:
-    #             module.weight.data[module.padding_idx].zero_()
-    #     elif isinstance(module, nn.LayerNorm):
-    #         module.bias.data.zero_()
-    #         module.weight.data.fill_(1.0)
-
-    #     # Reinitialize selected weights subject to the Jukebox Paper Scheme:
-    #     #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
-    #     #   > the weights of residual layers at initialization by a factor of 1/√N where N is the # of residual layers.
-    #     #   >   -- GPT-2 :: https://openai.com/blog/better-language-models/
-    #     #
-    #     # Reference (Megatron-LM): https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/gpt_model.py
-    #     for name, p in module.named_parameters():
-    #         if "c_proj" in name and "weight" in name:
-    #             # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
-    #             p.data.normal_(mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.n_layer)))
-
-    # def _set_gradient_checkpointing(self, module, value=False):
-    #     if isinstance(module, JukeboxModel):
-    #         module.gradient_checkpointing = value
 
 
 JUKEBOX_START_DOCSTRING = r"""
@@ -3046,7 +2933,6 @@ def get_alignment(x, zs, labels, prior, level, fp16, hps):
 
         # set y offset, sample_length and lyrics tokens
         y, indices_hop = prior.get_y(labels, start, total_length, get_indices=True)
-        # assert len(indices_hop) == bs
         for indices in indices_hop:
             assert len(indices) == n_tokens
 
@@ -3060,9 +2946,7 @@ def get_alignment(x, zs, labels, prior, level, fp16, hps):
             del w_hop
         w = torch.cat(w_hops, dim=0)
         del w_hops
-        # assert_shape(w, (bs, n_ctx, n_tokens))
         alignment_hop = w.float().cpu().numpy()
-        # assert_shape(alignment_hop, (bs, n_ctx, n_tokens))
         del w
 
         # alignment_hop has shape (bs, n_ctx, n_tokens)
