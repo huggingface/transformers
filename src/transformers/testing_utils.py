@@ -1384,10 +1384,10 @@ def pytest_terminal_summary_main(tr, id):
         tr.summary_warnings()  # normal warnings
         tr.summary_warnings()  # final warnings
 
-    tr.reportchars = "wPpsxXEf"  # emulate -rA (used in summary_passes() and short_test_summary())
-    with open(report_files["passes"], "w") as f:
-        tr._tw = create_terminal_writer(config, f)
-        tr.summary_passes()
+    # tr.reportchars = "wPpsxXEf"  # emulate -rA (used in summary_passes() and short_test_summary())
+    # with open(report_files["passes"], "w") as f:
+    #     tr._tw = create_terminal_writer(config, f)
+    #     tr.summary_passes()
 
     with open(report_files["summary_short"], "w") as f:
         tr._tw = create_terminal_writer(config, f)
