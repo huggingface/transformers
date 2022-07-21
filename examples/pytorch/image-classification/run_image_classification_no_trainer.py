@@ -210,12 +210,19 @@ def main():
     # in the environment
     accelerator = (
         Accelerator(
+<<<<<<< HEAD
             log_with=args.report_to,
             logging_dir=args.output_dir,
             gradient_accumulation_steps=args.gradient_accumulation_steps,
         )
         if args.with_tracking
         else Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps)
+=======
+            log_with=args.report_to, 
+            logging_dir=args.output_dir, 
+            gradient_accumulation_steps=args.gradient_accumulation_steps
+        ) if args.with_tracking else Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps)
+>>>>>>> 3e218f387 (Start updating all no trainer examples)
     )
     logger.info(accelerator.state)
     # Make one log on every process with the configuration for debugging.
