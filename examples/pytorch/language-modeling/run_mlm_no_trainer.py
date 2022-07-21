@@ -256,7 +256,13 @@ def main():
     # If we're using tracking, we also need to initialize it here and it will by default pick up all supported trackers
     # in the environment
     accelerator = (
-        Accelerator(log_with=args.report_to, logging_dir=args.output_dir) if args.with_tracking else Accelerator()
+        Accelerator(
+            log_with=args.report_to,
+            logging_dir=args.output_dir,
+            gradient_accumulation_steps=args.gradient_accumulation_steps,
+        )
+        if args.with_tracking
+        else Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps)
     )
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
@@ -608,19 +614,19 @@ def main():
                 if resume_step is not None and step < resume_step:
                     completed_steps += 1
                     continue
-            outputs = model(**batch)
-            loss = outputs.loss
-            # We keep track of the loss at each epoch
-            if args.with_tracking:
-                total_loss += loss.detach().float()
-            loss = loss / args.gradient_accumulation_steps
-            accelerator.backward(loss)
-            if step % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
+            with accelerator.accumulate(model):
+                outputs = model(**batch)
+                loss = outputs.loss
+                # We keep track of the loss at each epoch
+                if args.with_tracking:
+                    total_loss += loss.detach().float()
+                accelerator.backward(loss)
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
-                progress_bar.update(1)
-                completed_steps += 1
+                if step % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
+                    progress_bar.update(1)
+                    completed_steps += 1
 
             if isinstance(checkpointing_steps, int):
                 if completed_steps % checkpointing_steps == 0:
@@ -639,10 +645,11 @@ def main():
                 outputs = model(**batch)
 
             loss = outputs.loss
-            losses.append(accelerator.gather(loss.repeat(args.per_device_eval_batch_size)))
+            losses.append(
+                accelerator.gather_for_metrics(loss.repeat(args.per_device_eval_batch_size)), eval_dataloader
+            )
 
         losses = torch.cat(losses)
-        losses = losses[: len(eval_dataset)]
         try:
             eval_loss = torch.mean(losses)
             perplexity = math.exp(eval_loss)
@@ -659,8 +666,7 @@ def main():
                     "train_loss": total_loss.item() / len(train_dataloader),
                     "epoch": epoch,
                     "step": completed_steps,
-                },
-                step=completed_steps,
+                }
             )
 
         if args.push_to_hub and epoch < args.num_train_epochs - 1:

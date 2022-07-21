@@ -337,7 +337,13 @@ def main():
     # If we're using tracking, we also need to initialize it here and it will by default pick up all supported trackers
     # in the environment
     accelerator = (
-        Accelerator(log_with=args.report_to, logging_dir=args.output_dir) if args.with_tracking else Accelerator()
+        Accelerator(
+            log_with=args.report_to,
+            logging_dir=args.output_dir,
+            gradient_accumulation_steps=args.gradient_accumulation_steps,
+        )
+        if args.with_tracking
+        else Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps)
     )
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
@@ -838,19 +844,19 @@ def main():
                 if resume_step is not None and step < resume_step:
                     completed_steps += 1
                     continue
-            outputs = model(**batch)
-            loss = outputs.loss
-            # We keep track of the loss at each epoch
-            if args.with_tracking:
-                total_loss += loss.detach().float()
-            loss = loss / args.gradient_accumulation_steps
-            accelerator.backward(loss)
-            if step % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
+            with accelerator.accumulate(model):
+                outputs = model(**batch)
+                loss = outputs.loss
+                # We keep track of the loss at each epoch
+                if args.with_tracking:
+                    total_loss += loss.detach().float()
+                accelerator.backward(loss)
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
-                progress_bar.update(1)
-                completed_steps += 1
+                if step % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
+                    progress_bar.update(1)
+                    completed_steps += 1
 
             if isinstance(checkpointing_steps, int):
                 if completed_steps % checkpointing_steps == 0:
@@ -900,8 +906,8 @@ def main():
                 start_logits = accelerator.pad_across_processes(start_logits, dim=1, pad_index=-100)
                 end_logits = accelerator.pad_across_processes(end_logits, dim=1, pad_index=-100)
 
-            all_start_logits.append(accelerator.gather(start_logits).cpu().numpy())
-            all_end_logits.append(accelerator.gather(end_logits).cpu().numpy())
+            all_start_logits.append(accelerator.gather_for_metrics(start_logits, eval_dataloader).cpu().numpy())
+            all_end_logits.append(accelerator.gather_for_metrics(end_logits, eval_dataloader).cpu().numpy())
 
     max_len = max([x.shape[1] for x in all_start_logits])  # Get the max_length of the tensor
 
@@ -939,8 +945,8 @@ def main():
                     start_logits = accelerator.pad_across_processes(start_logits, dim=1, pad_index=-100)
                     end_logits = accelerator.pad_across_processes(end_logits, dim=1, pad_index=-100)
 
-                all_start_logits.append(accelerator.gather(start_logits).cpu().numpy())
-                all_end_logits.append(accelerator.gather(end_logits).cpu().numpy())
+                all_start_logits.append(accelerator.gather_for_metrics(start_logits, predict_dataloader).cpu().numpy())
+                all_end_logits.append(accelerator.gather_for_metrics(end_logits, predict_dataloader).cpu().numpy())
 
         max_len = max([x.shape[1] for x in all_start_logits])  # Get the max_length of the tensor
         # concatenate the numpy array
@@ -966,7 +972,7 @@ def main():
     if args.do_predict:
         log["squad_v2_predict" if args.version_2_with_negative else "squad_predict"] = predict_metric
 
-        accelerator.log(log, step=completed_steps)
+        accelerator.log(log)
 
     if args.output_dir is not None:
         accelerator.wait_for_everyone()

@@ -297,7 +297,13 @@ def main():
 
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
     # If we're using tracking, we also need to initialize it here and it will pick up all supported trackers in the environment
-    accelerator = Accelerator(log_with="all", logging_dir=args.output_dir) if args.with_tracking else Accelerator()
+    accelerator = (
+        Accelerator(
+            log_with="all", logging_dir=args.output_dir, gradient_accumulation_steps=args.gradient_accumulation_steps
+        )
+        if args.with_tracking
+        else Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps)
+    )
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
@@ -817,17 +823,17 @@ def main():
                 if resume_step is not None and step < resume_step:
                     completed_steps += 1
                     continue
-            outputs = model(**batch)
-            loss = outputs.loss
-            # We keep track of the loss at each epoch
-            if args.with_tracking:
-                total_loss += loss.detach().float()
-            loss = loss / args.gradient_accumulation_steps
-            accelerator.backward(loss)
-            if step % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
+            with accelerator.accumulate(model):
+                outputs = model(**batch)
+                loss = outputs.loss
+                # We keep track of the loss at each epoch
+                if args.with_tracking:
+                    total_loss += loss.detach().float()
+                accelerator.backward(loss)
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
+            if step % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
                 progress_bar.update(1)
                 completed_steps += 1
 
@@ -875,11 +881,15 @@ def main():
                 end_top_index = accelerator.pad_across_processes(end_top_index, dim=1, pad_index=-100)
                 cls_logits = accelerator.pad_across_processes(cls_logits, dim=1, pad_index=-100)
 
-            all_start_top_log_probs.append(accelerator.gather(start_top_log_probs).cpu().numpy())
-            all_start_top_index.append(accelerator.gather(start_top_index).cpu().numpy())
-            all_end_top_log_probs.append(accelerator.gather(end_top_log_probs).cpu().numpy())
-            all_end_top_index.append(accelerator.gather(end_top_index).cpu().numpy())
-            all_cls_logits.append(accelerator.gather(cls_logits).cpu().numpy())
+            all_start_top_log_probs.append(
+                accelerator.gather_for_metrics(start_top_log_probs, eval_dataloader).cpu().numpy()
+            )
+            all_start_top_index.append(accelerator.gather_for_metrics(start_top_index, eval_dataloader).cpu().numpy())
+            all_end_top_log_probs.append(
+                accelerator.gather_for_metrics(end_top_log_probs, eval_dataloader).cpu().numpy()
+            )
+            all_end_top_index.append(accelerator.gather_for_metrics(end_top_index, eval_dataloader).cpu().numpy())
+            all_cls_logits.append(accelerator.gather_for_metrics(cls_logits, eval_dataloader).cpu().numpy())
 
     max_len = max([x.shape[1] for x in all_end_top_log_probs])  # Get the max_length of the tensor
 
@@ -935,11 +945,19 @@ def main():
                     end_top_index = accelerator.pad_across_processes(end_top_index, dim=1, pad_index=-100)
                     cls_logits = accelerator.pad_across_processes(cls_logits, dim=1, pad_index=-100)
 
-                all_start_top_log_probs.append(accelerator.gather(start_top_log_probs).cpu().numpy())
-                all_start_top_index.append(accelerator.gather(start_top_index).cpu().numpy())
-                all_end_top_log_probs.append(accelerator.gather(end_top_log_probs).cpu().numpy())
-                all_end_top_index.append(accelerator.gather(end_top_index).cpu().numpy())
-                all_cls_logits.append(accelerator.gather(cls_logits).cpu().numpy())
+                all_start_top_log_probs.append(
+                    accelerator.gather_for_metrics(start_top_log_probs, predict_dataloader).cpu().numpy()
+                )
+                all_start_top_index.append(
+                    accelerator.gather_for_metrics(start_top_index, predict_dataloader).cpu().numpy()
+                )
+                all_end_top_log_probs.append(
+                    accelerator.gather_for_metrics(end_top_log_probs, predict_dataloader).cpu().numpy()
+                )
+                all_end_top_index.append(
+                    accelerator.gather_for_metrics(end_top_index, predict_dataloader).cpu().numpy()
+                )
+                all_cls_logits.append(accelerator.gather_for_metrics(cls_logits, predict_dataloader).cpu().numpy())
 
         max_len = max([x.shape[1] for x in all_end_top_log_probs])  # Get the max_length of the tensor
 
