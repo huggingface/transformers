@@ -313,8 +313,8 @@ class Message:
             {"type": "section", "text": {"type": "mrkdwn", "text": module_failures_report}},
         ]
 
+        # Save complete tables (for past CI) - to be uploaded as artifacts
         if ci_event.startswith("Past CI"):
-            # Save complete tables - to be uploaded as artifacts
             model_failures_report = prepare_reports(
                 title="These following model modules had failures",
                 header=model_header,
@@ -728,6 +728,8 @@ if __name__ == "__main__":
 
     unclassified_model_failures = []
 
+    # This prefix is used to get job links below. For past CI, we use `workflow_call`, which changes the job names from
+    # `Model tests (...)` to `PyTorch 1.5 / Model tests (...)` for example.
     job_name_prefix = ""
     if ci_event.startswith("Past CI - "):
         framework, version = ci_event.replace("Past CI - ", "").split("-")
