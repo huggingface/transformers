@@ -412,8 +412,8 @@ class TrainingArguments:
             down the training and evaluation speed.
         push_to_hub (`bool`, *optional*, defaults to `False`):
             Whether or not to push the model to the Hub every time the model is saved. If this is activated,
-            `output_dir` will begin a git directory synced with the the repo (determined by `hub_model_id`) and the
-            content will be pushed each time a save is triggered (depending on your `save_strategy`). Calling
+            `output_dir` will begin a git directory synced with the repo (determined by `hub_model_id`) and the content
+            will be pushed each time a save is triggered (depending on your `save_strategy`). Calling
             [`~Trainer.save_model`] will also trigger a push.
 
             <Tip warning={true}>
@@ -434,7 +434,7 @@ class TrainingArguments:
             `"organization_name/model"`. Will default to `user_name/output_dir_name` with *output_dir_name* being the
             name of `output_dir`.
 
-            Will default to to the name of `output_dir`.
+            Will default to the name of `output_dir`.
         hub_strategy (`str` or [`~trainer_utils.HubStrategy`], *optional*, defaults to `"every_save"`):
             Defines the scope of what is pushed to the Hub and when. Possible values are:
 
@@ -787,10 +787,10 @@ class TrainingArguments:
         metadata={
             "help": (
                 "Whether or not to use PyTorch Fully Sharded Data Parallel (FSDP) training (in distributed training"
-                " only). The base option should be `full_shard` or `shard_grad_op` and you can add CPU-offload to"
-                " `full_shard` or `shard_grad_op` like this: full_shard offload` or `shard_grad_op offload`. You can"
-                " add auto-wrap to `full_shard` or `shard_grad_op` with the same syntax: full_shard auto_wrap` or"
-                " `shard_grad_op auto_wrap`."
+                " only). The base option should be `full_shard`, `shard_grad_op` or `no_shard` and you can add"
+                " CPU-offload to `full_shard` or `shard_grad_op` like this: full_shard offload` or `shard_grad_op"
+                " offload`. You can add auto-wrap to `full_shard` or `shard_grad_op` with the same syntax: full_shard"
+                " auto_wrap` or `shard_grad_op auto_wrap`."
             ),
         },
     )
@@ -800,6 +800,15 @@ class TrainingArguments:
             "help": (
                 "FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `fsdp` field is"
                 " passed)."
+            )
+        },
+    )
+    fsdp_transformer_layer_cls_to_wrap: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Transformer layer class name (case-sensitive) to wrap ,e.g, `BertLayer`, `GPTJBlock`, `T5Block` .... "
+                "(useful only when `fsdp` flag is passed)."
             )
         },
     )
@@ -935,7 +944,7 @@ class TrainingArguments:
                 " are two options - eager and nvfuser. Eager defaults to pytorch eager and is useful for debugging."
                 " nvfuser path uses AOT Autograd and nvfuser compiler to optimize the models."
             ),
-            "choices": ["eager", "nvfuser"],
+            "choices": ["eager", "nvfuser", "fx2trt", "fx2trt-fp16"],
         },
     )
     ray_scope: Optional[str] = field(
@@ -1159,6 +1168,14 @@ class TrainingArguments:
 
         if len(self.fsdp) == 0 and self.fsdp_min_num_params > 0:
             warnings.warn("`--fsdp_min_num_params` is useful only when `--fsdp` is specified.")
+
+        if len(self.fsdp) == 0 and self.fsdp_transformer_layer_cls_to_wrap is not None:
+            warnings.warn("`--fsdp_transformer_layer_cls_to_wrap` is useful only when `--fsdp` is specified.")
+
+        if len(self.fsdp) > 0 and self.fsdp_min_num_params > 0 and self.fsdp_transformer_layer_cls_to_wrap is not None:
+            raise ValueError(
+                "`--fsdp_min_num_params` and `--fsdp_transformer_layer_cls_to_wrap` are mutually exclusive."
+            )
 
         if self.tpu_metrics_debug:
             warnings.warn(

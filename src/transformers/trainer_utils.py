@@ -653,6 +653,7 @@ def find_executable_batch_size(
 class FSDPOption(ExplicitEnum):
     FULL_SHARD = "full_shard"
     SHARD_GRAD_OP = "shard_grad_op"
+    NO_SHARD = "no_shard"
     OFFLOAD = "offload"
     AUTO_WRAP = "auto_wrap"
 

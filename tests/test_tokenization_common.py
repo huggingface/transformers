@@ -990,7 +990,9 @@ class TokenizerTesterMixin:
                 sequence = tokenizer.encode(seq_0, add_special_tokens=False)
                 total_length = len(sequence)
 
-                self.assertGreater(total_length, 4, "Issue with the testing sequence, please update it it's too short")
+                self.assertGreater(
+                    total_length, 4, "Issue with the testing sequence, please update it, it's too short"
+                )
 
                 # Test with max model input length
                 model_max_length = tokenizer.model_max_length
@@ -1000,7 +1002,9 @@ class TokenizerTesterMixin:
                 sequence1 = tokenizer(seq_1, add_special_tokens=False)
                 total_length1 = len(sequence1["input_ids"])
                 self.assertGreater(
-                    total_length1, model_max_length, "Issue with the testing sequence, please update it it's too short"
+                    total_length1,
+                    model_max_length,
+                    "Issue with the testing sequence, please update it, it's too short",
                 )
 
                 # Simple
