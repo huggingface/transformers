@@ -17,7 +17,7 @@
 import unittest
 
 from transformers import LEDConfig, is_tf_available
-from transformers.testing_utils import require_tf, slow
+from transformers.testing_utils import require_tf, slow, tooslow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -365,7 +365,7 @@ class TFLEDModelTest(TFModelTesterMixin, unittest.TestCase):
         # TODO JP: Make LED XLA compliant
         pass
 
-    @unittest.skip(reason="Test takes too long to run (>30sec) causing the CI to fail.")
+    @tooslow
     def test_saved_model_creation(self):
         pass
 

@@ -17,7 +17,7 @@
 import unittest
 
 from transformers import FunnelConfig, is_tf_available
-from transformers.testing_utils import require_tf
+from transformers.testing_utils import require_tf, tooslow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
@@ -371,7 +371,7 @@ class TFFunnelModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
 
-    @unittest.skip(reason="Test takes too long to run (>30sec) causing the CI to fail.")
+    @tooslow
     def test_saved_model_creation(self):
         pass
 
@@ -407,6 +407,6 @@ class TFFunnelBaseModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
 
-    @unittest.skip(reason="Test takes too long to run (>30sec) causing the CI to fail.")
+    @tooslow
     def test_saved_model_creation(self):
         pass

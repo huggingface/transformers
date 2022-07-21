@@ -189,7 +189,7 @@ class TFSpeech2TextSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
             emb = tf.concat([emb, tf.zeros(num_embeddings, 1)], axis=1)
         if padding_idx is not None:
             emb = tf.concat(
-                [emb[:padding_idx, :], tf.zeros((1, shape_list(emb)[1])), emb[padding_idx + 1 :, :]], axis=0
+                [emb[:padding_idx, :], tf.zeros((1, tf.shape(emb)[1])), emb[padding_idx + 1 :, :]], axis=0
             )
         return emb
 
@@ -200,7 +200,7 @@ class TFSpeech2TextSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
         """
         self.embeddings = self.add_weight(
             name="weights",  # name also used in PT
-            shape=shape_list(self.embedding_weights),
+            shape=tf.shape(self.embedding_weights),
             trainable=False,
         )
         self.embeddings.assign(self.embedding_weights)
@@ -779,7 +779,7 @@ class TFSpeech2TextEncoder(tf.keras.layers.Layer):
     def _get_feature_vector_attention_mask(self, feature_vector_length, attention_mask):
         # generate creates 3D attention mask, because of the shape of input_features
         # convert it to 2D if thats the case
-        if len(shape_list(attention_mask)) > 2:
+        if len(attention_mask.shape) > 2:
             attention_mask = attention_mask[:, :, -1]
 
         subsampled_lengths = self._get_feat_extract_output_lengths(tf.math.reduce_sum(attention_mask, -1))
@@ -844,10 +844,10 @@ class TFSpeech2TextEncoder(tf.keras.layers.Layer):
 
         # subsample attention mask if necessary
         if attention_mask is not None:
-            attention_mask = self._get_feature_vector_attention_mask(shape_list(inputs_embeds)[1], attention_mask)
+            attention_mask = self._get_feature_vector_attention_mask(tf.shape(inputs_embeds)[1], attention_mask)
             padding_mask = tf.cast(tf.math.not_equal(attention_mask, 1), tf.int64)
         else:
-            padding_mask = tf.zeros(shape_list(inputs_embeds)[:-1], dtype=tf.int64)
+            padding_mask = tf.zeros(tf.shape(inputs_embeds)[:-1], dtype=tf.int64)
 
         embed_pos = self.embed_positions(padding_mask)
 
@@ -1193,7 +1193,7 @@ class TFSpeech2TextMainLayer(tf.keras.layers.Layer):
         # downsample encoder attention mask
         if attention_mask is not None:
             encoder_attention_mask = self.encoder._get_feature_vector_attention_mask(
-                shape_list(encoder_outputs[0])[1], attention_mask
+                tf.shape(encoder_outputs[0])[1], attention_mask
             )
         else:
             encoder_attention_mask = None

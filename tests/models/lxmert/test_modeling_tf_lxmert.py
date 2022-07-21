@@ -20,7 +20,7 @@ import unittest
 import numpy as np
 
 from transformers import LxmertConfig, is_tf_available
-from transformers.testing_utils import require_tf, slow
+from transformers.testing_utils import require_tf, slow, tooslow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
@@ -600,7 +600,7 @@ class TFLxmertModelTest(TFModelTesterMixin, unittest.TestCase):
                 name = model.get_bias()
                 assert name is None
 
-    @unittest.skip(reason="Test takes too long to run (>30sec) causing the CI to fail.")
+    @tooslow
     def test_saved_model_creation(self):
         pass
 

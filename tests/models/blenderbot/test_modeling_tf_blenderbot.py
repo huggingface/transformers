@@ -213,7 +213,7 @@ class TFBlenderbotModelTest(TFModelTesterMixin, unittest.TestCase):
                 name = model.get_bias()
                 assert name is None
 
-    @unittest.skip(reason="Test takes too long to run (>30sec) causing the CI to fail.")
+    @tooslow
     def test_saved_model_creation(self):
         pass
 

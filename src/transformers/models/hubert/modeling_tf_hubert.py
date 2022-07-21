@@ -232,11 +232,7 @@ def _compute_mask_indices(
     num_masked_spans = tf.cast(num_masked_spans, tf.int32)
 
     # make sure num masked indices <= sequence_length
-    num_masked_spans = tf.cond(
-        num_masked_spans * mask_length > sequence_length,
-        true_fn=lambda: sequence_length // mask_length,
-        false_fn=lambda: num_masked_spans,
-    )
+    num_masked_spans = tf.math.minimum(sequence_length // mask_length, num_masked_spans)
     num_masked_spans = tf.squeeze(num_masked_spans)
 
     # SpecAugment mask to fill
@@ -261,7 +257,7 @@ def _compute_mask_indices(
 
     # scatter indices to mask
     spec_aug_mask = _scatter_values_on_batch_indices(
-        tf.ones_like(spec_aug_mask_idxs), spec_aug_mask_idxs, shape_list(spec_aug_mask)
+        tf.ones_like(spec_aug_mask_idxs), spec_aug_mask_idxs, tf.shape(spec_aug_mask)
     )
 
     return spec_aug_mask

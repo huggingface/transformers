@@ -326,7 +326,7 @@ class TFLongformerModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
 
-    @unittest.skip(reason="Test takes too long to run (>30sec) causing the CI to fail.")
+    @tooslow
     def test_saved_model_creation(self):
         pass
 

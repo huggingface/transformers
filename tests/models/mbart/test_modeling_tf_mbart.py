@@ -17,7 +17,7 @@ import tempfile
 import unittest
 
 from transformers import AutoTokenizer, MBartConfig, is_tf_available
-from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
+from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow, tooslow
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
@@ -281,7 +281,7 @@ class TFMBartModelTest(TFModelTesterMixin, unittest.TestCase):
                                 models_equal = False
                     self.assertTrue(models_equal)
 
-    @unittest.skip(reason="Test takes too long to run (>30sec) causing the CI to fail.")
+    @tooslow
     def test_saved_model_creation(self):
         pass
 

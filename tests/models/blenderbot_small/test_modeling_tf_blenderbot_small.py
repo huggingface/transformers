@@ -278,7 +278,7 @@ class TFBlenderbotSmallModelTest(TFModelTesterMixin, unittest.TestCase):
                                 models_equal = False
                     self.assertTrue(models_equal)
 
-    @unittest.skip(reason="Test takes too long to run (>30sec) causing the CI to fail.")
+    @tooslow
     def test_saved_model_creation(self):
         pass
 
