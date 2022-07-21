@@ -393,7 +393,6 @@ class BloomBlock(nn.Module):
         hidden_states,
         layer_past=None,
         attention_mask=None,
-        causal_mask=None,
         head_mask=None,
         use_cache=False,
         output_attentions=False,
@@ -416,7 +415,6 @@ class BloomBlock(nn.Module):
             residual,
             layer_past=layer_past,
             attention_mask=attention_mask,
-            causal_mask=causal_mask,
             alibi=alibi,
             head_mask=head_mask,
             use_cache=use_cache,
@@ -616,7 +614,6 @@ class BloomModel(BloomPreTrainedModel):
         input_ids=None,
         past_key_values=None,
         attention_mask=None,
-        causal_mask=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
@@ -696,7 +693,7 @@ class BloomModel(BloomPreTrainedModel):
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
                         # None for past_key_value
-                        return module(*inputs, use_cache, output_attentions, alibi)
+                        return module(*inputs, use_cache, output_attentions)
 
                     return custom_forward
 
@@ -706,6 +703,7 @@ class BloomModel(BloomPreTrainedModel):
                     None,
                     causal_mask,
                     head_mask[i],
+                    alibi,
                 )
             else:
                 outputs = block(
@@ -713,9 +711,9 @@ class BloomModel(BloomPreTrainedModel):
                     layer_past=layer_past,
                     attention_mask=causal_mask,
                     head_mask=head_mask[i],
+                    alibi=alibi,
                     use_cache=use_cache,
                     output_attentions=output_attentions,
-                    alibi=alibi,
                 )
 
             hidden_states = outputs[0]
