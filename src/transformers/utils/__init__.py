@@ -87,6 +87,7 @@ from .import_utils import (
     DummyObject,
     OptionalDependencyNotAvailable,
     _LazyModule,
+    ccl_version,
     is_accelerate_available,
     is_apex_available,
     is_bitsandbytes_available,
