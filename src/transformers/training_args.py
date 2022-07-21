@@ -803,12 +803,12 @@ class TrainingArguments:
             )
         },
     )
-    fsdp_transformer_layer_cls_to_wrap: str = field(
+    fsdp_transformer_layer_cls_to_wrap: Optional[str] = field(
         default=None,
         metadata={
             "help": (
                 "Transformer layer class name (case-sensitive) to wrap ,e.g, `BertLayer`, `GPTJBlock`, `T5Block` .... "
-                "(useful only when `fsdp` flag is passed).",
+                "(useful only when `fsdp` flag is passed)."
             )
         },
     )
