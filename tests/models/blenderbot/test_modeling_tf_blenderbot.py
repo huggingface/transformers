@@ -17,7 +17,7 @@
 import unittest
 
 from transformers import BlenderbotConfig, BlenderbotTokenizer, is_tf_available
-from transformers.testing_utils import require_tf, require_tokenizers, slow
+from transformers.testing_utils import require_tf, require_tokenizers, slow, tooslow
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester

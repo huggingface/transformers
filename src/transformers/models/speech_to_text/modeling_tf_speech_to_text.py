@@ -188,9 +188,7 @@ class TFSpeech2TextSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
             # zero pad
             emb = tf.concat([emb, tf.zeros(num_embeddings, 1)], axis=1)
         if padding_idx is not None:
-            emb = tf.concat(
-                [emb[:padding_idx, :], tf.zeros((1, tf.shape(emb)[1])), emb[padding_idx + 1 :, :]], axis=0
-            )
+            emb = tf.concat([emb[:padding_idx, :], tf.zeros((1, tf.shape(emb)[1])), emb[padding_idx + 1 :, :]], axis=0)
         return emb
 
     def build(self, input_shape: tf.TensorShape):
