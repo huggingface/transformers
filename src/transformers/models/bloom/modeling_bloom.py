@@ -693,7 +693,7 @@ class BloomModel(BloomPreTrainedModel):
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
                         # None for past_key_value
-                        return module(*inputs, use_cache, output_attentions)
+                        return module(*inputs, use_cache, output_attentions, alibi)
 
                     return custom_forward
 
@@ -703,7 +703,6 @@ class BloomModel(BloomPreTrainedModel):
                     None,
                     causal_mask,
                     head_mask[i],
-                    alibi,
                 )
             else:
                 outputs = block(
@@ -711,9 +710,9 @@ class BloomModel(BloomPreTrainedModel):
                     layer_past=layer_past,
                     attention_mask=causal_mask,
                     head_mask=head_mask[i],
-                    alibi=alibi,
                     use_cache=use_cache,
                     output_attentions=output_attentions,
+                    alibi=alibi,
                 )
 
             hidden_states = outputs[0]
