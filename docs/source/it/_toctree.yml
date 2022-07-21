@@ -11,8 +11,6 @@
     title: Pipeline per l'inferenza
   - local: autoclass_tutorial
     title: Carica istanze pre-allenate con AutoClass
-  - local: model_sharing
-    title: Condividere un modello
   - local: preprocessing
     title: Preprocess
   - local: training
