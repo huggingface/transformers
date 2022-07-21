@@ -848,6 +848,11 @@ class GenerationMixin:
             for key in ["decoder_input_ids"]:
                 model_kwargs.pop(key, None)
 
+        # Transfo_XL does not use have "attention_mask" as an argument, and it is harmless (it is being passed in the
+        # tests, through)
+        if "transfoxl" in str(self).lower():
+            model_kwargs.pop("attention_mask", None)
+
         unused_model_args = []
         model_args = set(inspect.signature(self.prepare_inputs_for_generation).parameters)
         # `kwargs`` if often used to handle optional forward pass inputs like `attention_mask`. If

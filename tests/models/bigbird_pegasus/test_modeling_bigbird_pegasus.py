@@ -360,7 +360,7 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
         if torch_device == "cuda":
             model.half()
         model.generate(**input_dict)
-        model.generate(**input_dict, do_sample=True, early_stopping=False, num_return_sequences=3)
+        model.generate(**input_dict, do_sample=True, num_return_sequences=3)
 
     @slow
     def test_batched_forward_original_full(self):

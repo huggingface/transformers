@@ -2052,7 +2052,7 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         # max_new_tokens and max_length serve the same purpose and should not be used together.
         with self.assertWarns(UserWarning):
-            gpt2_model.generate(decoder_input_ids=input_ids, max_new_tokens=10, max_length=20)
+            gpt2_model.generate(input_ids=input_ids, max_new_tokens=10, max_length=20)
 
     def test_encoder_decoder_generate_with_inputs_embeds(self):
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
