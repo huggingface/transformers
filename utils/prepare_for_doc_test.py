@@ -28,7 +28,7 @@
     When debugging the doc tests locally, please make sure to
     always run:
 
-    ```python utils/prepare_for_doc_test.py src doc```
+    ```python utils/prepare_for_doc_test.py src docs```
 
     before running the doc tests:
 
