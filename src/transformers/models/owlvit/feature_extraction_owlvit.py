@@ -64,8 +64,6 @@ class OwlViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether or not to rescale input images to between 0-1 range. `PIL.Image.Image` inputs are automatically
             scaled.
-        do_convert_rgb (`bool`, *optional*, defaults to `True`):
-            Whether or not to convert `PIL.Image.Image` into `RGB` format.
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the shorter edge of the input to a certain `size`.
         do_center_crop (`bool`, *optional*, defaults to `True`):
@@ -85,7 +83,6 @@ class OwlViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin
         image_mean=None,
         image_std=None,
         do_rescale=True,
-        do_convert_rgb=True,
         do_resize=True,
         do_center_crop=True,
         do_normalize=True,
@@ -98,7 +95,6 @@ class OwlViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin
         self.image_mean = image_mean if image_mean is not None else [0.48145466, 0.4578275, 0.40821073]
         self.image_std = image_std if image_std is not None else [0.26862954, 0.26130258, 0.27577711]
         self.do_rescale = do_rescale
-        self.do_convert_rgb = do_convert_rgb
         self.do_resize = do_resize
         self.do_center_crop = do_center_crop
         self.do_normalize = do_normalize
@@ -201,9 +197,7 @@ class OwlViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin
         if not is_batched:
             images = [images]
 
-        # transformations (convert rgb + resizing + center cropping + normalization)
-        if self.do_convert_rgb:
-            images = [self.convert_rgb(image) for image in images]
+        # transformations (resizing + center cropping + normalization)
         if self.do_resize and self.size is not None and self.resample is not None:
             images = [
                 self.resize(image=image, size=self.size, resample=self.resample, default_to_square=False)
