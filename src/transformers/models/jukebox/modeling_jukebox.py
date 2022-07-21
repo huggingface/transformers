@@ -24,7 +24,7 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from packaging import version
 from torch import nn
-
+import time
 
 if version.parse(torch.__version__) >= version.parse("1.6"):
     is_amp_available = True
@@ -343,10 +343,6 @@ class Decoder(nn.Module):
         self.out = nn.Conv1d(output_emb_width, input_emb_width, 3, 1, 1)
 
     def forward(self, xs, all_levels=True):
-        if all_levels:
-            assert len(xs) == self.levels
-        else:
-            assert len(xs) == 1
         x = xs[-1]
 
         # 32, 64 ...
@@ -432,7 +428,6 @@ class BottleneckBlock(nn.Module):
         _k_rand = y[torch.randperm(y.shape[0])][:k_bins]
         # dist.broadcast(_k_rand, 0)
         self.k = _k_rand
-        assert self.k.shape == (k_bins, emb_width)
         self.k_sum = self.k
         self.k_elem = torch.ones(k_bins, device=self.k.device)
 
@@ -458,10 +453,6 @@ class BottleneckBlock(nn.Module):
             _k_elem = x_l_onehot.sum(dim=-1)  # k_bins
             y = self._tile(x)
             _k_rand = y[torch.randperm(y.shape[0])][:k_bins]
-
-            # dist.broadcast(_k_rand, 0)
-            # dist.all_reduce(_k_sum)
-            # dist.all_reduce(_k_elem)
 
             # Update centres
             old_k = self.k
@@ -749,7 +740,6 @@ class VQVAE(nn.Module):
         if multipliers is None:
             self.multipliers = [1] * levels
         else:
-            assert len(multipliers) == levels, "Invalid number of multipliers"
             self.multipliers = multipliers
 
         def _block_kwargs(level):
@@ -830,14 +820,11 @@ class VQVAE(nn.Module):
 
     def sample(self, n_samples):
         # TODO handle device properly
-
         zs = [torch.randint(0, self.l_bins, size=(n_samples, *z_shape), device="cpu") for z_shape in self.z_shapes]
         return self.decode(zs)
 
     def forward(self, x, hps, loss_fn="l1"):
         metrics = {}
-
-        # N = x.shape[0]
 
         # Encode/Decode
         x_in = self.preprocess(x)
@@ -852,7 +839,6 @@ class VQVAE(nn.Module):
         for level in range(self.levels):
             decoder = self.decoders[level]
             x_out = decoder(xs_quantised[level : level + 1], all_levels=False)
-            # assert_shape(x_out, x_in.shape)
             x_outs.append(x_out)
 
         # Loss
@@ -940,7 +926,6 @@ class JukeboxMLP(nn.Module):
 
 
 # TODO rename to JukeboxLayerNorm
-
 
 class LayerNorm(FusedLayerNorm):
     def __init__(self, normalized_shape, eps=1e-5, elementwise_affine=True):
@@ -1585,28 +1570,8 @@ class JukeboxBlock(nn.Module):
         self.attn_func = attn_func
 
     def forward(self, x, encoder_kv, sample=False):
-        if sample:
-            a = self.attn(self.ln_0(x), encoder_kv, sample)
-            m = self.mlp(self.ln_1(x + a))
-        else:
-            a = self.attn(self.ln_0(x), encoder_kv, sample)
-            m = self.mlp(self.ln_1(x + a))
-            # if self.attn_func == 6:
-            #     assert encoder_kv is not None
-            #     a = checkpoint(lambda _x,_enc_kv,_s=sample: self.attn(self.ln_0(_x),_enc_kv,_s),
-            #                    (x,encoder_kv),
-            #                    (*self.attn.parameters(), *self.ln_0.parameters()),
-            #                    self.checkpoint_attn == 3)  # 2 recomputes after the projections, and 1 recomputes after head splitting.
-            # else:
-            #     assert encoder_kv is None
-            #     a = checkpoint(lambda _x,_enc_kv=None,_s=sample: self.attn(self.ln_0(_x),_enc_kv,_s),
-            #                    (x,),
-            #                    (*self.attn.parameters(), *self.ln_0.parameters()),
-            #                    self.checkpoint_attn == 3)  # 2 recomputes after the projections, and 1 recomputes after head splitting.
-            # m = checkpoint(lambda _x: self.mlp(self.ln_1(_x)), (x + a,),
-            #                (*self.mlp.parameters(), *self.ln_1.parameters()),
-            #                self.checkpoint_mlp == 1)
-            pass
+        a = self.attn(self.ln_0(x), encoder_kv, sample)
+        m = self.mlp(self.ln_1(x + a))
         if self.res_scale == 1.0:
             h = x + a + m
         else:
@@ -1924,29 +1889,9 @@ class JukeboxConditionalAutoregressive(nn.Module):
         with torch.no_grad():
             x = self.preprocess(x)
 
-        N, D = x.shape
-        # assert isinstance(x, torch.cuda.LongTensor)
-        # assert (0 <= x).all() and (x < self.bins).all()
-
-        if self.y_cond:
-            assert y_cond is not None
-            assert y_cond.shape == (N, 1, self.width)
-        else:
-            assert y_cond is None
-
-        if self.x_cond:
-            assert x_cond is not None
-            assert x_cond.shape == (N, D, self.width) or x_cond.shape == (
-                N,
-                1,
-                self.width,
-            ), (
-                f"{x_cond.shape} != {(N, D, self.width)} nor {(N, 1, self.width)}. Did you pass the correct"
-                " --sample_length?"
-            )
-        else:
-            assert x_cond is None
-            x_cond = torch.zeros((N, 1, self.width), device=x.device, dtype=torch.float)
+        N = x.shape[0]
+        if not self.x_cond:
+           x_cond = torch.zeros((N, 1, self.width), device=x.device, dtype=torch.float)
 
         x_t = x  # Target
         x = self.x_emb(x)  # X emb
@@ -1989,17 +1934,12 @@ class JukeboxConditionalAutoregressive(nn.Module):
     def get_emb(self, sample_t, n_samples, x, x_cond, y_cond):
         N, D = n_samples, self.input_dims
         if sample_t == 0:
-            # Fill in start token
-            # x = torch.empty(n_samples, 1, self.width).cuda()
             x = torch.empty(n_samples, 1, self.width).to(x_cond.device)
-
             if self.y_cond:
                 x[:, 0] = y_cond.view(N, self.width)
             else:
                 x[:, 0] = self.start_token
         else:
-            # assert isinstance(x, torch.cuda.LongTensor)
-            assert (0 <= x).all() and (x < self.bins).all()
             x = self.x_emb(x)
         assert x.shape == (n_samples, 1, self.width)
         if x_cond.shape == (N, D, self.width):
@@ -3073,13 +3013,13 @@ def get_starts(total_length, n_ctx, hop_length):
     return starts
 
 
-def save_wav(fname, aud, sr):
+def save_wav(fname, lvl, aud, sr):
     import soundfile
 
     # clip before saving?
     aud = torch.clamp(aud, -1, 1).cpu().numpy()
     for i in list(range(aud.shape[0])):
-        soundfile.write(f"{fname}/item_{i}.wav", aud[i], samplerate=sr, format="wav")
+        soundfile.write(f"{fname}/lvl_{lvl}-sample_{i}.wav", aud[i], samplerate=sr, format="wav")
 
 
 def get_alignment(x, zs, labels, prior, level, fp16, hps):
@@ -3191,7 +3131,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         self.priors = nn.ModuleList([JukeboxPrior(config, level=i) for i in range(config.nb_priors)])
 
     # Sample a partial window of length<n_ctx with tokens_to_sample new tokens on level=level
-    def sample_partial_window(self, zs, labels, sampling_kwargs, level, tokens_to_sample, hps):
+    def sample_partial_window(self, zs, labels, offset, sampling_kwargs, level, tokens_to_sample, hps):
         prior = self.priors[level]
         z = zs[level]
         n_ctx = prior.n_ctx
@@ -3203,10 +3143,10 @@ class JukeboxModel(JukeboxPreTrainedModel):
             sampling_kwargs["sample_tokens"] = n_ctx
             start = current_tokens - n_ctx + tokens_to_sample
 
-        return self.sample_single_window(zs, labels, sampling_kwargs, level, start, hps)
+        return self.sample_single_window(zs, labels, offset, sampling_kwargs, level, start, hps)
 
     # Sample a single window of length=n_ctx at position=start on level=level
-    def sample_single_window(self, zs, labels, sampling_kwargs, level, start, hps):
+    def sample_single_window(self, zs, labels, offset, sampling_kwargs, level, start, hps):
         prior = self.priors[level]
         n_samples = hps.n_samples
         n_ctx = prior.n_ctx
@@ -3241,7 +3181,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         # if there are no levels above should return None!
 
         # set y offset, sample_length and lyrics okens
-        y = prior.get_y(labels, start, self.total_length,sampling_kwargs.pop('offset') )
+        y = prior.get_y(labels, start, self.total_length,offset)
 
         empty_cache()
         max_batch_size = 2
@@ -3265,16 +3205,16 @@ class JukeboxModel(JukeboxPreTrainedModel):
         return zs
 
     # Sample total_length tokens at level=level with hop_length=hop_length
-    def sample_level(self, zs, labels, sampling_kwargs, level, total_length, hop_length, hps):
+    def sample_level(self, zs, labels, offset, sampling_kwargs, level, total_length, hop_length, hps):
         # print(f"Sampling level {level}")
         print(f"Sampling level {level}")
         prior = self.priors[level]
         if total_length >= prior.n_ctx:
             for start in get_range(get_starts(total_length, prior.n_ctx, hop_length)):
-                zs = self.sample_single_window(zs, labels, sampling_kwargs, level, start, hps)
+                zs = self.sample_single_window(zs, labels, offset, sampling_kwargs, level, start, hps)
 
         else:
-            zs = self.sample_partial_window(zs, labels, sampling_kwargs, level, total_length, hps)
+            zs = self.sample_partial_window(zs, labels, offset, sampling_kwargs, level, total_length, hps)
         return zs
 
     # Sample multiple levels
@@ -3301,8 +3241,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
                 chunk_size=chunk_size,
                 sample_tokens=sample_tokens,
                 total_length=(int(sample_length_in_seconds * self.config.sr) // top_prior.raw_to_tokens)
-                * top_prior.raw_to_tokens,
-                offset = offset
+                * top_prior.raw_to_tokens
             ),
             dict(
                 temp=0.99,
@@ -3311,8 +3250,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
                 chunk_size=chunk_size,
                 sample_tokens=sample_tokens,
                 total_length=(int(sample_length_in_seconds * self.config.sr) // top_prior.raw_to_tokens)
-                * top_prior.raw_to_tokens,
-                offset = offset
+                * top_prior.raw_to_tokens
 
             ),
             dict(
@@ -3322,39 +3260,36 @@ class JukeboxModel(JukeboxPreTrainedModel):
                 chunk_size=chunk_size,
                 sample_tokens=sample_tokens,
                 total_length=(int(sample_length_in_seconds * self.config.sr) // top_prior.raw_to_tokens)
-                * top_prior.raw_to_tokens,
-                offset = offset
+                * top_prior.raw_to_tokens
 
             ),
         ]
         hps = self.config
-        
+        self.start_time = time.strftime('%Y-%m-%d-%Hh%M')
         for level in reversed(sample_levels):
             self.total_length = sampling_kwargs[level].pop("total_length")
             self.priors[level].to(zs[0].device).eval()
             empty_cache()
-            hps.sample_length = self.total_length
+            hps.sample_length = self.total_length # generated length of the signal
             # Set correct total_length, hop_length, labels and sampling_kwargs for level
-            assert (
-                hps.sample_length % self.priors[level].raw_to_tokens == 0
-            ), f"Expected sample_length {hps.sample_length} to be multiple of {self.priors[level].raw_to_tokens}"
             total_length = hps.sample_length // self.priors[level].raw_to_tokens
             hop_length = int(hps.hop_fraction[-level - 1] * self.priors[level].n_ctx)
 
-            zs = self.sample_level(zs, labels[level], sampling_kwargs[level], level, total_length, hop_length, hps)
+            zs = self.sample_level(zs, labels[level], offset, sampling_kwargs[level], level, total_length, hop_length, hps)
 
+            self.priors[level].to('cpu')
             empty_cache()
             self.vqvae.to(zs[level].device)
             # Decode sample
             with torch.no_grad():
                 x = self.vqvae.decode(zs[level:], start_level=level, bs_chunks=zs[level].shape[0])
             self.vqvae.to('cpu')
-            import time
-            logdir = f"{time.strftime('%Y-%m-%d-%Hh%M')}/level_{level}"
+            
+            logdir = f"{self.start_time}/level_{level}"
             if not os.path.exists(logdir):
                 os.makedirs(logdir)
             torch.save(dict(zs=zs, labels=labels, sampling_kwargs=sampling_kwargs, x=x), f"{logdir}/data.pth.tar")
-            save_wav(logdir, x, hps.sr)
+            save_wav(logdir,level, x, hps.sr)
             if (
                 alignments is None and self.priors[-1] is not None and self.priors[-1].n_tokens > 0
             ):  # and not isinstance(self.priors[-1].labeller, Empty`Labeller`):
