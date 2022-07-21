@@ -43,6 +43,7 @@ from .utils import (
     FLAX_WEIGHTS_NAME,
     HUGGINGFACE_CO_RESOLVE_ENDPOINT,
     WEIGHTS_NAME,
+    WEIGHTS_INDEX_NAME, 
     EntryNotFoundError,
     PushToHubMixin,
     RepositoryNotFoundError,
