@@ -79,23 +79,29 @@ class ContextPooler(nn.Module):
 # Copied from transformers.models.deberta.modeling_deberta.XSoftmax with deberta->deberta_v2
 class XSoftmax(torch.autograd.Function):
     """
-    Args:
     Masked Softmax which is optimized for saving memory
+
+    Args:
         input (`torch.tensor`): The input tensor that will apply softmax.
         mask (`torch.IntTensor`):
             The mask matrix where 0 indicate that element will be ignored in the softmax calculation.
         dim (int): The dimension that will apply softmax
+
     Example:
+
     ```python
     >>> import torch
     >>> from transformers.models.deberta_v2.modeling_deberta_v2 import XSoftmax
 
     >>> # Make a tensor
     >>> x = torch.randn([4, 20, 100])
+
     >>> # Create a mask
     >>> mask = (x > 0).int()
+
     >>> # Specify the dimension to apply softmax
     >>> dim = -1
+
     >>> y = XSoftmax.apply(x, mask, dim)
     ```"""
 
@@ -189,8 +195,9 @@ class XDropout(torch.autograd.Function):
 # Copied from transformers.models.deberta.modeling_deberta.StableDropout
 class StableDropout(nn.Module):
     """
-    Args:
     Optimized dropout module for stabilizing the training
+
+    Args:
         drop_prob (float): the dropout probabilities
     """
 
@@ -202,8 +209,9 @@ class StableDropout(nn.Module):
 
     def forward(self, x):
         """
-        Args:
         Call the module
+
+        Args:
             x (`torch.tensor`): The input tensor to apply dropout
         """
         if self.training and self.drop_prob > 0:
@@ -537,16 +545,21 @@ def make_log_bucket_position(relative_pos, bucket_size, max_position):
 
 def build_relative_position(query_size, key_size, bucket_size=-1, max_position=-1):
     """
+    Build relative position according to the query and key
+
+    We assume the absolute position of query \\(P_q\\) is range from (0, query_size) and the absolute position of key
+    \\(P_k\\) is range from (0, key_size), The relative positions from query to key is \\(R_{q \\rightarrow k} = P_q -
+    P_k\\)
+
     Args:
-    Build relative position according to the query and key We assume the absolute position of query \\(P_q\\) is range
-    from (0, query_size) and the absolute position of key \\(P_k\\) is range from (0, key_size), The relative positions
-    from query to key is \\(R_{q \\rightarrow k} = P_q - P_k\\)
         query_size (int): the length of query
         key_size (int): the length of key
         bucket_size (int): the size of position bucket
         max_position (int): the maximum allowed absolute position
+
     Return:
         `torch.LongTensor`: A tensor with shape [1, query_size, key_size]
+
     """
     q_ids = np.arange(0, query_size)
     k_ids = np.arange(0, key_size)
@@ -579,11 +592,13 @@ def pos_dynamic_expand(pos_index, p2c_att, key_layer):
 
 class DisentangledSelfAttention(nn.Module):
     """
-    Parameters:
     Disentangled self-attention module
+
+    Parameters:
         config (`DebertaV2Config`):
             A model config class instance with the configuration to build a new model. The schema is similar to
             *BertConfig*, for more details, please refer [`DebertaV2Config`]
+
     """
 
     def __init__(self, config):
@@ -639,25 +654,33 @@ class DisentangledSelfAttention(nn.Module):
         rel_embeddings=None,
     ):
         """
-        Args:
         Call the module
+
+        Args:
             hidden_states (`torch.FloatTensor`):
                 Input states to the module usually the output from previous layer, it will be the Q,K and V in
                 *Attention(Q,K,V)*
+
             attention_mask (`torch.ByteTensor`):
                 An attention mask matrix of shape [*B*, *N*, *N*] where *B* is the batch size, *N* is the maximum
                 sequence length in which element [i,j] = *1* means the *i* th token in the input can attend to the *j*
                 th token.
+
             output_attentions (`bool`, optional):
                 Whether return the attention matrix.
+
             query_states (`torch.FloatTensor`, optional):
                 The *Q* state in *Attention(Q,K,V)*.
+
             relative_pos (`torch.LongTensor`):
                 The relative position encoding between the tokens in the sequence. It's of shape [*B*, *N*, *N*] with
                 values ranging in [*-max_relative_positions*, *max_relative_positions*].
+
             rel_embeddings (`torch.FloatTensor`):
                 The embedding of relative distances. It's a tensor of shape [\\(2 \\times
                 \\text{max_relative_positions}\\), *hidden_size*].
+
+
         """
         if query_states is None:
             query_states = hidden_states
@@ -890,13 +913,17 @@ class DebertaV2PreTrainedModel(PreTrainedModel):
 
 
 DEBERTA_START_DOCSTRING = r"""
-    Parameters:
     The DeBERTa model was proposed in [DeBERTa: Decoding-enhanced BERT with Disentangled
     Attention](https://arxiv.org/abs/2006.03654) by Pengcheng He, Xiaodong Liu, Jianfeng Gao, Weizhu Chen. It's build
     on top of BERT/RoBERTa with two improvements, i.e. disentangled attention and enhanced mask decoder. With those two
-    improvements, it out perform BERT/RoBERTa on a majority of tasks with 80GB pretraining data. This model is also a
-    PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it as a regular
-    PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and behavior.```
+    improvements, it out perform BERT/RoBERTa on a majority of tasks with 80GB pretraining data.
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.```
+
+
+    Parameters:
         config ([`DebertaV2Config`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -905,23 +932,32 @@ DEBERTA_START_DOCSTRING = r"""
 DEBERTA_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`DebertaV2Tokenizer`].
-            See [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
-            IDs?](../glossary#input-ids)
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`DebertaV2Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
         attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
+
             [What are attention masks?](../glossary#attention-mask)
         token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
             1]`:
+
             - 0 corresponds to a *sentence A* token,
             - 1 corresponds to a *sentence B* token.
+
             [What are token type IDs?](../glossary#token-type-ids)
         position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`. [What are position IDs?](../glossary#position-ids)
+            config.max_position_embeddings - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
         inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
