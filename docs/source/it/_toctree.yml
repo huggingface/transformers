@@ -13,4 +13,18 @@
     title: Carica istanze pre-allenate con AutoClass
   - local: model_sharing
     title: Condividere un modello
+  - local: preprocessing
+    title: Preprocess
+  - local: training
+    title: Mettere a punto un modello pre-addestrato
+  - local: model_sharing
+    title: Condividere un modello
   title: Esercitazione
+- sections:
+  - local: run_scripts
+    title: Addestramento con script
+  - local: multilingual
+    title: Modelli multilingua per l'inferenza
+- sections:
+  - local: debugging
+    title: Debugging

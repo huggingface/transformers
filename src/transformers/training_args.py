@@ -20,7 +20,7 @@ import warnings
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from .debug_utils import DebugOption
 from .trainer_utils import (
@@ -52,7 +52,7 @@ if is_torch_available():
     import torch
     import torch.distributed as dist
 
-if is_torch_tpu_available():
+if is_torch_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
 
 
@@ -412,8 +412,8 @@ class TrainingArguments:
             down the training and evaluation speed.
         push_to_hub (`bool`, *optional*, defaults to `False`):
             Whether or not to push the model to the Hub every time the model is saved. If this is activated,
-            `output_dir` will begin a git directory synced with the the repo (determined by `hub_model_id`) and the
-            content will be pushed each time a save is triggered (depending on your `save_strategy`). Calling
+            `output_dir` will begin a git directory synced with the repo (determined by `hub_model_id`) and the content
+            will be pushed each time a save is triggered (depending on your `save_strategy`). Calling
             [`~Trainer.save_model`] will also trigger a push.
 
             <Tip warning={true}>
@@ -434,7 +434,7 @@ class TrainingArguments:
             `"organization_name/model"`. Will default to `user_name/output_dir_name` with *output_dir_name* being the
             name of `output_dir`.
 
-            Will default to to the name of `output_dir`.
+            Will default to the name of `output_dir`.
         hub_strategy (`str` or [`~trainer_utils.HubStrategy`], *optional*, defaults to `"every_save"`):
             Defines the scope of what is pushed to the Hub and when. Possible values are:
 
@@ -493,7 +493,7 @@ class TrainingArguments:
     do_train: bool = field(default=False, metadata={"help": "Whether to run training."})
     do_eval: bool = field(default=False, metadata={"help": "Whether to run eval on the dev set."})
     do_predict: bool = field(default=False, metadata={"help": "Whether to run predictions on the test set."})
-    evaluation_strategy: IntervalStrategy = field(
+    evaluation_strategy: Union[IntervalStrategy, str] = field(
         default="no",
         metadata={"help": "The evaluation strategy to use."},
     )
@@ -559,7 +559,7 @@ class TrainingArguments:
         default=-1,
         metadata={"help": "If > 0: set total number of training steps to perform. Override num_train_epochs."},
     )
-    lr_scheduler_type: SchedulerType = field(
+    lr_scheduler_type: Union[SchedulerType, str] = field(
         default="linear",
         metadata={"help": "The scheduler type to use."},
     )
@@ -596,14 +596,14 @@ class TrainingArguments:
         },
     )
     logging_dir: Optional[str] = field(default=None, metadata={"help": "Tensorboard log dir."})
-    logging_strategy: IntervalStrategy = field(
+    logging_strategy: Union[IntervalStrategy, str] = field(
         default="steps",
         metadata={"help": "The logging strategy to use."},
     )
     logging_first_step: bool = field(default=False, metadata={"help": "Log the first global_step"})
     logging_steps: int = field(default=500, metadata={"help": "Log every X updates steps."})
     logging_nan_inf_filter: bool = field(default=True, metadata={"help": "Filter nan and inf losses for logging."})
-    save_strategy: IntervalStrategy = field(
+    save_strategy: Union[IntervalStrategy, str] = field(
         default="steps",
         metadata={"help": "The checkpoint save strategy to use."},
     )
@@ -787,10 +787,10 @@ class TrainingArguments:
         metadata={
             "help": (
                 "Whether or not to use PyTorch Fully Sharded Data Parallel (FSDP) training (in distributed training"
-                " only). The base option should be `full_shard` or `shard_grad_op` and you can add CPU-offload to"
-                " `full_shard` or `shard_grad_op` like this: full_shard offload` or `shard_grad_op offload`. You can"
-                " add auto-wrap to `full_shard` or `shard_grad_op` with the same syntax: full_shard auto_wrap` or"
-                " `shard_grad_op auto_wrap`."
+                " only). The base option should be `full_shard`, `shard_grad_op` or `no_shard` and you can add"
+                " CPU-offload to `full_shard` or `shard_grad_op` like this: full_shard offload` or `shard_grad_op"
+                " offload`. You can add auto-wrap to `full_shard` or `shard_grad_op` with the same syntax: full_shard"
+                " auto_wrap` or `shard_grad_op auto_wrap`."
             ),
         },
     )
@@ -800,6 +800,15 @@ class TrainingArguments:
             "help": (
                 "FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `fsdp` field is"
                 " passed)."
+            )
+        },
+    )
+    fsdp_transformer_layer_cls_to_wrap: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Transformer layer class name (case-sensitive) to wrap ,e.g, `BertLayer`, `GPTJBlock`, `T5Block` .... "
+                "(useful only when `fsdp` flag is passed)."
             )
         },
     )
@@ -815,7 +824,7 @@ class TrainingArguments:
     label_smoothing_factor: float = field(
         default=0.0, metadata={"help": "The label smoothing epsilon to apply (zero means no label smoothing)."}
     )
-    optim: OptimizerNames = field(
+    optim: Union[OptimizerNames, str] = field(
         default="adamw_hf",
         metadata={"help": "The optimizer to use."},
     )
@@ -868,7 +877,7 @@ class TrainingArguments:
     hub_model_id: Optional[str] = field(
         default=None, metadata={"help": "The name of the repository to keep in sync with the local `output_dir`."}
     )
-    hub_strategy: HubStrategy = field(
+    hub_strategy: Union[HubStrategy, str] = field(
         default="every_save",
         metadata={"help": "The hub strategy to use when `--push_to_hub` is activated."},
     )
@@ -935,7 +944,7 @@ class TrainingArguments:
                 " are two options - eager and nvfuser. Eager defaults to pytorch eager and is useful for debugging."
                 " nvfuser path uses AOT Autograd and nvfuser compiler to optimize the models."
             ),
-            "choices": ["eager", "nvfuser"],
+            "choices": ["eager", "nvfuser", "fx2trt", "fx2trt-fp16"],
         },
     )
     ray_scope: Optional[str] = field(
@@ -1159,6 +1168,14 @@ class TrainingArguments:
 
         if len(self.fsdp) == 0 and self.fsdp_min_num_params > 0:
             warnings.warn("`--fsdp_min_num_params` is useful only when `--fsdp` is specified.")
+
+        if len(self.fsdp) == 0 and self.fsdp_transformer_layer_cls_to_wrap is not None:
+            warnings.warn("`--fsdp_transformer_layer_cls_to_wrap` is useful only when `--fsdp` is specified.")
+
+        if len(self.fsdp) > 0 and self.fsdp_min_num_params > 0 and self.fsdp_transformer_layer_cls_to_wrap is not None:
+            raise ValueError(
+                "`--fsdp_min_num_params` and `--fsdp_transformer_layer_cls_to_wrap` are mutually exclusive."
+            )
 
         if self.tpu_metrics_debug:
             warnings.warn(

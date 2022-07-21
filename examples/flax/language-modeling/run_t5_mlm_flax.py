@@ -459,7 +459,7 @@ class FlaxDataCollatorForT5MLM:
         return is_noise[:orig_length]
 
 
-def generate_batch_splits(samples_idx: jnp.ndarray, batch_size: int) -> jnp.ndarray:
+def generate_batch_splits(samples_idx: np.ndarray, batch_size: int) -> np.ndarray:
     num_samples = len(samples_idx)
     samples_to_remove = num_samples % batch_size
 
@@ -739,7 +739,6 @@ def main():
             config,
             seed=training_args.seed,
             dtype=getattr(jnp, model_args.dtype),
-            use_auth_token=True if model_args.use_auth_token else None,
         )
 
     # Data collator
@@ -871,6 +870,7 @@ def main():
 
         # Generate an epoch by shuffling sampling indices from the train dataset
         num_train_samples = len(tokenized_datasets["train"])
+        # Avoid using jax.numpy here in case of TPU training
         train_samples_idx = np.random.permutation(np.arange(num_train_samples))
         train_batch_idx = generate_batch_splits(train_samples_idx, train_batch_size)
 
@@ -908,7 +908,8 @@ def main():
             if cur_step % training_args.eval_steps == 0 and cur_step > 0:
                 # ======================== Evaluating ==============================
                 num_eval_samples = len(tokenized_datasets["validation"])
-                eval_samples_idx = jnp.arange(num_eval_samples)
+                # Avoid using jax.numpy here in case of TPU training
+                eval_samples_idx = np.arange(num_eval_samples)
                 eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size)
 
                 eval_metrics = []
@@ -944,7 +945,8 @@ def main():
     # Eval after training
     if training_args.do_eval:
         num_eval_samples = len(tokenized_datasets["validation"])
-        eval_samples_idx = jnp.arange(num_eval_samples)
+        # Avoid using jax.numpy here in case of TPU training
+        eval_samples_idx = np.arange(num_eval_samples)
         eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size)
 
         eval_metrics = []

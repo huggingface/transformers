@@ -16,7 +16,7 @@
 import unittest
 
 from transformers import GPT2Config, is_tf_available
-from transformers.testing_utils import require_tf, slow
+from transformers.testing_utils import require_tf, require_tf2onnx, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -294,21 +294,6 @@ class TFGPT2ModelTester:
         result = model(inputs)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
-    def create_and_check_gpt2_xla_generate_fast(self, config, input_ids, *args):
-        config.eos_token_id = None  # Generate until max length
-        config.max_length = 10
-        model = TFGPT2LMHeadModel(config=config)
-
-        # make sure there are no pad tokens in prompt
-        input_ids = tf.where(input_ids != config.pad_token_id, input_ids, config.pad_token_id - 1)
-
-        generated = model.generate(input_ids)
-
-        generate_xla = tf.function(model.generate, jit_compile=True)
-        generated_xla = generate_xla(input_ids)
-
-        self.parent.assertListEqual(generated.numpy().tolist(), generated_xla.numpy().tolist())
-
     def create_and_check_gpt2_double_head(
         self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, *args
     ):
@@ -408,10 +393,6 @@ class TFGPT2ModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt2_lm_head(*config_and_inputs)
 
-    def test_gpt2_xla_generate_fast(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_gpt2_xla_generate_fast(*config_and_inputs)
-
     def test_gpt2_double_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt2_double_head(*config_and_inputs)
@@ -443,6 +424,32 @@ class TFGPT2ModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
         for model_name in TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = TFGPT2Model.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+    # overwrite from common since ONNX runtime optimization doesn't work with tf.gather() when the argument
+    # `batch_dims` > 0"
+    @require_tf2onnx
+    @slow
+    def test_onnx_runtime_optimize(self):
+        if not self.test_onnx:
+            return
+
+        import onnxruntime
+        import tf2onnx
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+
+            # Skip these 2 classes which uses `tf.gather` with `batch_dims=1`
+            if model_class in [TFGPT2ForSequenceClassification, TFGPT2DoubleHeadsModel]:
+                continue
+
+            model = model_class(config)
+            model(model.dummy_inputs)
+
+            onnx_model_proto, _ = tf2onnx.convert.from_keras(model, opset=self.onnx_min_opset)
+
+            onnxruntime.InferenceSession(onnx_model_proto.SerializeToString())
 
 
 @require_tf
@@ -627,3 +634,27 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
             output_ids = xla_generate(**input_ids, do_sample=True, seed=[7, 0])
             output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
             self.assertListEqual(output_strings, expected_output_string_xla)
+
+    @slow
+    def test_lm_generate_gpt2_beam_search_xla(self):
+        model = TFGPT2LMHeadModel.from_pretrained("gpt2")
+        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
+
+        sentences = ["The dog", "The flying machine"]
+        expected_output_strings = [
+            "The dog was found in the backyard of a home in the 6500 block of South Main Street",
+            "The flying machine is a very powerful machine, but it's not a very powerful machine. It's",
+        ]
+        input_ids = tokenizer(sentences, return_tensors="tf", padding=True)
+
+        output_ids = model.generate(**input_ids, do_sample=False, num_beams=2)
+        output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        self.assertListEqual(output_strings, expected_output_strings)
+
+        xla_generate = tf.function(model.generate, jit_compile=True)
+        output_ids = xla_generate(**input_ids, do_sample=False, num_beams=2)
+        output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        self.assertListEqual(output_strings, expected_output_strings)

@@ -45,16 +45,6 @@ PRETRAINED_VOCAB_FILES_MAP = {
     },
 }
 
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "bigscience/tokenizer": 1024,
-    "bigscience/bloom-350m": 1024,
-    "bigscience/bloom-760m": 1024,
-    "bigscience/bloom-1b3": 1024,
-    "bigscience/bloom-2b5": 1024,
-    "bigscience/bloom-6b3": 1024,
-    "bigscience/bloom": 1024,
-}
-
 
 class BloomTokenizerFast(PreTrainedTokenizerFast):
     """
@@ -109,9 +99,9 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = None
+    # No `max_model_input_sizes` as BLOOM uses ALiBi positional embeddings
 
     def __init__(
         self,
@@ -136,7 +126,6 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
             add_prefix_space=add_prefix_space,
             **kwargs,
         )
-
         pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
         if pre_tok_state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
             pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop("type"))

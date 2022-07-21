@@ -43,7 +43,7 @@ from .utils import is_sagemaker_mp_enabled, is_torch_tpu_available, is_training_
 if is_training_run_on_sagemaker():
     logging.add_handler(StreamHandler(sys.stdout))
 
-if is_torch_tpu_available():
+if is_torch_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
 
 # this is used to suppress an undesired warning emitted by pytorch versions 1.4.2-1.7.0
@@ -466,8 +466,12 @@ class LabelSmoother:
     epsilon: float = 0.1
     ignore_index: int = -100
 
-    def __call__(self, model_output, labels):
+    def __call__(self, model_output, labels, shift_labels=False):
         logits = model_output["logits"] if isinstance(model_output, dict) else model_output[0]
+        if shift_labels:
+            logits = logits[..., :-1, :].contiguous()
+            labels = labels[..., 1:].contiguous()
+
         log_probs = -nn.functional.log_softmax(logits, dim=-1)
         if labels.dim() == log_probs.dim() - 1:
             labels = labels.unsqueeze(-1)
@@ -554,6 +558,12 @@ class LengthGroupedSampler(Sampler):
                     f"'{model_input_name}' key."
                 )
             lengths = [len(feature[model_input_name]) for feature in dataset]
+        elif isinstance(lengths, torch.Tensor):
+            logger.info(
+                "If lengths is a torch.Tensor, LengthGroupedSampler will be slow. Converting lengths to List[int]..."
+            )
+            lengths = lengths.tolist()
+
         self.lengths = lengths
         self.generator = generator
 
@@ -610,6 +620,13 @@ class DistributedLengthGroupedSampler(DistributedSampler):
                     f"'{model_input_name}' key."
                 )
             lengths = [len(feature[model_input_name]) for feature in dataset]
+        elif isinstance(lengths, torch.Tensor):
+            logger.info(
+                "If lengths is a torch.Tensor, DistributedLengthGroupedSampler will be slow. Converting lengths to"
+                " List[int]..."
+            )
+            lengths = lengths.tolist()
+
         self.lengths = lengths
 
         # If the dataset length is evenly divisible by # of replicas, then there
@@ -1014,6 +1031,26 @@ def get_parameter_names(model, forbidden_layer_types):
     # Add model specific parameters (defined with nn.Parameter) since they are not in any child.
     result += list(model._parameters.keys())
     return result
+
+
+def get_module_class_from_name(module, name):
+    """
+    Gets a class from a module by its name.
+
+    Args:
+        module (`torch.nn.Module`): The module to get the class from.
+        name (`str`): The name of the class.
+    """
+    modules_children = list(module.children())
+    if module.__class__.__name__ == name:
+        return module.__class__
+    elif len(modules_children) == 0:
+        return
+    else:
+        for child_module in modules_children:
+            module_class = get_module_class_from_name(child_module, name)
+            if module_class is not None:
+                return module_class
 
 
 if is_sagemaker_mp_enabled():

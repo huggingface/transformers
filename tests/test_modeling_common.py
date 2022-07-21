@@ -1616,7 +1616,7 @@ class ModelTesterMixin:
 
     # Copied from tests.test_modeling_tf_common.TFModelTesterMixin.check_pt_tf_outputs
     def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=1e-5, name="outputs", attributes=None):
-        """Check the outputs from PyTorch and TensorFlow models are closed enough. Checks are done in a recursive way.
+        """Check the outputs from PyTorch and TensorFlow models are close enough. Checks are done in a recursive way.
 
         Args:
             model_class: The class of the model that is currently testing. For example, `TFBertModel`,
@@ -1642,8 +1642,8 @@ class ModelTesterMixin:
             # TODO: remove this method and this line after issues are fixed
             tf_outputs, pt_outputs = self._postprocessing_to_ignore_test_cases(tf_outputs, pt_outputs, model_class)
 
-            tf_keys = tuple([k for k, v in tf_outputs.items() if v is not None])
-            pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
+            tf_keys = [k for k, v in tf_outputs.items() if v is not None]
+            pt_keys = [k for k, v in pt_outputs.items() if v is not None]
 
             self.assertEqual(tf_keys, pt_keys, f"{name}: Output keys differ between TF and PyTorch")
 
@@ -2503,6 +2503,15 @@ def floats_tensor(shape, scale=1.0, rng=None, name=None):
     return torch.tensor(data=values, dtype=torch.float, device=torch_device).view(shape).contiguous()
 
 
+def check_models_equal(model1, model2):
+    models_are_equal = True
+    for model1_p, model2_p in zip(model1.parameters(), model2.parameters()):
+        if model1_p.data.ne(model2_p.data).sum() > 0:
+            models_are_equal = False
+
+    return models_are_equal
+
+
 @require_torch
 class ModelUtilsTest(TestCasePlus):
     @slow
@@ -2530,6 +2539,56 @@ class ModelUtilsTest(TestCasePlus):
             model = BertModel.from_pretrained(model_name, output_attentions=True, output_hidden_states=True)
             self.assertEqual(model.config.output_hidden_states, True)
             self.assertEqual(model.config, config)
+
+    def test_model_from_pretrained_subfolder(self):
+        config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
+        model = BertModel(config)
+
+        subfolder = "bert"
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(os.path.join(tmp_dir, subfolder))
+
+            with self.assertRaises(OSError):
+                _ = BertModel.from_pretrained(tmp_dir)
+
+            model_loaded = BertModel.from_pretrained(tmp_dir, subfolder=subfolder)
+
+        self.assertTrue(check_models_equal(model, model_loaded))
+
+    def test_model_from_pretrained_subfolder_sharded(self):
+        config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
+        model = BertModel(config)
+
+        subfolder = "bert"
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(os.path.join(tmp_dir, subfolder), max_shard_size="10KB")
+
+            with self.assertRaises(OSError):
+                _ = BertModel.from_pretrained(tmp_dir)
+
+            model_loaded = BertModel.from_pretrained(tmp_dir, subfolder=subfolder)
+
+        self.assertTrue(check_models_equal(model, model_loaded))
+
+    def test_model_from_pretrained_hub_subfolder(self):
+        subfolder = "bert"
+        model_id = "hf-internal-testing/tiny-random-bert-subfolder"
+        with self.assertRaises(OSError):
+            _ = BertModel.from_pretrained(model_id)
+
+        model = BertModel.from_pretrained(model_id, subfolder=subfolder)
+
+        self.assertIsNotNone(model)
+
+    def test_model_from_pretrained_hub_subfolder_sharded(self):
+        subfolder = "bert"
+        model_id = "hf-internal-testing/tiny-random-bert-sharded-subfolder"
+        with self.assertRaises(OSError):
+            _ = BertModel.from_pretrained(model_id)
+
+        model = BertModel.from_pretrained(model_id, subfolder=subfolder)
+
+        self.assertIsNotNone(model)
 
     def test_model_from_pretrained_with_different_pretrained_model_name(self):
         model = T5ForConditionalGeneration.from_pretrained(TINY_T5)
@@ -2810,6 +2869,48 @@ class ModelUtilsTest(TestCasePlus):
 
         text_output = tokenizer.decode(output[0].tolist())
         self.assertEqual(text_output, "Hello, my name is John. I'm a writer, and I'm a writer. I'm")
+
+    @require_accelerate
+    @require_torch_gpu
+    def test_from_pretrained_disk_offload_task_model(self):
+        model = AutoModel.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        device_map = {
+            "transformer.wte": 0,
+            "transformer.wpe": 0,
+            "transformer.h.0": "cpu",
+            "transformer.h.1": "cpu",
+            "transformer.h.2": "cpu",
+            "transformer.h.3": "disk",
+            "transformer.h.4": "disk",
+            "transformer.ln_f": 0,
+            "lm_head": 0,
+        }
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            inputs = torch.tensor([[1, 2, 3]]).to(0)
+
+            model.save_pretrained(tmp_dir)
+            new_model = AutoModelForCausalLM.from_pretrained(tmp_dir).to(0)
+            outputs1 = new_model.to(0)(inputs)
+
+            offload_folder = os.path.join(tmp_dir, "offload")
+            new_model_with_offload = AutoModelForCausalLM.from_pretrained(
+                tmp_dir, device_map=device_map, offload_folder=offload_folder
+            )
+            outputs2 = new_model_with_offload(inputs)
+
+            self.assertTrue(torch.allclose(outputs1.logits.cpu(), outputs2.logits.cpu()))
+
+            # With state dict temp offload
+            offload_folder = os.path.join(tmp_dir, "offload")
+            new_model_with_offload = AutoModelForCausalLM.from_pretrained(
+                tmp_dir,
+                device_map=device_map,
+                offload_folder=offload_folder,
+                offload_state_dict=True,
+            )
+            outputs2 = new_model_with_offload(inputs)
+
+            self.assertTrue(torch.allclose(outputs1.logits.cpu(), outputs2.logits.cpu()))
 
     def test_cached_files_are_used_when_internet_is_down(self):
         # A mock response for an HTTP head request to emulate server down
