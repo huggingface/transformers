@@ -210,10 +210,12 @@ def main():
     # in the environment
     accelerator = (
         Accelerator(
-            log_with=args.report_to, 
-            logging_dir=args.output_dir, 
-            gradient_accumulation_steps=args.gradient_accumulation_steps
-        ) if args.with_tracking else Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps)
+            log_with=args.report_to,
+            logging_dir=args.output_dir,
+            gradient_accumulation_steps=args.gradient_accumulation_steps,
+        )
+        if args.with_tracking
+        else Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps)
     )
     logger.info(accelerator.state)
     # Make one log on every process with the configuration for debugging.
@@ -508,12 +510,11 @@ def main():
                 break
 
         model.eval()
-        samples_seen = 0
         for step, batch in enumerate(eval_dataloader):
             with torch.no_grad():
                 outputs = model(**batch)
             predictions = outputs.logits.argmax(dim=-1)
-            predictions, references = accelerator.gather_for_metrics((predictions, batch["labels"]))
+            predictions, references = accelerator.gather_for_metrics((predictions, batch["labels"]), eval_dataloader)
             metric.add_batch(
                 predictions=predictions,
                 references=references,

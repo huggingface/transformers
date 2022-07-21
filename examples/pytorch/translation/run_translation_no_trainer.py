@@ -65,7 +65,6 @@ MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 # Parsing input arguments
 def parse_args():
-
     parser = argparse.ArgumentParser(description="Finetune a transformers model on a text classification task")
     parser.add_argument(
         "--dataset_name",
@@ -313,7 +312,13 @@ def main():
     # If we're using tracking, we also need to initialize it here and it will by default pick up all supported trackers
     # in the environment
     accelerator = (
-        Accelerator(log_with=args.report_to, logging_dir=args.output_dir) if args.with_tracking else Accelerator()
+        Accelerator(
+            log_with=args.report_to,
+            logging_dir=args.output_dir,
+            gradient_accumulation_steps=args.gradient_accumulation_steps,
+        )
+        if args.with_tracking
+        else Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps)
     )
 
     # Make one log on every process with the configuration for debugging.
@@ -618,19 +623,19 @@ def main():
                 if resume_step is not None and step < resume_step:
                     completed_steps += 1
                     continue
-            outputs = model(**batch)
-            loss = outputs.loss
-            # We keep track of the loss at each epoch
-            if args.with_tracking:
-                total_loss += loss.detach().float()
-            loss = loss / args.gradient_accumulation_steps
-            accelerator.backward(loss)
-            if step % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
+            with accelerator.accumulate(model):
+                outputs = model(**batch)
+                loss = outputs.loss
+                # We keep track of the loss at each epoch
+                if args.with_tracking:
+                    total_loss += loss.detach().float()
+                accelerator.backward(loss)
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
-                progress_bar.update(1)
-                completed_steps += 1
+                if step % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
+                    progress_bar.update(1)
+                    completed_steps += 1
 
             if isinstance(checkpointing_steps, int):
                 if completed_steps % checkpointing_steps == 0:
@@ -651,7 +656,6 @@ def main():
             "max_length": args.val_max_target_length if args is not None else config.max_length,
             "num_beams": args.num_beams,
         }
-        samples_seen = 0
         for step, batch in enumerate(eval_dataloader):
             with torch.no_grad():
                 generated_tokens = accelerator.unwrap_model(model).generate(
@@ -668,8 +672,8 @@ def main():
                     # If we did not pad to max length, we need to pad the labels too
                     labels = accelerator.pad_across_processes(batch["labels"], dim=1, pad_index=tokenizer.pad_token_id)
 
-                generated_tokens = accelerator.gather(generated_tokens).cpu().numpy()
-                labels = accelerator.gather(labels).cpu().numpy()
+                generated_tokens = accelerator.gather_for_metrics(generated_tokens, eval_dataloader).cpu().numpy()
+                labels = accelerator.gather_for_metrics(labels, eval_dataloader).cpu().numpy()
 
                 if args.ignore_pad_token_for_loss:
                     # Replace -100 in the labels as we can't decode them.
@@ -679,15 +683,6 @@ def main():
                 decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
 
                 decoded_preds, decoded_labels = postprocess_text(decoded_preds, decoded_labels)
-
-                # If we are in a multiprocess environment, the last batch has duplicates
-                if accelerator.num_processes > 1:
-                    if step == len(eval_dataloader) - 1:
-                        decoded_preds = decoded_preds[: len(eval_dataloader.dataset) - samples_seen]
-                        decoded_labels = decoded_labels[: len(eval_dataloader.dataset) - samples_seen]
-                    else:
-                        samples_seen += len(decoded_labels)
-
                 metric.add_batch(predictions=decoded_preds, references=decoded_labels)
         eval_metric = metric.compute()
         logger.info({"bleu": eval_metric["score"]})
@@ -699,8 +694,7 @@ def main():
                     "train_loss": total_loss.item() / len(train_dataloader),
                     "epoch": epoch,
                     "step": completed_steps,
-                },
-                step=completed_steps,
+                }
             )
 
         if args.push_to_hub and epoch < args.num_train_epochs - 1:
@@ -736,5 +730,4 @@ def main():
 
 
 if __name__ == "__main__":
-
     main()

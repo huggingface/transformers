@@ -267,7 +267,13 @@ def main():
     # If we're using tracking, we also need to initialize it here and it will by default pick up all supported trackers
     # in the environment
     accelerator = (
-        Accelerator(log_with=args.report_to, logging_dir=args.output_dir) if args.with_tracking else Accelerator()
+        Accelerator(
+            log_with=args.report_to,
+            logging_dir=args.output_dir,
+            gradient_accumulation_steps=args.gradient_accumulation_steps,
+        )
+        if args.with_tracking
+        else Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps)
     )
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
@@ -668,17 +674,17 @@ def main():
                 if resume_step is not None and step < resume_step:
                     completed_steps += 1
                     continue
-            outputs = model(**batch)
-            loss = outputs.loss
-            # We keep track of the loss at each epoch
-            if args.with_tracking:
-                total_loss += loss.detach().float()
-            loss = loss / args.gradient_accumulation_steps
-            accelerator.backward(loss)
-            if step % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
+            with accelerator.accumulate(model):
+                outputs = model(**batch)
+                loss = outputs.loss
+                # We keep track of the loss at each epoch
+                if args.with_tracking:
+                    total_loss += loss.detach().float()
+                accelerator.backward(loss)
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
+            if step % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
                 progress_bar.update(1)
                 completed_steps += 1
 
@@ -693,7 +699,6 @@ def main():
                 break
 
         model.eval()
-        samples_seen = 0
         for step, batch in enumerate(eval_dataloader):
             with torch.no_grad():
                 outputs = model(**batch)
@@ -702,14 +707,9 @@ def main():
             if not args.pad_to_max_length:  # necessary to pad predictions and labels for being gathered
                 predictions = accelerator.pad_across_processes(predictions, dim=1, pad_index=-100)
                 labels = accelerator.pad_across_processes(labels, dim=1, pad_index=-100)
-            predictions_gathered, labels_gathered = accelerator.gather((predictions, labels))
-            # If we are in a multiprocess environment, the last batch has duplicates
-            if accelerator.num_processes > 1:
-                if step == len(eval_dataloader) - 1:
-                    predictions_gathered = predictions_gathered[: len(eval_dataloader.dataset) - samples_seen]
-                    labels_gathered = labels_gathered[: len(eval_dataloader.dataset) - samples_seen]
-                else:
-                    samples_seen += labels_gathered.shape[0]
+            predictions_gathered, labels_gathered = accelerator.gather_for_metrics(
+                (predictions, labels), eval_dataloader
+            )
             preds, refs = get_labels(predictions_gathered, labels_gathered)
             metric.add_batch(
                 predictions=preds,
@@ -725,8 +725,7 @@ def main():
                     "train_loss": total_loss.item() / len(train_dataloader),
                     "epoch": epoch,
                     "step": completed_steps,
-                },
-                step=completed_steps,
+                }
             )
 
         if args.push_to_hub and epoch < args.num_train_epochs - 1:
