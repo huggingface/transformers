@@ -321,19 +321,18 @@ class Message:
                 reports=sorted_model_reports,
                 to_truncate=False,
             )
+            file_path = os.path.join(os.getcwd(), "test_failure_tables/model_failures_report.txt")
+            with open(file_path, "w", encoding="UTF-8") as fp:
+                fp.write(model_failures_report)
+
             module_failures_report = prepare_reports(
                 title="The following non-model modules had failures",
                 header=module_header,
                 reports=sorted_module_reports,
                 to_truncate=False,
             )
-            with open(
-                os.path.join(os.getcwd(), "test_failure_tables/model_failures_report.txt"), "w", encoding="UTF-8"
-            ) as fp:
-                fp.write(model_failures_report)
-            with open(
-                os.path.join(os.getcwd(), "test_failure_tables/module_failures_report.txt"), "w", encoding="UTF-8"
-            ) as fp:
+            file_path = os.path.join(os.getcwd(), "test_failure_tables/module_failures_report.txt")
+            with open(file_path, "w", encoding="UTF-8") as fp:
                 fp.write(module_failures_report)
 
         return model_failure_sections
