@@ -327,9 +327,13 @@ class Message:
                 reports=sorted_module_reports,
                 to_truncate=False,
             )
-            with open(os.path.join(os.getcwd(), "test_failure_tables/model_failures_report.txt"), "w", encoding="UTF-8") as fp:
+            with open(
+                os.path.join(os.getcwd(), "test_failure_tables/model_failures_report.txt"), "w", encoding="UTF-8"
+            ) as fp:
                 fp.write(model_failures_report)
-            with open(os.path.join(os.getcwd(), "test_failure_tables/module_failures_report.txt"), "w", encoding="UTF-8") as fp:
+            with open(
+                os.path.join(os.getcwd(), "test_failure_tables/module_failures_report.txt"), "w", encoding="UTF-8"
+            ) as fp:
                 fp.write(module_failures_report)
 
         return model_failure_sections
@@ -602,14 +606,14 @@ def prepare_reports(title, header, reports, to_truncate=True):
 
     MAX_ERROR_TEXT = 3000 - len("[Truncated]")
     if not to_truncate:
-        MAX_ERROR_TEXT = float('inf')
+        MAX_ERROR_TEXT = float("inf")
 
     if len(reports) > 0:
         # `text` must be less than 3001 characters in Slack SDK
         # keep some room for adding "[Truncated]" when necessary
 
         for idx in range(len(reports)):
-            _report = header + "\n".join(reports[:idx + 1])
+            _report = header + "\n".join(reports[: idx + 1])
             new_report = f"{title}:\n```\n{_report}\n```\n"
             if len(new_report) > MAX_ERROR_TEXT:
                 # `report` here has length <= 3000
