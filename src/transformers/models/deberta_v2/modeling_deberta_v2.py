@@ -77,29 +77,23 @@ class ContextPooler(nn.Module):
 # Copied from transformers.models.deberta.modeling_deberta.XSoftmax with deberta->deberta_v2
 class XSoftmax(torch.autograd.Function):
     """
-    Masked Softmax which is optimized for saving memory
-
     Args:
+    Masked Softmax which is optimized for saving memory
         input (`torch.tensor`): The input tensor that will apply softmax.
         mask (`torch.IntTensor`):
             The mask matrix where 0 indicate that element will be ignored in the softmax calculation.
         dim (int): The dimension that will apply softmax
-
     Example:
-
     ```python
     >>> import torch
     >>> from transformers.models.deberta_v2.modeling_deberta_v2 import XSoftmax
 
     >>> # Make a tensor
     >>> x = torch.randn([4, 20, 100])
-
     >>> # Create a mask
     >>> mask = (x > 0).int()
-
     >>> # Specify the dimension to apply softmax
     >>> dim = -1
-
     >>> y = XSoftmax.apply(x, mask, dim)
     ```"""
 
@@ -210,9 +204,8 @@ class XDropout(torch.autograd.Function):
 # Copied from transformers.models.deberta.modeling_deberta.StableDropout
 class StableDropout(nn.Module):
     """
-    Optimized dropout module for stabilizing the training
-
     Args:
+    Optimized dropout module for stabilizing the training
         drop_prob (float): the dropout probabilities
     """
 
@@ -224,9 +217,8 @@ class StableDropout(nn.Module):
 
     def forward(self, x):
         """
-        Call the module
-
         Args:
+        Call the module
             x (`torch.tensor`): The input tensor to apply dropout
         """
         if self.training and self.drop_prob > 0:
@@ -493,6 +485,7 @@ class DebertaV2Encoder(nn.Module):
         rel_embeddings = self.get_rel_embedding()
         output_states = next_kv
         for i, layer_module in enumerate(self.layer):
+
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (output_states,)
 
@@ -565,28 +558,23 @@ def make_log_bucket_position(relative_pos, bucket_size, max_position):
 
 def build_relative_position(query_size, key_size, bucket_size=-1, max_position=-1):
     """
-    Build relative position according to the query and key
-
-    We assume the absolute position of query \\(P_q\\) is range from (0, query_size) and the absolute position of key
-    \\(P_k\\) is range from (0, key_size), The relative positions from query to key is \\(R_{q \\rightarrow k} = P_q -
-    P_k\\)
-
     Args:
+    Build relative position according to the query and key We assume the absolute position of query \\(P_q\\) is range
+    from (0, query_size) and the absolute position of key \\(P_k\\) is range from (0, key_size), The relative positions
+    from query to key is \\(R_{q \\rightarrow k} = P_q - P_k\\)
         query_size (int): the length of query
         key_size (int): the length of key
         bucket_size (int): the size of position bucket
         max_position (int): the maximum allowed absolute position
-
     Return:
         `torch.LongTensor`: A tensor with shape [1, query_size, key_size]
-
     """
     q_ids = torch.arange(0, query_size)
     k_ids = torch.arange(0, key_size)
     rel_pos_ids = q_ids[:, None] - k_ids[None, :]
     if bucket_size > 0 and max_position > 0:
         rel_pos_ids = make_log_bucket_position(rel_pos_ids, bucket_size, max_position)
-    rel_pos_ids = rel_pos_ids.to(torch.long)
+    rel_pos_ids = torch.tensor(rel_pos_ids, dtype=torch.long)
     rel_pos_ids = rel_pos_ids[:query_size, :]
     rel_pos_ids = rel_pos_ids.unsqueeze(0)
     return rel_pos_ids
@@ -612,13 +600,11 @@ def pos_dynamic_expand(pos_index, p2c_att, key_layer):
 
 class DisentangledSelfAttention(nn.Module):
     """
-    Disentangled self-attention module
-
     Parameters:
+    Disentangled self-attention module
         config (`DebertaV2Config`):
             A model config class instance with the configuration to build a new model. The schema is similar to
             *BertConfig*, for more details, please refer [`DebertaV2Config`]
-
     """
 
     def __init__(self, config):
@@ -674,33 +660,25 @@ class DisentangledSelfAttention(nn.Module):
         rel_embeddings=None,
     ):
         """
-        Call the module
-
         Args:
+        Call the module
             hidden_states (`torch.FloatTensor`):
                 Input states to the module usually the output from previous layer, it will be the Q,K and V in
                 *Attention(Q,K,V)*
-
             attention_mask (`torch.ByteTensor`):
                 An attention mask matrix of shape [*B*, *N*, *N*] where *B* is the batch size, *N* is the maximum
                 sequence length in which element [i,j] = *1* means the *i* th token in the input can attend to the *j*
                 th token.
-
             output_attentions (`bool`, optional):
                 Whether return the attention matrix.
-
             query_states (`torch.FloatTensor`, optional):
                 The *Q* state in *Attention(Q,K,V)*.
-
             relative_pos (`torch.LongTensor`):
                 The relative position encoding between the tokens in the sequence. It's of shape [*B*, *N*, *N*] with
                 values ranging in [*-max_relative_positions*, *max_relative_positions*].
-
             rel_embeddings (`torch.FloatTensor`):
                 The embedding of relative distances. It's a tensor of shape [\\(2 \\times
                 \\text{max_relative_positions}\\), *hidden_size*].
-
-
         """
         if query_states is None:
             query_states = hidden_states
@@ -771,22 +749,22 @@ class DisentangledSelfAttention(nn.Module):
         if self.share_att_key:
             pos_query_layer = self.transpose_for_scores(
                 self.query_proj(rel_embeddings), self.num_attention_heads
-            ).repeat(torch.div(query_layer.size(0), self.num_attention_heads, rounding_mode="floor"), 1, 1)
+            ).repeat(query_layer.size(0) // self.num_attention_heads, 1, 1)
             pos_key_layer = self.transpose_for_scores(self.key_proj(rel_embeddings), self.num_attention_heads).repeat(
-                torch.div(query_layer.size(0), self.num_attention_heads, rounding_mode="floor"), 1, 1
+                query_layer.size(0) // self.num_attention_heads, 1, 1
             )
         else:
             if "c2p" in self.pos_att_type:
                 pos_key_layer = self.transpose_for_scores(
                     self.pos_key_proj(rel_embeddings), self.num_attention_heads
                 ).repeat(
-                    torch.div(query_layer.size(0), self.num_attention_heads, rounding_mode="floor"), 1, 1
+                    query_layer.size(0) // self.num_attention_heads, 1, 1
                 )  # .split(self.all_head_size, dim=-1)
             if "p2c" in self.pos_att_type:
                 pos_query_layer = self.transpose_for_scores(
                     self.pos_query_proj(rel_embeddings), self.num_attention_heads
                 ).repeat(
-                    torch.div(query_layer.size(0), self.num_attention_heads, rounding_mode="floor"), 1, 1
+                    query_layer.size(0) // self.num_attention_heads, 1, 1
                 )  # .split(self.all_head_size, dim=-1)
 
         score = 0
@@ -935,6 +913,7 @@ class DebertaV2PreTrainedModel(PreTrainedModel):
 
 
 DEBERTA_START_DOCSTRING = r"""
+    Parameters:
     The DeBERTa model was proposed in [DeBERTa: Decoding-enhanced BERT with Disentangled
     Attention](https://arxiv.org/abs/2006.03654) by Pengcheng He, Xiaodong Liu, Jianfeng Gao, Weizhu Chen. It's build
     on top of BERT/RoBERTa with two improvements, i.e. disentangled attention and enhanced mask decoder. With those two
@@ -954,32 +933,23 @@ DEBERTA_START_DOCSTRING = r"""
 DEBERTA_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`DebertaV2Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`DebertaV2Tokenizer`].
+            See [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
+            IDs?](../glossary#input-ids)
         attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-
             [What are attention masks?](../glossary#attention-mask)
         token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
             1]`:
-
             - 0 corresponds to a *sentence A* token,
             - 1 corresponds to a *sentence B* token.
-
             [What are token type IDs?](../glossary#token-type-ids)
         position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
+            config.max_position_embeddings - 1]`. [What are position IDs?](../glossary#position-ids)
         inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
