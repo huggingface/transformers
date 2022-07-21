@@ -14,10 +14,9 @@
 
 import subprocess
 from argparse import ArgumentParser
-from getpass import getpass
 from typing import List, Union
 
-from huggingface_hub.hf_api import HfFolder, create_repo, login, logout, whoami
+from huggingface_hub.hf_api import HfFolder, create_repo, whoami
 from requests.exceptions import HTTPError
 
 from . import BaseTransformersCLICommand
@@ -106,33 +105,11 @@ class LoginCommand(BaseUserCommand):
     def run(self):
         print(
             ANSI.red(
-                "WARNING! `transformers-cli login` is deprecated and will be removed in v5. Please use "
-                "`huggingface-cli login` instead."
+                "ERROR! `transformers-cli login` uses an outdated login mechanism "
+                "that is not compatible with the Hugging Face Hub backend anymore. "
+                "Please use `huggingface-cli login instead."
             )
         )
-        print(  # docstyle-ignore
-            """
-        _|    _|  _|    _|    _|_|_|    _|_|_|  _|_|_|  _|      _|    _|_|_|      _|_|_|_|    _|_|      _|_|_|  _|_|_|_|
-        _|    _|  _|    _|  _|        _|          _|    _|_|    _|  _|            _|        _|    _|  _|        _|
-        _|_|_|_|  _|    _|  _|  _|_|  _|  _|_|    _|    _|  _|  _|  _|  _|_|      _|_|_|    _|_|_|_|  _|        _|_|_|
-        _|    _|  _|    _|  _|    _|  _|    _|    _|    _|    _|_|  _|    _|      _|        _|    _|  _|        _|
-        _|    _|    _|_|      _|_|_|    _|_|_|  _|_|_|  _|      _|    _|_|_|      _|        _|    _|    _|_|_|  _|_|_|_|
-
-        """
-        )
-        username = input("Username: ")
-        password = getpass()
-        try:
-            token = login(username, password)
-        except HTTPError as e:
-            # probably invalid credentials, display error message.
-            print(e)
-            print(ANSI.red(e.response.text))
-            exit(1)
-        HfFolder.save_token(token)
-        print("Login successful")
-        print("Your token:", token, "\n")
-        print("Your token has been saved to", HfFolder.path_token)
 
 
 class WhoamiCommand(BaseUserCommand):
@@ -162,17 +139,11 @@ class LogoutCommand(BaseUserCommand):
     def run(self):
         print(
             ANSI.red(
-                "WARNING! `transformers-cli logout` is deprecated and will be removed in v5. Please use "
-                "`huggingface-cli logout` instead."
+                "ERROR! `transformers-cli logout` uses an outdated logout mechanism "
+                "that is not compatible with the Hugging Face Hub backend anymore. "
+                "Please use `huggingface-cli logout instead."
             )
         )
-        token = HfFolder.get_token()
-        if token is None:
-            print("Not logged in")
-            exit()
-        HfFolder.delete_token()
-        logout(token)
-        print("Successfully logged out.")
 
 
 class RepoCreateCommand(BaseUserCommand):

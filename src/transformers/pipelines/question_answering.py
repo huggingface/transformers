@@ -279,7 +279,6 @@ class QuestionAnsweringPipeline(ChunkPipeline):
                 truncation="only_second" if question_first else "only_first",
                 max_length=max_seq_len,
                 stride=doc_stride,
-                return_tensors="np",
                 return_token_type_ids=True,
                 return_overflowing_tokens=True,
                 return_offsets_mapping=True,
@@ -294,12 +293,10 @@ class QuestionAnsweringPipeline(ChunkPipeline):
 
             # p_mask: mask with 1 for token than cannot be in the answer (0 for token which can be in an answer)
             # We put 0 on the tokens from the context and 1 everywhere else (question and special tokens)
-            p_mask = np.asarray(
-                [
-                    [tok != 1 if question_first else 0 for tok in encoded_inputs.sequence_ids(span_id)]
-                    for span_id in range(num_spans)
-                ]
-            )
+            p_mask = [
+                [tok != 1 if question_first else 0 for tok in encoded_inputs.sequence_ids(span_id)]
+                for span_id in range(num_spans)
+            ]
 
             features = []
             for span_idx in range(num_spans):
@@ -316,8 +313,6 @@ class QuestionAnsweringPipeline(ChunkPipeline):
                     for cls_index in cls_indices:
                         p_mask[span_idx][cls_index] = 0
                 submask = p_mask[span_idx]
-                if isinstance(submask, np.ndarray):
-                    submask = submask.tolist()
                 features.append(
                     SquadFeatures(
                         input_ids=input_ids_span_idx,
@@ -344,7 +339,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         for i, feature in enumerate(features):
             fw_args = {}
             others = {}
-            model_input_names = self.tokenizer.model_input_names + ["p_mask"]
+            model_input_names = self.tokenizer.model_input_names + ["p_mask", "token_type_ids"]
 
             for k, v in feature.__dict__.items():
                 if k in model_input_names:

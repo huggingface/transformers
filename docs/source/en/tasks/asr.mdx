@@ -117,7 +117,7 @@ The preprocessing function needs to:
 ...     return batch
 ```
 
-Use 🤗 Datasets [`map`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map) function to apply the preprocessing function over the entire dataset. You can speed up the map function by increasing the number of processes with `num_proc`. Remove the columns you don't need:
+Use 🤗 Datasets [`~datasets.Dataset.map`] function to apply the preprocessing function over the entire dataset. You can speed up the map function by increasing the number of processes with `num_proc`. Remove the columns you don't need:
 
 ```py
 >>> encoded_minds = minds.map(prepare_dataset, remove_columns=minds.column_names["train"], num_proc=4)

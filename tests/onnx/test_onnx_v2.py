@@ -180,8 +180,14 @@ PYTORCH_EXPORT_MODELS = {
     ("ibert", "kssteven/ibert-roberta-base"),
     ("camembert", "camembert-base"),
     ("convbert", "YituTech/conv-bert-base"),
+    ("codegen", "Salesforce/codegen-350M-multi"),
+    ("deberta", "microsoft/deberta-base"),
+    ("deberta-v2", "microsoft/deberta-v2-xlarge"),
+    ("convnext", "facebook/convnext-tiny-224"),
+    ("detr", "facebook/detr-resnet-50"),
     ("distilbert", "distilbert-base-cased"),
     ("electra", "google/electra-base-generator"),
+    ("resnet", "microsoft/resnet-50"),
     ("roberta", "roberta-base"),
     ("roformer", "junnyu/roformer_chinese_base"),
     ("squeezebert", "squeezebert/squeezebert-uncased"),
@@ -189,15 +195,19 @@ PYTORCH_EXPORT_MODELS = {
     ("xlm", "xlm-clm-ende-1024"),
     ("xlm-roberta", "xlm-roberta-base"),
     ("layoutlm", "microsoft/layoutlm-base-uncased"),
+    ("layoutlmv3", "microsoft/layoutlmv3-base"),
+    ("levit", "facebook/levit-128S"),
     ("vit", "google/vit-base-patch16-224"),
     ("deit", "facebook/deit-small-patch16-224"),
     ("beit", "microsoft/beit-base-patch16-224"),
     ("data2vec-text", "facebook/data2vec-text-base"),
     ("perceiver", "deepmind/language-perceiver", ("masked-lm", "sequence-classification")),
     ("perceiver", "deepmind/vision-perceiver-conv", ("image-classification",)),
+    ("yolos", "hustvl/yolos-tiny"),
 }
 
 PYTORCH_EXPORT_WITH_PAST_MODELS = {
+    ("bloom", "bigscience/bloom-350m"),
     ("gpt2", "gpt2"),
     ("gpt-neo", "EleutherAI/gpt-neo-125M"),
 }
@@ -211,6 +221,8 @@ PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {
     ("blenderbot-small", "facebook/blenderbot_small-90M"),
     ("blenderbot", "facebook/blenderbot-400M-distill"),
     ("bigbird-pegasus", "google/bigbird-pegasus-large-arxiv"),
+    ("longt5", "google/long-t5-local-base"),
+    ("longt5", "google/long-t5-tglobal-base"),
 }
 
 # TODO(lewtun): Include the same model types in `PYTORCH_EXPORT_MODELS` once TensorFlow has parity with the PyTorch model implementations.

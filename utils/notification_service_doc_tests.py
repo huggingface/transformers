@@ -289,7 +289,7 @@ def retrieve_artifact(name: str):
         files = os.listdir(name)
         for file in files:
             try:
-                with open(os.path.join(name, file)) as f:
+                with open(os.path.join(name, file), encoding="utf-8") as f:
                     _artifact[file.split(".")[0]] = f.read()
             except UnicodeDecodeError as e:
                 raise ValueError(f"Could not open {os.path.join(name, file)}.") from e
