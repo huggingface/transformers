@@ -17,6 +17,8 @@
     title: Mettere a punto un modello pre-addestrato
   title: Esercitazione
 - sections:
+  - local: run_scripts
+    title: Addestramento con script
   - local: multilingual
     title: Modelli multilingua per l'inferenza
 - sections:
