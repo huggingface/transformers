@@ -1340,10 +1340,10 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         # Embed images and text queries
         feature_map, query_embeds = self.image_text_embedder(
-            pixel_values=pixel_values, 
-            input_ids=input_ids, 
-            attention_mask=attention_mask, 
-            output_attentions=output_attentions
+            pixel_values=pixel_values,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
         )
 
         batch_size, height, width, hidden_dim = feature_map.shape
