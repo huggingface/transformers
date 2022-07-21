@@ -182,8 +182,8 @@ def copy_class_merge_token(hf_model, flax_params):
 
     weight = torch.from_numpy(flax_class_token_params["scale"])
     bias = torch.from_numpy(flax_class_token_params["bias"])
-    hf_model.embedder.layer_norm.weight = nn.Parameter(weight)
-    hf_model.embedder.layer_norm.bias = nn.Parameter(bias)
+    hf_model.layer_norm.weight = nn.Parameter(weight)
+    hf_model.layer_norm.bias = nn.Parameter(bias)
 
 
 def copy_class_box_heads(hf_model, flax_params):
@@ -344,7 +344,7 @@ def convert_owlvit_checkpoint(pt_backbone, flax_params, attn_params, pytorch_dum
     hf_backbone.logit_scale = pt_backbone.logit_scale
     copy_flax_attn_params(hf_backbone, attn_params)
 
-    hf_model.embedder.clip = hf_backbone
+    hf_model.owlvit = hf_backbone
     copy_class_merge_token(hf_model, flax_params)
     copy_class_box_heads(hf_model, flax_params)
 

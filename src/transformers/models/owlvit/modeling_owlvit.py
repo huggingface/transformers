@@ -1150,46 +1150,6 @@ class OwlViTClassPredictionHead(nn.Module):
         return (pred_logits, image_class_embeds)
 
 
-class OwlViTImageTextEmbedder(nn.Module):
-    def __init__(self, config: OwlViTConfig):
-        super().__init__()
-
-        self.clip = OwlViTModel(config)
-        self.layer_norm = nn.LayerNorm(config.vision_config.hidden_size)
-
-    def forward(
-        self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-    ) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
-
-        image_embeds, text_embeds = None, None
-
-        # Encode text
-        if input_ids is not None:
-            text_embeds = self.clip.get_text_features(
-                input_ids=input_ids, attention_mask=attention_mask, output_attentions=output_attentions
-            )
-
-        # Encode image
-        if pixel_values is not None:
-            image_embeds = self.clip.get_image_features(
-                pixel_values, return_projected=False, output_attentions=output_attentions
-            )
-
-            # Resize class token
-            new_size = tuple(np.array(image_embeds.shape) - np.array((0, 1, 0)))
-            class_token_out = torch.broadcast_to(image_embeds[:, :1, :], new_size)
-
-            # Merge image embedding with class tokens
-            image_embeds = image_embeds[:, 1:, :] * class_token_out
-            image_embeds = self.layer_norm(image_embeds)
-
-        return (image_embeds, text_embeds)
-
-
 class OwlViTForObjectDetection(OwlViTPreTrainedModel):
     config_class = OwlViTConfig
     main_input_name = "pixel_values"
@@ -1197,9 +1157,11 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
     def __init__(self, config: OwlViTConfig):
         super().__init__(config)
 
-        self.embedder = OwlViTImageTextEmbedder(config)
+        self.owlvit = OwlViTModel(config)
         self.class_head = OwlViTClassPredictionHead(config)
         self.box_head = OwlViTBoxPredictionHead(config)
+
+        self.layer_norm = nn.LayerNorm(config.vision_config.hidden_size)
         self.sigmoid = nn.Sigmoid()
 
     def normalize_grid_corner_coordinates(self, feature_map: torch.FloatTensor):
@@ -1246,9 +1208,9 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         """
         Args:
             image_feats:
-                Features extracted from the image, returned by the`embedder` function.
+                Features extracted from the image, returned by the `image_text_embedder` method.
             feature_map:
-                A spatial re-arrangement of image_features, also returned by the `embedder` function.
+                A spatial re-arrangement of image_features, also returned by the `image_text_embedder` method.
         Returns:
             pred_boxes:
                 List of predicted boxes (cxcywh normalized to 0, 1) nested within a dictionary.
@@ -1270,7 +1232,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         """
         Args:
             image_feats:
-                Features extracted from the image embedder.
+                Features extracted from the `image_text_embedder`.
             query_embeds:
                 Text query embeddings.
             query_mask:
@@ -1280,13 +1242,30 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         return (pred_logits, image_class_embeds)
 
-    def image_embedder(
+    def image_text_embedder(
         self,
         pixel_values: torch.FloatTensor,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = None,
     ) -> torch.FloatTensor:
-        # Returns a 2D map of image features.
-        (image_embeds, _) = self.embedder(pixel_values=pixel_values, output_attentions=output_attentions)
+        # Encode text
+        text_embeds = self.owlvit.get_text_features(
+            input_ids=input_ids, attention_mask=attention_mask, output_attentions=output_attentions
+        )
+
+        # Encode image
+        image_embeds = self.owlvit.get_image_features(
+            pixel_values, return_projected=False, output_attentions=output_attentions
+        )
+
+        # Resize class token
+        new_size = tuple(np.array(image_embeds.shape) - np.array((0, 1, 0)))
+        class_token_out = torch.broadcast_to(image_embeds[:, :1, :], new_size)
+
+        # Merge image embedding with class tokens
+        image_embeds = image_embeds[:, 1:, :] * class_token_out
+        image_embeds = self.layer_norm(image_embeds)
 
         # Resize to [batch_size, num_patches, num_patches, hidden_size]
         new_size = (
@@ -1297,21 +1276,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         )
         image_embeds = image_embeds.reshape(new_size)
 
-        return image_embeds
-
-    def text_embedder(
-        self,
-        input_ids: torch.Tensor,
-        attention_mask: torch.Tensor,
-        output_attentions: Optional[bool] = None,
-    ) -> torch.FloatTensor:
-
-        # Returns text embeddings
-        (_, text_feats) = self.embedder(
-            input_ids=input_ids, attention_mask=attention_mask, output_attentions=output_attentions
-        )
-
-        return text_feats
+        return (image_embeds, text_embeds)
 
     @add_start_docstrings_to_model_forward(OWLVIT_OBJECT_DETECTION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=OwlViTObjectDetectionOutput, config_class=OwlViTConfig)
@@ -1362,7 +1327,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         vision_model_last_hidden_states = None
 
         if output_hidden_states:
-            outputs = self.embedder.clip(
+            outputs = self.owlvit(
                 pixel_values=pixel_values,
                 input_ids=input_ids,
                 attention_mask=attention_mask,
@@ -1373,15 +1338,16 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             text_model_last_hidden_states = outputs[-2][0]
             vision_model_last_hidden_states = outputs[-1][0]
 
-        # Embed images
-        feature_map = self.image_embedder(pixel_values=pixel_values, output_attentions=output_attentions)
+        # Embed images and text queries
+        feature_map, query_embeds = self.image_text_embedder(
+            pixel_values=pixel_values, 
+            input_ids=input_ids, 
+            attention_mask=attention_mask, 
+            output_attentions=output_attentions
+        )
+
         batch_size, height, width, hidden_dim = feature_map.shape
         image_feats = torch.reshape(feature_map, (batch_size, height * width, hidden_dim))
-
-        # Embed text queries
-        query_embeds = self.text_embedder(
-            input_ids=input_ids, attention_mask=attention_mask, output_attentions=output_attentions
-        )
 
         # Reshape from [batch_size * max_text_queries, hidden_dim] -> [batch_size, max_text_queries, hidden_dim]
         max_text_queries = input_ids.shape[0] // batch_size
