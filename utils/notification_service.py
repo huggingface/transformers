@@ -326,10 +326,9 @@ class Message:
             reports=sorted_module_reports,
             to_truncate=False,
         )
-        # TODO: Pass the target path from GitHub workflow files
-        with open("test_failure_tables/model_failures_report.txt", "w", encoding="UTF-8") as fp:
+        with open(os.path.join(os.getcwd(), "test_failure_tables/model_failures_report.txt"), "w", encoding="UTF-8") as fp:
             fp.write(model_failures_report)
-        with open("test_failure_tables/module_failures_report.txt", "w", encoding="UTF-8") as fp:
+        with open(os.path.join(os.getcwd(), "test_failure_tables/module_failures_report.txt"), "w", encoding="UTF-8") as fp:
             fp.write(module_failures_report)
 
         return model_failure_sections
@@ -609,7 +608,7 @@ def prepare_reports(title, header, reports, to_truncate=True):
         # keep some room for adding "[Truncated]" when necessary
 
         for idx in range(len(reports)):
-            _report = header + "\n".join(reports[:idx])
+            _report = header + "\n".join(reports[:idx + 1])
             new_report = f"{title}:\n```\n{_report}\n```\n"
             if len(new_report) > MAX_ERROR_TEXT:
                 # `report` here has length <= 3000
@@ -724,16 +723,22 @@ if __name__ == "__main__":
 
     unclassified_model_failures = []
 
+    job_name_prefix = ""
+    if ci_event.startswith("Past CI - "):
+        framework, version = ci_event.replace("Past CI - ", "").split("-")
+        framework = "PyTorch" if framework == "pytorch" else "TensorFlow"
+        job_name_prefix = f"{framework} {version}"
+
     for model in model_results.keys():
         for artifact_path in available_artifacts[f"run_all_tests_gpu_{model}_test_reports"].paths:
             artifact = retrieve_artifact(artifact_path["name"], artifact_path["gpu"])
             if "stats" in artifact:
                 # Link to the GitHub Action job
-                model_results[model]["job_link"][artifact_path["gpu"]] = github_actions_job_links.get(
-                    # The job names use `matrix.folder` which contain things like `models/bert` instead of `models_bert`
-                    f"Model tests ({model.replace('models_', 'models/')}, {artifact_path['gpu']}-gpu)"
-                )
-
+                # The job names use `matrix.folder` which contain things like `models/bert` instead of `models_bert`
+                job_name = f"Model tests ({model.replace('models_', 'models/')}, {artifact_path['gpu']}-gpu)"
+                if job_name_prefix:
+                    job_name = f"{job_name_prefix} / {job_name}"
+                model_results[model]["job_link"][artifact_path["gpu"]] = github_actions_job_links.get(job_name)
                 failed, success, time_spent = handle_test_results(artifact["stats"])
                 model_results[model]["success"] += success
                 model_results[model]["time_spent"] += time_spent[1:-1] + ", "
