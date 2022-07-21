@@ -796,6 +796,7 @@ class Swinv2Stage(nn.Module):
 
         self.pointing = False
 
+    # Copied from transformers.models.swin.modeling_swin.SwinStage.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -852,6 +853,7 @@ class Swinv2Encoder(nn.Module):
 
         self.gradient_checkpointing = False
 
+    # Copied from transformers.models.swin.modeling_swin.SwinEncoder.forward with SwinEncoderOutput->Swinv2EncoderOutput
     def forward(
         self,
         hidden_states: torch.Tensor,
