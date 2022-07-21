@@ -911,14 +911,14 @@ class TFData2VecVisionModel(TFData2VecVisionPreTrainedModel):
         return outputs
 
     def serving_output(self, output: TFData2VecVisionModelOutputWithPooling) -> TFData2VecVisionModelOutputWithPooling:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFData2VecVisionModelOutputWithPooling(
             last_hidden_state=output.last_hidden_state,
             pooler_output=output.pooler_output,
-            hidden_states=hs,
-            attentions=attns,
+            hidden_states=hidden_states,
+            attentions=attentions,
         )
 
 
@@ -995,10 +995,10 @@ class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TF
         )
 
     def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hidden_states, attentions=attentions)
 
 
 class TFData2VecVisionConvModule(tf.keras.layers.Layer):
@@ -1462,11 +1462,7 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
         )
 
     def serving_output(self, output: TFSemanticSegmenterOutput) -> TFSemanticSegmenterOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFSemanticSegmenterOutput(
-            logits=output.logits,
-            hidden_states=hs,
-            attentions=attns,
-        )
+        return TFSemanticSegmenterOutput(logits=output.logits, hidden_states=hidden_states, attentions=attentions)

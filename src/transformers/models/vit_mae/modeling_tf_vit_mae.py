@@ -843,15 +843,15 @@ class TFViTMAEModel(TFViTMAEPreTrainedModel):
         return outputs
 
     def serving_output(self, output: TFViTMAEModelOutput) -> TFViTMAEModelOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFViTMAEModelOutput(
             last_hidden_state=output.last_hidden_state,
             mask=output.mask,
             ids_restore=output.ids_restore,
-            hidden_states=hs,
-            attentions=attns,
+            hidden_states=hidden_states,
+            attentions=attentions,
         )
 
 
@@ -1157,9 +1157,13 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
         )
 
     def serving_output(self, output: TFViTMAEForPreTrainingOutput) -> TFViTMAEForPreTrainingOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFViTMAEForPreTrainingOutput(
-            logits=output.logits, mask=output.mask, ids_restore=output.ids_restore, hidden_states=hs, attentions=attns
+            logits=output.logits,
+            mask=output.mask,
+            ids_restore=output.ids_restore,
+            hidden_states=hidden_states,
+            attentions=attentions,
         )

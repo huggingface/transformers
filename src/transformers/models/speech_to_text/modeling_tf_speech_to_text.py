@@ -143,9 +143,8 @@ class TFConv1dSubsampler(tf.keras.layers.Layer):
         ]
 
     def call(self, input_features: tf.Tensor) -> tf.Tensor:
-        hidden_states = tf.cast(
-            input_features, tf.float32
-        )  # TF Conv1D assumes Batch x Time x Channels, same as the input
+        # TF Conv1D assumes Batch x Time x Channels, same as the input
+        hidden_states = tf.cast(input_features, tf.float32)
         for i, conv in enumerate(self.conv_layers):
             # equivalent to `padding=k // 2` on PT's `nn.Conv1d`
             pad_len = self.kernel_sizes[i] // 2

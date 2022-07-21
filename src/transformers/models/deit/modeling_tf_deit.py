@@ -680,14 +680,14 @@ class TFDeiTModel(TFDeiTPreTrainedModel):
         return outputs
 
     def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFBaseModelOutputWithPooling(
             last_hidden_state=output.last_hidden_state,
             pooler_output=output.pooler_output,
-            hidden_states=hs,
-            attentions=attns,
+            hidden_states=hidden_states,
+            attentions=attentions,
         )
 
 
@@ -865,10 +865,10 @@ class TFDeiTForMaskedImageModeling(TFDeiTPreTrainedModel):
         )
 
     def serving_output(self, output: TFMaskedLMOutput) -> TFMaskedLMOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFMaskedLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+        return TFMaskedLMOutput(logits=output.logits, hidden_states=hidden_states, attentions=attentions)
 
 
 @add_start_docstrings(
@@ -968,10 +968,10 @@ class TFDeiTForImageClassification(TFDeiTPreTrainedModel, TFSequenceClassificati
         )
 
     def serving_output(self, output: TFImageClassifierOutput) -> TFImageClassifierOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFImageClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+        return TFImageClassifierOutput(logits=output.logits, hidden_states=hidden_states, attentions=attentions)
 
 
 @add_start_docstrings(
@@ -1057,13 +1057,13 @@ class TFDeiTForImageClassificationWithTeacher(TFDeiTPreTrainedModel):
     def serving_output(
         self, output: TFDeiTForImageClassificationWithTeacherOutput
     ) -> TFDeiTForImageClassificationWithTeacherOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFDeiTForImageClassificationWithTeacherOutput(
             logits=output.logits,
             cls_logits=output.cls_logits,
             distillation_logits=output.distillation_logits,
-            hidden_states=hs,
-            attentions=attns,
+            hidden_states=hidden_states,
+            attentions=attentions,
         )

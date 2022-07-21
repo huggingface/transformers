@@ -1557,14 +1557,14 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
         return outputs
 
     def serving_output(self, output):
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFWav2Vec2BaseModelOutput(
             last_hidden_state=output.last_hidden_state,
             extract_features=output.extract_features,
-            hidden_states=hs,
-            attentions=attns,
+            hidden_states=hidden_states,
+            attentions=attentions,
         )
 
 
@@ -1739,6 +1739,6 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
         )
 
     def serving_output(self, output: TFCausalLMOutput) -> TFCausalLMOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-        return TFCausalLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        return TFCausalLMOutput(logits=output.logits, hidden_states=hidden_states, attentions=attentions)
