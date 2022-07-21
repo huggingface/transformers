@@ -15,12 +15,14 @@
 """PyTorch BLOOM model."""
 
 import math
+import os
 from typing import Tuple, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
+from torch.utils.cpp_extension import load
 
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_outputs import (
@@ -49,6 +51,11 @@ BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "bigscience/bloom-6b3",
     "bigscience/bloom",
 ]
+
+
+dirname = os.path.dirname(__file__)
+
+cuda_gelu = load(name="bias_gelu_fp16", sources=[os.path.join(dirname, "gelu.cpp"), os.path.join(dirname, "gelu.cu")])
 
 
 def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_values_length: int = 0):
