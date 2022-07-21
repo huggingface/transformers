@@ -328,7 +328,7 @@ def convert_owlvit_checkpoint(pt_backbone, flax_params, attn_params, pytorch_dum
     """
     Copy/paste/tweak model's weights to transformers design.
     """
-    repo = Repository(pytorch_dump_folder_path, clone_from=f"adirik/{pytorch_dump_folder_path}")
+    repo = Repository(pytorch_dump_folder_path, clone_from=f"google/{pytorch_dump_folder_path}")
     repo.git_pull()
 
     if config_path is not None:

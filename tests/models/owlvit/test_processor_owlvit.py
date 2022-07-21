@@ -176,7 +176,7 @@ class OwlViTProcessorTest(unittest.TestCase):
             processor()
 
     def test_processor_with_text_list(self):
-        model_name = "adirik/owlvit-base-patch32"
+        model_name = "google/owlvit-base-patch32"
         processor = OwlViTProcessor.from_pretrained(model_name)
 
         input_text = ["cat", "nasa badge"]
@@ -191,7 +191,7 @@ class OwlViTProcessorTest(unittest.TestCase):
             processor()
 
     def test_processor_with_nested_text_list(self):
-        model_name = "adirik/owlvit-base-patch32"
+        model_name = "google/owlvit-base-patch32"
         processor = OwlViTProcessor.from_pretrained(model_name)
 
         input_texts = [["cat", "nasa badge"], ["person"]]

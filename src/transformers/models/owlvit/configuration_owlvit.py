@@ -25,9 +25,9 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "adirik/owlvit-base-patch32": "https://huggingface.co/adirik/owlvit-base-patch32/resolve/main/config.json",
-    "adirik/owlvit-base-patch16": "https://huggingface.co/adirik/owlvit-base-patch16/resolve/main/config.json",
-    "adirik/owlvit-large-patch14": "https://huggingface.co/adirik/owlvit-large-patch14/resolve/main/config.json",
+    "google/owlvit-base-patch32": "https://huggingface.co/google/owlvit-base-patch32/resolve/main/config.json",
+    "google/owlvit-base-patch16": "https://huggingface.co/google/owlvit-base-patch16/resolve/main/config.json",
+    "google/owlvit-large-patch14": "https://huggingface.co/google/owlvit-large-patch14/resolve/main/config.json",
 }
 
 
@@ -36,7 +36,7 @@ class OwlViTTextConfig(PretrainedConfig):
     This is the configuration class to store the configuration of an [`OwlViTTextModel`]. It is used to instantiate an
     OwlViT text encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the OwlViT
-    [adirik/owlvit-base-patch32](https://huggingface.co/adirik/owlvit-base-patch32) architecture.
+    [google/owlvit-base-patch32](https://huggingface.co/google/owlvit-base-patch32) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -76,10 +76,10 @@ class OwlViTTextConfig(PretrainedConfig):
     ```python
     >>> from transformers import OwlViTTextConfig, OwlViTTextModel
 
-    >>> # Initializing a OwlViTTextModel with adirik/owlvit-base-patch32 style configuration
+    >>> # Initializing a OwlViTTextModel with google/owlvit-base-patch32 style configuration
     >>> configuration = OwlViTTextConfig()
 
-    >>> # Initializing a OwlViTTextConfig from the adirik/owlvit-base-patch32 style configuration
+    >>> # Initializing a OwlViTTextConfig from the google/owlvit-base-patch32 style configuration
     >>> model = OwlViTTextModel(configuration)
 
     >>> # Accessing the model configuration
@@ -181,10 +181,10 @@ class OwlViTVisionConfig(PretrainedConfig):
     ```python
     >>> from transformers import OwlViTVisionConfig, OwlViTVisionModel
 
-    >>> # Initializing a OwlViTVisionModel with adirik/owlvit-base-patch32 style configuration
+    >>> # Initializing a OwlViTVisionModel with google/owlvit-base-patch32 style configuration
     >>> configuration = OwlViTVisionConfig()
 
-    >>> # Initializing a OwlViTVisionModel model from the adirik/owlvit-base-patch32 style configuration
+    >>> # Initializing a OwlViTVisionModel model from the google/owlvit-base-patch32 style configuration
     >>> model = OwlViTVisionModel(configuration)
 
     >>> # Accessing the model configuration

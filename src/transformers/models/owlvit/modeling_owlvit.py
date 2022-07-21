@@ -38,13 +38,13 @@ from .configuration_owlvit import OwlViTConfig, OwlViTTextConfig, OwlViTVisionCo
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "adirik/owlvit-base-patch32"
+_CHECKPOINT_FOR_DOC = "google/owlvit-base-patch32"
 
 # See all OwlViT models at https://huggingface.co/models?filter=owlvit
 OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "adirik/owlvit-base-patch32",
-    "adirik/owlvit-base-patch16",
-    "adirik/owlvit-large-patch14",
+    "google/owlvit-base-patch32",
+    "google/owlvit-base-patch16",
+    "google/owlvit-large-patch14",
 ]
 
 
@@ -740,8 +740,8 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
         ```python
         >>> from transformers import OwlViTProcessor, OwlViTTextModel
 
-        >>> model = OwlViTTextModel.from_pretrained("adirik/owlvit-base-patch32")
-        >>> processor = OwlViTProcessor.from_pretrained("adirik/owlvit-base-patch32")
+        >>> model = OwlViTTextModel.from_pretrained("google/owlvit-base-patch32")
+        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
         >>> inputs = processor(
         ...     text=[["a photo of a cat", "a photo of a dog"], ["photo of a astranaut"]], return_tensors="pt"
         ... )
@@ -849,8 +849,8 @@ class OwlViTVisionModel(OwlViTPreTrainedModel):
         >>> import requests
         >>> from transformers import OwlViTProcessor, OwlViTVisionModel
 
-        >>> model = OwlViTVisionModel.from_pretrained("adirik/owlvit-base-patch32")
-        >>> processor = OwlViTProcessor.from_pretrained("adirik/owlvit-base-patch32")
+        >>> model = OwlViTVisionModel.from_pretrained("google/owlvit-base-patch32")
+        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
@@ -922,8 +922,8 @@ class OwlViTModel(OwlViTPreTrainedModel):
         ```python
         >>> from transformers import OwlViTProcessor, OwlViTModel
 
-        >>> model = OwlViTModel.from_pretrained("adirik/owlvit-base-patch32")
-        >>> processor = OwlViTProcessor.from_pretrained("adirik/owlvit-base-patch32")
+        >>> model = OwlViTModel.from_pretrained("google/owlvit-base-patch32")
+        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
         >>> inputs = processor(
         ...     text=[["a photo of a cat", "a photo of a dog"], ["photo of a astranaut"]], return_tensors="pt"
         ... )
@@ -969,8 +969,8 @@ class OwlViTModel(OwlViTPreTrainedModel):
         >>> import requests
         >>> from transformers import OwlViTProcessor, OwlViTModel
 
-        >>> model = OwlViTModel.from_pretrained("adirik/owlvit-base-patch32")
-        >>> processor = OwlViTProcessor.from_pretrained("adirik/owlvit-base-patch32")
+        >>> model = OwlViTModel.from_pretrained("google/owlvit-base-patch32")
+        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> inputs = processor(images=image, return_tensors="pt")
@@ -1020,8 +1020,8 @@ class OwlViTModel(OwlViTPreTrainedModel):
         >>> import requests
         >>> from transformers import OwlViTProcessor, OwlViTModel
 
-        >>> model = OwlViTModel.from_pretrained("adirik/owlvit-base-patch32")
-        >>> processor = OwlViTProcessor.from_pretrained("adirik/owlvit-base-patch32")
+        >>> model = OwlViTModel.from_pretrained("google/owlvit-base-patch32")
+        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> inputs = processor(text=[["a photo of a cat", "a photo of a dog"]], images=image, return_tensors="pt")
@@ -1334,8 +1334,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         >>> import torch
         >>> from transformers import OwlViTProcessor, OwlViTForObjectDetection
 
-        >>> model = OwlViTModel.from_pretrained("adirik/owlvit-base-patch32")
-        >>> processor = OwlViTProcessor.from_pretrained("adirik/owlvit-base-patch32")
+        >>> model = OwlViTModel.from_pretrained("google/owlvit-base-patch32")
+        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
