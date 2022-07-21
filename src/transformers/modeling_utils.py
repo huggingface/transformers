@@ -75,6 +75,7 @@ from .utils.versions import require_version_core
 
 
 if is_accelerate_available():
+    import accelerate
     from accelerate import dispatch_model, infer_auto_device_map, init_empty_weights
     from accelerate.utils import (
         load_offloaded_weights,
@@ -84,7 +85,7 @@ if is_accelerate_available():
     )
 
 if is_bitsandbytes_available():
-    from .utils.bitsandbytes import replace_8bit_linear, set_module_8bit_tensor_to_device
+    from .utils.bitsandbytes import replace_8bit_linear, set_module_8bit_tensor_to_device, replace_set_tensor_function
 
 logger = logging.get_logger(__name__)
 
@@ -2163,8 +2164,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         model.eval()
 
         # Dispatch model with hooks on all devices if necessary
-        if device_map is not None and not load_in_8bit:
+        if device_map:
             dispatch_model(model, device_map=device_map, offload_dir=offload_folder)
+
 
         if output_loading_info:
             if loading_info is None:
