@@ -22,10 +22,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_
 
 
 _import_structure = {
-    "configuration_bloom": [
-        "BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "BloomConfig",
-    ],
+    "configuration_bloom": ["BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP", "BloomConfig", "BloomOnnxConfig"],
 }
 try:
     if not is_tokenizers_available():
@@ -46,10 +43,12 @@ else:
         "BloomForCausalLM",
         "BloomModel",
         "BloomPreTrainedModel",
+        "BloomForSequenceClassification",
+        "BloomForTokenClassification",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_bloom import BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP, BloomConfig
+    from .configuration_bloom import BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP, BloomConfig, BloomOnnxConfig
 
     try:
         if not is_tokenizers_available():
@@ -68,6 +67,8 @@ if TYPE_CHECKING:
         from .modeling_bloom import (
             BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST,
             BloomForCausalLM,
+            BloomForSequenceClassification,
+            BloomForTokenClassification,
             BloomModel,
             BloomPreTrainedModel,
         )

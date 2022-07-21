@@ -306,7 +306,7 @@ stages = [ZERO2, ZERO3]
 #
 # dtypes = [FP16]
 # so just hardcoding --fp16 for now
-# if is_torch_bf16_available():
+# if is_torch_bf16_gpu_available():
 #     dtypes += [BF16]
 
 

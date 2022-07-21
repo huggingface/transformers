@@ -351,9 +351,10 @@ class FSMTHeadTests(unittest.TestCase):
         config, *_ = self._get_config_and_data()
         input_ids = _long_tensor(([4, 4, 2]))
         decoder_input_ids = _long_tensor([[26388, 2, config.pad_token_id]])
-        ignore = float("-inf")
+        causal_mask_dtype = torch.float32
+        ignore = torch.finfo(causal_mask_dtype).min
         decoder_input_ids, decoder_attn_mask, causal_mask = _prepare_fsmt_decoder_inputs(
-            config, input_ids, decoder_input_ids
+            config, input_ids, decoder_input_ids, causal_mask_dtype=causal_mask_dtype
         )
         expected_causal_mask = torch.tensor(
             [[0, ignore, ignore], [0, 0, ignore], [0, 0, 0]]  # never attend to the final token, because its pad

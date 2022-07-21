@@ -22,7 +22,7 @@ import unittest
 import timeout_decorator  # noqa
 
 from transformers import OPTConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
 
 from ...generation.test_generation_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -32,7 +32,7 @@ from ...test_modeling_common import ModelTesterMixin, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import GPT2Tokenizer, OPTForCausalLM, OPTModel
+    from transformers import GPT2Tokenizer, OPTForCausalLM, OPTForSequenceClassification, OPTModel
 
 
 def prepare_opt_inputs_dict(
@@ -74,7 +74,9 @@ class OPTModelTester:
         pad_token_id=1,
         bos_token_id=0,
         embed_dim=16,
+        num_labels=3,
         word_embed_proj_dim=16,
+        type_sequence_label_size=2,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -94,11 +96,12 @@ class OPTModelTester:
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.embed_dim = embed_dim
+        self.num_labels = num_labels
+        self.type_sequence_label_size = type_sequence_label_size
         self.word_embed_proj_dim = word_embed_proj_dim
         self.is_encoder_decoder = False
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
             3,
         )
@@ -175,7 +178,7 @@ class OPTModelTester:
 
 @require_torch
 class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (OPTModel, OPTForCausalLM) if is_torch_available() else ()
+    all_model_classes = (OPTModel, OPTForCausalLM, OPTForSequenceClassification) if is_torch_available() else ()
     all_generative_model_classes = (OPTForCausalLM,) if is_torch_available() else ()
     is_encoder_decoder = False
     fx_compatible = True
@@ -241,6 +244,33 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             model.half()
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
+
+    def test_opt_sequence_classification_model(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs()
+        config.num_labels = 3
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+        model = OPTForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
+        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
+    def test_opt_sequence_classification_model_for_multi_label(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs()
+        config.num_labels = 3
+        config.problem_type = "multi_label_classification"
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        sequence_labels = ids_tensor(
+            [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
+        ).to(torch.float)
+        model = OPTForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
+        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
 
 def assert_tensors_close(a, b, atol=1e-12, prefix=""):
@@ -344,10 +374,10 @@ class OPTGenerationTest(unittest.TestCase):
         model_id = "facebook/opt-125m"
 
         EXPECTED_OUTPUTS = [
-            "Today is a beautiful day and I want everyone",
-            "In the city of Rome Canaver Canaver Canaver Canaver",
-            "Paris is the capital of France and Parisdylib",
-            "Computers and mobile phones have taken precedence over",
+            "Today is a beautiful day and I want to",
+            "In the city of New York, the city",
+            "Paris is the capital of France and the capital",
+            "Computers and mobile phones have taken over the",
         ]
 
         predicted_outputs = []
@@ -428,3 +458,25 @@ class OPTGenerationTest(unittest.TestCase):
             predicted_outputs += generated_string
 
         self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)
+
+    @require_torch_gpu
+    def test_batched_nan_fp16(self):
+        # a bug manifested starting at models facebook/opt-1.3 and larger when running batched generations,
+        # therefore not using a tiny model, but the smallest model the problem was seen with which is opt-1.3b.
+        # please refer to this github thread: https://github.com/huggingface/transformers/pull/17437 for more details
+        model_name = "facebook/opt-1.3b"
+        tokenizer = GPT2Tokenizer.from_pretrained(model_name, use_fast=False, padding_side="left")
+
+        model = OPTForCausalLM.from_pretrained(model_name, torch_dtype=torch.float16, use_cache=True).cuda()
+        model = model.eval()
+
+        batch = tokenizer(["Who are you?", "Joe Biden is the president of"], padding=True, return_tensors="pt")
+
+        input_ids = batch["input_ids"].cuda()
+        attention_mask = batch["attention_mask"].cuda()
+
+        with torch.no_grad():
+            outputs = model(input_ids, attention_mask=attention_mask)
+            self.assertFalse(
+                torch.isnan(outputs.logits[0]).any().item()
+            )  # the first logits could contain NaNs if it fails

@@ -202,7 +202,7 @@ class KerasMetricCallback(Callback):
 
                 predictions = self.model.generate(generation_inputs, attention_mask=attention_mask)
             else:
-                predictions = self.model.predict(batch)
+                predictions = self.model.predict_on_batch(batch)
                 if isinstance(predictions, dict):
                     # This converts any dict-subclass to a regular dict
                     # Keras REALLY doesn't like it when we pass around a BatchEncoding or other derived class
@@ -277,7 +277,7 @@ class PushToHubCallback(Callback):
             for instance `"user_name/model"`, which allows you to push to an organization you are a member of with
             `"organization_name/model"`.
 
-            Will default to to the name of `output_dir`.
+            Will default to the name of `output_dir`.
         hub_token (`str`, *optional*):
             The token to use to push the model to the Hub. Will default to the token in the cache folder obtained with
             `huggingface-cli login`.
