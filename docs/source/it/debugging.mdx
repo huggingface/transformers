@@ -171,10 +171,7 @@ abs min  abs max  metadata
 0.00e+00      inf output
 ```
 
-The last frame reports for `Dropout.forward` function with the first entry for the only input and the second for the
-only output. You can see that it was called from an attribute `dropout` inside `DenseReluDense` class. We can see
-that it happened during the first layer, of the 2nd block, during the very first batch. Finally, the absolute largest
-input elements was `6.27e+04` and same for the output was `inf`.
+L'ultimo frame report per la funzione `Dropout.forward` con la prima voce per l'unico input e la seconda per l'unico output. Si può notare che è stato richiamato da un attibuto `dropout` dentro la classe `DenseReluDense`. Si può notare che ciò è avvenuto durante il primo strato, del 2° blocco, durante il primissimo lotto. Infine, gli elementi di input più grandi in assoluto sono stati `6.27e+04` e l'equivalente per l'output era `inf`.
 
 You can see here, that `T5DenseGatedGeluDense.forward` resulted in output activations, whose absolute max value was
 around 62.7K, which is very close to fp16's top limit of 64K. In the next frame we have `Dropout` which renormalizes
