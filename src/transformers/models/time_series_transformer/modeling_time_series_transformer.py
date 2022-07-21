@@ -657,19 +657,21 @@ class TimeSeriesTransformerEncoder(TimeSeriesTransformerPreTrainedModel):
         self.layerdrop = config.encoder_layerdrop
 
         embed_dim = config.d_model
-        self.padding_idx = config.pad_token_id
-        self.max_source_positions = config.max_position_embeddings
-        self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
+        # self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
+        # self.padding_idx = config.pad_token_id
+        # self.max_source_positions = config.max_position_embeddings
 
-        self.embed_positions = TimeSeriesTransformerLearnedPositionalEmbedding(
-            config.max_position_embeddings,
-            embed_dim,
-        )
+        # if embed_tokens is not None:
+        #     self.embed_tokens = embed_tokens
+        # else:
+        #     self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
+
+        # self.embed_positions = TimeSeriesTransformerLearnedPositionalEmbedding(
+        #     config.max_position_embeddings,
+        #     embed_dim,
+        # )
+
         self.layers = nn.ModuleList([TimeSeriesTransformerEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
 
@@ -679,10 +681,10 @@ class TimeSeriesTransformerEncoder(TimeSeriesTransformerPreTrainedModel):
 
     def forward(
         self,
-        input_ids=None,
+        inputs_embeds: torch.Tensor,
+        # input_ids=None,
         attention_mask=None,
         head_mask=None,
-        inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -730,23 +732,24 @@ class TimeSeriesTransformerEncoder(TimeSeriesTransformerPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # retrieve input_ids and inputs_embeds
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            input_shape = input_ids.size()
-            input_ids = input_ids.view(-1, input_shape[-1])
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
+        # # retrieve input_ids and inputs_embeds
+        # if input_ids is not None and inputs_embeds is not None:
+        #     raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        # elif input_ids is not None:
+        #     input_shape = input_ids.size()
+        #     input_ids = input_ids.view(-1, input_shape[-1])
+        # elif inputs_embeds is not None:
+        #     input_shape = inputs_embeds.size()[:-1]
+        # else:
+        #     raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+        # if inputs_embeds is None:
+        #     inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
-        embed_pos = self.embed_positions(input_shape)
+        # embed_pos = self.embed_positions(input_shape)
 
-        hidden_states = inputs_embeds + embed_pos
+        hidden_states = inputs_embeds  # + embed_pos
+
         hidden_states = self.layernorm_embedding(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
@@ -822,19 +825,21 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
-        self.padding_idx = config.pad_token_id
-        self.max_target_positions = config.max_position_embeddings
-        self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
+        # self.padding_idx = config.pad_token_id
+        # self.max_target_positions = config.max_position_embeddings
+        # self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
-        self.embed_positions = TimeSeriesTransformerLearnedPositionalEmbedding(
-            config.max_position_embeddings,
-            config.d_model,
-        )
+        # if embed_tokens is not None:
+        #     self.embed_tokens = embed_tokens
+        # else:
+        #     self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
+
+        # self.embed_positions = TimeSeriesTransformerLearnedPositionalEmbedding(
+        #     config.max_position_embeddings,
+        #     config.d_model,
+        # )
+
         self.layers = nn.ModuleList([TimeSeriesTransformerDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
@@ -842,11 +847,11 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
+    # def get_input_embeddings(self):
+    #     return self.embed_tokens
 
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
+    # def set_input_embeddings(self, value):
+    #     self.embed_tokens = value
 
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
         # create causal mask
@@ -868,14 +873,14 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
 
     def forward(
         self,
-        input_ids=None,
+        inputs_embeds: torch.Tensor,
+        # input_ids=None,
         attention_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         head_mask=None,
         cross_attn_head_mask=None,
         past_key_values=None,
-        inputs_embeds=None,
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -952,22 +957,23 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # retrieve input_ids and inputs_embeds
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
-        elif input_ids is not None:
-            input_shape = input_ids.size()
-            input_ids = input_ids.view(-1, input_shape[-1])
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-        else:
-            raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
+        # # retrieve input_ids and inputs_embeds
+        # if input_ids is not None and inputs_embeds is not None:
+        #     raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
+        # elif input_ids is not None:
+        #     input_shape = input_ids.size()
+        #     input_ids = input_ids.view(-1, input_shape[-1])
+        # elif inputs_embeds is not None:
+        #     input_shape = inputs_embeds.size()[:-1]
+        # else:
+        #     raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
+        input_shape = inputs_embeds.size()[:-1]
 
         # past_key_values_length
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
-        if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+        # if inputs_embeds is None:
+        #     inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
@@ -978,10 +984,10 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
-        # embed positions
-        positions = self.embed_positions(input_shape, past_key_values_length)
+        # # embed positions
+        # positions = self.embed_positions(input_shape, past_key_values_length)
 
-        hidden_states = inputs_embeds + positions
+        hidden_states = inputs_embeds  # + positions
         hidden_states = self.layernorm_embedding(hidden_states)
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
