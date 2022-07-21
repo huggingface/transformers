@@ -606,7 +606,7 @@ class TFSpeech2TextPreTrainedModel(TFPreTrainedModel):
     @tf.function(
         input_signature=[
             {
-                "input_features": tf.TensorSpec((None, None, None), tf.int32, name="input_features"),
+                "input_features": tf.TensorSpec((None, None, None), tf.float32, name="input_features"),
                 "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
                 "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
                 "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
