@@ -178,7 +178,9 @@ class DecisionTransformerGPT2Attention(nn.Module):
         attn_weights = torch.matmul(query, key.transpose(-1, -2))
 
         if self.scale_attn_weights:
-            attn_weights = attn_weights / torch.tensor(value.size(-1) ** 0.5, dtype=attn_weights.dtype, device=attn_weights.device)
+            attn_weights = attn_weights / torch.tensor(
+                value.size(-1) ** 0.5, dtype=attn_weights.dtype, device=attn_weights.device
+            )
 
         # Layer-wise attention scaling
         if self.scale_attn_by_inverse_layer_idx:
