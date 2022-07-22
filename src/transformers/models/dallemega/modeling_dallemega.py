@@ -261,7 +261,7 @@ class LayerNorm(nn.LayerNorm):
         super().__init__(normalized_shape, eps=eps, elementwise_affine=use_scale)
         self.use_scale = use_scale
         if not use_scale:
-            self.bias = nn.Parameter(torch.tensor(normalized_shape))
+            self.bias = nn.Parameter(torch.ones(normalized_shape))
 
     def forward(self, hidden_states):
         return super().forward(hidden_states)
