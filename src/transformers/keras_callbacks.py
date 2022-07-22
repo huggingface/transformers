@@ -66,14 +66,14 @@ class KerasMetricCallback(Callback):
         predict_with_generate (`bool`, *optional*, defaults to `False`):
             Whether we should use `model.generate()` to get outputs for the model.
         use_xla_generation (`bool`, *optional*, defaults to `False`):
-            If we're generating, whether to compile model generation with XLA. This can massively increase the speed
-            of generation (up to 100X speedup) but will require a new XLA compilation for each input shape. When using
-            XLA generation, it's a good idea to pad your inputs to the same size, or to use the `pad_to_multiple_of`
+            If we're generating, whether to compile model generation with XLA. This can massively increase the speed of
+            generation (up to 100X speedup) but will require a new XLA compilation for each input shape. When using XLA
+            generation, it's a good idea to pad your inputs to the same size, or to use the `pad_to_multiple_of`
             argument in `to_tf_dataset()`, which will reduce the number of unique input shapes and save a lot of
             compilation time. This option has no effect is `predict_with_generate` is `False`.
         generate_kwargs (`dict`, *optional*):
-            Keyword arguments to pass to `model.generate()` when generating. Has no effect if `predict_with_generate` is
-            `False`.
+            Keyword arguments to pass to `model.generate()` when generating. Has no effect if `predict_with_generate`
+            is `False`.
 
     """
 
@@ -200,12 +200,14 @@ class KerasMetricCallback(Callback):
                 main_input_name = getattr(self.model, "main_input_name", "input_ids")
 
             if self.use_xla_generation and self.generation_function is None:
+
                 def generation_function(inputs, attention_mask):
                     return self.model.generate(
                         inputs,
                         attention_mask=attention_mask,
                         **self.generate_kwargs,
                     )
+
                 self.generation_function = tf.function(generation_function, jit_compile=True)
 
         prediction_list = []
