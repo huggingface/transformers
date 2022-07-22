@@ -1389,7 +1389,7 @@ def pytest_terminal_summary_main(tr, id):
     #     tr._tw = create_terminal_writer(config, f)
     #     tr.summary_passes()
 
-    tr.reportchars = "wsxXEf"  # emulate -rA (used in summary_passes() and short_test_summary())
+    tr.reportchars = "wPpsxXEf"  # emulate -rA (used in summary_passes() and short_test_summary())
     with open(report_files["summary_short"], "w") as f:
         tr._tw = create_terminal_writer(config, f)
         tr.short_test_summary()
