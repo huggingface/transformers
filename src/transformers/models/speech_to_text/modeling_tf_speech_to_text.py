@@ -143,7 +143,8 @@ class TFConv1dSubsampler(tf.keras.layers.Layer):
         ]
 
     def call(self, input_features: tf.Tensor) -> tf.Tensor:
-        hidden_states = tf.identity(input_features)  # TF Conv1D assumes Batch x Time x Channels, same as the input
+        # TF Conv1D assumes Batch x Time x Channels, same as the input
+        hidden_states = tf.cast(input_features, tf.float32)
         for i, conv in enumerate(self.conv_layers):
             # equivalent to `padding=k // 2` on PT's `nn.Conv1d`
             pad_len = self.kernel_sizes[i] // 2
@@ -187,23 +188,20 @@ class TFSpeech2TextSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
             # zero pad
             emb = tf.concat([emb, tf.zeros(num_embeddings, 1)], axis=1)
         if padding_idx is not None:
-            emb = tf.concat([emb[:padding_idx, :], tf.zeros((1, emb.shape[1])), emb[padding_idx + 1 :, :]], axis=0)
+            emb = tf.concat([emb[:padding_idx, :], tf.zeros((1, tf.shape(emb)[1])), emb[padding_idx + 1 :, :]], axis=0)
         return emb
-
-    def _resize_embeddings(self):
-        """Recreates (and effectivelly resizes) the sinusoidal embeddings"""
-        self.embeddings = self.add_weight(
-            name="weights",  # name also used in PT
-            shape=self.embedding_weights.shape,
-        )
-        self.embeddings.assign(self.embedding_weights)
 
     def build(self, input_shape: tf.TensorShape):
         """
         Build shared token embedding layer Shared weights logic adapted from
         https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
         """
-        self._resize_embeddings()
+        self.embeddings = self.add_weight(
+            name="weights",  # name also used in PT
+            shape=tf.shape(self.embedding_weights),
+            trainable=False,
+        )
+        self.embeddings.assign(self.embedding_weights)
         super().build(input_shape)
 
     def call(self, input_ids: tf.Tensor, past_key_values_length: int = 0) -> tf.Tensor:
@@ -215,7 +213,7 @@ class TFSpeech2TextSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
         max_pos = self.padding_idx + 1 + seq_len
         if max_pos > shape_list(self.embeddings)[0]:
             self.embedding_weights = self._get_embedding(max_pos + self.offset, self.embedding_dim, self.padding_idx)
-            self._resize_embeddings()
+            self.embeddings.assign(self.embedding_weights)
         return tf.reshape(tf.gather(self.embeddings, tf.reshape(position_ids, (-1,)), axis=0), (bsz, seq_len, -1))
 
     @staticmethod
@@ -608,7 +606,7 @@ class TFSpeech2TextPreTrainedModel(TFPreTrainedModel):
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "input_features": tf.TensorSpec((None, None, None), tf.float32, name="input_features"),
                 "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
                 "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
                 "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
@@ -791,7 +789,6 @@ class TFSpeech2TextEncoder(tf.keras.layers.Layer):
             ),
             axis=-1,
         )
-
         attention_mask = tf.scatter_nd(indices=indices, updates=tf.ones(bsz), shape=[bsz, feature_vector_length])
         attention_mask = tf.cast(tf.reverse(tf.math.cumsum(tf.reverse(attention_mask, [-1]), -1), [-1]), tf.int64)
         return attention_mask
@@ -845,10 +842,10 @@ class TFSpeech2TextEncoder(tf.keras.layers.Layer):
 
         # subsample attention mask if necessary
         if attention_mask is not None:
-            attention_mask = self._get_feature_vector_attention_mask(inputs_embeds.shape[1], attention_mask)
+            attention_mask = self._get_feature_vector_attention_mask(tf.shape(inputs_embeds)[1], attention_mask)
             padding_mask = tf.cast(tf.math.not_equal(attention_mask, 1), tf.int64)
         else:
-            padding_mask = tf.zeros(inputs_embeds.shape[:-1], dtype=tf.int64)
+            padding_mask = tf.zeros(tf.shape(inputs_embeds)[:-1], dtype=tf.int64)
 
         embed_pos = self.embed_positions(padding_mask)
 
@@ -941,22 +938,6 @@ class TFSpeech2TextDecoder(tf.keras.layers.Layer):
 
     def set_embed_tokens(self, embed_tokens):
         self.embed_tokens = embed_tokens
-
-    def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
-        # create causal mask
-        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        combined_attention_mask = None
-        if input_shape[-1] > 1:
-            combined_attention_mask = _make_causal_mask(input_shape, past_key_values_length=past_key_values_length)
-
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            expanded_attn_mask = _expand_mask(attention_mask, tgt_len=input_shape[-1])
-            combined_attention_mask = (
-                expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
-            )
-
-        return combined_attention_mask
 
     @unpack_inputs
     def call(
@@ -1053,9 +1034,16 @@ class TFSpeech2TextDecoder(tf.keras.layers.Layer):
         else:
             inputs_embeds = inputs_embeds
 
-        attention_mask = self._prepare_decoder_attention_mask(
-            attention_mask, input_shape, inputs_embeds, past_key_values_length
-        )
+        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+        if input_shape[-1] > 1:
+            combined_attention_mask = _make_causal_mask(input_shape, past_key_values_length=past_key_values_length)
+        else:
+            combined_attention_mask = _expand_mask(
+                tf.ones((input_shape[0], input_shape[1] + past_key_values_length)), tgt_len=input_shape[-1]
+            )
+
+        if attention_mask is not None:
+            combined_attention_mask = combined_attention_mask + _expand_mask(attention_mask, tgt_len=input_shape[-1])
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
@@ -1100,7 +1088,7 @@ class TFSpeech2TextDecoder(tf.keras.layers.Layer):
 
             hidden_states, layer_self_attn, layer_cross_attn, present_key_value = decoder_layer(
                 hidden_states,
-                attention_mask=attention_mask,
+                attention_mask=combined_attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
                 layer_head_mask=head_mask[idx] if head_mask is not None else None,
@@ -1203,7 +1191,7 @@ class TFSpeech2TextMainLayer(tf.keras.layers.Layer):
         # downsample encoder attention mask
         if attention_mask is not None:
             encoder_attention_mask = self.encoder._get_feature_vector_attention_mask(
-                encoder_outputs[0].shape[1], attention_mask
+                tf.shape(encoder_outputs[0])[1], attention_mask
             )
         else:
             encoder_attention_mask = None
@@ -1465,8 +1453,8 @@ class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCaus
         enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None
         enc_attns = tf.convert_to_tensor(output.encoder_attentions) if self.config.output_attentions else None
 
-        return TFSeq2SeqModelOutput(
-            last_hidden_state=output.last_hidden_state,
+        return TFSeq2SeqLMOutput(
+            logits=output.logits,
             past_key_values=pkv,
             decoder_hidden_states=dec_hs,
             decoder_attentions=dec_attns,
