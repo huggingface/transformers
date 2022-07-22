@@ -827,7 +827,7 @@ class DalleMegaDecoder(DalleMegaPretrainedModel):
         self.layernorm_embedding = LayerNorm(config.d_model)
         self.embed_tokens = nn.Embedding(config.decoder_vocab_size, config.d_model)
         self.layers = nn.ModuleList([DalleMegaDecoderLayer(config) for _ in range(config.decoder_layers)])
-        self.final_layer_norm = LayerNorm(config.d_model, use_scale=False)
+        self.final_layernorm = LayerNorm(config.d_model, use_scale=False)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -1048,7 +1048,7 @@ class DalleMegaDecoder(DalleMegaPretrainedModel):
                 if encoder_hidden_states is not None:
                     all_cross_attentions += (layer_outputs[2],)
 
-        hidden_states = self.final_layer_norm(hidden_states)
+        hidden_states = self.final_layernorm(hidden_states)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
