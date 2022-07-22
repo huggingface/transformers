@@ -208,6 +208,25 @@ class OwlViTProcessorTest(unittest.TestCase):
         with pytest.raises(ValueError):
             processor()
 
+    def test_processor_case(self):
+        model_name = "google/owlvit-base-patch32"
+        processor = OwlViTProcessor.from_pretrained(model_name)
+
+        input_texts = ["cat", "nasa badge"]
+        inputs = processor(text=input_texts)
+
+        seq_length = 16
+        input_ids = inputs["input_ids"]
+        predicted_ids = [
+            [49406, 2368, 49407, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [49406, 6841, 11301, 49407, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        ]
+
+        self.assertListEqual(list(inputs.keys()), ["input_ids", "attention_mask"])
+        self.assertEqual(inputs["input_ids"].shape, (2, seq_length))
+        self.assertListEqual(list(input_ids[0]), predicted_ids[0])
+        self.assertListEqual(list(input_ids[1]), predicted_ids[1])
+
     def test_tokenizer_decode(self):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
