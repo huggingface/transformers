@@ -53,6 +53,7 @@ logger = logging.get_logger(__name__)
 JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "ArthurZ/jukebox-dummy",
     "ArthurZ/jukebox-1b-lyrics",
+    "ArthurZ/jukebox-5b-lyrics",
     # See all Jukebox models at https://huggingface.co/models?filter=jukebox
 ]
 
@@ -3092,9 +3093,8 @@ class JukeboxModel(JukeboxPreTrainedModel):
     def sample_level(self, zs, labels, offset, sampling_kwargs, level, total_length, hop_length, hps):
         # print(f"Sampling level {level}")
         print(f"Sampling level {level}")
-        prior = self.priors[level]
-        if total_length >= prior.n_ctx:
-            for start in get_range(get_starts(total_length, prior.n_ctx, hop_length)):
+        if total_length >= self.priors[level].n_ctx:
+            for start in get_range(get_starts(total_length, self.priors[level].n_ctx, hop_length)):
                 zs = self.sample_single_window(zs, labels, offset, sampling_kwargs, level, start, hps)
 
         else:
@@ -3120,7 +3120,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         sampling_kwargs = [
             dict(
                 temp=0.99,
-                fp16=False,
+                fp16=True,
                 max_batch_size=lower_batch_size,
                 chunk_size=chunk_size,
                 sample_tokens=sample_tokens,
@@ -3129,7 +3129,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
             ),
             dict(
                 temp=0.99,
-                fp16=False,
+                fp16=True,
                 max_batch_size=lower_batch_size,
                 chunk_size=chunk_size,
                 sample_tokens=sample_tokens,
@@ -3139,7 +3139,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
             ),
             dict(
                 temp=sampling_temperature,
-                fp16=False,
+                fp16=True,
                 max_batch_size=max_batch_size,
                 chunk_size=chunk_size,
                 sample_tokens=sample_tokens,
@@ -3184,7 +3184,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
 
     # Generate ancestral samples given a list of artists and genres
     def ancestral_sample(self, labels, n_samples=1, **sampling_kwargs):
-        sample_levels = list(range(len(self.priors)))
+        sample_levels =  sampling_kwargs.pop('sample_levels',list(range(len(self.priors))))
         zs = [torch.zeros(n_samples, 0, dtype=torch.long, device=labels[0].device) for _ in range(len(self.priors))]
         zs = self._sample(zs, labels, sample_levels, **sampling_kwargs)
         return zs
