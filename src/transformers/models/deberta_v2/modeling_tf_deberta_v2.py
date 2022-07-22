@@ -528,6 +528,8 @@ def take_along_axis(x, indices):
     flat_x = tf.reshape(x, (-1, x.shape[-1]))
     flat_indices = tf.reshape(indices, (-1, indices.shape[-1]))
     gathered = tf.gather(flat_x, flat_indices, batch_dims=1)
+
+    breakpoint()
     gathered = tf.reshape(gathered, indices.shape)
 
     return gathered
