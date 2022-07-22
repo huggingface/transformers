@@ -21,10 +21,14 @@
     title: Condividere un modello
   title: Esercitazione
 - sections:
+  - local: create_a_model
+    title: Crea un'architettura personalizzata
   - local: run_scripts
     title: Addestramento con script
   - local: multilingual
     title: Modelli multilingua per l'inferenza
+  - local: serialization
+    title: Esporta modelli Transformers
 - sections:
   - local: debugging
     title: Debugging
