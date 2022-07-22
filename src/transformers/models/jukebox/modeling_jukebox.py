@@ -3120,7 +3120,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         sampling_kwargs = [
             dict(
                 temp=0.99,
-                fp16=True,
+                fp16=False,
                 max_batch_size=lower_batch_size,
                 chunk_size=chunk_size,
                 sample_tokens=sample_tokens,
@@ -3129,7 +3129,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
             ),
             dict(
                 temp=0.99,
-                fp16=True,
+                fp16=False,
                 max_batch_size=lower_batch_size,
                 chunk_size=chunk_size,
                 sample_tokens=sample_tokens,
@@ -3139,7 +3139,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
             ),
             dict(
                 temp=sampling_temperature,
-                fp16=True,
+                fp16=False,
                 max_batch_size=max_batch_size,
                 chunk_size=chunk_size,
                 sample_tokens=sample_tokens,
