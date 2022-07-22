@@ -415,26 +415,25 @@ class DalleMegaAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-class GLUMLP(nn.Module):
+class GEGLU(nn.Module):
     def __init__(self, hidden_size, intermediate_size):
         super().__init__()
-        self.ln0 = LayerNorm(hidden_size, use_scale=False)
-        self.fc0 = nn.Linear(hidden_size, intermediate_size, bias=False)
+        self.layernorm_0 = LayerNorm(hidden_size, use_scale=False)
         self.gelu = nn.GELU()
-        self.fc1 = nn.Linear(hidden_size, intermediate_size, bias=False)
-        self.ln1 = LayerNorm(intermediate_size, use_scale=False)
-        self.fc2 = nn.Linear(intermediate_size, hidden_size, bias=False)
+        self.wi_0 = nn.Linear(hidden_size, intermediate_size, bias=False)
+        self.wi_1 = nn.Linear(hidden_size, intermediate_size, bias=False)
+        self.layernorm_1 = LayerNorm(intermediate_size, use_scale=False)
+        self.wo = nn.Linear(intermediate_size, hidden_size, bias=False)
 
     def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
-        hidden_states = self.ln0(hidden_states)
+        hidden_states = self.layernorm_0(hidden_states)
 
-        w = self.fc0(hidden_states)
-        w = self.gelu(w)
-        v = self.fc1(hidden_states)
+        hidden_gelu = self.gelu(self.wi_0(hidden_states))
+        hidden_linear = self.wi_1(hidden_states)
 
-        hidden_states = w * v
-        hidden_states = self.ln1(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = hidden_gelu * hidden_linear
+        hidden_states = self.layernorm_1(hidden_states)
+        hidden_states = self.wo(hidden_states)
         return hidden_states
 
 
@@ -443,16 +442,16 @@ class DalleMegaEncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
 
-        self.pre_attn_layer_norm = LayerNorm(self.embed_dim, use_scale=False)
+        self.pre_attn_layernorm = LayerNorm(self.embed_dim, use_scale=False)
         self.self_attn = DalleMegaAttention(
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
             bias=False,
         )
-        self.post_attn_layer_norm = LayerNorm(self.embed_dim)
+        self.post_attn_layernorm = LayerNorm(self.embed_dim)
         self.dropout = config.dropout
-        self.ffn = GLUMLP(config.d_model, config.encoder_ffn_dim)
+        self.ffn = GEGLU(config.d_model, config.encoder_ffn_dim)
 
     def forward(
         self,
@@ -475,14 +474,14 @@ class DalleMegaEncoderLayer(nn.Module):
         residual = hidden_states
 
         # self attention
-        hidden_states = self.pre_attn_layer_norm(hidden_states)
+        hidden_states = self.pre_attn_layernorm(hidden_states)
         hidden_states, attn_weights, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
-        hidden_states = self.post_attn_layer_norm(hidden_states)
+        hidden_states = self.post_attn_layernorm(hidden_states)
         hidden_states = residual + hidden_states
 
         # feed forward
@@ -503,7 +502,7 @@ class DalleMegaDecoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
 
-        self.pre_attn_layer_norm = LayerNorm(self.embed_dim, use_scale=False)
+        self.pre_attn_layernorm = LayerNorm(self.embed_dim, use_scale=False)
         self.self_attn = DalleMegaAttention(
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
@@ -511,11 +510,11 @@ class DalleMegaDecoderLayer(nn.Module):
             is_decoder=True,
             bias=False,
         )
-        self.post_attn_layer_norm = LayerNorm(self.embed_dim)
+        self.post_attn_layernorm = LayerNorm(self.embed_dim)
 
-        self.ffn = GLUMLP(config.d_model, config.decoder_ffn_dim)
+        self.ffn = GEGLU(config.d_model, config.decoder_ffn_dim)
 
-        self.pre_encoder_attn_layer_norm = LayerNorm(self.embed_dim, use_scale=False)
+        self.pre_encoder_attn_layernorm = LayerNorm(self.embed_dim, use_scale=False)
         self.encoder_attn = DalleMegaAttention(
             self.embed_dim,
             config.decoder_attention_heads,
@@ -523,7 +522,7 @@ class DalleMegaDecoderLayer(nn.Module):
             is_decoder=True,
             bias=False,
         )
-        self.post_encoder_attn_layer_norm = LayerNorm(self.embed_dim)
+        self.post_encoder_attn_layernorm = LayerNorm(self.embed_dim)
 
     def forward(
         self,
@@ -562,7 +561,7 @@ class DalleMegaDecoderLayer(nn.Module):
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
         # add present self-attn cache to positions 1,2 of present_key_value tuple
 
-        hidden_states = self.pre_attn_layer_norm(hidden_states)
+        hidden_states = self.pre_attn_layernorm(hidden_states)
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
             past_key_value=self_attn_past_key_value,
@@ -570,7 +569,7 @@ class DalleMegaDecoderLayer(nn.Module):
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
-        hidden_states = self.post_attn_layer_norm(hidden_states)
+        hidden_states = self.post_attn_layernorm(hidden_states)
         hidden_states = residual + hidden_states
 
         # Cross-Attention Block
@@ -582,7 +581,7 @@ class DalleMegaDecoderLayer(nn.Module):
             # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
 
-            hidden_states = self.pre_encoder_attn_layer_norm(hidden_states)
+            hidden_states = self.pre_encoder_attn_layernorm(hidden_states)
             hidden_states, cross_attn_weights, cross_attn_present_key_value = self.encoder_attn(
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
@@ -591,7 +590,7 @@ class DalleMegaDecoderLayer(nn.Module):
                 past_key_value=cross_attn_past_key_value,
                 output_attentions=output_attentions,
             )
-            hidden_states = self.post_encoder_attn_layer_norm(hidden_states)
+            hidden_states = self.post_encoder_attn_layernorm(hidden_states)
             hidden_states = residual + hidden_states
 
             # add cross-attn to positions 3,4 of present_key_value tuple
