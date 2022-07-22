@@ -1300,7 +1300,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         >>> import torch
         >>> from transformers import OwlViTProcessor, OwlViTForObjectDetection
 
-        >>> model = OwlViTModel.from_pretrained("google/owlvit-base-patch32")
+        >>> model = OwlViTForObjectDetection.from_pretrained("google/owlvit-base-patch32")
         >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
