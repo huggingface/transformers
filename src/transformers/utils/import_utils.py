@@ -253,7 +253,7 @@ _is_ccl_available = (
 )
 try:
     ccl_version = importlib_metadata.version("oneccl_bind_pt")
-    logger.info(f"Successfully imported torch_ccl version {ccl_version}")
+    logger.debug(f"Successfully imported oneccl_bind_pt version {ccl_version}")
 except importlib_metadata.PackageNotFoundError:
     _is_ccl_available = False
 
@@ -865,7 +865,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("vision", (is_vision_available, VISION_IMPORT_ERROR)),
         ("scipy", (is_scipy_available, SCIPY_IMPORT_ERROR)),
         ("accelerate", (is_accelerate_available, ACCELERATE_IMPORT_ERROR)),
-        ("torch_ccl", (is_ccl_available, CCL_IMPORT_ERROR)),
+        ("oneccl_bind_pt", (is_ccl_available, CCL_IMPORT_ERROR)),
     ]
 )
 

@@ -1304,7 +1304,7 @@ class TrainingArguments:
                         "Please set '--xpu_backend' to either 'mpi' or 'ccl'."
                     )
                 if self.xpu_backend == "ccl":
-                    requires_backends(self, "torch_ccl")
+                    requires_backends(self, "oneccl_bind_pt")
                     if ccl_version >= "1.12":
                         import oneccl_bindings_for_pytorch  # noqa: F401
                     else:

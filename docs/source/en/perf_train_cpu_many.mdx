@@ -1,0 +1,97 @@
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+-->
+
+# Efficient Training on Multiple CPUs
+
+When training on a single CPU is too slow, we will use multiple CPUs, This guide focuses on PyTorch-based DDP enabling and how to do it efficiently.
+
+## Intel® oneCCL Bindings for PyTorch
+
+Intel® oneCCL (collective communications library) is a library for efficient distributed deep learning training implementing such collectives like allreduce, allgather, alltoall. For more information on oneCCL, please refer to the oneCCL documentation and oneCCL specification.
+
+oneccl_bindings_for_pytorch module implements PyTorch C10D ProcessGroup API and can be dynamically loaded as external ProcessGroup and only works on Linux platform now
+
+Check more detailed information for [oneccl_bind_pt](https://github.com/intel/torch-ccl).
+
+### Intel® oneCCL Bindings for PyTorch installation:
+
+Wheel files are avaiable for the following Python versions:
+
+For PyTorch-1.10:
+
+```
+pip install oneccl_bind_pt==1.10.0 -f https://software.intel.com/ipex-whl-stable
+```
+For PyTorch-1.11:
+
+```
+pip install oneccl_bind_pt==1.11.0 -f https://software.intel.com/ipex-whl-stable
+```
+For PyTorch-1.12:
+
+```
+pip install oneccl_bind_pt==1.12.0 -f https://software.intel.com/ipex-whl-stable
+```
+Check more approaches for [oneccl_bind_pt installation](https://github.com/intel/torch-ccl).
+
+### Usage in Trainer
+To enable DDP in Trainer with ccl backend, users should add **`--xpu_backend ccl`** in training command arguments.
+
+Take an example of the use cases on [Transformers question-answering](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering)
+
+following command enables **2DDP** in one Xeon node, with one process running per one socket, OMP_NUM_THREADS/CCL_WORKER_COUNT can be tuned for optimal performance.
+```shell script
+ export CCL_WORKER_COUNT=1
+ export MASTER_ADDR=127.0.0.1
+ mpirun -n 2 -genv OMP_NUM_THREADS=23 \
+ python3 run_qa.py \
+ --model_name_or_path bert-large-uncased \
+ --dataset_name squad \
+ --do_train \
+ --do_eval \
+ --per_device_train_batch_size 12  \
+ --learning_rate 3e-5  \
+ --num_train_epochs 2  \
+ --max_seq_length 384 \
+ --doc_stride 128  \
+ --output_dir /tmp/debug_squad/ \
+ --no_cuda \
+ --xpu_backend ccl
+```
+following command enables **4DDP** in two Xeons (node0 and node1, taking node0 as the master), ppn(processes per node) is set to 2, with one process running per one socket, OMP_NUM_THREADS/CCL_WORKER_COUNT can be tuned for optimal performance.
+
+in node0, you need to create a config file which contains ip of each node(for ex: hostfile) and pass to mpirun as a argument
+```shell script
+ cat hostfile
+ xxx.xxx.xxx.xxx #node0 ip
+ xxx.xxx.xxx.xxx #node1 ip
+```
+run the following command in node0 and **4DDP** will be enabled in node0 and node1
+
+```shell script
+ export CCL_WORKER_COUNT=1
+ export MASTER_ADDR=xxx.xxx.xxx.xxx #node0 ip
+ mpirun -f hostfile -n 4 -ppn 2 \
+ -genv OMP_NUM_THREADS=23 \
+ python3 run_qa.py \
+ --model_name_or_path bert-large-uncased \
+ --dataset_name squad \
+ --do_train \
+ --do_eval \
+ --per_device_train_batch_size 12  \
+ --learning_rate 3e-5  \
+ --num_train_epochs 2  \
+ --max_seq_length 384 \
+ --doc_stride 128  \
+ --output_dir /tmp/debug_squad/ \
+ --no_cuda \
+ --xpu_backend ccl
+```
