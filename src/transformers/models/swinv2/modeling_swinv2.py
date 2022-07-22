@@ -254,6 +254,21 @@ def drop_path(input, drop_prob=0.0, training=False, scale_by_keep=True):
     return output
 
 
+# Copied from transformers.models.swin.modeling_swin.SwinDropPath with Swin->Swinv2
+class Swinv2DropPath(nn.Module):
+    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
+
+    def __init__(self, drop_prob: Optional[float] = None) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return drop_path(x, self.drop_prob, self.training)
+
+    def extra_repr(self) -> str:
+        return "p={}".format(self.drop_prob)
+
+
 # Copied from transformers.models.swin.modeling_swin.SwinEmbeddings with Swin->Swinv2
 class Swinv2Embeddings(nn.Module):
     """
@@ -397,21 +412,6 @@ class Swinv2PatchMerging(nn.Module):
         input_feature = self.norm(input_feature)
 
         return input_feature
-
-
-# Copied from transformers.models.swin.modeling_swin.SwinDropPath with Swin->Swinv2
-class Swinv2DropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob: Optional[float] = None) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return drop_path(x, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
 
 
 class Swinv2SelfAttention(nn.Module):
