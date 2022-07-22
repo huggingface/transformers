@@ -635,7 +635,7 @@ class TFSegformerModel(TFSegformerPreTrainedModel):
         return TFBaseModelOutput(
             last_hidden_state=output.last_hidden_state,
             hidden_states=output.hidden_states,
-            attentions=output.attentions
+            attentions=output.attentions,
         )
 
 
@@ -705,9 +705,7 @@ class TFSegformerForImageClassification(TFSegformerPreTrainedModel, TFSequenceCl
     def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
         # hidden_states and attention not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
         return TFSequenceClassifierOutput(
-            logits=output.logits,
-            hidden_states=output.hidden_states,
-            attentions=output.attentions
+            logits=output.logits, hidden_states=output.hidden_states, attentions=output.attentions
         )
 
 
@@ -898,7 +896,5 @@ class TFSegformerForSemanticSegmentation(TFSegformerPreTrainedModel):
     def serving_output(self, output: TFSemanticSegmenterOutput) -> TFSemanticSegmenterOutput:
         # hidden_states and attention not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
         return TFSemanticSegmenterOutput(
-            logits=output.logits,
-            hidden_states=output.hidden_states,
-            attentions=output.attentions
+            logits=output.logits, hidden_states=output.hidden_states, attentions=output.attentions
         )
