@@ -3006,7 +3006,7 @@ def load_prompts(audio_files, duration, hps):
 )
 class JukeboxModel(JukeboxPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["attn.masked_bias"]
-
+    _no_split_modules = ["JukeboxBlock"]
     def __init__(self, config):
         super().__init__(config)
 
