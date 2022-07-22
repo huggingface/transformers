@@ -1,4 +1,3 @@
-from contextlib import contextmanager
 from transformers.utils import is_accelerate_available, is_bitsandbytes_available
 
 
@@ -9,9 +8,7 @@ if is_bitsandbytes_available():
     import bitsandbytes as bnb
 
 if is_accelerate_available():
-    import accelerate
     from accelerate import init_empty_weights
-    from accelerate.utils import set_module_tensor_to_device
 
 
 def set_module_8bit_tensor_to_device(module, tensor_name, device, value=None):
@@ -99,8 +96,3 @@ def replace_8bit_linear(model, threshold=6.0):
                     threshold=threshold,
                 )
     return model
-
-@contextmanager
-def replace_set_tensor_function():
-    setattr(accelerate.utils, "set_module_tensor_to_device", set_module_8bit_tensor_to_device)
-    yield
