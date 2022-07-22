@@ -261,13 +261,10 @@ class LayerNorm(nn.LayerNorm):
         super().__init__(normalized_shape, eps=eps, elementwise_affine=use_scale)
         self.use_scale = use_scale
         if not use_scale:
-            self.bias = nn.Parameter(torch.tensor(0.0))
+            self.bias = nn.Parameter(torch.tensor(normalized_shape))
 
     def forward(self, hidden_states):
-        hidden_states = super().forward(hidden_states)
-        if not self.use_scale:
-            hidden_states += self.bias
-        return hidden_states
+        return super().forward(hidden_states)
 
 
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->DalleMega
