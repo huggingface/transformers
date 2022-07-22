@@ -451,7 +451,7 @@ def main():
         # https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map
 
         with training_args.main_process_first(desc="grouping texts together"):
-            tokenized_datasets = tokenized_datasets.map(
+            lm_datasets = tokenized_datasets.map(
                 group_texts,
                 batched=True,
                 num_proc=data_args.preprocessing_num_workers,
@@ -462,7 +462,14 @@ def main():
     if training_args.do_train:
         if "train" not in tokenized_datasets:
             raise ValueError("--do_train requires a train dataset")
-        train_dataset = tokenized_datasets["train"]
+        final_block_size = len(lm_datasets['train'][0]['input_ids'])
+        # This ensures that the data is all of the same length going into training.
+        # PyTorch does not like dealing with different list lengths
+        train_dataset = lm_datasets['train'].filter(lambda x: all([len(item) == final_block_size
+                                                                   for item in x.values()]),
+                                                    load_from_cache_file=not data_args.overwrite_cache,
+                                                    num_proc=data_args.preprocessing_num_workers,
+                                                    desc=f"Filtering out texts not of {final_block_size}")
         if data_args.max_train_samples is not None:
             max_train_samples = min(len(train_dataset), data_args.max_train_samples)
             train_dataset = train_dataset.select(range(max_train_samples))
@@ -470,7 +477,7 @@ def main():
     if training_args.do_eval:
         if "validation" not in tokenized_datasets:
             raise ValueError("--do_eval requires a validation dataset")
-        eval_dataset = tokenized_datasets["validation"]
+        eval_dataset = lm_datasets["validation"]
         if data_args.max_eval_samples is not None:
             max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
             eval_dataset = eval_dataset.select(range(max_eval_samples))

@@ -468,7 +468,7 @@ def main():
         # https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map
 
         with accelerator.main_process_first():
-            tokenized_datasets = tokenized_datasets.map(
+            lm_datasets = tokenized_datasets.map(
                 group_texts,
                 batched=True,
                 num_proc=args.preprocessing_num_workers,
@@ -476,8 +476,15 @@ def main():
                 desc=f"Grouping texts in chunks of {max_seq_length}",
             )
 
-    train_dataset = tokenized_datasets["train"]
-    eval_dataset = tokenized_datasets["validation"]
+    final_block_size = len(lm_datasets['train'][0]['input_ids'])
+    # This ensures that the data is all of the same length going into training.
+    # PyTorch does not like dealing with different list lengths
+    train_dataset = lm_datasets['train'].filter(lambda x: all([len(item) == final_block_size
+                                                               for item in x.values()]),
+                                                load_from_cache_file=not args.overwrite_cache,
+                                                num_proc=args.preprocessing_num_workers,
+                                                desc=f"Filtering out texts not of {final_block_size}")
+    eval_dataset = lm_datasets["validation"]
 
     # Conditional for small test subsets
     if len(train_dataset) > 3:
