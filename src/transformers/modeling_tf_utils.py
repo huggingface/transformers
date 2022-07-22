@@ -403,8 +403,13 @@ def unpack_inputs(func):
         # move any arg into kwargs, if they exist
         fn_args_and_kwargs.update(dict(zip(func.__code__.co_varnames[1:], args)))
 
-        # process the inputs and call the wrapped function
-        unpacked_inputs = input_processing(func, self.config, **fn_args_and_kwargs)
+        # Encoder Decoder models delegate the application of the configuration options to their inner models.
+        if "encoder_decoder" in str(self).lower():
+            config = None
+        else:
+            config = self.config
+
+        unpacked_inputs = input_processing(func, config, **fn_args_and_kwargs)
         return func(self, **unpacked_inputs)
 
     # Keras enforces the first layer argument to be passed, and checks it through `inspect.getfullargspec()`. This
@@ -559,18 +564,19 @@ def input_processing(func, config, **kwargs):
     if "kwargs" in output:
         del output["kwargs"]
 
-    boolean_dict = {
-        k: v
-        for k, v in output.items()
-        if k in ["return_dict", "output_attentions", "output_hidden_states", "use_cache"]
-    }
+    if config is not None:
+        boolean_dict = {
+            k: v
+            for k, v in output.items()
+            if k in ["return_dict", "output_attentions", "output_hidden_states", "use_cache"]
+        }
 
-    output.update(
-        booleans_processing(
-            config=config,
-            **boolean_dict,
+        output.update(
+            booleans_processing(
+                config=config,
+                **boolean_dict,
+            )
         )
-    )
 
     return output
 
