@@ -40,7 +40,7 @@ _import_structure = {
 
 
 try:
-    if not is_vision_available() or not is_torch_available():
+    if not is_vision_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
@@ -72,7 +72,7 @@ if TYPE_CHECKING:
     from .processing_owlvit import OwlViTProcessor
 
     try:
-        if not is_vision_available() or not is_torch_available():
+        if not is_vision_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass
