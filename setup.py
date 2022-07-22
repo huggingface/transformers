@@ -139,7 +139,8 @@ _deps = [
     "pytest",
     "pytest-timeout",
     "pytest-xdist",
-    "python>=3.7.0",
+    # To run the full tests -> This will be reverted.
+    "python>=3.6.0",
     "ray[tune]",
     "regex!=2019.12.17",
     "requests",
