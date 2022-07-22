@@ -17,6 +17,7 @@
 
 import math
 import os
+import time
 
 import numpy as np
 import torch
@@ -24,7 +25,7 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from packaging import version
 from torch import nn
-import time
+
 
 if version.parse(torch.__version__) >= version.parse("1.6"):
     is_amp_available = True
@@ -927,6 +928,7 @@ class JukeboxMLP(nn.Module):
 
 
 # TODO rename to JukeboxLayerNorm
+
 
 class LayerNorm(FusedLayerNorm):
     def __init__(self, normalized_shape, eps=1e-5, elementwise_affine=True):
@@ -1891,7 +1893,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
 
         N = x.shape[0]
         if not self.x_cond:
-           x_cond = torch.zeros((N, 1, self.width), device=x.device, dtype=torch.float)
+            x_cond = torch.zeros((N, 1, self.width), device=x.device, dtype=torch.float)
 
         x_t = x  # Target
         x = self.x_emb(x)  # X emb
@@ -1966,7 +1968,6 @@ class JukeboxConditionalAutoregressive(nn.Module):
         if sample_tokens is None:
             sample_tokens = self.input_dims
         N, D = n_samples, self.input_dims
-
 
         if not self.x_cond:
             x_cond = torch.zeros((N, 1, self.width), dtype=torch.float).to(
@@ -2601,7 +2602,7 @@ class JukeboxPrior(nn.Module):
         y[:, 2] = int(self.sample_length)
 
         # Set offset
-        y[:, 1:2] = int(offset* self.raw_to_tokens) + int(start * self.raw_to_tokens)
+        y[:, 1:2] = int(offset * self.raw_to_tokens) + int(start * self.raw_to_tokens)
         # here since y has the full token_list, ze just need to selected the ones that are relevant
 
         # Set lyric tokens
@@ -2645,8 +2646,8 @@ class JukeboxPrior(nn.Module):
 
         for i in range(len(conds)):
             cond, _, dims = conds[i], self.prior_shapes[i], self.prior_dims[i]
-            if cond is  None:
-               conds[i] = torch.zeros((N, dims, self.prior_width), dtype=torch.float, device=xs[0].device)
+            if cond is None:
+                conds[i] = torch.zeros((N, dims, self.prior_width), dtype=torch.float, device=xs[0].device)
 
         return torch.cat(xs, dim=1), torch.cat(conds, dim=1)
 
@@ -3066,7 +3067,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         # if there are no levels above should return None!
 
         # set y offset, sample_length and lyrics okens
-        y = prior.get_y(labels, start, self.total_length,offset)
+        y = prior.get_y(labels, start, self.total_length, offset)
 
         empty_cache()
         max_batch_size = 2
@@ -3125,7 +3126,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
                 chunk_size=chunk_size,
                 sample_tokens=sample_tokens,
                 total_length=(int(sample_length_in_seconds * self.config.sr) // top_prior.raw_to_tokens)
-                * top_prior.raw_to_tokens
+                * top_prior.raw_to_tokens,
             ),
             dict(
                 temp=0.99,
@@ -3134,8 +3135,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
                 chunk_size=chunk_size,
                 sample_tokens=sample_tokens,
                 total_length=(int(sample_length_in_seconds * self.config.sr) // top_prior.raw_to_tokens)
-                * top_prior.raw_to_tokens
-
+                * top_prior.raw_to_tokens,
             ),
             dict(
                 temp=sampling_temperature,
@@ -3144,36 +3144,37 @@ class JukeboxModel(JukeboxPreTrainedModel):
                 chunk_size=chunk_size,
                 sample_tokens=sample_tokens,
                 total_length=(int(sample_length_in_seconds * self.config.sr) // top_prior.raw_to_tokens)
-                * top_prior.raw_to_tokens
-
+                * top_prior.raw_to_tokens,
             ),
         ]
         hps = self.config
-        self.start_time = time.strftime('%Y-%m-%d-%Hh%M')
+        self.start_time = time.strftime("%Y-%m-%d-%Hh%M")
         for level in reversed(sample_levels):
             self.total_length = sampling_kwargs[level].pop("total_length")
             self.priors[level].to(zs[0].device).eval()
             empty_cache()
-            hps.sample_length = self.total_length # generated length of the signal
+            hps.sample_length = self.total_length  # generated length of the signal
             # Set correct total_length, hop_length, labels and sampling_kwargs for level
             total_length = hps.sample_length // self.priors[level].raw_to_tokens
             hop_length = int(hps.hop_fraction[-level - 1] * self.priors[level].n_ctx)
 
-            zs = self.sample_level(zs, labels[level], offset, sampling_kwargs[level], level, total_length, hop_length, hps)
+            zs = self.sample_level(
+                zs, labels[level], offset, sampling_kwargs[level], level, total_length, hop_length, hps
+            )
 
-            self.priors[level].to('cpu')
+            self.priors[level].to("cpu")
             empty_cache()
             self.vqvae.to(zs[level].device)
             # Decode sample
             with torch.no_grad():
                 x = self.vqvae.decode(zs[level:], start_level=level, bs_chunks=zs[level].shape[0])
-            self.vqvae.to('cpu')
-            
+            self.vqvae.to("cpu")
+
             logdir = f"{self.start_time}/level_{level}"
             if not os.path.exists(logdir):
                 os.makedirs(logdir)
             torch.save(dict(zs=zs, labels=labels, sampling_kwargs=sampling_kwargs, x=x), f"{logdir}/data.pth.tar")
-            save_wav(logdir,level, x, hps.sr)
+            save_wav(logdir, level, x, hps.sr)
             if (
                 alignments is None and self.priors[-1] is not None and self.priors[-1].n_tokens > 0
             ):  # and not isinstance(self.priors[-1].labeller, Empty`Labeller`):
@@ -3184,7 +3185,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
 
     # Generate ancestral samples given a list of artists and genres
     def ancestral_sample(self, labels, n_samples=1, **sampling_kwargs):
-        sample_levels =  sampling_kwargs.pop('sample_levels',list(range(len(self.priors))))
+        sample_levels = sampling_kwargs.pop("sample_levels", list(range(len(self.priors))))
         zs = [torch.zeros(n_samples, 0, dtype=torch.long, device=labels[0].device) for _ in range(len(self.priors))]
         zs = self._sample(zs, labels, sample_levels, **sampling_kwargs)
         return zs
@@ -3207,6 +3208,6 @@ class JukeboxModel(JukeboxPreTrainedModel):
         self.vqvae.to(x.device)
         with torch.no_grad():
             zs = self.vqvae.encode(x, start_level=0, end_level=len(self.priors), bs_chunks=x.shape[0])
-        self.vqvae.to('cpu')
+        self.vqvae.to("cpu")
         zs = self._sample(zs, labels, sample_levels, **sampling_kwargs)
         return zs
