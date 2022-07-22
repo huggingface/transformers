@@ -16,6 +16,7 @@
 
 import argparse
 import json
+from pathlib import Path
 
 import torch
 from PIL import Image
@@ -186,6 +187,12 @@ def convert_swinv2_checkpoint(swinv2_name, pytorch_dump_folder_path):
 
     print(f"Saving feature extractor to {pytorch_dump_folder_path}")
     feature_extractor.save_pretrained(pytorch_dump_folder_path)
+
+    model.push_to_hub(
+        repo_path_or_name=Path(pytorch_dump_folder_path, swinv2_name),
+        organization="nandwalritik",
+        commit_message="Add model",
+    )
 
 
 if __name__ == "__main__":
