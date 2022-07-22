@@ -747,7 +747,9 @@ class DalleMegaEncoder(DalleMegaPretrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        embed_pos = self.embed_positions(input_shape)
+        _, seq_len = input_shape[:2]
+        positions_ids = torch.arange(0, seq_len, dtype=torch.long, device=inputs_embeds.device)
+        embed_pos = self.embed_positions(positions_ids)
 
         hidden_states = inputs_embeds + embed_pos
         hidden_states = self.layernorm_embedding(hidden_states)
@@ -971,7 +973,9 @@ class DalleMegaDecoder(DalleMegaPretrainedModel):
             encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
         # embed positions
-        positions = self.embed_positions(input_shape, past_key_values_length)
+        _, seq_len = input_shape[:2]
+        positions_ids = torch.arange(past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=inputs_embeds.device)
+        positions = self.embed_positions(positions_ids)
 
         hidden_states = inputs_embeds + positions
         hidden_states = self.layernorm_embedding(hidden_states)
