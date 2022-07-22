@@ -242,7 +242,7 @@ jobs:
             - store_artifacts:
                   path: ~/transformers/test_preparation.txt
             - run: |
-                  python -m pytest -n 3 --max-worker-restart=0 --dist=loadfile -s --make-reports=tests_torch tests/models/plbart/test_modeling_plbart.py tests/models/bert/test_modeling_bert.py tests/models/bart/test_modeling_bart.py tests/models/t5/test_modeling_t5.py tests/models/gpt2/test_modeling_gpt2.py | tee tests_output.txt
+                  python -m pytest -n 3 --max-worker-restart=0 --dist=loadfile -s --make-reports=tests_torch tests/models/data2vec/test_modeling_data2vec_audio.py  tests/models/plbart/test_modeling_plbart.py tests/models/detr/test_modeling_detr.py tests/models/bert/test_modeling_bert.py tests/models/bart/test_modeling_bart.py tests/models/t5/test_modeling_t5.py tests/models/gpt2/test_modeling_gpt2.py | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
