@@ -242,9 +242,7 @@ jobs:
             - store_artifacts:
                   path: ~/transformers/test_preparation.txt
             - run: |
-                  if [ -f test_list.txt ]; then
-                    python -m pytest -n 3 --max-worker-restart=0 --dist=loadfile -s --make-reports=tests_torch $(cat test_list.txt) | tee tests_output.txt
-                  fi
+                  python -m pytest -n 3 --max-worker-restart=0 --dist=loadfile -s --make-reports=tests_torch tests/models/plbart/test_modeling_plbart.py tests/models/bert/test_modeling_bert.py tests/models/bart/test_modeling_bart.py tests/models/t5/test_modeling_t5.py tests/models/gpt2/test_modeling_gpt2.py | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -997,21 +995,7 @@ workflows:
     version: 2
     build_and_test:
         jobs:
-            - check_code_quality
-            - check_repository_consistency
-            - run_examples_torch
-            - run_examples_flax
-            - run_tests_custom_tokenizers
-            - run_tests_torch_and_tf
-            - run_tests_torch_and_flax
             - run_tests_torch
-            - run_tests_tf
-            - run_tests_flax
-            - run_tests_pipelines_torch
-            - run_tests_pipelines_tf
-            - run_tests_onnxruntime
-            - run_tests_hub
-            - run_tests_layoutlmv2_and_v3
     nightly:
         triggers:
             - schedule:
