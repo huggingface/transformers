@@ -49,55 +49,50 @@ class OwlViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin
     should refer to this superclass for more information regarding those methods.
 
     Args:
+        do_resize (`bool`, *optional*, defaults to `True`):
+            Whether to resize the shorter edge of the input to a certain `size`.
         size (`int`, *optional*, defaults to 768):
             Resize the shorter edge of the input to the given size. Only has an effect if `do_resize` is set to `True`.
         resample (`int`, *optional*, defaults to `PIL.Image.BICUBIC`):
             An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
             `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`. Only has an effect
             if `do_resize` is set to `True`.
+        do_center_crop (`bool`, *optional*, defaults to `True`):
+            Whether to crop the input at the center. If the input size is smaller than `crop_size` along any edge, the
+            image is padded with 0's and then center cropped.
         crop_size (`int`, *optional*, defaults to 768):
-            Desired output size when applying center-cropping. Only has an effect if `do_center_crop` is set to `True`.
+        do_normalize (`bool`, *optional*, defaults to `True`):
+            Whether or not to normalize the input with `image_mean` and `image_std`. Desired output size when applying
+            center-cropping. Only has an effect if `do_center_crop` is set to `True`.
         image_mean (`List[int]`, *optional*, defaults to `[0.48145466, 0.4578275, 0.40821073]`):
             The sequence of means for each channel, to be used when normalizing images.
         image_std (`List[int]`, *optional*, defaults to `[0.26862954, 0.26130258, 0.27577711]`):
             The sequence of standard deviations for each channel, to be used when normalizing images.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether or not to rescale input images to between 0-1 range. `PIL.Image.Image` inputs are automatically
-            scaled.
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the shorter edge of the input to a certain `size`.
-        do_center_crop (`bool`, *optional*, defaults to `True`):
-            Whether to crop the input at the center. If the input size is smaller than `crop_size` along any edge, the
-            image is padded with 0's and then center cropped.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether or not to normalize the input with `image_mean` and `image_std`.
     """
 
     model_input_names = ["pixel_values"]
 
     def __init__(
         self,
+        do_resize=True,
         size=768,
         resample=Image.BICUBIC,
         crop_size=768,
-        image_mean=None,
-        image_std=None,
-        do_rescale=True,
-        do_resize=True,
         do_center_crop=True,
         do_normalize=True,
+        image_mean=None,
+        image_std=None,
         **kwargs
     ):
         super().__init__(**kwargs)
         self.size = size
         self.resample = resample
         self.crop_size = crop_size
-        self.image_mean = image_mean if image_mean is not None else [0.48145466, 0.4578275, 0.40821073]
-        self.image_std = image_std if image_std is not None else [0.26862954, 0.26130258, 0.27577711]
-        self.do_rescale = do_rescale
         self.do_resize = do_resize
         self.do_center_crop = do_center_crop
         self.do_normalize = do_normalize
+        self.image_mean = image_mean if image_mean is not None else [0.48145466, 0.4578275, 0.40821073]
+        self.image_std = image_std if image_std is not None else [0.26862954, 0.26130258, 0.27577711]
 
     def post_process(self, outputs, target_sizes):
         """
