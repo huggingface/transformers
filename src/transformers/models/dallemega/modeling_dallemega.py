@@ -256,6 +256,20 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
+class LayerNorm(nn.LayerNorm):
+    def __init__(self, normalized_shape, eps=1e-05, use_scale=True):
+        super().__init__(normalized_shape, eps=eps, elementwise_affine=use_scale)
+        self.use_scale = use_scale
+        if not use_scale:
+            self.bias = nn.Parameter(torch.tensor(0.0))
+
+    def forward(self, hidden_states):
+        hidden_states = super().forward(hidden_states)
+        if not self.use_scale:
+            hidden_states += self.bias
+        return hidden_states
+
+
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->DalleMega
 class DalleMegaAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
@@ -407,11 +421,11 @@ class DalleMegaAttention(nn.Module):
 class GLUMLP(nn.Module):
     def __init__(self, hidden_size, intermediate_size):
         super().__init__()
-        self.ln0 = nn.LayerNorm(hidden_size)
+        self.ln0 = LayerNorm(hidden_size, use_scale=False)
         self.fc0 = nn.Linear(hidden_size, intermediate_size, bias=False)
         self.gelu = nn.GELU()
         self.fc1 = nn.Linear(intermediate_size, intermediate_size, bias=False)
-        self.ln1 = nn.LayerNorm(intermediate_size)
+        self.ln1 = LayerNorm(intermediate_size, use_scale=False)
         self.fc2 = nn.Linear(intermediate_size, hidden_size, bias=False)
 
     def forward(self, z: torch.FloatTensor) -> torch.FloatTensor:
@@ -432,14 +446,14 @@ class DalleMegaEncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
 
-        self.pre_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.pre_attn_layer_norm = LayerNorm(self.embed_dim, use_scale=False)
         self.self_attn = DalleMegaAttention(
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
             bias=False,
         )
-        self.post_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.post_attn_layer_norm = LayerNorm(self.embed_dim)
         self.dropout = config.dropout
         self.ffn = GLUMLP(config.d_model, config.encoder_ffn_dim)
 
@@ -492,7 +506,7 @@ class DalleMegaDecoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
 
-        self.pre_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.pre_attn_layer_norm = LayerNorm(self.embed_dim, use_scale=False)
         self.self_attn = DalleMegaAttention(
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
@@ -500,11 +514,11 @@ class DalleMegaDecoderLayer(nn.Module):
             is_decoder=True,
             bias=False,
         )
-        self.post_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.post_attn_layer_norm = LayerNorm(self.embed_dim)
 
         self.ffn = GLUMLP(config.d_model, config.decoder_ffn_dim)
 
-        self.pre_encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.pre_encoder_attn_layer_norm = LayerNorm(self.embed_dim, use_scale=False)
         self.encoder_attn = DalleMegaAttention(
             self.embed_dim,
             config.decoder_attention_heads,
@@ -512,7 +526,7 @@ class DalleMegaDecoderLayer(nn.Module):
             is_decoder=True,
             bias=False,
         )
-        self.post_encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.post_encoder_attn_layer_norm = LayerNorm(self.embed_dim)
 
     def forward(
         self,
@@ -654,8 +668,8 @@ class DalleMegaEncoder(DalleMegaPretrainedModel):
         self.embed_tokens = nn.Embedding(config.encoder_vocab_size, embed_dim)
         self.embed_positions = nn.Embedding(config.encoder_max_positions, embed_dim)
         self.layers = nn.ModuleList([DalleMegaEncoderLayer(config) for _ in range(config.encoder_layers)])
-        self.layernorm_embedding = nn.LayerNorm(embed_dim)
-        self.final_layernorm = nn.LayerNorm(embed_dim)
+        self.layernorm_embedding = LayerNorm(embed_dim)
+        self.final_layernorm = LayerNorm(embed_dim)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -810,10 +824,10 @@ class DalleMegaDecoder(DalleMegaPretrainedModel):
         super().__init__(config)
         self.dropout = config.dropout
         self.embed_positions = nn.Embedding(config.decoder_max_positions, config.d_model)
-        self.layernorm_embedding = nn.LayerNorm(config.d_model)
+        self.layernorm_embedding = LayerNorm(config.d_model)
         self.embed_tokens = nn.Embedding(config.decoder_vocab_size, config.d_model)
         self.layers = nn.ModuleList([DalleMegaDecoderLayer(config) for _ in range(config.decoder_layers)])
-        self.final_layer_norm = nn.LayerNorm(config.d_model)
+        self.final_layer_norm = LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -1188,7 +1202,7 @@ class DalleMegaForConditionalGeneration(DalleMegaPretrainedModel):
     def __init__(self, config: DalleMegaConfig):
         super().__init__(config)
         self.model = DalleMegaModel(config)
-        self.lm_head = nn.Linear(config.d_model, self.model.decoder_vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.d_model, config.decoder_vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
