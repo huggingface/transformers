@@ -18,7 +18,7 @@ import unittest
 import numpy as np
 
 from transformers import BartConfig, BartTokenizer, is_tf_available
-from transformers.testing_utils import require_tf, slow
+from transformers.testing_utils import require_tf, slow, tooslow
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
@@ -293,8 +293,8 @@ class TFBartModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
                                 models_equal = False
                     self.assertTrue(models_equal)
 
+    @tooslow
     def test_saved_model_creation(self):
-        # This test is too long (>30sec) and makes fail the CI
         pass
 
 
