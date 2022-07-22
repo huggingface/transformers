@@ -25,11 +25,11 @@ from packaging import version
 from torch import nn
 
 from transformers import (
+    BartTokenizer,
     DalleMegaConfig,
     DalleMegaForConditionalGeneration,
     DalleMegaForSequenceClassification,
     DalleMegaModel,
-    BartTokenizer,
 )
 from transformers.utils import logging
 
@@ -140,7 +140,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "fairseq_path", type=str, help="dallemega.large, dallemega.large.cnn or a path to a model.pt on local filesystem."
+        "fairseq_path",
+        type=str,
+        help="dallemega.large, dallemega.large.cnn or a path to a model.pt on local filesystem.",
     )
     parser.add_argument("pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
     parser.add_argument(

@@ -31,7 +31,6 @@ DALLE_MEGA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class DalleMegaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DalleMegaModel`]. It is used to instantiate a
@@ -149,7 +148,7 @@ class DalleMegaConfig(PretrainedConfig):
         self.decoder_vocab_size = decoder_vocab_size
         self.encoder_max_positions = encoder_max_positions
         self.decoder_max_positions = decoder_max_positions
-        self.activation_function = activation_function        
+        self.activation_function = activation_function
         self.dropout = dropout
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout

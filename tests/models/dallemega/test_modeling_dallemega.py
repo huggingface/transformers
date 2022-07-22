@@ -35,12 +35,12 @@ if is_torch_available():
 
     from transformers import (
         AutoModelForSequenceClassification,
+        BartTokenizer,
         DalleMegaForCausalLM,
         DalleMegaForConditionalGeneration,
         DalleMegaForQuestionAnswering,
         DalleMegaForSequenceClassification,
         DalleMegaModel,
-        BartTokenizer,
         pipeline,
     )
     from transformers.models.dallemega.modeling_dallemega import DalleMegaDecoder, DalleMegaEncoder, shift_tokens_right
@@ -416,7 +416,12 @@ class DalleMegaHeadTests(unittest.TestCase):
 @require_torch
 class DalleMegaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (DalleMegaModel, DalleMegaForConditionalGeneration, DalleMegaForSequenceClassification, DalleMegaForQuestionAnswering)
+        (
+            DalleMegaModel,
+            DalleMegaForConditionalGeneration,
+            DalleMegaForSequenceClassification,
+            DalleMegaForQuestionAnswering,
+        )
         if is_torch_available()
         else ()
     )
