@@ -36,10 +36,7 @@ if is_torch_available():
     from transformers import (
         AutoModelForSequenceClassification,
         BartTokenizer,
-        DalleMegaForCausalLM,
         DalleMegaForConditionalGeneration,
-        DalleMegaForQuestionAnswering,
-        DalleMegaForSequenceClassification,
         DalleMegaModel,
         pipeline,
     )
@@ -274,31 +271,6 @@ class DalleMegaHeadTests(unittest.TestCase):
         )
         return config, input_ids, batch_size
 
-    def test_sequence_classification_forward(self):
-        config, input_ids, batch_size = self._get_config_and_data()
-        labels = _long_tensor([2] * batch_size).to(torch_device)
-        model = DalleMegaForSequenceClassification(config)
-        model.to(torch_device)
-        outputs = model(input_ids=input_ids, decoder_input_ids=input_ids, labels=labels)
-        expected_shape = torch.Size((batch_size, config.num_labels))
-        self.assertEqual(outputs["logits"].shape, expected_shape)
-        self.assertIsInstance(outputs["loss"].item(), float)
-
-    def test_question_answering_forward(self):
-        config, input_ids, batch_size = self._get_config_and_data()
-        sequence_labels = ids_tensor([batch_size], 2).to(torch_device)
-        model = DalleMegaForQuestionAnswering(config)
-        model.to(torch_device)
-        outputs = model(
-            input_ids=input_ids,
-            start_positions=sequence_labels,
-            end_positions=sequence_labels,
-        )
-
-        self.assertEqual(outputs["start_logits"].shape, input_ids.shape)
-        self.assertEqual(outputs["end_logits"].shape, input_ids.shape)
-        self.assertIsInstance(outputs["loss"].item(), float)
-
     @timeout_decorator.timeout(1)
     def test_lm_forward(self):
         config, input_ids, batch_size = self._get_config_and_data()
@@ -419,8 +391,6 @@ class DalleMegaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
         (
             DalleMegaModel,
             DalleMegaForConditionalGeneration,
-            DalleMegaForSequenceClassification,
-            DalleMegaForQuestionAnswering,
         )
         if is_torch_available()
         else ()
@@ -460,7 +430,7 @@ class DalleMegaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        for model_class in (DalleMegaModel, DalleMegaForConditionalGeneration, DalleMegaForQuestionAnswering):
+        for model_class in (DalleMegaModel, DalleMegaForConditionalGeneration):
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -1399,8 +1369,7 @@ class DalleMegaStandaloneDecoderModelTester:
 
 @require_torch
 class DalleMegaStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (DalleMegaDecoder, DalleMegaForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (DalleMegaForCausalLM,) if is_torch_available() else ()
+    all_model_classes = (DalleMegaDecoder,) if is_torch_available() else ()
     fx_comptatible = True
     test_pruning = False
     is_encoder_decoder = False

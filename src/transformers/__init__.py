@@ -834,13 +834,9 @@ else:
     _import_structure["models.dallemega"].extend(
         [
             "DALLE_MEGA_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "DalleMegaForCausalLM",
             "DalleMegaForConditionalGeneration",
-            "DalleMegaForQuestionAnswering",
-            "DalleMegaForSequenceClassification",
             "DalleMegaModel",
             "DalleMegaPretrainedModel",
-            "PretrainedDalleMegaModel",
         ]
     )
     _import_structure["models.mvp"].extend(
@@ -3634,13 +3630,9 @@ if TYPE_CHECKING:
         )
         from .models.dallemega import (
             DALLE_MEGA_PRETRAINED_MODEL_ARCHIVE_LIST,
-            DalleMegaForCausalLM,
             DalleMegaForConditionalGeneration,
-            DalleMegaForQuestionAnswering,
-            DalleMegaForSequenceClassification,
             DalleMegaModel,
             DalleMegaPretrainedModel,
-            PretrainedDalleMegaModel,
         )
         from .models.data2vec import (
             DATA2VEC_AUDIO_PRETRAINED_MODEL_ARCHIVE_LIST,

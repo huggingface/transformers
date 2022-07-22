@@ -32,13 +32,9 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_dallemega"] = [
         "DALLE_MEGA_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "DalleMegaForCausalLM",
         "DalleMegaForConditionalGeneration",
-        "DalleMegaForQuestionAnswering",
-        "DalleMegaForSequenceClassification",
         "DalleMegaModel",
         "DalleMegaPretrainedModel",
-        "PretrainedDalleMegaModel",
     ]
 
 if TYPE_CHECKING:
@@ -52,13 +48,9 @@ if TYPE_CHECKING:
     else:
         from .modeling_dallemega import (
             DALLE_MEGA_PRETRAINED_MODEL_ARCHIVE_LIST,
-            DalleMegaForCausalLM,
             DalleMegaForConditionalGeneration,
-            DalleMegaForQuestionAnswering,
-            DalleMegaForSequenceClassification,
             DalleMegaModel,
             DalleMegaPretrainedModel,
-            PretrainedDalleMegaModel,
         )
 
 else:
