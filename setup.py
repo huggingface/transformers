@@ -145,7 +145,7 @@ _deps = [
     "requests",
     "resampy<0.3.1",
     "rjieba",
-    "rouge-score",
+    "rouge-score<0.0.7",
     "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
     "sagemaker>=2.31.0",
