@@ -91,7 +91,7 @@ def groupvit_loss(similarity: tf.Tensor) -> tf.Tensor:
     return (caption_loss + image_loss) / 2.0
 
 
-def hard_softmax(logits: tf.Tensor, dim: int):
+def hard_softmax(logits: tf.Tensor, dim: int) -> tf.Tensor:
     """
     Reference: https://gist.github.com/ariG23498/08cdae21637b8b61bdd6d21d11719fb3
     """
@@ -176,7 +176,7 @@ def resize_attention_map(attentions: tf.Tensor, height: int, width: int, align_c
 def get_grouping_from_attentions(attentions: Tuple[tf.Tensor], hw_shape: Tuple[int]) -> tf.Tensor:
     """
     Args:
-        attentions (`tuple(tf.Tensor)`: tuple of attention maps returned by `GroupViTVisionTransformer`
+        attentions (`tuple(tf.Tensor)`: tuple of attention maps returned by `TFGroupViTVisionTransformer`
         hw_shape (`tuple(int)`): height and width of the output attention map
     Returns:
         `tf.Tensor`: the attention map of shape [batch_size, groups, height, width]
@@ -190,7 +190,7 @@ def get_grouping_from_attentions(attentions: Tuple[tf.Tensor], hw_shape: Tuple[i
         if prev_attn_masks is None:
             prev_attn_masks = attn_masks
         else:
-            prev_attn_masks = prev_attn_masks @ attn_masks
+            prev_attn_masks = tf.matmul(prev_attn_masks, attn_masks)
         # [batch_size, height x width, num_groups] -> [batch_size, num_groups, height x width] -> [batch_size, num_groups, height, width]
         cur_attn_map = resize_attention_map(
             tf.transpose(prev_attn_masks, perm=(0, 2, 1)),
@@ -260,9 +260,9 @@ class TFGroupViTAssignAttention(tf.keras.layers.Layer):
         attn = self.get_attn(raw_attn)
         soft_attn = self.get_attn(raw_attn, gumbel=False, hard=False)
 
-        attn = attn / (attn.sum(dim=-1, keepdim=True) + self.assign_eps)
+        attn = attn / (tf.math.reduce_sum(attn, axis=-1, keepdims=True) + self.assign_eps)
 
-        out = attn @ value
+        out = tf.matmul(attn, value)
 
         out = self.proj(out)
 
@@ -400,7 +400,9 @@ class TFGroupViTPatchEmbeddings(tf.keras.layers.Layer):
             filters=embed_dim,
             kernel_size=patch_size,
             stride=patch_size,
-            name="projection"
+            padding="valid",
+            data_format="channels_last",
+            name="projection",
         )
 
     def call(self, pixel_values: tf.Tensor, interpolate_pos_encoding: bool = False) -> tf.Tensor:
@@ -421,7 +423,8 @@ class TFGroupViTPatchEmbeddings(tf.keras.layers.Layer):
         
         # Change the 2D spatial dimensions to a single temporal dimension.
         # shape = (batch_size, num_patches, out_channels=embed_dim)
-        x = tf.reshape(tensor=x, shape=(batch_size, self.num_patches, -1))
+        num_patches = (width // self.patch_size[1]) * (height // self.patch_size[0])
+        x = tf.reshape(tensor=x, shape=(batch_size, num_patches, -1))
         return x
 
 
@@ -866,168 +869,6 @@ class TFGroupViTEncoderLayer(tf.keras.layers.Layer):
         return outputs
 
 
-class TFGroupViTPreTrainedModel(TFPreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = GroupViTConfig
-    base_model_prefix = "groupvit"
-
-
-GROUPVIT_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`GroupViTConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-GROUPVIT_TEXT_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`CLIPTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-GROUPVIT_VISION_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`CLIPFeatureExtractor`]. See [`CLIPFeatureExtractor.__call__`] for details.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-GROUPVIT_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`CLIPTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`CLIPFeatureExtractor`]. See
-            [`CLIPFeatureExtractor.__call__`] for details.
-        return_loss (`bool`, *optional*):
-            Whether or not to return the contrastive loss.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-class TFGroupViTVisionEncoder(tf.keras.layers.Layer):
-    def __init__(self, config: GroupViTVisionConfig, **kwargs) -> None:
-        super().__init__(**kwargs)
-        self.config = config
-        self.stages = [
-            TFGroupViTStage(
-                config=config,
-                depth=config.depths[i],
-                num_group_token=config.num_group_tokens[i],
-                num_output_group=config.num_output_groups[i],
-                num_prev_group_token=config.num_output_groups[i - 1] if i > 0 else 0,
-            )
-            for i in range(len(config.depths))
-        ]
-
-    def call(
-        self,
-        hidden_states: tf.Tensor,
-        output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, TFBaseModelOutput]:
-
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        all_hidden_states = () if output_hidden_states else None
-        all_groupings = () if output_attentions else None
-
-        group_tokens = None
-
-        for i, stage in enumerate(self.stages):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            layer_outputs = stage(hidden_states, group_tokens, output_attentions)
-
-            hidden_states = layer_outputs[0]
-            group_tokens = layer_outputs[1]
-
-            if output_attentions and layer_outputs[2] is not None:
-                all_groupings = all_groupings + (layer_outputs[2],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_groupings] if v is not None)
-        return TFBaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_groupings
-        )
-
-
 class TFGroupViTTextEncoder(tf.keras.layers.Layer):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self-attention layers. Each layer is a
@@ -1112,6 +953,62 @@ class TFGroupViTTextEncoder(tf.keras.layers.Layer):
             return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
         return TFBaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
+        )
+
+
+class TFGroupViTVisionEncoder(tf.keras.layers.Layer):
+    def __init__(self, config: GroupViTVisionConfig, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.config = config
+        self.stages = [
+            TFGroupViTStage(
+                config=config,
+                depth=config.depths[i],
+                num_group_token=config.num_group_tokens[i],
+                num_output_group=config.num_output_groups[i],
+                num_prev_group_token=config.num_output_groups[i - 1] if i > 0 else 0,
+            )
+            for i in range(len(config.depths))
+        ]
+
+    def call(
+        self,
+        hidden_states: tf.Tensor,
+        output_hidden_states: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[tuple, TFBaseModelOutput]:
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        all_hidden_states = () if output_hidden_states else None
+        all_groupings = () if output_attentions else None
+
+        group_tokens = None
+
+        for i, stage in enumerate(self.stages):
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+
+            layer_outputs = stage(hidden_states, group_tokens, output_attentions)
+
+            hidden_states = layer_outputs[0]
+            group_tokens = layer_outputs[1]
+
+            if output_attentions and layer_outputs[2] is not None:
+                all_groupings = all_groupings + (layer_outputs[2],)
+
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
+
+        if not return_dict:
+            return tuple(v for v in [hidden_states, all_hidden_states, all_groupings] if v is not None)
+        return TFBaseModelOutput(
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_groupings
         )
 
 
@@ -1200,56 +1097,6 @@ class TFGroupViTTextTransformer(tf.keras.layers.Layer):
         return tf.broadcast_to(input=to_mask, shape=(batch_size, 1, seq_length, seq_length))
 
 
-# Copied from transformers.models.clip.modeling_tf_clip.TFCLIPTextMainLayer with CLIPText->GroupViTText
-
-@keras_serializable
-class TFGroupViTTextMainLayer(tf.keras.layers.Layer):
-    config_class = GroupViTTextConfig
-
-    def __init__(self, config: GroupViTTextConfig, **kwargs):
-        super().__init__(**kwargs)
-        self.config = config
-        self.text_model = TFGroupViTTextTransformer(config, name="text_model")
-
-    def get_input_embeddings(self) -> tf.keras.layers.Layer:
-        return self.text_model.embeddings
-
-    def set_input_embeddings(self, value: tf.Variable):
-        self.text_model.embeddings.weight = value
-        self.text_model.embeddings.vocab_size = shape_list(value)[0]
-
-    @unpack_inputs
-    def call(
-        self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        training: bool = False,
-    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
-        if input_ids is None:
-            raise ValueError("You have to specify input_ids")
-
-        input_shape = shape_list(input_ids)
-
-        if attention_mask is None:
-            attention_mask = tf.fill(dims=input_shape, value=1)
-
-        text_model_outputs = self.text_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            training=training,
-        )
-
-        return text_model_outputs
-
-
 class TFGroupViTVisionTransformer(tf.keras.layers.Layer):
     def __init__(self, config: GroupViTVisionConfig):
         super().__init__()
@@ -1308,6 +1155,55 @@ class TFGroupViTVisionTransformer(tf.keras.layers.Layer):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
+
+
+# Copied from transformers.models.clip.modeling_tf_clip.TFCLIPTextMainLayer with CLIPText->GroupViTText
+@keras_serializable
+class TFGroupViTTextMainLayer(tf.keras.layers.Layer):
+    config_class = GroupViTTextConfig
+
+    def __init__(self, config: GroupViTTextConfig, **kwargs):
+        super().__init__(**kwargs)
+        self.config = config
+        self.text_model = TFGroupViTTextTransformer(config, name="text_model")
+
+    def get_input_embeddings(self) -> tf.keras.layers.Layer:
+        return self.text_model.embeddings
+
+    def set_input_embeddings(self, value: tf.Variable):
+        self.text_model.embeddings.weight = value
+        self.text_model.embeddings.vocab_size = shape_list(value)[0]
+
+    @unpack_inputs
+    def call(
+        self,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: bool = False,
+    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
+        if input_ids is None:
+            raise ValueError("You have to specify input_ids")
+
+        input_shape = shape_list(input_ids)
+
+        if attention_mask is None:
+            attention_mask = tf.fill(dims=input_shape, value=1)
+
+        text_model_outputs = self.text_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+        )
+
+        return text_model_outputs
 
 
 # Copied from transformers.models.clip.modeling_tf_clip.TFCLIPVisionMainLayer with CLIPVision->GroupViTVision
@@ -1589,80 +1485,136 @@ class TFGroupViTMainLayer(tf.keras.layers.Layer):
         )
 
 
+class TFGroupViTPreTrainedModel(TFPreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
 
-class TFGroupViTTextModel(TFGroupViTPreTrainedModel):
-    config_class = GroupViTTextConfig
+    config_class = GroupViTConfig
+    base_model_prefix = "groupvit"
 
-    def __init__(self, config: GroupViTTextConfig, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
 
-        self.group_vit = TFGroupViTTextMainLayer(config, name="group_vit")
+GROUPVIT_START_DOCSTRING = r"""
+    
+    This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
 
-    @unpack_inputs
-    @add_start_docstrings_to_model_forward(GROUPVIT_TEXT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=TFBaseModelOutputWithPooling, config_class=GroupViTTextConfig)
-    def call(
-        self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
-    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
-        r"""
-        Returns:
+    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
+    behavior.
 
-        Examples:
+    <Tip>
 
-        ```python
-        >>> from transformers import CLIPTokenizer, GroupViTTextModel
+    TF 2.0 models accepts two formats as inputs:
 
-        >>> tokenizer = CLIPTokenizer.from_pretrained("nvidia/groupvit-gcc-yfcc")
-        >>> model = GroupViTTextModel.from_pretrained("nvidia/groupvit-gcc-yfcc")
+    - having all inputs as keyword arguments (like PyTorch models), or
+    - having all inputs as a list, tuple or dict in the first positional arguments.
 
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
+    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all the
+    tensors in the first argument of the model call function: `model(inputs)`.
 
-        >>> outputs = model(**inputs)
-        >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
-        ```"""
+    If you choose this second option, there are three possibilities you can use to gather all the input Tensors in the
+    first positional argument :
 
-        outputs = self.group_vit(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            training=training,
-        )
+    - a single Tensor with `input_ids` only and nothing else: `model(input_ids)`
+    - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
+      `model([input_ids, attention_mask])` or `model([input_ids, attention_mask, token_type_ids])`
+    - a dictionary with one or several input Tensors associated to the input names given in the docstring:
+      `model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
 
-        return outputs
+    </Tip>
 
-    @tf.function(
-        input_signature=[
-            {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-            }
-        ]
-    )
-    def serving(self, inputs: Dict[str, tf.Tensor]) -> TFBaseModelOutputWithPooling:
-        output = self.call(inputs)
-        return self.serving_output(output)
+    Parameters:
+        config ([`GroupViTConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
 
-    def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+GROUPVIT_TEXT_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
 
-        return TFBaseModelOutputWithPooling(
-            last_hidden_state=output.last_hidden_state,
-            pooler_output=output.pooler_output,
-            hidden_states=hs,
-            attentions=attns,
-        )
+            Indices can be obtained using [`CLIPTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
+GROUPVIT_VISION_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
+            [`CLIPFeatureExtractor`]. See [`CLIPFeatureExtractor.__call__`] for details.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
+GROUPVIT_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+
+            Indices can be obtained using [`CLIPTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`CLIPFeatureExtractor`]. See
+            [`CLIPFeatureExtractor.__call__`] for details.
+        return_loss (`bool`, *optional*):
+            Whether or not to return the contrastive loss.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
 
 
 class TFGroupViTVisionModel(TFGroupViTPreTrainedModel):
@@ -1744,8 +1696,83 @@ class TFGroupViTVisionModel(TFGroupViTPreTrainedModel):
         )
 
 
+class TFGroupViTTextModel(TFGroupViTPreTrainedModel):
+    config_class = GroupViTTextConfig
+
+    def __init__(self, config: GroupViTTextConfig, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+
+        self.group_vit = TFGroupViTTextMainLayer(config, name="group_vit")
+
+    @unpack_inputs
+    @add_start_docstrings_to_model_forward(GROUPVIT_TEXT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=TFBaseModelOutputWithPooling, config_class=GroupViTTextConfig)
+    def call(
+        self,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: Optional[bool] = False,
+    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import CLIPTokenizer, GroupViTTextModel
+
+        >>> tokenizer = CLIPTokenizer.from_pretrained("nvidia/groupvit-gcc-yfcc")
+        >>> model = GroupViTTextModel.from_pretrained("nvidia/groupvit-gcc-yfcc")
+
+        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> last_hidden_state = outputs.last_hidden_state
+        >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
+        ```"""
+
+        outputs = self.group_vit(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+        )
+
+        return outputs
+
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+            }
+        ]
+    )
+    def serving(self, inputs: Dict[str, tf.Tensor]) -> TFBaseModelOutputWithPooling:
+        output = self.call(inputs)
+        return self.serving_output(output)
+
+    def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFBaseModelOutputWithPooling(
+            last_hidden_state=output.last_hidden_state,
+            pooler_output=output.pooler_output,
+            hidden_states=hs,
+            attentions=attns,
+        )
+
+
 @add_start_docstrings(GROUPVIT_START_DOCSTRING)
-class TFCLIPModel(TFGroupViTPreTrainedModel):
+class TFGroupViTModel(TFGroupViTPreTrainedModel):
     config_class = GroupViTConfig
 
     def __init__(self, config: GroupViTConfig, *inputs, **kwargs):
@@ -1805,18 +1832,18 @@ class TFCLIPModel(TFGroupViTPreTrainedModel):
     ) -> tf.Tensor:
         r"""
         Returns:
-            text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of [`GroupViTTextModel`].
+            text_features (`tf.Tensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
+            applying the projection layer to the pooled output of [`TFGroupViTTextModel`].
 
         Examples:
 
         ```python
-        >>> from transformers import CLIPTokenizer, GroupViTModel
+        >>> from transformers import CLIPTokenizer, TFGroupViTModel
 
-        >>> model = GroupViTModel.from_pretrained("nvidia/groupvit-gcc-yfcc")
+        >>> model = TFGroupViTModel.from_pretrained("nvidia/groupvit-gcc-yfcc")
         >>> tokenizer = CLIPTokenizer.from_pretrained("nvidia/groupvit-gcc-yfcc")
 
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
+        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="tf")
         >>> text_features = model.get_text_features(**inputs)
         ```"""
 
@@ -1843,23 +1870,23 @@ class TFCLIPModel(TFGroupViTPreTrainedModel):
     ) -> tf.Tensor:
         r"""
         Returns:
-            image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
-            applying the projection layer to the pooled output of [`GroupViTVisionModel`].
+            image_features (`tf.Tensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
+            applying the projection layer to the pooled output of [`TFGroupViTVisionModel`].
 
         Examples:
 
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, GroupViTModel
+        >>> from transformers import AutoProcessor, TFGroupViTModel
 
-        >>> model = GroupViTModel.from_pretrained("nvidia/groupvit-gcc-yfcc")
+        >>> model = TFGroupViTModel.from_pretrained("nvidia/groupvit-gcc-yfcc")
         >>> processor = AutoProcessor.from_pretrained("nvidia/groupvit-gcc-yfcc")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> inputs = processor(images=image, return_tensors="pt")
+        >>> inputs = processor(images=image, return_tensors="tf")
 
         >>> image_features = model.get_image_features(**inputs)
         ```"""
@@ -1896,9 +1923,9 @@ class TFCLIPModel(TFGroupViTPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, GroupViTModel
+        >>> from transformers import AutoProcessor, TFGroupViTModel
 
-        >>> model = GroupViTModel.from_pretrained("nvidia/groupvit-gcc-yfcc")
+        >>> model = TFGroupViTModel.from_pretrained("nvidia/groupvit-gcc-yfcc")
         >>> processor = AutoProcessor.from_pretrained("nvidia/groupvit-gcc-yfcc")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
