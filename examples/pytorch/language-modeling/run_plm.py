@@ -462,14 +462,15 @@ def main():
     if training_args.do_train:
         if "train" not in tokenized_datasets:
             raise ValueError("--do_train requires a train dataset")
-        final_block_size = len(lm_datasets['train'][0]['input_ids'])
+        final_block_size = len(lm_datasets["train"][0]["input_ids"])
         # This ensures that the data is all of the same length going into training.
         # PyTorch does not like dealing with different list lengths
-        train_dataset = lm_datasets['train'].filter(lambda x: all([len(item) == final_block_size
-                                                                   for item in x.values()]),
-                                                    load_from_cache_file=not data_args.overwrite_cache,
-                                                    num_proc=data_args.preprocessing_num_workers,
-                                                    desc=f"Filtering out texts not of {final_block_size}")
+        train_dataset = lm_datasets["train"].filter(
+            lambda x: all([len(item) == final_block_size for item in x.values()]),
+            load_from_cache_file=not data_args.overwrite_cache,
+            num_proc=data_args.preprocessing_num_workers,
+            desc=f"Filtering out texts not of {final_block_size}",
+        )
         if data_args.max_train_samples is not None:
             max_train_samples = min(len(train_dataset), data_args.max_train_samples)
             train_dataset = train_dataset.select(range(max_train_samples))
