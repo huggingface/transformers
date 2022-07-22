@@ -424,21 +424,21 @@ class GLUMLP(nn.Module):
         self.ln0 = LayerNorm(hidden_size, use_scale=False)
         self.fc0 = nn.Linear(hidden_size, intermediate_size, bias=False)
         self.gelu = nn.GELU()
-        self.fc1 = nn.Linear(intermediate_size, intermediate_size, bias=False)
+        self.fc1 = nn.Linear(hidden_size, intermediate_size, bias=False)
         self.ln1 = LayerNorm(intermediate_size, use_scale=False)
         self.fc2 = nn.Linear(intermediate_size, hidden_size, bias=False)
 
-    def forward(self, z: torch.FloatTensor) -> torch.FloatTensor:
-        z = self.ln0(z)
-        w = self.fc0(z)
+    def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
+        hidden_states = self.ln0(hidden_states)
 
+        w = self.fc0(hidden_states)
         w = self.gelu(w)
+        v = self.fc1(hidden_states)
 
-        v = self.fc1(z)
-        z = self.ln1(w * v)
-        z = self.fc2(z)
-
-        return z
+        hidden_states = w * v
+        hidden_states = self.ln1(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
 
 
 class DalleMegaEncoderLayer(nn.Module):
