@@ -18,7 +18,7 @@
 import inspect
 import unittest
 
-from transformers import is_torch_available, is_vision_available
+from transformers import SegformerConfig, is_torch_available, is_vision_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -31,7 +31,6 @@ if is_torch_available():
 
     from transformers import (
         MODEL_MAPPING,
-        SegformerConfig,
         SegformerForImageClassification,
         SegformerForSemanticSegmentation,
         SegformerModel,
