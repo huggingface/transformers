@@ -669,7 +669,7 @@ class DalleMegaEncoder(DalleMegaPretrainedModel):
         self.embed_positions = nn.Embedding(config.encoder_max_positions, embed_dim)
         self.layers = nn.ModuleList([DalleMegaEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = LayerNorm(embed_dim)
-        self.final_layernorm = LayerNorm(embed_dim)
+        self.final_layernorm = LayerNorm(embed_dim, use_scale=False)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -827,7 +827,7 @@ class DalleMegaDecoder(DalleMegaPretrainedModel):
         self.layernorm_embedding = LayerNorm(config.d_model)
         self.embed_tokens = nn.Embedding(config.decoder_vocab_size, config.d_model)
         self.layers = nn.ModuleList([DalleMegaDecoderLayer(config) for _ in range(config.decoder_layers)])
-        self.final_layer_norm = LayerNorm(config.d_model)
+        self.final_layer_norm = LayerNorm(config.d_model, use_scale=False)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
