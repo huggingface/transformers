@@ -464,14 +464,14 @@ class DalleMegaEncoderLayer(nn.Module):
         residual = hidden_states
 
         # self attention
-        hidden_states = self.self_attn_layer_norm(hidden_states)
+        hidden_states = self.pre_attn_layer_norm(hidden_states)
         hidden_states, attn_weights, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
-        hidden_states = self.final_layer_norm(hidden_states)
+        hidden_states = self.post_attn_layer_norm(hidden_states)
         hidden_states = residual + hidden_states
 
         # feed forward
