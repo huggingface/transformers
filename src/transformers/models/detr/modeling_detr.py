@@ -1237,8 +1237,15 @@ class DetrModel(DetrPreTrainedModel):
 
         >>> feature_extractor = DetrFeatureExtractor.from_pretrained("facebook/detr-resnet-50")
         >>> model = DetrModel.from_pretrained("facebook/detr-resnet-50")
+
+        >>> # prepare image for the model
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
+
+        >>> # forward pass
         >>> outputs = model(**inputs)
+
+        >>> # the last hidden states are the final query embeddings of the Transformer decoder
+        >>> # these are of shape (batch_size, num_queries, hidden_size)
         >>> last_hidden_states = outputs.last_hidden_state
         >>> list(last_hidden_states.shape)
         [1, 100, 256]
@@ -1389,6 +1396,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
 
         ```python
         >>> from transformers import DetrFeatureExtractor, DetrForObjectDetection
+        >>> import torch
         >>> from PIL import Image
         >>> import requests
 
@@ -1400,17 +1408,23 @@ class DetrForObjectDetection(DetrPreTrainedModel):
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
-        >>> # model predicts bounding boxes and corresponding COCO classes
-        >>> bboxes, logits = outputs.pred_boxes, outputs.logits
 
-        >>> # get probability per object class and remove the no-object class
-        >>> probas_per_class = outputs.logits.softmax(-1)[:, :, :-1]
-        >>> objects_to_keep = probas_per_class.max(-1).values > 0.9
+        >>> # convert outputs (bounding boxes and class logits) to COCO API
+        >>> target_sizes = torch.tensor([image.size[::-1]])
+        >>> results = feature_extractor.post_process(outputs, target_sizes=target_sizes)[0]
 
-        >>> ids, _ = probas_per_class.max(-1).indices[objects_to_keep].sort()
-        >>> labels = [model.config.id2label[id.item()] for id in ids]
-        >>> labels
-        ['cat', 'cat', 'couch', 'remote', 'remote']
+        >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
+        ...     box = [round(i, 2) for i in box.tolist()]
+        ...     # let's only keep detections with score > 0.9
+        ...     if score > 0.9:
+        ...         print(
+        ...             f"Detected {model.config.id2label[label.item()]} with confidence {round(score.item(), 3)} at location {box}"
+        ...         )
+        Detected remote with confidence 0.998 at location [40.16, 70.81, 175.55, 117.98]
+        Detected remote with confidence 0.996 at location [333.24, 72.55, 368.33, 187.66]
+        Detected couch with confidence 0.995 at location [-0.02, 1.15, 639.73, 473.76]
+        Detected cat with confidence 0.999 at location [13.24, 52.05, 314.02, 470.93]
+        Detected cat with confidence 0.999 at location [345.4, 23.85, 640.37, 368.72]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1562,9 +1576,12 @@ class DetrForSegmentation(DetrPreTrainedModel):
         >>> feature_extractor = DetrFeatureExtractor.from_pretrained("facebook/detr-resnet-50-panoptic")
         >>> model = DetrForSegmentation.from_pretrained("facebook/detr-resnet-50-panoptic")
 
+        >>> # prepare image for the model
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
+
+        >>> # forward pass
         >>> outputs = model(**inputs)
-        >>> # model predicts COCO classes, bounding boxes, and masks
+
         >>> logits = outputs.logits
         >>> list(logits.shape)
         [1, 100, 251]
@@ -1576,6 +1593,12 @@ class DetrForSegmentation(DetrPreTrainedModel):
         >>> masks = outputs.pred_masks
         >>> list(masks.shape)
         [1, 100, 200, 267]
+
+        >>> # compute the scores, excluding the "no-object" class (the last one)
+        >>> scores = outputs.logits.softmax(-1)[..., :-1].max(-1)[0]
+        >>> # threshold the confidence
+        >>> keep = scores > 0.85
+        >>> final_masks = outputs.pred_masks[keep].detach().numpy()
         ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
