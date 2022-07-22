@@ -11,4 +11,20 @@
     title: Pipeline per l'inferenza
   - local: autoclass_tutorial
     title: Carica istanze pre-allenate con AutoClass
+  - local: preprocessing
+    title: Preprocess
+  - local: training
+    title: Mettere a punto un modello pre-addestrato
+  - local: accelerate
+    title: Allenamento distribuito con 🤗 Accelerate
+  - local: model_sharing
+    title: Condividere un modello
   title: Esercitazione
+- sections:
+  - local: run_scripts
+    title: Addestramento con script
+  - local: multilingual
+    title: Modelli multilingua per l'inferenza
+- sections:
+  - local: debugging
+    title: Debugging

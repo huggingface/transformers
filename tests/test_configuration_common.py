@@ -157,6 +157,17 @@ class ConfigTester(object):
 
         self.parent.assertEqual(config_second.to_dict(), config_first.to_dict())
 
+    def create_and_test_config_from_and_save_pretrained_subfolder(self):
+        config_first = self.config_class(**self.inputs_dict)
+
+        subfolder = "test"
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            sub_tmpdirname = os.path.join(tmpdirname, subfolder)
+            config_first.save_pretrained(sub_tmpdirname)
+            config_second = self.config_class.from_pretrained(tmpdirname, subfolder=subfolder)
+
+        self.parent.assertEqual(config_second.to_dict(), config_first.to_dict())
+
     def create_and_test_config_with_num_labels(self):
         config = self.config_class(**self.inputs_dict, num_labels=5)
         self.parent.assertEqual(len(config.id2label), 5)
@@ -197,6 +208,7 @@ class ConfigTester(object):
         self.create_and_test_config_to_json_string()
         self.create_and_test_config_to_json_file()
         self.create_and_test_config_from_and_save_pretrained()
+        self.create_and_test_config_from_and_save_pretrained_subfolder()
         self.create_and_test_config_with_num_labels()
         self.check_config_can_be_init_without_params()
         self.check_config_arguments_init()
@@ -307,6 +319,15 @@ class ConfigTestUtils(unittest.TestCase):
                 " `test_configuration_common.config_common_kwargs` pick another value for them:"
                 f" {', '.join(keys_with_defaults)}."
             )
+
+    def test_from_pretrained_subfolder(self):
+        with self.assertRaises(OSError):
+            # config is in subfolder, the following should not work without specifying the subfolder
+            _ = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert-subfolder")
+
+        config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert-subfolder", subfolder="bert")
+
+        self.assertIsNotNone(config)
 
     def test_cached_files_are_used_when_internet_is_down(self):
         # A mock response for an HTTP head request to emulate server down

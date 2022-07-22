@@ -661,7 +661,7 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
         loss = model(input_ids, labels=labels).loss
         mtf_score = -tf.math.reduce_mean(loss).numpy()
 
-        EXPECTED_SCORE = -4.7710114
+        EXPECTED_SCORE = -4.771147
         self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
 
     @slow
@@ -687,7 +687,7 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
         loss = model(input_ids, labels=labels).loss
         mtf_score = -tf.math.reduce_mean(loss).numpy()
 
-        EXPECTED_SCORE = -14.759922
+        EXPECTED_SCORE = -14.757326
         self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
 
     @slow
@@ -711,7 +711,7 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
         loss = model(input_ids, labels=labels).loss
         mtf_score = -tf.math.reduce_mean(loss).numpy()
 
-        EXPECTED_SCORE = -7.594554
+        EXPECTED_SCORE = -7.592465
         self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
 
     @slow
