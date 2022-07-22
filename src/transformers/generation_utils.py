@@ -843,13 +843,13 @@ class GenerationMixin:
 
     def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
         """Validates model kwargs for generation. Generate argument typos will also be caught here."""
-        # Excludes arguments that are handled before calling the any model function
+        # Excludes arguments that are handled before calling any model function
         if self.config.is_encoder_decoder:
             for key in ["decoder_input_ids"]:
                 model_kwargs.pop(key, None)
 
         # Transfo_XL does not use have "attention_mask" as an argument, and it is harmless (it is being passed in the
-        # tests, through)
+        # tests, through, hence this ad hoc exception)
         if "transfoxl" in str(self).lower():
             model_kwargs.pop("attention_mask", None)
 
