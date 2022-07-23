@@ -28,6 +28,7 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("pegasus_x", "PegasusXModel"),
         ("albert", "AlbertModel"),
         ("bart", "BartModel"),
         ("beit", "BeitModel"),
@@ -204,6 +205,8 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
     [
         # Model with LM heads mapping
+
+        ("pegasus_x", "PegasusXForConditionalGeneration"),
         ("albert", "AlbertForMaskedLM"),
         ("bart", "BartForConditionalGeneration"),
         ("bert", "BertForMaskedLM"),
@@ -268,6 +271,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
+        ("pegasus_x", "PegasusXForCausalLM"),
         ("bart", "BartForCausalLM"),
         ("bert", "BertLMHeadModel"),
         ("bert-generation", "BertGenerationDecoder"),
@@ -451,6 +455,8 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
+
+        ("pegasus_x", "PegasusXForConditionalGeneration"),
         ("bart", "BartForConditionalGeneration"),
         ("bigbird_pegasus", "BigBirdPegasusForConditionalGeneration"),
         ("blenderbot", "BlenderbotForConditionalGeneration"),
@@ -483,6 +489,7 @@ MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Sequence Classification mapping
+        ("pegasus_x", "PegasusXForSequenceClassification"),
         ("albert", "AlbertForSequenceClassification"),
         ("bart", "BartForSequenceClassification"),
         ("bert", "BertForSequenceClassification"),
@@ -541,6 +548,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
         # Model for Question Answering mapping
+        ("pegasus_x", "PegasusXForQuestionAnswering"),
         ("albert", "AlbertForQuestionAnswering"),
         ("bart", "BartForQuestionAnswering"),
         ("bert", "BertForQuestionAnswering"),

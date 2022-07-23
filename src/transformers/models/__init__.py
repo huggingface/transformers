@@ -17,6 +17,7 @@
 # limitations under the License.
 
 from . import (
+    pegasus_x,
     albert,
     auto,
     bart,
