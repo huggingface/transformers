@@ -17,7 +17,6 @@
 from collections.abc import Sequence
 from typing import Optional, Tuple, Union
 
-import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import nn
