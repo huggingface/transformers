@@ -1566,13 +1566,14 @@ class DetrForSegmentation(DetrPreTrainedModel):
         Examples:
 
         ```python
+        >>> import io
+        >>> import requests
+        >>> from PIL import Image
+        >>> import torch
+        >>> import numpy
+
         >>> from transformers import DetrFeatureExtractor, DetrForSegmentation
         >>> from transformers.models.detr.feature_extraction_detr import rgb_to_id
-        >>> import torch
-        >>> from PIL import Image
-        >>> import numpy
-        >>> import requests
-        >>> import io
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
