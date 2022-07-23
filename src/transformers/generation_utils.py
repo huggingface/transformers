@@ -1212,7 +1212,8 @@ class GenerationMixin:
             raise ValueError(
                 "Both `max_new_tokens` and `max_length` have been set but they serve the same purpose -- setting a"
                 " limit to the generated output length. Remove one of those arguments. Please refer to the"
-                " documentation for more information."
+                " documentation for more information. "
+                "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
             )
         # default to config if still None
         max_length = max_length if max_length is not None else self.config.max_length
