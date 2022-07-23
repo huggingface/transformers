@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch BrandNewBERT model. """
+""" PyTorch PEGASUSX model. """
 
 
 import math
@@ -55,7 +55,7 @@ _TOKENIZER_FOR_DOC = "PegasusXTokenizer"
 
 PEGASUS_X_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "pegasus-x-base",
-    # See all BrandNewBERT models at https://huggingface.co/models?filter=pegasus_x
+    # See all PEGASUSX models at https://huggingface.co/models?filter=pegasus_x
 ]
 
 
@@ -1069,7 +1069,7 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The bare BrandNewBERT Model outputting raw hidden-states without any specific head on top.",
+    "The bare PEGASUSX Model outputting raw hidden-states without any specific head on top.",
     PEGASUS_X_START_DOCSTRING,
 )
 class PegasusXModel(PegasusXPreTrainedModel):
@@ -1181,7 +1181,7 @@ class PegasusXModel(PegasusXPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The BrandNewBERT Model with a language modeling head. Can be used for summarization.", PEGASUS_X_START_DOCSTRING
+    "The PEGASUSX Model with a language modeling head. Can be used for summarization.", PEGASUS_X_START_DOCSTRING
 )
 class PegasusXForConditionalGeneration(PegasusXPreTrainedModel):
     base_model_prefix = "model"
@@ -1479,7 +1479,7 @@ class PegasusXForSequenceClassification(PegasusXPreTrainedModel):
 
 @add_start_docstrings(
     """
-    BrandNewBERT Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    PEGASUSX Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
     layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
     PEGASUS_X_START_DOCSTRING,

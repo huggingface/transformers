@@ -30,6 +30,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
         ("pegasus_x", "PegasusXConfig"),
+        ("pegasus_x", "PegasusXConfig"),
         ("albert", "AlbertConfig"),
         ("bart", "BartConfig"),
         ("beit", "BeitConfig"),
@@ -159,6 +160,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here)
         ("pegasus_x", "PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("pegasus_x", "PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("albert", "ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("bart", "BART_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("beit", "BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -272,6 +274,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+        ("pegasus_x", "PegasusX"),
         ("pegasus_x", "PegasusX"),
         ("albert", "ALBERT"),
         ("bart", "BART"),

@@ -18,6 +18,7 @@
 
 from . import (
     pegasus_x,
+    pegasus_x,
     albert,
     auto,
     bart,

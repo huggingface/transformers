@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" BrandNewBERT model configuration """
+""" PEGASUSX model configuration """
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -22,16 +22,16 @@ logger = logging.get_logger(__name__)
 
 PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "pegasus-x-base": "https://huggingface.co/pegasus-x-base/resolve/main/config.json",
-    # See all BrandNewBERT models at https://huggingface.co/models?filter=pegasus_x
+    # See all PEGASUSX models at https://huggingface.co/models?filter=pegasus_x
 }
 
 
 class PegasusXConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`~PegasusXModel`].
-    It is used to instantiate an BrandNewBERT model according to the specified arguments, defining the model
+    It is used to instantiate an PEGASUSX model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the BrandNewBERT [pegasus-x-base](https://huggingface.co/pegasus-x-base) architecture.
+    the PEGASUSX [pegasus-x-base](https://huggingface.co/pegasus-x-base) architecture.
 
     Configuration objects inherit from  [`PretrainedConfig`] and can be used
     to control the model outputs. Read the documentation from  [`PretrainedConfig`]
@@ -40,7 +40,7 @@ class PegasusXConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 50265):
-            Vocabulary size of the BrandNewBERT model. Defines the number of different tokens that can be represented by the
+            Vocabulary size of the PEGASUSX model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`~PegasusXModel`] or
             [`~TFPegasusXModel`].
         d_model (`int`, *optional*, defaults to 1024):
@@ -86,7 +86,7 @@ class PegasusXConfig(PretrainedConfig):
     ```python
     >>> from transformers import PegasusXModel, PegasusXConfig
 
-    >>> # Initializing a BrandNewBERT pegasus-x-base style configuration
+    >>> # Initializing a PEGASUSX pegasus-x-base style configuration
     >>> configuration = PegasusXConfig()
 
     >>> # Initializing a model from the pegasus-x-base style configuration
