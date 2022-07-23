@@ -57,7 +57,7 @@ To do so, the `EncoderDecoderModel` class provides a [`EncoderDecoderModel.from_
 
 ## Loading an existing `EncoderDecoderModel` checkpoint and perform inference.
 
-To load fine-tuned checkpoints of the `EncoderDecoderModel` class, ['EncoderDecoderModel`] provides the `from_pretrained(...)` method just like any other model architecture in Transformers.
+To load fine-tuned checkpoints of the `EncoderDecoderModel` class, [`EncoderDecoderModel`] provides the `from_pretrained(...)` method just like any other model architecture in Transformers.
 
 To perform inference, one uses the [`generate`] method, which allows to autoregressively generate text. This method supports various forms of decoding, such as greedy, beam search and multinomial sampling.
 
@@ -134,6 +134,7 @@ target sequence).
 >>> # the forward function automatically creates the correct decoder_input_ids
 >>> loss = model(input_ids=input_ids, labels=labels).loss
 ```
+
 Detailed [colab](https://colab.research.google.com/drive/1WIk2bxglElfZewOHboPFNj8H44_VAyKE?usp=sharing#scrollTo=ZwQIEhKOrJpl) for training.
 
 This model was contributed by [thomwolf](https://github.com/thomwolf). This model's TensorFlow and Flax versions
