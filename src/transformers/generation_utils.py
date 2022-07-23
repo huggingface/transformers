@@ -923,8 +923,9 @@ class GenerationMixin:
                 should of in the format of `input_ids`. For encoder-decoder models *inputs* can represent any of
                 `input_ids`, `input_values`, `input_features`, or `pixel_values`.
             max_length (`int`, *optional*, defaults to `model.config.max_length`):
-                The maximum length of the sequence to be generated. Prefer the use of `max_new_tokens`, which ignores
-                the number of tokens in the prompt.
+                The maximum length the generated tokens can have. Corresponds to the length of the input prompt +
+                `max_new_tokens`. In general, prefer the use of `max_new_tokens`, which ignores the number of tokens in
+                the prompt.
             max_new_tokens (`int`, *optional*):
                 The maximum numbers of tokens to generate, ignoring the number of tokens in the prompt.
             min_length (`int`, *optional*, defaults to 10):
@@ -1200,9 +1201,9 @@ class GenerationMixin:
         if max_length is None and max_new_tokens is None:
             warnings.warn(
                 "Neither `max_length` nor `max_new_tokens` have been set, `max_length` will default to "
-                f"{self.config.max_length} (`self.config.max_length`). This behavior is deprecated and will be "
-                "removed in v5 of Transformers -- we recommend using `max_new_tokens` to control the maximum length "
-                "of the generation.",
+                f"{self.config.max_length} (`self.config.max_length`). Controlling `max_length` via the config is "
+                "deprecated and `max_length` will be removed from the config in v5 of Transformers -- we recommend "
+                "using `max_new_tokens` to control the maximum length of the generation.",
                 UserWarning,
             )
         elif max_length is None and max_new_tokens is not None:

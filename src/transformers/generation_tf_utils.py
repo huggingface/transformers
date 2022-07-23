@@ -426,8 +426,9 @@ class TFGenerationMixin:
                 should of in the format of `input_ids`. For encoder-decoder models *inputs* can represent any of
                 `input_ids`, `input_values`, `input_features`, or `pixel_values`.
             max_length (`int`, *optional*, defaults to `model.config.max_length`):
-                The maximum length of the sequence to be generated. Prefer the use of `max_new_tokens`, which ignores
-                the number of tokens in the prompt.
+                The maximum length the generated tokens can have. Corresponds to the length of the input prompt +
+                `max_new_tokens`. In general, prefer the use of `max_new_tokens`, which ignores the number of tokens in
+                the prompt.
             max_new_tokens (`int`, *optional*):
                 The maximum numbers of tokens to generate, ignoring the number of tokens in the prompt.
             min_length (`int`, *optional*, defaults to 10):
@@ -1340,8 +1341,9 @@ class TFGenerationMixin:
                 The sequence used as a prompt for the generation. If `None` the method initializes it with
                 `bos_token_id` and a batch size of 1.
             max_length (`int`, *optional*, defaults to `model.config.max_length`):
-                The maximum length of the sequence to be generated. Prefer the use of `max_new_tokens`, which ignores
-                the number of tokens in the prompt.
+                The maximum length the generated tokens can have. Corresponds to the length of the input prompt +
+                `max_new_tokens`. In general, prefer the use of `max_new_tokens`, which ignores the number of tokens in
+                the prompt.
             max_new_tokens (`int`, *optional*):
                 The maximum numbers of tokens to generate, ignoring the number of tokens in the prompt.
             min_length (`int`, *optional*, defaults to 10):
@@ -1568,9 +1570,9 @@ class TFGenerationMixin:
         if max_length is None and max_new_tokens is None:
             warnings.warn(
                 "Neither `max_length` nor `max_new_tokens` have been set, `max_length` will default to "
-                f"{self.config.max_length} (`self.config.max_length`). This behavior is deprecated and will be "
-                "removed in v5 of Transformers -- we recommend using `max_new_tokens` to control the maximum length "
-                "of the generation.",
+                f"{self.config.max_length} (`self.config.max_length`). Controlling `max_length` via the config is "
+                "deprecated and `max_length` will be removed from the config in v5 of Transformers -- we recommend "
+                "using `max_new_tokens` to control the maximum length of the generation.",
                 UserWarning,
             )
         elif max_length is None and max_new_tokens is not None:
@@ -1579,7 +1581,8 @@ class TFGenerationMixin:
             raise ValueError(
                 "Both `max_new_tokens` and `max_length` have been set but they serve the same purpose -- setting a"
                 " limit to the generated output length. Remove one of those arguments. Please refer to the"
-                " documentation for more information."
+                " documentation for more information. "
+                "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
             )
         # default to config if still None
         max_length = max_length if max_length is not None else self.config.max_length
