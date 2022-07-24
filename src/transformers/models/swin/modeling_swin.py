@@ -667,6 +667,7 @@ class SwinLayer(nn.Module):
         hidden_states_windows = window_partition(shifted_hidden_states, self.window_size)
         hidden_states_windows = hidden_states_windows.view(-1, self.window_size * self.window_size, channels)
         attn_mask = self.get_attn_mask(height_pad, width_pad)
+        self.register_buffer("attn_mask", attn_mask)
         if attn_mask is not None:
             attn_mask = attn_mask.to(hidden_states_windows.device)
 
