@@ -1,29 +1,49 @@
+# coding=utf-8
+# Copyright 2022 The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Convert DONUT checkpoints using the original `donut-python`library. URL: https://github.com/clovaai/donut"""
+
 import argparse
 
 import torch
 from datasets import load_dataset
 from PIL import Image
 
-from donut import DonutModel
+from donut import DonutConfig, DonutModel
 from transformers import MBartConfig, MBartForCausalLM, SwinConfig, SwinModel, VisionEncoderDecoderModel
 
 
-def get_configs():
+def get_configs(model):
+    original_config = model.config
+
     encoder_config = SwinConfig(
-        image_size=[1280, 960],
+        image_size=original_config.input_size,
         patch_size=4,
-        depths=[2, 2, 14, 2],
+        depths=original_config.encoder_layer,
         num_heads=[4, 8, 16, 32],
-        window_size=10,
+        window_size=original_config.window_size,
         embed_dim=128,
     )
     decoder_config = MBartConfig(
         is_decoder=True,
         is_encoder_decoder=False,
         add_cross_attention=True,
-        decoder_layers=4,
-        max_position_embeddings=768,
-        vocab_size=57580,  # several special tokens are added to the vocab of XLMRobertaTokenizer, see repo on the hub (added_tokens.json)
+        decoder_layers=original_config.decoder_layer,
+        max_position_embeddings=original_config.max_position_embeddings,
+        vocab_size=len(
+            model.decoder.tokenizer
+        ),  # several special tokens are added to the vocab of XLMRobertaTokenizer, see repo on the hub (added_tokens.json)
         scale_embedding=True,
         add_final_layer_norm=True,
     )
@@ -103,19 +123,20 @@ def convert_state_dict(orig_state_dict, model):
     return orig_state_dict
 
 
-def convert_swin_checkpoint(checkpoint_path, pytorch_dump_folder_path):
-    encoder_config, decoder_config = get_configs()
+def convert_swin_checkpoint(model_name, pytorch_dump_folder_path):
+    # load original model
+    original_model = DonutModel.from_pretrained(model_name)
+
+    # load HuggingFace model
+    encoder_config, decoder_config = get_configs(original_model)
     encoder = SwinModel(encoder_config)
     decoder = MBartForCausalLM(decoder_config)
     model = VisionEncoderDecoderModel(encoder=encoder, decoder=decoder)
     model.eval()
 
-    state_dict = torch.load(checkpoint_path, map_location="cpu")
+    state_dict = original_model.state_dict()
     new_state_dict = convert_state_dict(state_dict, model)
     model.load_state_dict(new_state_dict)
-
-    # load original model
-    original_model = DonutModel.from_pretrained("naver-clova-ix/donut-base-finetuned-docvqa")
 
     # verify results on scanned document
     dataset = load_dataset("hf-internal-testing/fixtures_docvqa")
@@ -134,8 +155,8 @@ def convert_swin_checkpoint(checkpoint_path, pytorch_dump_folder_path):
     outputs = model.encoder(pixel_values, output_hidden_states=True)
     print("Shape of last hidden state HuggingFace one:", outputs.last_hidden_state[0, :3, :3])
 
-    # TODO assert outputs
-    # assert torch.allclose(timm_outs, hf_outs, atol=1e-3)
+    assert torch.allclose(last_hidden_state, outputs.last_hidden_state, atol=1e-3)
+    print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
         print(f"Saving model and feature extractor to {pytorch_dump_folder_path}")
@@ -147,10 +168,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--checkpoint_path",
-        default="/Users/nielsrogge/Documents/Donut/pytorch_model.bin",
+        "--model_name",
+        default="naver-clova-ix/donut-base-finetuned-docvqa",
         type=str,
-        help="Path to the original checkpoint you'd like to convert.",
+        help="Name of the original model you'd like to convert.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",
@@ -161,4 +182,4 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_swin_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path)
+    convert_swin_checkpoint(args.model_name, args.pytorch_dump_folder_path)
