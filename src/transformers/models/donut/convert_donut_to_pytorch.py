@@ -12,10 +12,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert DONUT checkpoints using the original `donut-python`library. URL: https://github.com/clovaai/donut"""
+"""Convert DONUT checkpoints using the original `donut-python` library. URL: https://github.com/clovaai/donut"""
 
 import argparse
 
+import torch
 from datasets import load_dataset
 from PIL import Image
 
@@ -113,7 +114,7 @@ def convert_state_dict(orig_state_dict, model):
                 orig_state_dict[
                     f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.bias"
                 ] = val[-dim:]
-        elif "attn_mask" in key:
+        elif "attn_mask" in key or key in ["encoder.model.norm.weight", "encoder.model.norm.bias"]:
             # TODO check attn_mask buffers
             pass
         else:
@@ -122,13 +123,13 @@ def convert_state_dict(orig_state_dict, model):
     return orig_state_dict
 
 
-def convert_swin_checkpoint(model_name, pytorch_dump_folder_path):
+def convert_swin_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_hub=False):
     # load original model
     original_model = DonutModel.from_pretrained(model_name).eval()
 
     # load HuggingFace model
     encoder_config, decoder_config = get_configs(original_model)
-    encoder = SwinModel(encoder_config)
+    encoder = SwinModel(encoder_config, add_final_layer_norm=False)
     decoder = MBartForCausalLM(decoder_config)
     model = VisionEncoderDecoderModel(encoder=encoder, decoder=decoder)
     model.eval()
@@ -141,35 +142,38 @@ def convert_swin_checkpoint(model_name, pytorch_dump_folder_path):
     dataset = load_dataset("hf-internal-testing/fixtures_docvqa")
     image = Image.open(dataset["test"][0]["file"]).convert("RGB")
 
+    # TODO create DonutProcessor (which combines a DonutFeatureExtractor and XLMRobertaTokenizer)
     pixel_values = original_model.encoder.prepare_input(image).unsqueeze(0)
 
     task_prompt = "<s_docvqa><s_question>{user_input}</s_question><s_answer>"
     question = "When is the coffee break?"
     user_prompt = task_prompt.replace("{user_input}", question)
+    prompt_tensors = original_model.decoder.tokenizer(user_prompt, add_special_tokens=False, return_tensors="pt")[
+        "input_ids"
+    ]
 
     original_patch_embed = original_model.encoder.model.patch_embed(pixel_values)
-
-    print("Shape of original patch embeddings:", original_patch_embed.shape)
-    print("Original patch embeddings:", original_patch_embed[0, :3, :3])
-
     patch_embeddings, _ = model.encoder.embeddings(pixel_values)
+    assert torch.allclose(original_patch_embed, patch_embeddings, atol=1e-3)
 
-    print("Shape of patch embeddings:", patch_embeddings.shape)
-    print("HuggingFace patch embeddings:", patch_embeddings[0, :3, :3])
+    # verify encoder hidden states
+    original_last_hidden_state = original_model.encoder(pixel_values)
+    last_hidden_state = model.encoder(pixel_values).last_hidden_state
+    assert torch.allclose(original_last_hidden_state, last_hidden_state, atol=1e-2)
 
-    last_hidden_state = original_model.encoder(pixel_values)
-    print("First values of original last_hidden_state:", last_hidden_state[0, :3, :3])
-
-    outputs = model.encoder(pixel_values, output_hidden_states=True)
-    print("Shape of last hidden state HuggingFace one:", outputs.last_hidden_states[-1][0, :3, :3])
-
-    # assert torch.allclose(last_hidden_state, outputs.last_hidden_state, atol=1e-3)
-    # print("Looks ok!")
+    # verify decoder hidden states
+    original_logits = original_model(pixel_values, prompt_tensors, None).logits
+    logits = model(pixel_values, decoder_input_ids=prompt_tensors).logits
+    assert torch.allclose(original_logits, logits, atol=1e-3)
+    print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
         print(f"Saving model and feature extractor to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
         # feature_extractor.save_pretrained(pytorch_dump_folder_path)
+
+    if push_to_hub:
+        model.push_to_hub(model_name.split("/")[-1], organization="nielsr")
 
 
 if __name__ == "__main__":
@@ -178,6 +182,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model_name",
         default="naver-clova-ix/donut-base-finetuned-docvqa",
+        required=False,
         type=str,
         help="Name of the original model you'd like to convert.",
     )
@@ -188,6 +193,9 @@ if __name__ == "__main__":
         type=str,
         help="Path to the output PyTorch model directory.",
     )
+    parser.add_argument(
+        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+    )
 
     args = parser.parse_args()
-    convert_swin_checkpoint(args.model_name, args.pytorch_dump_folder_path)
+    convert_swin_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
