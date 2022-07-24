@@ -914,7 +914,7 @@ SWIN_INPUTS_DOCSTRING = r"""
     SWIN_START_DOCSTRING,
 )
 class SwinModel(SwinPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True, use_mask_token=False, add_final_layer_norm=True):
+    def __init__(self, config, add_pooling_layer=True, use_mask_token=False):
         super().__init__(config)
         self.config = config
         self.num_layers = len(config.depths)
@@ -923,7 +923,7 @@ class SwinModel(SwinPreTrainedModel):
         self.embeddings = SwinEmbeddings(config, use_mask_token=use_mask_token)
         self.encoder = SwinEncoder(config, self.embeddings.patch_grid)
 
-        self.layernorm = nn.LayerNorm(self.num_features, eps=config.layer_norm_eps) if add_final_layer_norm else None
+        self.layernorm = nn.LayerNorm(self.num_features, eps=config.layer_norm_eps) if config.add_final_layer_norm else None
         self.pooler = nn.AdaptiveAvgPool1d(1) if add_pooling_layer else None
 
         # Initialize weights and apply final processing

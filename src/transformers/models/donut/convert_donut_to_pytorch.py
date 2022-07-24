@@ -34,6 +34,7 @@ def get_configs(model):
         num_heads=[4, 8, 16, 32],
         window_size=original_config.window_size,
         embed_dim=128,
+        add_final_layer_norm=False,
     )
     decoder_config = MBartConfig(
         is_decoder=True,
@@ -129,7 +130,7 @@ def convert_swin_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_h
 
     # load HuggingFace model
     encoder_config, decoder_config = get_configs(original_model)
-    encoder = SwinModel(encoder_config, add_final_layer_norm=False)
+    encoder = SwinModel(encoder_config)
     decoder = MBartForCausalLM(decoder_config)
     model = VisionEncoderDecoderModel(encoder=encoder, decoder=decoder)
     model.eval()
