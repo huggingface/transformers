@@ -27,7 +27,7 @@ from torch import nn
 from ...activations import SiLUActivation
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging
+from ...utils import logging, replace_return_docstrings
 from .configuration_vqgan import VQGANConfig
 
 
@@ -49,6 +49,16 @@ VQGAN_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 @dataclass
 class VQGANQuantizerOutput(ModelOutput):
+    """
+    Args:
+        quantized_states (`torch.FloatTensor` of shape `(batch_size, channels, latent_height, latent_width)`):
+            The quantized states obtained by applying the `VectorQuantizer` to the output of `Encoder`.
+        codebook_indices (`torch.LongTensor` of shape `(batch_size, latent_height*latent_width)`):
+            The indices in the codebook (embedding) matrix for the `quantized_states`.
+        codebook_loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+            The codebook loss to optimize.
+    """
+
     quantized_states: torch.FloatTensor = None
     codebook_indices: torch.LongTensor = None
     codebook_loss: Optional[torch.FloatTensor] = None
@@ -56,6 +66,18 @@ class VQGANQuantizerOutput(ModelOutput):
 
 @dataclass
 class VQGANModelOutput(ModelOutput):
+    """
+    Args:
+        reconstructed_pixel_values (`torch.FloatTensor` of shape `(batch_size, channels, height, width)`):
+            The reconstructed pixel values.
+        codebook_indices (`torch.LongTensor` of shape `(batch_size, latent_height*latent_width)`):
+            The indices in the codebook (embedding) matrix for the `quantized_states`.
+        quantized_states (`torch.FloatTensor` of shape `(batch_size, channels, latent_height, latent_width)`):
+            The quantized states obtained by applying the `VectorQuantizer` to the output of `Encoder`.
+        codebook_loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+            The codebook loss to optimize.
+    """
+
     reconstructed_pixel_values: torch.FloatTensor = None
     codebook_indices: torch.LongTensor = None
     quantized_states: torch.FloatTensor = None
@@ -496,7 +518,6 @@ class VectorQuantizer(nn.Module):
         min_encodings.scatter_(1, min_encoding_indices, 1)
 
         # get quantized latent vectors
-        # z_q = self.embedding(min_encoding_indices).reshape(hidden_states.shape)
         z_q = torch.matmul(min_encodings, self.embedding.weight).view(hidden_states.shape)
 
         # reshape to (batch, num_tokens)
@@ -514,8 +535,6 @@ class VectorQuantizer(nn.Module):
         # reshape back to match original input shape
         z_q = z_q.permute(0, 3, 1, 2).contiguous()
 
-        # compute the codebook_loss (q_loss) outside the model
-        # here we return the embeddings and indices
         return z_q, min_encoding_indices, loss
 
     def get_codebook_entry(self, indices):
@@ -562,7 +581,18 @@ class VQGANModel(VQGANPreTrainedModel):
             kernel_size=1,
         )
 
+    @replace_return_docstrings(output_type=VQGANQuantizerOutput, config_class=VQGANConfig)
     def encode(self, pixel_values, return_loss=False, return_dict=True):
+        """
+        Args:
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+                Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
+                [`VQGANFeatureExtractor`]. See [`VQGANFeatureExtractor.__call__`] for details.
+            return_loss (`bool`, *optional*):
+                Whether or not to return the codebook loss.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        """
         hidden_states = self.encoder(pixel_values)
         hidden_states = self.quant_conv(hidden_states)
         quantized_states, codebook_indices, codebook_loss = self.quantize(hidden_states, return_loss)
@@ -579,16 +609,44 @@ class VQGANModel(VQGANPreTrainedModel):
         return output
 
     def decode(self, quantized_states):
+        """
+        Args:
+            quantized_states (`torch.FloatTensor` of shape `(batch_size, channels, latent_height, latent_width)`):
+            The quantized states obtained by applying the `VectorQuantizer` to the output of `Encoder`.
+        Returns:
+            reconstructed_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+                The reconstructed image.
+        """
         hidden_states = self.post_quant_conv(quantized_states)
         reconstructed_pixel_values = self.decoder(hidden_states)
         return reconstructed_pixel_values
 
     def decode_code(self, codebook_indices):
+        """
+        Reconstruct the image from the codebook indices.
+        Args:
+            codebook_indices (`torch.LongTensor` of shape `(batch_size, num_tokens)`):
+                The indices of the codebook vectors. Here `num_tokens=latent_height*latent_width`.
+        Returns:
+            reconstructed_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+                The reconstructed image.
+        """
         quantized_states = self.quantize.get_codebook_entry(codebook_indices)
         reconstructed_pixel_values = self.decode(quantized_states)
         return reconstructed_pixel_values
 
+    @replace_return_docstrings(output_type=VQGANModelOutput, config_class=VQGANConfig)
     def forward(self, pixel_values, return_loss=False, return_dict=True):
+        """
+        Args:
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+                Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
+                [`VQGANFeatureExtractor`]. See [`VQGANFeatureExtractor.__call__`] for details.
+            return_loss (`bool`, *optional*):
+                Whether or not to return the codebook loss.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        """
         hidden_states = self.encoder(pixel_values)
         hidden_states = self.quant_conv(hidden_states)
         quantized_states, codebook_indices, codebook_loss = self.quantize(hidden_states, return_loss)
