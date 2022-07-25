@@ -18,7 +18,7 @@
 import json
 import os
 from json.encoder import INFINITY
-from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -35,10 +35,6 @@ from ...utils import TensorType, is_flax_available, is_tf_available, is_torch_av
 if TYPE_CHECKING:
     if is_torch_available():
         import torch
-    if is_tf_available():
-        import tensorflow as tf
-    if is_flax_available():
-        import jax.numpy as jnp  # noqa: F401
 
 logger = logging.get_logger(__name__)
 
@@ -92,7 +88,6 @@ def get_relevant_lyric_tokens(full_tokens, max_n_lyric_tokens, total_length, off
             Expected duration of the generated music, in samples. The duration has to be smaller than the total lenght,
             which represent the overall length of the signal,
     """
-    import torch
 
     full_tokens = full_tokens[0]
     if len(full_tokens) < max_n_lyric_tokens:

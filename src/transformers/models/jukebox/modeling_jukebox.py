@@ -3112,7 +3112,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         zs,
         labels,
         metas,
-        sample_levels,
+        sample_levels=None,
         chunk_size=32,
         sampling_temperature=0.98,
         lower_batch_size=16,
@@ -3154,6 +3154,8 @@ class JukeboxModel(JukeboxPreTrainedModel):
         ]
         hps = self.config
         self.start_time = time.strftime("%Y-%m-%d-%Hh%M")
+        if sample_levels is None:
+            sample_levels = range(len(self.priors))
         for level in reversed(sample_levels):
             self.total_length = sampling_kwargs[level].pop("total_length")
             self.priors[level].to(zs[0].device).eval()
@@ -3179,7 +3181,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
             if not os.path.exists(logdir):
                 os.makedirs(logdir)
             torch.save(dict(zs=zs, labels=labels, sampling_kwargs=sampling_kwargs, x=x), f"{logdir}/data.pth.tar")
-            save_wav(logdir, level, metas, x, hps.sr)
+            save_wav(logdir, level, metas=metas, audi=x, sr=hps.sr)
             if (
                 alignments is None and self.priors[-1] is not None and self.priors[-1].n_tokens > 0
             ):  # and not isinstance(self.priors[-1].labeller, Empty`Labeller`):
