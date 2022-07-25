@@ -63,6 +63,8 @@ class VQGANConfig(PretrainedConfig):
             The dropout probability.
         resample_with_conv (`bool`, *optional*, defaults to True):
             Whether to use convolutional upsampling/downsampling.
+        commitment_cost (`float`, *optional*, defaults to 0.25):
+            Scalar which controls the weighting of the loss terms in the codebook loss.
     """
 
     def __init__(
@@ -78,6 +80,7 @@ class VQGANConfig(PretrainedConfig):
         quantized_embed_dim: int = 256,
         dropout: float = 0.0,
         resample_with_conv: bool = True,
+        commitment_cost: float = 0.25,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -92,6 +95,7 @@ class VQGANConfig(PretrainedConfig):
         self.quantized_embed_dim = quantized_embed_dim
         self.dropout = dropout
         self.resample_with_conv = resample_with_conv
+        self.commitment_cost = commitment_cost
 
     @property
     def num_resolutions(self):

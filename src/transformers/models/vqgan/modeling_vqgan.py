@@ -482,20 +482,26 @@ class Decoder(nn.Module):
 class VectorQuantizer(nn.Module):
     """
     see https://github.com/MishaLaskin/vqvae/blob/d761a999e2267766400dc646d82d3ac3657771d4/models/quantizer.py
-    ____________________________________________ Discretization bottleneck part of the VQ-VAE. Inputs:
-    - n_e : number of embeddings
-    - e_dim : dimension of embedding
-    - beta : commitment cost used in loss term, beta * ||z_e(x)-sg[e]||^2
-    _____________________________________________
+    Discretization bottleneck part of the VQ-VAE.
     """
 
-    def __init__(self, config):
+    def __init__(self, num_embeddings, embedding_dim, commitment_cost):
+        r"""
+        Args:
+            num_embeddings: number of vectors in the quantized space.
+            embedding_dim: dimensionality of the tensors in the quantized space.
+                Inputs to the modules must be in this format as well.
+            commitment_cost: scalar which controls the weighting of the loss terms
+                (see equation 4 in the paper https://arxiv.org/abs/1711.00937 - this variable is Beta).
+        """
         super().__init__()
 
-        self.config = config
-        self.embedding = nn.Embedding(self.config.num_embeddings, self.config.quantized_embed_dim)  # TODO: init
-        self.embedding.weight.data.uniform_(-1.0 / self.config.num_embeddings, 1.0 / self.config.num_embeddings)
-        self.beta = 0.2
+        self.num_embeddings = num_embeddings
+        self.embedding_dim = embedding_dim
+        self.commitment_cost = commitment_cost
+
+        self.embedding = nn.Embedding(num_embeddings, embedding_dim)
+        self.embedding.weight.data.uniform_(-1.0 / num_embeddings, 1.0 / num_embeddings)
 
     def forward(self, hidden_states, return_loss=False):
         """
@@ -507,7 +513,7 @@ class VectorQuantizer(nn.Module):
         """
         # reshape z -> (batch, height, width, channel) and flatten
         hidden_states = hidden_states.permute(0, 2, 3, 1).contiguous()
-        hidden_states_flattended = hidden_states.reshape((-1, self.config.quantized_embed_dim))
+        hidden_states_flattended = hidden_states.reshape((-1, self.embedding_dim))
 
         # distances from z to embeddings e_j (z - e)^2 = z^2 + e^2 - 2 e * z
         emb_weights = self.embedding.weight
@@ -518,7 +524,7 @@ class VectorQuantizer(nn.Module):
         )
 
         min_encoding_indices = torch.argmin(distance, axis=1).unsqueeze(1)
-        min_encodings = torch.zeros(min_encoding_indices.shape[0], self.config.num_embeddings).to(hidden_states)
+        min_encodings = torch.zeros(min_encoding_indices.shape[0], self.num_embeddings).to(hidden_states)
         min_encodings.scatter_(1, min_encoding_indices, 1)
 
         # get quantized latent vectors
@@ -530,7 +536,7 @@ class VectorQuantizer(nn.Module):
         # compute loss for embedding
         loss = None
         if return_loss:
-            loss = torch.mean((z_q.detach() - hidden_states) ** 2) + self.beta * torch.mean(
+            loss = torch.mean((z_q.detach() - hidden_states) ** 2) + self.commitment_cost * torch.mean(
                 (z_q - hidden_states.detach()) ** 2
             )
             # preserve gradients
@@ -581,7 +587,9 @@ class VQGANModel(VQGANPreTrainedModel):
 
         self.encoder = Encoder(self.config)
         self.decoder = Decoder(self.config)
-        self.quantize = VectorQuantizer(self.config)
+        self.quantize = VectorQuantizer(
+            self.config.num_embeddings, self.config.quant_embedding_dim, self.config.commitment_cost
+        )
         self.quant_conv = nn.Conv2d(
             self.config.z_channels,
             self.config.quantized_embed_dim,
