@@ -408,7 +408,7 @@ class FeaturesManager:
             "causal-lm-with-past",
             "seq2seq-lm",
             "seq2seq-lm-with-past",
-            onnx_config_cls="models.pegasus.PegasusT5OnnxConfig",
+            onnx_config_cls="models.pegasus.PegasusOnnxConfig",
         ),
         "perceiver": supported_features_mapping(
             "image-classification",
