@@ -18,16 +18,27 @@
 import json
 import os
 from json.encoder import INFINITY
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
-import torch
+import numpy as np
 
 import regex as re
 from tokenizers import normalizers
+from transformers.testing_utils import require_torch
+from transformers.utils.generic import _is_jax, _is_numpy
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
-from ...utils import logging
+from ...tokenization_utils_base import BatchEncoding
+from ...utils import TensorType, is_flax_available, is_tf_available, is_torch_available, logging
 
+
+if TYPE_CHECKING:
+    if is_torch_available():
+        import torch
+    if is_tf_available():
+        import tensorflow as tf
+    if is_flax_available():
+        import jax.numpy as jnp  # noqa: F401
 
 logger = logging.get_logger(__name__)
 
@@ -53,7 +64,15 @@ PRETRAINED_LYRIC_TOKENS_SIZES = {
     "jukebox": 512,  # corresonds to the dummy-model ?
 }
 
+"""" batch_outputs = BatchEncoding(
+    encoded_inputs, tensor_type=return_tensors, prepend_batch_axis=prepend_batch_axis
+)
 
+
+"""
+
+
+@require_torch
 def get_relevant_lyric_tokens(full_tokens, max_n_lyric_tokens, total_length, offset, duration):
     """
     Extract only the relevant tokens based on the character position. A total of `max_n_lyric_tokens` tokens will be
@@ -73,6 +92,8 @@ def get_relevant_lyric_tokens(full_tokens, max_n_lyric_tokens, total_length, off
             Expected duration of the generated music, in samples. The duration has to be smaller than the total lenght,
             which represent the overall length of the signal,
     """
+    import torch
+
     full_tokens = full_tokens[0]
     if len(full_tokens) < max_n_lyric_tokens:
         tokens = torch.cat([torch.zeros(max_n_lyric_tokens - len(full_tokens)), full_tokens])
@@ -108,9 +129,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
     >>> from transformers import JukeboxTokenizer
     >>> tokenizer = JukeboxTokenizer.from_pretrained("jukebox")
     >>> tokenizer("Alan Jackson", "Country Rock", "old town road")['input_ids']
-    [[6785],[546], [0, 0, 0, 0, 0, 0, 0,   41,       38,       30,
-                    77,       46,       41,       49,       40,
-                    77,       44,       41,       27,       30] ]
+    ## TODO UPDATE THIS OUTPUT
     >>> tokenizer("Alan Jackson", "Country Rock")['input_ids']
     [6785],[546]]
     ```
@@ -330,8 +349,69 @@ class JukeboxTokenizer(PreTrainedTokenizer):
 
     # TODO : should add_token be implemeted for artists, genres and lyrics? Should it have
     # a type argument to add an artist token with self.getattr('artist') ?
+    def convert_to_tensors(
+        self, inputs, tensor_type: Optional[Union[str, TensorType]] = None, prepend_batch_axis: bool = False
+    ):
+        """
+        Convert the inner content to tensors.
 
-    def __call__(self, artist, genres, lyrics, return_tensor="pt"):
+        Args:
+            tensor_type (`str` or [`~utils.TensorType`], *optional*):
+                The type of tensors to use. If `str`, should be one of the values of the enum [`~utils.TensorType`]. If
+                `None`, no modification is done.
+            prepend_batch_axis (`int`, *optional*, defaults to `False`):
+                Whether or not to add the batch dimension during the conversion.
+        """
+        # Convert to TensorType
+        if not isinstance(tensor_type, TensorType):
+            tensor_type = TensorType(tensor_type)
+
+        # Get a function reference for the correct framework
+        if tensor_type == TensorType.TENSORFLOW:
+            if not is_tf_available():
+                raise ImportError(
+                    "Unable to convert output to TensorFlow tensors format, TensorFlow is not installed."
+                )
+            import tensorflow as tf
+
+            as_tensor = tf.constant
+            is_tensor = tf.is_tensor
+        elif tensor_type == TensorType.PYTORCH:
+            if not is_torch_available():
+                raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
+            import torch
+
+            as_tensor = torch.tensor
+            is_tensor = torch.is_tensor
+        elif tensor_type == TensorType.JAX:
+            if not is_flax_available():
+                raise ImportError("Unable to convert output to JAX tensors format, JAX is not installed.")
+            import jax.numpy as jnp  # noqa: F811
+
+            as_tensor = jnp.array
+            is_tensor = _is_jax
+        else:
+            as_tensor = np.asarray
+            is_tensor = _is_numpy
+
+        # Do the tensor conversion in batch
+
+        try:
+            if prepend_batch_axis:
+                inputs = [inputs]
+
+            if not is_tensor(inputs):
+                inputs = as_tensor(inputs)
+        except:  # noqa E722
+
+            raise ValueError(
+                "Unable to create tensor, you should probably activate truncation and/or padding "
+                "with 'padding=True' 'truncation=True' to have batched tensors with the same length."
+            )
+
+        return inputs
+
+    def __call__(self, artist, genres, lyrics, return_tensors="pt") -> BatchEncoding:
         """Convert the raw string to a list of token ids
 
         Args:
@@ -356,16 +436,17 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         attention_masks = [-INFINITY] * len(full_tokens[-1])
         # TODO properly handle the return pt tensor option
         input_ids = [
-            torch.tensor([input_ids + [artists_id[i]] + genres_ids[i] + full_tokens[i]])
+            self.convert_to_tensors(
+                [input_ids + [artists_id[i]] + genres_ids[i] + full_tokens[i]], tensor_type=return_tensors
+            )
             for i in range(len(self.version))
         ]
-        if return_tensor == "pt":
-            # TODO use BatchEncoding to support
-
-            return {
+        return BatchEncoding(
+            {
                 "input_ids": input_ids,
-                "attention_masks": torch.tensor(attention_masks),
+                "attention_masks": attention_masks,
             }
+        )
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         """
