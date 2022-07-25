@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert DONUT checkpoints using the original `donut-python` library. URL: https://github.com/clovaai/donut"""
+"""Convert Donut checkpoints using the original `donut-python` library. URL: https://github.com/clovaai/donut"""
 
 import argparse
 
@@ -21,7 +21,16 @@ from datasets import load_dataset
 from PIL import Image
 
 from donut import DonutModel
-from transformers import MBartConfig, MBartForCausalLM, SwinConfig, SwinModel, VisionEncoderDecoderModel
+from transformers import (
+    DonutFeatureExtractor,
+    DonutProcessor,
+    MBartConfig,
+    MBartForCausalLM,
+    SwinConfig,
+    SwinModel,
+    VisionEncoderDecoderModel,
+    XLMRobertaTokenizer,
+)
 
 
 def get_configs(model):
@@ -143,8 +152,13 @@ def convert_swin_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_h
     dataset = load_dataset("hf-internal-testing/fixtures_docvqa")
     image = Image.open(dataset["test"][0]["file"]).convert("RGB")
 
-    # TODO create DonutProcessor (which combines a DonutFeatureExtractor and XLMRobertaTokenizer)
-    pixel_values = original_model.encoder.prepare_input(image).unsqueeze(0)
+    # TODO maybe verify pixel values against original implementation
+    # original_pixel_values = original_model.encoder.prepare_input(image).unsqueeze(0)
+
+    tokenizer = XLMRobertaTokenizer.from_pretrained(model_name)
+    feature_extractor = DonutFeatureExtractor()
+    processor = DonutProcessor(feature_extractor, tokenizer)
+    pixel_values = processor(image, return_tensors="pt").pixel_values
 
     task_prompt = "<s_docvqa><s_question>{user_input}</s_question><s_answer>"
     question = "When is the coffee break?"
@@ -169,12 +183,13 @@ def convert_swin_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_h
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
-        print(f"Saving model and feature extractor to {pytorch_dump_folder_path}")
+        print(f"Saving model and processor to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
-        # feature_extractor.save_pretrained(pytorch_dump_folder_path)
+        processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
         model.push_to_hub(model_name.split("/")[-1], organization="nielsr")
+        processor.push_to_hub(model_name.split("/")[-1], organization="nielsr")
 
 
 if __name__ == "__main__":
@@ -195,7 +210,9 @@ if __name__ == "__main__":
         help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model and processor to the 🤗 hub.",
     )
 
     args = parser.parse_args()

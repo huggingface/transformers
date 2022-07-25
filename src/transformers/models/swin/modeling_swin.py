@@ -923,7 +923,9 @@ class SwinModel(SwinPreTrainedModel):
         self.embeddings = SwinEmbeddings(config, use_mask_token=use_mask_token)
         self.encoder = SwinEncoder(config, self.embeddings.patch_grid)
 
-        self.layernorm = nn.LayerNorm(self.num_features, eps=config.layer_norm_eps) if config.add_final_layer_norm else None
+        self.layernorm = (
+            nn.LayerNorm(self.num_features, eps=config.layer_norm_eps) if config.add_final_layer_norm else None
+        )
         self.pooler = nn.AdaptiveAvgPool1d(1) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
