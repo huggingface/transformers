@@ -970,7 +970,9 @@ class DalleMegaDecoder(DalleMegaPretrainedModel):
 
         # embed positions
         _, seq_len = input_shape[:2]
-        positions_ids = torch.arange(past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=inputs_embeds.device)
+        positions_ids = torch.arange(
+            past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=inputs_embeds.device
+        )
         positions = self.embed_positions(positions_ids)
 
         hidden_states = inputs_embeds + positions

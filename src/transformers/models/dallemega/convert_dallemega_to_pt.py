@@ -15,18 +15,21 @@
 """Convert DALLE_MEGA checkpoint."""
 
 
+import numpy as np
 import torch
+
 import jax
 import jax.numpy as jnp
-import numpy as np
 from flax.traverse_util import flatten_dict
+
 
 try:
     from dalle_mini import DalleBart
 except ImportError:
-    print("DalleBart is not installed. Please install it with `pip install dalle_mini`.")
+    print("dalle_mini is not installed. Please install it with `pip install dalle_mini`.")
 
-from transformers import DalleMegaForConditionalGeneration, DalleMegaConfig
+from transformers import DalleMegaConfig, DalleMegaForConditionalGeneration
+
 
 def convert_flax_state_dict_to_pt(flax_state):
     # convert all weights to fp32 if the are bf16 since torch.from_numpy can-not handle bf16
@@ -59,10 +62,10 @@ def convert_flax_state_dict_to_pt(flax_state):
 
 
 replace_patterns = [
-    ("GLU_0.Dense_0", "GLU_0.fc0"),
-    ("GLU_0.Dense_1", "GLU_0.fc1"),
-    ("GLU_0.Dense_2", "GLU_0.fc2"),
-    ("GLU_0.LayerNorm_", "GLU_0.ln"),
+    ("GLU_0.Dense_0", "GLU_0.wi_0"),
+    ("GLU_0.Dense_1", "GLU_0.wi_1"),
+    ("GLU_0.Dense_2", "GLU_0.wo"),
+    ("GLU_0.LayerNorm_", "GLU_0.layernorm_"),
     ("FlaxBartEncoderLayer_", ""),
     ("FlaxBartDecoderLayer_", ""),
     ("FlaxBartAttention_0", "self_attn"),
@@ -81,6 +84,7 @@ def rename_key(key):
         key = key.replace(pattern[0], pattern[1])
     return key
 
+
 def rename_state_dict(state_dict):
     keys = list(state_dict.keys())
     for key in keys:
@@ -88,15 +92,16 @@ def rename_state_dict(state_dict):
         state_dict[new_key] = state_dict.pop(key)
     return state_dict
 
+
 def convert_dalle_mega_to_pt(checkpoint_path, config_path, save_path):
-    flax_model, params = DalleBart.from_pretrained(checkpoint_path, _do_init=False)
-    
+    _, params = DalleBart.from_pretrained(checkpoint_path, _do_init=False)
+
     config = DalleMegaConfig.from_pretrained(config_path)
     pt_model = DalleMegaForConditionalGeneration(config).eval()
-    
+
     pt_state_dict = convert_flax_state_dict_to_pt(params)
     pt_state_dict = rename_state_dict(pt_state_dict)
-    
+
     pt_model.load_state_dict(pt_state_dict)
     pt_model.save_pretrained(save_path)
     return pt_model
