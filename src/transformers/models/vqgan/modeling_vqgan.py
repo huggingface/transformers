@@ -33,18 +33,13 @@ from .configuration_vqgan import VQGANConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "vqgan-imagenet-f16-1024"
+_CHECKPOINT_FOR_DOC = "CompVis/vqgan-imagenet-f16-1024"
 _CONFIG_FOR_DOC = "VQGANConfig"
 
 VQGAN_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "valhalla/vqgan_imagenet_f16_16384",
     # See all VQGAN models at https://huggingface.co/models?filter=vqgan
 ]
-
-# TODO (patil-suraj):
-# 1. Write docstrings
-# 2. Add output_hidden_states to VQGANModel
-# 3. Make tests more robust
 
 
 VQGAN_START_DOCSTRING = r"""
@@ -591,9 +586,9 @@ class VQGANModel(VQGANPreTrainedModel):
             kernel_size=1,
         )
 
-    @replace_return_docstrings(output_type=VQGANQuantizerOutput, config_class=VQGANConfig)
+    @replace_return_docstrings(output_type=VQGANQuantizerOutput, config_class=_CONFIG_FOR_DOC)
     def encode(self, pixel_values, return_loss=False, return_dict=True):
-        """
+        r"""
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
                 Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained
@@ -602,7 +597,29 @@ class VQGANModel(VQGANPreTrainedModel):
                 Whether or not to return the codebook loss.
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+
         Returns:
+
+        Example:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import VQGANFeatureExtractor, VQGANModel
+
+        >>> model = VQGANModel.from_pretrained("CompVis/vqgan-imagenet-f16-1024")
+        >>> feature_extractor = VQGANFeatureExtractor.from_pretrained("CompVis/vqgan-imagenet-f16-1024")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = feature_extractor(image, return_tensors="pt")
+
+        >>> outputs = model.encode(inputs["pixel_values"])
+        >>> quantized_states = outputs.quantized_states  # the quantized latent vectors
+        >>> codebook_indices = outputs.codebook_indices  # indices of the closest codebook vectors
+        >>> codebook_loss = outputs.codebook_loss  # the codebook loss
+        ```
         """
         hidden_states = self.encoder(pixel_values)
         hidden_states = self.quant_conv(hidden_states)
@@ -620,20 +637,33 @@ class VQGANModel(VQGANPreTrainedModel):
         return output
 
     def decode(self, quantized_states):
-        """
+        r"""
         Args:
             quantized_states (`torch.FloatTensor` of shape `(batch_size, channels, latent_height, latent_width)`):
             The quantized states obtained by applying the `VectorQuantizer` to the output of `Encoder`.
+
         Returns:
             reconstructed_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
                 The reconstructed image.
+
+        Example:
+        ```python
+        >>> from transformers import VQGANModel
+
+        >>> model = VQGANModel.from_pretrained("CompVis/vqgan-imagenet-f16-1024")
+
+        >>> quantized_states = torch.randn(
+        ...     1, model.config.z_channels, model.config.latent_size, model.config.latent_size
+        ... )
+        >>> reconstructed_pixel_values = model.decode(quantized_states)
+        ```
         """
         hidden_states = self.post_quant_conv(quantized_states)
         reconstructed_pixel_values = self.decoder(hidden_states)
         return reconstructed_pixel_values
 
     def decode_code(self, codebook_indices):
-        """
+        r"""
         Args:
         Reconstruct the image from the codebook indices.
             codebook_indices (`torch.LongTensor` of shape `(batch_size, num_tokens)`):
@@ -641,14 +671,26 @@ class VQGANModel(VQGANPreTrainedModel):
         Returns:
             reconstructed_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
                 The reconstructed image.
+
+        Example:
+        ```python
+        >>> from transformers import VQGANModel
+
+        >>> model = VQGANModel.from_pretrained("CompVis/vqgan-imagenet-f16-1024")
+
+        >>> codebook_indices = torch.randint(
+        ...     0, model.config.num_embeddings, (1, model.config.latent_size * model.config.latent_size)
+        ... )
+        >>> reconstructed_pixel_values = model.decode_code(codebook_indices)
+        ```
         """
         quantized_states = self.quantize.get_codebook_entry(codebook_indices)
         reconstructed_pixel_values = self.decode(quantized_states)
         return reconstructed_pixel_values
 
-    @replace_return_docstrings(output_type=VQGANModelOutput, config_class=VQGANConfig)
+    @replace_return_docstrings(output_type=VQGANModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(self, pixel_values, return_loss=False, return_dict=True):
-        """
+        r"""
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
                 Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained
@@ -657,7 +699,35 @@ class VQGANModel(VQGANPreTrainedModel):
                 Whether or not to return the codebook loss.
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+
         Returns:
+
+        Example:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import VQGANFeatureExtractor, VQGANModel
+
+        >>> model = VQGANModel.from_pretrained("CompVis/vqgan-imagenet-f16-1024")
+        >>> feature_extractor = VQGANFeatureExtractor.from_pretrained("CompVis/vqgan-imagenet-f16-1024")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = feature_extractor(image, return_tensors="pt")
+
+        >>> output = model(**inputs)
+        >>> reconstructed_pixel_values = output.reconstructed_pixel_values  # this is the reconstructed image
+        >>> codebook_loss = output.codebook_loss  # this is the codebook loss to be optimized
+
+        >>> # convert the tensor to PIL image
+        >>> reconstructed_pixel_values = torch.clamp(reconstructed_pixel_values.detach(), -1.0, 1.0)
+        >>> reconstructed_pixel_values = (reconstructed_pixel_values + 1.0) / 2.0
+        >>> reconstructed_pixel_values = reconstructed_pixel_values.transpose(1, 2, 0).cpu().numpy()
+        >>> reconstructed_pixel_values = (reconstructed_pixel_values * 255.0).astype(np.uint8)
+        >>> reconstructed_image = Image.fromarray(reconstructed_pixel_values)
+        ```
         """
         hidden_states = self.encoder(pixel_values)
         hidden_states = self.quant_conv(hidden_states)
