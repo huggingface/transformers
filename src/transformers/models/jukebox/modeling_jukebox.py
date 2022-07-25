@@ -2905,13 +2905,19 @@ def get_starts(total_length, n_ctx, hop_length):
 def save_wav(fname, lvl, metas, aud, sr):
     import soundfile
 
-    artists, genres, lyrics = metas.values()
     # clip before saving?
     aud = torch.clamp(aud, -1, 1).cpu().numpy()
     for i in list(range(aud.shape[0])):
-        soundfile.write(
-            f"{fname}/lvl_{lvl}-{artists[i]}-{genres[i]}-{lyrics[i][:5]}{i}.wav", aud[i], samplerate=sr, format="wav"
-        )
+        if metas is not None:
+            artists, genres, lyrics = metas[i]
+            soundfile.write(
+                f"{fname}/lvl_{lvl}-{artists[i]}-{genres[i]}-{lyrics[i][:5]}{i}.wav",
+                aud[i],
+                samplerate=sr,
+                format="wav",
+            )
+        else:
+            soundfile.write(f"{fname}/lvl_{lvl}-sample-{i}.wav", aud[i], samplerate=sr, format="wav")
 
 
 def get_alignment(x, zs, labels, prior, level, fp16, hps):
@@ -3111,8 +3117,8 @@ class JukeboxModel(JukeboxPreTrainedModel):
         self,
         zs,
         labels,
-        metas,
         sample_levels=None,
+        metas=None,
         chunk_size=32,
         sampling_temperature=0.98,
         lower_batch_size=16,
@@ -3121,6 +3127,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         alignments=None,
         sample_tokens=None,
         offset=0,
+        save_wav=True,
     ):
         top_prior = self.priors[-1]
         sampling_kwargs = [
@@ -3177,17 +3184,18 @@ class JukeboxModel(JukeboxPreTrainedModel):
                 x = self.vqvae.decode(zs[level:], start_level=level, bs_chunks=zs[level].shape[0])
             self.vqvae.to("cpu")
 
-            logdir = f"{self.start_time}/level_{level}"
-            if not os.path.exists(logdir):
-                os.makedirs(logdir)
-            torch.save(dict(zs=zs, labels=labels, sampling_kwargs=sampling_kwargs, x=x), f"{logdir}/data.pth.tar")
-            save_wav(logdir, level, metas=metas, audi=x, sr=hps.sr)
-            if (
-                alignments is None and self.priors[-1] is not None and self.priors[-1].n_tokens > 0
-            ):  # and not isinstance(self.priors[-1].labeller, Empty`Labeller`):
-                # either use level which will be the given lovel or use the total nb of levels?
-                # alignments = get_alignment(x, zs, labels[-1], self.priors[-1], level, sampling_kwargs[-1]["fp16"], hps)
-                pass  # TODO this is a really dirty fix
+            if save_wav:
+                logdir = f"{self.start_time}/level_{level}"
+                if not os.path.exists(logdir):
+                    os.makedirs(logdir)
+                torch.save(dict(zs=zs, labels=labels, sampling_kwargs=sampling_kwargs, x=x), f"{logdir}/data.pth.tar")
+                save_wav(logdir, level, metas=metas, aud=x, sr=hps.sr)
+                if (
+                    alignments is None and self.priors[-1] is not None and self.priors[-1].n_tokens > 0
+                ):  # and not isinstance(self.priors[-1].labeller, Empty`Labeller`):
+                    # either use level which will be the given lovel or use the total nb of levels?
+                    # alignments = get_alignment(x, zs, labels[-1], self.priors[-1], level, sampling_kwargs[-1]["fp16"], hps)
+                    pass  # TODO this is a really dirty fix
         return zs
 
     # Generate ancestral samples given a list of artists and genres
@@ -3198,15 +3206,15 @@ class JukeboxModel(JukeboxPreTrainedModel):
         return zs
 
     # Continue ancestral sampling from previously saved codes
-    def continue_sample(self, zs, labels, **sampling_kwargs):
+    def continue_sample(self, zs, labels, metas, **sampling_kwargs):
         sample_levels = list(range(len(self.priors)))
-        zs = self._sample(zs, labels, sample_levels, **sampling_kwargs)
+        zs = self._sample(zs, labels, metas, sample_levels, **sampling_kwargs)
         return zs
 
     # Upsample given already generated upper-level codes
     def upsample(self, zs, labels, **sampling_kwargs):
         sample_levels = list(range(len(self.priors) - 1))
-        zs = self._sample(zs, labels, sample_levels, **sampling_kwargs)
+        zs = self._sample(zs, labels, metas, sample_levels, **sampling_kwargs)
         return zs
 
     # Prompt the model with raw audio input (dimension: NTC) and generate continuations
@@ -3216,5 +3224,5 @@ class JukeboxModel(JukeboxPreTrainedModel):
         with torch.no_grad():
             zs = self.vqvae.encode(x, start_level=0, end_level=len(self.priors), bs_chunks=x.shape[0])
         self.vqvae.to("cpu")
-        zs = self._sample(zs, labels, sample_levels, **sampling_kwargs)
+        zs = self._sample(zs, labels, metas, sample_levels, **sampling_kwargs)
         return zs

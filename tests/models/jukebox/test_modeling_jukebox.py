@@ -87,21 +87,21 @@ class Jukebox1bModelTester(unittest.TestCase):
 
         set_seed(0)
         zs = [torch.zeros(1, 0, dtype=torch.long).cpu() for _ in range(3)]
-        zs = model._sample(zs, labels, [2], sample_tokens=10)
-        assert torch.allclose(zs[-1][0], self.EXPECTED_OUTPUT_2)
+        zs = model._sample(zs, labels, [2], sample_tokens=10, save_wav=False)
+        assert torch.allclose(zs[-1][0], torch.tensor(self.EXPECTED_OUTPUT_2))
 
-        zs[-1] = self.EXPECTED_OUTPUT_2.unsqueeze(0)
+        zs[-1] = torch.tensor(self.EXPECTED_OUTPUT_2).unsqueeze(0)
         set_seed(0)
         zs[-1] = torch.cat((zs[-1], torch.zeros(1, 1000000 - zs[-1].shape[-1]).cpu()), dim=-1).long()
-        zs = model._sample(zs, labels, [1], sample_tokens=10)
-        assert torch.allclose(zs[-2][0, :80], self.EXPECTED_OUTPUT_1)
+        zs = model._sample(zs, labels, [1], sample_tokens=10, save_wav=False)
+        assert torch.allclose(zs[-2][0, :80], torch.tensor(self.EXPECTED_OUTPUT_1))
 
-        zs[-2] = self.EXPECTED_OUTPUT_1.unsqueeze(0)
+        zs[-2] = torch.tensor(self.EXPECTED_OUTPUT_1).unsqueeze(0)
 
         set_seed(0)
         zs[-2] = torch.cat((zs[-2], torch.zeros(1, 1000000 - zs[-2].shape[-1]).cpu()), dim=-1).long()
-        zs = model._sample(zs, labels, [0], sample_tokens=10)
-        assert torch.allclose(zs[0][0, :40], self.EXPECTED_OUTPUT_0)
+        zs = model._sample(zs, labels, [0], sample_tokens=10, save_wav=False)
+        assert torch.allclose(zs[0][0, :40], torch.tensor(self.EXPECTED_OUTPUT_0))
 
     @slow
     @require_torch
@@ -112,10 +112,8 @@ class Jukebox1bModelTester(unittest.TestCase):
         labels = [i.cuda() for i in self.prepare_inputs(model_id)]
         set_seed(0)
         zs = [torch.zeros(1, 0, dtype=torch.long).cuda() for _ in range(3)]
-        zs = model._sample(zs, labels, [2], sample_tokens=10)
-        print(zs[-1][0].cpu())
-        print(self.EXPECTED_OUTPUT_2)
-        assert torch.allclose(zs[-1][0].cpu(), self.EXPECTED_OUTPUT_2)
+        zs = model._sample(zs, labels, [2], sample_tokens=10, save_wav=False)
+        assert torch.allclose(zs[-1][0].cpu(), torch.tensor(self.EXPECTED_OUTPUT_2))
 
     def test_vqvae(self):
         # implemented vavae decoding test at 3 levels using the expected outputs
@@ -184,21 +182,21 @@ class Jukebox5bModelTester(unittest.TestCase):
         labels = self.prepare_inputs(model_id)
         set_seed(0)
         zs = [torch.zeros(1, 0, dtype=torch.long).cpu() for _ in range(3)]
-        zs = model._sample(zs, labels, [2], sample_tokens=10)
-        assert torch.allclose(zs[-1][0], self.EXPECTED_OUTPUT_2)
+        zs = model._sample(zs, labels, [2], sample_tokens=10, save_wav=False)
+        assert torch.allclose(zs[-1][0], torch.tensor(self.EXPECTED_OUTPUT_2))
 
-        zs[-1] = self.EXPECTED_OUTPUT_2.unsqueeze(0)
+        zs[-1] = torch.tensor(self.EXPECTED_OUTPUT_2).unsqueeze(0)
         set_seed(0)
         zs[-1] = torch.cat((zs[-1], torch.zeros(1, 1000000 - zs[-1].shape[-1]).cpu()), dim=-1).long()
-        zs = model._sample(zs, labels, [1], sample_tokens=10)
-        assert torch.allclose(zs[-2][0, :80], self.EXPECTED_OUTPUT_1)
+        zs = model._sample(zs, labels, [1], sample_tokens=10, save_wav=False)
+        assert torch.allclose(zs[-2][0, :80], torch.tensor(self.EXPECTED_OUTPUT_1))
 
-        zs[-2] = self.EXPECTED_OUTPUT_1.unsqueeze(0)
+        zs[-2] = torch.tensor(self.EXPECTED_OUTPUT_1).unsqueeze(0)
 
         set_seed(0)
         zs[-2] = torch.cat((zs[-2], torch.zeros(1, 1000000 - zs[-2].shape[-1]).cpu()), dim=-1).long()
-        zs = model._sample(zs, labels, [0], sample_tokens=10)
-        assert torch.allclose(zs[0][0, :80], self.EXPECTED_OUTPUT_0)
+        zs = model._sample(zs, labels, [0], sample_tokens=10, save_wav=False)
+        assert torch.allclose(zs[0][0, :80], torch.tensor(self.EXPECTED_OUTPUT_0))
 
     @slow
     def test_slow_sampling(self):
@@ -208,8 +206,8 @@ class Jukebox5bModelTester(unittest.TestCase):
         labels = [i.cuda() for i in self.prepare_inputs(model_id)]
         set_seed(0)
         zs = [torch.zeros(1, 0, dtype=torch.long).cuda() for _ in range(3)]
-        zs = model._sample(zs, labels, [2], sample_tokens=10)
-        assert torch.allclose(zs[-1][0].cpu(), self.EXPECTED_OUTPUT_2)
+        zs = model._sample(zs, labels, [2], sample_tokens=10, save_wav=False)
+        assert torch.allclose(zs[-1][0].cpu(), torch.tensor(self.EXPECTED_OUTPUT_2))
 
     def test_vqvae(self):
         # implement vavae decoding test at 3 levels using the expected outputs
@@ -217,6 +215,5 @@ class Jukebox5bModelTester(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    tester = Jukebox5bModelTester()
-    tester.test_1b_lyrics()
-    tester.test_slow_sampling()
+    tester = Jukebox1bModelTester()
+    tester.test_sampling()
