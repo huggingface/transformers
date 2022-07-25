@@ -56,4 +56,15 @@ class VQGANConfig(PretrainedConfig):
         self.quantized_embed_dim = quantized_embed_dim
         self.dropout = dropout
         self.resamp_with_conv = resample_with_conv
-        self.num_resolutions = len(channel_mult)
+
+    @property
+    def num_resolutions(self):    
+        return len(self.channel_mult)
+    
+    @property
+    def reduction_factor(self):
+        return 2 ** (self.num_resolutions - 1)
+    
+    @property
+    def latent_size(self):
+        return self.resolution // self.reduction_factor
