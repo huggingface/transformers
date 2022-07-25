@@ -29,7 +29,7 @@ from transformers import (
     SwinConfig,
     SwinModel,
     VisionEncoderDecoderModel,
-    XLMRobertaTokenizer,
+    XLMRobertaTokenizerFast,
 )
 
 
@@ -155,15 +155,20 @@ def convert_swin_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_h
     # TODO maybe verify pixel values against original implementation
     # original_pixel_values = original_model.encoder.prepare_input(image).unsqueeze(0)
 
-    tokenizer = XLMRobertaTokenizer.from_pretrained(model_name)
-    feature_extractor = DonutFeatureExtractor()
+    tokenizer = XLMRobertaTokenizerFast.from_pretrained(model_name, from_slow=True)
+    feature_extractor = DonutFeatureExtractor(size=original_model.config.input_size[::-1])
     processor = DonutProcessor(feature_extractor, tokenizer)
     pixel_values = processor(image, return_tensors="pt").pixel_values
 
-    task_prompt = "<s_docvqa><s_question>{user_input}</s_question><s_answer>"
-    question = "When is the coffee break?"
-    user_prompt = task_prompt.replace("{user_input}", question)
-    prompt_tensors = original_model.decoder.tokenizer(user_prompt, add_special_tokens=False, return_tensors="pt")[
+    if "vqa" in model_name:
+        task_prompt = "<s_docvqa><s_question>{user_input}</s_question><s_answer>"
+        question = "When is the coffee break?"
+        task_prompt = task_prompt.replace("{user_input}", question)
+    elif "rvlcdip" in model_name:
+        task_prompt = "<s_rvlcdip>"
+    elif "cord-v2" in model_name:
+        task_prompt = "s_cord-v2>"
+    prompt_tensors = original_model.decoder.tokenizer(task_prompt, add_special_tokens=False, return_tensors="pt")[
         "input_ids"
     ]
 
