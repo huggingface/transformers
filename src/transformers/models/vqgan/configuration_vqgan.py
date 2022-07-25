@@ -29,6 +29,40 @@ VQGAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 
 class VQGANConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`VQGANModel`]. It is used to instantiate an VQGAN
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the VQGAN
+    [CompVis/vqgan-imagenet-f16-1024](https://huggingface.co/openai/clip-vit-base-patch32) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        resolution (`int`, *optional*, defaults to 256):
+            The resolution of the input image.
+        num_channels (`int`, *optional*, defaults to 3):
+            The number of channels of the input image.
+        hidden_channels (`int`, *optional*, defaults to 128):
+            The number of channels of the hidden representation.
+        channel_mult (`tuple`, *optional*, defaults to (1, 1, 2, 2, 4)):
+            The channel multipliers for the hidden representation.
+        num_res_blocks (`int`, *optional*, defaults to 2):
+            The number of residual blocks.
+        attn_resolutions (`tuple`, *optional*, defaults to (16,)):
+            The resolutions of the attention heads.
+        z_channels (`int`, *optional*, defaults to 256):
+            The number of channels of the quantized (latent) representation.
+        num_embeddings (`int`, *optional*, defaults to 1024):
+            The number of embedding vectors in the quantized (latent) space.
+        quantized_embed_dim (`int`, *optional*, defaults to 256):
+            The dimension of the quantized (latent) embedding vectors.
+        dropout (`float`, *optional*, defaults to 0.0):
+            The dropout probability.
+        resample_with_conv (`bool`, *optional*, defaults to True):
+            Whether to use convolutional upsampling/downsampling.
+    """
+
     def __init__(
         self,
         resolution: int = 256,
@@ -58,13 +92,13 @@ class VQGANConfig(PretrainedConfig):
         self.resample_with_conv = resample_with_conv
 
     @property
-    def num_resolutions(self):    
+    def num_resolutions(self):
         return len(self.channel_mult)
-    
+
     @property
     def reduction_factor(self):
         return 2 ** (self.num_resolutions - 1)
-    
+
     @property
     def latent_size(self):
         return self.resolution // self.reduction_factor
