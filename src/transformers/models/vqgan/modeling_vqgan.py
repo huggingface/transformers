@@ -27,7 +27,7 @@ from torch import nn
 from ...activations import SiLUActivation
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging, replace_return_docstrings
+from ...utils import add_start_docstrings, logging, replace_return_docstrings
 from .configuration_vqgan import VQGANConfig
 
 
@@ -45,6 +45,18 @@ VQGAN_PRETRAINED_MODEL_ARCHIVE_LIST = [
 # 1. Write docstrings
 # 2. Add output_hidden_states to VQGANModel
 # 3. Make tests more robust
+
+
+VQGAN_START_DOCSTRING = r"""
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
+    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
+
+    Parameters:
+        config ([`VQGANConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
 
 
 @dataclass
@@ -558,6 +570,7 @@ class VQGANPreTrainedModel(PreTrainedModel):
         super().__init__(*inputs, **kwargs)
 
 
+@add_start_docstrings(VQGAN_START_DOCSTRING)
 class VQGANModel(VQGANPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
