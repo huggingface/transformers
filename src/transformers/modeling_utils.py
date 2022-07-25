@@ -2225,6 +2225,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if offload_state_dict is None:
                 offload_state_dict = True
 
+        print(device_map)
         # Retrieve missing & unexpected_keys
         model_state_dict = model.state_dict()
         expected_keys = list(model_state_dict.keys())
