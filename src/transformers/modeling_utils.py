@@ -2118,7 +2118,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # Make sure tied weights are tied before creating the device map.
             model.tie_weights()
             device_map = infer_auto_device_map(
-                model, no_split_module_classes=no_split_modules, dtype=torch_dtype, max_memory=max_memory
+                model,
+                no_split_module_classes=no_split_modules,
+                dtype=torch_dtype if not load_in_8bit else torch.int8,
+                max_memory=max_memory,
             )
 
         if from_tf:
@@ -2225,7 +2228,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if offload_state_dict is None:
                 offload_state_dict = True
 
-        print(device_map)
         # Retrieve missing & unexpected_keys
         model_state_dict = model.state_dict()
         expected_keys = list(model_state_dict.keys())
