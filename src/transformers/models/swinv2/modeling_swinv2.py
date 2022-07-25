@@ -61,7 +61,7 @@ SWINV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# drop_path, Swinv2PatchEmbeddings, Swinv2PatchMerging and Swinv2DropPath are from the timm library.
+# drop_path, Swinv2PatchEmbeddings, Swinv2PatchMerging and Swinv2DropPath are from https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/swin_transformer_v2.py.
 
 
 @dataclass
