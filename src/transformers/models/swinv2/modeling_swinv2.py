@@ -404,7 +404,7 @@ class Swinv2PatchMerging(nn.Module):
         input_feature_2 = input_feature[:, 0::2, 1::2, :]
         # [batch_size, height/2, width/2, num_channels]
         input_feature_3 = input_feature[:, 1::2, 1::2, :]
-        # batch_size height/2 width/2 4*num_channels
+        # [batch_size, height/2 * width/2, 4*num_channels]
         input_feature = torch.cat([input_feature_0, input_feature_1, input_feature_2, input_feature_3], -1)
         input_feature = input_feature.view(batch_size, -1, 4 * num_channels)  # [batch_size, height/2 * width/2, 4*C]
 
@@ -439,11 +439,11 @@ class Swinv2SelfAttention(nn.Module):
         relative_coords_h = torch.arange(-(self.window_size[0] - 1), self.window_size[0], dtype=torch.float32)
         relative_coords_w = torch.arange(-(self.window_size[1] - 1), self.window_size[1], dtype=torch.float32)
         relative_coords_table = (
-            torch.stack(torch.meshgrid([relative_coords_h, relative_coords_w]))
+            torch.stack(torch.meshgrid([relative_coords_h, relative_coords_w], indexing="ij"))
             .permute(1, 2, 0)
             .contiguous()
             .unsqueeze(0)
-        )  # 1, 2*Wh-1, 2*Ww-1, 2
+        )  # [1, 2*window_height - 1, 2*window_width - 1, 2]
         if pretrained_window_size[0] > 0:
             relative_coords_table[:, :, :, 0] /= pretrained_window_size[0] - 1
             relative_coords_table[:, :, :, 1] /= pretrained_window_size[1] - 1
@@ -555,10 +555,10 @@ class Swinv2Attention(nn.Module):
     def __init__(self, config, dim, num_heads, window_size, pretrained_window_size=0):
         super().__init__()
         self.self = Swinv2SelfAttention(
-            config,
-            dim,
-            num_heads,
-            window_size,
+            config=config,
+            dim=dim,
+            num_heads=num_heads,
+            window_size=window_size,
             pretrained_window_size=pretrained_window_size
             if isinstance(pretrained_window_size, collections.abc.Iterable)
             else (pretrained_window_size, pretrained_window_size),
@@ -635,9 +635,9 @@ class Swinv2Layer(nn.Module):
         self.input_resolution = input_resolution
         self.set_shift_and_window_size(input_resolution)
         self.attention = Swinv2Attention(
-            config,
-            dim,
-            num_heads,
+            config=config,
+            dim=dim,
+            num_heads=num_heads,
             window_size=self.window_size,
             pretrained_window_size=pretrained_window_size
             if isinstance(pretrained_window_size, collections.abc.Iterable)
