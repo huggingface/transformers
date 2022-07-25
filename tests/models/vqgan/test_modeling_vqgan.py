@@ -17,6 +17,7 @@
 
 import inspect
 import tempfile
+from typing import Dict, List, Tuple
 import unittest
 
 import numpy as np
@@ -26,7 +27,7 @@ from transformers.testing_utils import require_torch, require_vision, slow, torc
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import floats_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor
 
 
 if is_torch_available():
@@ -60,6 +61,7 @@ class VQGANModelTester:
         resamp_with_conv=True,
         give_pre_end=False,
         scope=None,
+        is_training=True,
     ):
         self.parent = parent
         self.ch = ch
@@ -78,6 +80,7 @@ class VQGANModelTester:
         self.give_pre_end = give_pre_end
         self.scope = scope
         self.batch_size = 4
+        self.is_training = is_training
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor((self.batch_size, self.in_channels, self.resolution, self.resolution))
@@ -120,9 +123,14 @@ class VQGANModelTester:
 
 
 @require_torch
-class VQGANModelTest(unittest.TestCase):
+class VQGANModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (VQGANModel,) if is_torch_available() else ()
+
+    test_pruning = False
+    test_resize_embeddings = False
+    test_head_masking = False
+    has_attentions = False
 
     def setUp(self):
         self.model_tester = VQGANModelTester(self)
@@ -135,10 +143,61 @@ class VQGANModelTest(unittest.TestCase):
         self.config_tester.create_and_test_config_with_num_labels()
         self.config_tester.check_config_can_be_init_without_params()
         self.config_tester.check_config_arguments_init()
+    
+    def create_and_test_config_common_properties(self):
+        return
+    
+    @unittest.skip(reason="VQGAN does not output hidden states")
+    def test_hidden_states_output(self):
+        pass
+
+    @unittest.skip(reason="VQGAN does not output attentions")
+    def test_attention_outputs(self):
+        pass
+
+    @unittest.skip(reason="VQGAN does not use inputs_embeds")
+    def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="VQGAN does not support input and output embeddings")
+    def test_model_common_attributes(self):
+        pass
+    
+    @unittest.skip(reason="VQGAN does not output hidden states")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+    
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            expected_arg_names = ["pixel_values"]
+            self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+    
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config=config)
+            for name, module in model.named_modules():
+                if isinstance(module, (torch.nn.BatchNorm2d, torch.nn.GroupNorm)):
+                    self.assertTrue(
+                        torch.all(module.weight == 1),
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
+                    self.assertTrue(
+                        torch.all(module.bias == 0),
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
 
     def test_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -170,6 +229,57 @@ class VQGANModelTest(unittest.TestCase):
         # The main input is the name of the argument after `self`
         observed_main_input_name = list(model_signature.parameters.keys())[1]
         self.assertEqual(VQGANModel.main_input_name, observed_main_input_name)
+    
+    def test_model_outputs_equivalence(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        def set_nan_tensor_to_zero(t):
+            t[t != t] = 0
+            return t
+
+        def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
+            with torch.no_grad():
+                tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
+                dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
+
+                def recursive_check(tuple_object, dict_object):
+                    if isinstance(tuple_object, (List, Tuple)):
+                        for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
+                            recursive_check(tuple_iterable_value, dict_iterable_value)
+                    elif isinstance(tuple_object, Dict):
+                        for tuple_iterable_value, dict_iterable_value in zip(
+                            tuple_object.values(), dict_object.values()
+                        ):
+                            recursive_check(tuple_iterable_value, dict_iterable_value)
+                    elif tuple_object is None:
+                        return
+                    else:
+                        self.assertTrue(
+                            torch.allclose(
+                                set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
+                            ),
+                            msg=(
+                                "Tuple and dict output are not equal. Difference:"
+                                f" {torch.max(torch.abs(tuple_object - dict_object))}. Tuple has `nan`:"
+                                f" {torch.isnan(tuple_object).any()} and `inf`: {torch.isinf(tuple_object)}. Dict has"
+                                f" `nan`: {torch.isnan(dict_object).any()} and `inf`: {torch.isinf(dict_object)}."
+                            ),
+                        )
+
+                recursive_check(tuple_output, dict_output)
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
+            check_equivalence(model, tuple_inputs, dict_inputs)
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            check_equivalence(model, tuple_inputs, dict_inputs)
 
     @slow
     def test_model_from_pretrained(self):

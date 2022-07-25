@@ -86,8 +86,8 @@ class VQGANModelOutput(ModelOutput):
     """
 
     reconstructed_pixel_values: torch.FloatTensor = None
-    codebook_indices: torch.LongTensor = None
     quantized_states: torch.FloatTensor = None
+    codebook_indices: torch.LongTensor = None
     codebook_loss: Optional[torch.FloatTensor] = None
 
 
@@ -560,6 +560,13 @@ class VQGANPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
+
+    def _init_weights(self, module):
+        if isinstance(module, nn.Conv2d):
+            nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
+        elif isinstance(module, (nn.BatchNorm2d, nn.GroupNorm)):
+            nn.init.constant_(module.weight, 1)
+            nn.init.constant_(module.bias, 0)
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
