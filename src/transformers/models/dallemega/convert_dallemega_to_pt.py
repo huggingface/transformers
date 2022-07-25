@@ -72,10 +72,10 @@ replace_patterns = [
     ("FlaxBartAttention_1", "encoder_attn"),
     ("GLU_0", "ffn"),
     ("final_ln", "final_layernorm"),
-    ("LayerNorm_0", "pre_attn_layer_norm"),
-    ("LayerNorm_1", "post_attn_layer_norm"),
-    ("LayerNorm_2", "pre_encoder_attn_layer_norm"),
-    ("LayerNorm_3", "post_encoder_attn_layer_norm"),
+    ("LayerNorm_0", "pre_attn_layernorm"),
+    ("LayerNorm_1", "post_attn_layernorm"),
+    ("LayerNorm_2", "pre_encoder_attn_layernorm"),
+    ("LayerNorm_3", "post_encoder_attn_layernorm"),
 ]
 
 
