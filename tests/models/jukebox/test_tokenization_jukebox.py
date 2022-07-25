@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The HuggingFace Team. All rights reserved.
+# Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,199 +13,197 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-# import json
-# import os
-# import unittest
-
-# from transformers import JukeboxTokenizer, JukeboxTokenizerFast
-# from transformers.models.jukebox.tokenization_jukebox import VOCAB_FILES_NAMES
-# from transformers.testing_utils import require_tokenizers
-
 import unittest
 
-# from ..test_tokenization_common import TokenizerTesterMixin
 from transformers import JukeboxTokenizer
+from transformers.testing_utils import require_torch
 
 
-class JukeBoxIntegrationTest(unittest.TestCase):
+class JukeboxTokenizationTest(unittest.TestCase):
+    tokenizer_class = JukeboxTokenizer
+    metas = dict(
+        artist="Zac Brown Band",
+        genres="Country",
+        lyrics="""I met a traveller from an antique land,
+        Who said "Two vast and trunkless legs of stone
+        Stand in the desert. . . . Near them, on the sand,
+        Half sunk a shattered visage lies, whose frown,
+        And wrinkled lip, and sneer of cold command,
+        Tell that its sculptor well those passions read
+        Which yet survive, stamped on these lifeless things,
+        The hand that mocked them, and the heart that fed;
+        And on the pedestal, these words appear:
+        My name is Ozymandias, King of Kings;
+        Look on my Works, ye Mighty, and despair!
+        Nothing beside remains. Round the decay
+        Of that colossal Wreck, boundless and bare
+        The lone and level sands stretch far away
+        """,
+    )
 
-    # @slow
-    def test_tokenizer(self):
+    @require_torch
+    def test_1b_lyrics_tokenizer(self):
         """
         how to run the same test with openAI
         ...
         """
+        import torch
 
-        tokenizer = JukeboxTokenizer.from_pretrained("ArthurZ/jukebox")
-        tokenizer.max_n_lyric_tokens = 20
-        tokens = tokenizer("Alan Jackson", "rock", "old town road", 4 * 60 * 44100, 8192 * 8 * 4 * 4, 0)
-        inputs, attention_masks = tokens["input_ids"]["y"], tokens["attention_masks"]
+        tokenizer = JukeboxTokenizer.from_pretrained("ArthurZ/jukebox-1b-lyrics")
+        tokens = tokenizer(**self.metas)["input_ids"]
+        # fmt: off
         EXPECTED_OUTPUT = [
-            10584000,
-            0,
-            1048576,
-            145,
-            8,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            41,
-            38,
-            30,
-            77,
-            46,
-            41,
-            49,
-            40,
-            77,
-            44,
-            41,
-            27,
-            30,
+            torch.tensor([[0, 0, 0, 1069, 11]]),
+            torch.tensor([[0, 0, 0, 1069, 11]]),
+            torch.tensor([[
+                0, 0, 0, 7169, 507, 9, 76, 39, 31, 46, 76, 27,
+                76, 46, 44, 27, 48, 31, 38, 38, 31, 44, 76, 32,
+                44, 41, 39, 76, 27, 40, 76, 27, 40, 46, 35, 43,
+                47, 31, 76, 38, 27, 40, 30, 64, 78, 76, 76, 76,
+                76, 76, 76, 76, 76, 23, 34, 41, 76, 45, 27, 35,
+                30, 76, 71, 20, 49, 41, 76, 48, 27, 45, 46, 76,
+                27, 40, 30, 76, 46, 44, 47, 40, 37, 38, 31, 45,
+                45, 76, 38, 31, 33, 45, 76, 41, 32, 76, 45, 46,
+                41, 40, 31, 78, 76, 76, 76, 76, 76, 76, 76, 76,
+                19, 46, 27, 40, 30, 76, 35, 40, 76, 46, 34, 31,
+                76, 30, 31, 45, 31, 44, 46, 63, 76, 63, 76, 63,
+                76, 63, 76, 14, 31, 27, 44, 76, 46, 34, 31, 39,
+                64, 76, 41, 40, 76, 46, 34, 31, 76, 45, 27, 40,
+                30, 64, 78, 76, 76, 76, 76, 76, 76, 76, 76, 8,
+                27, 38, 32, 76, 45, 47, 40, 37, 76, 27, 76, 45,
+                34, 27, 46, 46, 31, 44, 31, 30, 76, 48, 35, 45,
+                27, 33, 31, 76, 38, 35, 31, 45, 64, 76, 49, 34,
+                41, 45, 31, 76, 32, 44, 41, 49, 40, 64, 78, 76,
+                76, 76, 76, 76, 76, 76, 76, 1, 40, 30, 76, 49,
+                44, 35, 40, 37, 38, 31, 30, 76, 38, 35, 42, 64,
+                76, 27, 40, 30, 76, 45, 40, 31, 31, 44, 76, 41,
+                32, 76, 29, 41, 38, 30, 76, 29, 41, 39, 39, 27,
+                40, 30, 64, 78, 76, 76, 76, 76, 76, 76, 76, 76,
+                20, 31, 38, 38, 76, 46, 34, 27, 46, 76, 35, 46,
+                45, 76, 45, 29, 47, 38, 42, 46, 41, 44, 76, 49,
+                31, 38, 38, 76, 46, 34, 41, 45, 31, 76, 42, 27,
+                45, 45, 35, 41, 40, 45, 76, 44, 31, 27, 30, 78,
+                76, 76, 76, 76, 76, 76, 76, 76, 23, 34, 35, 29,
+                34, 76, 51, 31, 46, 76, 45, 47, 44, 48, 35, 48,
+                31, 64, 76, 45, 46, 27, 39, 42, 31, 30, 76, 41,
+                40, 76, 46, 34, 31, 45, 31, 76, 38, 35, 32, 31,
+                38, 31, 45, 45, 76, 46, 34, 35, 40, 33, 45, 64,
+                78, 76, 76, 76, 76, 76, 76, 76, 76, 20, 34, 31,
+                76, 34, 27, 40, 30, 76, 46, 34, 27, 46, 76, 39,
+                41, 29, 37, 31, 30, 76, 46, 34, 31, 39, 64, 76,
+                27, 40, 30, 76, 46, 34, 31, 76, 34, 31, 27, 44,
+                46, 76, 46, 34, 27, 46, 76, 32, 31, 30, 66, 78,
+                76, 76, 76, 76, 76, 76, 76, 76, 1, 40, 30, 76,
+                41, 40, 76, 46, 34, 31, 76, 42, 31, 30, 31, 45,
+                46, 27, 38, 64, 76, 46, 34, 31, 45, 31, 76, 49,
+                41, 44, 30, 45, 76, 27, 42, 42, 31, 27, 44, 65,
+                78, 76, 76, 76, 76, 76, 76, 76, 76, 13, 51, 76,
+                40, 27, 39, 31, 76, 35, 45, 76, 15, 52, 51, 39,
+                27, 40, 30, 35, 27, 45, 64, 76, 11, 35, 40, 33,
+                76, 41, 32, 76, 11, 35, 40, 33, 45, 66, 78, 76,
+                76, 76, 76, 76, 76, 76, 76, 12, 41, 41, 37, 76,
+                41, 40, 76, 39, 51, 76, 23, 41, 44, 37, 45, 64,
+                76, 51, 31, 76, 13, 35, 33, 34, 46, 51, 64, 76,
+                27, 40, 30, 76, 30, 31, 45, 42, 27, 35, 44, 67,
+                78, 76, 76, 76, 76, 76, 76, 76, 76, 14, 41, 46,
+                34, 35, 40, 33, 76, 28, 31, 45, 35, 30, 31, 76,
+                44, 31, 39, 27, 35, 40, 45, 63, 76, 18, 41, 47,
+                40, 30, 76, 46, 34, 31, 76, 30, 31, 29, 27, 51,
+                78, 76, 76, 76, 76, 76, 76, 76, 76, 15, 32, 76,
+                46, 34, 27, 46, 76, 29, 41, 38, 41, 45, 45, 27,
+                38, 76, 23, 44, 31, 29, 37, 64, 76, 28, 41, 47,
+                40, 30, 38, 31, 45, 45, 76, 27, 40, 30, 76, 28,
+                27, 44, 31, 78, 76, 76, 76, 76, 76, 76, 76, 76,
+                20, 34, 31, 76, 38, 41, 40, 31, 76, 27, 40, 30,
+                76, 38, 31, 48, 31, 38, 76, 45, 27, 40, 30, 45,
+                76, 45, 46, 44, 31, 46, 29, 34, 76, 32, 27, 44,
+                76, 27, 49, 27, 51, 78, 76, 76, 76, 76, 76, 76,
+                76, 76]])
         ]
+        # fmt: on
+        self.assertTrue(torch.allclose(tokens[0], EXPECTED_OUTPUT[0]))
+        self.assertTrue(torch.allclose(tokens[1], EXPECTED_OUTPUT[1]))
+        self.assertTrue(torch.allclose(tokens[2], EXPECTED_OUTPUT[2]))
 
-        self.assertTrue(inputs == EXPECTED_OUTPUT)
-        EXPECTED_MASK_OUTPUT = [-float("inf")] * 7 + [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-        self.assertTrue(attention_masks == EXPECTED_MASK_OUTPUT)
+    @require_torch
+    def test_5b_lyrics_tokenizer(self):
+        """
+        The outputs are similar that open AI but do not have the same format as this one is adapted to the HF integration.
+        """
+        import torch
 
-
-# @require_tokenizers
-# class JukeboxTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
-#     tokenizer_class = JukeboxTokenizer
-#     rust_tokenizer_class = JukeboxTokenizerFast
-#     test_rust_tokenizer = True
-#     from_pretrained_kwargs = {"add_prefix_space": True}
-#     test_seq2seq = False
-
-#     def setUp(self):
-#         super().setUp()
-
-#         vocab = {
-#             "artist": {"Marron 5": 0, "Bob Marley": 1},
-#             "genres": {"Pop": 0, "Rap": 1},
-#             "lyrics": {
-#                 c: i
-#                 for c, i in enumerate(
-#                     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,:;!?-'\"()[] \t\n"
-#                 )
-#             },
-#         }
-#         self.special_tokens_map = {"unk_token": "<unk>"}
-
-#         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-#         with open(self.vocab_file, "w", encoding="utf-8") as fp:
-#             fp.write(json.dumps(vocab) + "\n")
-
-#     def get_tokenizer(self, **kwargs):
-#         kwargs.update(self.special_tokens_map)
-#         return JukeboxTokenizer.from_pretrained(self.tmpdirname, **kwargs)
-
-#     def get_rust_tokenizer(self, **kwargs):
-#         kwargs.update(self.special_tokens_map)
-#         return JukeboxTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
-
-#     def get_input_output_texts(self, tokenizer):
-#         input_text = "lower newer"
-#         output_text = "lower newer"
-#         return input_text, output_text
-
-#     # TODO: mostly modify this part
-#     def test_full_tokenizer(self):
-#         tokenizer = JukeboxTokenizer(self.vocab_file, self.merges_file, **self.special_tokens_map)
-#         text = "lower newer"
-#         bpe_tokens = ["\u0120low", "er", "\u0120", "n", "e", "w", "er"]
-#         tokens = tokenizer.tokenize(text, add_prefix_space=True)
-#         self.assertListEqual(tokens, bpe_tokens)
-
-#         input_tokens = tokens + [tokenizer.unk_token]
-#         input_bpe_tokens = [14, 15, 10, 9, 3, 2, 15, 19]
-#         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
-
-#     def test_rust_and_python_full_tokenizers(self):
-#         if not self.test_rust_tokenizer:
-#             return
-
-#         tokenizer = self.get_tokenizer()
-#         rust_tokenizer = self.get_rust_tokenizer(add_prefix_space=True)
-
-#         sequence = "lower newer"
-
-#         # Testing tokenization
-#         tokens = tokenizer.tokenize(sequence, add_prefix_space=True)
-#         rust_tokens = rust_tokenizer.tokenize(sequence)
-#         self.assertListEqual(tokens, rust_tokens)
-
-#         # Testing conversion to ids without special tokens
-#         ids = tokenizer.encode(sequence, add_special_tokens=False, add_prefix_space=True)
-#         rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
-#         self.assertListEqual(ids, rust_ids)
-
-#         # Testing conversion to ids with special tokens
-#         rust_tokenizer = self.get_rust_tokenizer(add_prefix_space=True)
-#         ids = tokenizer.encode(sequence, add_prefix_space=True)
-#         rust_ids = rust_tokenizer.encode(sequence)
-#         self.assertListEqual(ids, rust_ids)
-
-#         # Testing the unknown token
-#         input_tokens = tokens + [rust_tokenizer.unk_token]
-#         input_bpe_tokens = [14, 15, 10, 9, 3, 2, 15, 19]
-#         self.assertListEqual(rust_tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
-
-#     def test_pretokenized_inputs(self, *args, **kwargs):
-#         # It's very difficult to mix/test pretokenization with byte-level
-#         # And get both Jukebox and Roberta to work at the same time (mostly an issue of adding a space before the string)
-#         pass
-
-#     def test_padding(self, max_length=15):
-#         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-#             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-#                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-
-#                 # Simple input
-#                 s = "This is a simple input"
-#                 s2 = ["This is a simple input 1", "This is a simple input 2"]
-#                 p = ("This is a simple input", "This is a pair")
-#                 p2 = [
-#                     ("This is a simple input 1", "This is a simple input 2"),
-#                     ("This is a simple pair 1", "This is a simple pair 2"),
-#                 ]
-
-#                 # Simple input tests
-#                 self.assertRaises(ValueError, tokenizer_r.encode, s, max_length=max_length, padding="max_length")
-
-#                 # Simple input
-#                 self.assertRaises(ValueError, tokenizer_r.encode_plus, s, max_length=max_length, padding="max_length")
-
-#                 # Simple input
-#                 self.assertRaises(
-#                     ValueError,
-#                     tokenizer_r.batch_encode_plus,
-#                     s2,
-#                     max_length=max_length,
-#                     padding="max_length",
-#                 )
-
-#                 # Pair input
-#                 self.assertRaises(ValueError, tokenizer_r.encode, p, max_length=max_length, padding="max_length")
-
-#                 # Pair input
-#                 self.assertRaises(ValueError, tokenizer_r.encode_plus, p, max_length=max_length, padding="max_length")
-
-#                 # Pair input
-#                 self.assertRaises(
-#                     ValueError,
-#                     tokenizer_r.batch_encode_plus,
-#                     p2,
-#                     max_length=max_length,
-#                     padding="max_length",
-#                 )
-
-#     # tokenizer has no padding token
-#     def test_padding_different_model_input_name(self):
-#         pass
+        tokenizer = JukeboxTokenizer.from_pretrained("ArthurZ/jukebox-5b-lyrics")
+        tokens = tokenizer(**self.metas)["input_ids"]
+        # fmt: off
+        EXPECTED_OUTPUT = [
+            torch.tensor([[0, 0, 0, 1069, 11, -1, -1, -1, -1]]),
+            torch.tensor([[0, 0, 0, 1069, 11, -1, -1, -1, -1]]),
+            torch.tensor([[
+                0, 0, 0, 1069, 11, -1, -1, -1, -1, 9, 77, 39,
+                31, 46, 77, 27, 77, 46, 44, 27, 48, 31, 38, 38,
+                31, 44, 77, 32, 44, 41, 39, 77, 27, 40, 77, 27,
+                40, 46, 35, 43, 47, 31, 77, 38, 27, 40, 30, 64,
+                79, 77, 77, 77, 77, 77, 77, 77, 77, 23, 34, 41,
+                77, 45, 27, 35, 30, 77, 72, 20, 49, 41, 77, 48,
+                27, 45, 46, 77, 27, 40, 30, 77, 46, 44, 47, 40,
+                37, 38, 31, 45, 45, 77, 38, 31, 33, 45, 77, 41,
+                32, 77, 45, 46, 41, 40, 31, 79, 77, 77, 77, 77,
+                77, 77, 77, 77, 19, 46, 27, 40, 30, 77, 35, 40,
+                77, 46, 34, 31, 77, 30, 31, 45, 31, 44, 46, 63,
+                77, 63, 77, 63, 77, 63, 77, 14, 31, 27, 44, 77,
+                46, 34, 31, 39, 64, 77, 41, 40, 77, 46, 34, 31,
+                77, 45, 27, 40, 30, 64, 79, 77, 77, 77, 77, 77,
+                77, 77, 77, 8, 27, 38, 32, 77, 45, 47, 40, 37,
+                77, 27, 77, 45, 34, 27, 46, 46, 31, 44, 31, 30,
+                77, 48, 35, 45, 27, 33, 31, 77, 38, 35, 31, 45,
+                64, 77, 49, 34, 41, 45, 31, 77, 32, 44, 41, 49,
+                40, 64, 79, 77, 77, 77, 77, 77, 77, 77, 77, 1,
+                40, 30, 77, 49, 44, 35, 40, 37, 38, 31, 30, 77,
+                38, 35, 42, 64, 77, 27, 40, 30, 77, 45, 40, 31,
+                31, 44, 77, 41, 32, 77, 29, 41, 38, 30, 77, 29,
+                41, 39, 39, 27, 40, 30, 64, 79, 77, 77, 77, 77,
+                77, 77, 77, 77, 20, 31, 38, 38, 77, 46, 34, 27,
+                46, 77, 35, 46, 45, 77, 45, 29, 47, 38, 42, 46,
+                41, 44, 77, 49, 31, 38, 38, 77, 46, 34, 41, 45,
+                31, 77, 42, 27, 45, 45, 35, 41, 40, 45, 77, 44,
+                31, 27, 30, 79, 77, 77, 77, 77, 77, 77, 77, 77,
+                23, 34, 35, 29, 34, 77, 51, 31, 46, 77, 45, 47,
+                44, 48, 35, 48, 31, 64, 77, 45, 46, 27, 39, 42,
+                31, 30, 77, 41, 40, 77, 46, 34, 31, 45, 31, 77,
+                38, 35, 32, 31, 38, 31, 45, 45, 77, 46, 34, 35,
+                40, 33, 45, 64, 79, 77, 77, 77, 77, 77, 77, 77,
+                77, 20, 34, 31, 77, 34, 27, 40, 30, 77, 46, 34,
+                27, 46, 77, 39, 41, 29, 37, 31, 30, 77, 46, 34,
+                31, 39, 64, 77, 27, 40, 30, 77, 46, 34, 31, 77,
+                34, 31, 27, 44, 46, 77, 46, 34, 27, 46, 77, 32,
+                31, 30, 66, 79, 77, 77, 77, 77, 77, 77, 77, 77,
+                1, 40, 30, 77, 41, 40, 77, 46, 34, 31, 77, 42,
+                31, 30, 31, 45, 46, 27, 38, 64, 77, 46, 34, 31,
+                45, 31, 77, 49, 41, 44, 30, 45, 77, 27, 42, 42,
+                31, 27, 44, 65, 79, 77, 77, 77, 77, 77, 77, 77,
+                77, 13, 51, 77, 40, 27, 39, 31, 77, 35, 45, 77,
+                15, 52, 51, 39, 27, 40, 30, 35, 27, 45, 64, 77,
+                11, 35, 40, 33, 77, 41, 32, 77, 11, 35, 40, 33,
+                45, 66, 79, 77, 77, 77, 77, 77, 77, 77, 77, 12,
+                41, 41, 37, 77, 41, 40, 77, 39, 51, 77, 23, 41,
+                44, 37, 45, 64, 77, 51, 31, 77, 13, 35, 33, 34,
+                46, 51, 64, 77, 27, 40, 30, 77, 30, 31, 45, 42,
+                27, 35, 44, 67, 79, 77, 77, 77, 77, 77, 77, 77,
+                77, 14, 41, 46, 34, 35, 40, 33, 77, 28, 31, 45,
+                35, 30, 31, 77, 44, 31, 39, 27, 35, 40, 45, 63,
+                77, 18, 41, 47, 40, 30, 77, 46, 34, 31, 77, 30,
+                31, 29, 27, 51, 79, 77, 77, 77, 77, 77, 77, 77,
+                77, 15, 32, 77, 46, 34, 27, 46, 77, 29, 41, 38,
+                41, 45, 45, 27, 38, 77, 23, 44, 31, 29, 37, 64,
+                77, 28, 41, 47, 40, 30, 38, 31, 45, 45, 77, 27,
+                40, 30, 77, 28, 27, 44, 31, 79, 77, 77, 77, 77,
+                77, 77, 77, 77, 20, 34, 31, 77, 38, 41, 40, 31,
+                77, 27, 40, 30, 77, 38, 31, 48, 31, 38, 77, 45,
+                27, 40, 30, 45, 77, 45, 46, 44, 31, 46, 29, 34,
+                77, 32, 27, 44, 77, 27, 49, 27, 51, 79, 77, 77,
+                77, 77, 77, 77, 77, 77]])
+        ]
+        # fmt: on
+        self.assertTrue(torch.allclose(tokens[0], EXPECTED_OUTPUT[0]))
+        self.assertTrue(torch.allclose(tokens[1], EXPECTED_OUTPUT[1]))
+        self.assertTrue(torch.allclose(tokens[2], EXPECTED_OUTPUT[2]))

@@ -423,7 +423,7 @@ class BottleneckBlock(nn.Module):
     def init_k(self, x):
         # TODO rename x to a way more meaningful name
 
-        emb_width, k_bins = self.emb_width, self.k_bins  # mu,
+        _, k_bins = self.emb_width, self.k_bins  # mu,
         self.init = True
         # init k_w using random vectors from x
         y = self._tile(x)
@@ -1967,7 +1967,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
     ):
         if sample_tokens is None:
             sample_tokens = self.input_dims
-        N, D = n_samples, self.input_dims
+        N, _ = n_samples, self.input_dims
 
         if not self.x_cond:
             x_cond = torch.zeros((N, 1, self.width), dtype=torch.float).to(
@@ -2035,7 +2035,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
         xs = torch.split(x, 1, dim=1)
         xs = list(xs)
 
-        N, D = n_samples, self.input_dims
+        N, _ = n_samples, self.input_dims
 
         if not self.x_cond:
             x_cond = torch.zeros((N, 1, self.width), dtype=torch.float).to(x.device)
@@ -2902,13 +2902,16 @@ def get_starts(total_length, n_ctx, hop_length):
     return starts
 
 
-def save_wav(fname, lvl, aud, sr):
+def save_wav(fname, lvl, metas, aud, sr):
     import soundfile
 
+    artists, genres, lyrics = metas.values()
     # clip before saving?
     aud = torch.clamp(aud, -1, 1).cpu().numpy()
     for i in list(range(aud.shape[0])):
-        soundfile.write(f"{fname}/lvl_{lvl}-sample_{i}.wav", aud[i], samplerate=sr, format="wav")
+        soundfile.write(
+            f"{fname}/lvl_{lvl}-{artists[i]}-{genres[i]}-{lyrics[i][:5]}{i}.wav", aud[i], samplerate=sr, format="wav"
+        )
 
 
 def get_alignment(x, zs, labels, prior, level, fp16, hps):
@@ -3007,6 +3010,7 @@ def load_prompts(audio_files, duration, hps):
 class JukeboxModel(JukeboxPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["attn.masked_bias"]
     _no_split_modules = ["JukeboxBlock"]
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -3107,6 +3111,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         self,
         zs,
         labels,
+        metas,
         sample_levels,
         chunk_size=32,
         sampling_temperature=0.98,
@@ -3174,7 +3179,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
             if not os.path.exists(logdir):
                 os.makedirs(logdir)
             torch.save(dict(zs=zs, labels=labels, sampling_kwargs=sampling_kwargs, x=x), f"{logdir}/data.pth.tar")
-            save_wav(logdir, level, x, hps.sr)
+            save_wav(logdir, level, metas, x, hps.sr)
             if (
                 alignments is None and self.priors[-1] is not None and self.priors[-1].n_tokens > 0
             ):  # and not isinstance(self.priors[-1].labeller, Empty`Labeller`):
@@ -3184,10 +3189,10 @@ class JukeboxModel(JukeboxPreTrainedModel):
         return zs
 
     # Generate ancestral samples given a list of artists and genres
-    def ancestral_sample(self, labels, n_samples=1, **sampling_kwargs):
+    def ancestral_sample(self, labels, metas, n_samples=1, **sampling_kwargs):
         sample_levels = sampling_kwargs.pop("sample_levels", list(range(len(self.priors))))
         zs = [torch.zeros(n_samples, 0, dtype=torch.long, device=labels[0].device) for _ in range(len(self.priors))]
-        zs = self._sample(zs, labels, sample_levels, **sampling_kwargs)
+        zs = self._sample(zs, labels, metas, sample_levels, **sampling_kwargs)
         return zs
 
     # Continue ancestral sampling from previously saved codes

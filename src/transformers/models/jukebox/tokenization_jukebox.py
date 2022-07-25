@@ -75,7 +75,10 @@ def get_relevant_lyric_tokens(full_tokens, max_n_lyric_tokens, total_length, off
     """
     full_tokens = full_tokens[0]
     if len(full_tokens) < max_n_lyric_tokens:
-        tokens = [0] * (max_n_lyric_tokens - len(full_tokens)) + full_tokens
+        tokens = torch.cat([torch.zeros(max_n_lyric_tokens - len(full_tokens)), full_tokens])
+        # tokens = torch.cat([0] * (max_n_lyric_tokens - len(full_tokens)), full_tokens)
+        # did not handle that before but now the full_tokens are torch tensors
+        # because the tokenizer outputs tensors and not list (choice ma)
         indices = [-1] * (max_n_lyric_tokens - len(full_tokens)) + list(range(0, len(full_tokens)))
     else:
         assert 0 <= offset < total_length
@@ -243,13 +246,12 @@ class JukeboxTokenizer(PreTrainedTokenizer):
             lyrics (`_type_`):
                 _description_
         """
-        artist, genre, lyrics, kwargs = self.prepare_for_tokenization(artist, genre, lyrics, **kwargs)
-        # TODO deal with the kwargs here
+        artist, genre, lyrics = self.prepare_for_tokenization(artist, genre, lyrics)
         lyrics = self._tokenize(lyrics)
         return artist, genre, lyrics
 
     def prepare_for_tokenization(
-        self, artists: str, genres: str, lyrics: str, is_split_into_words: bool = False, **kwargs
+        self, artists: str, genres: str, lyrics: str, is_split_into_words: bool = False
     ) -> Tuple[str, str, str, Dict[str, Any]]:
         """
         Performs any necessary transformations before tokenization.
@@ -269,10 +271,10 @@ class JukeboxTokenizer(PreTrainedTokenizer):
                 tokenizer assumes the input is already split into words (for instance, by splitting it on whitespace)
                 which it will tokenize. This is useful for NER or token classification.
             kwargs:
-                Keyword arguments to use for the tokenization. #TODO v3 could be handled here
+                Keyword arguments to use for the tokenization.
 
         Returns:
-            `Tuple[str, str, str, Dict[str, Any]]`: The prepared text and the unused kwargs.
+            `Tuple[str, Union[List[str]|str], str, Dict[str, Any]]`:
         """
         for idx in range(len(self.version)):
             if self.version[idx] == "v3":
@@ -280,11 +282,11 @@ class JukeboxTokenizer(PreTrainedTokenizer):
                 genres[idx] = [genres[idx].lower()]
             else:
                 artists[idx] = self._normalize(artists[idx]) + ".v2"
-                genres[idx] = self._normalize(genres[idx] + ".v2").split(
-                    "_"
-                )  # split is for the full dictionnary with combined genres
+                genres[idx] = [
+                    self._normalize(genre) + ".v2" for genre in genres[idx].split("_")
+                ]  # split is for the full dictionnary with combined genres
 
-        if self.version[idx] == "v2":
+        if self.version[-1] == "v2":
             self.out_of_vocab = re.compile("[^A-Za-z0-9.,:;!?\-'\"()\[\] \t\n]+")
             vocab = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,:;!?-+'\"()[] \t\n"
             self.vocab = {vocab[index]: index + 1 for index in range(len(vocab))}
@@ -300,7 +302,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         lyrics = normalizer.normalize_str(lyrics)
         lyrics = lyrics.replace("\\", "\n")
         lyrics = [], [], self.out_of_vocab.sub("", lyrics)
-        return artists, genres, lyrics, kwargs
+        return artists, genres, lyrics
 
     def _normalize(self, text: str) -> str:
         """Normalizes the input text. This process is for the genres and the artit
