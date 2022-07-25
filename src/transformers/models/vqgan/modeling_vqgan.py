@@ -260,11 +260,11 @@ class UpsamplingBlock(nn.Module):
         self.curr_res = curr_res
 
         if self.block_idx == self.config.num_resolutions - 1:
-            block_in = self.config.hidden_channels * self.config.hidden_channels_mult[-1]
+            block_in = self.config.hidden_channels * self.config.channel_mult[-1]
         else:
-            block_in = self.config.hidden_channels * self.config.hidden_channels_mult[self.block_idx + 1]
+            block_in = self.config.hidden_channels * self.config.channel_mult[self.block_idx + 1]
 
-        block_out = self.config.hidden_channels * self.config.hidden_channels_mult[self.block_idx]
+        block_out = self.config.hidden_channels * self.config.channel_mult[self.block_idx]
 
         res_blocks = []
         attn_blocks = []
@@ -301,9 +301,9 @@ class DownsamplingBlock(nn.Module):
         self.curr_res = curr_res
         self.block_idx = block_idx
 
-        in_channel_mult = (1,) + tuple(self.config.hidden_channels_mult)
+        in_channel_mult = (1,) + tuple(self.config.channel_mult)
         block_in = self.config.hidden_channels * in_channel_mult[self.block_idx]
-        block_out = self.config.hidden_channels * self.config.hidden_channels_mult[self.block_idx]
+        block_out = self.config.hidden_channels * self.config.channel_mult[self.block_idx]
 
         res_blocks = nn.ModuleList()
         attn_blocks = nn.ModuleList()
@@ -384,7 +384,7 @@ class Encoder(nn.Module):
         self.down = nn.ModuleList(downsample_blocks)
 
         # middle
-        mid_channels = self.config.hidden_channels * self.config.hidden_channels_mult[-1]
+        mid_channels = self.config.hidden_channels * self.config.channel_mult[-1]
         self.mid = MidBlock(config, mid_channels, self.config.dropout)
 
         # end
@@ -424,7 +424,7 @@ class Decoder(nn.Module):
         self.config = config
 
         # compute in_channel_mult, block_in and curr_res at lowest res
-        block_in = self.config.hidden_channels * self.config.hidden_channels_mult[self.config.num_resolutions - 1]
+        block_in = self.config.hidden_channels * self.config.channel_mult[self.config.num_resolutions - 1]
         curr_res = self.config.resolution // 2 ** (self.config.num_resolutions - 1)
         self.z_shape = (1, self.config.z_channels, curr_res, curr_res)
 
@@ -449,7 +449,7 @@ class Decoder(nn.Module):
         self.up = nn.ModuleList(list(reversed(upsample_blocks)))  # reverse to get consistent order
 
         # end
-        block_out = self.config.hidden_channels * self.config.hidden_channels_mult[0]
+        block_out = self.config.hidden_channels * self.config.channel_mult[0]
         self.norm_out = nn.GroupNorm(num_groups=32, num_channels=block_out, eps=1e-6, affine=True)
         self.activation = SiLUActivation()
         self.conv_out = nn.Conv2d(
