@@ -55,7 +55,7 @@ class VQGANConfig(PretrainedConfig):
         self.num_embeddings = num_embeddings
         self.quantized_embed_dim = quantized_embed_dim
         self.dropout = dropout
-        self.resamp_with_conv = resample_with_conv
+        self.resample_with_conv = resample_with_conv
 
     @property
     def num_resolutions(self):    
