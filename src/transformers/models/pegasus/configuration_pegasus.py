@@ -19,7 +19,7 @@ from typing import Any, Mapping, Optional
 from ... import PreTrainedTokenizer
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfigWithPast, OnnxSeq2SeqConfigWithPast
-from ...utils import logging, is_torch_available, TensorType
+from ...utils import logging, TensorType
 
 logger = logging.get_logger(__name__)
 
