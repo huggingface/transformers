@@ -2909,7 +2909,7 @@ def save_wav(fname, lvl, metas, aud, sr):
     aud = torch.clamp(aud, -1, 1).cpu().numpy()
     for i in list(range(aud.shape[0])):
         if metas is not None:
-            artists, genres, lyrics = metas[i]
+            artists, genres, lyrics = metas[i].values() # twitter prompts or inputs are in the form of a dictionnary
             soundfile.write(
                 f"{fname}/lvl_{lvl}-{artists[i]}-{genres[i]}-{lyrics[i][:5]}{i}.wav",
                 aud[i],
@@ -3212,13 +3212,13 @@ class JukeboxModel(JukeboxPreTrainedModel):
         return zs
 
     # Upsample given already generated upper-level codes
-    def upsample(self, zs, labels, **sampling_kwargs):
+    def upsample(self, zs, labels, metas, **sampling_kwargs):
         sample_levels = list(range(len(self.priors) - 1))
         zs = self._sample(zs, labels, metas, sample_levels, **sampling_kwargs)
         return zs
 
     # Prompt the model with raw audio input (dimension: NTC) and generate continuations
-    def primed_sample(self, x, labels, **sampling_kwargs):
+    def primed_sample(self, x, labels, metas, **sampling_kwargs):
         sample_levels = list(range(len(self.priors)))
         self.vqvae.to(x.device)
         with torch.no_grad():
