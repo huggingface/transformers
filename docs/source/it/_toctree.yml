@@ -24,10 +24,10 @@
   - local: custom_models
     title: Condividere modelli personalizzati
   title: How-to-guides
+- sections:
   - local: run_scripts
     title: Addestramento con script
   - local: multilingual
     title: Modelli multilingua per l'inferenza
-- sections:
   - local: debugging
     title: Debugging
