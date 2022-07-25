@@ -602,6 +602,7 @@ class VQGANModel(VQGANPreTrainedModel):
                 Whether or not to return the codebook loss.
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        Returns:
         """
         hidden_states = self.encoder(pixel_values)
         hidden_states = self.quant_conv(hidden_states)
@@ -656,6 +657,7 @@ class VQGANModel(VQGANPreTrainedModel):
                 Whether or not to return the codebook loss.
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        Returns:
         """
         hidden_states = self.encoder(pixel_values)
         hidden_states = self.quant_conv(hidden_states)
