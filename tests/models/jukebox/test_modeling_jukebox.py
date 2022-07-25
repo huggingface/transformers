@@ -113,7 +113,7 @@ class Jukebox1bModelTester(unittest.TestCase):
     @slow
     @require_torch
     def test_slow_sampling(self):
-        
+
         model_id = "ArthurZ/jukebox-1b-lyrics"
         model = JukeboxModel.from_pretrained(model_id).eval().to("cuda")
 
@@ -122,12 +122,12 @@ class Jukebox1bModelTester(unittest.TestCase):
         zs = [torch.zeros(1, 0, dtype=torch.long).cuda() for _ in range(3)]
 
         top_prior = model.priors[-1]
-        start = 0 
-        z_conds = top_prior.get_z_conds(zs, start = start, end = start + top_prior.n_ctx)
-        y = top_prior.get_y(labels[-1].clone(), start, 1058304 ,0)
-        
+        start = 0
+        z_conds = top_prior.get_z_conds(zs, start=start, end=start + top_prior.n_ctx)
+        y = top_prior.get_y(labels[-1].clone(), start, 1058304, 0)
+
         self.assertIsNone(z_conds)
-        self.assertListEqual(y.cpu().numpy()[0][:10].tolist(),self.EXPECTED_Y_COND)
+        self.assertListEqual(y.cpu().numpy()[0][:10].tolist(), self.EXPECTED_Y_COND)
 
         set_seed(0)
         zs = model._sample(zs, labels, [2], sample_tokens=10, save_wav=False)
@@ -228,8 +228,8 @@ class Jukebox5bModelTester(unittest.TestCase):
         assert torch.allclose(zs[-1][0].cpu(), torch.tensor(self.EXPECTED_OUTPUT_2))
 
     def test_vqvae(self):
-        # test encoding of an audio 
-        # test decoding 
+        # test encoding of an audio
+        # test decoding
         # implement vavae decoding test at 3 levels using the expected outputs
         pass
 

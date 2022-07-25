@@ -2909,7 +2909,7 @@ def save_wav(fname, lvl, metas, aud, sr):
     aud = torch.clamp(aud, -1, 1).cpu().numpy()
     for i in list(range(aud.shape[0])):
         if metas is not None:
-            artists, genres, lyrics = metas[i].values() # twitter prompts or inputs are in the form of a dictionnary
+            artists, genres, lyrics = metas[i].values()  # twitter prompts or inputs are in the form of a dictionnary
             soundfile.write(
                 f"{fname}/lvl_{lvl}-{artists[i]}-{genres[i]}-{lyrics[i][:5]}{i}.wav",
                 aud[i],
