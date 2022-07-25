@@ -281,8 +281,6 @@ class TFRepetitionPenaltyLogitsProcessor(TFLogitsProcessor):
 
         return scores
 
-import pdb
-import sys
 
 class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
     """
