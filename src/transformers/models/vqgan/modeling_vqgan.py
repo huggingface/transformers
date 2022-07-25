@@ -253,11 +253,11 @@ class UpsamplingBlock(nn.Module):
         self.curr_res = curr_res
 
         if self.block_idx == self.config.num_resolutions - 1:
-            block_in = self.config.ch * self.config.ch_mult[-1]
+            block_in = self.config.hidden_channels * self.config.hidden_channels_mult[-1]
         else:
-            block_in = self.config.ch * self.config.ch_mult[self.block_idx + 1]
+            block_in = self.config.hidden_channels * self.config.hidden_channels_mult[self.block_idx + 1]
 
-        block_out = self.config.ch * self.config.ch_mult[self.block_idx]
+        block_out = self.config.hidden_channels * self.config.hidden_channels_mult[self.block_idx]
 
         res_blocks = []
         attn_blocks = []
@@ -272,7 +272,7 @@ class UpsamplingBlock(nn.Module):
 
         self.upsample = None
         if self.block_idx != 0:
-            self.upsample = Upsample(block_in, self.config.resamp_with_conv)
+            self.upsample = Upsample(block_in, self.config.resample_with_conv)
 
     def forward(self, hidden_states):
         for i, res_block in enumerate(self.block):
@@ -294,9 +294,9 @@ class DownsamplingBlock(nn.Module):
         self.curr_res = curr_res
         self.block_idx = block_idx
 
-        in_ch_mult = (1,) + tuple(self.config.ch_mult)
-        block_in = self.config.ch * in_ch_mult[self.block_idx]
-        block_out = self.config.ch * self.config.ch_mult[self.block_idx]
+        in_channel_mult = (1,) + tuple(self.config.hidden_channels_mult)
+        block_in = self.config.hidden_channels * in_channel_mult[self.block_idx]
+        block_out = self.config.hidden_channels * self.config.hidden_channels_mult[self.block_idx]
 
         res_blocks = nn.ModuleList()
         attn_blocks = nn.ModuleList()
@@ -311,7 +311,7 @@ class DownsamplingBlock(nn.Module):
 
         self.downsample = None
         if self.block_idx != self.config.num_resolutions - 1:
-            self.downsample = Downsample(block_in, self.config.resamp_with_conv)
+            self.downsample = Downsample(block_in, self.config.resample_with_conv)
 
     def forward(self, hidden_states):
         for i, res_block in enumerate(self.block):
@@ -360,8 +360,8 @@ class Encoder(nn.Module):
 
         # downsampling
         self.conv_in = nn.Conv2d(
-            self.config.in_channels,
-            self.config.ch,
+            self.config.num_channels,
+            self.config.hidden_channels,
             kernel_size=3,
             stride=1,
             padding=1,
@@ -377,7 +377,7 @@ class Encoder(nn.Module):
         self.down = nn.ModuleList(downsample_blocks)
 
         # middle
-        mid_channels = self.config.ch * self.config.ch_mult[-1]
+        mid_channels = self.config.hidden_channels * self.config.hidden_channels_mult[-1]
         self.mid = MidBlock(config, mid_channels, self.config.dropout)
 
         # end
@@ -385,7 +385,7 @@ class Encoder(nn.Module):
         self.activation = SiLUActivation()
         self.conv_out = nn.Conv2d(
             mid_channels,
-            2 * self.config.z_channels if self.config.double_z else self.config.z_channels,
+            self.config.z_channels,
             kernel_size=3,
             stride=1,
             padding=1,
@@ -416,8 +416,8 @@ class Decoder(nn.Module):
 
         self.config = config
 
-        # compute in_ch_mult, block_in and curr_res at lowest res
-        block_in = self.config.ch * self.config.ch_mult[self.config.num_resolutions - 1]
+        # compute in_channel_mult, block_in and curr_res at lowest res
+        block_in = self.config.hidden_channels * self.config.hidden_channels_mult[self.config.num_resolutions - 1]
         curr_res = self.config.resolution // 2 ** (self.config.num_resolutions - 1)
         self.z_shape = (1, self.config.z_channels, curr_res, curr_res)
 
@@ -442,12 +442,12 @@ class Decoder(nn.Module):
         self.up = nn.ModuleList(list(reversed(upsample_blocks)))  # reverse to get consistent order
 
         # end
-        block_out = self.config.ch * self.config.ch_mult[0]
+        block_out = self.config.hidden_channels * self.config.hidden_channels_mult[0]
         self.norm_out = nn.GroupNorm(num_groups=32, num_channels=block_out, eps=1e-6, affine=True)
         self.activation = SiLUActivation()
         self.conv_out = nn.Conv2d(
             block_out,
-            self.config.out_ch,
+            self.config.num_channels,
             kernel_size=3,
             stride=1,
             padding=1,
@@ -465,9 +465,6 @@ class Decoder(nn.Module):
             hidden_states = block(hidden_states)
 
         # end
-        if self.config.give_pre_end:
-            return hidden_states
-
         hidden_states = self.norm_out(hidden_states)
         hidden_states = self.activation(hidden_states)
         hidden_states = self.conv_out(hidden_states)
@@ -489,8 +486,8 @@ class VectorQuantizer(nn.Module):
         super().__init__()
 
         self.config = config
-        self.embedding = nn.Embedding(self.config.n_embed, self.config.embed_dim)  # TODO: init
-        self.embedding.weight.data.uniform_(-1.0 / self.config.n_embed, 1.0 / self.config.n_embed)
+        self.embedding = nn.Embedding(self.config.num_embeddings, self.config.quantized_embed_dim)  # TODO: init
+        self.embedding.weight.data.uniform_(-1.0 / self.config.num_embeddings, 1.0 / self.config.num_embeddings)
         self.beta = 0.2
 
     def forward(self, hidden_states, return_loss=False):
@@ -503,7 +500,7 @@ class VectorQuantizer(nn.Module):
         """
         # reshape z -> (batch, height, width, channel) and flatten
         hidden_states = hidden_states.permute(0, 2, 3, 1).contiguous()
-        hidden_states_flattended = hidden_states.reshape((-1, self.config.embed_dim))
+        hidden_states_flattended = hidden_states.reshape((-1, self.config.quantized_embed_dim))
 
         # distances from z to embeddings e_j (z - e)^2 = z^2 + e^2 - 2 e * z
         emb_weights = self.embedding.weight
@@ -514,7 +511,7 @@ class VectorQuantizer(nn.Module):
         )
 
         min_encoding_indices = torch.argmin(distance, axis=1).unsqueeze(1)
-        min_encodings = torch.zeros(min_encoding_indices.shape[0], self.config.n_embed).to(hidden_states)
+        min_encodings = torch.zeros(min_encoding_indices.shape[0], self.config.num_embeddings).to(hidden_states)
         min_encodings.scatter_(1, min_encoding_indices, 1)
 
         # get quantized latent vectors
@@ -572,11 +569,11 @@ class VQGANModel(VQGANPreTrainedModel):
         self.quantize = VectorQuantizer(self.config)
         self.quant_conv = nn.Conv2d(
             self.config.z_channels,
-            self.config.embed_dim,
+            self.config.quantized_embed_dim,
             kernel_size=1,
         )
         self.post_quant_conv = nn.Conv2d(
-            self.config.embed_dim,
+            self.config.quantized_embed_dim,
             self.config.z_channels,
             kernel_size=1,
         )
