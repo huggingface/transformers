@@ -273,6 +273,13 @@ _import_structure = {
     ],
     "models.openai": ["OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OpenAIGPTConfig", "OpenAIGPTTokenizer"],
     "models.opt": ["OPTConfig"],
+    "models.owlvit": [
+        "OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "OwlViTConfig",
+        "OwlViTProcessor",
+        "OwlViTTextConfig",
+        "OwlViTVisionConfig",
+    ],
     "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
     "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
     "models.phobert": ["PhobertTokenizer"],
@@ -641,6 +648,7 @@ else:
     _import_structure["models.levit"].append("LevitFeatureExtractor")
     _import_structure["models.maskformer"].append("MaskFormerFeatureExtractor")
     _import_structure["models.mobilevit"].append("MobileViTFeatureExtractor")
+    _import_structure["models.owlvit"].append("OwlViTFeatureExtractor")
     _import_structure["models.perceiver"].append("PerceiverFeatureExtractor")
     _import_structure["models.poolformer"].append("PoolFormerFeatureExtractor")
     _import_structure["models.segformer"].append("SegformerFeatureExtractor")
@@ -1504,6 +1512,17 @@ else:
             "OPTForCausalLM",
             "OPTModel",
             "OPTPreTrainedModel",
+            "OPTForSequenceClassification",
+        ]
+    )
+    _import_structure["models.owlvit"].extend(
+        [
+            "OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "OwlViTModel",
+            "OwlViTPreTrainedModel",
+            "OwlViTTextModel",
+            "OwlViTVisionModel",
+            "OwlViTForObjectDetection",
         ]
     )
     _import_structure["models.pegasus"].extend(
@@ -2430,6 +2449,16 @@ else:
             "TFRoFormerPreTrainedModel",
         ]
     )
+    _import_structure["models.segformer"].extend(
+        [
+            "TF_SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFSegformerDecodeHead",
+            "TFSegformerForImageClassification",
+            "TFSegformerForSemanticSegmentation",
+            "TFSegformerModel",
+            "TFSegformerPreTrainedModel",
+        ]
+    )
     _import_structure["models.speech_to_text"].extend(
         [
             "TF_SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3002,6 +3031,13 @@ if TYPE_CHECKING:
     from .models.nystromformer import NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, NystromformerConfig
     from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
     from .models.opt import OPTConfig
+    from .models.owlvit import (
+        OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        OwlViTConfig,
+        OwlViTProcessor,
+        OwlViTTextConfig,
+        OwlViTVisionConfig,
+    )
     from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
     from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
     from .models.phobert import PhobertTokenizer
@@ -3318,6 +3354,7 @@ if TYPE_CHECKING:
         from .models.levit import LevitFeatureExtractor
         from .models.maskformer import MaskFormerFeatureExtractor
         from .models.mobilevit import MobileViTFeatureExtractor
+        from .models.owlvit import OwlViTFeatureExtractor
         from .models.perceiver import PerceiverFeatureExtractor
         from .models.poolformer import PoolFormerFeatureExtractor
         from .models.segformer import SegformerFeatureExtractor
@@ -4027,7 +4064,21 @@ if TYPE_CHECKING:
             OpenAIGPTPreTrainedModel,
             load_tf_weights_in_openai_gpt,
         )
-        from .models.opt import OPT_PRETRAINED_MODEL_ARCHIVE_LIST, OPTForCausalLM, OPTModel, OPTPreTrainedModel
+        from .models.opt import (
+            OPT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            OPTForCausalLM,
+            OPTForSequenceClassification,
+            OPTModel,
+            OPTPreTrainedModel,
+        )
+        from .models.owlvit import (
+            OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            OwlViTForObjectDetection,
+            OwlViTModel,
+            OwlViTPreTrainedModel,
+            OwlViTTextModel,
+            OwlViTVisionModel,
+        )
         from .models.pegasus import (
             PegasusForCausalLM,
             PegasusForConditionalGeneration,
@@ -4783,6 +4834,14 @@ if TYPE_CHECKING:
             TFRoFormerLayer,
             TFRoFormerModel,
             TFRoFormerPreTrainedModel,
+        )
+        from .models.segformer import (
+            TF_SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFSegformerDecodeHead,
+            TFSegformerForImageClassification,
+            TFSegformerForSemanticSegmentation,
+            TFSegformerModel,
+            TFSegformerPreTrainedModel,
         )
         from .models.speech_to_text import (
             TF_SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,

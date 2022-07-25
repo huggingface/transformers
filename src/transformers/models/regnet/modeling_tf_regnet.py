@@ -371,7 +371,8 @@ class TFRegNetPreTrainedModel(TFPreTrainedModel):
             inputs (`Dict[str, tf.Tensor]`):
                 The input of the saved model as a dictionary of tensors.
         """
-        return self.call(inputs)
+        output = self.call(inputs)
+        return self.serving_output(output)
 
 
 REGNET_START_DOCSTRING = r"""
@@ -444,6 +445,16 @@ class TFRegNetModel(TFRegNetPreTrainedModel):
             hidden_states=outputs.hidden_states,
         )
 
+    def serving_output(
+        self, output: TFBaseModelOutputWithPoolingAndNoAttention
+    ) -> TFBaseModelOutputWithPoolingAndNoAttention:
+        # hidden_states not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
+        return TFBaseModelOutputWithPoolingAndNoAttention(
+            last_hidden_state=output.last_hidden_state,
+            pooler_output=output.pooler_output,
+            hidden_states=output.hidden_states,
+        )
+
 
 @add_start_docstrings(
     """
@@ -506,3 +517,7 @@ class TFRegNetForImageClassification(TFRegNetPreTrainedModel, TFSequenceClassifi
             return ((loss,) + output) if loss is not None else output
 
         return TFSequenceClassifierOutput(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+
+    def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
+        # hidden_states not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
+        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=output.hidden_states)

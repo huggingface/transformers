@@ -98,6 +98,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "FlaxBartForCausalLM",  # Building part of bigger (tested) model.
     "FlaxBertForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through FlaxRobertaForCausalLM.
     "OPTDecoderWrapper",
+    "TFSegformerDecodeHead",  # Not a regular model.
 ]
 
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't
@@ -138,6 +139,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "PerceiverForMultimodalAutoencoding",
     "PerceiverForOpticalFlow",
     "SegformerDecodeHead",
+    "TFSegformerDecodeHead",
     "FlaxBeitForMaskedImageModeling",
     "PLBartEncoder",
     "PLBartDecoder",
@@ -165,6 +167,9 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "LukeForEntityPairClassification",
     "LukeForEntitySpanClassification",
     "OpenAIGPTDoubleHeadsModel",
+    "OwlViTTextModel",
+    "OwlViTVisionModel",
+    "OwlViTForObjectDetection",
     "RagModel",
     "RagSequenceForGeneration",
     "RagTokenForGeneration",

@@ -64,6 +64,7 @@ src/transformers/models/sew_d/modeling_sew_d.py
 src/transformers/models/speech_encoder_decoder/modeling_speech_encoder_decoder.py
 src/transformers/models/speech_to_text/modeling_speech_to_text.py
 src/transformers/models/speech_to_text_2/modeling_speech_to_text_2.py
+src/transformers/models/segformer/modeling_tf_segformer.py
 src/transformers/models/swin/modeling_swin.py
 src/transformers/models/trocr/modeling_trocr.py
 src/transformers/models/unispeech/modeling_unispeech.py

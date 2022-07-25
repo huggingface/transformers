@@ -202,7 +202,7 @@ class KerasMetricCallback(Callback):
 
                 predictions = self.model.generate(generation_inputs, attention_mask=attention_mask)
             else:
-                predictions = self.model.predict(batch)
+                predictions = self.model.predict_on_batch(batch)
                 if isinstance(predictions, dict):
                     # This converts any dict-subclass to a regular dict
                     # Keras REALLY doesn't like it when we pass around a BatchEncoding or other derived class
