@@ -37,7 +37,7 @@ _CHECKPOINT_FOR_DOC = "CompVis/vqgan-imagenet-f16-1024"
 _CONFIG_FOR_DOC = "VQGANConfig"
 
 VQGAN_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "valhalla/vqgan_imagenet_f16_16384",
+    "valhalla/vqgan_imagenet_f16_16384",  # TODO: upload this to CompVis org.
     # See all VQGAN models at https://huggingface.co/models?filter=vqgan
 ]
 

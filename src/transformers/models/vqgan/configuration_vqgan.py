@@ -23,7 +23,9 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 VQGAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "vqgan-imagenet-f16-1024": "https://huggingface.co/vqgan-imagenet-f16-1024/resolve/main/config.json",
+    "valhalla/vqgan_imagenet_f16_16384": (  # TODO: upload this to CompVis org.
+        "https://huggingface.co/valhalla/vqgan_imagenet_f16_16384/resolve/main/config.json"
+    ),
     # See all VQGAN models at https://huggingface.co/models?filter=vqgan
 }
 
@@ -33,7 +35,7 @@ class VQGANConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`VQGANModel`]. It is used to instantiate an VQGAN
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the VQGAN
-    [CompVis/vqgan-imagenet-f16-1024](https://huggingface.co/openai/clip-vit-base-patch32) architecture.
+    [valhalla/vqgan_imagenet_f16_16384](https://huggingface.co/valhalla/vqgan_imagenet_f16_16384) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
