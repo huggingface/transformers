@@ -51,8 +51,8 @@ class VQGANFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
         crop_size (`int`, *optional*, defaults to 224):
             Desired output size when applying center-cropping. Only has an effect if `do_center_crop` is set to `True`.
         do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether or not to normalize the input with mean and standard deviation.
-            The sequence of standard deviations for each channel, to be used when normalizing images.
+            Whether or not to normalize the input with mean and standard deviation. The sequence of standard deviations
+            for each channel, to be used when normalizing images.
     """
 
     model_input_names = ["pixel_values"]
@@ -148,8 +148,7 @@ class VQGANFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
 
     def normalize(self, image):
         """
-        Normalizes `image`. Note that this will trigger a conversion of `image` to a NumPy array
-        if it's a PIL Image.
+        Normalizes `image`. Note that this will trigger a conversion of `image` to a NumPy array if it's a PIL Image.
 
         Args:
             image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):

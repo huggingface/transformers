@@ -245,7 +245,7 @@ class AttnBlock(nn.Module):
         attn_weights = attn_weights * (int(channels) ** -0.5)
         attn_weights = nn.functional.softmax(attn_weights, dim=2)
 
-        ## attend to values
+        # attend to values
         value = value.reshape((batch, channels, height * width))
         attn_weights = attn_weights.permute(0, 2, 1)
         hidden_states = torch.bmm(value, attn_weights)
@@ -596,8 +596,8 @@ class VQGANModel(VQGANPreTrainedModel):
         """
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-                Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-                [`VQGANFeatureExtractor`]. See [`VQGANFeatureExtractor.__call__`] for details.
+                Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained
+                using [`VQGANFeatureExtractor`]. See [`VQGANFeatureExtractor.__call__`] for details.
             return_loss (`bool`, *optional*):
                 Whether or not to return the codebook loss.
             return_dict (`bool`, *optional*):
@@ -633,8 +633,8 @@ class VQGANModel(VQGANPreTrainedModel):
 
     def decode_code(self, codebook_indices):
         """
-        Reconstruct the image from the codebook indices.
         Args:
+        Reconstruct the image from the codebook indices.
             codebook_indices (`torch.LongTensor` of shape `(batch_size, num_tokens)`):
                 The indices of the codebook vectors. Here `num_tokens=latent_height*latent_width`.
         Returns:
@@ -650,8 +650,8 @@ class VQGANModel(VQGANPreTrainedModel):
         """
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-                Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-                [`VQGANFeatureExtractor`]. See [`VQGANFeatureExtractor.__call__`] for details.
+                Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained
+                using [`VQGANFeatureExtractor`]. See [`VQGANFeatureExtractor.__call__`] for details.
             return_loss (`bool`, *optional*):
                 Whether or not to return the codebook loss.
             return_dict (`bool`, *optional*):
