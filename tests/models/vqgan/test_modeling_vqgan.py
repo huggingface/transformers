@@ -17,8 +17,8 @@
 
 import inspect
 import tempfile
-from typing import Dict, List, Tuple
 import unittest
+from typing import Dict, List, Tuple
 
 import numpy as np
 
@@ -143,10 +143,10 @@ class VQGANModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester.create_and_test_config_with_num_labels()
         self.config_tester.check_config_can_be_init_without_params()
         self.config_tester.check_config_arguments_init()
-    
+
     def create_and_test_config_common_properties(self):
         return
-    
+
     @unittest.skip(reason="VQGAN does not output hidden states")
     def test_hidden_states_output(self):
         pass
@@ -162,11 +162,11 @@ class VQGANModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="VQGAN does not support input and output embeddings")
     def test_model_common_attributes(self):
         pass
-    
+
     @unittest.skip(reason="VQGAN does not output hidden states")
     def test_retain_grad_hidden_states_attentions(self):
         pass
-    
+
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -182,7 +182,7 @@ class VQGANModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-    
+
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -229,7 +229,7 @@ class VQGANModelTest(ModelTesterMixin, unittest.TestCase):
         # The main input is the name of the argument after `self`
         observed_main_input_name = list(model_signature.parameters.keys())[1]
         self.assertEqual(VQGANModel.main_input_name, observed_main_input_name)
-    
+
     def test_model_outputs_equivalence(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
