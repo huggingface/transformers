@@ -69,8 +69,8 @@ class KerasMetricCallback(Callback):
             If we're generating, whether to compile model generation with XLA. This can massively increase the speed of
             generation (up to 100X speedup) but will require a new XLA compilation for each input shape. When using XLA
             generation, it's a good idea to pad your inputs to the same size, or to use the `pad_to_multiple_of`
-            argument in `to_tf_dataset()`, which will reduce the number of unique input shapes and save a lot of
-            compilation time. This option has no effect is `predict_with_generate` is `False`.
+            argument in your `tokenizer` or `DataCollator`, which will reduce the number of unique input shapes and
+            save a lot of compilation time. This option has no effect is `predict_with_generate` is `False`.
         generate_kwargs (`dict`, *optional*):
             Keyword arguments to pass to `model.generate()` when generating. Has no effect if `predict_with_generate`
             is `False`.
