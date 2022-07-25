@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Google and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021, Google and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PEGASUSX model configuration """
+""" PEGASUS-X model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -21,28 +21,26 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "pegasus-x-base": "https://huggingface.co/pegasus-x-base/resolve/main/config.json",
-    # See all PEGASUSX models at https://huggingface.co/models?filter=pegasus_x
+    "google/pegasus-x-base": "https://huggingface.co/google/pegasus-x-base/resolve/main/config.json",
+    # See all PEGASUS-X models at https://huggingface.co/models?filter=pegasus-x
 }
 
 
 class PegasusXConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`~PegasusXModel`].
-    It is used to instantiate an PEGASUSX model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the PEGASUSX [pegasus-x-base](https://huggingface.co/pegasus-x-base) architecture.
+    This is the configuration class to store the configuration of a [`PegasusXModel`]. It is used to instantiate an
+    PEGASUS model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the PEGASUS-X
+    [google/pegasus-large](https://huggingface.co/google/pegasus-large) architecture.
 
-    Configuration objects inherit from  [`PretrainedConfig`] and can be used
-    to control the model outputs. Read the documentation from  [`PretrainedConfig`]
-    for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
         vocab_size (`int`, *optional*, defaults to 50265):
-            Vocabulary size of the PEGASUSX model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`~PegasusXModel`] or
-            [`~TFPegasusXModel`].
+            Vocabulary size of the PEGASUS-X model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`PegasusXModel`].
         d_model (`int`, *optional*, defaults to 1024):
             Dimension of the layers and the pooler layer.
         encoder_layers (`int`, *optional*, defaults to 12):
@@ -80,29 +78,34 @@ class PegasusXConfig(PretrainedConfig):
             The LayerDrop probability for the decoder. See the [LayerDrop paper](see
             https://arxiv.org/abs/1909.11556) for more details.
         use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models).
-        Example:
+            Whether or not the model should return the last key/values attentions (not used by all models)
+        forced_eos_token_id (`int`, *optional*, defaults to 1):
+            The id of the token to force as the last generated token when `max_length` is reached. Usually set to
+            `eos_token_id`.
+        num_global_tokens (`int`, *optional*, defaults to 32):
+            Number of global tokens to use for the encoder
+        block_size=256 (`int`, *optional*, defaults to 256):
+            Block size for encoder localattention
+        stagger_local_block (`bool`, *optional*, defaults to `True`):
+            Whether to stagger every other local attention by half a block
+
+    Example:
 
     ```python
     >>> from transformers import PegasusXModel, PegasusXConfig
 
-    >>> # Initializing a PEGASUSX pegasus-x-base style configuration
+    >>> # Initializing a PEGASUS google/pegasus-large style configuration
     >>> configuration = PegasusXConfig()
 
-    >>> # Initializing a model from the pegasus-x-base style configuration
+    >>> # Initializing a model from the google/pegasus-large style configuration
     >>> model = PegasusXModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```
-"""
+    ```"""
     model_type = "pegasus_x"
     keys_to_ignore_at_inference = ["past_key_values"]
-    
-    attribute_map = {
-        "num_attention_heads": "encoder_attention_heads",
-        "hidden_size": "d_model"
-    }
+    attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
 
     def __init__(
         self,
@@ -124,12 +127,15 @@ class PegasusXConfig(PretrainedConfig):
         attention_dropout=0.0,
         activation_dropout=0.0,
         init_std=0.02,
-        decoder_start_token_id=2,
+        decoder_start_token_id=0,
         classifier_dropout=0.0,
         scale_embedding=False,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
+        pad_token_id=0,
+        eos_token_id=1,
+        forced_eos_token_id=1,
+        num_global_tokens=32,
+        block_size=256,
+        stagger_local_blocks=True,
         **kwargs
     ):
         self.vocab_size = vocab_size
@@ -152,14 +158,24 @@ class PegasusXConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.num_hidden_layers = encoder_layers
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
-
+        
+        self.num_global_tokens = num_global_tokens
+        self.block_size = block_size
+        self.stagger_local_blocks = stagger_local_blocks
+        
         super().__init__(
             pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
             decoder_start_token_id=decoder_start_token_id,
-            **kwargs
+            forced_eos_token_id=forced_eos_token_id,
+            **kwargs,
         )
 
-    
+    @property
+    def num_attention_heads(self) -> int:
+        return self.encoder_attention_heads
+
+    @property
+    def hidden_size(self) -> int:
+        return self.d_model
