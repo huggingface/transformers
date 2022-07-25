@@ -223,6 +223,7 @@ PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {
     ("bigbird-pegasus", "google/bigbird-pegasus-large-arxiv"),
     ("longt5", "google/long-t5-local-base"),
     ("longt5", "google/long-t5-tglobal-base"),
+    ("pegasus", "google/pegasus-large"),
 }
 
 # TODO(lewtun): Include the same model types in `PYTORCH_EXPORT_MODELS` once TensorFlow has parity with the PyTorch model implementations.

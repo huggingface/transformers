@@ -13,10 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PEGASUS model configuration"""
+from collections import OrderedDict
+from typing import Any, Mapping, Optional
 
+from ... import PreTrainedTokenizer
 from ...configuration_utils import PretrainedConfig
-from ...utils import logging
-
+from ...onnx import OnnxConfigWithPast, OnnxSeq2SeqConfigWithPast
+from ...utils import logging, is_torch_available, TensorType
 
 logger = logging.get_logger(__name__)
 
@@ -104,32 +107,32 @@ class PegasusConfig(PretrainedConfig):
     attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
 
     def __init__(
-        self,
-        vocab_size=50265,
-        max_position_embeddings=1024,
-        encoder_layers=12,
-        encoder_ffn_dim=4096,
-        encoder_attention_heads=16,
-        decoder_layers=12,
-        decoder_ffn_dim=4096,
-        decoder_attention_heads=16,
-        encoder_layerdrop=0.0,
-        decoder_layerdrop=0.0,
-        use_cache=True,
-        is_encoder_decoder=True,
-        activation_function="gelu",
-        d_model=1024,
-        dropout=0.1,
-        attention_dropout=0.0,
-        activation_dropout=0.0,
-        init_std=0.02,
-        decoder_start_token_id=0,
-        classifier_dropout=0.0,
-        scale_embedding=False,
-        pad_token_id=0,
-        eos_token_id=1,
-        forced_eos_token_id=1,
-        **kwargs
+            self,
+            vocab_size=50265,
+            max_position_embeddings=1024,
+            encoder_layers=12,
+            encoder_ffn_dim=4096,
+            encoder_attention_heads=16,
+            decoder_layers=12,
+            decoder_ffn_dim=4096,
+            decoder_attention_heads=16,
+            encoder_layerdrop=0.0,
+            decoder_layerdrop=0.0,
+            use_cache=True,
+            is_encoder_decoder=True,
+            activation_function="gelu",
+            d_model=1024,
+            dropout=0.1,
+            attention_dropout=0.0,
+            activation_dropout=0.0,
+            init_std=0.02,
+            decoder_start_token_id=0,
+            classifier_dropout=0.0,
+            scale_embedding=False,
+            pad_token_id=0,
+            eos_token_id=1,
+            forced_eos_token_id=1,
+            **kwargs
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
@@ -167,3 +170,74 @@ class PegasusConfig(PretrainedConfig):
     @property
     def hidden_size(self) -> int:
         return self.d_model
+
+
+class PegasusOnnxConfig(OnnxSeq2SeqConfigWithPast):
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        if self.task in ["default", "seq2seq-lm"]:
+            common_inputs = OrderedDict(
+                [
+                    ("input_ids", {0: "batch", 1: "encoder_sequence"}),
+                    ("attention_mask", {0: "batch", 1: "encoder_sequence"}),
+                ]
+            )
+
+            if self.use_past:
+                common_inputs["decoder_input_ids"] = {0: "batch"}
+                common_inputs["decoder_attention_mask"] = {0: "batch", 1: "past_decoder_sequence + sequence"}
+            else:
+                common_inputs["decoder_input_ids"] = {0: "batch", 1: "decoder_sequence"}
+                common_inputs["decoder_attention_mask"] = {0: "batch", 1: "decoder_sequence"}
+
+            if self.use_past:
+                self.fill_with_past_key_values_(common_inputs, direction="inputs")
+        elif self.task == "causal-lm":
+            common_inputs = OrderedDict(
+                [
+                    ("input_ids", {0: "batch", 1: "encoder_sequence"}),
+                    ("attention_mask", {0: "batch", 1: "encoder_sequence"}),
+                ]
+            )
+            if self.use_past:
+                num_encoder_layers, _ = self.num_layers
+                for i in range(num_encoder_layers):
+                    common_inputs[f"past_key_values.{i}.key"] = {0: "batch", 2: "past_sequence + sequence"}
+                    common_inputs[f"past_key_values.{i}.value"] = {0: "batch", 2: "past_sequence + sequence"}
+
+        return common_inputs
+
+    @property
+    def outputs(self) -> Mapping[str, Mapping[int, str]]:
+        if self.task in ["default", "seq2seq-lm"]:
+            common_outputs = super().outputs
+        else:
+            common_outputs = super(OnnxConfigWithPast, self).outputs
+            if self.use_past:
+                num_encoder_layers, _ = self.num_layers
+                for i in range(num_encoder_layers):
+                    common_outputs[f"present.{i}.key"] = {0: "batch", 2: "past_sequence + sequence"}
+                    common_outputs[f"present.{i}.value"] = {0: "batch", 2: "past_sequence + sequence"}
+        return common_outputs
+
+    def generate_dummy_inputs(
+        self,
+        tokenizer: PreTrainedTokenizer,
+        batch_size: int = -1,
+        seq_length: int = -1,
+        is_pair: bool = False,
+        framework: Optional[TensorType] = None,
+    ) -> Mapping[str, Any]:
+        if self.task in ["default", "seq2seq-lm"]:
+            common_inputs = super().generate_dummy_inputs(
+                tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
+            )
+
+        elif self.task == "causal-lm":
+            # Generating dummy inputs for causal-lm has already been implemented in the OnnxConfigWithPast class.
+            # The OnnxSeq2SeqConfigWithPast class inherits from OnnxConfigWithPast
+            common_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
+                tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
+            )
+
+        return common_inputs

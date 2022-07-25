@@ -384,6 +384,15 @@ class FeaturesManager:
             "seq2seq-lm-with-past",
             onnx_config_cls="models.m2m_100.M2M100OnnxConfig",
         ),
+        "pegasus": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "causal-lm",
+            "causal-lm-with-past",
+            "seq2seq-lm",
+            "seq2seq-lm-with-past",
+            onnx_config_cls="models.pegasus.PegasusT5OnnxConfig",
+        ),
         "perceiver": supported_features_mapping(
             "image-classification",
             "masked-lm",
