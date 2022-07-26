@@ -695,18 +695,17 @@ class BloomModel(BloomPreTrainedModel):
                     use_cache = False
 
                 def create_custom_forward(module):
-                    def custom_forward(*inputs):
+                    def custom_forward(**kwargs):
                         # None for past_key_value
-                        return module(*inputs, use_cache, output_attentions, alibi)
+                        return module(**kwargs, use_cache=use_cache, output_attentions=output_attentions, alibi=alibi)
 
                     return custom_forward
 
                 outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(block),
-                    hidden_states,
-                    None,
-                    causal_mask,
-                    head_mask[i],
+                    hidden_states=hidden_states,
+                    attention_mask=causal_mask,
+                    head_mask=head_mask[i],
                 )
             else:
                 outputs = block(

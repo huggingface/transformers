@@ -398,15 +398,17 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         # >=760m + allow_fp16_reduced_precision_reduction = False  + torch.bmm  ==> PASS
 
         path_350m = "bigscience/bloom-350m"
-        model = BloomForCausalLM.from_pretrained(path_350m, torch_dtype="auto", use_cache=True, revision="gs555750").cuda()
+        model = BloomForCausalLM.from_pretrained(
+            path_350m, torch_dtype="auto", use_cache=True, revision="gs555750"
+        ).cuda()
         model = model.eval()
         tokenizer = BloomTokenizerFast.from_pretrained(path_350m)
 
         input_sentence = "I enjoy walking with my cute dog"
         # This output has been obtained using fp32 model on the huggingface DGX workstation - NVIDIA A100 GPU
         EXPECTED_OUTPUT = (
-            "I enjoy walking with my cute dog, and I love to watch the kids play with the kids. I am a very "
-            "active person, and I enjoy working out, and I am a very active person. I am a very active person, and I"
+            "I enjoy walking with my cute dog, and I love to watch the kids play. I am a very active person, and I am"
+            " very active. I am a very good listener, and I am very good at listening. I am a very good"
         )
 
         input_ids = tokenizer.encode(input_sentence, return_tensors="pt")
@@ -418,7 +420,9 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     @require_torch_gpu
     def test_batch_generation(self):
         path_350m = "bigscience/bloom-350m"
-        model = BloomForCausalLM.from_pretrained(path_350m, torch_dtype="auto", use_cache=True, revision="gs555750").cuda()
+        model = BloomForCausalLM.from_pretrained(
+            path_350m, torch_dtype="auto", use_cache=True, revision="gs555750"
+        ).cuda()
         model = model.eval()
         tokenizer = BloomTokenizerFast.from_pretrained(path_350m, padding_side="left")
 
@@ -439,7 +443,9 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     def test_batch_generation_padd(self):
 
         path_350m = "bigscience/bloom-350m"
-        model = BloomForCausalLM.from_pretrained(path_350m, torch_dtype="auto", use_cache=True, revision="gs555750").cuda()
+        model = BloomForCausalLM.from_pretrained(
+            path_350m, torch_dtype="auto", use_cache=True, revision="gs555750"
+        ).cuda()
         model = model.eval()
         tokenizer = BloomTokenizerFast.from_pretrained(path_350m, padding_side="left")
 
