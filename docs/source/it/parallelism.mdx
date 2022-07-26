@@ -1,0 +1,459 @@
+<!---
+Copyright 2021 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
+# Parallelizzazione dei modelli
+
+
+## Panoramica della parallelizzazione
+
+I vari approcci della parallelizzazione sono usati nel machine learning moderno per: 
+1. adattare modelli molto grandi in hardware limitati - ad esempio, i soli parametri del modello t5-11b pesano 45GB
+2. velocizzare significativamente l'allenamento - terminando in poche ore allenamenti che impiegherebbero un anno 
+
+Inizieremo discutendo in dettaglio diverse tecniche di parallelizzazione 1D, i loro pro e contro e come queste possano essere combinate in 
+parallelizzazione 2D e 3D per consentire un allenamento ancora più veloce e supportare modelli ancora più grandi. Diversi potenti approcci alternativi saranno presentati.
+
+Sebbene i concetti principali siano applicabili ad ogni altro framework, questo articolo è incentrato sulle implementazioni basate su Pytorch.
+
+
+## Concetti
+
+Segue una breve descrizione dei concetti principali che verranno dettagliatamente descritti in questo documento.
+
+1. DataParallel (DP) - lo stesso setup è replicato più volte, passando ciascuna volta una parte dei dati. Il processing è eseguito in parallelo e tutti i setup sono sincronizzati alla fine di ogni iterazione di allenamento.
+2. TensorParallel (TP) - ogni tensore è diviso in più blocchi, in questo modo anzichè dover essere collocato interamente in un'unica GPU, ciascun blocco di tensore risiederà nella GPU ad esso assegnata. Durante il processing, ogni blocco è processato separatamente e in parallelo su differenti GPU ed i risultati sono poi sincronizzati alla fine dello step. Questo processo è talvolta definito parallelizzazione orizzontale poichè lo splitting avviene su un livello orizzontale.
+3. PipelineParallel (PP) - il modello è diviso verticalmente (layer-level) su più GPU, così che solo uno o più layers del modello risiedano in un'unica GPU. Ciascuna GPU esegue in parallelo le differenti fase della pipeline e lavora su una porzione ridotta della batch.
+4. Zero Redundancy Optimizer (ZeRO) - esegue una divisione simile al metodo TP, con l'eccezione che l'intero tensore viene poi ricostruito per una computazione in avanti (forward) o all'indietro (backward), per cui il modello non deve essere modificato. Supporta anche diverse tecniche di offloading per compensare in casi di memoria GPU limitata.
+5. Sharded DDP - è un altro nome per il metodo ZeRO in diverse altre implementazioni di ZeRO.
+
+## Parallelizzazione dei Dati 
+
+La maggior parte degli utenti con sole 2 GPU godono già di una velocità di allenamento migliorata grazie a `DataParallel` (DP) e `DistributedDataParallel` (DDP) 
+che sono pressochè banali da utilizzare. Questa è una funzionalità built-in di Pytorch.
+
+## Parallelizzazione dei Dati con ZeRO 
+
+La parallelizzazione dei dati ZeRO-powered (ZeRO-DP) è descritta dal seguente diagramma preso da questo [post:](https://www.microsoft.com/en-us/research/blog/zero-deepspeed-new-system-optimizations-enable-training-models-with-over-100-billion-parameters/)
+![DeepSpeed-Image-1](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-zero.png)
+
+Può essere difficile da comprendere, ma in realtà il concetto è relativamente semplice. Consiste nel comune `DataParallel` (DP),
+dove anzichè replicare tutti i parametri del modello, gradienti e stati degli ottimizzatori, ogni GPU ne memorizza soltanto una parte.
+Dopodichè, nel momento del run-time in cui tutti i parametri di quel layer sono necessari, le GPU si sincronizzano per dare l'un l'altra le parti mancanti - tutto qui.
+
+Considera questo semplice modello con 3 layer, dove ogni layer ha 3 parametri:
+```
+La | Lb | Lc
+---|----|---
+a0 | b0 | c0
+a1 | b1 | c1
+a2 | b2 | c2
+```
+Il layer La ha pesi a0, a1 ed a2.
+
+Se abbiamo 3 GPU, lo Shared DDP (o Zero-DP) divide il modello in 3 GPU come segue:
+
+```
+GPU0:
+La | Lb | Lc
+---|----|---
+a0 | b0 | c0
+
+GPU1:
+La | Lb | Lc
+---|----|---
+a1 | b1 | c1
+
+GPU2:
+La | Lb | Lc
+---|----|---
+a2 | b2 | c2
+```
+
+In un certo senso, questo è lo stesso di fare slicing orizzontale, come nella parallelzzazione dei tensori, se immaginiamo il tipico diagramma DNN.
+Lo slicing verticale invece si ha quando inseriamo interi layer (o gruppi di layer) su diverse GPU. Ma questo è soltanto l'inizio.
+
+Adesso, ogni GPU riceverà le classiche mini-batch come nel DP:
+```
+x0 => GPU0
+x1 => GPU1
+x2 => GPU2
+```
+
+Gli input sono invariati, come se venissero processati dal modello normale.
+
+Innanzitutto, gli input entrano nel layer La.
+
+Concentriamoci solo su GPU0: x0 necessita dei parametri a0, a1 e a2 per il suo percorso in avanti, ma GPU0 ha solo a0 - per cui riceve a1 da GPU1 e a2 da GPU2, ricostruendo insieme tutte le parti del modello.
+
+In parallelo, GPU1 riceve la mini-batch x1 ed ha soltanto a1, ma richiede anche a0 e a2, per cui li ottiene da GPU0 e GPU2.
+
+Lo stesso avviene a GPU2 che riceve l'input x2. Riceve a0 e a1 da GPU0 e GPU1 e assieme al suo a2 ricostruisce l'intero tensore.
+
+Tutte e 3 le GPU ottengono i tensori completi ed il passaggio in avanti viene effettuato.
+
+Non appena i calcoli sono effettuati, i dati che non sono più necessari vengono rimossi - sono utilizzati soltanto durante il calcolo. La ricostruzione è effettuata in modo efficiente tramite un pre-fetch.
+
+L'intero procedimento è ripetuto per il layer Lb ed Lc nel passaggio in avanti, e poi all'indietro Lc -> Lb -> La.
+
+Sembra proprio un'efficiente strategia con cui distribuire i pesi:
+
+1. La persona A porta la tenda,
+2. La persona B porta il fornello,
+3. La persona C porta l'ascia. 
+
+Ogni notte, condividono quello che hanno con gli altri e ricevono dagli altri quello che non hanno, e la mattina riprendono l'equipaggiamento a 
+loro assegnato e continuano per la loro strada. Questo è lo Shared DDP / Zero DP.
+
+Comparando questa strategia con quella più semplice, in cui ogni persona si porta la propria tenda, fornello ed ascia, quest'ultima sarebbe molto più inefficiente. 
+Questo è il DataParallel (DP e DDP) su Pytorch.
+
+Leggendo la letteratura su questo argomento, potrai incontrare i seguenti sinonimi: condiviso (shared), partizionato (partitioned).
+
+Se presti molta attenzione al metodo in cui ZeRO suddivide i pesi del modello, noterai che è molto simile alla parallelizzazione dei tensori 
+che discuteremo più avanti. Questo perchè divide il peso di ogni layer, al contrario della parallelizzazione verticale che verrà discussa di seguito.
+
+Implementazione:
+
+- [DeepSpeed](https://www.deepspeed.ai/features/#the-zero-redundancy-optimizer) ZeRO-DP stages 1+2+3
+- [Fairscale](https://github.com/facebookresearch/fairscale/#optimizer-state-sharding-zero) ZeRO-DP stages 1+2+3
+- [Integrazione `transformers`](main_classes/trainer#trainer-integrations)
+
+## Parallelizzazione Ingenua del Modello (Verticale) e Parallelizzazione di Pipeline
+
+La Naive Model Parallelism (MP) si ha quando dividiamo parti dei layer di un modello su più GPU. Il meccanismo è relativamente semplice - i layer desiderati sono 
+indirizzati ai dispositivi che desideriamo tramite `.to()` e ogniqualvolta i dati entrano ed escono dai layer, questi passano per lo stesso dispositivo e lasciano gli altri invariati.
+
+Ci riferiamo a questo metodo come MP Verticale, perchè se ricordiamo come la maggior parte dei modelli sono disegnati, stiamo dividendo i modelli in verticale.
+Ad esempio, il seguente diagramma mostra un modello con 8 layer:
+
+```
+===================  ===================
+|  0 | 1 | 2 | 3  |  |  4 | 5 | 6 | 7  |
+===================  ===================
+        gpu0                 gpu1
+```
+Abbiamo semplicemente diviso il modello in 2 in verticale, inserendo i layer da 0 a 3 nella GPU0 e da 4 a 7 nella GPU1.
+
+Finchè i dati viaggiano dal layer 0 a 1, da 1 a 2, da 2 a 3, questi percorrono il modello in modo tradizionale. 
+Quando però i dati passano dal layer 3 al layer 4, deve viaggiare dalla GPU0 alla GPU1, introducendo un communication overhead. 
+Se le GPU che partecipano sono sullo stesso nodo computazionale (ad esempio, la stessa macchina fisica), questo passaggio 
+è piuttosto veloce, ma se le GPU si trovano in diversi nodi computazionali (ad esempio, su più macchine), il tempo richiesto per la comunicazione  
+potrebbe essere molto grande. 
+
+Infine, il passaggio dal layer 4 al 5, al 6 ed infine al 7 tornano ad essere quelli del modello normale, e quando il passaggio al layer 7 è completato, 
+spesso dobbiamo re-inviare i dati indietro al layer 0, in cui sono presenti le labels (oppure, dobbiamo far passare le labels all'ultimo layer).
+A questo punto, la funzione di perdita può essere calcolata e l'ottimizzatore può fare il suo lavoro.
+
+Problemi: 
+- la principale lacuna del metodo, da cui il nome MP "ingenuo", è che soltanto una GPU è attiva in ogni momento. Perciò, se 4 GPU sono utilizzate, è quasi identico a quadruplicare la quantità di memoria di una singola GPU, ignorando il resto dell'hardware. Inoltre, si aggiunge il costo di copiare i dati fra diversi dispositivi. Quindi 4x GPU da 6GB sarebbero in grado di accomodare la stessa dimensione di una GPU da 24GB, ma quest'ultima completerebbe l'allenamento in modo più veloce, dal momento che non ha il costo di copiare i dati. Ma, qualora dovessimo avere GPU da 40GB per contenere un modello da 45GB, questo metodo ci permetterebbe di eseguire l'allenamento.
+- rappresentazioni (embedding) condivise potrebbero dover essere copiate avanti e indietro fra le GPU.
+
+La parallelizzazione delle Pipeline (PP) è pressochè identica al metodo MP ingenuo, ma risolve il problema dell'utilizzo di una sola GPU alla volta, dividendo la batch di dati in entrata in mini-batches e creando artificialmente una pipeline che consente alle differenti GPU di partecipare congiuntamente al processo computazionale.
+
+La seguente immagine dal [paper GPipe](https://ai.googleblog.com/2019/03/introducing-gpipe-open-source-library.html) 
+mostra il MP ingenuo in alto ed il PP in basso:
+
+![mp-pp](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-gpipe-bubble.png)
+
+In basso nel diagramma possiamo facilmente notare come il PP ha meno tempi morti in cui le GPU non lavorano. Le parti in cui le GPU non lavorano sono spesso chiamate "bolle".
+
+Il grado di parallelizzazione in entrambe le parti dei diagrammi è 4. Ciò significa che 4 GPU partecipano nel processo. 
+Per cui abbiamo un percorso in avanti di 4 passaggi, F0, F1, F2 e F3, seguito da un passaggio all'indietro da B3, B2, B1 e B0.
+
+PP introduce un nuovo iperparametro da aggiustare: `chunks`, che definisce quanti blocchi di dati sono inviati allo stesso passaggio nella pipeline. Ad esempio, 
+nel diagramma in basso possiamo vedere che `chunks=4`. GPU0 effettua lo stesso passaggio sui blocchi 0, 1, 2 e 3 (F0,0, F0,1, F0,2, F0,3) dopodichè 
+attende che le altre GPU facciano il loro lavoro e, quando stanno per terminare, GPU0 ricomincia a lavorare per il passaggio all'indietro dei blocchi 3, 2, 1 e 0 (B0,3, B0,2, B0,1, B0,0).
+
+Notiamo inoltre che concettualmente, questo è lo stesso concetto di uno step di accumulazione del gradiente (GAS). Pytorch utilizza `chunks`
+mentre DeepSpeed si riferisce allo stesso iperparametro come GAS.
+
+A causa dei blocchi, PP introduce il concetto di micro-batches (MBS). DP divide la bath size globale in mini-batches, quindi se abbiamo un grado di DP pari a 4, 
+una batch globale di dimensione 1024 vien divisa in 4 mini-batches da 256 ciascuna (1024/4). E se il numero di `chunks` (o GAS) è pari a 32, otteniamo 
+una micro-batch di dimensione 8 (256/32). Ogni passaggio della Pipeline funziona con una sola micro-batch alla volta.
+
+Per calcolare la dimensione globale della batch di DP + PP possiamo eseguire: `mbs*chunks*dp_degree` (`8*32*4=1024`).
+
+Torniamo al diagramma.
+
+Con `chunks=1` otteniamo il MP ingenuo, che è molto inefficiente. Con valori `chunks` molto grandi, otteniamo micro-batch di dimensioni troppo piccole, che 
+risultano anch'esse non efficienti. Occorre quindi sperimentare per trovare il valore che porta al più efficiente utilizzo delle GPU.
+
+Poichè il diagramma mostra che c'è una bolla di tempo "morto" che non può essere parallelizzato perchè l'ultimo passaggio `forward` deve aspettare il 
+completamento del `backward`, lo scopo di trovare il miglior valore possibile per `chunks` sta nel consentire una buona collaborazione fra le GPU partecipanti, 
+minimizzando la dimensione di questa bolla. 
+
+Ci sono 2 gruppi di soluzione - i metodi tradizionali della API Pipeline e soluzioni più moderne che rendono le cose più semplici per l'utente finale.
+
+Soluzioni tradizionali della API Pipeline:
+- PyTorch
+- FairScale
+- DeepSpeed
+- Megatron-LM
+
+Soluzioni moderne:
+- Varuna
+- Sagemaker
+
+Problemi delle soluzioni tradizionali della API Pipeline: 
+- richiede di modificare il modello piuttosto pesantemente, perchè Pipeline richiede di riscrivere il modello dei moduli in sequenze `nn.Sequential`, che potrebbero richiedere modifiche nel design del modello.
+- al momento, l'API è molto limitata. Se hai diverse variabili python da inserire nel primo step della Pipeline, dovrai trovare un modo alternativo. Al momento, l'interfaccia Pipeline necessità o di un singolo tensore, o una tupla di tensori come unico input ed output. Questi tensori devono avere la batch size come prima dimensione, dal momento che la pipeline dividerà le mini-batches in micro-batches. Possibili miglioramenti sono in discussione qua: https://github.com/pytorch/pytorch/pull/50693 
+- il controllo del flusso condizionale al livello dei vari step della Pipeline non è possibile - ad esempio, modelli Encoder-Decoder come T5 richiedono speciali soluzioni per gestire i vari step di encoding condizionale.
+- richiede di organizzare ciascun layer in modo che l'output di un modello diventi l'input dell'altro.
+
+Necessitiamo ancora di sperimentare con Varuna e SageMaker, ma i loro paper riportano di aver superato la lista dei problemi menzionati in precedenza e dicono di richiedere cambiamenti molto minori nel modello dell'utente.
+
+
+Implementazioni:
+- [Pytorch](https://pytorch.org/docs/stable/pipeline.html) (supporto iniziale in pytorch-1.8, progressivamente migliorato in 1.9 e 1.10). Alcuni [esempi](https://github.com/pytorch/pytorch/blob/master/benchmarks/distributed/pipeline/pipe.py).
+- [FairScale](https://fairscale.readthedocs.io/en/latest/tutorials/pipe.html)
+- [DeepSpeed](https://www.deepspeed.ai/tutorials/pipeline/)
+- [Megatron-LM](https://github.com/NVIDIA/Megatron-LM) ha un'implementazione interna - no API.
+- [Varuna](https://github.com/microsoft/varuna)
+- [SageMaker](https://arxiv.org/abs/2111.05972) - questa è una soluzione proprietaria che può essere solo utilizata su AWS.
+- [OSLO](https://github.com/tunib-ai/oslo) - questa implementazione è basata su Hugging Face Transformers.
+
+🤗 Transformers status: al momento della scrittura di questa guida, nessuno dei modelli supporta full-PP. I modelli GPT2 e T5 hanno un supporto per il MP ingenuo.
+Il principale ostacolo è l'incapacità di convertire i modelli in `nn.Sequential` e che tutti gli input siano Tensori. Questo è dovuto al fatto che, al momento, 
+i modelli includono molte features che rendono la conversione molto complicata, e necessitano di essere rimosse per raggiungere questo obiettivo.
+
+Altri approcci:
+
+DeepSpeed, Varuna e SageMaker usano il concetto di una [Interleaved Pipeline](https://docs.aws.amazon.com/sagemaker/latest/dg/model-parallel-core-features.html)
+![interleaved-pipeline-execution](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-sagemaker-interleaved-pipeline.png)
+
+Qua la bolla (tempi morti) è ulteriormente minimizzata prioritizzando i passaggi all'indietro.
+
+Varuna cerca ulteriormente di migliorare la struttura utilizzando simulazioni per individuare il più efficiente scheduling.
+
+OSLO ha una parallelizzazione di pipeline implementata basandosi su Transformers senza la conversione a `nn.Sequential`.
+
+## Parallelizzazione dei Tensori
+
+Nella parallelizzazione dei tensori ogni GPU processa soltando una parte di un tensore ed aggrega il tensore completo soltanto per le operazioni che lo richiedono.
+
+In questa sezione usiamo concetti e diagrammi dal paper [Megatron-LM](https://github.com/NVIDIA/Megatron-LM): [Efficient Large-Scale Language Model Training on GPU Clusters](https://arxiv.org/abs/2104.04473).
+
+Il blocco principale di ogni modello transformer è un layer fully connected `nn.Linear` seguito da una funzione di attivazione non lineare `GeLU`.
+
+Seguento la notazione del paper di Megatron, possiamo scrivere il dot-product come `Y = GeLU(XA)`, dove `X` ed `Y` sono i vettori di input ed ouput ed `A` è la matrice dei pesi.
+
+Se osserviamo i calcoli in forma matriciale, è facile notare come la moltiplicazione fra matrici può essere suddivisa fra più GPU:
+![Parallel GEMM](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-tp-parallel_gemm.png)
+
+Se dividiamo la matrice di pesi `A` in colonne, su `N`GPU e performiamo le moltiplicazioni fra matrici da `XA_1` a `XA_n` in parallelo, rimarremo con `N`
+vettori di output `Y_1, Y_2, ..., Y_n` che possono essere inviati a `GeLU` in modo indipendente:
+![independent GeLU](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-tp-independent-gelu.png)
+
+Secondo questo principio, possiamo aggiornare un MLP di profondità arbitraria senza il bisogno di sincronizzare le GPU fino alla fine del procedimento, 
+al termine del quale necessiteremo di ricostruire l'output dai singoli blocchi. Gli autori del paper Megatron-LM hanno realizzato un'illustrazione utile per questo:
+![parallel shard processing](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-tp-parallel_shard_processing.png)
+
+Parallelizzare i layer di multi-head attention è perfino più semplice, dal momento che sono già per loro natura paralleli grazie al fatto che hanno più heads indipendenti!
+![parallel self-attention](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-tp-parallel_self_attention.png)
+
+Considerazioni speciali: TP richiede una rete di GPU molto veloce, per cui non è suggeribile effettuare TP su più nodi (macchine).
+In pratica, se un nodo ha 4 GPU, il maggior grado di TP può essere 4. Se necessiti di un TP di grado 8, dovrai utilizzare nodi che hanno almeno 8 GPU.
+
+Questa sezione è basata sull'originale e molto più dettagliata  TP overview](https://github.com/huggingface/transformers/issues/10321#issuecomment-783543530).
+by [@anton-l](https://github.com/anton-l).
+
+SageMaker combina TP con DP per un processing più efficiente.
+
+Nomi alternativi: 
+- DeepSpeed lo chiama [tensor slicing](https://www.deepspeed.ai/features/#model-parallelism)
+
+Implementazioni:
+- [Megatron-LM](https://github.com/NVIDIA/Megatron-LM) ha un'implementazione interna, molto specifica per quel modello
+- [parallelformers](https://github.com/tunib-ai/parallelformers) (al momento, solo per l'inferenza)
+- [SageMaker](https://arxiv.org/abs/2111.05972) - soluzione proprietaria di AWS
+- [OSLO](https://github.com/tunib-ai/oslo) ha un'implementazione di TP basata su Transformers.
+
+
+🤗 Transformers status:
+- core: non ancora implementato
+- ma se vuoi fare inferenza, [parallelformers](https://github.com/tunib-ai/parallelformers) offre questo supporto per la maggior parte dei nostri modelli. Finchè questo non è implementato nella libreria princiaple, puoi usare questa libreria. Ci auguriamo anche che diventi disponibile in fase di allenamento oltre che per l'inferenza.
+- Deepspeed-Inference supporta anche BERT, GPT-2 e GPT-Neo nella loro super-veloce modalità di inferenza basata su CUDA-kernel, vedi [qui](https://www.deepspeed.ai/tutorials/inference-tutorial/)
+
+## DP+PP
+
+Il seguente diagramma del [tutorial di DeepSpeed](https://www.deepspeed.ai/tutorials/pipeline/) dimostra come combinare DP con PP.
+
+![dp-pp-2d](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-zero-dp-pp.png)
+
+Qua è importante notare come il rango 0 di DP non vede la GPU2 e il DP di rango 1 non vede la GPU3. Per il DP è come se ci fossero soltanto GPU0 e GPU1, ai
+quali passa i dati come se ci fossero solo 2 GPU. GPU0 "segretamente" passa parte del suo carico alla GPU2 tramite PP, e lo stesso vale per GPU1 con GPU3.
+
+Dal momento che ciascuna dimensione richiede almeno 2 GPU, in questo caso sarebbero necessarie almeno 4 GPU.
+
+Implementazioni:
+- [DeepSpeed](https://github.com/microsoft/DeepSpeed)
+- [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
+- [Varuna](https://github.com/microsoft/varuna)
+- [SageMaker](https://arxiv.org/abs/2111.05972)
+- [OSLO](https://github.com/tunib-ai/oslo)
+
+🤗 Transformers status: non ancora implementato.
+
+## DP+PP+TP
+
+Per avere un allenamento ancora più efficiente, una parallelizzazione 3D può essere utilizzata, combinando TP, DP e PP. Possiamo osservarlo nel seguente diagramma:
+
+![dp-pp-tp-3d](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-deepspeed-3d.png)
+
+Questo diagramma è stato preso dal post [3D parallelism: Scaling to trillion-parameter models](https://www.microsoft.com/en-us/research/blog/deepspeed-extreme-scale-model-training-for-everyone/), che è una lettura interessante sull'argomento.
+
+Dal momento che ciascuan dimensione richiede almeno 2 GPU, in questo caso sono necessarie almeno 8 GPU.
+
+Implementazioni:
+- [DeepSpeed](https://github.com/microsoft/DeepSpeed) - DeepSpeed include anche una versione di DP più efficiente, chiamata ZeRO-DP.
+- [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
+- [Varuna](https://github.com/microsoft/varuna)
+- [SageMaker](https://arxiv.org/abs/2111.05972)
+- [OSLO](https://github.com/tunib-ai/oslo)
+
+🤗 Transformers status: non ancora implementato, dato che non abbiamo ancora PP e TP.
+
+## ZeRO DP+PP+TP
+
+Una delle funzionalità principali di DeepSpeed è ZeRO, che è un'estensione super scalabile di DP. Questa è già stata discussa in [ZeRO Data Parallelism](#zero-data-parallelism). 
+Normalmente, è una funzionalità a sè stante, che non richiede PP o TP, ma può essere combinata con PP e TP.
+
+Quando ZeRO-DP è combinata con PP (e opzionalmente TP) tipicalmente permette soltanto ZeRO stage 1 (optimizer sharding).
+
+Sebbene sia teoricamente possibile utilizzare ZeRO stage 2 (gradient sharding) con la parallelizzazione della Pipeline, questo porta a impatti negativi sulla performance. 
+Sarebbe necessario avere un addizionale riduttore di dispersione per ogni micro-batch per ri-aggregare i gradienti prima di dividerli, che aggiunge un overhead di comunicazione 
+potenzialmente molto significativo. Per natura del PP, vengono utilizzate delle piccole micro-batches e invece lo scopo è bilanciare l'intensità aritmetica (micro-batch size) con
+la minimizzazione della bolla della Pipeline (numero di micro-batches). Per cui, i costi di comunicazione cresceranno.
+
+Inoltre, ci sono già meno layer del solito grazie al PP, per cui il risparmio in termini di memoria non risulta particolarmente rilevante. 
+PP riduce già il gradiente di  ``1/PP``, per cui il risparmio ottenuto dividendo i gradienti sono meno significativi rispetto al puro DP.
+
+Allo stesso modo, ZeRO stage 3 non è una buona scelta per lo stesso motivo - più comunicazioni fra nodi sono richieste.
+
+Dal momento che abbiamo ZeRO, un altro beneficio è lo ZeRO-Offload. Dal momento che questo è uno stage 1 optimizer, possiamo scaricare in CPU gli stati del modello.
+
+Implementazioni:
+- [Megatron-DeepSpeed](https://github.com/microsoft/Megatron-DeepSpeed) e [Megatron-Deepspeed from BigScience](https://github.com/bigscience-workshop/Megatron-DeepSpeed), che è una fork della repo precedente.
+- [OSLO](https://github.com/tunib-ai/oslo)
+
+Paper importanti:
+
+- [Using DeepSpeed and Megatron to Train Megatron-Turing NLG 530B, A Large-Scale Generative Language Model](
+https://arxiv.org/abs/2201.11990)
+
+🤗 Transformers status: non ancora implementato, dal momento che non abbiamo ancora PP e TP.
+
+## FlexFlow
+
+[FlexFlow](https://github.com/flexflow/FlexFlow) risolve il problema di parallelizzazione in un approccio leggermente diverso.
+
+Paper: ["Beyond Data and Model Parallelism for Deep Neural Networks" by Zhihao Jia, Matei Zaharia, Alex Aiken](https://arxiv.org/abs/1807.05358)
+
+Effettua una sorta di parallelizzazione 4D su Campione-Operatore-Attributi-Parametri:
+
+1. Campione = Data Parallelism (parallelizzazione per campione)
+2. Operatore = Parallelizza una singola operazione in più sotto-operazioni
+3. Attributi = Data Parallelism (parallelizzazione length-wise)
+4. Parametri = Model Parallelism (a prescindere dalla dimensione, orizzontale o verticale)
+
+Esempi:
+
+* Campione
+
+Prendiamo 10 batches di lunghezza 512, 10 x 512. Se parallelizzate su due dispositivi, otteniamo 5 x 2 x 512.
+
+* Operatore
+
+Se effettuiamo l'operazione di normalizzazione per i layer, possiamo calcolare prima la deviazione standard, poi la media, e poi normalizzare i dati. 
+Parallelizzare per operatore consente di calcolare la deviazione standard e la media in parallelo. Per cui se li parallelizzassimo fra due dispositivi 
+(cuda:0, cuda:1), possiamo prima copiare i dati in entrambi i dispositivi, dopodichè cuda:0 calcola la deviazione standard e cuda:1 calcola la media allo stesso tempo.
+
+* Attributi
+
+Se abbiamo 10 batches di lunghezza 512, parallelizzandoli per la dimensione degli attributi otteniamo 10 x 2 x 256.
+
+* Parametri
+
+Funziona in modo simile alla parallelizzazione dei tensori o alla parallelizzazione ingenua dei layer.
+
+![flex-flow-soap](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-flexflow.jpeg)
+
+L'importanza di questo framweork è che prende risorse come (1) GPU/TPU/CPU vs. (2) RAM/DRAM vs. (3) inter-connessioni veloci/inter-connessioni lente ed 
+automaticamente le ottimizza tramite un algoritmo, che decide quale parallelizzazione usare.
+
+Un aspetto molto importante è che FlexFlow è pensato per ottimizzare parallelizzazioni per modelli con carichi di lavoro statici e fissati,poichè 
+modelli dinamici potrebbero preferire differenti strategie di parallelizzazione fra le differenti iterazioni.
+
+La promessa è molto invitante - effettua una simulazione di 30 minuti su un cluster ed elabora la miglior strategia da utilizzare per l'ambiente specifico.
+Se qualche parte venisse aggiunta/rimossa/modificata, l'algoritmo ri-parte e ri-ottimizza il piano di parallelizzazione, dopodichè potrai tornare ad allenare il modello.
+Ciascuna impostazione avrà la sua ottimizzazione specifica.
+
+🤗 Transformers status: non ancora implementato. Abbiamo modelli FX-trace-able in [transformers.utils.fx](https://github.com/huggingface/transformers/blob/main/src/transformers/utils/fx.py), 
+che è un prerequisito per utilizzare FlexFlow, perciò qualcuno dovrà capire cosa è necessario fare per far funzionare FlexFlow con i nostri modelli.
+
+
+## Quale Strategia Usare e Quando
+
+Segue uno schema molto approssimativo di quale strategia di parallelizzazione usare e quando. Il primo di ogni lista è tipicamente il più veloce.
+
+**⇨ Una sola GPU**
+
+* Se il modello riesce a stare dentro una singola GPU: 
+
+    1. Utilizzo normale 
+
+* Se il modello non riesce a stare dentro una singola GPU:
+
+    1. ZeRO + Offload CPU e opzionalmente NVMe
+    2. come sopra, più Memory Centric Tiling (vedi sotto per maggiori dettagli) se il layer più grande non riesce a stare in una singola GPU
+
+* Se il layer più grande non riesce a stare dentro una singola GPU:
+
+1. ZeRO - Attiva [Memory Centric Tiling](https://deepspeed.readthedocs.io/en/latest/zero3.html#memory-centric-tiling) (MCT). Consente di allenare layer arbitrariamente grandi dividendoli ed eseguendoli sequenzialmente. MCT riduce il numero di parametri attivi in una GPU, ma non ha effetto sulla memoria di attivazione. Dal momento che questa necessità è molto rara, nel momento in cui scriviamo questa guida spetta all'utente effettuare una sovrascrizione manuale di `torch.nn.Linear`.
+
+**⇨ Un solo nodo / Multi-GPU**
+
+* Se il modello riesce a stare dentro una singola GPU:
+
+    1. DDP - DP distribuito
+    2. ZeRO - potrebbe o meno essere più veloce a seconda della configurazione utilizzata
+
+* Se il modello non riesce a stare dentro una singola GPU:
+
+    1. PP
+    2. ZeRO
+    3. TP
+
+    Con connettività fra nodi ultraveloce (NVLINK o NVSwitch) tutti e tre i metodi dovrebbero essere prevalentemente alla pari, senza questi invece il PP dovrebbe essere il più veloce. Il grado di TP potrebbe inoltre  fare la differenza. Il metodo migliore sta nello sperimentare finchè non troverai il miglior metodo per le tue impostazioni.
+
+    TP è quasi sempre utilizzato all'interno dello stesso nodo. Per cui, dimensione del TP <= GPU di ciascun nodo.
+
+* Se il layer più grande non riesce a stare dentro una singola GPU:
+
+    1. Se non utilizzi ZeRO - devi utilizzare TP dal momento che PP da solo non sarà in grado di far stare il layer nella GPU.
+    2. Con ZeRO vedi il punto precedente "Una sola GPU" 
+
+
+**⇨ Multi-Node / Multi-GPU**
+
+* Se hai una veloce connettività fra nodi:
+
+    1. ZeRO - poichè non richiede pressochè alcuna modifica al modello
+    2. PP+TP+DP - meno comunicazioni, ma richiede importanti modifiche al modello
+ 
+* Se hai una connettività fra nodi lenta e una memoria GPU scarsa:  
+
+    1. DP+PP+TP+ZeRO-1
