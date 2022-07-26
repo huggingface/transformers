@@ -63,9 +63,9 @@ class KerasMetricCallback(Callback):
             supplied.
         batch_size (`int`, *optional*):
             Batch size. Only used when the data is not a pre-batched `tf.data.Dataset`.
-        predict_with_generate (`bool`, defaults to `False`):
+        predict_with_generate (`bool`, *optional*, defaults to `False`):
             Whether we should use `model.generate()` to get outputs for the model.
-        use_xla_generation (`bool`, defaults to `False`):
+        use_xla_generation (`bool`, *optional*, defaults to `False`):
             If we're generating, whether to compile model generation with XLA. This can massively increase the speed of
             generation (up to 100X speedup) but will require a new XLA compilation for each input shape. When using XLA
             generation, it's a good idea to pad your inputs to the same size, or to use the `pad_to_multiple_of`
