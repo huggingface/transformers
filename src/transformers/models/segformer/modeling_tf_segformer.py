@@ -544,7 +544,9 @@ class TFSegformerPreTrainedModel(TFPreTrainedModel):
             inputs (`Dict[str, tf.Tensor]`):
                 The input of the saved model as a dictionary of tensors.
         """
-        return self.call(inputs)
+        output = self.call(inputs)
+
+        return self.serving_output(output)
 
 
 SEGFORMER_START_DOCSTRING = r"""
@@ -628,6 +630,14 @@ class TFSegformerModel(TFSegformerPreTrainedModel):
         )
         return outputs
 
+    def serving_output(self, output: TFBaseModelOutput) -> TFBaseModelOutput:
+        # hidden_states and attention not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
+        return TFBaseModelOutput(
+            last_hidden_state=output.last_hidden_state,
+            hidden_states=output.hidden_states,
+            attentions=output.attentions,
+        )
+
 
 @add_start_docstrings(
     """
@@ -690,6 +700,12 @@ class TFSegformerForImageClassification(TFSegformerPreTrainedModel, TFSequenceCl
 
         return TFSequenceClassifierOutput(
             loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
+        )
+
+    def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
+        # hidden_states and attention not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
+        return TFSequenceClassifierOutput(
+            logits=output.logits, hidden_states=output.hidden_states, attentions=output.attentions
         )
 
 
@@ -875,4 +891,10 @@ class TFSegformerForSemanticSegmentation(TFSegformerPreTrainedModel):
             logits=logits,
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
+        )
+
+    def serving_output(self, output: TFSemanticSegmenterOutput) -> TFSemanticSegmenterOutput:
+        # hidden_states and attention not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
+        return TFSemanticSegmenterOutput(
+            logits=output.logits, hidden_states=output.hidden_states, attentions=output.attentions
         )
