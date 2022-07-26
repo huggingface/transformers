@@ -123,39 +123,31 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
-# Copied from transformers.models.marian.modeling_marian.MarianSinusoidalPositionalEmbedding with Marian->PegasusX
-class PegasusXSinusoidalPositionalEmbedding(nn.Embedding):
+class PegasusXSinusoidalPositionalEmbedding(nn.Module):
     """This module produces sinusoidal positional embeddings of any length."""
 
-    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None) -> None:
-        super().__init__(num_positions, embedding_dim)
-        self.weight = self._init_weight(self.weight)
-
-    @staticmethod
-    def _init_weight(out: nn.Parameter) -> nn.Parameter:
-        """
-        Identical to the XLM create_sinusoidal_embeddings except features are not interleaved. The cos features are in
-        the 2nd half of the vector. [dim // 2:]
-        """
-        n_pos, dim = out.shape
-        position_enc = np.array(
-            [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
-        )
-        out.requires_grad = False  # set early to avoid an error in pytorch-1.8+
-        sentinel = dim // 2 if dim % 2 == 0 else (dim // 2) + 1
-        out[:, 0:sentinel] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))
-        out[:, sentinel:] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
-        out.detach_()
-        return out
+    def __init__(self, embed_dim, padding_idx, max_scale: int = 10000.0):
+        super().__init__()
+        self.embed_dim = embed_dim
+        self.padding_idx = padding_idx
+        self.max_scale = max_scale
 
     @torch.no_grad()
-    def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0) -> torch.Tensor:
+    def forward(self, input_embeds: torch.Tensor, past_key_values_length: int = 0) -> torch.Tensor:
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
-        bsz, seq_len = input_ids_shape[:2]
+        batch_size, seq_len = input_embeds.shape[:2]
         positions = torch.arange(
-            past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
-        )
-        return super().forward(positions)
+            past_key_values_length, past_key_values_length + seq_len, 
+            dtype=torch.long, device=input_embeds.device
+        )[:, None]
+        pe = torch.zeros((seq_len, self.embed_dim), device=input_embeds.device)
+        half_d_feature = self.embed_dim // 2
+        div_term = torch.exp(
+            torch.arange(half_d_feature, device=input_embeds.device, dtype=input_embeds.dtype)
+            * -(np.log(float(self.max_scale)) / (half_d_feature - 1)))
+        pe[:, :half_d_feature] = torch.sin(positions * div_term)
+        pe[:, half_d_feature:] = torch.cos(positions * div_term)
+        return pe[None].expand(batch_size, -1, -1)
 
 
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->PegasusX
@@ -168,7 +160,6 @@ class PegasusXAttention(nn.Module):
         num_heads: int,
         dropout: float = 0.0,
         is_decoder: bool = False,
-        bias: bool = True,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -184,10 +175,10 @@ class PegasusXAttention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=False)
+        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=False)
+        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=False)
+        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=False)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
@@ -306,7 +297,6 @@ class PegasusXGlobalLocalAttention(nn.Module):
         block_size: int,
         dropout: float = 0.0,
         is_decoder: bool = False,
-        bias: bool = True,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -323,10 +313,10 @@ class PegasusXGlobalLocalAttention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=False)
+        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=False)
+        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=False)
+        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=False)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
@@ -899,7 +889,6 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
 
         self.embed_global = nn.Embedding(config.num_global_tokens, embed_dim)
         self.embed_positions = PegasusXSinusoidalPositionalEmbedding(
-            config.max_position_embeddings,
             embed_dim,
             self.padding_idx,
         )
@@ -932,7 +921,6 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
         self.config.max_position_embeddings = new_num_position_embeddings
 
         self.embed_positions = PegasusXSinusoidalPositionalEmbedding(
-            self.config.max_position_embeddings,
             self.config.d_model,
             self.padding_idx,
         )
@@ -1004,7 +992,7 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
-        embed_pos = self.embed_positions(input_shape)
+        embed_pos = self.embed_positions(inputs_embeds)
 
         hidden_states = inputs_embeds + embed_pos
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -1109,7 +1097,6 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
             self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
 
         self.embed_positions = PegasusXSinusoidalPositionalEmbedding(
-            config.max_position_embeddings,
             config.d_model,
             self.padding_idx,
         )
@@ -1162,7 +1149,6 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
         self.config.max_position_embeddings = new_num_position_embeddings
 
         self.embed_positions = PegasusXSinusoidalPositionalEmbedding(
-            self.config.max_position_embeddings,
             self.config.d_model,
             self.padding_idx,
         )
@@ -1274,7 +1260,7 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
             encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
         # embed positions
-        positions = self.embed_positions(input_shape, past_key_values_length)
+        positions = self.embed_positions(inputs_embeds, past_key_values_length)
 
         hidden_states = inputs_embeds + positions
 
@@ -1513,7 +1499,6 @@ class PegasusXModel(PegasusXPreTrainedModel):
 class PegasusXForConditionalGeneration(PegasusXPreTrainedModel):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = [
-        r"final_logits_bias",
         r"encoder.version",
         r"decoder.version",
         r"lm_head.weight",
@@ -1523,7 +1508,6 @@ class PegasusXForConditionalGeneration(PegasusXPreTrainedModel):
     def __init__(self, config: PegasusXConfig):
         super().__init__(config)
         self.model = PegasusXModel(config)
-        self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
         self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
 
         # Initialize weights and apply final processing
@@ -1537,17 +1521,7 @@ class PegasusXForConditionalGeneration(PegasusXPreTrainedModel):
 
     def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
         new_embeddings = super().resize_token_embeddings(new_num_tokens)
-        self._resize_final_logits_bias(new_num_tokens)
         return new_embeddings
-
-    def _resize_final_logits_bias(self, new_num_tokens: int) -> None:
-        old_num_tokens = self.final_logits_bias.shape[-1]
-        if new_num_tokens <= old_num_tokens:
-            new_bias = self.final_logits_bias[:, :new_num_tokens]
-        else:
-            extra_bias = torch.zeros((1, new_num_tokens - old_num_tokens), device=self.final_logits_bias.device)
-            new_bias = torch.cat([self.final_logits_bias, extra_bias], dim=1)
-        self.register_buffer("final_logits_bias", new_bias)
 
     def get_output_embeddings(self):
         return self.lm_head
@@ -1631,7 +1605,7 @@ class PegasusXForConditionalGeneration(PegasusXPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        lm_logits = self.lm_head(outputs[0]) + self.final_logits_bias
+        lm_logits = self.lm_head(outputs[0])
 
         masked_lm_loss = None
         if labels is not None:
