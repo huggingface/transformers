@@ -770,7 +770,7 @@ class OwlViTModelIntegrationTest(unittest.TestCase):
             torch.Size(
                 (
                     inputs.pixel_values.shape[0],
-                    inputs.input_ids.shape[0] * inputs.input_ids.shape[1] * inputs.pixel_values.shape[0],
+                    inputs.input_ids.shape[0],
                 )
             ),
         )
@@ -778,13 +778,12 @@ class OwlViTModelIntegrationTest(unittest.TestCase):
             outputs.logits_per_text.shape,
             torch.Size(
                 (
-                    inputs.input_ids.shape[0] * inputs.input_ids.shape[1] * inputs.pixel_values.shape[0],
+                    inputs.input_ids.shape[0],
                     inputs.pixel_values.shape[0],
                 )
             ),
         )
-
-        expected_logits = torch.tensor([[1.0115, 0.9982]], device=torch_device)
+        expected_logits = torch.tensor([[4.4420, 0.6181]], device=torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))
 
@@ -810,6 +809,6 @@ class OwlViTModelIntegrationTest(unittest.TestCase):
         num_queries = int((model.config.vision_config.image_size / model.config.vision_config.patch_size) ** 2)
         self.assertEqual(outputs.pred_boxes.shape, torch.Size((1, num_queries, 4)))
         expected_slice_boxes = torch.tensor(
-            [[0.0143, 0.0236, 0.0285], [0.0649, 0.0247, 0.0437], [0.0601, 0.0446, 0.0699]]
+            [[0.0948, 0.0471, 0.1915], [0.3194, 0.0583, 0.6498], [0.1441, 0.0452, 0.2197]]
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))

@@ -1285,7 +1285,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         input_ids: torch.Tensor,
-        attention_mask: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
