@@ -85,6 +85,7 @@ def build_alibi_tensor(attention_mask: torch.Tensor, n_head: int, dtype, device)
     relies on a translation invariance of softmax for quick implementation: with l being a tensor, and a fixed value
     `softmax(l+a) = softmax(l)`. Based on
     https://github.com/ofirpress/attention_with_linear_biases/blob/a35aaca144e0eb6b789dfcb46784c4b8e31b7983/fairseq/models/transformer.py#L742
+    TODO @thomasw21 this doesn't work as nicely due to the masking strategy, and so masking varies slightly.
 
     Args:
     Returns tensor shaped (batch_size * n_head, 1, max_seq_len)
