@@ -236,6 +236,10 @@ class PretrainedConfig(PushToHubMixin):
 
         use_bfloat16 (`bool`, *optional*, defaults to `False`):
             Whether or not the model should use BFloat16 scalars (only used by some TensorFlow models).
+        tf_legacy_loss (`bool`, *optional*, defaults to `False`):
+            Whether the model should use legacy TensorFlow losses. Legacy losses have variable output shapes and may
+            not be XLA-compatible. This option is here for backward compatibility and will be removed in Transformers
+            v5.
     """
     model_type: str = ""
     is_composition: bool = False
@@ -260,6 +264,7 @@ class PretrainedConfig(PushToHubMixin):
         self.torchscript = kwargs.pop("torchscript", False)  # Only used by PyTorch models
         self.torch_dtype = kwargs.pop("torch_dtype", None)  # Only used by PyTorch models
         self.use_bfloat16 = kwargs.pop("use_bfloat16", False)
+        self.tf_legacy_loss = kwargs.pop("tf_legacy_loss", False)  # Only used by TensorFlow models
         self.pruned_heads = kwargs.pop("pruned_heads", {})
         self.tie_word_embeddings = kwargs.pop(
             "tie_word_embeddings", True
@@ -489,6 +494,9 @@ class PretrainedConfig(PushToHubMixin):
                 If `True`, then this functions returns a `Tuple(config, unused_kwargs)` where *unused_kwargs* is a
                 dictionary consisting of the key/value pairs whose keys are not configuration attributes: i.e., the
                 part of `kwargs` which has not been used to update `config` and is otherwise ignored.
+            subfolder (`str`, *optional*, defaults to `""`):
+                In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
+                specify the folder name here.
             kwargs (`Dict[str, Any]`, *optional*):
                 The values in kwargs of any keys which are configuration attributes will be used to override the loaded
                 values. Behavior concerning key/value pairs whose keys are *not* configuration attributes is controlled
@@ -572,6 +580,7 @@ class PretrainedConfig(PushToHubMixin):
         use_auth_token = kwargs.pop("use_auth_token", None)
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
+        subfolder = kwargs.pop("subfolder", "")
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
 
@@ -584,16 +593,22 @@ class PretrainedConfig(PushToHubMixin):
             local_files_only = True
 
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
-        if os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
+        if os.path.isfile(os.path.join(subfolder, pretrained_model_name_or_path)) or is_remote_url(
+            pretrained_model_name_or_path
+        ):
             config_file = pretrained_model_name_or_path
         else:
             configuration_file = kwargs.pop("_configuration_file", CONFIG_NAME)
 
-            if os.path.isdir(pretrained_model_name_or_path):
-                config_file = os.path.join(pretrained_model_name_or_path, configuration_file)
+            if os.path.isdir(os.path.join(pretrained_model_name_or_path, subfolder)):
+                config_file = os.path.join(pretrained_model_name_or_path, subfolder, configuration_file)
             else:
                 config_file = hf_bucket_url(
-                    pretrained_model_name_or_path, filename=configuration_file, revision=revision, mirror=None
+                    pretrained_model_name_or_path,
+                    filename=configuration_file,
+                    revision=revision,
+                    subfolder=subfolder if len(subfolder) > 0 else None,
+                    mirror=None,
                 )
 
         try:

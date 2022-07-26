@@ -23,7 +23,7 @@ from packaging import version
 
 from transformers import BeitConfig
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -153,6 +153,16 @@ class BeitModelTester:
         result = model(pixel_values, labels=labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
+        # test greyscale images
+        config.num_channels = 1
+        model = BeitForImageClassification(config)
+        model.to(torch_device)
+        model.eval()
+
+        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
+        result = model(pixel_values, labels=labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+
     def create_and_check_for_semantic_segmentation(self, config, pixel_values, labels, pixel_labels):
         config.num_labels = self.num_labels
         model = BeitForSemanticSegmentation(config)
@@ -200,6 +210,11 @@ class BeitModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="BEiT does not use inputs_embeds")
     def test_inputs_embeds(self):
+        pass
+
+    @require_torch_multi_gpu
+    @unittest.skip(reason="BEiT has some layers using `add_module` which doesn't work well with `nn.DataParallel`")
+    def test_multi_gpu_data_parallel_forward(self):
         pass
 
     def test_model_common_attributes(self):

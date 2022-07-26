@@ -422,7 +422,14 @@ def _raise_for_status(response: Response):
     response.raise_for_status()
 
 
-def http_get(url: str, temp_file: BinaryIO, proxies=None, resume_size=0, headers: Optional[Dict[str, str]] = None):
+def http_get(
+    url: str,
+    temp_file: BinaryIO,
+    proxies=None,
+    resume_size=0,
+    headers: Optional[Dict[str, str]] = None,
+    file_name: Optional[str] = None,
+):
     """
     Download remote file. Do not gobble up errors.
     """
@@ -441,7 +448,7 @@ def http_get(url: str, temp_file: BinaryIO, proxies=None, resume_size=0, headers
         unit_divisor=1024,
         total=total,
         initial=resume_size,
-        desc="Downloading",
+        desc=f"Downloading {file_name}" if file_name is not None else "Downloading",
     )
     for chunk in r.iter_content(chunk_size=1024):
         if chunk:  # filter out keep-alive new chunks
@@ -545,8 +552,9 @@ def get_from_cache(
                 # the models might've been found if local_files_only=False
                 # Notify the user about that
                 if local_files_only:
-                    raise FileNotFoundError(
-                        "Cannot find the requested files in the cached path and outgoing traffic has been"
+                    fname = url.split("/")[-1]
+                    raise EntryNotFoundError(
+                        f"Cannot find the requested file ({fname}) in the cached path and outgoing traffic has been"
                         " disabled. To enable model look-ups and downloads online, set 'local_files_only'"
                         " to False."
                     )
@@ -591,7 +599,16 @@ def get_from_cache(
         with temp_file_manager() as temp_file:
             logger.info(f"{url} not found in cache or force_download set to True, downloading to {temp_file.name}")
 
-            http_get(url_to_download, temp_file, proxies=proxies, resume_size=resume_size, headers=headers)
+            # The url_to_download might be messy, so we extract the file name from the original url.
+            file_name = url.split("/")[-1]
+            http_get(
+                url_to_download,
+                temp_file,
+                proxies=proxies,
+                resume_size=resume_size,
+                headers=headers,
+                file_name=file_name,
+            )
 
         logger.info(f"storing {url} in cache at {cache_path}")
         os.replace(temp_file.name, cache_path)
@@ -1125,6 +1142,7 @@ def get_checkpoint_shard_files(
     user_agent=None,
     revision=None,
     mirror=None,
+    subfolder="",
 ):
     """
     For a given model:
@@ -1150,14 +1168,18 @@ def get_checkpoint_shard_files(
 
     # First, let's deal with local folder.
     if os.path.isdir(pretrained_model_name_or_path):
-        shard_filenames = [os.path.join(pretrained_model_name_or_path, f) for f in shard_filenames]
+        shard_filenames = [os.path.join(pretrained_model_name_or_path, subfolder, f) for f in shard_filenames]
         return shard_filenames, sharded_metadata
 
     # At this stage pretrained_model_name_or_path is a model identifier on the Hub
     cached_filenames = []
     for shard_filename in shard_filenames:
         shard_url = hf_bucket_url(
-            pretrained_model_name_or_path, filename=shard_filename, revision=revision, mirror=mirror
+            pretrained_model_name_or_path,
+            filename=shard_filename,
+            revision=revision,
+            mirror=mirror,
+            subfolder=subfolder if len(subfolder) > 0 else None,
         )
 
         try:
