@@ -20,7 +20,6 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -634,17 +633,6 @@ class DalleMegaPretrainedModel(PreTrainedModel):
         if isinstance(module, (DalleMegaDecoder, DalleMegaEncoder)):
             module.gradient_checkpointing = value
 
-    @property
-    def dummy_inputs(self):
-        pad_token = self.config.pad_token_id
-        input_ids = torch.tensor([[0, 6, 10, 4, 2], [0, 8, 12, 2, pad_token]], device=self.device)
-        dummy_inputs = {
-            "attention_mask": input_ids.ne(pad_token),
-            "input_ids": input_ids,
-        }
-        return dummy_inputs
-
-
 class DalleMegaEncoder(DalleMegaPretrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
@@ -1092,11 +1080,69 @@ class DalleMegaModel(DalleMegaPretrainedModel):
     def set_input_embeddings(self, value):
         self.encoder.embed_tokens = value
 
+    def get_decoder_input_embeddings(self):
+        return self.get_decoder().get_input_embeddings()
+
+    def set_decoder_input_embeddings(self, value):
+        self.decoder.embed_tokens = value
+
     def get_encoder(self):
         return self.encoder
 
     def get_decoder(self):
         return self.decoder
+    
+    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> nn.Embedding:
+        """
+        Resizes input token embeddings matrix of the encoder if `new_num_tokens != config.encoder_vocab_size`.
+
+        Takes care of tying weights embeddings afterwards if the model class has a `tie_weights()` method.
+
+        Arguments:
+            new_num_tokens (`int`, *optional*):
+                The number of new tokens in the encoder embedding matrix. Increasing the size will add newly initialized
+                vectors at the end. Reducing the size will remove vectors from the end. If not provided or `None`, just
+                returns a pointer to the input tokens `torch.nn.Embedding` module of the model without doing anything.
+
+        Return:
+            `torch.nn.Embedding`: Pointer to the input tokens Embeddings Module of the model.
+        """
+        model_embeds = self._resize_token_embeddings(new_num_tokens)
+        if new_num_tokens is None:
+            return model_embeds
+
+        # Update base model and current model config
+        self.config.encoder_vocab_size = new_num_tokens
+        self.encoder_vocab_size = new_num_tokens
+
+        # Tie weights again if needed
+        self.tie_weights()
+
+        return model_embeds
+
+    def _resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
+        old_embeddings = self.get_input_embeddings()
+        new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
+        self.set_input_embeddings(new_embeddings)
+        return self.get_input_embeddings()
+
+    def resize_decoder_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
+        old_embeddings = self.get_decoder_input_embeddings()
+        new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
+        self.set_decoder_input_embeddings(new_embeddings)
+
+        model_embeds = self.get_decoder_input_embeddings()
+
+        if new_num_tokens is None:
+            return model_embeds
+
+        # Update base model and current model config
+        self.config.decoder_vocab_size = new_num_tokens
+
+        # Tie weights again if needed
+        self.tie_weights()
+
+        return model_embeds
 
     @add_start_docstrings_to_model_forward(DALLE_MEGA_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -1215,15 +1261,73 @@ class DalleMegaForConditionalGeneration(DalleMegaPretrainedModel):
     def get_decoder(self):
         return self.model.get_decoder()
 
-    def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
-        new_embeddings = super().resize_token_embeddings(new_num_tokens)
-        return new_embeddings
+    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> nn.Embedding:
+        """
+        Resizes input token embeddings matrix of the encoder if `new_num_tokens != config.encoder_vocab_size`.
+
+        Takes care of tying weights embeddings afterwards if the model class has a `tie_weights()` method.
+
+        Arguments:
+            new_num_tokens (`int`, *optional*):
+                The number of new tokens in the encoder embedding matrix. Increasing the size will add newly initialized
+                vectors at the end. Reducing the size will remove vectors from the end. If not provided or `None`, just
+                returns a pointer to the input tokens `torch.nn.Embedding` module of the model without doing anything.
+
+        Return:
+            `torch.nn.Embedding`: Pointer to the input tokens Embeddings Module of the model.
+        """
+        base_model = getattr(self, self.base_model_prefix, self)
+        return base_model.resize_token_embeddings(new_num_tokens)
+
+    def resize_decoder_token_embeddings(self, new_num_tokens):
+        old_embeddings = self.model.get_decoder_input_embeddings()
+        new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
+        self.model.set_decoder_input_embeddings(new_embeddings)
+
+        # if word embeddings are not tied, make sure that lm head is resized as well
+        if self.get_output_embeddings() is not None and not self.config.tie_word_embeddings:
+            old_lm_head = self.get_output_embeddings()
+            new_lm_head = self._get_resized_lm_head(old_lm_head, new_num_tokens)
+            self.set_output_embeddings(new_lm_head)
+
+        model_embeds = self.model.get_decoder_input_embeddings()
+
+        if new_num_tokens is None:
+            return model_embeds
+
+        # Update base model and current model config
+        self.config.decoder_vocab_size = new_num_tokens
+
+        # Tie weights again if needed
+        self.tie_weights()
+
+        return model_embeds
 
     def get_output_embeddings(self):
         return self.lm_head
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
+
+    def tie_weights(self):
+        """
+        Tie the weights between the input embeddings and the output embeddings.
+
+        If the `torchscript` flag is set in the configuration, can't handle parameter sharing so we are cloning the
+        weights instead.
+        """
+        output_embeddings = self.get_output_embeddings()
+        if output_embeddings is not None and getattr(self.config, "tie_word_embeddings", True):
+            # if embeddings are shared this will return shared embeddings otherwise decoder embed_tokens
+            word_embeddings = self.get_decoder().get_input_embeddings()
+            self._tie_or_clone_weights(output_embeddings, word_embeddings)
+
+        if getattr(self.config, "tie_encoder_decoder", False):
+            raise ValueError("DalleMega does not support tying encoder and decoder weights.")
+
+        for module in self.modules():
+            if hasattr(module, "_tie_weights"):
+                module._tie_weights()
 
     @add_start_docstrings_to_model_forward(DALLE_MEGA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)

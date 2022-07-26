@@ -129,6 +129,7 @@ class DalleMegaConfig(PretrainedConfig):
         is_encoder_decoder=True,
         tie_word_embeddings=False,
         do_sample=True,
+        use_cache=True,
         bos_token_id=16385,
         eos_token_id=16385,
         pad_token_id=16385,
@@ -153,6 +154,7 @@ class DalleMegaConfig(PretrainedConfig):
         self.activation_function = activation_function
         self.init_std = init_std
         self.num_hidden_layers = encoder_layers
+        self.use_cache = use_cache
 
         super().__init__(
             pad_token_id=pad_token_id,

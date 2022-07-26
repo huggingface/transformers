@@ -82,51 +82,51 @@ class DalleMegaModelTester:
         seq_length=7,
         is_training=True,
         use_labels=False,
-        vocab_size=99,
+        encoder_vocab_size=99,
+        decoder_vocab_size=99,
         hidden_size=16,
         num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=4,
-        hidden_act="gelu",
+        activation_function="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=20,
+        encoder_max_positions=20,
+        decoder_max_positions=20,
         eos_token_id=2,
         pad_token_id=1,
         bos_token_id=0,
+        decoder_start_token_id=3,
     ):
         self.parent = parent
         self.batch_size = batch_size
         self.seq_length = seq_length
         self.is_training = is_training
         self.use_labels = use_labels
-        self.vocab_size = vocab_size
+        self.encoder_vocab_size = encoder_vocab_size
+        self.decoder_vocab_size = decoder_vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
+        self.activation_function = activation_function
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
+        self.encoder_max_positions = encoder_max_positions
+        self.decoder_max_positions = decoder_max_positions
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
-
-        # forcing a certain token to be generated, sets all other tokens to -inf
-        # if however the token to be generated is already at -inf then it can lead token
-        # `nan` values and thus break generation
-        self.forced_bos_token_id = None
-        self.forced_eos_token_id = None
+        self.decoder_start_token_id = decoder_start_token_id
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.encoder_vocab_size)
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.encoder_vocab_size).clamp(
             3,
         )
         input_ids[:, -1] = self.eos_token_id  # Eos Token
 
-        decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.decoder_vocab_size)
 
         config = self.get_config()
         inputs_dict = prepare_dallemega_inputs_dict(config, input_ids, decoder_input_ids)
@@ -134,7 +134,8 @@ class DalleMegaModelTester:
 
     def get_config(self):
         return DalleMegaConfig(
-            vocab_size=self.vocab_size,
+            encoder_vocab_size=self.encoder_vocab_size,
+            decoder_vocab_size=self.decoder_vocab_size,
             d_model=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
             decoder_layers=self.num_hidden_layers,
@@ -144,18 +145,20 @@ class DalleMegaModelTester:
             decoder_ffn_dim=self.intermediate_size,
             dropout=self.hidden_dropout_prob,
             attention_dropout=self.attention_probs_dropout_prob,
-            max_position_embeddings=self.max_position_embeddings,
+            encoder_max_positions=self.encoder_max_positions,
+            decoder_max_positions=self.decoder_max_positions,
             eos_token_id=self.eos_token_id,
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
-            forced_bos_token_id=self.forced_bos_token_id,
-            forced_eos_token_id=self.forced_eos_token_id,
+            decoder_start_token_id=self.decoder_start_token_id,
         )
 
     def get_pipeline_config(self):
         config = self.get_config()
-        config.max_position_embeddings = 100
-        config.vocab_size = 300
+        config.encoder_max_positions = 100
+        config.decoder_max_positions = 100
+        config.encoder_vocab_size = 300
+        config.decoder_vocab_size = 300
         return config
 
     def prepare_config_and_inputs_for_common(self):
@@ -174,7 +177,7 @@ class DalleMegaModelTester:
         output, past_key_values = outputs.to_tuple()
 
         # create hypothetical multiple next token and extent to next_input_ids
-        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
+        next_tokens = ids_tensor((self.batch_size, 3), config.decoder_vocab_size)
         next_attn_mask = ids_tensor((self.batch_size, 3), 2)
 
         # append to next input_ids and
@@ -256,7 +259,8 @@ class DalleMegaHeadTests(unittest.TestCase):
 
         batch_size = input_ids.shape[0]
         config = DalleMegaConfig(
-            vocab_size=self.vocab_size,
+            encoder_vocab_size=self.vocab_size,
+            decoder_vocab_size=self.vocab_size,
             d_model=24,
             encoder_layers=2,
             decoder_layers=2,
@@ -264,27 +268,32 @@ class DalleMegaHeadTests(unittest.TestCase):
             decoder_attention_heads=2,
             encoder_ffn_dim=32,
             decoder_ffn_dim=32,
-            max_position_embeddings=48,
+            encoder_max_positions=48,
+            decoder_max_positions=48,
             eos_token_id=2,
             pad_token_id=1,
             bos_token_id=0,
+            decoder_start_token_id=2,
         )
         return config, input_ids, batch_size
 
     @timeout_decorator.timeout(1)
     def test_lm_forward(self):
         config, input_ids, batch_size = self._get_config_and_data()
-        lm_labels = ids_tensor([batch_size, input_ids.shape[1]], self.vocab_size).to(torch_device)
-        lm_model = DalleMegaForConditionalGeneration(config)
-        lm_model.to(torch_device)
+        lm_labels = ids_tensor([batch_size, input_ids.shape[1]], config.decoder_vocab_size).to(torch_device)
+        
+        lm_model = DalleMegaForConditionalGeneration(config).to(torch_device)
+        
         outputs = lm_model(input_ids=input_ids, labels=lm_labels)
-        expected_shape = (batch_size, input_ids.shape[1], config.vocab_size)
+        
+        expected_shape = (batch_size, input_ids.shape[1], config.decoder_vocab_size)
         self.assertEqual(outputs["logits"].shape, expected_shape)
         self.assertIsInstance(outputs["loss"].item(), float)
 
     def test_lm_uneven_forward(self):
         config = DalleMegaConfig(
-            vocab_size=self.vocab_size,
+            encoder_vocab_size=self.vocab_size,
+            decoder_vocab_size=self.vocab_size,
             d_model=14,
             encoder_layers=2,
             decoder_layers=2,
@@ -292,7 +301,12 @@ class DalleMegaHeadTests(unittest.TestCase):
             decoder_attention_heads=2,
             encoder_ffn_dim=8,
             decoder_ffn_dim=8,
-            max_position_embeddings=48,
+            encoder_max_positions=48,
+            decoder_max_positions=48,
+            eos_token_id=2,
+            pad_token_id=1,
+            bos_token_id=0,
+            decoder_start_token_id=2,
         )
         lm_model = DalleMegaForConditionalGeneration(config).to(torch_device)
         context = torch.tensor(
@@ -300,13 +314,14 @@ class DalleMegaHeadTests(unittest.TestCase):
         )
         summary = torch.tensor([[82, 71, 82, 18, 2], [58, 68, 2, 1, 1]], device=torch_device, dtype=torch.long)
         outputs = lm_model(input_ids=context, decoder_input_ids=summary, labels=summary)
-        expected_shape = (*summary.shape, config.vocab_size)
+        expected_shape = (*summary.shape, config.decoder_vocab_size)
         self.assertEqual(outputs["logits"].shape, expected_shape)
 
     def test_generate_beam_search(self):
         input_ids = torch.tensor([[71, 82, 2], [68, 34, 2]], device=torch_device, dtype=torch.long)
         config = DalleMegaConfig(
-            vocab_size=self.vocab_size,
+            encoder_vocab_size=self.vocab_size,
+            decoder_vocab_size=self.vocab_size,
             d_model=24,
             encoder_layers=2,
             decoder_layers=2,
@@ -314,10 +329,12 @@ class DalleMegaHeadTests(unittest.TestCase):
             decoder_attention_heads=2,
             encoder_ffn_dim=32,
             decoder_ffn_dim=32,
-            max_position_embeddings=48,
+            encoder_max_positions=48,
+            decoder_max_positions=48,
             eos_token_id=2,
             pad_token_id=1,
             bos_token_id=0,
+            decoder_start_token_id=2,
         )
         lm_model = DalleMegaForConditionalGeneration(config).to(torch_device)
         lm_model.eval()
@@ -363,11 +380,6 @@ class DalleMegaHeadTests(unittest.TestCase):
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
-    def test_dummy_inputs(self):
-        config, *_ = self._get_config_and_data()
-        model = DalleMegaForConditionalGeneration(config).eval().to(torch_device)
-        model(**model.dummy_inputs)
-
     def test_resize_tokens_embeddings_more(self):
         config, input_ids, _ = self._get_config_and_data()
 
@@ -375,15 +387,16 @@ class DalleMegaHeadTests(unittest.TestCase):
             return (m.get_input_embeddings().weight.data.clone(), m.get_output_embeddings().weight.data.clone())
 
         model = DalleMegaForConditionalGeneration(config).eval().to(torch_device)
-        input, output = _get_embs(model)
-        self.assertTrue(torch.eq(input, output).all())
-        new_vocab_size = 45
-        model.resize_token_embeddings(new_vocab_size)
+        
+        new_encoder_vocab_size = 45
+        new_decoder_vocab_size = 46
+        
+        model.resize_token_embeddings(new_encoder_vocab_size)
+        model.resize_decoder_token_embeddings(new_decoder_vocab_size)
+        
         input_new, output_new = _get_embs(model)
-        self.assertEqual(input_new.shape, (new_vocab_size, config.d_model))
-        self.assertEqual(output_new.shape, (new_vocab_size, config.d_model))
-        self.assertTrue(torch.eq(input_new, output_new).all())
-
+        self.assertEqual(input_new.shape, (new_encoder_vocab_size, config.d_model))
+        self.assertEqual(output_new.shape, (new_decoder_vocab_size, config.d_model))
 
 @require_torch
 class DalleMegaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -403,7 +416,10 @@ class DalleMegaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
 
     def setUp(self):
         self.model_tester = DalleMegaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DalleMegaConfig)
+        # we set has_text_modality to False since the model has two vocab_size size attributes
+        # encoder_vocab_size and decoder_vocab_size, and we don't use the attrubute vocab_size
+        # to avoid confusion.Setting has_text_modality=False won't check the vocab_size attribute.
+        self.config_tester = ConfigTester(self, config_class=DalleMegaConfig, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -417,7 +433,216 @@ class DalleMegaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(info["missing_keys"], [])
+    
+    def test_resize_tokens_embeddings(self):
+        (
+            original_config,
+            inputs_dict,
+        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        if not self.test_resize_embeddings:
+            return
 
+        for model_class in self.all_model_classes:
+            config = copy.deepcopy(original_config)
+            model = model_class(config)
+            model.to(torch_device)
+
+            if self.model_tester.is_training is False:
+                model.eval()
+
+            model_vocab_size = config.encoder_vocab_size
+            # Retrieve the embeddings and clone theme
+            model_embed = model.resize_token_embeddings(model_vocab_size)
+            cloned_embeddings = model_embed.weight.clone()
+
+            # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
+            model_embed = model.resize_token_embeddings(model_vocab_size + 10)
+            self.assertEqual(model.config.encoder_vocab_size, model_vocab_size + 10)
+            # Check that it actually resizes the embeddings matrix
+            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
+            model_embed = model.resize_token_embeddings(model_vocab_size - 15)
+            self.assertEqual(model.config.encoder_vocab_size, model_vocab_size - 15)
+            # Check that it actually resizes the embeddings matrix
+            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
+
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            # Input ids should be clamped to the maximum size of the vocabulary
+            inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Check that adding and removing tokens has not modified the first part of the embedding matrix.
+            models_equal = True
+            for p1, p2 in zip(cloned_embeddings, model_embed.weight):
+                if p1.data.ne(p2.data).sum() > 0:
+                    models_equal = False
+
+            self.assertTrue(models_equal)
+    
+    @unittest.skip("DalleMega does not share the embeddingsbetween encoder and decoder. This test is implemented for decoder below.")
+    def test_resize_embeddings_untied(self):
+        pass
+    
+    def test_resize_decoder_embeddings_tied(self):
+        (
+            original_config,
+            inputs_dict,
+        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        if not self.test_resize_embeddings:
+            return
+        
+        original_config.tie_word_embeddings = True
+
+        for model_class in self.all_model_classes:
+            config = copy.deepcopy(original_config)
+            model = model_class(config)
+            model.to(torch_device)
+
+            if self.model_tester.is_training is False:
+                model.eval()
+
+            model_vocab_size = config.decoder_vocab_size
+            # Retrieve the embeddings and clone theme
+            model_embed = model.resize_decoder_token_embeddings(model_vocab_size)
+            cloned_embeddings = model_embed.weight.clone()
+
+            # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
+            model_embed = model.resize_decoder_token_embeddings(model_vocab_size + 10)
+            self.assertEqual(model.config.decoder_vocab_size, model_vocab_size + 10)
+            # Check that it actually resizes the embeddings matrix
+            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
+            model_embed = model.resize_decoder_token_embeddings(model_vocab_size - 15)
+            self.assertEqual(model.config.decoder_vocab_size, model_vocab_size - 15)
+            # Check that it actually resizes the embeddings matrix
+            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
+
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            # Input ids should be clamped to the maximum size of the vocabulary
+            inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Check that adding and removing tokens has not modified the first part of the embedding matrix.
+            models_equal = True
+            for p1, p2 in zip(cloned_embeddings, model_embed.weight):
+                if p1.data.ne(p2.data).sum() > 0:
+                    models_equal = False
+
+            self.assertTrue(models_equal)
+
+    def test_resize_decoder_embeddings_untied(self):
+        (
+            original_config,
+            inputs_dict,
+        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        if not self.test_resize_embeddings:
+            return
+
+        original_config.tie_word_embeddings = False
+
+        # if model cannot untied embeddings -> leave test
+        if original_config.tie_word_embeddings:
+            return
+
+        for model_class in self.all_model_classes:
+            config = copy.deepcopy(original_config)
+            model = model_class(config).to(torch_device)
+
+            # if no output embeddings -> leave test
+            if model.get_output_embeddings() is None:
+                continue
+
+            # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
+            model_vocab_size = config.decoder_vocab_size
+            model.resize_decoder_token_embeddings(model_vocab_size + 10)
+            self.assertEqual(model.config.decoder_vocab_size, model_vocab_size + 10)
+            output_embeds = model.get_output_embeddings()
+            self.assertEqual(output_embeds.weight.shape[0], model_vocab_size + 10)
+            # Check bias if present
+            if output_embeds.bias is not None:
+                self.assertEqual(output_embeds.bias.shape[0], model_vocab_size + 10)
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
+            model.resize_decoder_token_embeddings(model_vocab_size - 15)
+            self.assertEqual(model.config.decoder_vocab_size, model_vocab_size - 15)
+            # Check that it actually resizes the embeddings matrix
+            output_embeds = model.get_output_embeddings()
+            self.assertEqual(output_embeds.weight.shape[0], model_vocab_size - 15)
+            # Check bias if present
+            if output_embeds.bias is not None:
+                self.assertEqual(output_embeds.bias.shape[0], model_vocab_size - 15)
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            # Input ids should be clamped to the maximum size of the vocabulary
+            if "decoder_input_ids" in inputs_dict:
+                inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+    def test_tie_model_weights(self):
+        if not self.test_torchscript:
+            return
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        def check_same_values(layer_1, layer_2):
+            equal = True
+            for p1, p2 in zip(layer_1.weight, layer_2.weight):
+                if p1.data.ne(p2.data).sum() > 0:
+                    equal = False
+            return equal
+
+        for model_class in self.all_model_classes:
+            config.torchscript = True
+            model_not_tied = model_class(config)
+            if model_not_tied.get_output_embeddings() is None:
+                continue
+
+            config_tied = copy.deepcopy(config)
+            config_tied.torchscript = False
+            model_tied = model_class(config_tied)
+            params_tied = list(model_tied.parameters())
+            # Check that the embedding layer and decoding layer are the same in size and in value
+            # self.assertTrue(check_same_values(embeddings, decoding))
+
+            # # Check that after modification, they remain the same.
+            # embeddings.weight.data.div_(2)
+            # # Check that the embedding layer and decoding layer are the same in size and in value
+            # self.assertTrue(embeddings.weight.shape, decoding.weight.shape)
+            # self.assertTrue(check_same_values(embeddings, decoding))
+
+            # # Check that after modification, they remain the same.
+            # decoding.weight.data.div_(4)
+            # # Check that the embedding layer and decoding layer are the same in size and in value
+            # self.assertTrue(embeddings.weight.shape, decoding.weight.shape)
+            # self.assertTrue(check_same_values(embeddings, decoding))
+
+            # Check that after resize they remain tied.
+            model_tied.resize_token_embeddings(config.encoder_vocab_size + 10)
+            model_tied.resize_decoder_token_embeddings(config.decoder_vocab_size + 10)
+            params_tied_2 = list(model_tied.parameters())
+            self.assertEqual(len(params_tied_2), len(params_tied))
+
+            # decoding.weight.data.mul_(20)
+            # # Check that the embedding layer and decoding layer are the same in size and in value
+            # self.assertTrue(model.transformer.wte.weight.shape, model.lm_head.weight.shape)
+            # self.assertTrue(check_same_values(model.transformer.wte, model.lm_head))
+    
+    def _check_scores(self, batch_size, scores, length, config):
+        expected_shape = (batch_size, config.decoder_vocab_size)
+        self.assertIsInstance(scores, tuple)
+        self.assertEqual(len(scores), length)
+        self.assertListEqual([iter_scores.shape for iter_scores in scores], [expected_shape] * len(scores))
+    
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
@@ -913,12 +1138,6 @@ class DalleMegaModelIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(EXPECTED_SUMMARY, decoded[0])
 
-    def test_xsum_config_generation_params(self):
-        config = DalleMegaConfig.from_pretrained("facebook/dallemega-large-xsum")
-        expected_params = dict(num_beams=6, do_sample=False, early_stopping=True, length_penalty=1.0)
-        config_params = {k: getattr(config, k, "MISSING") for k, v in expected_params.items()}
-        self.assertDictEqual(expected_params, config_params)
-
     @slow
     def test_cnn_summarization_same_as_fairseq(self):
         hf = DalleMegaForConditionalGeneration.from_pretrained("facebook/dallemega-large-cnn").to(torch_device)
@@ -1155,242 +1374,3 @@ class DalleMegaModelIntegrationTests(unittest.TestCase):
             hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
         )
         assert generated_summaries == EXPECTED
-
-
-class DalleMegaStandaloneDecoderModelTester:
-    def __init__(
-        self,
-        parent,
-        vocab_size=99,
-        batch_size=13,
-        d_model=16,
-        decoder_seq_length=7,
-        is_training=True,
-        is_decoder=True,
-        use_attention_mask=True,
-        use_cache=False,
-        use_labels=True,
-        decoder_start_token_id=2,
-        decoder_ffn_dim=32,
-        decoder_layers=4,
-        encoder_attention_heads=4,
-        decoder_attention_heads=4,
-        max_position_embeddings=30,
-        is_encoder_decoder=False,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-        scope=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.decoder_seq_length = decoder_seq_length
-        # For common tests
-        self.seq_length = self.decoder_seq_length
-        self.is_training = is_training
-        self.use_attention_mask = use_attention_mask
-        self.use_labels = use_labels
-
-        self.vocab_size = vocab_size
-        self.d_model = d_model
-        self.hidden_size = d_model
-        self.num_hidden_layers = decoder_layers
-        self.decoder_layers = decoder_layers
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.encoder_attention_heads = encoder_attention_heads
-        self.decoder_attention_heads = decoder_attention_heads
-        self.num_attention_heads = decoder_attention_heads
-        self.eos_token_id = eos_token_id
-        self.bos_token_id = bos_token_id
-        self.pad_token_id = pad_token_id
-        self.decoder_start_token_id = decoder_start_token_id
-        self.use_cache = use_cache
-        self.max_position_embeddings = max_position_embeddings
-        self.is_encoder_decoder = is_encoder_decoder
-
-        self.scope = None
-        self.decoder_key_length = decoder_seq_length
-        self.base_model_out_len = 2
-        self.decoder_attention_idx = 1
-
-    def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
-
-        attention_mask = None
-        if self.use_attention_mask:
-            attention_mask = ids_tensor([self.batch_size, self.decoder_seq_length], vocab_size=2)
-
-        lm_labels = None
-        if self.use_labels:
-            lm_labels = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
-
-        config = DalleMegaConfig(
-            vocab_size=self.vocab_size,
-            d_model=self.d_model,
-            encoder_layers=self.decoder_layers,
-            decoder_layers=self.decoder_layers,
-            decoder_ffn_dim=self.decoder_ffn_dim,
-            encoder_attention_heads=self.encoder_attention_heads,
-            decoder_attention_heads=self.decoder_attention_heads,
-            eos_token_id=self.eos_token_id,
-            bos_token_id=self.bos_token_id,
-            use_cache=self.use_cache,
-            pad_token_id=self.pad_token_id,
-            decoder_start_token_id=self.decoder_start_token_id,
-            max_position_embeddings=self.max_position_embeddings,
-            is_encoder_decoder=self.is_encoder_decoder,
-        )
-
-        return (
-            config,
-            input_ids,
-            attention_mask,
-            lm_labels,
-        )
-
-    def prepare_config_and_inputs_for_decoder(self):
-        (
-            config,
-            input_ids,
-            attention_mask,
-            lm_labels,
-        ) = self.prepare_config_and_inputs()
-
-        encoder_hidden_states = floats_tensor([self.batch_size, self.decoder_seq_length, self.hidden_size])
-        encoder_attention_mask = ids_tensor([self.batch_size, self.decoder_seq_length], vocab_size=2)
-
-        return (
-            config,
-            input_ids,
-            attention_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
-            lm_labels,
-        )
-
-    def create_and_check_decoder_model_past(
-        self,
-        config,
-        input_ids,
-        attention_mask,
-        lm_labels,
-    ):
-        config.use_cache = True
-        model = DalleMegaDecoder(config=config).to(torch_device).eval()
-        # first forward pass
-        outputs = model(input_ids, use_cache=True)
-        outputs_use_cache_conf = model(input_ids)
-        outputs_no_past = model(input_ids, use_cache=False)
-
-        self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
-        self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
-
-        past_key_values = outputs["past_key_values"]
-
-        # create hypothetical next token and extent to next_input_ids
-        next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
-
-        # append to next input_ids and
-        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-
-        output_from_no_past = model(next_input_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
-
-        # select random slice
-        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, next_input_ids.shape[-1] - 1, random_slice_idx].detach()
-        output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
-
-        # test that outputs are equal for slice
-        assert torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
-
-    def create_and_check_decoder_model_attention_mask_past(
-        self,
-        config,
-        input_ids,
-        attention_mask,
-        lm_labels,
-    ):
-        model = DalleMegaDecoder(config=config).to(torch_device).eval()
-
-        # create attention mask
-        attn_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
-
-        half_seq_length = input_ids.shape[-1] // 2
-        attn_mask[:, half_seq_length:] = 0
-
-        # first forward pass
-        past_key_values = model(input_ids, attention_mask=attn_mask, use_cache=True)["past_key_values"]
-
-        # create hypothetical next token and extent to next_input_ids
-        next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
-
-        # change a random masked slice from input_ids
-        random_seq_idx_to_change = ids_tensor((1,), half_seq_length).item() + 1
-        random_other_next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size).squeeze(-1)
-        input_ids[:, -random_seq_idx_to_change] = random_other_next_tokens
-
-        # append to next input_ids and attn_mask
-        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-        attn_mask = torch.cat(
-            [attn_mask, torch.ones((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)],
-            dim=1,
-        )
-
-        # get two different outputs
-        output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=attn_mask, past_key_values=past_key_values)[
-            "last_hidden_state"
-        ]
-
-        # select random slice
-        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, next_input_ids.shape[-1] - 1, random_slice_idx].detach()
-        output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
-
-        # test that outputs are equal for slice
-        assert torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            attention_mask,
-            lm_labels,
-        ) = config_and_inputs
-
-        inputs_dict = {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-        }
-        return config, inputs_dict
-
-
-@require_torch
-class DalleMegaStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (DalleMegaDecoder,) if is_torch_available() else ()
-    fx_comptatible = True
-    test_pruning = False
-    is_encoder_decoder = False
-
-    def setUp(
-        self,
-    ):
-        self.model_tester = DalleMegaStandaloneDecoderModelTester(self, is_training=False)
-        self.config_tester = ConfigTester(self, config_class=DalleMegaConfig)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_decoder_model_past(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_decoder_model_past(*config_and_inputs)
-
-    def test_decoder_model_attn_mask_past(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
-
-    def test_retain_grad_hidden_states_attentions(self):
-        # decoder cannot keep gradients
-        return
