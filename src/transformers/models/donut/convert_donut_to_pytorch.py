@@ -133,7 +133,7 @@ def convert_state_dict(orig_state_dict, model):
     return orig_state_dict
 
 
-def convert_swin_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_hub=False):
+def convert_donut_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_hub=False):
     # load original model
     original_model = DonutModel.from_pretrained(model_name).eval()
 
@@ -156,18 +156,25 @@ def convert_swin_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_h
     # original_pixel_values = original_model.encoder.prepare_input(image).unsqueeze(0)
 
     tokenizer = XLMRobertaTokenizerFast.from_pretrained(model_name, from_slow=True)
-    feature_extractor = DonutFeatureExtractor(size=original_model.config.input_size[::-1])
+    feature_extractor = DonutFeatureExtractor(
+        do_align_long_axis=original_model.config.align_long_axis, size=original_model.config.input_size[::-1]
+    )
     processor = DonutProcessor(feature_extractor, tokenizer)
     pixel_values = processor(image, return_tensors="pt").pixel_values
 
-    if "vqa" in model_name:
+    if model_name == "naver-clova-ix/donut-base-finetuned-docvqa":
         task_prompt = "<s_docvqa><s_question>{user_input}</s_question><s_answer>"
         question = "When is the coffee break?"
         task_prompt = task_prompt.replace("{user_input}", question)
-    elif "rvlcdip" in model_name:
+    elif model_name == "naver-clova-ix/donut-base-finetuned-rvlcdip":
         task_prompt = "<s_rvlcdip>"
-    elif "cord-v2" in model_name:
+    elif model_name == "naver-clova-ix/donut-base-finetuned-cord-v2":
         task_prompt = "s_cord-v2>"
+    elif model_name in ["naver-clova-ix/donut-proto", "naver-clova-ix/donut-base"]:
+        # use a random prompt
+        task_prompt = "hello world"
+    else:
+        raise ValueError("Model name not supported")
     prompt_tensors = original_model.decoder.tokenizer(task_prompt, add_special_tokens=False, return_tensors="pt")[
         "input_ids"
     ]
@@ -221,4 +228,4 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_swin_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_donut_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
