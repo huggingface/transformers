@@ -80,7 +80,7 @@ def _resample_loop(x, t_out, interp_win, interp_delta, num_table, scale, y):
             y[t] += weight * x[n + k + 1]
 
 
-_resample_loop_p = jit(nopython=True, nogil=True, parallel=True)(_resample_loop)
+_resample_loop_p = jit(nopython=True, nogil=True, parallel=False)(_resample_loop)
 
 
 @guvectorize(
@@ -145,16 +145,29 @@ if __name__ == "__main__":
 
 
 
-    batch_size = 64
-    seq_len = 65536
+    # batch_size = 64
+    # seq_len = 65536
+    #
+    # from transformers import Wav2Vec2Model
+    # model = Wav2Vec2Model.from_pretrained("hf-internal-testing/tiny-random-wav2vec2")
+    # encoder_input = torch.ones(batch_size, seq_len, dtype=torch.float32)
+    #
+    # for i in tqdm(range(32)):
+    #     output = model(input_values=encoder_input)
+    #     print(output.last_hidden_state.shape)
 
-    from transformers import Wav2Vec2Model
-    model = Wav2Vec2Model.from_pretrained("hf-internal-testing/tiny-random-wav2vec2")
-    encoder_input = torch.ones(batch_size, seq_len, dtype=torch.float32)
+
+
+    batch_size = 64
+    seq_len = 128
+
+    from transformers import BertLMHeadModel
+    model = BertLMHeadModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+    decoder_input = torch.ones(batch_size, seq_len, dtype=torch.int32)
 
     for i in tqdm(range(32)):
-        output = model(input_values=encoder_input)
-        print(output.last_hidden_state.shape)
+        output = model(input_ids=decoder_input)
+        print(output.logits.shape)
 
 
 
