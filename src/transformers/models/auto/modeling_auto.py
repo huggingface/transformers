@@ -129,6 +129,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("vision-text-dual-encoder", "VisionTextDualEncoderModel"),
         ("visual_bert", "VisualBertModel"),
         ("vit", "ViTModel"),
+        ("efficientformer", "EfficientformerModel"),
         ("vit_mae", "ViTMAEModel"),
         ("wav2vec2", "Wav2Vec2Model"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerModel"),
@@ -309,6 +310,7 @@ MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
         ("deit", "DeiTForMaskedImageModeling"),
         ("swin", "SwinForMaskedImageModeling"),
         ("vit", "ViTForMaskedImageModeling"),
+        ("efficientformer", "EfficientformerForMaskedImageModeling"),
     ]
 )
 
@@ -346,6 +348,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("swin", "SwinForImageClassification"),
         ("van", "VanForImageClassification"),
         ("vit", "ViTForImageClassification"),
+        ("efficientformer", "EfficientformerForImageClassification"),
     ]
 )
 

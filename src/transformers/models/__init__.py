@@ -140,6 +140,7 @@ from . import (
     vision_text_dual_encoder,
     visual_bert,
     vit,
+    efficientformer,
     vit_mae,
     wav2vec2,
     wav2vec2_conformer,
