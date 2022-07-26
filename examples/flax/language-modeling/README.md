@@ -384,7 +384,7 @@ tokenizer.train_from_iterator(batch_iterator(), vocab_size=50265, min_frequency=
 ])
 
 # Save files to disk
-tokenizer.save("./vi-bart-base/tokenizer.json")
+tokenizer.save("./norwegian-bart-base/tokenizer.json")
 ```
 
 ### Create configuration
