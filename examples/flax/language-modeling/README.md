@@ -429,7 +429,7 @@ python run_bart_dlm_flax.py \
 Training should converge at a loss and accuracy 
 of 1.36 and 0.77 respectively after 3 epochs on a single TPUv3-8.
 This should take less than 6 hours.
-Training statistics can be accessed on [tfhub.dev](https://tensorboard.dev/experiment/Maw62QlaSXWS0MOf2V2lbg).
+Training statistics can be accessed on [tfhub.dev](https://tensorboard.dev/experiment/Maw62QlaSXWS0MOf2V2lbg/).
 
 ## Runtime evaluation
 
