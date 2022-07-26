@@ -146,7 +146,7 @@ if __name__ == "__main__":
 
 
     batch_size = 64
-    seq_len = 16384
+    seq_len = 65536
 
     from transformers import Wav2Vec2Model
     model = Wav2Vec2Model.from_pretrained("hf-internal-testing/tiny-random-wav2vec2")
