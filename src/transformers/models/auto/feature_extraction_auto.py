@@ -58,6 +58,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("maskformer", "MaskFormerFeatureExtractor"),
         ("mctct", "MCTCTFeatureExtractor"),
         ("mobilevit", "MobileViTFeatureExtractor"),
+        ("owlvit", "OwlViTFeatureExtractor"),
         ("perceiver", "PerceiverFeatureExtractor"),
         ("poolformer", "PoolFormerFeatureExtractor"),
         ("regnet", "ConvNextFeatureExtractor"),
