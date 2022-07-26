@@ -444,7 +444,13 @@ def main():
         # We drop the small remainder, we could add padding if the model supported it instead of this drop, you can
         # customize this part to your needs.
         if total_length >= block_size:
-            total_length = (total_length // block_size) * block_size
+             total_length = (total_length // block_size) * block_size
+        else:
+            # If `total_length` < `block_size`, we ignore the whole batch of `examples`. Otherwise, we might have
+            # examples of different lengths which gives the following error from `torch_default_data_collator`:
+            # `expected sequence of length X at dim 1 (got Y) during training`.
+            # See https://github.com/huggingface/transformers/issues/17875.
+            total_length = 0
         # Split by chunks of max_len.
         result = {
             k: [t[i : i + block_size] for i in range(0, total_length, block_size)]
