@@ -701,7 +701,7 @@ with "TF", but are otherwise identically named to our PyTorch classes. This
 means that the TF equivalent of the class you tried to import would be "TF{0}".
 If you want to use TensorFlow, please use TF classes instead!
 
-If you really do want to use PyTorch (for some reason) please go to
+If you really do want to use PyTorch please go to
 https://pytorch.org/get-started/locally/ and follow the instructions that
 match your environment.
 """
