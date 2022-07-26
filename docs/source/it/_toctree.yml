@@ -29,6 +29,8 @@
     title: Modelli multilingua per l'inferenza
   - local: serialization
     title: Esporta modelli Transformers
+  - local: parallelism
+    title: Parallelizzazione dei modelli
 - sections:
   - local: debugging
     title: Debugging
