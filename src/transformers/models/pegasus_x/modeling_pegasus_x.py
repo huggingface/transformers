@@ -421,7 +421,7 @@ class PegasusXGlobalLocalAttention(nn.Module):
 
         # [B, H, G, G+P]
         attn_weights = torch.einsum("BHGF,BHXF->BHGX", global_q, global_and_local_k)
-        attn_weights += attn_weights + extended_mask[:, None, None, :]
+        attn_weights = attn_weights + extended_mask[:, None, None, :]
         attn_probs = nn.functional.softmax(attn_weights, dim=-1)
         attn_probs = nn.functional.dropout(attn_probs, p=self.dropout, training=self.training)
         
