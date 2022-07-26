@@ -174,7 +174,7 @@ class BloomModelTester:
         output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice))
 
     def create_and_check_bloom_model_attention_mask_past(self, config, input_ids, input_mask, *args):
         model = BloomModel(config=config)
@@ -214,18 +214,12 @@ class BloomModelTester:
         output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
 
         # test that outputs are equal for slice
-        print(output_from_past_slice)
-        print(output_from_no_past_slice)
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice))
 
     def create_and_check_bloom_model_past_large_inputs(self, config, input_ids, input_mask, *args):
         model = BloomModel(config=config)
         model.to(torch_device)
         model.eval()
-
-        print("test input_ids", input_ids.shape)
-        print("test input_mask", input_mask.shape)
-        print("test input_mask[0]", input_mask[0])
 
         # first forward pass
         outputs = model(input_ids, attention_mask=input_mask, use_cache=True)
@@ -235,10 +229,6 @@ class BloomModelTester:
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
         next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
-
-        print("test next_tokens", next_tokens.shape)
-        print("test next_mask", next_mask.shape)
-        print("test next_mask[0]", next_mask[0])
 
         # append to next input_ids and token_type_ids
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
@@ -256,10 +246,7 @@ class BloomModelTester:
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
         # test that outputs are equal for slice
-        torch.testing.assert_close(output_from_past_slice, output_from_no_past_slice, check_stride=False)
-        print(output_from_past_slice)
-        print(output_from_no_past_slice)
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice))
 
     def create_and_check_lm_head_model(self, config, input_ids, input_mask, *args):
         model = BloomForCausalLM(config)

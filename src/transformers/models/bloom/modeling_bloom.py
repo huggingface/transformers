@@ -305,10 +305,6 @@ class BloomAttention(nn.Module):
             attention_scores * self.layer_number, attention_mask, torch.finfo(input_dtype).min
         )
 
-        # DEBUG @thomasw21
-        if self.layer_number == 2:
-            print("attention_mask", attention_mask[0, :, -3:, :])
-
         attention_probs = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(input_dtype)
         # [batch_size, num_heads, q_length, k_length]
         attention_probs = self.attention_dropout(attention_probs)
@@ -682,12 +678,6 @@ class BloomModel(BloomPreTrainedModel):
         alibi = build_alibi_tensor(attention_mask, self.n_head, hidden_states.dtype, hidden_states.device)
 
         causal_mask = self._prepare_attn_mask(attention_mask, input_shape, inputs_embeds, past_key_values_length)
-
-        # DEBUG @thomasw21
-        if past_key_values[0] is not None:
-            print("bloom modeling input_ids", input_ids.shape)
-            print("bloom modeling past_key_values[0][0]", past_key_values[0][0].shape)
-            print("bloom modeling causal_mask", causal_mask.shape, causal_mask[0])
 
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
 
