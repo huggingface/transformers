@@ -81,6 +81,7 @@ if is_tf_available():
         TF_MODEL_WITH_LM_HEAD_MAPPING,
         TFAutoModel,
         TFAutoModelForCausalLM,
+        TFAutoModelForImageClassification,
         TFAutoModelForMaskedLM,
         TFAutoModelForQuestionAnswering,
         TFAutoModelForSeq2SeqLM,
@@ -282,7 +283,7 @@ SUPPORTED_TASKS = {
     },
     "image-classification": {
         "impl": ImageClassificationPipeline,
-        "tf": (),
+        "tf": (TFAutoModelForImageClassification,) if is_tf_available() else (),
         "pt": (AutoModelForImageClassification,) if is_torch_available() else (),
         "default": {"model": {"pt": ("google/vit-base-patch16-224", "5dca96d")}},
         "type": "image",
