@@ -408,7 +408,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         # This output has been obtained using fp32 model on the huggingface DGX workstation - NVIDIA A100 GPU
         EXPECTED_OUTPUT = (
             "I enjoy walking with my cute dog, and I love to watch the kids play. I am a very active person, and I am"
-            " very active. I am a very good listener, and I am very good at listening. I am a very good"
+            " a very good listener. I am a very good person, and I am a very good person. I am a"
         )
 
         input_ids = tokenizer.encode(input_sentence, return_tensors="pt")
