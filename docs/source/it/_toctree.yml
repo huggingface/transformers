@@ -23,6 +23,8 @@
 - sections:
   - local: create_a_model
     title: Crea un'architettura personalizzata
+  - local: custom_models
+    title: Condividere modelli personalizzati
   - local: run_scripts
     title: Addestramento con script
   - local: multilingual
@@ -31,7 +33,6 @@
     title: Convertire modelli tensorflow
   - local: serialization
     title: Esporta modelli Transformers
-- sections:
   - local: debugging
     title: Debugging
-    
+  title: Guide pratiche
