@@ -21,7 +21,7 @@ cómo escribir un modelo personalizado y su configuración para que pueda usarse
 con la comunidad (con el código en el que se basa) para que cualquiera pueda usarlo, incluso si no está presente en la biblioteca 
 🤗 Transformers.
 
-Ilustraremos todo esto en un modelo ResNet, envolviendo la clase ResNet del [biblioteca timm](https://github.com/rwightman/pytorch-image-models/tree/master/timm) en un [`PreTrainedModel`].
+Ilustraremos todo esto con un modelo ResNet, envolviendo la clase ResNet de la [biblioteca timm](https://github.com/rwightman/pytorch-image-models/tree/master/timm) en un [`PreTrainedModel`].
 
 ## Escribir una configuración personalizada
 
@@ -30,7 +30,7 @@ contendrá toda la información necesaria para construir el modelo. Como veremos
 tomar un `config` para ser inicializado, por lo que realmente necesitamos que ese objeto esté lo más completo posible.
 
 En nuestro ejemplo, tomaremos un par de argumentos de la clase ResNet que tal vez queramos modificar. Las diferentes 
-configuraciones nos darán los diferentes tipos de ResNet que son posibles. Luego simplemente almacenamos esos argumentos, 
+configuraciones nos darán los diferentes tipos de ResNet que son posibles. Luego simplemente almacenamos esos argumentos 
 después de verificar la validez de algunos de ellos.
 
 ```python
@@ -98,7 +98,7 @@ con el método `from_pretrained`:
 resnet50d_config = ResnetConfig.from_pretrained("custom-resnet")
 ```
 
-También puedes usar cualquier otro método de la clase [`PretrainedConfig`], como [`~PretrainedConfig.push_to_hub`] para cargar 
+También puedes usar cualquier otro método de la clase [`PretrainedConfig`], como [`~PretrainedConfig.push_to_hub`], para cargar 
 directamente tu configuración en el Hub.
 
 ## Escribir un modelo personalizado
@@ -315,7 +315,7 @@ from transformers import AutoModelForImageClassification
 model = AutoModelForImageClassification.from_pretrained("sgugger/custom-resnet50d", trust_remote_code=True)
 ```
 
-También se recomienda encarecidamente pasar un _hash_ de confirmación como una "revisión" para asegurarte que el autor 
+También se recomienda encarecidamente pasar un _hash_ de confirmación como una "revisión" para asegurarte de que el autor 
 de los modelos no actualizó el código con algunas líneas nuevas maliciosas (a menos que confíes plenamente en los autores 
 de los modelos).
 
@@ -348,4 +348,4 @@ AutoModelForImageClassification.register(ResnetConfig, ResnetModelForImageClassi
 
 Ten en cuenta que el primer argumento utilizado al registrar tu configuración personalizada en [`AutoConfig`] debe coincidir
 con el `model_type` de tu configuración personalizada, y el primer argumento utilizado al registrar tus modelos personalizados
-en cualquier clase del modelo automático debe coincidir con `config_class ` de esos modelos.
+en cualquier clase del modelo automático debe coincidir con el `config_class ` de esos modelos.
