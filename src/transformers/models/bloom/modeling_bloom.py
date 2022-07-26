@@ -301,13 +301,14 @@ class BloomAttention(nn.Module):
         # change view to [batch_size, num_heads, q_length, k_length]
         attention_scores = matmul_result.view(batch_size, self.num_heads, q_length, kv_length)
 
-        # We replace the scaled softmax by just a few line of code - [batch_size, num_heads, q_length, k_length]
+        # we cast attention scores to fp32 compute scaled softmax and cast back into initial dtype - [batch_size, num_heads, q_length, k_length]
         input_dtype = attention_scores.dtype
+        attention_scores = attention_scores.float()
         attn_weights = torch.masked_fill(
-            attention_scores * self.layer_number, attention_mask, torch.finfo(input_dtype).min
+            attention_scores * self.layer_number, attention_mask, torch.finfo(torch.float32).min
         )
-
         attention_probs = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(input_dtype)
+
         # [batch_size, num_heads, q_length, k_length]
         attention_probs = self.attention_dropout(attention_probs)
 
