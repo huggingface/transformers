@@ -63,9 +63,9 @@ class KerasMetricCallback(Callback):
             supplied.
         batch_size (`int`, *optional*):
             Batch size. Only used when the data is not a pre-batched `tf.data.Dataset`.
-        predict_with_generate (`bool`, *optional*, defaults to `False`):
+        predict_with_generate (`bool`, defaults to `False`):
             Whether we should use `model.generate()` to get outputs for the model.
-        use_xla_generation (`bool`, *optional*, defaults to `False`):
+        use_xla_generation (`bool`, defaults to `False`):
             If we're generating, whether to compile model generation with XLA. This can massively increase the speed of
             generation (up to 100X speedup) but will require a new XLA compilation for each input shape. When using XLA
             generation, it's a good idea to pad your inputs to the same size, or to use the `pad_to_multiple_of`
@@ -84,8 +84,8 @@ class KerasMetricCallback(Callback):
         output_cols: Optional[List[str]] = None,
         label_cols: Optional[List[str]] = None,
         batch_size: Optional[int] = None,
-        predict_with_generate: Optional[bool] = False,
-        use_xla_generation: Optional[bool] = False,
+        predict_with_generate: bool = False,
+        use_xla_generation: bool = False,
         generate_kwargs: Optional[dict] = None,
     ):
         super().__init__()
@@ -138,7 +138,9 @@ class KerasMetricCallback(Callback):
             logging.warning("TF versions less than 2.7 may encounter issues with KerasMetricCallback!")
 
         self.use_xla_generation = use_xla_generation
-        self.generate_kwargs = generate_kwargs or {}
+        if generate_kwargs is None:
+            generate_kwargs = dict()
+        self.generate_kwargs = generate_kwargs
 
         self.generation_function = None
 
@@ -202,11 +204,7 @@ class KerasMetricCallback(Callback):
             if self.use_xla_generation and self.generation_function is None:
 
                 def generation_function(inputs, attention_mask):
-                    return self.model.generate(
-                        inputs,
-                        attention_mask=attention_mask,
-                        **self.generate_kwargs,
-                    )
+                    return self.model.generate(inputs, attention_mask=attention_mask, **self.generate_kwargs)
 
                 self.generation_function = tf.function(generation_function, jit_compile=True)
 
