@@ -154,7 +154,7 @@ if __name__ == "__main__":
 
     for i in tqdm(range(32)):
         output = model(input_values=encoder_input)
-        print(output.logits.shape)
+        print(output.last_hidden_state.shape)
 
 
 
