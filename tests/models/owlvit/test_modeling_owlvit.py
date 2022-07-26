@@ -91,6 +91,7 @@ class OwlViTVisionModelTester:
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = pixel_values.to(torch_device)
         config = self.get_config()
 
         return config, pixel_values
@@ -110,8 +111,7 @@ class OwlViTVisionModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values):
-        model = OwlViTVisionModel(config=config)
-        model.to(torch_device)
+        model = OwlViTVisionModel(config=config).to(torch_device)
         model.eval()
 
         pixel_values = pixel_values.to(torch.float32)
@@ -245,10 +245,12 @@ class OwlViTTextModelTester:
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size * self.num_queries, self.seq_length], self.vocab_size)
+        input_ids = input_ids.to(torch_device)
         input_mask = None
 
         if self.use_input_mask:
             input_mask = random_attention_mask([self.batch_size * self.num_queries, self.seq_length])
+            input_mask = input_mask.to(torch_device)
 
         if input_mask is not None:
             num_text, seq_length = input_mask.shape
@@ -276,8 +278,7 @@ class OwlViTTextModelTester:
         )
 
     def create_and_check_model(self, config, input_ids, input_mask):
-        model = OwlViTTextModel(config=config)
-        model.to(torch_device)
+        model = OwlViTTextModel(config=config).to(torch_device)
         model.eval()
         with torch.no_grad():
             result = model(input_ids=input_ids, attention_mask=input_mask)
@@ -455,8 +456,7 @@ class OwlViTModelTest(ModelTesterMixin, unittest.TestCase):
         configs_no_init.torchscript = True
         configs_no_init.return_dict = False
         for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            model.to(torch_device)
+            model = model_class(config=configs_no_init).to(torch_device)
             model.eval()
 
             try:
@@ -479,10 +479,7 @@ class OwlViTModelTest(ModelTesterMixin, unittest.TestCase):
                 except Exception:
                     self.fail("Couldn't load module.")
 
-            model.to(torch_device)
-            model.eval()
-
-            loaded_model.to(torch_device)
+            loaded_model = loaded_model.to(torch_device)
             loaded_model.eval()
 
             model_state_dict = model.state_dict()
@@ -638,8 +635,7 @@ class OwlViTForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
         configs_no_init.torchscript = True
         configs_no_init.return_dict = False
         for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            model.to(torch_device)
+            model = model_class(config=configs_no_init).to(torch_device)
             model.eval()
 
             try:
@@ -662,10 +658,7 @@ class OwlViTForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
                 except Exception:
                     self.fail("Couldn't load module.")
 
-            model.to(torch_device)
-            model.eval()
-
-            loaded_model.to(torch_device)
+            loaded_model = loaded_model.to(torch_device)
             loaded_model.eval()
 
             model_state_dict = model.state_dict()
@@ -720,8 +713,7 @@ class OwlViTForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
                 recursive_check(tuple_output, dict_output)
 
         for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
+            model = model_class(config).to(torch_device)
             model.eval()
 
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
