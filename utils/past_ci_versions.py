@@ -8,7 +8,7 @@ past_versions_testing = {
             "torch": "1.11.0",
             "torchvision": "0.12.0",
             "torchaudio": "0.11.0",
-            "python": 3.10,
+            "python": 3.9,
             "cuda": "cu113",
             "install": (
                 "python3 -m pip install --no-cache-dir -U torch==1.11.0 torchvision==0.12.0 torchaudio==0.11.0"
