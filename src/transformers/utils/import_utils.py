@@ -706,6 +706,17 @@ https://pytorch.org/get-started/locally/ and follow the instructions that
 match your environment.
 """
 
+# docstyle-ignore
+TF_IMPORT_ERROR_WITH_PYTORCH = """
+{0} requires the TensorFlow library but it was not found in your environment.
+However, we were able to find a PyTorch installation. PyTorch classes do not begin
+with "TF", but are otherwise identically named to our TF classes.
+If you want to use PyTorch, please use those classes instead!
+
+If you really do want to use TensorFlow, please follow the instructions on the
+installation page https://www.tensorflow.org/install that match your environment.
+"""
+
 
 # docstyle-ignore
 SKLEARN_IMPORT_ERROR = """
@@ -872,6 +883,10 @@ def requires_backends(obj, backends):
     # Raise an error for users who might not realize that classes without "TF" are torch-only
     if "torch" in backends and "tf" not in backends and not is_torch_available() and is_tf_available():
         raise ImportError(PYTORCH_IMPORT_ERROR_WITH_TF.format(name))
+
+    # Raise the inverse error for PyTorch users trying to load TF classes
+    if "tf" in backends and "torch" not in backends and is_torch_available() and not is_tf_available():
+        raise ImportError(TF_IMPORT_ERROR_WITH_PYTORCH.format(name))
 
     checks = (BACKENDS_MAPPING[backend] for backend in backends)
     failed = [msg.format(name) for available, msg in checks if not available()]
