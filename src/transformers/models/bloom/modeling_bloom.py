@@ -51,17 +51,17 @@ BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_values_length: int = 0):
+def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0):
     """
     Make causal mask used for self-attention.
     """
     batch_size, target_length = input_ids_shape
 
-    mask = torch.ones((target_length, target_length), dtype=dtype)
+    mask = torch.ones((target_length, target_length), dtype=dtype, device=device)
     mask.triu_(diagonal=1)
 
     if past_key_values_length > 0:
-        past_key_values_mask = torch.zeros((target_length, past_key_values_length), dtype=dtype)
+        past_key_values_mask = torch.zeros((target_length, past_key_values_length), dtype=dtype, device=device)
         mask = torch.cat([past_key_values_mask, mask], dim=-1)
 
     expanded_mask = mask[None, None, :, :].expand(batch_size, 1, target_length, target_length + past_key_values_length)
@@ -588,14 +588,17 @@ class BloomModel(BloomPreTrainedModel):
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         combined_attention_mask = None
+        device = attention_mask.device
+        dtype = torch.bool
+
         if input_shape[-1] > 1:
             combined_attention_mask = _make_causal_mask(
-                input_shape, torch.bool, past_key_values_length=past_key_values_length
+                input_shape, dtype, device, past_key_values_length=past_key_values_length
             )
 
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            expanded_attn_mask = _expand_mask(attention_mask, torch.bool, tgt_len=input_shape[-1])
+            expanded_attn_mask = _expand_mask(attention_mask, dtype, tgt_len=input_shape[-1])
             combined_attention_mask = (
                 expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
             )
