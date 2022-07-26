@@ -131,7 +131,7 @@ class DummyModel(nn.Module):
 
 
 if __name__ == "__main__":
-    batch_size = 128
+    batch_size = 64
     seq_len = 1024
 
     dim = 1024
