@@ -208,7 +208,7 @@ class BloomGelu(nn.Module):
 
 
 class BloomAttention(nn.Module):
-    def __init__(self, config, layer_number=None):
+    def __init__(self, config, layer_number):
         super().__init__()
 
         self.pretraining_tp = config.pretraining_tp
@@ -262,9 +262,9 @@ class BloomAttention(nn.Module):
         self,
         hidden_states,
         residual,
+        alibi,
+        attention_mask,
         layer_past=None,
-        attention_mask=None,
-        alibi=None,
         head_mask=None,
         use_cache=False,
         output_attentions=False,
@@ -379,7 +379,7 @@ class BloomMLP(nn.Module):
 
 
 class BloomBlock(nn.Module):
-    def __init__(self, config, layer_number=None):
+    def __init__(self, config, layer_number):
         super().__init__()
         hidden_size = config.hidden_size
 
@@ -396,12 +396,12 @@ class BloomBlock(nn.Module):
     def forward(
         self,
         hidden_states,
+        alibi,
+        attention_mask,
         layer_past=None,
-        attention_mask=None,
         head_mask=None,
         use_cache=False,
         output_attentions=False,
-        alibi=None,
     ):
         # hidden_states: [batch_size, seq_length, hidden_size]
 
