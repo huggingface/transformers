@@ -304,7 +304,7 @@ class BloomAttention(nn.Module):
             attention_scores * self.layer_number, attention_mask, torch.finfo(input_dtype).min
         )
 
-        ## DEBUG @thomasw21
+        # DEBUG @thomasw21
         if self.layer_number == 2:
             print("attention_mask", attention_mask[0, :, -3:, :])
 
@@ -679,7 +679,7 @@ class BloomModel(BloomPreTrainedModel):
 
         causal_mask = self._prepare_attn_mask(attention_mask, input_shape, inputs_embeds, past_key_values_length)
 
-        ## DEBUG @thomasw21
+        # DEBUG @thomasw21
         if past_key_values[0] is not None:
             print("bloom modeling input_ids", input_ids.shape)
             print("bloom modeling past_key_values[0][0]", past_key_values[0][0].shape)
