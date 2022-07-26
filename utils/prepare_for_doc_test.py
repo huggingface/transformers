@@ -28,7 +28,7 @@
     When debugging the doc tests locally, please make sure to
     always run:
 
-    ```python utils/prepare_for_doc_test.py src doc```
+    ```python utils/prepare_for_doc_test.py src docs```
 
     before running the doc tests:
 
@@ -36,7 +36,7 @@
 
     Afterwards you should revert the changes by running
 
-    ```python utils/prepare_for_doc_test.py src doc --remove_new_line```
+    ```python utils/prepare_for_doc_test.py src docs --remove_new_line```
 """
 
 import argparse

@@ -28,7 +28,11 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_layoutlmv3": ["LAYOUTLMV3_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMv3Config"],
+    "configuration_layoutlmv3": [
+        "LAYOUTLMV3_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "LayoutLMv3Config",
+        "LayoutLMv3OnnxConfig",
+    ],
     "processing_layoutlmv3": ["LayoutLMv3Processor"],
     "tokenization_layoutlmv3": ["LayoutLMv3Tokenizer"],
 }
@@ -66,7 +70,11 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_layoutlmv3 import LAYOUTLMV3_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMv3Config
+    from .configuration_layoutlmv3 import (
+        LAYOUTLMV3_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        LayoutLMv3Config,
+        LayoutLMv3OnnxConfig,
+    )
     from .processing_layoutlmv3 import LayoutLMv3Processor
     from .tokenization_layoutlmv3 import LayoutLMv3Tokenizer
 

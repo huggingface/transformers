@@ -42,6 +42,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("data2vec-vision", "TFData2VecVisionModel"),
         ("deberta", "TFDebertaModel"),
         ("deberta-v2", "TFDebertaV2Model"),
+        ("deit", "TFDeiTModel"),
         ("distilbert", "TFDistilBertModel"),
         ("dpr", "TFDPRQuestionEncoder"),
         ("electra", "TFElectraModel"),
@@ -62,9 +63,12 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("openai-gpt", "TFOpenAIGPTModel"),
         ("opt", "TFOPTModel"),
         ("pegasus", "TFPegasusModel"),
+        ("regnet", "TFRegNetModel"),
         ("rembert", "TFRemBertModel"),
+        ("resnet", "TFResNetModel"),
         ("roberta", "TFRobertaModel"),
         ("roformer", "TFRoFormerModel"),
+        ("segformer", "TFSegformerModel"),
         ("speech_to_text", "TFSpeech2TextModel"),
         ("swin", "TFSwinModel"),
         ("t5", "TFT5Model"),
@@ -164,6 +168,7 @@ TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
 
 TF_MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
     [
+        ("deit", "TFDeiTForMaskedImageModeling"),
         ("swin", "TFSwinForMaskedImageModeling"),
     ]
 )
@@ -173,6 +178,10 @@ TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         # Model for Image-classsification
         ("convnext", "TFConvNextForImageClassification"),
         ("data2vec-vision", "TFData2VecVisionForImageClassification"),
+        ("deit", ("TFDeiTForImageClassification", "TFDeiTForImageClassificationWithTeacher")),
+        ("regnet", "TFRegNetForImageClassification"),
+        ("resnet", "TFResNetForImageClassification"),
+        ("segformer", "TFSegformerForImageClassification"),
         ("swin", "TFSwinForImageClassification"),
         ("vit", "TFViTForImageClassification"),
     ]
@@ -182,6 +191,7 @@ TF_MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Semantic Segmentation mapping
         ("data2vec-vision", "TFData2VecVisionForSemanticSegmentation"),
+        ("segformer", "TFSegformerForSemanticSegmentation"),
     ]
 )
 

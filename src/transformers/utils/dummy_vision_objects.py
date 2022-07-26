@@ -115,6 +115,20 @@ class MaskFormerFeatureExtractor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class MobileViTFeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class OwlViTFeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class PerceiverFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 

@@ -136,7 +136,9 @@ class TextClassificationPipeline(Pipeline):
             If `top_k` is used, one such dictionary is returned per label.
         """
         result = super().__call__(*args, **kwargs)
-        if isinstance(args[0], str) and isinstance(result, dict):
+        # TODO try and retrieve it in a nicer way from _sanitize_parameters.
+        _legacy = "top_k" not in kwargs
+        if isinstance(args[0], str) and _legacy:
             # This pipeline is odd, and return a list when single item is run
             return [result]
         else:
