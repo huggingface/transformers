@@ -134,19 +134,19 @@ if __name__ == "__main__":
     batch_size = 64
     seq_len = 512
 
-    # dim = 512
-    # model = DummyModel(n_layers=8, dim=dim)
-    # input = torch.ones(batch_size, seq_len, dim)
-    #
-    # for i in tqdm(range(16)):
-    #     output = model(input)
-    #     print(output.shape)
-
-    from transformers import AutoModelForSpeechSeq2Seq
-    model = AutoModelForSpeechSeq2Seq.from_pretrained("hf-internal-testing/tiny-random-speech-encoder-decoder")
-    encoder_input = torch.ones(batch_size, seq_len, dtype=torch.float32)
-    decoder_input = torch.ones(batch_size, 128, dtype=torch.int32)
+    dim = 512
+    model = DummyModel(n_layers=8, dim=dim)
+    input = torch.ones(batch_size, seq_len, dim)
 
     for i in tqdm(range(16)):
-        output = model(inputs=encoder_input, decoder_input_ids=decoder_input)
-        print(output.logits.shape)
+        output = model(input)
+        print(output.shape)
+
+    # from transformers import AutoModelForSpeechSeq2Seq
+    # model = AutoModelForSpeechSeq2Seq.from_pretrained("hf-internal-testing/tiny-random-speech-encoder-decoder")
+    # encoder_input = torch.ones(batch_size, seq_len, dtype=torch.float32)
+    # decoder_input = torch.ones(batch_size, 128, dtype=torch.int32)
+    #
+    # for i in tqdm(range(16)):
+    #     output = model(inputs=encoder_input, decoder_input_ids=decoder_input)
+    #     print(output.logits.shape)
