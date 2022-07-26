@@ -46,63 +46,54 @@ class VQGANModelTester:
     def __init__(
         self,
         parent,
-        ch=64,
-        out_ch=3,
-        in_channels=3,
+        hidden_channels=64,
+        num_channels=3,
         num_res_blocks=2,
         resolution=64,
         z_channels=64,
-        ch_mult=(1, 2, 4),
+        channel_mult=(1, 2, 4),
         attn_resolutions=(8,),
-        n_embed=128,
-        embed_dim=64,
+        num_embeddings=128,
+        quantized_embed_dim=64,
         dropout=0.0,
-        double_z=False,
-        resamp_with_conv=True,
-        give_pre_end=False,
+        resample_with_conv=True,
         scope=None,
         is_training=True,
     ):
         self.parent = parent
-        self.ch = ch
-        self.out_ch = out_ch
-        self.in_channels = in_channels
+        self.hidden_channels = hidden_channels
+        self.num_channels = num_channels
         self.num_res_blocks = num_res_blocks
         self.resolution = resolution
         self.z_channels = z_channels
-        self.ch_mult = ch_mult
+        self.channel_mult = channel_mult
         self.attn_resolutions = attn_resolutions
-        self.n_embed = n_embed
-        self.embed_dim = embed_dim
+        self.num_embeddings = num_embeddings
+        self.quantized_embed_dim = quantized_embed_dim
         self.dropout = dropout
-        self.double_z = double_z
-        self.resamp_with_conv = resamp_with_conv
-        self.give_pre_end = give_pre_end
+        self.resample_with_conv = resample_with_conv
         self.scope = scope
         self.batch_size = 4
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor((self.batch_size, self.in_channels, self.resolution, self.resolution))
+        pixel_values = floats_tensor((self.batch_size, self.num_channels, self.resolution, self.resolution))
         config = self.get_config()
         return config, pixel_values
 
     def get_config(self):
         return VQGANConfig(
-            ch=self.ch,
-            out_ch=self.out_ch,
-            in_channels=self.in_channels,
+            hidden_channels=self.hidden_channels,
+            num_channels=self.num_channels,
             num_res_blocks=self.num_res_blocks,
             resolution=self.resolution,
             z_channels=self.z_channels,
-            ch_mult=self.ch_mult,
+            channel_mult=self.channel_mult,
             attn_resolutions=self.attn_resolutions,
-            n_embed=self.n_embed,
-            embed_dim=self.embed_dim,
+            num_embeddings=self.num_embeddings,
+            quantized_embed_dim=self.quantized_embed_dim,
             dropout=self.dropout,
-            double_z=self.double_z,
-            resamp_with_conv=self.resamp_with_conv,
-            give_pre_end=self.give_pre_end,
+            resample_with_conv=self.resample_with_conv,
         )
 
     def create_and_check_model(self, config, pixel_values):
@@ -112,7 +103,8 @@ class VQGANModelTester:
         result = model(pixel_values)
         result = model(pixel_values, return_loss=True)
         self.parent.assertEqual(
-            result.reconstructed_pixel_values.shape, (self.batch_size, self.out_ch, self.resolution, self.resolution)
+            result.reconstructed_pixel_values.shape,
+            (self.batch_size, self.num_channels, self.resolution, self.resolution),
         )
 
     def prepare_config_and_inputs_for_common(self):

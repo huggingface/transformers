@@ -588,7 +588,7 @@ class VQGANModel(VQGANPreTrainedModel):
         self.encoder = Encoder(self.config)
         self.decoder = Decoder(self.config)
         self.quantize = VectorQuantizer(
-            self.config.num_embeddings, self.config.quant_embedding_dim, self.config.commitment_cost
+            self.config.num_embeddings, self.config.quantized_embed_dim, self.config.commitment_cost
         )
         self.quant_conv = nn.Conv2d(
             self.config.z_channels,
