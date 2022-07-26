@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python
 # coding=utf-8
 # Copyright 2021 The HuggingFace Team All rights reserved.
@@ -23,18 +22,17 @@ https://huggingface.co/models?filter=bart
 
 import json
 import logging
+import math
 import os
 import sys
 import time
-import math
 from dataclasses import asdict, dataclass, field
-import nltk
-
 from enum import Enum
 from itertools import chain
 from pathlib import Path
 from typing import Dict, List, Optional
 
+import nltk
 import numpy as np
 from datasets import load_dataset
 from tqdm import tqdm
@@ -51,11 +49,11 @@ from transformers import (
     CONFIG_MAPPING,
     FLAX_MODEL_FOR_MASKED_LM_MAPPING,
     AutoTokenizer,
+    BartConfig,
     BatchEncoding,
     FlaxBartForConditionalGeneration,
     HfArgumentParser,
     PreTrainedTokenizerBase,
-    BartConfig,
     is_tensorboard_available,
     set_seed,
 )
@@ -279,7 +277,8 @@ class FlaxDataCollatorForBartDenoisingLM:
     def __post_init__(self):
         if self.tokenizer.mask_token is None or self.tokenizer.eos_token is None:
             raise ValueError(
-                "This tokenizer does not have a mask token or eos token token which is necessary for denoising language modeling. "
+                "This tokenizer does not have a mask token or eos token token which is necessary for denoising"
+                " language modeling. "
             )
 
     def __call__(self, examples: List[Dict[str, List[int]]]) -> Dict[str, np.ndarray]:
@@ -288,8 +287,9 @@ class FlaxDataCollatorForBartDenoisingLM:
             {k: np.array([examples[i][k] for i in range(len(examples))]) for k, v in examples[0].items()}
         )
         batch["labels"] = batch["input_ids"].copy()
-        batch["decoder_input_ids"] = shift_tokens_right(batch["labels"],
-                                                             self.tokenizer.pad_token_id, self.decoder_start_token_id)
+        batch["decoder_input_ids"] = shift_tokens_right(
+            batch["labels"], self.tokenizer.pad_token_id, self.decoder_start_token_id
+        )
         # permuting sentences
         do_permute = False
         if self.permute_sentence_ratio > 0.0:
@@ -298,11 +298,13 @@ class FlaxDataCollatorForBartDenoisingLM:
 
         # masking span of tokens (text infilling in the paper)
         if self.mask_ratio:
-            batch["input_ids"], batch["labels"] = self.span_mask_tokens(batch["input_ids"], batch["labels"], do_permute)
+            batch["input_ids"], batch["labels"] = self.span_mask_tokens(
+                batch["input_ids"], batch["labels"], do_permute
+            )
 
         # ignore pad tokens
-        batch['attention_mask'] = (batch["input_ids"] != self.tokenizer.pad_token_id).astype(int)
-        batch['decoder_attention_mask'] = (batch["decoder_input_ids"] != self.tokenizer.pad_token_id).astype(int)
+        batch["attention_mask"] = (batch["input_ids"] != self.tokenizer.pad_token_id).astype(int)
+        batch["decoder_attention_mask"] = (batch["decoder_input_ids"] != self.tokenizer.pad_token_id).astype(int)
         return batch
 
     def permute_sentences(self, input_ids):
@@ -319,8 +321,9 @@ class FlaxDataCollatorForBartDenoisingLM:
         num_sentences_map = {sent_idx: count for sent_idx, count in zip(example_has_multiple_sentences, num_sentences)}
 
         num_to_permute = np.ceil(num_sentences * self.permute_sentence_ratio).astype(int)
-        num_to_permute_map = {sent_idx: count for sent_idx, count in
-                              zip(example_has_multiple_sentences, num_to_permute)}
+        num_to_permute_map = {
+            sent_idx: count for sent_idx, count in zip(example_has_multiple_sentences, num_to_permute)
+        }
 
         sentence_ends = np.split(sentence_ends[:, 1], np.unique(sentence_ends[:, 0], return_index=True)[1][1:])
         sentence_ends_map = {sent_idx: count for sent_idx, count in zip(example_has_multiple_sentences, sentence_ends)}
@@ -328,15 +331,15 @@ class FlaxDataCollatorForBartDenoisingLM:
         for i in range(input_ids.shape[0]):
             if i not in example_has_multiple_sentences:
                 continue
-            substitutions = np.random.permutation(num_sentences_map[i])[:num_to_permute_map[i]]
+            substitutions = np.random.permutation(num_sentences_map[i])[: num_to_permute_map[i]]
             ordering = np.arange(0, num_sentences_map[i])
             ordering[substitutions] = substitutions[np.random.permutation(num_to_permute_map[i])]
 
             # write shuffled sentences into results
             index = 0
             for j in ordering:
-                sentence = input_ids[i, (sentence_ends_map[i][j - 1] if j > 0 else 0): sentence_ends_map[i][j]]
-                results[i, index: index + sentence.shape[0]] = sentence
+                sentence = input_ids[i, (sentence_ends_map[i][j - 1] if j > 0 else 0) : sentence_ends_map[i][j]]
+                results[i, index : index + sentence.shape[0]] = sentence
                 index += sentence.shape[0]
         return results
 
@@ -362,7 +365,9 @@ class FlaxDataCollatorForBartDenoisingLM:
         # generate a sufficient number of span lengths
         span_lengths = np.random.poisson(lam=self.poisson_lambda, size=(num_tokens_to_mask,))
         while np.cumsum(span_lengths, 0)[-1] < num_tokens_to_mask:
-            span_lengths = np.concatenate([span_lengths, np.random.poisson(lam=self.poisson_lambda, size=(num_tokens_to_mask,))])
+            span_lengths = np.concatenate(
+                [span_lengths, np.random.poisson(lam=self.poisson_lambda, size=(num_tokens_to_mask,))]
+            )
 
         # remove all spans of length 0
         # note that BART inserts additional mask tokens where length == 0,
@@ -375,7 +380,7 @@ class FlaxDataCollatorForBartDenoisingLM:
 
         # randomly choose starting positions for masking
         token_indices = np.argwhere(is_token_mask == 1)
-        span_starts = np.random.permutation(token_indices.shape[0])[:span_lengths.shape[0]]
+        span_starts = np.random.permutation(token_indices.shape[0])[: span_lengths.shape[0]]
         # prepare mask
         masked_indices = np.array(token_indices[span_starts])
         mask = np.full_like(input_ids, fill_value=False)
@@ -399,7 +404,7 @@ class FlaxDataCollatorForBartDenoisingLM:
         mask[np.where(special_tokens_mask_inputs)] = False
         input_ids[np.where(mask)] = self.tokenizer.mask_token_id
         if not do_permute:
-            labels[np.where(mask==0)] = -100
+            labels[np.where(mask == 0)] = -100
         else:
             labels[np.where(special_tokens_mask_labels)] = -100
 
@@ -408,9 +413,10 @@ class FlaxDataCollatorForBartDenoisingLM:
         new_input_ids = np.full_like(input_ids, fill_value=self.tokenizer.pad_token_id)
         for i, example in enumerate(input_ids):
             new_example = example[~to_remove[i]]
-            new_input_ids[i, :new_example.shape[0]] = new_example
+            new_input_ids[i, : new_example.shape[0]] = new_example
 
         return new_input_ids, labels
+
 
 def generate_batch_splits(samples_idx: np.ndarray, batch_size: int) -> np.ndarray:
     num_samples = len(samples_idx)
@@ -421,6 +427,7 @@ def generate_batch_splits(samples_idx: np.ndarray, batch_size: int) -> np.ndarra
     sections_split = num_samples // batch_size
     batch_idx = np.split(samples_idx, sections_split)
     return batch_idx
+
 
 def write_train_metric(summary_writer, train_metrics, train_time, step):
     summary_writer.scalar("train_time", train_time, step)
@@ -605,14 +612,14 @@ def main():
     max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
 
     # Use Punkt Sentence Tokenizer to divide a document into a list of sentences
-    nltk.download('punkt')
+    nltk.download("punkt")
     sentence_tokenizer = nltk.data.load("tokenizers/punkt/english.pickle")
 
     def sentence_split_function(example):
-        sents = sentence_tokenizer.tokenize(example['text'])
+        sents = sentence_tokenizer.tokenize(example["text"])
         # use pad token as end of sentence indicator
         new_text = f"{tokenizer.pad_token}".join(sents)
-        return {'text': new_text}
+        return {"text": new_text}
 
     splitted_datasets = datasets.map(
         sentence_split_function,
@@ -647,7 +654,7 @@ def main():
             total_length = (total_length // max_seq_length) * max_seq_length
         # Split by chunks of max_len.
         result = {
-            k: [t[i: i + max_seq_length] for i in range(0, total_length, max_seq_length)]
+            k: [t[i : i + max_seq_length] for i in range(0, total_length, max_seq_length)]
             for k, t in concatenated_examples.items()
         }
         return result
