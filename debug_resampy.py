@@ -131,16 +131,32 @@ class DummyModel(nn.Module):
 
 
 if __name__ == "__main__":
-    batch_size = 64
-    seq_len = 1024
 
-    dim = 1024
-    model = DummyModel(n_layers=16, dim=dim)
-    input = torch.ones(batch_size, seq_len, dim)
+    # batch_size = 64
+    # seq_len = 1024
+    #
+    # dim = 1024
+    # model = DummyModel(n_layers=16, dim=dim)
+    # input = torch.ones(batch_size, seq_len, dim)
+    #
+    # for i in tqdm(range(32)):
+    #     output = model(input)
+    #     print(output.shape)
+
+
+
+    batch_size = 64
+    seq_len = 16384
+
+    from transformers import Wav2Vec2Model
+    model = Wav2Vec2Model.from_pretrained("hf-internal-testing/tiny-random-wav2vec2")
+    encoder_input = torch.ones(batch_size, seq_len, dtype=torch.float32)
 
     for i in tqdm(range(32)):
-        output = model(input)
-        print(output.shape)
+        output = model(input_values=encoder_input)
+        print(output.logits.shape)
+
+
 
     # from transformers import AutoModelForSpeechSeq2Seq
     # model = AutoModelForSpeechSeq2Seq.from_pretrained("hf-internal-testing/tiny-random-speech-encoder-decoder")
