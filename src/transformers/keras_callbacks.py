@@ -138,9 +138,7 @@ class KerasMetricCallback(Callback):
             logging.warning("TF versions less than 2.7 may encounter issues with KerasMetricCallback!")
 
         self.use_xla_generation = use_xla_generation
-        if generate_kwargs is None:
-            generate_kwargs = dict()
-        self.generate_kwargs = generate_kwargs
+        self.generate_kwargs = {} if generate_kwargs is None else generate_kwargs
 
         self.generation_function = None
 
