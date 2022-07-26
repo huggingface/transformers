@@ -377,6 +377,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     @slow
     @require_torch_gpu
     def test_simple_generation(self):
+        # TODO @thomasw21 remove once we determine that flakiness wasn't due to some fp16 kernel
         # This test is a bit flaky. For some GPU architectures, pytorch sets by default allow_fp16_reduced_precision_reduction = True and some operations
         # do not give the same results under this configuration, especially torch.baddmm and torch.bmm. https://pytorch.org/docs/stable/notes/numerical_accuracy.html#fp16-on-mi200
         # As we leave the default value (True) for allow_fp16_reduced_precision_reduction , the tests failed when running in half-precision with smaller models (350m)
@@ -397,7 +398,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         # >=760m + allow_fp16_reduced_precision_reduction = False  + torch.bmm  ==> PASS
 
         path_350m = "bigscience/bloom-350m"
-        model = BloomForCausalLM.from_pretrained(path_350m, use_cache=True, revision="gs555750").cuda()
+        model = BloomForCausalLM.from_pretrained(path_350m, torch_dtype="auto", use_cache=True, revision="gs555750").cuda()
         model = model.eval()
         tokenizer = BloomTokenizerFast.from_pretrained(path_350m)
 
@@ -417,7 +418,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     @require_torch_gpu
     def test_batch_generation(self):
         path_350m = "bigscience/bloom-350m"
-        model = BloomForCausalLM.from_pretrained(path_350m, use_cache=True, revision="gs555750").cuda()
+        model = BloomForCausalLM.from_pretrained(path_350m, torch_dtype="auto", use_cache=True, revision="gs555750").cuda()
         model = model.eval()
         tokenizer = BloomTokenizerFast.from_pretrained(path_350m, padding_side="left")
 
@@ -438,7 +439,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     def test_batch_generation_padd(self):
 
         path_350m = "bigscience/bloom-350m"
-        model = BloomForCausalLM.from_pretrained(path_350m, use_cache=True, revision="gs555750").cuda()
+        model = BloomForCausalLM.from_pretrained(path_350m, torch_dtype="auto", use_cache=True, revision="gs555750").cuda()
         model = model.eval()
         tokenizer = BloomTokenizerFast.from_pretrained(path_350m, padding_side="left")
 
