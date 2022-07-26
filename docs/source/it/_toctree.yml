@@ -27,8 +27,11 @@
     title: Addestramento con script
   - local: multilingual
     title: Modelli multilingua per l'inferenza
+  - local: converting_tensorflow_models
+    title: Convertire modelli tensorflow
   - local: serialization
     title: Esporta modelli Transformers
 - sections:
   - local: debugging
     title: Debugging
+    
