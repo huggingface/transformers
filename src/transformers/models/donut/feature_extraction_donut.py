@@ -14,7 +14,7 @@
 # limitations under the License.
 """Feature extractor class for Donut."""
 
-from typing import Bool, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import numpy as np
 from PIL import Image, ImageOps
@@ -105,7 +105,7 @@ class DonutFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
 
         return image
 
-    def pad(self, image: Image.Image, size: Tuple[int, int], random_padding: Bool = False) -> Image.Image:
+    def pad(self, image: Image.Image, size: Tuple[int, int], random_padding: bool = False) -> Image.Image:
         delta_width = size[0] - image.width
         delta_height = size[1] - image.height
 
