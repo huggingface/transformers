@@ -50,24 +50,24 @@ class Jukebox1bModelTester(unittest.TestCase):
     )
     # fmt: off
     EXPECTED_OUTPUT_2 = [
-        1434, 324, 1489, 756, 1224, 1150, 1489, 353, 2033, 1622, 1536, 519,
-        475, 1996, 1643, 701, 1229, 1434, 10, 1420, 1306, 178, 409, 2038,
-        1355, 286, 897, 1804, 253, 1643, 1685, 1769, 1002, 1597, 30, 539,
-        376, 427, 1179, 286
+        1864, 1536, 1213, 1870, 1357, 1536, 519, 880, 1323, 789, 1082, 534,
+        1000, 1445, 1105, 1130, 967, 515, 1434, 1620, 534, 1495, 283, 1445,
+        333, 1307, 539, 1631, 1528, 375, 1434, 673, 627, 710, 778, 1883,
+        1405, 1276, 1455, 1228
     ]
 
     EXPECTED_OUTPUT_1 = [
-        1125, 1125, 904, 2037, 1125, 1274, 317, 642, 1274, 317, 851, 642,
-        642, 747, 867, 502, 502, 416, 1125, 1125, 317, 1274, 317, 1125,
-        416, 1125, 1125, 1125, 1125, 317, 855, 844, 94, 855, 502, 1714,
-        1107, 747, 1353, 573
+        1125, 1751, 697, 1776, 1141, 1476, 391, 697, 1125, 684, 867, 416,
+        844, 1372, 1274, 717, 1274, 844, 1299, 1419, 697, 1370, 317, 1125,
+        191, 1440, 1370, 1440, 1370, 282, 1621, 1370, 368, 349, 867, 1872,
+        1262, 869, 1728, 747
     ]
 
     EXPECTED_OUTPUT_0 = [
-        1755, 1061, 808, 1755, 992, 1572, 185, 491, 992, 417, 234, 89,
-        234, 417, 234, 234, 234, 417, 1638, 1638, 677, 1659, 541, 1659,
-        946, 579, 992, 556, 844, 329, 926, 556, 293, 579, 946, 1659,
-        1562, 579, 1372, 290
+        1755, 842, 307, 1843, 1022, 1395, 234, 1554, 806, 739, 1022, 442,
+        616, 556, 268, 1499, 933, 457, 1440, 1837, 755, 985, 308, 902,
+        293, 1443, 1671, 1141, 1533, 555, 1562, 1061, 287, 417, 1022, 2008,
+        1186, 1015, 1777, 268
     ]
 
     EXPECTED_Y_COND = [1058304, 0, 786432, 7169, 507, 76, 27, 40, 30, 76]
@@ -90,13 +90,6 @@ class Jukebox1bModelTester(unittest.TestCase):
         269, 35, 1699, 241, 1369, 35, 1303, 583, 825, 1941, 1089, 1944,
         581, 35, 1153, 1153
     ]
-    EXPECTED_VQVAE = [
-        -0.0168, -0.0083, -0.0062, -0.0078, -0.0095, -0.0108, -0.0117, -0.0124,
-        -0.0138, -0.0149, -0.0148, -0.0140, -0.0136, -0.0130, -0.0125, -0.0120,
-        -0.0129, -0.0148, -0.0151, -0.0138, -0.0130, -0.0129, -0.0125, -0.0116,
-        -0.0119, -0.0130, -0.0129, -0.0116, -0.0113, -0.0118, -0.0112, -0.0104,
-        -0.0114, -0.0127, -0.0122, -0.0103, -0.0083, -0.0070, -0.0060, -0.0051
-    ]
     EXPECTED_PRIMED_0 = [
         390, 1160, 1002, 1907, 1788, 1788, 1788, 1907, 1002, 1002, 1854, 1002,
         1002, 1002, 1002, 1002, 1002, 1160, 1160, 1606, 596, 596, 1160, 1002,
@@ -115,6 +108,19 @@ class Jukebox1bModelTester(unittest.TestCase):
         1269, 1459, 1333, 1645, 812, 1577, 1337, 606, 353, 981, 1466, 619,
         197, 391, 302, 1930
     ]
+    EXPECTED_VQVAE_ENCODE= [
+        390, 1160, 1002, 1907, 1788, 1788, 1788, 1907, 1002, 1002, 1854, 1002,
+        1002, 1002, 1002, 1002, 1002, 1160, 1160, 1606, 596, 596, 1160, 1002,
+        1516, 596, 1002, 1002, 1002, 1907, 1788, 1788, 1788, 1854, 1788, 1907,
+        1907, 1788, 596, 1626
+    ]
+    EXPECTED_VQVAE_DECODE= [
+        -0.0492, -0.0524, -0.0565, -0.0640, -0.0686, -0.0684, -0.0677, -0.0664,
+        -0.0605, -0.0490, -0.0330, -0.0168, -0.0083, -0.0075, -0.0051, 0.0025,
+        0.0136, 0.0261, 0.0386, 0.0497, 0.0580, 0.0599, 0.0583, 0.0614,
+        0.0740, 0.0889, 0.1023, 0.1162, 0.1211, 0.1212, 0.1251, 0.1336,
+        0.1502, 0.1686, 0.1883, 0.2148, 0.2363, 0.2458, 0.2507, 0.2531
+    ]
     # fmt: on
 
     def prepare_inputs(self):
@@ -122,7 +128,7 @@ class Jukebox1bModelTester(unittest.TestCase):
         tokens = tokenizer(**self.metas)["input_ids"]
         return tokens
 
-    @require_torch
+    @slow
     def test_sampling(self):
         model = JukeboxModel.from_pretrained(self.model_id, min_duration=0).eval()
         labels = self.prepare_inputs()
@@ -146,7 +152,6 @@ class Jukebox1bModelTester(unittest.TestCase):
         assert torch.allclose(zs[0][0], torch.tensor(self.EXPECTED_OUTPUT_0))
 
     @slow
-    @require_torch
     def test_slow_sampling(self):
         torch.backends.cuda.matmul.allow_tf32 = False
 
@@ -213,16 +218,16 @@ class Jukebox1bModelTester(unittest.TestCase):
 
     @slow
     def test_vqvae(self):
-        zs = torch.tensor(self.EXPECTED_OUTPUT_2)
+        model = JukeboxModel.from_pretrained(self.model_id, min_duration=0).eval()
+        set_seed(0)
+        x = torch.rand((1,5120,1))
         with torch.no_grad():
-            x = self.vqvae.decode(zs, start_level=2, bs_chunks=zs.shape[0])
-        assert torch.allclose(x.cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_0))
+            zs = model.vqvae.encode(x, start_level=2, bs_chunks=x.shape[0])
+        assert torch.allclose(zs[0][0], torch.tensor(self.EXPECTED_VQVAE_ENCODE))
 
-        zs.to("gpu")
-        self.vqvae.to("gpu")
         with torch.no_grad():
-            x = self.vqvae.decode(zs, start_level=2, bs_chunks=zs.shape[0])
-        assert torch.allclose(x.cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_0))
+            x = model.vqvae.decode(zs, start_level=2, bs_chunks=x.shape[0])
+        assert torch.allclose(x[0,:40,0], torch.tensor(self.EXPECTED_VQVAE_DECODE),atol=1e-4)
 
 
 @require_torch
@@ -250,29 +255,51 @@ class Jukebox5bModelTester(unittest.TestCase):
 
     # fmt: off
     EXPECTED_OUTPUT_2 = [
-        1489, 653, 653, 653, 653, 653, 653, 653, 653, 653, 1489, 653,
-        653, 653, 653, 653, 653, 653, 653, 653
+        1489, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653,
+        653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653,
+        653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653,
+        653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653,
+        1489, 1489, 1489, 1489, 1150, 1853, 1509, 1150, 1357, 1509,  6, 1272
     ]
 
     EXPECTED_OUTPUT_1 = [
-        1125, 416, 1125, 1125, 1125, 1125, 416, 416, 416, 416, 1585, 284,
-        717, 1544, 1045, 1320, 711, 193, 1440, 1193, 416, 1125, 539, 1544,
-        593, 1274, 1181, 1658, 1181, 1145, 2037, 1125, 556, 1014, 1045, 1858,
-        1749, 1803, 1440, 1145, 416, 416, 1372, 1079, 1045, 1320, 1764, 158,
-        2020, 1543, 2037, 416, 539, 2047, 1446, 885, 1749, 2047, 118, 1348,
-        1585, 284, 529, 2047, 1228, 556, 732, 2047, 307, 1323, 2037, 1446,
-        591, 1803, 58, 591, 529, 1079, 642, 591
+        1125, 416, 1125, 1125, 1125, 1125, 1125, 416, 416, 416, 416, 416,
+         416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416,
+         416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416,
+         416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416,
+         416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416
     ]
 
     EXPECTED_OUTPUT_0 = [
-        1755, 1061, 234, 1755, 290, 1572, 234, 491, 992, 417, 591, 290,
-        234, 842, 589, 948, 983, 616, 1613, 1613, 290, 632, 89, 632,
-        290, 1022, 983, 1612, 1353, 581, 1353, 755, 185, 307, 632, 1979,
-        854, 1120, 1572, 719, 491, 34, 755, 632, 844, 755, 1802, 225,
-        2013, 1814, 1148, 616, 185, 1979, 1460, 983, 1168, 1613, 34, 1242,
-        632, 34, 34, 1982, 1510, 554, 983, 1784, 526, 1691, 1268, 1268,
-        290, 755, 34, 307, 222, 234, 648, 526
+       1755, 1061, 234, 1755, 1061, 1755, 185, 290, 307, 307, 616, 616,
+        616, 616, 616, 616, 307, 290, 417, 1755, 234, 1755, 185, 290,
+        290, 290, 307, 616, 616, 616, 616, 616, 290, 234, 234, 1755,
+        234, 234, 1755, 234, 185, 185, 307, 616, 616, 616, 616, 290,
+        1755, 1755, 1755, 234, 234, 1755, 1572, 290, 307, 616, 34, 616
     ]
+
+    EXPECTED_GPU_OUTPUTS_2 = [
+        1489, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653,
+        653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653,
+        653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653,
+        653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653,
+        653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653
+    ]
+    EXPECTED_GPU_OUTPUTS_1 = [
+        1125, 1125, 416, 1125, 1125, 416, 1125, 1125, 416, 416, 1125, 416,
+        416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416,
+        416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416,
+        416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416,
+        416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416
+    ]
+    EXPECTED_GPU_OUTPUTS_0 = [
+        491, 1755, 34, 1613, 1755, 417, 992, 1613, 222, 842, 1353, 1613,
+        844, 632, 185, 1613, 844, 632, 185, 1613, 185, 842, 677, 1613,
+        185, 114, 1353, 1613, 307, 89, 844, 1613, 307, 1332, 234, 1979,
+        307, 89, 1353, 616, 34, 842, 185, 842, 34, 842, 185, 842,
+        307, 114, 185, 89, 34, 1268, 185, 89, 34, 842, 185, 89
+    ]
+    
     # fmt: on
 
     def prepare_inputs(self, model_id):
@@ -280,6 +307,7 @@ class Jukebox5bModelTester(unittest.TestCase):
         tokens = tokenizer(**self.metas)["input_ids"]
         return tokens
 
+    @slow
     def test_sampling(self):
         model_id = "ArthurZ/jukebox-5b-lyrics"
         model = JukeboxModel.from_pretrained(model_id, min_duration=0).eval()
@@ -287,40 +315,48 @@ class Jukebox5bModelTester(unittest.TestCase):
         labels = self.prepare_inputs(model_id)
         set_seed(0)
         zs = [torch.zeros(1, 0, dtype=torch.long).cpu() for _ in range(3)]
-        zs = model._sample(zs, labels, [2], sample_length=40 * model.priors[-1].raw_to_tokens, save_results=False)
+        zs = model._sample(zs, labels, [2], sample_length=60 * model.priors[-1].raw_to_tokens, save_results=False)
         assert torch.allclose(zs[-1][0], torch.tensor(self.EXPECTED_OUTPUT_2))
 
         zs[-1] = torch.tensor(self.EXPECTED_OUTPUT_2).unsqueeze(0)
         set_seed(0)
         zs[-1] = torch.cat((zs[-1], torch.zeros(1, 1000000 - zs[-1].shape[-1]).cpu()), dim=-1).long()
-        zs = model._sample(zs, labels, [1], sample_length=40 * model.priors[-2].raw_to_tokens, save_results=False)
-        assert torch.allclose(zs[-2][0, :80], torch.tensor(self.EXPECTED_OUTPUT_1))
+        zs = model._sample(zs, labels, [1], sample_length=60 * model.priors[-2].raw_to_tokens, save_results=False)
+        assert torch.allclose(zs[-2][0], torch.tensor(self.EXPECTED_OUTPUT_1))
 
         zs[-2] = torch.tensor(self.EXPECTED_OUTPUT_1).unsqueeze(0)
 
         set_seed(0)
         zs[-2] = torch.cat((zs[-2], torch.zeros(1, 1000000 - zs[-2].shape[-1]).cpu()), dim=-1).long()
-        zs = model._sample(zs, labels, [0], sample_length=40 * model.priors[-3].raw_to_tokens, save_results=False)
-        assert torch.allclose(zs[0][0, :40], torch.tensor(self.EXPECTED_OUTPUT_0))
+        zs = model._sample(zs, labels, [0], sample_length=60 * model.priors[-3].raw_to_tokens, save_results=False)
+        assert torch.allclose(zs[0][0], torch.tensor(self.EXPECTED_OUTPUT_0))
 
-    @slow
+    # @slow
     def test_slow_sampling(self):
         model_id = "ArthurZ/jukebox-5b-lyrics"
-        model = JukeboxModel.from_pretrained(model_id).eval().to("cuda")
+        model = JukeboxModel.from_pretrained(model_id, min_duration=0).eval().to("cuda")
 
         labels = [i.cuda() for i in self.prepare_inputs(model_id)]
         set_seed(0)
         zs = [torch.zeros(1, 0, dtype=torch.long).cuda() for _ in range(3)]
-        zs = model._sample(zs, labels, [2], sample_tokens=10, save_results=False)
-        assert torch.allclose(zs[-1][0].cpu(), torch.tensor(self.EXPECTED_OUTPUT_2))
+        zs = model._sample(zs, labels, [2], sample_length=60 * model.priors[-1].raw_to_tokens, save_results=False)
+        assert torch.allclose(zs[-1][0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_2))
 
-    def test_vqvae(self):
-        # test encoding of an audio
-        # test decoding
-        # implement vavae decoding test at 3 levels using the expected outputs
-        pass
+        zs[-1] = torch.tensor(self.EXPECTED_GPU_OUTPUTS_2).unsqueeze(0)
+        set_seed(0)
+        zs[-1] = torch.cat((zs[-1].cuda(), torch.zeros(1, 1000000 - zs[-1].shape[-1]).cuda()), dim=-1).long()
+        zs = model._sample(zs, labels, [1], sample_length=60 * model.priors[-2].raw_to_tokens, save_results=False)
+        assert torch.allclose(zs[-2][0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_1))
+
+        zs[-2] = torch.tensor(self.EXPECTED_GPU_OUTPUTS_1).unsqueeze(0)
+
+        set_seed(0)
+        zs[-2] = torch.cat((zs[-2].cuda(), torch.zeros(1, 1000000 - zs[-2].shape[-1]).cuda()), dim=-1).long()
+        zs = model._sample(zs, labels, [0], sample_length=60 * model.priors[-3].raw_to_tokens, save_results=False)
+        assert torch.allclose(zs[0][0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_0))
+
 
 
 if __name__ == "__main__":
     tester = Jukebox1bModelTester()
-    tester.test_primed_sampling()
+    tester.test_vqvae()
