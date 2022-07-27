@@ -52,36 +52,36 @@ BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 def _make_causal_mask(
-    input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0
+    input_ids_shape: torch.Size, device: torch.device, past_key_values_length: int = 0
 ):
     """
     Make causal mask used for self-attention.
     """
     batch_size, target_length = input_ids_shape
 
-    mask = torch.ones((target_length, target_length), dtype=dtype, device=device)
+    mask = torch.ones((target_length, target_length), dtype=torch.bool, device=device)
     mask.triu_(diagonal=1)
 
     if past_key_values_length > 0:
-        past_key_values_mask = torch.zeros((target_length, past_key_values_length), dtype=dtype, device=device)
+        past_key_values_mask = torch.zeros((target_length, past_key_values_length), dtype=torch.bool, device=device)
         mask = torch.cat([past_key_values_mask, mask], dim=-1)
 
     expanded_mask = mask[None, None, :, :].expand(batch_size, 1, target_length, target_length + past_key_values_length)
     return expanded_mask
 
 
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: int = None):
+def _expand_mask(mask: torch.Tensor, tgt_len: int = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
     batch_size, source_length = mask.shape
     tgt_len = tgt_len if tgt_len is not None else source_length
 
-    expanded_mask = mask[:, None, None, :].to(dtype).expand(batch_size, 1, tgt_len, source_length)
+    expanded_mask = mask[:, None, None, :].to(torch.bool).expand(batch_size, 1, tgt_len, source_length)
     return ~expanded_mask
 
 
-def build_alibi_tensor(attention_mask: torch.Tensor, n_head: int, dtype, device) -> torch.Tensor:
+def build_alibi_tensor(attention_mask: torch.Tensor, n_head: int, dtype: torch.dtype) -> torch.Tensor:
     """
     Link to paper: https://arxiv.org/abs/2108.12409 Alibi tensor is not causal as the original paper mentions, it
     relies on a translation invariance of softmax for quick implementation: with l being a tensor, and a fixed value
@@ -101,16 +101,16 @@ def build_alibi_tensor(attention_mask: torch.Tensor, n_head: int, dtype, device)
             device of the output alibi tensor
     """
     closest_power_of_2 = 2 ** math.floor(math.log2(n_head))
-    base = torch.tensor(2 ** (-(2 ** -(math.log2(closest_power_of_2) - 3))), device=device, dtype=torch.float32)
-    powers = torch.arange(1, 1 + closest_power_of_2, device=device, dtype=torch.int32)
+    base = torch.tensor(2 ** (-(2 ** -(math.log2(closest_power_of_2) - 3))), device=attention_mask.device, dtype=torch.float32)
+    powers = torch.arange(1, 1 + closest_power_of_2, device=attention_mask.device, dtype=torch.int32)
     slopes = torch.pow(base, powers)
 
     if closest_power_of_2 != n_head:
         extra_base = torch.tensor(
-            2 ** (-(2 ** -(math.log2(2 * closest_power_of_2) - 3))), device=device, dtype=torch.float32
+            2 ** (-(2 ** -(math.log2(2 * closest_power_of_2) - 3))), device=attention_mask.device, dtype=torch.float32
         )
         num_remaining_heads = min(closest_power_of_2, n_head - closest_power_of_2)
-        extra_powers = torch.arange(1, 1 + 2 * num_remaining_heads, 2, device=device, dtype=torch.int32)
+        extra_powers = torch.arange(1, 1 + 2 * num_remaining_heads, 2, device=attention_mask.device, dtype=torch.int32)
         slopes = torch.cat([slopes, torch.pow(extra_base, extra_powers)], dim=0)
 
     # Note: alibi will added to the attention bias that will be applied to the query, key product of attention
@@ -565,10 +565,7 @@ class BloomModel(BloomPreTrainedModel):
         self.n_head = config.n_head
 
         # Embedding + LN Embedding
-        self.word_embeddings = nn.Embedding(
-            config.vocab_size, self.embed_dim, dtype=torch.float if config.word_embeddings_in_fp32 else None
-        )
-
+        self.word_embeddings = nn.Embedding(config.vocab_size, self.embed_dim)
         self.word_embeddings_layernorm = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
         # Transformer blocks
@@ -590,18 +587,17 @@ class BloomModel(BloomPreTrainedModel):
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         combined_attention_mask = None
         device = attention_mask.device
-        dtype = torch.bool
 
         if input_shape[-1] > 1:
             combined_attention_mask = _make_causal_mask(
-                input_shape, dtype, device, past_key_values_length=past_key_values_length
+                input_shape, device=device, past_key_values_length=past_key_values_length
             )
 
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            expanded_attn_mask = _expand_mask(attention_mask, dtype, tgt_len=input_shape[-1])
+            expanded_attn_mask = _expand_mask(attention_mask, tgt_len=input_shape[-1])
             combined_attention_mask = (
-                expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
+                expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask | combined_attention_mask
             )
 
         return combined_attention_mask
@@ -621,6 +617,7 @@ class BloomModel(BloomPreTrainedModel):
         input_ids=None,
         past_key_values=None,
         attention_mask=None,
+        position_ids=None,
         head_mask=None,
         inputs_embeds=None,
         use_cache=None,
@@ -628,6 +625,12 @@ class BloomModel(BloomPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
+        if position_ids is not None:
+            warnings.warn(
+                "`position_ids` is deprecated and will be removed in v5.0.0",
+                FutureWarning,
+            )
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -680,7 +683,7 @@ class BloomModel(BloomPreTrainedModel):
             attention_mask = attention_mask.view(-1, attention_mask_shape[-1])
             attention_mask = attention_mask.to(hidden_states.device)
 
-        alibi = build_alibi_tensor(attention_mask, self.n_head, hidden_states.dtype, hidden_states.device)
+        alibi = build_alibi_tensor(attention_mask, self.n_head, hidden_states.dtype)
 
         causal_mask = self._prepare_attn_mask(attention_mask, input_shape, inputs_embeds, past_key_values_length)
 
@@ -766,6 +769,11 @@ class BloomForCausalLM(BloomPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def post_init(self):
+        if self.config.force_word_embeddings_in_fp32:
+            self.transformer.word_embeddings.to(torch.float32)
+        return super().post_init()
+
     def get_output_embeddings(self):
         return self.lm_head
 
@@ -798,6 +806,7 @@ class BloomForCausalLM(BloomPreTrainedModel):
         input_ids=None,
         past_key_values=None,
         attention_mask=None,
+        position_ids=None,
         head_mask=None,
         inputs_embeds=None,
         labels=None,
@@ -812,6 +821,12 @@ class BloomForCausalLM(BloomPreTrainedModel):
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
         """
+        if position_ids is not None:
+            warnings.warn(
+                "`position_ids` is deprecated and will be removed in v5.0.0",
+                FutureWarning,
+            )
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         transformer_outputs = self.transformer(
@@ -827,7 +842,7 @@ class BloomForCausalLM(BloomPreTrainedModel):
         )
         hidden_states = transformer_outputs[0]
 
-        if self.config.word_embeddings_in_fp32:
+        if self.config.force_word_embeddings_in_fp32:
             hidden_states = hidden_states.to(self.lm_head.weight.dtype)
         lm_logits = self.lm_head(hidden_states)
 
@@ -904,6 +919,7 @@ class BloomForSequenceClassification(BloomPreTrainedModel):
         input_ids=None,
         past_key_values=None,
         attention_mask=None,
+        position_ids=None,
         head_mask=None,
         inputs_embeds=None,
         labels=None,
@@ -918,6 +934,11 @@ class BloomForSequenceClassification(BloomPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
+        if position_ids is not None:
+            warnings.warn(
+                "`position_ids` is deprecated and will be removed in v5.0.0",
+                FutureWarning,
+            )
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1031,6 +1052,7 @@ class BloomForTokenClassification(BloomPreTrainedModel):
         input_ids=None,
         past_key_values=None,
         attention_mask=None,
+        position_ids=None,
         head_mask=None,
         inputs_embeds=None,
         labels=None,
@@ -1045,6 +1067,11 @@ class BloomForTokenClassification(BloomPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
+        if position_ids is not None:
+            warnings.warn(
+                "`position_ids` is deprecated and will be removed in v5.0.0",
+                FutureWarning,
+            )
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
