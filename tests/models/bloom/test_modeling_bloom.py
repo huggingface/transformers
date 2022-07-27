@@ -377,6 +377,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bloom_weight_initialization(*config_and_inputs)
 
+    @require_torch_gpu
     @torch.no_grad()
     def test_force_word_embeddings_in_fp32_is_close_to_fp16(self):
         model_name = "bigscience/bigscience-small-testing"
