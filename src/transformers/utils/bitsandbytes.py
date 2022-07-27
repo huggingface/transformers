@@ -54,25 +54,22 @@ def set_module_8bit_tensor_to_device(module, tensor_name, device, value=None):
     if has_fp16_weights is not None:
         param = module._parameters[tensor_name]
         if param.device.type != "cuda":
-            with torch.no_grad():
-                if value is None:
-                    new_value = old_value.to(device)
-                elif isinstance(value, torch.Tensor):
-                    new_value = value.to("cpu")
-                else:
-                    new_value = torch.tensor(value, device="cpu")
-                new_value = bnb.nn.Int8Params(new_value, requires_grad=False, has_fp16_weights=has_fp16_weights).to(
-                    device
-                )
-                module._parameters[tensor_name] = new_value
-    else:
-        with torch.no_grad():
             if value is None:
                 new_value = old_value.to(device)
             elif isinstance(value, torch.Tensor):
-                new_value = value.to(device)
+                new_value = value.to("cpu")
             else:
-                new_value = torch.tensor(value, device=device)
+                new_value = torch.tensor(value, device="cpu")
+            new_value = bnb.nn.Int8Params(new_value, requires_grad=False, has_fp16_weights=has_fp16_weights).to(device)
+            module._parameters[tensor_name] = new_value
+    else:
+        if value is None:
+            new_value = old_value.to(device)
+        elif isinstance(value, torch.Tensor):
+            new_value = value.to(device)
+        else:
+            new_value = torch.tensor(value, device=device)
+
         if is_buffer:
             module._buffers[tensor_name] = new_value
         else:
