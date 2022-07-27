@@ -28,10 +28,26 @@ from .image_utils import (
 )
 
 
+def rescale(image: np.ndarray, scale: Union[float, int] = 255) -> np.ndarray:
+    """
+    Rescales `image` by `scale`.
+
+    Args:
+        image (`np.ndarray``):
+            The image to rescale.
+        scale (`float`, `int`):
+            The scale to use for rescaling the image.
+
+    Returns:
+        image: A rescaled np.ndarray image.
+    """
+    return image * scale
+
+
 def to_pil_image(
     image: Union[np.ndarray, PIL.Image.Image, "torch.Tensor", "tf.Tensor"],
     channel_dim: Optional[ChannelDimension] = None,
-    rescale=None
+    do_rescale: Optional[bool] = None
 ) -> PIL.Image.Image:
     """
     Converts `image` to a PIL Image. Optionally rescales it and puts the channel dimension back as the last axis if
@@ -61,9 +77,9 @@ def to_pil_image(
         image = image.transpose((1, 2, 0))
 
     # PIL.Image can only store uint8 values, so we rescale the image to be between 0 and 255 if needed.
-    rescale = isinstance(image.flat[0], float) if rescale is None else rescale
-    if rescale:
-        rescale = image * 255
+    do_rescale = isinstance(image.flat[0], float) if do_rescale is None else do_rescale
+    if do_rescale:
+        image = rescale(image, 255)
     image = image.astype(np.uint8)
     return PIL.Image.fromarray(image)
 
@@ -107,7 +123,7 @@ def get_resize_output_image_size(
     return (new_short, new_long) if width <= height else (new_long, new_short)
 
 
-def resize(image, size: Tuple[int, int], resample=PIL.Image.BILINEAR):
+def resize(image, size: Tuple[int, int], resample=PIL.Image.Resampling.BILINEAR):
     """
     Resizes `image`. Enforces conversion of input to PIL.Image.
 

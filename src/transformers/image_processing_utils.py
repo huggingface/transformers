@@ -23,6 +23,7 @@ import numpy as np
 from requests import HTTPError
 
 from .dynamic_module_utils import custom_object_save
+from .image_utils import ImageType
 from .utils import (
     HUGGINGFACE_CO_RESOLVE_ENDPOINT,
     IMAGE_PROCESSOR_NAME,
@@ -105,25 +106,24 @@ class BatchFeature(UserDict):
     def items(self):
         return self.data.items()
 
-    # Copied from transformers.feature_extraction_utils.BatchFeature.convert_to_tensors
-    def convert_to_tensors(self, tensor_type: Optional[Union[str, TensorType]] = None):
+    def convert_to_tensors(self, tensor_type: Optional[Union[str, ImageType]] = None):
         """
         Convert the inner content to tensors.
 
         Args:
-            tensor_type (`str` or [`~utils.TensorType`], *optional*):
-                The type of tensors to use. If `str`, should be one of the values of the enum [`~utils.TensorType`]. If
+            tensor_type (`str` or [`~utils.ImageType`], *optional*):
+                The type of tensors to use. If `str`, should be one of the values of the enum [`~utils.ImageType`]. If
                 `None`, no modification is done.
         """
         if tensor_type is None:
             return self
 
         # Convert to TensorType
-        if not isinstance(tensor_type, TensorType):
-            tensor_type = TensorType(tensor_type)
+        if not isinstance(tensor_type, ImageType):
+            tensor_type = ImageType(tensor_type)
 
         # Get a function reference for the correct framework
-        if tensor_type == TensorType.TENSORFLOW:
+        if tensor_type == ImageType.TENSORFLOW:
             if not is_tf_available():
                 raise ImportError(
                     "Unable to convert output to TensorFlow tensors format, TensorFlow is not installed."
@@ -132,7 +132,7 @@ class BatchFeature(UserDict):
 
             as_tensor = tf.constant
             is_tensor = tf.is_tensor
-        elif tensor_type == TensorType.PYTORCH:
+        elif tensor_type == ImageType.PYTORCH:
             if not is_torch_available():
                 raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
             import torch
@@ -143,7 +143,7 @@ class BatchFeature(UserDict):
                 return torch.tensor(value)
 
             is_tensor = torch.is_tensor
-        elif tensor_type == TensorType.JAX:
+        elif tensor_type == ImageType.JAX:
             if not is_flax_available():
                 raise ImportError("Unable to convert output to JAX tensors format, JAX is not installed.")
             import jax.numpy as jnp  # noqa: F811
@@ -584,8 +584,8 @@ class BaseImageProcessor(ImageProcessorMixin):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-    def __call__(self, *args, **kwargs):
-        return self.preprocess(*args, **kwargs)
+    def __call__(self, images, **kwargs) -> BatchFeature:
+        return self.preprocess(images, **kwargs)
 
-    def preprocess(self, *args, **kwargs):
+    def preprocess(self, images, **kwargs) -> BatchFeature:
         raise NotImplementedError("Each image processor must implement its own preprocess method")
