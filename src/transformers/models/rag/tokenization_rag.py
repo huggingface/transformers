@@ -68,15 +68,11 @@ class RagTokenizer:
     def decode(self, *args, **kwargs):
         return self.generator.decode(*args, **kwargs)
 
-    @contextmanager
-    def as_target_tokenizer(self):
-        """
-        Temporarily sets the tokenizer for encoding the targets. Useful for tokenizer associated to
-        sequence-to-sequence models that need a slightly different processing for the labels.
-        """
-        self.current_tokenizer = self.generator
-        yield
+    def _switch_to_input_mode(self):
         self.current_tokenizer = self.question_encoder
+
+    def _switch_to_target_mode(self):
+        self.current_tokenizer = self.generator
 
     def prepare_seq2seq_batch(
         self,

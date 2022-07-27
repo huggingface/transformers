@@ -281,18 +281,14 @@ class MarianTokenizer(PreTrainedTokenizer):
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return token_ids_0 + token_ids_1 + [self.eos_token_id]
 
-    @contextmanager
-    def as_target_tokenizer(self):
-        """
-        Temporarily sets the tokenizer for encoding the targets. Useful for tokenizer associated to
-        sequence-to-sequence models that need a slightly different processing for the labels.
-        """
+    def _switch_to_input_mode(self):
+        self.current_spm = self.spm_source
+        self.current_encoder = self.encoder
+
+    def _switch_to_target_mode(self):
         self.current_spm = self.spm_target
         if self.separate_vocabs:
             self.current_encoder = self.target_encoder
-        yield
-        self.current_spm = self.spm_source
-        self.current_encoder = self.encoder
 
     @property
     def vocab_size(self) -> int:

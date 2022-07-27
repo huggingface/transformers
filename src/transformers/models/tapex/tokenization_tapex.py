@@ -1330,16 +1330,11 @@ class TapexTokenizer(PreTrainedTokenizer):
             verbose=verbose,
         )
 
-    @contextmanager
-    def as_target_tokenizer(self):
-        """
-        Temporarily sets the tokenizer for encoding the targets. Useful for tokenizer associated to
-        sequence-to-sequence models that need a slightly different processing for the labels.
-        """
-        self.current_tokenizer = TokenizerStrategy.TOKENIZE_TARGET
-        yield
-        # restore the call function
+    def _switch_to_input_mode(self):
         self.current_tokenizer = TokenizerStrategy.TOKENIZE_SOURCE
+
+    def _switch_to_target_mode(self):
+        self.current_tokenizer = TokenizerStrategy.TOKENIZE_TARGET
 
     def prepare_table_query(
         self,
