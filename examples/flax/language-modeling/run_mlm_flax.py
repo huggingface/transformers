@@ -804,7 +804,7 @@ def main():
                 num_eval_samples = len(tokenized_datasets["validation"])
                 # Avoid using jax.numpy here in case of TPU training
                 eval_samples_idx = np.arange(num_eval_samples)
-                eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size)
+                eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size, drop_last=False)
 
                 eval_metrics = []
                 for i, batch_idx in enumerate(tqdm(eval_batch_idx, desc="Evaluating ...", position=2)):
@@ -844,7 +844,7 @@ def main():
         num_eval_samples = len(tokenized_datasets["validation"])
         # Avoid using jax.numpy here in case of TPU training
         eval_samples_idx = np.arange(num_eval_samples)
-        eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size)
+        eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size, drop_last=False)
 
         eval_metrics = []
         for _, batch_idx in enumerate(tqdm(eval_batch_idx, desc="Evaluating ...", position=2)):
