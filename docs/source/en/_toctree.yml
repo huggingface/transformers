@@ -378,6 +378,8 @@
       title: SqueezeBERT
     - local: model_doc/swin
       title: Swin Transformer
+    - local: model_doc/swinv2
+      title: Swin Transformer V2
     - local: model_doc/t5
       title: T5
     - local: model_doc/t5v1.1
