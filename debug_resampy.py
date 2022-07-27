@@ -181,7 +181,48 @@ if __name__ == "__main__":
     #     output = model(inputs=encoder_input, decoder_input_ids=decoder_input)
     #     print(output.logits.shape)
 
-    from transformers import BertLMHeadModel
+    # Problem
+    # from transformers import BertLMHeadModel
+
+
+    import math
+    import os
+    import datetime
+    import warnings
+    from dataclasses import dataclass
+    from typing import List, Optional, Tuple, Union
+
+    import torch
+    import torch.utils.checkpoint
+    from packaging import version
+    from torch import nn
+    from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+
+    # from ...activations import ACT2FN
+    # from ...modeling_outputs import (
+    #     BaseModelOutputWithPastAndCrossAttentions,
+    #     BaseModelOutputWithPoolingAndCrossAttentions,
+    #     CausalLMOutputWithCrossAttentions,
+    #     MaskedLMOutput,
+    #     MultipleChoiceModelOutput,
+    #     NextSentencePredictorOutput,
+    #     QuestionAnsweringModelOutput,
+    #     SequenceClassifierOutput,
+    #     TokenClassifierOutput,
+    # )
+    # from ...modeling_utils import PreTrainedModel
+    # from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+    # from ...utils import (
+    #     ModelOutput,
+    #     add_code_sample_docstrings,
+    #     add_start_docstrings,
+    #     add_start_docstrings_to_model_forward,
+    #     logging,
+    #     replace_return_docstrings,
+    # )
+    # from .configuration_bert import BertConfig
+
+
 
     batch_size = 64
     seq_len = 128
