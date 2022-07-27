@@ -281,7 +281,7 @@ class FlaxDataCollatorForBartDenoisingLM:
                 " language modeling. "
             )
 
-    def __call__(self, examples: List[Dict[str, List[int]]]) -> Dict[str, np.ndarray]:
+    def __call__(self, examples: List[Dict[str, List[int]]]) -> BatchEncoding:
         # convert list to dict and tensorize input
         batch = BatchEncoding(
             {k: np.array([examples[i][k] for i in range(len(examples))]) for k, v in examples[0].items()}
