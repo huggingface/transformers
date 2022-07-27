@@ -14,9 +14,9 @@
 # limitations under the License.
 """Image processor class for GLPN."""
 
-from tkinter import Image
 from typing import Union
 
+import PIL.Image
 from numpy import np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
@@ -28,14 +28,14 @@ logger = logging.get_logger(__name__)
 
 
 class GLPNImageProcessor(BaseImageProcessor):
-    def __init__(self, do_resize=True, do_rescale=True, size_divisor=32, resample=Image.Resampling.BILINEAR, **kwargs) -> None:
+    def __init__(self, do_resize=True, do_rescale=True, size_divisor=32, resample=PIL.Image.Resampling.BILINEAR, **kwargs) -> None:
         self.do_resize = do_resize
         self.do_rescale = do_rescale
         self.size_divisor = size_divisor
         self.resample = resample
         super().__init__(**kwargs)
 
-    def resize(self, image: np.ndarray, size_divisor: Union[int, float], resample: Image.Resampling, **kwargs) -> np.ndarray:
+    def resize(self, image: np.ndarray, size_divisor: Union[int, float], resample: PIL.Image.Resampling, **kwargs) -> np.ndarray:
         height, width = get_image_size(image)
         new_h = height // size_divisor * size_divisor
         new_w = width // size_divisor * size_divisor
