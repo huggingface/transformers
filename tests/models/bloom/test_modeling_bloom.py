@@ -135,20 +135,17 @@ class BloomModelTester:
             force_lm_head_in_fp32=force_lm_head_in_fp32,
         )
 
-    @require_torch
-    @torch.no_grad()
     def create_and_check_bloom_model(self, config, input_ids, input_mask, *args):
         model = BloomModel(config=config)
         model.to(torch_device)
         model.eval()
 
-        result = model(input_ids)
+        with torch.no_grad():
+            result = model(input_ids)
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(len(result.past_key_values), config.n_layer)
 
-    @require_torch
-    @torch.no_grad()
     def create_and_check_bloom_model_past(self, config, input_ids, input_mask, *args):
         model = BloomModel(config=config)
 
@@ -156,9 +153,10 @@ class BloomModelTester:
         model.eval()
 
         # first forward pass
-        outputs = model(input_ids, attention_mask=torch.ones_like(input_ids), use_cache=True)
-        outputs_use_cache_conf = model(input_ids, attention_mask=torch.ones_like(input_ids))
-        outputs_no_past = model(input_ids, use_cache=False, attention_mask=torch.ones_like(input_ids))
+        with torch.no_grad():
+            outputs = model(input_ids, attention_mask=torch.ones_like(input_ids), use_cache=True)
+            outputs_use_cache_conf = model(input_ids, attention_mask=torch.ones_like(input_ids))
+            outputs_no_past = model(input_ids, use_cache=False, attention_mask=torch.ones_like(input_ids))
 
         self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
         self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
@@ -171,8 +169,9 @@ class BloomModelTester:
         # append to next input_ids and token_type_ids
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
 
-        output_from_no_past = model(next_input_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past)["last_hidden_state"]
+        with torch.no_grad():
+            output_from_no_past = model(next_input_ids)["last_hidden_state"]
+            output_from_past = model(next_tokens, past_key_values=past)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -182,8 +181,6 @@ class BloomModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice))
 
-    @require_torch
-    @torch.no_grad()
     def create_and_check_bloom_model_attention_mask_past(self, config, input_ids, input_mask, *args):
         model = BloomModel(config=config)
         model.to(torch_device)
@@ -195,7 +192,8 @@ class BloomModelTester:
         attn_mask[:, half_seq_length:] = 0
 
         # first forward pass
-        output, past = model(input_ids, attention_mask=attn_mask).to_tuple()
+        with torch.no_grad():
+            output, past = model(input_ids, attention_mask=attn_mask).to_tuple()
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -213,8 +211,9 @@ class BloomModelTester:
         )
 
         # get two different outputs
-        output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past, attention_mask=attn_mask)["last_hidden_state"]
+        with torch.no_grad():
+            output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
+            output_from_past = model(next_tokens, past_key_values=past, attention_mask=attn_mask)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -224,15 +223,14 @@ class BloomModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice))
 
-    @require_torch
-    @torch.no_grad()
     def create_and_check_bloom_model_past_large_inputs(self, config, input_ids, input_mask, *args):
         model = BloomModel(config=config)
         model.to(torch_device)
         model.eval()
 
         # first forward pass
-        outputs = model(input_ids, attention_mask=input_mask, use_cache=True)
+        with torch.no_grad():
+            outputs = model(input_ids, attention_mask=input_mask, use_cache=True)
 
         output, past = outputs.to_tuple()
 
@@ -244,10 +242,11 @@ class BloomModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
 
-        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past)[
-            "last_hidden_state"
-        ]
+        with torch.no_grad():
+            output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
+            output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past)[
+                "last_hidden_state"
+            ]
         self.parent.assertTrue(output_from_past.shape[1] == next_tokens.shape[1])
 
         # select random slice
@@ -258,36 +257,36 @@ class BloomModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice))
 
-    @require_torch
-    @torch.no_grad()
     def create_and_check_lm_head_model(self, config, input_ids, input_mask, *args):
         model = BloomForCausalLM(config)
         model.to(torch_device)
         model.eval()
 
-        result = model(input_ids, labels=input_ids)
+        with torch.no_grad():
+            result = model(input_ids, labels=input_ids)
+
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
-    @require_torch
-    @torch.no_grad()
     def create_and_check_sequence_classification_model(self, config, input_ids, input_mask, *args):
         config.num_labels = self.num_labels
         model = BloomForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
 
-        result = model(input_ids, attention_mask=input_mask)
+        with torch.no_grad():
+            result = model(input_ids, attention_mask=input_mask)
+
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
-    @require_torch
-    @torch.no_grad()
     def create_and_check_token_classification_model(self, config, input_ids, input_mask, *args):
         model = BloomForTokenClassification(config)
         model.to(torch_device)
         model.eval()
 
-        result = model(input_ids, attention_mask=input_mask)
+        with torch.no_grad():
+            result = model(input_ids, attention_mask=input_mask)
+
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def create_and_check_forward_and_backwards(
@@ -385,7 +384,6 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         self.model_tester.create_and_check_bloom_weight_initialization(*config_and_inputs)
 
     @require_torch_gpu
-    @torch.no_grad()
     def test_force_lm_head_in_fp32_is_close_to_fp16(self):
         model_name = "bigscience/bigscience-small-testing"
 
@@ -409,8 +407,9 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         model.eval()
         model_in_fp16.eval()
 
-        output = model(input_ids=input_ids, attention_mask=input_mask).logits
-        output_in_fp16 = model_in_fp16(input_ids=input_ids, attention_mask=input_mask).logits
+        with torch.no_grad():
+            output = model(input_ids=input_ids, attention_mask=input_mask).logits
+            output_in_fp16 = model_in_fp16(input_ids=input_ids, attention_mask=input_mask).logits
 
         # We guarantee that models in fp16 and fp16 with `force_lm_head_in_fp32=True` are close.
         self.assertTrue(torch.allclose(output, output_in_fp16.to(torch.float32), atol=1e-4, rtol=1e-4))
@@ -533,7 +532,6 @@ class BloomEmbeddingTest(unittest.TestCase):
         super().setUp()
         self.path_bigscience_model = "bigscience/bigscience-small-testing"
 
-    @require_torch
     def test_embeddings(self):
         model = BloomForCausalLM.from_pretrained(
             self.path_bigscience_model, torch_dtype="auto", force_lm_head_in_fp32=False
@@ -767,7 +765,6 @@ class BloomEmbeddingTest(unittest.TestCase):
             for j, idx in enumerate(output_dict[key].keys()):
                 self.assertAlmostEqual(EMBEDDINGS_DS_AFTER_LN[key][idx], output_dict_norm[key][idx], places=1)
 
-    @require_torch
     def test_hidden_states_transformers(self):
         cuda_available = torch.cuda.is_available()
         model = BloomModel.from_pretrained(
@@ -797,7 +794,6 @@ class BloomEmbeddingTest(unittest.TestCase):
 
         self.assertDictEqual(MIN_MAX_DICT, output_dict)
 
-    @require_torch
     def test_logits(self):
         cuda_available = torch.cuda.is_available()
         model = BloomForCausalLM.from_pretrained(
