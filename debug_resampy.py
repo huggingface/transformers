@@ -82,7 +82,7 @@ def _resample_loop(x, t_out, interp_win, interp_delta, num_table, scale, y):
             y[t] += weight * x[n + k + 1]
 
 
-_resample_loop_p = jit(nopython=True, nogil=True, parallel=True)(_resample_loop)
+_resample_loop_p = jit(nopython=True, nogil=True, parallel=False)(_resample_loop)
 
 
 @guvectorize(
@@ -134,98 +134,6 @@ class DummyModel(nn.Module):
 
 if __name__ == "__main__":
 
-    # batch_size = 64
-    # seq_len = 1024
-    #
-    # dim = 1024
-    # model = DummyModel(n_layers=16, dim=dim)
-    # input = torch.ones(batch_size, seq_len, dim)
-    #
-    # for i in tqdm(range(32)):
-    #     output = model(input)
-    #     print(output.shape)
-
-
-
-    # batch_size = 64
-    # seq_len = 65536
-    #
-    # from transformers import Wav2Vec2Model
-    # model = Wav2Vec2Model.from_pretrained("hf-internal-testing/tiny-random-wav2vec2")
-    # encoder_input = torch.ones(batch_size, seq_len, dtype=torch.float32)
-    #
-    # for i in tqdm(range(32)):
-    #     output = model(input_values=encoder_input)
-    #     print(output.last_hidden_state.shape)
-
-
-
-    # batch_size = 64
-    # seq_len = 128
-    #
-    # from transformers import BertLMHeadModel
-    # model = BertLMHeadModel.from_pretrained("hf-internal-testing/tiny-random-bert")
-    # decoder_input = torch.ones(batch_size, seq_len, dtype=torch.int32)
-    #
-    # for i in tqdm(range(16)):
-    #     output = model(input_ids=decoder_input)
-    #     print(output.logits.shape)
-    #     print("=" * 40)
-
-    # from transformers import AutoModelForSpeechSeq2Seq
-    # model = AutoModelForSpeechSeq2Seq.from_pretrained("hf-internal-testing/tiny-random-speech-encoder-decoder")
-    # encoder_input = torch.ones(batch_size, seq_len, dtype=torch.float32)
-    # decoder_input = torch.ones(batch_size, 128, dtype=torch.int32)
-    #
-    # for i in tqdm(range(16)):
-    #     output = model(inputs=encoder_input, decoder_input_ids=decoder_input)
-    #     print(output.logits.shape)
-
-    # Problem
-    # from transformers import BertLMHeadModel
-
-
-    #import math
-    #import os
-    #import datetime
-    #import warnings
-    #from dataclasses import dataclass
-    #from typing import List, Optional, Tuple, Union
-
-    # import torch
-    # import torch.utils.checkpoint
-    # from packaging import version
-    # from torch import nn
-    # from torch.nn import BCEWithLogitsLoss
-    # from torch.nn import CrossEntropyLoss
-    # from torch.nn import MSELoss
-
-    # from ...activations import ACT2FN
-    # from ...modeling_outputs import (
-    #     BaseModelOutputWithPastAndCrossAttentions,
-    #     BaseModelOutputWithPoolingAndCrossAttentions,
-    #     CausalLMOutputWithCrossAttentions,
-    #     MaskedLMOutput,
-    #     MultipleChoiceModelOutput,
-    #     NextSentencePredictorOutput,
-    #     QuestionAnsweringModelOutput,
-    #     SequenceClassifierOutput,
-    #     TokenClassifierOutput,
-    # )
-    # from ...modeling_utils import PreTrainedModel
-    # from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-    # from ...utils import (
-    #     ModelOutput,
-    #     add_code_sample_docstrings,
-    #     add_start_docstrings,
-    #     add_start_docstrings_to_model_forward,
-    #     logging,
-    #     replace_return_docstrings,
-    # )
-    # from .configuration_bert import BertConfig
-
-
-
     batch_size = 64
     seq_len = 128
 
@@ -246,7 +154,6 @@ if __name__ == "__main__":
         print(f"nn.Embedding ({i}): {(e - s).total_seconds() / 100} seconds")
     print("=" * 40)
 
-
     x = torch.ones(64, 128, 32, dtype=torch.float32)
     y = torch.ones(64, 128, 32, dtype=torch.float32)
 
@@ -260,7 +167,6 @@ if __name__ == "__main__":
         e = datetime.datetime.now()
         print(f"z = x + y ({i}): {(e - s).total_seconds() / 100} seconds")
     print("=" * 40)
-
 
     q = torch.ones(64, 4, 128, 8, dtype=torch.float32)
     k = torch.ones(64, 4, 8, 128, dtype=torch.float32)
