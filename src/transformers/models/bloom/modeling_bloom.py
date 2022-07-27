@@ -277,7 +277,7 @@ class BloomAttention(nn.Module):
 
         if layer_past is not None:
             past_key, past_value = layer_past
-            # concatenate along seq_length dimension -> [batch_size, qk_length, num_heads, head_dim]
+            # concatenate along seq_length dimension -> [batch_size, kv_length, num_heads, head_dim]
             key_layer = torch.cat((past_key.type_as(key_layer), key_layer), dim=1)
             value_layer = torch.cat((past_value.type_as(value_layer), value_layer), dim=1)
 
@@ -565,7 +565,7 @@ class BloomModel(BloomPreTrainedModel):
         self.n_head = config.n_head
 
         # Embedding + LN Embedding
-        self.word_embeddings = nn.Embedding(config.vocab_size, self.embed_dim)
+        self.word_embeddings = nn.Embedding(config.vocab_size, self.embed_dim, dtype=torch.float if config.word_embeddings_in_fp32 else None)
 
         self.word_embeddings_layernorm = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
@@ -654,7 +654,7 @@ class BloomModel(BloomPreTrainedModel):
         head_mask = self.get_head_mask(head_mask, self.config.n_layer)
 
         if inputs_embeds is None:
-            inputs_embeds = self.word_embeddings(input_ids)
+            inputs_embeds = self.word_embeddings(input_ids).to(self.word_embeddings_layernorm.weight.dtype)
 
         hidden_states = self.word_embeddings_layernorm(inputs_embeds)
 
@@ -825,6 +825,8 @@ class BloomForCausalLM(BloomPreTrainedModel):
         )
         hidden_states = transformer_outputs[0]
 
+        if self.config.word_embeddings_in_fp32:
+            hidden_states = hidden_states.to(self.lm_head.weight.dtype)
         lm_logits = self.lm_head(hidden_states)
 
         loss = None

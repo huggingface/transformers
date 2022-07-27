@@ -130,6 +130,7 @@ class BloomConfig(PretrainedConfig):
         attention_dropout=0.0,
         pretraining_tp=1,  # TP rank used when training with megatron
         slow_but_exact=False,
+        word_embeddings_in_fp32=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -149,6 +150,7 @@ class BloomConfig(PretrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.slow_but_exact = slow_but_exact
+        self.word_embeddings_in_fp32 = word_embeddings_in_fp32
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
