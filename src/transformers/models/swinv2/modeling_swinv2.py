@@ -500,9 +500,11 @@ class Swinv2SelfAttention(nn.Module):
         relative_position_bias_table = self.continuous_position_bias_mlp(self.relative_coords_table).view(
             -1, self.num_attention_heads
         )
+        # [window_height*window_width,window_height*window_width,num_attention_heads]
         relative_position_bias = relative_position_bias_table[self.relative_position_index.view(-1)].view(
             self.window_size[0] * self.window_size[1], self.window_size[0] * self.window_size[1], -1
-        )  # Wh*Ww,Wh*Ww,nH
+        )
+        # [num_attention_heads,window_height*window_width,window_height*window_width]
         relative_position_bias = relative_position_bias.permute(2, 0, 1).contiguous()  # nH, Wh*Ww, Wh*Ww
         relative_position_bias = 16 * torch.sigmoid(relative_position_bias)
         attention_scores = attention_scores + relative_position_bias.unsqueeze(0)
@@ -660,21 +662,23 @@ class Swinv2Layer(nn.Module):
             if isinstance(self.shift_size, collections.abc.Iterable)
             else (self.shift_size, self.shift_size)
         )
-        self.window_size = [r if r <= w else w for r, w in zip(input_resolution, target_window_size)][0]
-        self.shift_size = [
-            0 if r <= w else s
-            for r, w, s in zip(
-                input_resolution,
+        self.window_size = (
+            input_resolution[0] if input_resolution[0] <= target_window_size[0] else target_window_size[0]
+        )
+        self.shift_size = (
+            0
+            if input_resolution
+            <= (
                 self.window_size
                 if isinstance(self.window_size, collections.abc.Iterable)
-                else (self.window_size, self.window_size),
-                target_shift_size,
+                else (self.window_size, self.window_size)
             )
-        ][0]
+            else target_shift_size[0]
+        )
 
     def get_attn_mask(self, height, width):
         if self.shift_size > 0:
-            # calculate attention mask for SW-MSA
+            # calculate attention mask for shifted window multihead self attention
             img_mask = torch.zeros((1, height, width, 1))
             height_slices = (
                 slice(0, -self.window_size),
