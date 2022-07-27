@@ -15,7 +15,7 @@
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, slow
+from transformers.testing_utils import require_accelerate, require_torch, slow
 from transformers.trainer_utils import set_seed
 
 
@@ -114,26 +114,27 @@ class Jukebox1bModelTester(unittest.TestCase):
         return tokens
 
     @require_torch
+    @require_accelerate
     def test_sampling(self):
-        model = JukeboxModel.from_pretrained(self.model_id, min_duration=10).eval()
+        model = JukeboxModel.from_pretrained(self.model_id, min_duration = 0, device_map="auto").eval()
         labels = self.prepare_inputs()
 
         set_seed(0)
         zs = [torch.zeros(1, 0, dtype=torch.long).cpu() for _ in range(3)]
-        zs = model._sample(zs, labels, [2], sample_tokens=10, save_results=False, sample_length_in_seconds=10)
+        zs = model._sample(zs, labels, [2], sample_length=40*model.priors[-1].raw_to_tokens, save_results=False)
         assert torch.allclose(zs[-1][0], torch.tensor(self.EXPECTED_OUTPUT_2))
 
         zs[-1] = torch.tensor(self.EXPECTED_OUTPUT_2).unsqueeze(0)
         set_seed(0)
         zs[-1] = torch.cat((zs[-1], torch.zeros(1, 1000000 - zs[-1].shape[-1]).cpu()), dim=-1).long()
-        zs = model._sample(zs, labels, [1], sample_tokens=10, save_results=False)
+        zs = model._sample(zs, labels, [1], sample_length=40*model.priors[-2].raw_to_tokens, save_results=False)
         assert torch.allclose(zs[-2][0, :80], torch.tensor(self.EXPECTED_OUTPUT_1))
 
         zs[-2] = torch.tensor(self.EXPECTED_OUTPUT_1).unsqueeze(0)
 
         set_seed(0)
         zs[-2] = torch.cat((zs[-2], torch.zeros(1, 1000000 - zs[-2].shape[-1]).cpu()), dim=-1).long()
-        zs = model._sample(zs, labels, [0], sample_tokens=10, save_results=False)
+        zs = model._sample(zs, labels, [0], sample_length=40*model.priors[-3].raw_to_tokens, save_results=False)
         assert torch.allclose(zs[0][0, :40], torch.tensor(self.EXPECTED_OUTPUT_0))
 
     @slow
@@ -254,26 +255,26 @@ class Jukebox5bModelTester(unittest.TestCase):
 
     def test_sampling(self):
         model_id = "ArthurZ/jukebox-5b-lyrics"
-        model = JukeboxModel.from_pretrained(model_id).eval()
+        model = JukeboxModel.from_pretrained(model_id,min_duration=0).eval()
 
         labels = self.prepare_inputs(model_id)
         set_seed(0)
         zs = [torch.zeros(1, 0, dtype=torch.long).cpu() for _ in range(3)]
-        zs = model._sample(zs, labels, [2], sample_tokens=10, save_results=False)
+        zs = model._sample(zs, labels, [2], sample_length=40*model.priors[-1].raw_to_tokens, save_results=False)
         assert torch.allclose(zs[-1][0], torch.tensor(self.EXPECTED_OUTPUT_2))
 
         zs[-1] = torch.tensor(self.EXPECTED_OUTPUT_2).unsqueeze(0)
         set_seed(0)
         zs[-1] = torch.cat((zs[-1], torch.zeros(1, 1000000 - zs[-1].shape[-1]).cpu()), dim=-1).long()
-        zs = model._sample(zs, labels, [1], sample_tokens=10, save_results=False)
+        zs = model._sample(zs, labels, [1], sample_length=40*model.priors[-2].raw_to_tokens, save_results=False)
         assert torch.allclose(zs[-2][0, :80], torch.tensor(self.EXPECTED_OUTPUT_1))
 
         zs[-2] = torch.tensor(self.EXPECTED_OUTPUT_1).unsqueeze(0)
 
         set_seed(0)
         zs[-2] = torch.cat((zs[-2], torch.zeros(1, 1000000 - zs[-2].shape[-1]).cpu()), dim=-1).long()
-        zs = model._sample(zs, labels, [0], sample_tokens=10, save_results=False)
-        assert torch.allclose(zs[0][0, :80], torch.tensor(self.EXPECTED_OUTPUT_0))
+        zs = model._sample(zs, labels, [0], sample_length=40*model.priors[-3].raw_to_tokens, save_results=False)
+        assert torch.allclose(zs[0][0, :40], torch.tensor(self.EXPECTED_OUTPUT_0))
 
     @slow
     def test_slow_sampling(self):
@@ -295,4 +296,4 @@ class Jukebox5bModelTester(unittest.TestCase):
 
 if __name__ == "__main__":
     tester = Jukebox1bModelTester()
-    tester.test_primed_sampling()
+    tester.test_sampling()
