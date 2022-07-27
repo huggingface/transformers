@@ -565,7 +565,9 @@ class BloomModel(BloomPreTrainedModel):
         self.n_head = config.n_head
 
         # Embedding + LN Embedding
-        self.word_embeddings = nn.Embedding(config.vocab_size, self.embed_dim, dtype=torch.float if config.word_embeddings_in_fp32 else None)
+        self.word_embeddings = nn.Embedding(
+            config.vocab_size, self.embed_dim, dtype=torch.float if config.word_embeddings_in_fp32 else None
+        )
 
         self.word_embeddings_layernorm = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
