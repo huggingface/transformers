@@ -424,3 +424,14 @@ ImageProcessorMixin.push_to_hub = copy_func(ImageProcessorMixin.push_to_hub)
 ImageProcessorMixin.push_to_hub.__doc__ = ImageProcessorMixin.push_to_hub.__doc__.format(
     object="image processor", object_class="AutoImageProcessor", object_files="image processor file"
 )
+
+
+class BaseImageProcessor(ImageProcessorMixin):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def __call__(self, *args, **kwargs):
+        return self.preprocess(*args, **kwargs)
+
+    def preprocess(self, *args, **kwargs):
+        raise NotImplementedError("Each image processor must implement its own preprocess method")
