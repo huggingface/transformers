@@ -96,7 +96,7 @@ class BloomModelTester:
     def get_large_model_config(self):
         return BloomConfig.from_pretrained("bigscience/bloom")
 
-    def prepare_config_and_inputs(self, gradient_checkpointing=False):
+    def prepare_config_and_inputs(self, gradient_checkpointing=False, word_embeddings_in_fp32=True, dtype="float32"):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         input_mask = None
@@ -107,11 +107,11 @@ class BloomModelTester:
         if self.use_labels:
             sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
 
-        config = self.get_config(gradient_checkpointing=gradient_checkpointing)
+        config = self.get_config(gradient_checkpointing=gradient_checkpointing, word_embeddings_in_fp32=word_embeddings_in_fp32, dtype=dtype)
 
         return (config, input_ids, input_mask, sequence_labels)
 
-    def get_config(self, gradient_checkpointing=False, slow_but_exact=True):
+    def get_config(self, gradient_checkpointing=False, word_embeddings_in_fp32=True, dtype="float32", slow_but_exact=True):
         return BloomConfig(
             vocab_size=self.vocab_size,
             seq_length=self.seq_length,
@@ -130,7 +130,8 @@ class BloomModelTester:
             num_labels=self.num_labels,
             gradient_checkpointing=gradient_checkpointing,
             slow_but_exact=slow_but_exact,
-            dtype="float32",
+            word_embeddings_in_fp32=word_embeddings_in_fp32,
+            dtype=dtype,
         )
 
     def create_and_check_bloom_model(self, config, input_ids, input_mask, *args):
@@ -368,6 +369,39 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bloom_weight_initialization(*config_and_inputs)
 
+    def test_word_embeddings_in_fp32_is_close_to_fp16(self):
+        config, input_ids, input_mask, _ = self.model_tester.prepare_config_and_inputs(word_embeddings_in_fp32=True, dtype="float16")
+        model = BloomForCausalLM(config)
+
+        config_in_fp32, *_ = self.model_tester.prepare_config_and_inputs(word_embeddings_in_fp32=False, dtype="float32")
+        model_in_fp32 = BloomForCausalLM(config_in_fp32)
+
+        config_in_fp16, *_ = self.model_tester.prepare_config_and_inputs(word_embeddings_in_fp32=False, dtype="float16")
+        model_in_fp16 = BloomForCausalLM(config_in_fp16)
+
+        output = model(
+            input_ids=input_ids,
+            attention_mask=input_mask,
+        ).logits
+        output_in_fp32 = model_in_fp32(
+            input_ids=input_ids,
+            attention_mask=input_mask,
+        ).logits
+        output_in_fp16 = model_in_fp16(
+            input_ids=input_ids,
+            attention_mask=input_mask,
+        ).logits
+
+        # We guarantee that models in fp16 and fp32 and fp32 with word_embeddings_in_fp32 are close.
+        self.assertTrue(torch.allclose(output, output_in_fp32))
+        self.assertTrue(torch.allclose(output.to(torch.float16), output_in_fp16))
+
+        # We verify that fp16 have value collapses due to output vocabulary begin higher that maximum range of fp16.
+        random_batch_id = torch.randint(input_ids.shape[0], ())
+        random_sequence_id =torch.randint(input_ids.shape[1], ())
+        # Test that we see at least one collapse, ie the `len(unique_values) < vocabulary_size`. We could test that it's smaller that fp16 max range as well
+        self.assertTrue(torch.unique(output_in_fp16[random_batch_id, random_sequence_id]) < output_in_fp16.shape[-1])
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
@@ -478,7 +512,7 @@ class BloomEmbeddingTest(unittest.TestCase):
 
     @require_torch
     def test_embeddings(self):
-        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, torch_dtype="auto")  # load in fp32
+        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, torch_dtype="auto")  # load in bf16
         model.eval()
 
         EMBEDDINGS_DS_BEFORE_LN_BF_16_MEAN = {
@@ -684,7 +718,9 @@ class BloomEmbeddingTest(unittest.TestCase):
         tensor_ids = torch.LongTensor([EXAMPLE_IDS])
         with torch.no_grad():
             embeddings = model.transformer.word_embeddings(tensor_ids)
-            embeddings_ln = model.transformer.word_embeddings_layernorm(embeddings)  #
+            if model.config.word_embeddings_in_fp32:
+                embeddings = embeddings.to(model.transformer.word_embeddings.weight.dtype)
+            embeddings_ln = model.transformer.word_embeddings_layernorm(embeddings)
         # first check the embeddings before LN
         output_dict = {"min": {}, "max": {}, "mean": {}, "sum": {"value": embeddings.sum().item()}}
         for i, idx in enumerate(EXAMPLE_IDS):
