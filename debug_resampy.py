@@ -1,3 +1,5 @@
+import datetime
+
 import torch
 from torch import nn
 from tqdm import tqdm
@@ -158,17 +160,17 @@ if __name__ == "__main__":
 
 
 
-    batch_size = 64
-    seq_len = 128
-
-    from transformers import BertLMHeadModel
-    model = BertLMHeadModel.from_pretrained("hf-internal-testing/tiny-random-bert")
-    decoder_input = torch.ones(batch_size, seq_len, dtype=torch.int32)
-
-    for i in tqdm(range(16)):
-        output = model(input_ids=decoder_input)
-        print(output.logits.shape)
-        print("=" * 40)
+    # batch_size = 64
+    # seq_len = 128
+    #
+    # from transformers import BertLMHeadModel
+    # model = BertLMHeadModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+    # decoder_input = torch.ones(batch_size, seq_len, dtype=torch.int32)
+    #
+    # for i in tqdm(range(16)):
+    #     output = model(input_ids=decoder_input)
+    #     print(output.logits.shape)
+    #     print("=" * 40)
 
     # from transformers import AutoModelForSpeechSeq2Seq
     # model = AutoModelForSpeechSeq2Seq.from_pretrained("hf-internal-testing/tiny-random-speech-encoder-decoder")
@@ -178,3 +180,39 @@ if __name__ == "__main__":
     # for i in tqdm(range(16)):
     #     output = model(inputs=encoder_input, decoder_input_ids=decoder_input)
     #     print(output.logits.shape)
+
+    batch_size = 64
+    seq_len = 128
+
+    vocab_size = 1024
+    hidden_size = 32
+    layer = nn.Embedding(vocab_size, hidden_size)
+
+    inputs = torch.ones(batch_size, seq_len, dtype=torch.int32)
+
+    for i in range(16):
+        s = datetime.datetime.now()
+        output = layer(inputs)
+        e = datetime.datetime.now()
+        print(f"nn.Embedding: {(e - s).total_seconds()} seconds")
+    print("=" * 40)
+
+    x = torch.ones(64, 128, 32, dtype=torch.float32)
+    y = torch.ones(64, 128, 32, dtype=torch.float32)
+
+    for i in range(16):
+        s = datetime.datetime.now()
+        z = x + y
+        e = datetime.datetime.now()
+        print(f"x + y: {(e - s).total_seconds()} seconds")
+    print("=" * 40)
+
+    q = torch.ones(64, 4, 128, 8, dtype=torch.float32)
+    k = torch.ones(64, 4, 8, 128, dtype=torch.float32)
+
+    for i in range(16):
+        s = datetime.datetime.now()
+        attention_scores = torch.matmul(q, k)
+        e = datetime.datetime.now()
+        print(f"torch.matmul: {(e - s).total_seconds()} seconds")
+    print("=" * 40)
