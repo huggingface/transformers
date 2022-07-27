@@ -894,6 +894,7 @@ class MCTCTForAudioFrameClassification(MCTCTPreTrainedModel):
         self,
         input_features: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
+        head_mask=None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -911,6 +912,7 @@ class MCTCTForAudioFrameClassification(MCTCTPreTrainedModel):
         outputs = self.mctct(
             input_features,
             attention_mask=attention_mask,
+            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -996,6 +998,7 @@ class MCTCTForSequenceClassification(MCTCTPreTrainedModel):
         self,
         input_features: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1013,6 +1016,7 @@ class MCTCTForSequenceClassification(MCTCTPreTrainedModel):
         outputs = self.mctct(
             input_features,
             attention_mask=attention_mask,
+            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,

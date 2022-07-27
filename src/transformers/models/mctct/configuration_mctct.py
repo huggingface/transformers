@@ -99,6 +99,7 @@ class MCTCTConfig(PretrainedConfig):
             Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly
             occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
             of [`MCTCTForCTC`].
+        
 
     Example:
 

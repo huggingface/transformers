@@ -1,0 +1,48 @@
+diff --git a/src/transformers/models/mctct/configuration_mctct.py b/src/transformers/models/mctct/configuration_mctct.py
+index f71467e65..f96e2f0f7 100644
+--- a/src/transformers/models/mctct/configuration_mctct.py
++++ b/src/transformers/models/mctct/configuration_mctct.py
+@@ -99,6 +99,7 @@ class MCTCTConfig(PretrainedConfig):
+             Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly
+             occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
+             of [`MCTCTForCTC`].
++        
+ 
+     Example:
+ 
+diff --git a/src/transformers/models/mctct/modeling_mctct.py b/src/transformers/models/mctct/modeling_mctct.py
+index beefb56f0..1207dfdaf 100755
+--- a/src/transformers/models/mctct/modeling_mctct.py
++++ b/src/transformers/models/mctct/modeling_mctct.py
+@@ -894,6 +894,7 @@ class MCTCTForAudioFrameClassification(MCTCTPreTrainedModel):
+         self,
+         input_features: Optional[torch.Tensor],
+         attention_mask: Optional[torch.Tensor] = None,
++        head_mask=None,
+         output_attentions: Optional[bool] = None,
+         output_hidden_states: Optional[bool] = None,
+         return_dict: Optional[bool] = None,
+@@ -911,6 +912,7 @@ class MCTCTForAudioFrameClassification(MCTCTPreTrainedModel):
+         outputs = self.mctct(
+             input_features,
+             attention_mask=attention_mask,
++            head_mask=head_mask,
+             output_attentions=output_attentions,
+             output_hidden_states=output_hidden_states,
+             return_dict=return_dict,
+@@ -996,6 +998,7 @@ class MCTCTForSequenceClassification(MCTCTPreTrainedModel):
+         self,
+         input_features: Optional[torch.Tensor],
+         attention_mask: Optional[torch.Tensor] = None,
++        head_mask: Optional[bool] = None,
+         output_attentions: Optional[bool] = None,
+         output_hidden_states: Optional[bool] = None,
+         return_dict: Optional[bool] = None,
+@@ -1013,6 +1016,7 @@ class MCTCTForSequenceClassification(MCTCTPreTrainedModel):
+         outputs = self.mctct(
+             input_features,
+             attention_mask=attention_mask,
++            head_mask=head_mask,
+             output_attentions=output_attentions,
+             output_hidden_states=output_hidden_states,
+             return_dict=return_dict,
