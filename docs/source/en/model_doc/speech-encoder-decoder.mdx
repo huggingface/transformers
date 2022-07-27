@@ -25,7 +25,7 @@ An example of how to use a [`SpeechEncoderDecoderModel`] for inference can be se
 ## Randomly initializing `SpeechEncoderDecoderModel` from model configurations.
 
 [`SpeechEncoderDecoderModel`] can be randomly initialized from an encoder and a decoder config. In the following example, we show how to do this using the default [`Wav2Vec2Model`] configuration for the encoder
-and the default ['BertModel`] configuration for the decoder.
+and the default [`BertForCausalLM`] configuration for the decoder.
 
 ```python
 >>> from transformers import BertConfig, Wav2Vec2Config, SpeechEncoderDecoderConfig, SpeechEncoderDecoderModel
@@ -48,7 +48,7 @@ To do so, the `SpeechEncoderDecoderModel` class provides a [`SpeechEncoderDecode
 >>> from transformers import SpeechEncoderDecoderModel
 
 >>> model = SpeechEncoderDecoderModel.from_encoder_decoder_pretrained(
-...     "facebook/hubert-large-ls960-ft", "bert-base-uncased"
+...     "facebook/hubert-large-ll60k", "bert-base-uncased"
 ... )
 ```
 

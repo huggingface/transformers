@@ -31,7 +31,7 @@ the caption. Another example is optical character recognition. Refer to [TrOCR](
 ## Randomly initializing `VisionEncoderDecoderModel` from model configurations.
 
 [`VisionEncoderDecoderModel`] can be randomly initialized from an encoder and a decoder config. In the following example, we show how to do this using the default [`ViTModel`] configuration for the encoder
-and the default [`BertModel`] configuration for the decoder.
+and the default [`BertForCausalLM`] configuration for the decoder.
 
 ```python
 >>> from transformers import BertConfig, ViTConfig, VisionEncoderDecoderConfig, VisionEncoderDecoderModel
