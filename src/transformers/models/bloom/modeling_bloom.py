@@ -771,9 +771,10 @@ class BloomForCausalLM(BloomPreTrainedModel):
         self.post_init()
 
     def post_init(self):
-        if self.config.force_word_embeddings_in_fp32:
-            self.transformer.word_embeddings.to(torch.float32)
-        return super().post_init()
+        super().post_init()
+
+        if self.config.force_lm_head_in_fp32:
+            self.lm_head.to(torch.float32)
 
     def get_output_embeddings(self):
         return self.lm_head
@@ -843,7 +844,7 @@ class BloomForCausalLM(BloomPreTrainedModel):
         )
         hidden_states = transformer_outputs[0]
 
-        if self.config.force_word_embeddings_in_fp32:
+        if self.config.force_lm_head_in_fp32:
             hidden_states = hidden_states.to(self.lm_head.weight.dtype)
         lm_logits = self.lm_head(hidden_states)
 

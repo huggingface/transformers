@@ -91,7 +91,9 @@ class BloomConfig(PretrainedConfig):
             issue](https://github.com/pytorch/pytorch/issues/76232). A solution to obtain more accurate results is to
             enable this feature. Enabling this will hurt the computational time of the inference. Will be probably
             resolved in the future once the main model has been fine-tuned with TP_rank=1.
-
+        force_lm_head_in_fp32 (`bool` defaults to `True`):
+            Casts `lm_head` in fp32 in order to increase the chances that obtained logits are totally ordered,
+            ie with no values that is equal to another.
     Example:
 
     ```python
@@ -130,7 +132,7 @@ class BloomConfig(PretrainedConfig):
         attention_dropout=0.0,
         pretraining_tp=1,  # TP rank used when training with megatron
         slow_but_exact=False,
-        word_embeddings_in_fp32=True,
+        force_lm_head_in_fp32=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -150,7 +152,7 @@ class BloomConfig(PretrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.slow_but_exact = slow_but_exact
-        self.force_word_embeddings_in_fp32 = force_word_embeddings_in_fp32
+        self.force_lm_head_in_fp32 = force_lm_head_in_fp32
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
