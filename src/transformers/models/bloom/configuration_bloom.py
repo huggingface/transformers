@@ -92,8 +92,8 @@ class BloomConfig(PretrainedConfig):
             enable this feature. Enabling this will hurt the computational time of the inference. Will be probably
             resolved in the future once the main model has been fine-tuned with TP_rank=1.
         force_lm_head_in_fp32 (`bool` defaults to `True`):
-            Casts `lm_head` in fp32 in order to increase the chances that obtained logits are totally ordered,
-            ie with no values that is equal to another.
+            Casts `lm_head` in fp32 in order to increase the chances that obtained logits are totally ordered, ie with
+            no values that is equal to another.
     Example:
 
     ```python
