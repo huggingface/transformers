@@ -396,7 +396,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         ).logits
 
         # We guarantee that models in fp16 and fp16 with `word_embeddings_in_fp32=True` are close.
-        self.assertTrue(torch.allclose(output.to(torch.float16), output_in_fp16))
+        self.assertTrue(torch.allclose(output, output_in_fp16.to(torch.float32), atol=1e-4, rtol=1e-4))
 
         # We verify that fp16 have value collapses due to output vocabulary begin higher that maximum range of fp16.
         random_batch_id = torch.randint(input_ids.shape[0], ())
