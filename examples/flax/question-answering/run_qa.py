@@ -20,13 +20,13 @@ Fine-tuning the library models for question answering.
 
 import json
 import logging
+import math
 import os
 import random
 import sys
 import time
 from dataclasses import asdict, dataclass, field
 from enum import Enum
-from itertools import chain
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Tuple
 
@@ -40,7 +40,7 @@ import jax.numpy as jnp
 import optax
 import transformers
 from flax import struct, traverse_util
-from flax.jax_utils import replicate, unreplicate
+from flax.jax_utils import pad_shard_unpad, replicate, unreplicate
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard
 from huggingface_hub import Repository
@@ -406,11 +406,15 @@ def train_data_collator(rng: PRNGKey, dataset: Dataset, batch_size: int):
 
 # region eval data iterator
 def eval_data_collator(dataset: Dataset, batch_size: int):
-    """Returns batches of size `batch_size` from `eval dataset`, sharded over all local devices."""
-    for i in range(len(dataset) // batch_size):
-        batch = dataset[i * batch_size : (i + 1) * batch_size]
+    """Returns batches of size `batch_size` from `eval dataset`. Sharding handled by `pad_shard_unpad` in the eval loop."""
+    batch_idx = np.arange(len(dataset))
+
+    steps_per_epoch = math.ceil(len(dataset) / batch_size)
+    batch_idx = np.array_split(batch_idx, steps_per_epoch)
+
+    for idx in batch_idx:
+        batch = dataset[idx]
         batch = {k: np.array(v) for k, v in batch.items()}
-        batch = shard(batch)
 
         yield batch
 
@@ -856,8 +860,9 @@ def main():
     rng = jax.random.PRNGKey(training_args.seed)
     dropout_rngs = jax.random.split(rng, jax.local_device_count())
 
-    train_batch_size = training_args.per_device_train_batch_size * jax.local_device_count()
-    eval_batch_size = training_args.per_device_eval_batch_size * jax.local_device_count()
+    train_batch_size = int(training_args.per_device_train_batch_size) * jax.local_device_count()
+    per_device_eval_batch_size = int(training_args.per_device_eval_batch_size)
+    eval_batch_size = per_device_eval_batch_size * jax.local_device_count()
     # endregion
 
     # region Load model
@@ -975,32 +980,17 @@ def main():
                 # evaluate
                 for batch in tqdm(
                     eval_data_collator(eval_dataset, eval_batch_size),
-                    total=len(eval_dataset) // eval_batch_size,
+                    total=math.ceil(len(eval_dataset) / eval_batch_size),
                     desc="Evaluating ...",
                     position=2,
                 ):
                     _ = batch.pop("example_id")
                     _ = batch.pop("offset_mapping")
-                    predictions = p_eval_step(state, batch)
-                    start_logits = np.array([pred for pred in chain(*predictions[0])])
-                    end_logits = np.array([pred for pred in chain(*predictions[1])])
-                    all_start_logits.append(start_logits)
-                    all_end_logits.append(end_logits)
-
-                # evaluate also on leftover examples (not divisible by batch_size)
-                num_leftover_samples = len(eval_dataset) % eval_batch_size
-
-                # make sure leftover batch is evaluated on one device
-                if num_leftover_samples > 0 and jax.process_index() == 0:
-                    # take leftover samples
-                    batch = eval_dataset[-num_leftover_samples:]
-                    batch = {k: np.array(v) for k, v in batch.items()}
-                    _ = batch.pop("example_id")
-                    _ = batch.pop("offset_mapping")
-
-                    predictions = eval_step(unreplicate(state), batch)
-                    start_logits = np.array([pred for pred in predictions[0]])
-                    end_logits = np.array([pred for pred in predictions[1]])
+                    predictions = pad_shard_unpad(p_eval_step)(
+                        state, batch, min_device_batch=per_device_eval_batch_size
+                    )
+                    start_logits = np.array(predictions[0])
+                    end_logits = np.array(predictions[1])
                     all_start_logits.append(start_logits)
                     all_end_logits.append(end_logits)
 
@@ -1039,30 +1029,15 @@ def main():
         all_start_logits = []
         all_end_logits = []
 
-        eva_loader = eval_data_collator(eval_dataset, eval_batch_size)
-        for batch in tqdm(eva_loader, total=len(eval_dataset) // eval_batch_size, desc="Evaluating ...", position=2):
+        eval_loader = eval_data_collator(eval_dataset, eval_batch_size)
+        for batch in tqdm(
+            eval_loader, total=math.ceil(len(eval_dataset) / eval_batch_size), desc="Evaluating ...", position=2
+        ):
             _ = batch.pop("example_id")
             _ = batch.pop("offset_mapping")
-            predictions = p_eval_step(state, batch)
-            start_logits = np.array([pred for pred in chain(*predictions[0])])
-            end_logits = np.array([pred for pred in chain(*predictions[1])])
-            all_start_logits.append(start_logits)
-            all_end_logits.append(end_logits)
-
-        # evaluate also on leftover examples (not divisible by batch_size)
-        num_leftover_samples = len(eval_dataset) % eval_batch_size
-
-        # make sure leftover batch is evaluated on one device
-        if num_leftover_samples > 0 and jax.process_index() == 0:
-            # take leftover samples
-            batch = eval_dataset[-num_leftover_samples:]
-            batch = {k: np.array(v) for k, v in batch.items()}
-            _ = batch.pop("example_id")
-            _ = batch.pop("offset_mapping")
-
-            predictions = eval_step(unreplicate(state), batch)
-            start_logits = np.array([pred for pred in predictions[0]])
-            end_logits = np.array([pred for pred in predictions[1]])
+            predictions = pad_shard_unpad(p_eval_step)(state, batch, min_device_batch=per_device_eval_batch_size)
+            start_logits = np.array(predictions[0])
+            end_logits = np.array(predictions[1])
             all_start_logits.append(start_logits)
             all_end_logits.append(end_logits)
 
