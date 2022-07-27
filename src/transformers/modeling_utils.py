@@ -1697,6 +1697,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 If `True`, will temporarily offload the CPU state dict to the hard drive to avoid getting out of CPU
                 RAM if the weight of the CPU state dict + the biggest shard of the checkpoint does not fit. Defaults to
                 `True` when there is some disk offload.
+            load_in_8bit (`bool`, *optional*):
+                If `True`, will convert the loaded model into mixed-8bit quantized model. To use this feature please
+                install `bitsandbytes` compiled with your CUDA version by running `pip install -i
+                https://test.pypi.org/simple/ bitsandbytes-cudaXXX` where XXX is your CUDA version (e.g. 11.6 = 116).
+                Make also sure that you have enough GPU RAM to store half of the model size since the 8bit modules are
+                not compiled and adapted for CPUs.
+            int8_threshold (`int`, *optional*):
+                Works together with `load_in_8bit`. This corresponds to the outlier threshold for outlier detection as
+                described in `GPT3.int8() : 8-bit Matrix Multiplication for Transformers at Scale` paper (#TODO provide
+                link to paper). Set to `6.0` by default as described in the paper.
             subfolder (`str`, *optional*, defaults to `""`):
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
                 specify the folder name here.
