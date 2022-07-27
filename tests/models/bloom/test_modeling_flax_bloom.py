@@ -121,7 +121,6 @@ class FlaxBloomModelTester:
         attention_mask = inputs_dict["attention_mask"]
 
         past_key_values = model.init_cache(input_ids.shape[0], max_length)
-        attention_mask = jnp.ones((input_ids.shape[0], max_length), dtype="i4")
 
         outputs_cache = model(
             input_ids[:, :-1],
