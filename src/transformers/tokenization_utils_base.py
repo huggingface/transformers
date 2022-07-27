@@ -1501,7 +1501,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         self.deprecation_warnings = (
             {}
         )  # Use to store when we have already noticed a deprecation warning (avoid overlogging).
-
+        self._in_target_context_manager = False
         super().__init__(**kwargs)
 
     @property
@@ -2498,7 +2498,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if text is None and text_target is None:
             raise ValueError("You need to specify either `text` or `text_target`.")
         if text is not None:
-            self._switch_to_input_mode()
+            # The context manager will send the inputs as normal texts and not text_target.
+            if not self._in_target_context_manager:
+                self._switch_to_input_mode()
             encodings = self._call_one(text=text, text_pair=text_pair, **all_kwargs)
         if text_target is not None:
             self._switch_to_target_mode()
@@ -3551,7 +3553,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             "your input texts if you use the same keyword arguments, or in a separate call."
         )
         self._switch_to_target_mode()
+        self._in_target_context_manager = True
         yield
+        self._in_target_context_manager = False
         self._switch_to_input_mode()
 
     @classmethod

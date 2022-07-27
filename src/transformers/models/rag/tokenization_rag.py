@@ -15,7 +15,6 @@
 """Tokenization classes for RAG."""
 import os
 import warnings
-from contextlib import contextmanager
 from typing import List, Optional
 
 from ...tokenization_utils_base import BatchEncoding

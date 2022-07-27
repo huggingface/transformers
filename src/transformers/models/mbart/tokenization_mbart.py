@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import os
-from contextlib import contextmanager
 from shutil import copyfile
 from typing import Any, Dict, List, Optional, Tuple
 

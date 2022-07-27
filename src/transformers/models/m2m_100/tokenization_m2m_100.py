@@ -14,7 +14,6 @@
 """Tokenization classes for M2M100."""
 import json
 import os
-from contextlib import contextmanager
 from pathlib import Path
 from shutil import copyfile
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -349,7 +348,7 @@ class M2M100Tokenizer(PreTrainedTokenizer):
     def _switch_to_input_mode(self):
         self.set_src_lang_special_tokens(self.src_lang)
 
-    def _switch_to_targett_mode(self):
+    def _switch_to_target_mode(self):
         self.set_tgt_lang_special_tokens(self.tgt_lang)
 
     def set_src_lang_special_tokens(self, src_lang: str) -> None:
