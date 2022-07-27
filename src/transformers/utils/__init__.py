@@ -109,6 +109,7 @@ from .import_utils import (
     is_pytesseract_available,
     is_pytorch_quantization_available,
     is_rjieba_available,
+    is_sacremoses_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_scatter_available,
