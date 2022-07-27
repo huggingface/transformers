@@ -862,7 +862,7 @@ def main():
     dropout_rngs = jax.random.split(rng, jax.local_device_count())
 
     train_batch_size = int(training_args.per_device_train_batch_size) * jax.local_device_count()
-    per_device_eval_batch_size = int(training_args.per_device_train_batch_size)
+    per_device_eval_batch_size = int(training_args.per_device_eval_batch_size)
     eval_batch_size = per_device_eval_batch_size * jax.local_device_count()
     # endregion
 
@@ -990,8 +990,8 @@ def main():
                     predictions = pad_shard_unpad(p_eval_step)(
                         state, batch, min_device_batch=per_device_eval_batch_size
                     )
-                    start_logits = np.array([pred for pred in chain(*predictions[0])])
-                    end_logits = np.array([pred for pred in chain(*predictions[1])])
+                    start_logits = np.array(predictions[0])
+                    end_logits = np.array(predictions[1])
                     all_start_logits.append(start_logits)
                     all_end_logits.append(end_logits)
 
@@ -1037,8 +1037,8 @@ def main():
             _ = batch.pop("example_id")
             _ = batch.pop("offset_mapping")
             predictions = pad_shard_unpad(p_eval_step)(state, batch, min_device_batch=per_device_eval_batch_size)
-            start_logits = np.array([pred for pred in chain(*predictions[0])])
-            end_logits = np.array([pred for pred in chain(*predictions[1])])
+            start_logits = np.array(predictions[0])
+            end_logits = np.array(predictions[1])
             all_start_logits.append(start_logits)
             all_end_logits.append(end_logits)
 
