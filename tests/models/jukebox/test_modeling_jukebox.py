@@ -220,14 +220,14 @@ class Jukebox1bModelTester(unittest.TestCase):
     def test_vqvae(self):
         model = JukeboxModel.from_pretrained(self.model_id, min_duration=0).eval()
         set_seed(0)
-        x = torch.rand((1,5120,1))
+        x = torch.rand((1, 5120, 1))
         with torch.no_grad():
             zs = model.vqvae.encode(x, start_level=2, bs_chunks=x.shape[0])
         assert torch.allclose(zs[0][0], torch.tensor(self.EXPECTED_VQVAE_ENCODE))
 
         with torch.no_grad():
             x = model.vqvae.decode(zs, start_level=2, bs_chunks=x.shape[0])
-        assert torch.allclose(x[0,:40,0], torch.tensor(self.EXPECTED_VQVAE_DECODE),atol=1e-4)
+        assert torch.allclose(x[0, :40, 0], torch.tensor(self.EXPECTED_VQVAE_DECODE), atol=1e-4)
 
 
 @require_torch
@@ -299,7 +299,7 @@ class Jukebox5bModelTester(unittest.TestCase):
         307, 89, 1353, 616, 34, 842, 185, 842, 34, 842, 185, 842,
         307, 114, 185, 89, 34, 1268, 185, 89, 34, 842, 185, 89
     ]
-    
+
     # fmt: on
 
     def prepare_inputs(self, model_id):
@@ -354,7 +354,6 @@ class Jukebox5bModelTester(unittest.TestCase):
         zs[-2] = torch.cat((zs[-2].cuda(), torch.zeros(1, 1000000 - zs[-2].shape[-1]).cuda()), dim=-1).long()
         zs = model._sample(zs, labels, [0], sample_length=60 * model.priors[-3].raw_to_tokens, save_results=False)
         assert torch.allclose(zs[0][0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_0))
-
 
 
 if __name__ == "__main__":
