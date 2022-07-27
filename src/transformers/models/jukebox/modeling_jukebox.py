@@ -2908,7 +2908,9 @@ def save_wav(fname, lvl, metas, aud, sr):
     aud = torch.clamp(aud, -1, 1).cpu().numpy()
     for i in list(range(aud.shape[0])):
         if metas is not None:
-            artists, genres, lyrics = list(metas[i].values())  # twitter prompts or inputs are in the form of a dictionnary
+            artists, genres, lyrics = list(
+                metas[i].values()
+            )  # twitter prompts or inputs are in the form of a dictionnary
             soundfile.write(
                 f"{fname}/lvl_{lvl}-{artists[i]}-{genres[i]}-{lyrics[i][:5]}{i}.wav",
                 aud[i],
@@ -3127,10 +3129,14 @@ class JukeboxModel(JukeboxPreTrainedModel):
         sample_tokens=None,
         offset=0,
         save_results=True,
-        sample_length=None
+        sample_length=None,
     ):
         top_prior = self.priors[-1]
-        total_length = sample_length if sample_length is not None else (int(sample_length_in_seconds * self.config.sr) // top_prior.raw_to_tokens)* top_prior.raw_to_tokens
+        total_length = (
+            sample_length
+            if sample_length is not None
+            else (int(sample_length_in_seconds * self.config.sr) // top_prior.raw_to_tokens) * top_prior.raw_to_tokens
+        )
         sampling_kwargs = [
             dict(
                 temp=0.99,
