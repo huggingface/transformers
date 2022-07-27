@@ -2498,7 +2498,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if text is None and text_target is None:
             raise ValueError("You need to specify either `text` or `text_target`.")
         if text is not None:
-            # The context manager will send the inputs as normal texts and not text_target.
+            # The context manager will send the inputs as normal texts and not text_target, but we shouldn't change the
+            # input mode in this case.
             if not self._in_target_context_manager:
                 self._switch_to_input_mode()
             encodings = self._call_one(text=text, text_pair=text_pair, **all_kwargs)
