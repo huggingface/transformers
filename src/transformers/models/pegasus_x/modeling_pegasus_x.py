@@ -602,11 +602,13 @@ class PegasusXEncoderLayer(nn.Module):
     def pad_local_tokens(cls, hidden_states, attention_mask, block_size):
         assert hidden_states.dim() == 3
         pad_size = block_size // 2
+        mask_min_value = torch.finfo(hidden_states.dtype).min
         padded_hidden_states = torch.nn.functional.pad(
             hidden_states, pad=(0, 0, pad_size, pad_size),
         )
         padded_mask = torch.nn.functional.pad(
             attention_mask, pad=(pad_size, pad_size),
+            value=mask_min_value,
         )
         return padded_hidden_states, padded_mask
     
@@ -894,7 +896,7 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
         )
         self.layers = nn.ModuleList([
             PegasusXEncoderLayer(
-                stagger_blocks_this_layer=i%2 == 1 and config.stagger_local_blocks,
+                stagger_blocks_this_layer=i % 2 == 1 and config.stagger_local_blocks,
                 config=config)
             for i in range(config.encoder_layers)
         ])
