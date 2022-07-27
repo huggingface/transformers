@@ -260,7 +260,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
 
         input_features = kwargs.pop("input_features", None)
         labels = kwargs.pop("labels", None)
-        if len(args) > 1:
+        if len(args) > 0:
             input_features = args[0]
             args = args[1:]
 
