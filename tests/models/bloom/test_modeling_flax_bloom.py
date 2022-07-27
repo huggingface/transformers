@@ -106,7 +106,7 @@ class FlaxBloomModelTester:
             is_encoder_decoder=False,
             use_cache=False,
         )
-        inputs_dict = prepare_opt_inputs_dict(config, input_ids)
+        inputs_dict = prepare_bloom_inputs_dict(config, input_ids)
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_common(self):
