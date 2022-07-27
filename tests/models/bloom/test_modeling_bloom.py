@@ -96,7 +96,7 @@ class BloomModelTester:
     def get_large_model_config(self):
         return BloomConfig.from_pretrained("bigscience/bloom")
 
-    def prepare_config_and_inputs(self, gradient_checkpointing=False, word_embeddings_in_fp32=True, dtype="float32"):
+    def prepare_config_and_inputs(self, gradient_checkpointing=False, word_embeddings_in_fp32=True, torch_dtype="float32"):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         input_mask = None
@@ -107,11 +107,11 @@ class BloomModelTester:
         if self.use_labels:
             sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
 
-        config = self.get_config(gradient_checkpointing=gradient_checkpointing, word_embeddings_in_fp32=word_embeddings_in_fp32, dtype=dtype)
+        config = self.get_config(gradient_checkpointing=gradient_checkpointing, word_embeddings_in_fp32=word_embeddings_in_fp32, torch_dtype=torch_dtype)
 
         return (config, input_ids, input_mask, sequence_labels)
 
-    def get_config(self, gradient_checkpointing=False, word_embeddings_in_fp32=True, dtype="float32", slow_but_exact=True):
+    def get_config(self, gradient_checkpointing=False, word_embeddings_in_fp32=True, torch_dtype="float32", slow_but_exact=True):
         return BloomConfig(
             vocab_size=self.vocab_size,
             seq_length=self.seq_length,
@@ -131,7 +131,7 @@ class BloomModelTester:
             gradient_checkpointing=gradient_checkpointing,
             slow_but_exact=slow_but_exact,
             word_embeddings_in_fp32=word_embeddings_in_fp32,
-            dtype=dtype,
+            torch_dtype=torch_dtype,
         )
 
     def create_and_check_bloom_model(self, config, input_ids, input_mask, *args):
@@ -370,15 +370,20 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         self.model_tester.create_and_check_bloom_weight_initialization(*config_and_inputs)
 
     def test_word_embeddings_in_fp32_is_close_to_fp16(self):
-        config, input_ids, input_mask, _ = self.model_tester.prepare_config_and_inputs(word_embeddings_in_fp32=True, dtype="float16")
-        model = BloomForCausalLM(config)
+        config, input_ids, input_mask, _ = self.model_tester.prepare_config_and_inputs(word_embeddings_in_fp32=True, torch_dtype="float16")
+        model = BloomForCausalLM(config).to(torch_device)
 
-        config_in_fp32, *_ = self.model_tester.prepare_config_and_inputs(word_embeddings_in_fp32=False, dtype="float32")
-        model_in_fp32 = BloomForCausalLM(config_in_fp32)
+        config_in_fp32, *_ = self.model_tester.prepare_config_and_inputs(word_embeddings_in_fp32=False, torch_dtype="float32")
+        model_in_fp32 = BloomForCausalLM(config_in_fp32).to(torch_device)
 
-        config_in_fp16, *_ = self.model_tester.prepare_config_and_inputs(word_embeddings_in_fp32=False, dtype="float16")
-        model_in_fp16 = BloomForCausalLM(config_in_fp16)
+        config_in_fp16, *_ = self.model_tester.prepare_config_and_inputs(word_embeddings_in_fp32=False, torch_dtype="float16")
+        model_in_fp16 = BloomForCausalLM(config_in_fp16).to(torch_device)
 
+        model.eval()
+        model_in_fp32.eval()
+        model_in_fp16.eval()
+
+        print({name: value.dtype for name, value in model_in_fp16.state_dict().items()})
         output = model(
             input_ids=input_ids,
             attention_mask=input_mask,
@@ -393,8 +398,11 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         ).logits
 
         # We guarantee that models in fp16 and fp32 and fp32 with word_embeddings_in_fp32 are close.
-        self.assertTrue(torch.allclose(output, output_in_fp32))
-        self.assertTrue(torch.allclose(output.to(torch.float16), output_in_fp16))
+        # We guarantee that models in fp16 and fp32 and fp32 with word_embeddings_in_fp32 are close.
+        # torch.testing.assert_close(output, output_in_fp32)
+        torch.testing.assert_close(output.to(torch.float16), output_in_fp16)
+        #self.assertTrue(torch.allclose(output, output_in_fp32))
+        #self.assertTrue(torch.allclose(output.to(torch.float16), output_in_fp16))
 
         # We verify that fp16 have value collapses due to output vocabulary begin higher that maximum range of fp16.
         random_batch_id = torch.randint(input_ids.shape[0], ())
