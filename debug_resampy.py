@@ -192,10 +192,10 @@ if __name__ == "__main__":
     #from dataclasses import dataclass
     #from typing import List, Optional, Tuple, Union
 
-    import torch
+    # import torch
     import torch.utils.checkpoint
-    from packaging import version
-    from torch import nn
+    # from packaging import version
+    # from torch import nn
     from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
     # from ...activations import ACT2FN
