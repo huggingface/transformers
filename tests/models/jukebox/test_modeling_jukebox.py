@@ -28,6 +28,7 @@ if is_torch_available():
 @require_torch
 class Jukebox1bModelTester(unittest.TestCase):
     all_model_classes = (JukeboxModel,) if is_torch_available() else ()
+    model_id = "ArthurZ/jukebox-1b-lyrics"
     metas = dict(
         artist="Zac Brown Band",
         genres="Country",
@@ -73,51 +74,76 @@ class Jukebox1bModelTester(unittest.TestCase):
     ]
 
     EXPECTED_Y_COND = [1058304, 0, 786432, 7169, 507, 76, 27, 40, 30, 76]
+
     EXPECTED_GPU_OUTPUTS = [
-        1150, 384, 222, 1612, 1063, 710, 984, 710, 1272, 405, 784, 2001,
-        1276, 778, 937, 256, 1368, 1053, 1421, 405, 710, 1425, 445, 1489,
-        1895, 947, 317, 1082, 947, 669, 1527, 1321, 1807, 756, 1150, 1150,
-        1489, 1139, 519, 475
+        1489, 1489, 324, 1489, 1600, 1150, 1489, 1489, 947, 1400, 1684, 1408,
+        1368, 758, 49, 1331, 1244, 798, 228, 1240, 1224, 1150, 1150, 1150,
+        519, 475, 1643, 653, 1369, 30, 1434, 1434, 1489, 1864, 1106, 1877,
+        1434, 231, 1621, 1063
+    ]
+    EXPECTED_VQVAE = [
+        -0.0168, -0.0083, -0.0062, -0.0078, -0.0095, -0.0108, -0.0117, -0.0124,
+        -0.0138, -0.0149, -0.0148, -0.0140, -0.0136, -0.0130, -0.0125, -0.0120,
+        -0.0129, -0.0148, -0.0151, -0.0138, -0.0130, -0.0129, -0.0125, -0.0116,
+        -0.0119, -0.0130, -0.0129, -0.0116, -0.0113, -0.0118, -0.0112, -0.0104,
+        -0.0114, -0.0127, -0.0122, -0.0103, -0.0083, -0.0070, -0.0060, -0.0051
+    ]
+    EXPECTED_PRIMED_0 = [
+        390, 1160, 1002, 1907, 1788, 1788, 1788, 1907, 1002, 1002, 1854, 1002,
+        1002, 1002, 1002, 1002, 1002, 1160, 1160, 1606, 596, 596, 1160, 1002,
+        1516, 596, 1002, 1002, 1002, 1907, 1788, 1788, 1788, 1854, 1788, 1907,
+        1907, 1788, 596, 1626
+    ]
+    EXPECTED_PRIMED_1 = [
+        1236, 1668, 1484, 1920, 1848, 1409, 139, 864, 1828, 1272, 1599, 824,
+        1672, 139, 555, 1484, 824, 1920, 555, 596, 1579, 1599, 1231, 1599,
+        1637, 1407, 212, 824, 1599, 116, 1433, 824, 258, 1599, 1433, 1895,
+        1063, 1433, 1433, 1599
+    ]
+    EXPECTED_PRIMED_2 = [
+        1684, 1873, 1119, 1189, 395, 611, 1901, 972, 890, 1337, 1392, 1927,
+        96, 972, 672, 780, 1119, 890, 158, 771, 1073, 1927, 353, 1331,
+        1269, 1459, 1333, 1645, 812, 1577, 1337, 606, 353, 981, 1466, 619,
+        197, 391, 302, 1930
     ]
     # fmt: on
-    def prepare_inputs(self, model_id):
-        tokenizer = JukeboxTokenizer.from_pretrained(model_id)
+
+    def prepare_inputs(self):
+        tokenizer = JukeboxTokenizer.from_pretrained(self.model_id)
         tokens = tokenizer(**self.metas)["input_ids"]
         return tokens
 
     @require_torch
     def test_sampling(self):
-        model_id = "ArthurZ/jukebox-1b-lyrics"
-        model = JukeboxModel.from_pretrained(model_id, cond_res_scale=[None, True, False]).eval()
-
-        labels = self.prepare_inputs(model_id)
+        model = JukeboxModel.from_pretrained(self.model_id, min_duration=10).eval()
+        labels = self.prepare_inputs()
 
         set_seed(0)
         zs = [torch.zeros(1, 0, dtype=torch.long).cpu() for _ in range(3)]
-        zs = model._sample(zs, labels, [2], sample_tokens=10, save_wav=False)
+        zs = model._sample(zs, labels, [2], sample_tokens=10, save_results=False, sample_length_in_seconds=10)
         assert torch.allclose(zs[-1][0], torch.tensor(self.EXPECTED_OUTPUT_2))
 
         zs[-1] = torch.tensor(self.EXPECTED_OUTPUT_2).unsqueeze(0)
         set_seed(0)
         zs[-1] = torch.cat((zs[-1], torch.zeros(1, 1000000 - zs[-1].shape[-1]).cpu()), dim=-1).long()
-        zs = model._sample(zs, labels, [1], sample_tokens=10, save_wav=False)
+        zs = model._sample(zs, labels, [1], sample_tokens=10, save_results=False)
         assert torch.allclose(zs[-2][0, :80], torch.tensor(self.EXPECTED_OUTPUT_1))
 
         zs[-2] = torch.tensor(self.EXPECTED_OUTPUT_1).unsqueeze(0)
 
         set_seed(0)
         zs[-2] = torch.cat((zs[-2], torch.zeros(1, 1000000 - zs[-2].shape[-1]).cpu()), dim=-1).long()
-        zs = model._sample(zs, labels, [0], sample_tokens=10, save_wav=False)
+        zs = model._sample(zs, labels, [0], sample_tokens=10, save_results=False)
         assert torch.allclose(zs[0][0, :40], torch.tensor(self.EXPECTED_OUTPUT_0))
 
     @slow
     @require_torch
     def test_slow_sampling(self):
+        torch.backends.cuda.matmul.allow_tf32 = False
 
-        model_id = "ArthurZ/jukebox-1b-lyrics"
-        model = JukeboxModel.from_pretrained(model_id).eval().to("cuda")
+        model = JukeboxModel.from_pretrained(self.model_id).eval()
 
-        labels = [i.cuda() for i in self.prepare_inputs(model_id)]
+        labels = [i.cuda() for i in self.prepare_inputs()]
         set_seed(0)
         zs = [torch.zeros(1, 0, dtype=torch.long).cuda() for _ in range(3)]
 
@@ -130,12 +156,45 @@ class Jukebox1bModelTester(unittest.TestCase):
         self.assertListEqual(y.cpu().numpy()[0][:10].tolist(), self.EXPECTED_Y_COND)
 
         set_seed(0)
-        zs = model._sample(zs, labels, [2], sample_tokens=10, save_wav=False)
+        zs = model._sample(zs, labels, [2], sample_tokens=10, save_results=False)
         assert torch.allclose(zs[-1][0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS))
 
+    @slow
+    def test_primed_sampling(self):
+        torch.backends.cuda.matmul.allow_tf32 = False
+
+        model = JukeboxModel.from_pretrained(self.model_id, min_duration=0.5).eval()
+        set_seed(0)
+        waveform = torch.rand((1, 5120, 1))
+        tokens = [i.cuda() for i in self.prepare_inputs()]
+
+        zs = [None, None, model.vqvae.encode(waveform, start_level=2, bs_chunks=waveform.shape[0])[0].cuda()]
+        zs = model._sample(zs, tokens, sample_levels=[2], save_results=False, sample_length_in_seconds=1)
+        assert torch.allclose(zs[-1][0][:40].cpu(), torch.tensor(self.EXPECTED_PRIMED_0))
+
+        upper_2 = torch.cat((zs[-1], torch.zeros(1, 1000000 - zs[-1].shape[-1]).cuda()), dim=-1).long()
+        zs = [None, model.vqvae.encode(waveform, start_level=1, bs_chunks=waveform.shape[0])[0].cuda(), upper_2]
+        zs = model._sample(zs, tokens, sample_levels=[1], save_results=False, sample_length_in_seconds=1)
+        assert torch.allclose(zs[1][0][:40].cpu(), torch.tensor(self.EXPECTED_PRIMED_1))
+
+        upper_1 = torch.cat((zs[1], torch.zeros(1, 1000000 - zs[1].shape[-1]).cuda()), dim=-1).long()
+        zs = [model.vqvae.encode(waveform, start_level=0, bs_chunks=waveform.shape[0])[0].cuda(), upper_1, upper_2]
+        zs = model._sample(zs, tokens, sample_levels=[0], save_results=False, sample_length_in_seconds=1)
+        assert torch.allclose(zs[0][0][:40].cpu(), torch.tensor(self.EXPECTED_PRIMED_2))
+
+    @slow
     def test_vqvae(self):
         # implemented vavae decoding test at 3 levels using the expected outputs
-        pass
+        zs = torch.tensor(self.EXPECTED_OUTPUT_2)
+        with torch.no_grad():
+            x = self.vqvae.decode(zs, start_level=2, bs_chunks=zs.shape[0])
+        assert torch.allclose(x.cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS))
+
+        zs.to("gpu")
+        self.vqvae.to("gpu")
+        with torch.no_grad():
+            x = self.vqvae.decode(zs, start_level=2, bs_chunks=zs.shape[0])
+        assert torch.allclose(x.cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS))
 
 
 @require_torch
@@ -200,20 +259,20 @@ class Jukebox5bModelTester(unittest.TestCase):
         labels = self.prepare_inputs(model_id)
         set_seed(0)
         zs = [torch.zeros(1, 0, dtype=torch.long).cpu() for _ in range(3)]
-        zs = model._sample(zs, labels, [2], sample_tokens=10, save_wav=False)
+        zs = model._sample(zs, labels, [2], sample_tokens=10, save_results=False)
         assert torch.allclose(zs[-1][0], torch.tensor(self.EXPECTED_OUTPUT_2))
 
         zs[-1] = torch.tensor(self.EXPECTED_OUTPUT_2).unsqueeze(0)
         set_seed(0)
         zs[-1] = torch.cat((zs[-1], torch.zeros(1, 1000000 - zs[-1].shape[-1]).cpu()), dim=-1).long()
-        zs = model._sample(zs, labels, [1], sample_tokens=10, save_wav=False)
+        zs = model._sample(zs, labels, [1], sample_tokens=10, save_results=False)
         assert torch.allclose(zs[-2][0, :80], torch.tensor(self.EXPECTED_OUTPUT_1))
 
         zs[-2] = torch.tensor(self.EXPECTED_OUTPUT_1).unsqueeze(0)
 
         set_seed(0)
         zs[-2] = torch.cat((zs[-2], torch.zeros(1, 1000000 - zs[-2].shape[-1]).cpu()), dim=-1).long()
-        zs = model._sample(zs, labels, [0], sample_tokens=10, save_wav=False)
+        zs = model._sample(zs, labels, [0], sample_tokens=10, save_results=False)
         assert torch.allclose(zs[0][0, :80], torch.tensor(self.EXPECTED_OUTPUT_0))
 
     @slow
@@ -224,7 +283,7 @@ class Jukebox5bModelTester(unittest.TestCase):
         labels = [i.cuda() for i in self.prepare_inputs(model_id)]
         set_seed(0)
         zs = [torch.zeros(1, 0, dtype=torch.long).cuda() for _ in range(3)]
-        zs = model._sample(zs, labels, [2], sample_tokens=10, save_wav=False)
+        zs = model._sample(zs, labels, [2], sample_tokens=10, save_results=False)
         assert torch.allclose(zs[-1][0].cpu(), torch.tensor(self.EXPECTED_OUTPUT_2))
 
     def test_vqvae(self):
@@ -233,13 +292,7 @@ class Jukebox5bModelTester(unittest.TestCase):
         # implement vavae decoding test at 3 levels using the expected outputs
         pass
 
-    def test_primed_sampling(self):
-        pass
-
-    def test_upsampling(self):
-        pass
-
 
 if __name__ == "__main__":
     tester = Jukebox1bModelTester()
-    tester.test_slow_sampling()
+    tester.test_primed_sampling()

@@ -36,6 +36,7 @@ else:
         "JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST",
         "JukeboxModel",
         "JukeboxPreTrainedModel",
+        "JukeboxVQVAE",
     ]
 
 if TYPE_CHECKING:
@@ -48,7 +49,12 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_jukebox import JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST, JukeboxModel, JukeboxPreTrainedModel
+        from .modeling_jukebox import (
+            JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST,
+            JukeboxModel,
+            JukeboxPreTrainedModel,
+            JukeboxVQVAE,
+        )
 
 else:
     import sys

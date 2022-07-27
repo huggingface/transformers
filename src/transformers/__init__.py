@@ -1288,11 +1288,7 @@ else:
         ]
     )
     _import_structure["models.jukebox"].extend(
-        [
-            "JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "JukeboxModel",
-            "JukeboxPreTrainedModel",
-        ]
+        ["JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST", "JukeboxModel", "JukeboxPreTrainedModel", "JukeboxVQVAE"]
     )
     _import_structure["models.layoutlm"].extend(
         [
@@ -3888,7 +3884,12 @@ if TYPE_CHECKING:
             ImageGPTPreTrainedModel,
             load_tf_weights_in_imagegpt,
         )
-        from .models.jukebox import JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST, JukeboxModel, JukeboxPreTrainedModel
+        from .models.jukebox import (
+            JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST,
+            JukeboxModel,
+            JukeboxPreTrainedModel,
+            JukeboxVQVAE,
+        )
         from .models.layoutlm import (
             LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             LayoutLMForMaskedLM,

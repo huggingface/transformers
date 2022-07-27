@@ -698,9 +698,9 @@ def average_metrics(_metrics):
     return {key: sum(vals) / len(vals) for key, vals in metrics.items()}
 
 
-class VQVAE(nn.Module):
+class JukeboxVQVAE(PreTrainedModel):
     def __init__(self, config):
-        super().__init__()
+        super().__init__(config)
         if not config.sample_length:
             downsamples = calculate_strides(config.vq_vae_strides_t, config.vq_vae_downs_t)
             top_raw_to_tokens = np.prod(downsamples)
@@ -2097,7 +2097,6 @@ class JukeboxConditionalAutoregressive(nn.Module):
                 x = self.transformer(x, encoder_kv=encoder_kv, sample=True, fp16=fp16)  # Transformer
                 if self.add_cond_after_transformer:
                     x = x + cond
-                assert x.shape == (n_samples, 1, self.width)
                 x = self.x_out(x)  # Predictions
                 if get_preds:
                     preds.append(x)
@@ -3022,7 +3021,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
 
         self.embed_dim = config.hidden_size
 
-        self.vqvae = VQVAE(config)
+        self.vqvae = JukeboxVQVAE(config)
         config.vqvae_z_shapes = self.vqvae.z_shapes
         self.priors = nn.ModuleList([JukeboxPrior(config, level=i) for i in range(config.nb_priors)])
 
@@ -3117,7 +3116,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         self,
         zs,
         labels,
-        sample_levels=None,
+        sample_levels,
         metas=None,
         chunk_size=32,
         sampling_temperature=0.98,
@@ -3127,7 +3126,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         alignments=None,
         sample_tokens=None,
         offset=0,
-        save_wav=True,
+        save_results=True,
     ):
         top_prior = self.priors[-1]
         sampling_kwargs = [
@@ -3165,7 +3164,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
             sample_levels = range(len(self.priors))
         for level in reversed(sample_levels):
             self.total_length = sampling_kwargs[level].pop("total_length")
-            self.priors[level].to(zs[0].device).eval()
+            self.priors[level].to(zs[level].device).eval()
             empty_cache()
             hps.sample_length = self.total_length  # generated length of the signal
             # Set correct total_length, hop_length, labels and sampling_kwargs for level
@@ -3184,7 +3183,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
                 x = self.vqvae.decode(zs[level:], start_level=level, bs_chunks=zs[level].shape[0])
             self.vqvae.to("cpu")
 
-            if save_wav:
+            if save_results:
                 logdir = f"{self.start_time}/level_{level}"
                 if not os.path.exists(logdir):
                     os.makedirs(logdir)
@@ -3199,30 +3198,30 @@ class JukeboxModel(JukeboxPreTrainedModel):
         return zs
 
     # Generate ancestral samples given a list of artists and genres
-    def ancestral_sample(self, labels, metas, n_samples=1, **sampling_kwargs):
+    def ancestral_sample(self, labels, n_samples=1, **sampling_kwargs):
         sample_levels = sampling_kwargs.pop("sample_levels", list(range(len(self.priors))))
         zs = [torch.zeros(n_samples, 0, dtype=torch.long, device=labels[0].device) for _ in range(len(self.priors))]
-        zs = self._sample(zs, labels, metas, sample_levels, **sampling_kwargs)
+        zs = self._sample(zs, labels, sample_levels, **sampling_kwargs)
         return zs
 
     # Continue ancestral sampling from previously saved codes
-    def continue_sample(self, zs, labels, metas, **sampling_kwargs):
+    def continue_sample(self, zs, labels, **sampling_kwargs):
         sample_levels = list(range(len(self.priors)))
-        zs = self._sample(zs, labels, metas, sample_levels, **sampling_kwargs)
+        zs = self._sample(zs, labels, sample_levels, **sampling_kwargs)
         return zs
 
     # Upsample given already generated upper-level codes
-    def upsample(self, zs, labels, metas, **sampling_kwargs):
+    def upsample(self, zs, labels, **sampling_kwargs):
         sample_levels = list(range(len(self.priors) - 1))
-        zs = self._sample(zs, labels, metas, sample_levels, **sampling_kwargs)
+        zs = self._sample(zs, labels, sample_levels, **sampling_kwargs)
         return zs
 
     # Prompt the model with raw audio input (dimension: NTC) and generate continuations
-    def primed_sample(self, x, labels, metas, **sampling_kwargs):
+    def primed_sample(self, x, labels, **sampling_kwargs):
         sample_levels = list(range(len(self.priors)))
         self.vqvae.to(x.device)
         with torch.no_grad():
             zs = self.vqvae.encode(x, start_level=0, end_level=len(self.priors), bs_chunks=x.shape[0])
         self.vqvae.to("cpu")
-        zs = self._sample(zs, labels, metas, sample_levels, **sampling_kwargs)
+        zs = self._sample(zs, labels, sample_levels, **sampling_kwargs)
         return zs
