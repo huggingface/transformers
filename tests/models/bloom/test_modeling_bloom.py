@@ -502,10 +502,10 @@ class BloomEmbeddingTest(unittest.TestCase):
 
 
     You need to install tokenizers following this readme:
-        - https://huggingface.co/bigscience-catalogue-data-dev/byte-level-bpe-tokenizer-no-norm-250k-whitespace-and-eos-regex-alpha-v3-dedup-lines-articles
+        - https://huggingface.co/bigscience/tokenizer
 
     Tokenizer used during training:
-        - https://huggingface.co/bigscience-catalogue-data-dev/byte-level-bpe-tokenizer-no-norm-250k-whitespace-and-eos-regex-alpha-v3-dedup-lines-articles
+        - https://huggingface.co/bigscience/tokenizer
 
     # TODO change the script (or just add skip) when building the env with tokenizers 0.12.0
     """
@@ -516,7 +516,7 @@ class BloomEmbeddingTest(unittest.TestCase):
 
     @require_torch
     def test_embeddings(self):
-        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, torch_dtype="auto")  # load in bf16
+        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, torch_dtype="auto", word_embeddings_in_fp32=False)  # load in bf16
         model.eval()
 
         EMBEDDINGS_DS_BEFORE_LN_BF_16_MEAN = {
@@ -723,7 +723,7 @@ class BloomEmbeddingTest(unittest.TestCase):
         with torch.no_grad():
             embeddings = model.transformer.word_embeddings(tensor_ids)
             if model.config.word_embeddings_in_fp32:
-                embeddings = embeddings.to(model.transformer.word_embeddings.weight.dtype)
+                embeddings = embeddings.to(model.transformer.word_embeddings_layernorm.weight.dtype)
             embeddings_ln = model.transformer.word_embeddings_layernorm(embeddings)
         # first check the embeddings before LN
         output_dict = {"min": {}, "max": {}, "mean": {}, "sum": {"value": embeddings.sum().item()}}
@@ -749,7 +749,7 @@ class BloomEmbeddingTest(unittest.TestCase):
     @require_torch
     def test_hidden_states_transformers(self):
         cuda_available = torch.cuda.is_available()
-        model = BloomModel.from_pretrained(self.path_bigscience_model, use_cache=False, torch_dtype="auto").to(
+        model = BloomModel.from_pretrained(self.path_bigscience_model, use_cache=False, torch_dtype="auto", word_embeddings_in_fp32=False).to(
             torch_device
         )
         model.eval()
@@ -779,7 +779,7 @@ class BloomEmbeddingTest(unittest.TestCase):
     @require_torch
     def test_logits(self):
         cuda_available = torch.cuda.is_available()
-        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, use_cache=False, torch_dtype="auto").to(
+        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, use_cache=False, torch_dtype="auto", word_embeddings_in_fp32=False).to(
             torch_device
         )  # load in bf16
         model.eval()
