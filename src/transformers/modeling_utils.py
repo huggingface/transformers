@@ -2073,7 +2073,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         elif not is_sharded:
                             torch_dtype = get_state_dict_dtype(state_dict)
                         else:
-                            one_state_dict = load_state_dict(resolved_archive_file)
+                            one_state_dict = load_state_dict(resolved_archive_file[0])
                             torch_dtype = get_state_dict_dtype(one_state_dict)
                             del one_state_dict  # free CPU memory
                     else:
