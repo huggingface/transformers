@@ -295,6 +295,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("roberta", "RobertaForCausalLM"),
         ("roformer", "RoFormerForCausalLM"),
         ("speech_to_text_2", "Speech2Text2ForCausalLM"),
+        ("t5", "T5ForConditionalGeneration"),
         ("transfo-xl", "TransfoXLLMHeadModel"),
         ("trocr", "TrOCRForCausalLM"),
         ("xglm", "XGLMForCausalLM"),
