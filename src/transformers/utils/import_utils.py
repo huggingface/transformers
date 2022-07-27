@@ -444,6 +444,10 @@ def is_py3nvml_available():
     return importlib.util.find_spec("py3nvml") is not None
 
 
+def is_sacremoses_available():
+    return importlib.util.find_spec("sacremoses") is not None
+
+
 def is_apex_available():
     return importlib.util.find_spec("apex") is not None
 
@@ -800,6 +804,13 @@ PHONEMIZER_IMPORT_ERROR = """
 
 
 # docstyle-ignore
+SACREMOSES_IMPORT_ERROR = """
+{0} requires the sacremoses library but it was not found in your environment. You can install it with pip:
+`pip install sacremoses`
+"""
+
+
+# docstyle-ignore
 SCIPY_IMPORT_ERROR = """
 {0} requires the scipy library but it was not found in your environment. You can install it with pip:
 `pip install scipy`
@@ -856,6 +867,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("protobuf", (is_protobuf_available, PROTOBUF_IMPORT_ERROR)),
         ("pyctcdecode", (is_pyctcdecode_available, PYCTCDECODE_IMPORT_ERROR)),
         ("pytesseract", (is_pytesseract_available, PYTESSERACT_IMPORT_ERROR)),
+        ("sacremoses", (is_sacremoses_available, SACREMOSES_IMPORT_ERROR)),
         ("scatter", (is_scatter_available, SCATTER_IMPORT_ERROR)),
         ("pytorch_quantization", (is_pytorch_quantization_available, PYTORCH_QUANTIZATION_IMPORT_ERROR)),
         ("sentencepiece", (is_sentencepiece_available, SENTENCEPIECE_IMPORT_ERROR)),
