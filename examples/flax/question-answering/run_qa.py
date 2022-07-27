@@ -407,11 +407,7 @@ def train_data_collator(rng: PRNGKey, dataset: Dataset, batch_size: int):
 
 # region eval data iterator
 def eval_data_collator(dataset: Dataset, batch_size: int):
-    """Returns batches of size `batch_size` from `eval dataset`, sharded over all local devices."""
-    """
-    Returns batches of size `batch_size` from `dataset`. If `drop_last` is set to `False`, the final batch may be incomplete,
-    and range in size from 1 to `batch_size`. Shuffle batches if `shuffle` is `True`.
-    """
+    """Returns batches of size `batch_size` from `eval dataset`. Sharding handled by `pad_shard_unpad` in the eval loop."""
     batch_idx = np.arange(len(dataset))
 
     steps_per_epoch = math.ceil(len(dataset) / batch_size)
@@ -996,23 +992,6 @@ def main():
                     )
                     start_logits = np.array([pred for pred in chain(*predictions[0])])
                     end_logits = np.array([pred for pred in chain(*predictions[1])])
-                    all_start_logits.append(start_logits)
-                    all_end_logits.append(end_logits)
-
-                # evaluate also on leftover examples (not divisible by batch_size)
-                num_leftover_samples = len(eval_dataset) % eval_batch_size
-
-                # make sure leftover batch is evaluated on one device
-                if num_leftover_samples > 0 and jax.process_index() == 0:
-                    # take leftover samples
-                    batch = eval_dataset[-num_leftover_samples:]
-                    batch = {k: np.array(v) for k, v in batch.items()}
-                    _ = batch.pop("example_id")
-                    _ = batch.pop("offset_mapping")
-
-                    predictions = eval_step(unreplicate(state), batch)
-                    start_logits = np.array([pred for pred in predictions[0]])
-                    end_logits = np.array([pred for pred in predictions[1]])
                     all_start_logits.append(start_logits)
                     all_end_logits.append(end_logits)
 
