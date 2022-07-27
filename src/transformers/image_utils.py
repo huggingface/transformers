@@ -13,8 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import enum
 import os
-from typing import List, Union
+from typing import List, Tuple, Union
 
 import numpy as np
 import PIL.Image
@@ -22,8 +23,8 @@ import PIL.ImageOps
 
 import requests
 
-from .utils import is_torch_available
-from .utils.generic import _is_torch
+from .utils import is_torch_available, is_tf_available, is_jax_available
+from .utils.generic import _is_torch, _is_tensorflow, _is_jax
 
 
 IMAGENET_DEFAULT_MEAN = [0.485, 0.456, 0.406]
@@ -38,6 +39,70 @@ ImageInput = Union[
 
 def is_torch_tensor(obj):
     return _is_torch(obj) if is_torch_available() else False
+
+
+def is_tf_tensor(obj):
+    return _is_tensorflow(obj) if is_tf_available() else False
+
+
+def is_jax_tensor(obj):
+    return _is_jax(obj) if is_jax_available() else False
+
+
+class ChannelDimension(enum.Enum):
+    FIRST = 1
+    LAST = 3
+
+
+def infer_channel_dimension(image: np.ndarray) -> ChannelDimension:
+    """
+    Infers the channel dimension of the image.
+
+    Args:
+        image (`np.ndarray`):
+            The image to infer the channel dimension of.
+
+    Returns:
+        The channel dimension of the image.
+    """
+    if image.ndim == 3:
+        first_dim = 0
+        last_dim = 2
+    elif image.ndim == 4:
+        first_dim = 1
+        last_dim = 3
+    else:
+        raise ValueError(f"Unsupported image dimension: {image.ndim}")
+
+    if image.shape[first_dim] in (1, 3):
+        return ChannelDimension.FIRST
+    elif image.shape[last_dim] in (1, 3):
+        return ChannelDimension.LAST
+    raise Exception("Could not infer channel dimension")
+
+
+def get_image_size(image: np.ndarray, channel_dim: ChannelDimension = None) -> Tuple[int, int]:
+    """
+    Returns the (height, width) dimensions of the image.
+
+    Args:
+        image (`np.ndarray`):
+            The image to get the dimensions of.
+        channel_dim (`ChannelDimension`, *optional*):
+            Which dimension the channel dimension is in. If `None`, will infer the channel dimension from the image.
+
+    Returns:
+        A tuple of the image's height and width.
+    """
+    if channel_dim is None:
+        channel_dim = infer_channel_dimension(image)
+
+    if channel_dim == ChannelDimension.FIRST:
+        return image.shape[-2], image.shape[-1]
+    elif channel_dim == ChannelDimension.LAST:
+        return image.shape[-3], image.shape[-2]
+    else:
+        raise ValueError(f"Unsupported data format: {channel_dim}")
 
 
 def load_image(image: Union[str, "PIL.Image.Image"]) -> "PIL.Image.Image":

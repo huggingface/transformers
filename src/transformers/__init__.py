@@ -632,6 +632,7 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_vision_objects) if not name.startswith("_")
     ]
 else:
+    _import_structure["image_transforms"] = ["resize", "to_pil_image"]
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
     _import_structure["models.beit"].append("BeitFeatureExtractor")
     _import_structure["models.clip"].append("CLIPFeatureExtractor")
@@ -3339,6 +3340,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_vision_objects import *
     else:
+        from .image_transforms import resize, to_pil_image
         from .image_utils import ImageFeatureExtractionMixin
         from .models.beit import BeitFeatureExtractor
         from .models.clip import CLIPFeatureExtractor, CLIPProcessor
