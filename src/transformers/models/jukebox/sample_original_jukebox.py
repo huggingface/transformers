@@ -133,7 +133,7 @@ def test_sampling(model, device, tokens=40):
     upsamplers = None
 
 
-def test_prime_samling(model, device):
+def test_prime_samling(model, device, tokens=40):
     hps = Hyperparams()
     hps.device = device
     hps.sr = 44100
@@ -168,38 +168,50 @@ def test_prime_samling(model, device):
     labels = [None, None, top_prior.labeller.get_batch_labels(metas, device)]
     sampling_kwargs = get_args(model)
 
-    x = torch.rand((1, 5120, 1)).cuda()
-    vqvae.to("cuda")
-    zs = [None, None, top_prior.encode(x, start_level=2, bs_chunks=x.shape[0])[0].cuda()]
+    set_seed(0)
+    x = torch.rand((1, 5120, 1)).to(device)
+    vqvae.to(device)
+    zs = [None, None, top_prior.encode(x, start_level=2, bs_chunks=x.shape[0])[0].to(device)]
     zs = _sample(zs, labels, sampling_kwargs, [None, None, top_prior], [2], hps)
+    log_zs(zs, 2, f"primed-{model}-{device}")
 
-    if True:
-        del top_prior
-        empty_cache()
-        top_prior = None
-    upsamplers = [make_prior(setup_hparams(prior, dict()), vqvae, "cuda") for prior in priors[:-1]]
+    del top_prior
+    empty_cache()
+
+    upsamplers = [make_prior(setup_hparams(prior, dict()), vqvae, device) for prior in priors[:-1]]
     labels = [
-        upsamplers[0].labeller.get_batch_labels(metas, "cuda"),
-        upsamplers[0].labeller.get_batch_labels(metas, "cuda"),
+        upsamplers[0].labeller.get_batch_labels(metas, device),
+        upsamplers[0].labeller.get_batch_labels(metas, device),
         None,
     ]
 
+    set_seed(0)
+    hps.sample_length = tokens * upsamplers[1].raw_to_tokens
     zs = [
         None,
-        upsamplers[-1].encode(x, start_level=1, bs_chunks=x.shape[0])[0].cuda(),
-        torch.cat((zs[-1], torch.zeros(1, 1000000 - zs[-1].shape[-1]).cuda()), dim=-1).long(),
+        upsamplers[-1].encode(x, start_level=1, bs_chunks=x.shape[0])[0].to(device),
+        torch.cat((zs[-1], torch.zeros(1, 1000000 - zs[-1].shape[-1]).to(device)), dim=-1).long(),
     ]
     zs = _sample(zs, labels, sampling_kwargs, [None, upsamplers[1], None], [1], hps)
+    log_zs(zs, 1, f"primed-{model}-{device}")
 
+    set_seed(0)
+    hps.sample_length = tokens * upsamplers[0].raw_to_tokens
     zs = [
-        upsamplers[-1].encode(x, start_level=0, bs_chunks=x.shape[0])[0].cuda(),
-        torch.cat((zs[1], torch.zeros(1, 1000000 - zs[1].shape[1]).cuda()), dim=-1).long(),
-        torch.zeros(1, 1000000).cuda().long(),
+        upsamplers[-1].encode(x, start_level=0, bs_chunks=x.shape[0])[0].to(device),
+        torch.cat((zs[1], torch.zeros(1, 1000000 - zs[1].shape[1]).to(device)), dim=-1).long(),
+        torch.zeros(1, 1000000).to(device).long(),
     ]
     zs = _sample(zs, labels, sampling_kwargs, [upsamplers[0], None, None], [0], hps)
+    log_zs(zs, 0, f"primed-{model}-{device}")
 
 
-# test_sampling("1b_lyrics","cpu")
+test_sampling("1b_lyrics", "cpu")
 test_sampling("1b_lyrics", "cuda")
 test_sampling("5b_lyrics", "cpu", tokens=60)
 test_sampling("5b_lyrics", "cuda", tokens=60)
+
+test_prime_samling("1b_lyrics", "cpu")
+test_prime_samling("1b_lyrics", "cuda")
+test_prime_samling("5b_lyrics", "cpu", tokens=60)
+test_prime_samling("5b_lyrics", "cuda", tokens=60)
