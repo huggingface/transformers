@@ -107,7 +107,9 @@ class BloomModelTester:
         if self.use_labels:
             sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
 
-        config = self.get_config(gradient_checkpointing=gradient_checkpointing, word_embeddings_in_fp32=word_embeddings_in_fp32)
+        config = self.get_config(
+            gradient_checkpointing=gradient_checkpointing, word_embeddings_in_fp32=word_embeddings_in_fp32
+        )
 
         return (config, input_ids, input_mask, sequence_labels)
 
@@ -380,8 +382,12 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         model_name = "bigscience/bigscience-small-testing"
 
         _, input_ids, input_mask, _ = self.model_tester.prepare_config_and_inputs()
-        model = BloomForCausalLM.from_pretrained(model_name, word_embeddings_in_fp32=True, torch_dtype=torch.float16).to(torch_device)
-        model_in_fp16 = BloomForCausalLM.from_pretrained(model_name, word_embeddings_in_fp32=False, torch_dtype=torch.float16).to(torch_device)
+        model = BloomForCausalLM.from_pretrained(
+            model_name, word_embeddings_in_fp32=True, torch_dtype=torch.float16
+        ).to(torch_device)
+        model_in_fp16 = BloomForCausalLM.from_pretrained(
+            model_name, word_embeddings_in_fp32=False, torch_dtype=torch.float16
+        ).to(torch_device)
 
         model.eval()
         model_in_fp16.eval()
@@ -400,10 +406,12 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
 
         # We verify that fp16 have value collapses due to output vocabulary begin higher that maximum range of fp16.
         random_batch_id = torch.randint(input_ids.shape[0], ())
-        random_sequence_id =torch.randint(input_ids.shape[1], ())
+        random_sequence_id = torch.randint(input_ids.shape[1], ())
         # Test that we see at least one collapse in fp16 and none when `word_embeddings_in_fp32=True`,ie the `len(unique_values) < vocabulary_size`.
         #  We could test that it's smaller that fp16 max range as well
-        self.assertTrue(len(torch.unique(output_in_fp16[random_batch_id, random_sequence_id])) < output_in_fp16.shape[-1])
+        self.assertTrue(
+            len(torch.unique(output_in_fp16[random_batch_id, random_sequence_id])) < output_in_fp16.shape[-1]
+        )
         self.assertTrue(len(torch.unique(output[random_batch_id, random_sequence_id])) < output_in_fp16.shape[-1])
 
     @slow
@@ -516,7 +524,9 @@ class BloomEmbeddingTest(unittest.TestCase):
 
     @require_torch
     def test_embeddings(self):
-        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, torch_dtype="auto", word_embeddings_in_fp32=False)  # load in bf16
+        model = BloomForCausalLM.from_pretrained(
+            self.path_bigscience_model, torch_dtype="auto", word_embeddings_in_fp32=False
+        )  # load in bf16
         model.eval()
 
         EMBEDDINGS_DS_BEFORE_LN_BF_16_MEAN = {
@@ -749,9 +759,9 @@ class BloomEmbeddingTest(unittest.TestCase):
     @require_torch
     def test_hidden_states_transformers(self):
         cuda_available = torch.cuda.is_available()
-        model = BloomModel.from_pretrained(self.path_bigscience_model, use_cache=False, torch_dtype="auto", word_embeddings_in_fp32=False).to(
-            torch_device
-        )
+        model = BloomModel.from_pretrained(
+            self.path_bigscience_model, use_cache=False, torch_dtype="auto", word_embeddings_in_fp32=False
+        ).to(torch_device)
         model.eval()
 
         # fmt: off
@@ -779,7 +789,9 @@ class BloomEmbeddingTest(unittest.TestCase):
     @require_torch
     def test_logits(self):
         cuda_available = torch.cuda.is_available()
-        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, use_cache=False, torch_dtype="auto", word_embeddings_in_fp32=False).to(
+        model = BloomForCausalLM.from_pretrained(
+            self.path_bigscience_model, use_cache=False, torch_dtype="auto", word_embeddings_in_fp32=False
+        ).to(
             torch_device
         )  # load in bf16
         model.eval()
