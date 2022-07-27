@@ -91,7 +91,6 @@ class OwlViTVisionModelTester:
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
-        pixel_values = pixel_values.to(torch_device)
         config = self.get_config()
 
         return config, pixel_values
@@ -245,12 +244,10 @@ class OwlViTTextModelTester:
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size * self.num_queries, self.seq_length], self.vocab_size)
-        input_ids = input_ids.to(torch_device)
         input_mask = None
 
         if self.use_input_mask:
             input_mask = random_attention_mask([self.batch_size * self.num_queries, self.seq_length])
-            input_mask = input_mask.to(torch_device)
 
         if input_mask is not None:
             num_text, seq_length = input_mask.shape
