@@ -1300,23 +1300,31 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         >>> import torch
         >>> from transformers import OwlViTProcessor, OwlViTForObjectDetection
 
-        >>> model = OwlViTModel.from_pretrained("google/owlvit-base-patch32")
         >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
+        >>> model = OwlViTForObjectDetection.from_pretrained("google/owlvit-base-patch32")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> inputs = processor(text=[["a photo of a cat", "a photo of a dog"]], images=image, return_tensors="pt")
+        >>> texts = [["a photo of a cat", "a photo of a dog"]]
+        >>> inputs = processor(text=texts, images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
-        >>> logits = outputs["logits"]  # Prediction logits of shape [batch_size, num_patches, num_max_text_queries]
-        >>> boxes = outputs["pred_boxes"]  # Object box boundaries of shape # [batch_size, num_patches, 4]
 
-        >>> batch_size = boxes.shape[0]
-        >>> for i in range(batch_size):  # Loop over sets of images and text queries
-        ...     boxes = outputs["pred_boxes"][i]
-        ...     logits = torch.max(outputs["logits"][i], dim=-1)
-        ...     scores = torch.sigmoid(logits.values)
-        ...     labels = logits.indices
+        >>> # Target image sizes (height, width) to rescale box predictions [batch_size, 2]
+        >>> target_sizes = torch.Tensor([image.size[::-1]])
+        >>> # Convert outputs (bounding boxes and class logits) to COCO API
+        >>> results = processor.post_process(outputs=outputs, target_sizes=target_sizes)
+
+        >>> i = 0  # Retrieve predictions for the first image for the corresponding text queries
+        >>> text = texts[i]
+        >>> boxes, scores, labels = results[i]["boxes"], results[i]["scores"], results[i]["labels"]
+
+        >>> score_threshold = 0.1
+        >>> for box, score, label in zip(boxes, scores, labels):
+        ...     box = [round(i, 2) for i in box.tolist()]
+        ...     if score >= score_threshold:
+        ...         print(f"Detected {text[label]} with confidence {round(score.item(), 3)} at location {box}")
+        Detected a photo of a cat with confidence 0.243 at location [1.42, 50.69, 308.58, 370.48]
+        Detected a photo of a cat with confidence 0.298 at location [348.06, 20.56, 642.33, 372.61]
         ```"""
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
