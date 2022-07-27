@@ -618,7 +618,7 @@ def main():
     def sentence_split_function(example):
         sents = sentence_tokenizer.tokenize(example["text"])
         # use pad token as end of sentence indicator
-        new_text = f"{tokenizer.pad_token}".join(sents)
+        new_text = tokenizer.bos_token + f"{tokenizer.pad_token}".join(sents) + tokenizer.eos_token
         return {"text": new_text}
 
     splitted_datasets = datasets.map(
