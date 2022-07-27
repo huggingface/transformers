@@ -246,6 +246,16 @@ try:
 except importlib_metadata.PackageNotFoundError:
     _librosa_available = False
 
+ccl_version = "N/A"
+_is_ccl_available = (
+    importlib.util.find_spec("torch_ccl") is not None
+    or importlib.util.find_spec("oneccl_bindings_for_pytorch") is not None
+)
+try:
+    ccl_version = importlib_metadata.version("oneccl_bind_pt")
+    logger.debug(f"Successfully imported oneccl_bind_pt version {ccl_version}")
+except importlib_metadata.PackageNotFoundError:
+    _is_ccl_available = False
 
 # This is the version of torch required to run torch.fx features and torch.onnx with dictionary inputs.
 TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
@@ -636,6 +646,10 @@ def torch_only_method(fn):
     return wrapper
 
 
+def is_ccl_available():
+    return _is_ccl_available
+
+
 # docstyle-ignore
 DATASETS_IMPORT_ERROR = """
 {0} requires the 🤗 Datasets library but it was not found in your environment. You can install it with:
@@ -854,6 +868,11 @@ ACCELERATE_IMPORT_ERROR = """
 `pip install accelerate`
 """
 
+# docstyle-ignore
+CCL_IMPORT_ERROR = """
+{0} requires the torch ccl library but it was not found in your environment. You can install it with pip:
+`pip install oneccl_bind_pt -f https://developer.intel.com/ipex-whl-stable`
+"""
 
 BACKENDS_MAPPING = OrderedDict(
     [
@@ -882,6 +901,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("vision", (is_vision_available, VISION_IMPORT_ERROR)),
         ("scipy", (is_scipy_available, SCIPY_IMPORT_ERROR)),
         ("accelerate", (is_accelerate_available, ACCELERATE_IMPORT_ERROR)),
+        ("oneccl_bind_pt", (is_ccl_available, CCL_IMPORT_ERROR)),
     ]
 )
 

@@ -68,6 +68,8 @@
       title: Training on many GPUs
     - local: perf_train_cpu
       title: Training on CPU
+    - local: perf_train_cpu_many
+      title: Training on many CPUs
     - local: perf_train_tpu
       title: Training on TPUs
     - local: perf_train_special
