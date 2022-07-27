@@ -338,7 +338,7 @@ class TrainState(train_state.TrainState):
 
 def data_loader(rng: jax.random.PRNGKey, dataset: Dataset, batch_size: int, shuffle: bool = False, drop_last=True):
     """
-    Returns batches of size `batch_size` from `dataset`. If `drop_last` is set to `True, the final batch may be incomplete,
+    Returns batches of size `batch_size` from `dataset`. If `drop_last` is set to `False`, the final batch may be incomplete,
     and range in size from 1 to `batch_size`. Shuffle batches if `shuffle` is `True`.
     """
     if shuffle:
@@ -709,7 +709,8 @@ def main():
     # Store some constant
     num_epochs = int(training_args.num_train_epochs)
     train_batch_size = int(training_args.per_device_train_batch_size) * jax.device_count()
-    eval_batch_size = int(training_args.per_device_eval_batch_size) * jax.device_count()
+    per_device_eval_batch_size = int(training_args.per_device_eval_batch_size)
+    eval_batch_size = per_device_eval_batch_size * jax.device_count()
     steps_per_epoch = len(train_dataset) // train_batch_size
     total_train_steps = steps_per_epoch * num_epochs
 
@@ -872,13 +873,15 @@ def main():
         eval_labels = []
 
         eval_loader = data_loader(input_rng, eval_dataset, eval_batch_size, drop_last=False)
-        eval_steps = len(eval_dataset) // eval_batch_size
+        eval_steps = math.ceil(len(eval_dataset) / eval_batch_size)
         for _ in tqdm(range(eval_steps), desc="Evaluating...", position=2, leave=False):
             # Model forward
             batch = next(eval_loader)
             labels = batch["labels"]
 
-            metrics = pad_shard_unpad(p_eval_step, static_return=True)(state.params, batch)
+            metrics = pad_shard_unpad(p_eval_step, static_return=True)(
+                state.params, batch, min_device_batch=per_device_eval_batch_size
+            )
             eval_metrics.append(metrics)
 
             # generation
@@ -925,13 +928,15 @@ def main():
         pred_labels = []
 
         pred_loader = data_loader(input_rng, predict_dataset, eval_batch_size, drop_last=False)
-        pred_steps = len(predict_dataset) // eval_batch_size
+        pred_steps = math.ceil(len(predict_dataset) / eval_batch_size)
         for _ in tqdm(range(pred_steps), desc="Predicting...", position=2, leave=False):
             # Model forward
             batch = next(pred_loader)
             labels = batch["labels"]
 
-            metrics = pad_shard_unpad(p_eval_step, static_return=True)(state.params, batch)
+            metrics = pad_shard_unpad(p_eval_step, static_return=True)(
+                state.params, batch, min_device_batch=per_device_eval_batch_size
+            )
             pred_metrics.append(metrics)
 
             # generation
