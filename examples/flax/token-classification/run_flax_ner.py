@@ -37,7 +37,7 @@ import jax.numpy as jnp
 import optax
 import transformers
 from flax import struct, traverse_util
-from flax.jax_utils import replicate, unreplicate, pad_shard_unpad
+from flax.jax_utils import pad_shard_unpad, replicate, unreplicate
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard
 from huggingface_hub import Repository

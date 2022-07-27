@@ -36,7 +36,7 @@ import jax.numpy as jnp
 import optax
 import transformers
 from flax import struct, traverse_util
-from flax.jax_utils import replicate, unreplicate, pad_shard_unpad
+from flax.jax_utils import pad_shard_unpad, replicate, unreplicate
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard
 from huggingface_hub import Repository
@@ -632,7 +632,9 @@ def main():
                     position=2,
                 ):
                     labels = batch.pop("labels")
-                    predictions = pad_shard_unpad(p_eval_step)(state, batch, min_device_batch=per_device_eval_batch_size)
+                    predictions = pad_shard_unpad(p_eval_step)(
+                        state, batch, min_device_batch=per_device_eval_batch_size
+                    )
                     metric.add_batch(predictions=np.array(predictions), references=labels)
 
                 eval_metric = metric.compute()

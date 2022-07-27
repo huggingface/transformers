@@ -40,7 +40,7 @@ import jax.numpy as jnp
 import optax
 import transformers
 from flax import jax_utils
-from flax.jax_utils import unreplicate, pad_shard_unpad
+from flax.jax_utils import pad_shard_unpad, unreplicate
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
 from huggingface_hub import Repository
@@ -533,7 +533,9 @@ def main():
         eval_step_progress_bar = tqdm(total=eval_steps, desc="Evaluating...", position=2, leave=False)
         for batch in eval_loader:
             # Model forward
-            metrics = pad_shard_unpad(p_eval_step, static_return=True)(state.params, batch, min_device_batch=per_device_eval_batch_size)
+            metrics = pad_shard_unpad(p_eval_step, static_return=True)(
+                state.params, batch, min_device_batch=per_device_eval_batch_size
+            )
             eval_metrics.append(metrics)
 
             eval_step_progress_bar.update(1)
