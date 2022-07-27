@@ -353,8 +353,11 @@ class BertSelfAttention(nn.Module):
             # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_layer, value_layer)
 
+        s = datetime.datetime.now()
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+        e = datetime.datetime.now()
+        print(f"bert.encoder.encoder_layer.attention.self.(attention_scores = torch.matmul(q, k)): {(e - s).total_seconds()} seconds")
 
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
             seq_length = hidden_states.size()[1]
@@ -372,25 +375,46 @@ class BertSelfAttention(nn.Module):
                 relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
                 attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
 
+        s = datetime.datetime.now()
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+        e = datetime.datetime.now()
+        print(f"bert.encoder.encoder_layer.attention.self.(attention_scores = attention_scores / math.sqrt): {(e - s).total_seconds()} seconds")
+
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
-            attention_scores = attention_scores + attention_mask
 
+            s = datetime.datetime.now()
+            attention_scores = attention_scores + attention_mask
+            e = datetime.datetime.now()
+            print(f"bert.encoder.encoder_layer.attention.self.(attention_scores = attention_scores + attention_mask): {(e - s).total_seconds()} seconds")
+
+        s = datetime.datetime.now()
         # Normalize the attention scores to probabilities.
         attention_probs = nn.functional.softmax(attention_scores, dim=-1)
+        e = datetime.datetime.now()
+        print(f"bert.encoder.encoder_layer.attention.self.(attention_probs = nn.functional.softmax): {(e - s).total_seconds()} seconds")
 
+        s = datetime.datetime.now()
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
+        e = datetime.datetime.now()
+        print(f"bert.encoder.encoder_layer.attention.self.(attention_probs = self.dropout(attention_probs)): {(e - s).total_seconds()} seconds")
 
         # Mask heads if we want to
         if head_mask is not None:
             attention_probs = attention_probs * head_mask
 
+        s = datetime.datetime.now()
         context_layer = torch.matmul(attention_probs, value_layer)
+        e = datetime.datetime.now()
+        print(f"bert.encoder.encoder_layer.attention.self.(context_layer = torch.matmul(attention_probs, value_layer)): {(e - s).total_seconds()} seconds")
 
+        s = datetime.datetime.now()
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+        e = datetime.datetime.now()
+        print(f"bert.encoder.encoder_layer.attention.self.(context_layer = context_layer.permute): {(e - s).total_seconds()} seconds")
+
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(new_context_layer_shape)
 
@@ -409,9 +433,22 @@ class BertSelfOutput(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+
+        s = datetime.datetime.now()
         hidden_states = self.dense(hidden_states)
+        e = datetime.datetime.now()
+        print(f"bert.encoder.encoder_layer.attention.output.dense: {(e - s).total_seconds()} seconds")
+
+        s = datetime.datetime.now()
         hidden_states = self.dropout(hidden_states)
+        e = datetime.datetime.now()
+        print(f"bert.encoder.encoder_layer.attention.output.dropout: {(e - s).total_seconds()} seconds")
+
+        s = datetime.datetime.now()
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        e = datetime.datetime.now()
+        print(f"bert.encoder.encoder_layer.attention.output.LayerNorm: {(e - s).total_seconds()} seconds")
+
         return hidden_states
 
 
@@ -450,6 +487,8 @@ class BertAttention(nn.Module):
         past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
+
+        s = datetime.datetime.now()
         self_outputs = self.self(
             hidden_states,
             attention_mask,
@@ -459,8 +498,16 @@ class BertAttention(nn.Module):
             past_key_value,
             output_attentions,
         )
+        e = datetime.datetime.now()
+        print(f"bert.encoder.encoder_layer.attention.self: {(e - s).total_seconds()} seconds")
+
+        s = datetime.datetime.now()
         attention_output = self.output(self_outputs[0], hidden_states)
+        e = datetime.datetime.now()
+        print(f"bert.encoder.encoder_layer.attention.output: {(e - s).total_seconds()} seconds")
+
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+
         return outputs
 
 
