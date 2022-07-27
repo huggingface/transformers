@@ -39,7 +39,7 @@ if is_flax_available() and is_torch_available():
     from transformers.models.bloom.modeling_flax_bloom import build_alibi_tensor_flax
 
 
-def prepare_opt_inputs_dict(config, input_ids, attention_mask=None, head_mask=None):
+def prepare_bloom_inputs_dict(config, input_ids, attention_mask=None):
     if attention_mask is None:
         attention_mask = np.where(input_ids != config.pad_token_id, 1, 0)
     return {
