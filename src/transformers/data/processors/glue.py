@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" GLUE processors and helpers """
+""" GLUE processors and helpers"""
 
 import os
 import warnings
@@ -21,9 +21,8 @@ from dataclasses import asdict
 from enum import Enum
 from typing import List, Optional, Union
 
-from ...file_utils import is_tf_available
 from ...tokenization_utils import PreTrainedTokenizer
-from ...utils import logging
+from ...utils import is_tf_available, logging
 from .utils import DataProcessor, InputExample, InputFeatures
 
 
@@ -35,7 +34,7 @@ logger = logging.get_logger(__name__)
 DEPRECATION_WARNING = (
     "This {0} will be removed from the library soon, preprocessing should be handled with the 🤗 Datasets "
     "library. You can have a look at this example script for pointers: "
-    "https://github.com/huggingface/transformers/blob/master/examples/pytorch/text-classification/run_glue.py"
+    "https://github.com/huggingface/transformers/blob/main/examples/pytorch/text-classification/run_glue.py"
 )
 
 
@@ -48,20 +47,20 @@ def glue_convert_examples_to_features(
     output_mode=None,
 ):
     """
-    Loads a data file into a list of ``InputFeatures``
+    Loads a data file into a list of `InputFeatures`
 
     Args:
-        examples: List of ``InputExamples`` or ``tf.data.Dataset`` containing the examples.
+        examples: List of `InputExamples` or `tf.data.Dataset` containing the examples.
         tokenizer: Instance of a tokenizer that will tokenize the examples
         max_length: Maximum example length. Defaults to the tokenizer's max_len
         task: GLUE task
-        label_list: List of labels. Can be obtained from the processor using the ``processor.get_labels()`` method
-        output_mode: String indicating the output mode. Either ``regression`` or ``classification``
+        label_list: List of labels. Can be obtained from the processor using the `processor.get_labels()` method
+        output_mode: String indicating the output mode. Either `regression` or `classification`
 
     Returns:
-        If the ``examples`` input is a ``tf.data.Dataset``, will return a ``tf.data.Dataset`` containing the
-        task-specific features. If the input is a list of ``InputExamples``, will return a list of task-specific
-        ``InputFeatures`` which can be fed to the model.
+        If the `examples` input is a `tf.data.Dataset`, will return a `tf.data.Dataset` containing the task-specific
+        features. If the input is a list of `InputExamples`, will return a list of task-specific `InputFeatures` which
+        can be fed to the model.
 
     """
     warnings.warn(DEPRECATION_WARNING.format("function"), FutureWarning)
@@ -84,7 +83,7 @@ if is_tf_available():
     ) -> tf.data.Dataset:
         """
         Returns:
-            A ``tf.data.Dataset`` containing the task-specific features.
+            A `tf.data.Dataset` containing the task-specific features.
 
         """
         processor = glue_processors[task]()
@@ -203,7 +202,7 @@ class MrpcProcessor(DataProcessor):
     def _create_examples(self, lines, set_type):
         """Creates examples for the training, dev and test sets."""
         examples = []
-        for (i, line) in enumerate(lines):
+        for i, line in enumerate(lines):
             if i == 0:
                 continue
             guid = f"{set_type}-{i}"
@@ -249,7 +248,7 @@ class MnliProcessor(DataProcessor):
     def _create_examples(self, lines, set_type):
         """Creates examples for the training, dev and test sets."""
         examples = []
-        for (i, line) in enumerate(lines):
+        for i, line in enumerate(lines):
             if i == 0:
                 continue
             guid = f"{set_type}-{line[0]}"
@@ -315,7 +314,7 @@ class ColaProcessor(DataProcessor):
             lines = lines[1:]
         text_index = 1 if test_mode else 3
         examples = []
-        for (i, line) in enumerate(lines):
+        for i, line in enumerate(lines):
             guid = f"{set_type}-{i}"
             text_a = line[text_index]
             label = None if test_mode else line[1]
@@ -359,7 +358,7 @@ class Sst2Processor(DataProcessor):
         """Creates examples for the training, dev and test sets."""
         examples = []
         text_index = 1 if set_type == "test" else 0
-        for (i, line) in enumerate(lines):
+        for i, line in enumerate(lines):
             if i == 0:
                 continue
             guid = f"{set_type}-{i}"
@@ -404,7 +403,7 @@ class StsbProcessor(DataProcessor):
     def _create_examples(self, lines, set_type):
         """Creates examples for the training, dev and test sets."""
         examples = []
-        for (i, line) in enumerate(lines):
+        for i, line in enumerate(lines):
             if i == 0:
                 continue
             guid = f"{set_type}-{line[0]}"
@@ -453,7 +452,7 @@ class QqpProcessor(DataProcessor):
         q1_index = 1 if test_mode else 3
         q2_index = 2 if test_mode else 4
         examples = []
-        for (i, line) in enumerate(lines):
+        for i, line in enumerate(lines):
             if i == 0:
                 continue
             guid = f"{set_type}-{line[0]}"
@@ -502,7 +501,7 @@ class QnliProcessor(DataProcessor):
     def _create_examples(self, lines, set_type):
         """Creates examples for the training, dev and test sets."""
         examples = []
-        for (i, line) in enumerate(lines):
+        for i, line in enumerate(lines):
             if i == 0:
                 continue
             guid = f"{set_type}-{line[0]}"
@@ -548,7 +547,7 @@ class RteProcessor(DataProcessor):
     def _create_examples(self, lines, set_type):
         """Creates examples for the training, dev and test sets."""
         examples = []
-        for (i, line) in enumerate(lines):
+        for i, line in enumerate(lines):
             if i == 0:
                 continue
             guid = f"{set_type}-{line[0]}"
@@ -594,7 +593,7 @@ class WnliProcessor(DataProcessor):
     def _create_examples(self, lines, set_type):
         """Creates examples for the training, dev and test sets."""
         examples = []
-        for (i, line) in enumerate(lines):
+        for i, line in enumerate(lines):
             if i == 0:
                 continue
             guid = f"{set_type}-{line[0]}"

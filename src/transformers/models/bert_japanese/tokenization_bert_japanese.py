@@ -32,9 +32,15 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "cl-tohoku/bert-base-japanese": "https://huggingface.co/cl-tohoku/bert-base-japanese/resolve/main/vocab.txt",
-        "cl-tohoku/bert-base-japanese-whole-word-masking": "https://huggingface.co/cl-tohoku/bert-base-japanese-whole-word-masking/resolve/main/vocab.txt",
-        "cl-tohoku/bert-base-japanese-char": "https://huggingface.co/cl-tohoku/bert-base-japanese-char/resolve/main/vocab.txt",
-        "cl-tohoku/bert-base-japanese-char-whole-word-masking": "https://huggingface.co/cl-tohoku/bert-base-japanese-char-whole-word-masking/resolve/main/vocab.txt",
+        "cl-tohoku/bert-base-japanese-whole-word-masking": (
+            "https://huggingface.co/cl-tohoku/bert-base-japanese-whole-word-masking/resolve/main/vocab.txt"
+        ),
+        "cl-tohoku/bert-base-japanese-char": (
+            "https://huggingface.co/cl-tohoku/bert-base-japanese-char/resolve/main/vocab.txt"
+        ),
+        "cl-tohoku/bert-base-japanese-char-whole-word-masking": (
+            "https://huggingface.co/cl-tohoku/bert-base-japanese-char-whole-word-masking/resolve/main/vocab.txt"
+        ),
     }
 }
 
@@ -74,20 +80,20 @@ class BertJapaneseTokenizer(BertTokenizer):
     Construct a BERT tokenizer for Japanese text, based on a MecabTokenizer.
 
     Args:
-        vocab_file (:obj:`str`):
+        vocab_file (`str`):
             Path to a one-wordpiece-per-line vocabulary file.
-        do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        do_lower_case (`bool`, *optional*, defaults to `True`):
             Whether to lower case the input. Only has an effect when do_basic_tokenize=True.
-        do_word_tokenize (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        do_word_tokenize (`bool`, *optional*, defaults to `True`):
             Whether to do word tokenization.
-        do_subword_tokenize (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        do_subword_tokenize (`bool`, *optional*, defaults to `True`):
             Whether to do subword tokenization.
-        word_tokenizer_type (:obj:`str`, `optional`, defaults to :obj:`"basic"`):
+        word_tokenizer_type (`str`, *optional*, defaults to `"basic"`):
             Type of word tokenizer.
-        subword_tokenizer_type (:obj:`str`, `optional`, defaults to :obj:`"wordpiece"`):
+        subword_tokenizer_type (`str`, *optional*, defaults to `"wordpiece"`):
             Type of subword tokenizer.
-        mecab_kwargs (:obj:`str`, `optional`):
-            Dictionary passed to the :obj:`MecabTokenizer` constructor.
+        mecab_kwargs (`str`, *optional*):
+            Dictionary passed to the `MecabTokenizer` constructor.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -131,8 +137,8 @@ class BertJapaneseTokenizer(BertTokenizer):
 
         if not os.path.isfile(vocab_file):
             raise ValueError(
-                f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained "
-                "model use `tokenizer = AutoTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
+                f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
+                " model use `tokenizer = AutoTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         self.vocab = load_vocab(vocab_file)
         self.ids_to_tokens = collections.OrderedDict([(ids, tok) for tok, ids in self.vocab.items()])
@@ -210,17 +216,17 @@ class MecabTokenizer:
         Constructs a MecabTokenizer.
 
         Args:
-            **do_lower_case**: (`optional`) boolean (default True)
+            **do_lower_case**: (*optional*) boolean (default True)
                 Whether to lowercase the input.
-            **never_split**: (`optional`) list of str
+            **never_split**: (*optional*) list of str
                 Kept for backward compatibility purposes. Now implemented directly at the base class level (see
-                :func:`PreTrainedTokenizer.tokenize`) List of tokens not to split.
-            **normalize_text**: (`optional`) boolean (default True)
+                [`PreTrainedTokenizer.tokenize`]) List of tokens not to split.
+            **normalize_text**: (*optional*) boolean (default True)
                 Whether to apply unicode normalization to text before tokenization.
-            **mecab_dic**: (`optional`) string (default "ipadic")
+            **mecab_dic**: (*optional*) string (default "ipadic")
                 Name of dictionary to be used for MeCab initialization. If you are using a system-installed dictionary,
-                set this option to `None` and modify `mecab_option`.
-            **mecab_option**: (`optional`) string
+                set this option to `None` and modify *mecab_option*.
+            **mecab_option**: (*optional*) string
                 String passed to MeCab constructor.
         """
         self.do_lower_case = do_lower_case
@@ -326,11 +332,11 @@ class CharacterTokenizer:
         """
         Tokenizes a piece of text into characters.
 
-        For example, :obj:`input = "apple""` wil return as output :obj:`["a", "p", "p", "l", "e"]`.
+        For example, `input = "apple""` wil return as output `["a", "p", "p", "l", "e"]`.
 
         Args:
             text: A single token or whitespace separated tokens.
-                This should have already been passed through `BasicTokenizer`.
+                This should have already been passed through *BasicTokenizer*.
 
         Returns:
             A list of characters.

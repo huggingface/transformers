@@ -25,7 +25,9 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "YituTech/conv-bert-base": "https://huggingface.co/YituTech/conv-bert-base/resolve/main/vocab.txt",
-        "YituTech/conv-bert-medium-small": "https://huggingface.co/YituTech/conv-bert-medium-small/resolve/main/vocab.txt",
+        "YituTech/conv-bert-medium-small": (
+            "https://huggingface.co/YituTech/conv-bert-medium-small/resolve/main/vocab.txt"
+        ),
         "YituTech/conv-bert-small": "https://huggingface.co/YituTech/conv-bert-small/resolve/main/vocab.txt",
     }
 }
@@ -46,13 +48,12 @@ PRETRAINED_INIT_CONFIGURATION = {
 
 class ConvBertTokenizerFast(BertTokenizerFast):
     r"""
-    Construct a "fast" ConvBERT tokenizer (backed by HuggingFace's `tokenizers` library).
+    Construct a "fast" ConvBERT tokenizer (backed by HuggingFace's *tokenizers* library).
 
-    :class:`~transformers.ConvBertTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs
-    end-to-end tokenization: punctuation splitting and wordpiece.
+    [`ConvBertTokenizerFast`] is identical to [`BertTokenizerFast`] and runs end-to-end tokenization: punctuation
+    splitting and wordpiece.
 
-    Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
-    parameters.
+    Refer to superclass [`BertTokenizerFast`] for usage examples and documentation concerning parameters.
     """
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP

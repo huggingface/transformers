@@ -43,25 +43,45 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "funnel-transformer/small": "https://huggingface.co/funnel-transformer/small/resolve/main/vocab.txt",
         "funnel-transformer/small-base": "https://huggingface.co/funnel-transformer/small-base/resolve/main/vocab.txt",
         "funnel-transformer/medium": "https://huggingface.co/funnel-transformer/medium/resolve/main/vocab.txt",
-        "funnel-transformer/medium-base": "https://huggingface.co/funnel-transformer/medium-base/resolve/main/vocab.txt",
-        "funnel-transformer/intermediate": "https://huggingface.co/funnel-transformer/intermediate/resolve/main/vocab.txt",
-        "funnel-transformer/intermediate-base": "https://huggingface.co/funnel-transformer/intermediate-base/resolve/main/vocab.txt",
+        "funnel-transformer/medium-base": (
+            "https://huggingface.co/funnel-transformer/medium-base/resolve/main/vocab.txt"
+        ),
+        "funnel-transformer/intermediate": (
+            "https://huggingface.co/funnel-transformer/intermediate/resolve/main/vocab.txt"
+        ),
+        "funnel-transformer/intermediate-base": (
+            "https://huggingface.co/funnel-transformer/intermediate-base/resolve/main/vocab.txt"
+        ),
         "funnel-transformer/large": "https://huggingface.co/funnel-transformer/large/resolve/main/vocab.txt",
         "funnel-transformer/large-base": "https://huggingface.co/funnel-transformer/large-base/resolve/main/vocab.txt",
         "funnel-transformer/xlarge": "https://huggingface.co/funnel-transformer/xlarge/resolve/main/vocab.txt",
-        "funnel-transformer/xlarge-base": "https://huggingface.co/funnel-transformer/xlarge-base/resolve/main/vocab.txt",
+        "funnel-transformer/xlarge-base": (
+            "https://huggingface.co/funnel-transformer/xlarge-base/resolve/main/vocab.txt"
+        ),
     },
     "tokenizer_file": {
         "funnel-transformer/small": "https://huggingface.co/funnel-transformer/small/resolve/main/tokenizer.json",
-        "funnel-transformer/small-base": "https://huggingface.co/funnel-transformer/small-base/resolve/main/tokenizer.json",
+        "funnel-transformer/small-base": (
+            "https://huggingface.co/funnel-transformer/small-base/resolve/main/tokenizer.json"
+        ),
         "funnel-transformer/medium": "https://huggingface.co/funnel-transformer/medium/resolve/main/tokenizer.json",
-        "funnel-transformer/medium-base": "https://huggingface.co/funnel-transformer/medium-base/resolve/main/tokenizer.json",
-        "funnel-transformer/intermediate": "https://huggingface.co/funnel-transformer/intermediate/resolve/main/tokenizer.json",
-        "funnel-transformer/intermediate-base": "https://huggingface.co/funnel-transformer/intermediate-base/resolve/main/tokenizer.json",
+        "funnel-transformer/medium-base": (
+            "https://huggingface.co/funnel-transformer/medium-base/resolve/main/tokenizer.json"
+        ),
+        "funnel-transformer/intermediate": (
+            "https://huggingface.co/funnel-transformer/intermediate/resolve/main/tokenizer.json"
+        ),
+        "funnel-transformer/intermediate-base": (
+            "https://huggingface.co/funnel-transformer/intermediate-base/resolve/main/tokenizer.json"
+        ),
         "funnel-transformer/large": "https://huggingface.co/funnel-transformer/large/resolve/main/tokenizer.json",
-        "funnel-transformer/large-base": "https://huggingface.co/funnel-transformer/large-base/resolve/main/tokenizer.json",
+        "funnel-transformer/large-base": (
+            "https://huggingface.co/funnel-transformer/large-base/resolve/main/tokenizer.json"
+        ),
         "funnel-transformer/xlarge": "https://huggingface.co/funnel-transformer/xlarge/resolve/main/tokenizer.json",
-        "funnel-transformer/xlarge-base": "https://huggingface.co/funnel-transformer/xlarge-base/resolve/main/tokenizer.json",
+        "funnel-transformer/xlarge-base": (
+            "https://huggingface.co/funnel-transformer/xlarge-base/resolve/main/tokenizer.json"
+        ),
     },
 }
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {f"funnel-transformer/{name}": 512 for name in _model_names}
@@ -70,13 +90,12 @@ PRETRAINED_INIT_CONFIGURATION = {f"funnel-transformer/{name}": {"do_lower_case":
 
 class FunnelTokenizerFast(BertTokenizerFast):
     r"""
-    Construct a "fast" Funnel Transformer tokenizer (backed by HuggingFace's `tokenizers` library).
+    Construct a "fast" Funnel Transformer tokenizer (backed by HuggingFace's *tokenizers* library).
 
-    :class:`~transformers.FunnelTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs
-    end-to-end tokenization: punctuation splitting and wordpiece.
+    [`FunnelTokenizerFast`] is identical to [`BertTokenizerFast`] and runs end-to-end tokenization: punctuation
+    splitting and wordpiece.
 
-    Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
-    parameters.
+    Refer to superclass [`BertTokenizerFast`] for usage examples and documentation concerning parameters.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -129,22 +148,21 @@ class FunnelTokenizerFast(BertTokenizerFast):
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. A Funnel
         Transformer sequence pair mask has the following format:
 
-        ::
+        ```
+        2 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
+        | first sequence    | second sequence |
+        ```
 
-            2 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
-            | first sequence    | second sequence |
-
-        If :obj:`token_ids_1` is :obj:`None`, this method only returns the first portion of the mask (0s).
+        If `token_ids_1` is `None`, this method only returns the first portion of the mask (0s).
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: List of `token type IDs <../glossary.html#token-type-ids>`_ according to the given
-            sequence(s).
+            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]

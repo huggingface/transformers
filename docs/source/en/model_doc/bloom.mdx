@@ -1,0 +1,57 @@
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# BLOOM
+
+## Overview
+
+The BLOOM model has been proposed with its various versions through the [BigScience Workshop](https://bigscience.huggingface.co/). BigScience is inspired by other open science initiatives where researchers have pooled their time and resources to collectively achieve a higher impact.
+The architecture of BLOOM is essentially similar to GPT3 (auto-regressive model for next token prediction), but has been trained on different 46 languages including code.
+Several smaller versions of the models have been trained on the same dataset. BLOOM is available in the following versions:
+
+- [bloom-350m](https://huggingface.co/bigscience/bloom-350m)
+- [bloom-760m](https://huggingface.co/bigscience/bloom-760m)
+- [bloom-1b3](https://huggingface.co/bigscience/bloom-1b3)
+- [bloom-2b5](https://huggingface.co/bigscience/bloom-2b5)
+- [bloom-6b3](https://huggingface.co/bigscience/bloom-6b3)
+- [bloom](https://huggingface.co/bigscience/bloom) (176B parameters)
+
+
+## BloomConfig
+
+[[autodoc]] BloomConfig
+    - all
+
+## BloomModel
+
+[[autodoc]] BloomModel
+    - forward
+
+## BloomTokenizerFast
+
+[[autodoc]] BloomTokenizerFast
+    - all
+
+## BloomForCausalLM
+
+[[autodoc]] BloomForCausalLM
+    - forward
+
+## BloomForSequenceClassification
+
+[[autodoc]] BloomForSequenceClassification
+    - forward
+
+## BloomForTokenClassification
+
+[[autodoc]] BloomForTokenClassification
+    - forward

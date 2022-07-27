@@ -103,7 +103,7 @@ class TokenClassificationTask:
         label_map = {label: i for i, label in enumerate(label_list)}
 
         features = []
-        for (ex_index, example) in enumerate(examples):
+        for ex_index, example in enumerate(examples):
             if ex_index % 10_000 == 0:
                 logger.info("Writing example %d of %d", ex_index, len(examples))
 
@@ -140,7 +140,7 @@ class TokenClassificationTask:
             # it easier for the model to learn the concept of sequences.
             #
             # For classification tasks, the first vector (corresponding to [CLS]) is
-            # used as as the "sentence vector". Note that this only makes sense because
+            # used as the "sentence vector". Note that this only makes sense because
             # the entire model is fine-tuned.
             tokens += [sep_token]
             label_ids += [pad_token_label_id]

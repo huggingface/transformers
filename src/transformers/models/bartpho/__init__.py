@@ -18,19 +18,29 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_sentencepiece_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_sentencepiece_available
 
 
 _import_structure = {}
 
-if is_sentencepiece_available():
+try:
+    if not is_sentencepiece_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["tokenization_bartpho"] = ["BartphoTokenizer"]
 
 if TYPE_CHECKING:
-    if is_sentencepiece_available():
+    try:
+        if not is_sentencepiece_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .tokenization_bartpho import BartphoTokenizer
 
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)

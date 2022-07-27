@@ -15,6 +15,7 @@
 # limitations under the License.
 
 
+import warnings
 from functools import partial
 from typing import Dict, Optional
 
@@ -25,7 +26,6 @@ import jax
 import jax.numpy as jnp
 from jax import lax
 
-from .file_utils import ModelOutput
 from .generation_flax_logits_process import (
     FlaxForcedBOSTokenLogitsProcessor,
     FlaxForcedEOSTokenLogitsProcessor,
@@ -35,7 +35,7 @@ from .generation_flax_logits_process import (
     FlaxTopKLogitsWarper,
     FlaxTopPLogitsWarper,
 )
-from .utils import logging
+from .utils import ModelOutput, logging
 
 
 logger = logging.get_logger(__name__)
@@ -48,7 +48,7 @@ class FlaxGreedySearchOutput(ModelOutput):
 
 
     Args:
-        sequences (:obj:`jnp.ndarray` of shape :obj:`(batch_size, max_length)`):
+        sequences (`jnp.ndarray` of shape `(batch_size, max_length)`):
             The generated sequences.
     """
 
@@ -62,7 +62,7 @@ class FlaxSampleOutput(ModelOutput):
 
 
     Args:
-        sequences (:obj:`jnp.ndarray` of shape :obj:`(batch_size, max_length)`):
+        sequences (`jnp.ndarray` of shape `(batch_size, max_length)`):
             The generated sequences.
     """
 
@@ -76,10 +76,10 @@ class FlaxBeamSearchOutput(ModelOutput):
 
 
     Args:
-        sequences (:obj:`jnp.ndarray` of shape :obj:`(batch_size, max_length)`):
+        sequences (`jnp.ndarray` of shape `(batch_size, max_length)`):
             The generated sequences.
-        scores (:obj:`jnp.ndarray` of shape :obj:`(batch_size,)`):
-            The scores (log probabilites) of the generated sequences.
+        scores (`jnp.ndarray` of shape `(batch_size,)`):
+            The scores (log probabilities) of the generated sequences.
     """
 
     sequences: jnp.ndarray = None
@@ -118,8 +118,16 @@ class BeamSearchState:
 
 class FlaxGenerationMixin:
     """
-    A class containing all of the functions supporting generation, to be used as a mixin in
-    :class:`~transformers.FlaxPreTrainedModel`.
+    A class containing all functions for auto-regressive text generation, to be used as a mixin in
+    [`FlaxPreTrainedModel`].
+
+    The class exposes [`~generation_flax_utils.FlaxGenerationMixin.generate`], which can be used for:
+            - *greedy decoding* by calling [`~generation_flax_utils.FlaxGenerationMixin._greedy_search`] if
+              `num_beams=1` and `do_sample=False`.
+            - *multinomial sampling* by calling [`~generation_flax_utils.FlaxGenerationMixin._sample`] if `num_beams=1`
+              and `do_sample=True`.
+            - *beam-search decoding* by calling [`~generation_utils.FlaxGenerationMixin._beam_search`] if `num_beams>1`
+              and `do_sample=False`.
     """
 
     @staticmethod
@@ -148,8 +156,7 @@ class FlaxGenerationMixin:
     def _adapt_logits_for_beam_search(self, logits):
         """
         This function can be overwritten in the specific modeling_flax_<model-name>.py classes to allow for custom beam
-        search behavior. Note that the only model that overwrites this method is
-        :class:`~transformes.FlaxMarianMTModel`.
+        search behavior. Note that the only model that overwrites this method is [`~transformes.FlaxMarianMTModel`].
         """
         return logits
 
@@ -157,6 +164,7 @@ class FlaxGenerationMixin:
         self,
         input_ids: jnp.ndarray,
         max_length: Optional[int] = None,
+        max_new_tokens: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         bos_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
@@ -178,71 +186,89 @@ class FlaxGenerationMixin:
         **model_kwargs,
     ):
         r"""
-        Generates sequences for models with a language modeling head. The method currently supports greedy decoding,
-        and, multinomial sampling.
+        Generates sequences of token ids for models with a language modeling head. The method supports the following
+        generation methods for text-decoder, text-to-text, speech-to-text, and vision-to-text models:
 
-        Apart from :obj:`input_ids`, all the arguments below will default to the value of the attribute of the same
-        name inside the :class:`~transformers.PretrainedConfig` of the model. The default values indicated are the
-        default values of those config.
+            - *greedy decoding* by calling [`~generation_flax_utils.FlaxGenerationMixin._greedy_search`] if
+              `num_beams=1` and `do_sample=False`.
+            - *multinomial sampling* by calling [`~generation_flax_utils.FlaxGenerationMixin._sample`] if `num_beams=1`
+              and `do_sample=True`.
+            - *beam-search decoding* by calling [`~generation_utils.FlaxGenerationMixin._beam_search`] if `num_beams>1`
+              and `do_sample=False`.
 
-        Most of these parameters are explained in more detail in `this blog post
-        <https://huggingface.co/blog/how-to-generate>`__.
+        <Tip warning={true}>
+
+        Apart from `inputs`, all the arguments below will default to the value of the attribute of the same name as
+        defined in the model's config (`config.json`) which in turn defaults to the
+        [`~modeling_utils.PretrainedConfig`] of the model.
+
+        </Tip>
+
+        Most of these parameters are explained in more detail in [this blog
+        post](https://huggingface.co/blog/how-to-generate).
 
         Parameters:
 
-            input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`):
+            input_ids (`jnp.ndarray` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
-            max_length (:obj:`int`, `optional`, defaults to 20):
-                The maximum length of the sequence to be generated.
-            do_sample (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            max_length (`int`, *optional*, defaults to `model.config.max_length`):
+                The maximum length the generated tokens can have. Corresponds to the length of the input prompt +
+                `max_new_tokens`. In general, prefer the use of `max_new_tokens`, which ignores the number of tokens in
+                the prompt.
+            max_new_tokens (`int`, *optional*):
+                The maximum numbers of tokens to generate, ignoring the number of tokens in the prompt.
+            do_sample (`bool`, *optional*, defaults to `False`):
                 Whether or not to use sampling ; use greedy decoding otherwise.
-            temperature (:obj:`float`, `optional`, defaults to 1.0):
+            temperature (`float`, *optional*, defaults to 1.0):
                 The value used to module the next token probabilities.
-            top_k (:obj:`int`, `optional`, defaults to 50):
+            top_k (`int`, *optional*, defaults to 50):
                 The number of highest probability vocabulary tokens to keep for top-k-filtering.
-            top_p (:obj:`float`, `optional`, defaults to 1.0):
-                If set to float < 1, only the most probable tokens with probabilities that add up to :obj:`top_p` or
-                higher are kept for generation.
-            pad_token_id (:obj:`int`, `optional`):
-                The id of the `padding` token.
-            bos_token_id (:obj:`int`, `optional`):
-                The id of the `beginning-of-sequence` token.
-            eos_token_id (:obj:`int`, `optional`):
-                The id of the `end-of-sequence` token.
-            num_beams (:obj:`int`, `optional`, defaults to 1):
+            top_p (`float`, *optional*, defaults to 1.0):
+                If set to float < 1, only the most probable tokens with probabilities that add up to `top_p` or higher
+                are kept for generation.
+            pad_token_id (`int`, *optional*):
+                The id of the *padding* token.
+            bos_token_id (`int`, *optional*):
+                The id of the *beginning-of-sequence* token.
+            eos_token_id (`int`, *optional*):
+                The id of the *end-of-sequence* token.
+            num_beams (`int`, *optional*, defaults to 1):
                 Number of beams for beam search. 1 means no beam search.
-            decoder_start_token_id (:obj:`int`, `optional`):
-                If an encoder-decoder model starts decoding with a different token than `bos`, the id of that token.
-            trace (:obj:`bool`, `optional`, defaults to :obj:`True`):
-                Whether to trace generation. Setting ``trace=False`` should only be used for debugging and will lead to
-                a considerably slower runtime.
-            params (:obj:`Dict[str, jnp.ndarray]`, `optional`):
+            decoder_start_token_id (`int`, *optional*):
+                If an encoder-decoder model starts decoding with a different token than *bos*, the id of that token.
+            trace (`bool`, *optional*, defaults to `True`):
+                Whether to trace generation. Setting `trace=False` should only be used for debugging and will lead to a
+                considerably slower runtime.
+            params (`Dict[str, jnp.ndarray]`, *optional*):
                 Optionally the model parameters can be passed. Can be useful for parallelized generation.
             model_kwargs:
-                Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model.
+                Additional model specific kwargs will be forwarded to the `forward` function of the model. If the model
+                is an encoder-decoder model, encoder specific kwargs should not be prefixed and decoder specific kwargs
+                should be prefixed with *decoder_*. Also accepts `encoder_outputs` to skip encoder part.
 
         Return:
-            :class:`~transformers.file_utils.ModelOutput`.
+            [`~utils.ModelOutput`].
 
-        Examples::
-            >>> from transformers import AutoTokenizer, FlaxAutoModelForCausalLM
+        Examples:
 
-            >>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
-            >>> model = FlaxAutoModelForCausalLM.from_pretrained("distilgpt2")
-            >>> input_context = "The dog"
-            >>> # encode input context
-            >>> input_ids = tokenizer(input_context, return_tensors="np").input_ids
-            >>> # generate candidates using sampling
-            >>> outputs = model.generate(input_ids=input_ids, max_length=20, top_k=30, do_sample=True)
-            >>> print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
-        """
+        ```python
+        >>> from transformers import AutoTokenizer, FlaxAutoModelForCausalLM
+
+        >>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
+        >>> model = FlaxAutoModelForCausalLM.from_pretrained("distilgpt2")
+        >>> input_context = "The dog"
+        >>> # encode input context
+        >>> input_ids = tokenizer(input_context, return_tensors="np").input_ids
+        >>> # generate candidates using sampling
+        >>> outputs = model.generate(input_ids=input_ids, max_length=20, top_k=30, do_sample=True)
+        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        ```"""
         # set init values
-        max_length = max_length if max_length is not None else self.config.max_length
         bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
         decoder_start_token_id = (
-            decoder_start_token_id if decoder_start_token_id else self.config.decoder_start_token_id
+            decoder_start_token_id if decoder_start_token_id is not None else self.config.decoder_start_token_id
         )
         prng_key = prng_key if prng_key is not None else jax.random.PRNGKey(0)
 
@@ -251,9 +277,46 @@ class FlaxGenerationMixin:
 
         if self.config.is_encoder_decoder:
             # add encoder_outputs to model_kwargs
-            model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(input_ids, params, model_kwargs)
+            if model_kwargs.get("encoder_outputs") is None:
+                model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(input_ids, params, model_kwargs)
             # prepare decoder_input_ids for generation
             input_ids = jnp.ones((input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
+
+        # Prepare `max_length` depending on other stopping criteria.
+        input_ids_seq_length = input_ids.shape[-1]
+        if max_length is None and max_new_tokens is None:
+            warnings.warn(
+                "Neither `max_length` nor `max_new_tokens` have been set, `max_length` will default to "
+                f"{self.config.max_length} (`self.config.max_length`). Controlling `max_length` via the config is "
+                "deprecated and `max_length` will be removed from the config in v5 of Transformers -- we recommend "
+                "using `max_new_tokens` to control the maximum length of the generation.",
+                UserWarning,
+            )
+        elif max_length is None and max_new_tokens is not None:
+            max_length = max_new_tokens + input_ids_seq_length
+        elif max_length is not None and max_new_tokens is not None:
+            raise ValueError(
+                "Both `max_new_tokens` and `max_length` have been set but they serve the same purpose -- setting a"
+                " limit to the generated output length. Remove one of those arguments. Please refer to the"
+                " documentation for more information. "
+                "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
+            )
+        # default to config if still None
+        max_length = max_length if max_length is not None else self.config.max_length
+        min_length = min_length if min_length is not None else self.config.min_length
+
+        if min_length is not None and min_length > max_length:
+            raise ValueError(
+                f"Unfeasable length constraints: the minimum length ({min_length}) is larger than the maximum "
+                f"length ({max_length})"
+            )
+        if input_ids_seq_length >= max_length:
+            input_ids_string = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
+            logger.warning(
+                f"Input length of {input_ids_string} is {input_ids_seq_length}, but `max_length` is set to"
+                f" {max_length}. This can lead to unexpected behavior. You should consider increasing"
+                "`max_new_tokens`."
+            )
 
         do_sample = do_sample if do_sample is not None else self.config.do_sample
         num_beams = num_beams if num_beams is not None else self.config.num_beams
@@ -323,11 +386,11 @@ class FlaxGenerationMixin:
             raise NotImplementedError("`Beam sampling is currently not implemented.")
 
     def _get_logits_warper(
-        self, top_k: int = None, top_p: float = None, temperature: float = None
+        self, top_k: Optional[int] = None, top_p: Optional[float] = None, temperature: Optional[float] = None
     ) -> FlaxLogitsProcessorList:
         """
-        This class returns a :obj:`~transformers.FlaxLogitsProcessorList` list object that contains all relevant
-        :obj:`~transformers.FlaxLogitsWarper` instances used for multinomial sampling.
+        This class returns a [`FlaxLogitsProcessorList`] list object that contains all relevant [`FlaxLogitsWarper`]
+        instances used for multinomial sampling.
         """
 
         # init warp parameters
@@ -358,8 +421,8 @@ class FlaxGenerationMixin:
         forced_eos_token_id: int,
     ) -> FlaxLogitsProcessorList:
         """
-        This class returns a :obj:`~transformers.FlaxLogitsProcessorList` list object that contains all relevant
-        :obj:`~transformers.FlaxLogitsProcessor` instances used to modify the scores of the language model head.
+        This class returns a [`FlaxLogitsProcessorList`] list object that contains all relevant [`FlaxLogitsProcessor`]
+        instances used to modify the scores of the language model head.
         """
         processors = FlaxLogitsProcessorList()
 
@@ -367,7 +430,6 @@ class FlaxGenerationMixin:
         no_repeat_ngram_size = (
             no_repeat_ngram_size if no_repeat_ngram_size is not None else self.config.no_repeat_ngram_size
         )
-        min_length = min_length if min_length is not None else self.config.min_length
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
         forced_bos_token_id = (
             forced_bos_token_id if forced_bos_token_id is not None else self.config.forced_bos_token_id
@@ -537,10 +599,10 @@ class FlaxGenerationMixin:
 
             # apply min_length, ...
             logits = logits_processor(state.sequences, logits, state.cur_len)
-            # apply top_k, top_k, temperature
+            # apply top_p, top_k, temperature
             logits = logits_warper(logits, logits, state.cur_len)
 
-            next_token = jax.random.categorical(prng_key, model_outputs.logits[:, -1], axis=-1)
+            next_token = jax.random.categorical(prng_key, logits, axis=-1)
 
             next_is_sent_finished = state.is_sent_finished | (next_token == eos_token_id)
             next_token = next_token * ~next_is_sent_finished + pad_token_id * next_is_sent_finished
@@ -676,7 +738,7 @@ class FlaxGenerationMixin:
             not_max_length_yet = state.cur_len < max_length
 
             # 2. can the new beams still improve?
-            best_running_score = state.running_scores[:, -1:] / (max_length ** length_penalty)
+            best_running_score = state.running_scores[:, -1:] / (max_length**length_penalty)
             worst_finished_score = jnp.where(
                 state.is_sent_finished, jnp.min(state.scores, axis=1, keepdims=True), np.array(-1.0e7)
             )
@@ -766,7 +828,7 @@ class FlaxGenerationMixin:
             # - add length penalty
             # - make sure no scores can be added anymore if beam is full
             # - make sure still running sequences cannot be chosen as finalized beam
-            topk_log_probs = topk_log_probs / (state.cur_len ** length_penalty)
+            topk_log_probs = topk_log_probs / (state.cur_len**length_penalty)
             beams_in_batch_are_full = (
                 jnp.broadcast_to(state.is_sent_finished.all(axis=-1, keepdims=True), did_topk_just_finished.shape)
                 & early_stopping

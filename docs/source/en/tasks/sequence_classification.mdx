@@ -1,0 +1,214 @@
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# Text classification
+
+<Youtube id="leNG9fN9FQU"/>
+
+Text classification is a common NLP task that assigns a label or class to text. There are many practical applications of text classification widely used in production by some of today's largest companies. One of the most popular forms of text classification is sentiment analysis, which assigns a label like positive, negative, or neutral to a sequence of text. 
+
+This guide will show you how to fine-tune [DistilBERT](https://huggingface.co/distilbert-base-uncased) on the [IMDb](https://huggingface.co/datasets/imdb) dataset to determine whether a movie review is positive or negative.
+
+<Tip>
+
+See the text classification [task page](https://huggingface.co/tasks/text-classification) for more information about other forms of text classification and their associated models, datasets, and metrics.
+
+</Tip>
+
+## Load IMDb dataset
+
+Load the IMDb dataset from the 🤗 Datasets library:
+
+```py
+>>> from datasets import load_dataset
+
+>>> imdb = load_dataset("imdb")
+```
+
+Then take a look at an example:
+
+```py
+>>> imdb["test"][0]
+{
+    "label": 0,
+    "text": "I love sci-fi and am willing to put up with a lot. Sci-fi movies/TV are usually underfunded, under-appreciated and misunderstood. I tried to like this, I really did, but it is to good TV sci-fi as Babylon 5 is to Star Trek (the original). Silly prosthetics, cheap cardboard sets, stilted dialogues, CG that doesn't match the background, and painfully one-dimensional characters cannot be overcome with a 'sci-fi' setting. (I'm sure there are those of you out there who think Babylon 5 is good sci-fi TV. It's not. It's clichéd and uninspiring.) While US viewers might like emotion and character development, sci-fi is a genre that does not take itself seriously (cf. Star Trek). It may treat important issues, yet not as a serious philosophy. It's really difficult to care about the characters here as they are not simply foolish, just missing a spark of life. Their actions and reactions are wooden and predictable, often painful to watch. The makers of Earth KNOW it's rubbish as they have to always say \"Gene Roddenberry's Earth...\" otherwise people would not continue watching. Roddenberry's ashes must be turning in their orbit as this dull, cheap, poorly edited (watching it without advert breaks really brings this home) trudging Trabant of a show lumbers into space. Spoiler. So, kill off a main character. And then bring him back as another actor. Jeeez! Dallas all over again.",
+}
+```
+
+There are two fields in this dataset: 
+
+- `text`: a string containing the text of the movie review.
+- `label`: a value that can either be `0` for a negative review or `1` for a positive review.
+
+## Preprocess
+
+Load the DistilBERT tokenizer to process the `text` field:
+
+```py
+>>> from transformers import AutoTokenizer
+
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+```
+
+Create a preprocessing function to tokenize `text` and truncate sequences to be no longer than DistilBERT's maximum input length:
+
+```py
+>>> def preprocess_function(examples):
+...     return tokenizer(examples["text"], truncation=True)
+```
+
+Use 🤗 Datasets [`~datasets.Dataset.map`] function to apply the preprocessing function over the entire dataset. You can speed up the `map` function by setting `batched=True` to process multiple elements of the dataset at once:
+
+```py
+tokenized_imdb = imdb.map(preprocess_function, batched=True)
+```
+
+Use [`DataCollatorWithPadding`] to create a batch of examples. It will also *dynamically pad* your text to the length of the longest element in its batch, so they are a uniform length. While it is possible to pad your text in the `tokenizer` function by setting `padding=True`, dynamic padding is more efficient.
+
+<frameworkcontent>
+<pt>
+```py
+>>> from transformers import DataCollatorWithPadding
+
+>>> data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
+```
+</pt>
+<tf>
+```py
+>>> from transformers import DataCollatorWithPadding
+
+>>> data_collator = DataCollatorWithPadding(tokenizer=tokenizer, return_tensors="tf")
+```
+</tf>
+</frameworkcontent>
+
+## Train
+
+<frameworkcontent>
+<pt>
+Load DistilBERT with [`AutoModelForSequenceClassification`] along with the number of expected labels:
+
+```py
+>>> from transformers import AutoModelForSequenceClassification, TrainingArguments, Trainer
+
+>>> model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased", num_labels=2)
+```
+
+<Tip>
+
+If you aren't familiar with fine-tuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#finetune-with-trainer)!
+
+</Tip>
+
+At this point, only three steps remain:
+
+1. Define your training hyperparameters in [`TrainingArguments`].
+2. Pass the training arguments to [`Trainer`] along with the model, dataset, tokenizer, and data collator.
+3. Call [`~Trainer.train`] to fine-tune your model.
+
+```py
+>>> training_args = TrainingArguments(
+...     output_dir="./results",
+...     learning_rate=2e-5,
+...     per_device_train_batch_size=16,
+...     per_device_eval_batch_size=16,
+...     num_train_epochs=5,
+...     weight_decay=0.01,
+... )
+
+>>> trainer = Trainer(
+...     model=model,
+...     args=training_args,
+...     train_dataset=tokenized_imdb["train"],
+...     eval_dataset=tokenized_imdb["test"],
+...     tokenizer=tokenizer,
+...     data_collator=data_collator,
+... )
+
+>>> trainer.train()
+```
+
+<Tip>
+
+[`Trainer`] will apply dynamic padding by default when you pass `tokenizer` to it. In this case, you don't need to specify a data collator explicitly.
+
+</Tip>
+</pt>
+<tf>
+To fine-tune a model in TensorFlow, start by converting your datasets to the `tf.data.Dataset` format with [`~datasets.Dataset.to_tf_dataset`]. Specify inputs and labels in `columns`, whether to shuffle the dataset order, batch size, and the data collator:
+
+```py
+>>> tf_train_set = tokenized_imdb["train"].to_tf_dataset(
+...     columns=["attention_mask", "input_ids", "label"],
+...     shuffle=True,
+...     batch_size=16,
+...     collate_fn=data_collator,
+... )
+
+>>> tf_validation_set = tokenized_imdb["test"].to_tf_dataset(
+...     columns=["attention_mask", "input_ids", "label"],
+...     shuffle=False,
+...     batch_size=16,
+...     collate_fn=data_collator,
+... )
+```
+
+<Tip>
+
+If you aren't familiar with fine-tuning a model with Keras, take a look at the basic tutorial [here](training#finetune-with-keras)!
+
+</Tip>
+
+Set up an optimizer function, learning rate schedule, and some training hyperparameters:
+
+```py
+>>> from transformers import create_optimizer
+>>> import tensorflow as tf
+
+>>> batch_size = 16
+>>> num_epochs = 5
+>>> batches_per_epoch = len(tokenized_imdb["train"]) // batch_size
+>>> total_train_steps = int(batches_per_epoch * num_epochs)
+>>> optimizer, schedule = create_optimizer(init_lr=2e-5, num_warmup_steps=0, num_train_steps=total_train_steps)
+```
+
+Load DistilBERT with [`TFAutoModelForSequenceClassification`] along with the number of expected labels:
+
+```py
+>>> from transformers import TFAutoModelForSequenceClassification
+
+>>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased", num_labels=2)
+```
+
+Configure the model for training with [`compile`](https://keras.io/api/models/model_training_apis/#compile-method):
+
+```py
+>>> import tensorflow as tf
+
+>>> model.compile(optimizer=optimizer)
+```
+
+Call [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) to fine-tune the model:
+
+```py
+>>> model.fit(x=tf_train_set, validation_data=tf_validation_set, epochs=3)
+```
+</tf>
+</frameworkcontent>
+
+<Tip>
+
+For a more in-depth example of how to fine-tune a model for text classification, take a look at the corresponding
+[PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification.ipynb)
+or [TensorFlow notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification-tf.ipynb).
+
+</Tip>

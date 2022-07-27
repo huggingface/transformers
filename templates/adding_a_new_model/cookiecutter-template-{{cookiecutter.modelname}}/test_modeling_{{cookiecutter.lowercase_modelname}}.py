@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,13 +18,13 @@
 {% if cookiecutter.is_encoder_decoder_model == "False" -%}
 import unittest
 
-from tests.test_modeling_common import floats_tensor
+from ...test_modeling_common import floats_tensor
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from transformers import {{cookiecutter.camelcase_modelname}}Config
-from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
@@ -486,12 +486,12 @@ import tempfile
 import unittest
 
 from transformers import is_torch_available
-from transformers.file_utils import cached_property
+from transformers.utils import cached_property
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
-from .test_configuration_common import ConfigTester
-from .test_generation_utils import GenerationTesterMixin
-from .test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_configuration_common import ConfigTester
+from ...generation.test_generation_utils import GenerationTesterMixin
+from ...test_modeling_common import ModelTesterMixin, ids_tensor
 
 
 if is_torch_available():

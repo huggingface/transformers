@@ -3,7 +3,7 @@ scikit-learn
 seqeval
 psutil
 sacrebleu >= 1.4.12
-accelerate >= 0.5.0
+git+https://github.com/huggingface/accelerate@main#egg=accelerate
 rouge-score
 tensorflow_datasets
 matplotlib
@@ -22,3 +22,4 @@ protobuf
 torchvision
 jiwer
 librosa
+torch < 1.12

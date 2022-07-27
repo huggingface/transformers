@@ -22,7 +22,7 @@ the JAX/Flax backend and the [`pjit`](https://jax.readthedocs.io/en/latest/jax.e
 > Note: The example is experimental and might have bugs. Also currently it only supports single V3-8.
 
 The `partition.py` file defines the `PyTree` of `ParitionSpec` for the GPTNeo model which describes how the model will be sharded.
-The actual sharding is auto-matically handled by `pjit`. The weights are sharded accross all local devices.
+The actual sharding is auto-matically handled by `pjit`. The weights are sharded across all local devices.
 To adapt the script for other models, we need to also change the `ParitionSpec` accordingly.
 
 TODO: Add more explantion.
@@ -35,7 +35,7 @@ model = FlaxGPTNeoForCausalLM.from_pretrained("EleutherAI/gpt-neo-1.3B")
 
 emb = jnp.zeros((50264, model.config.hidden_size))
 # update the first 50257 weights using pre-trained weights
-emb = jax.ops.index_update(emb, jax.ops.index[:50257, :], model.params["transformer"]["wte"]["embedding"])
+emb = emb.at[:50257, :].set(model.params["transformer"]["wte"]["embedding"])
 params = model.params
 params["transformer"]["wte"]["embedding"] = emb
 

@@ -18,8 +18,8 @@ limitations under the License.
 
 This directory contains examples for finetuning and evaluating transformers on translation tasks.
 Please tag @patil-suraj with any issues/unexpected behaviors, or send a PR!
-For deprecated `bertabs` instructions, see [`bertabs/README.md`](https://github.com/huggingface/transformers/blob/master/examples/research_projects/bertabs/README.md).
-For the old `finetune_trainer.py` and related utils, see [`examples/legacy/seq2seq`](https://github.com/huggingface/transformers/blob/master/examples/legacy/seq2seq).
+For deprecated `bertabs` instructions, see [`bertabs/README.md`](https://github.com/huggingface/transformers/blob/main/examples/research_projects/bertabs/README.md).
+For the old `finetune_trainer.py` and related utils, see [`examples/legacy/seq2seq`](https://github.com/huggingface/transformers/blob/main/examples/legacy/seq2seq).
 
 ### Supported Architectures
 
@@ -150,7 +150,7 @@ python examples/pytorch/translation/run_translation.py \
 
 ## With Accelerate
 
-Based on the script [`run_translation_no_trainer.py`](https://github.com/huggingface/transformers/blob/master/examples/pytorch/translation/run_translationn_no_trainer.py).
+Based on the script [`run_translation_no_trainer.py`](https://github.com/huggingface/transformers/blob/main/examples/pytorch/translation/run_translationn_no_trainer.py).
 
 Like `run_translation.py`, this script allows you to fine-tune any of the models supported on a
 translation task, the main difference is that this
@@ -162,7 +162,7 @@ the mean of the [🤗 `Accelerate`](https://github.com/huggingface/accelerate) l
 after installing it:
 
 ```bash
-pip install accelerate
+pip install git+https://github.com/huggingface/accelerate
 ```
 
 then
@@ -192,8 +192,6 @@ accelerate test
 that will check everything is ready for training. Finally, you can launch training with
 
 ```bash
-export TASK_NAME=mrpc
-
 accelerate launch run_translation_no_trainer.py \
     --model_name_or_path Helsinki-NLP/opus-mt-en-ro \
     --source_lang en \

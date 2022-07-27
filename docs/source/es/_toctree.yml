@@ -1,0 +1,46 @@
+- sections:
+  - local: index
+    title: 🤗 Transformers
+  - local: quicktour
+    title: Tour rápido
+  - local: installation
+    title: Instalación
+  title: Empezar
+- sections:
+  - local: pipeline_tutorial
+    title: Pipelines para inferencia
+  - local: autoclass_tutorial
+    title: Carga instancias preentrenadas con un AutoClass
+  - local: preprocessing
+    title: Preprocesamiento
+  - local: training
+    title: Fine-tuning a un modelo pre-entrenado
+  - local: accelerate
+    title: Entrenamiento distribuido con 🤗 Accelerate
+  - local: model_sharing
+    title: Compartir un modelo
+  title: Tutoriales
+- sections:
+  - local: fast_tokenizers
+    title: Usa tokenizadores de 🤗 Tokenizers
+  - local: create_a_model
+    title: Crea una arquitectura personalizada
+  - local: custom_models
+    title: Compartir modelos personalizados
+  - sections:
+    - local: tasks/language_modeling
+      title: Modelado de lenguaje
+    - local: tasks/image_classification
+      title: Clasificación de imágenes
+    title: Fine-tuning para tareas posteriores
+  - local: sagemaker
+    title: Ejecutar el entrenamiento en Amazon SageMaker
+  - local: multilingual
+    title: Modelos multilingües para inferencia
+  title: Guías prácticas
+- sections:
+  - local: philosophy
+    title: Filosofía
+  - local: bertology
+    title: BERTología
+  title: Guías conceptuales

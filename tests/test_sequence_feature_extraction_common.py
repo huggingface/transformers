@@ -185,7 +185,7 @@ class SequenceFeatureExtractionTestMixin(FeatureExtractionSavingTestMixin):
 
         expected_mult_pad_length = pad_max_length if pad_max_length % 10 == 0 else (pad_max_length // 10 + 1) * 10
         self.assertTrue(all(len(x) == expected_mult_pad_length for x in input_8))
-        self.assertTrue(input_9.shape[:2], (batch_size, expected_mult_pad_length))
+        self.assertEqual(input_9.shape[:2], (batch_size, expected_mult_pad_length))
 
         if feature_size > 1:
             self.assertTrue(input_9.shape[2] == feature_size)

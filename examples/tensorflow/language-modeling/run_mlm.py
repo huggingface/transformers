@@ -18,7 +18,7 @@ Fine-tuning the library models for masked language modeling (BERT, ALBERT, RoBER
 on a text file or a dataset without using HuggingFace Trainer.
 
 Here is the full list of checkpoints on the hub that can be fine-tuned by this script:
-https://huggingface.co/models?filter=masked-lm
+https://huggingface.co/models?filter=fill-mask
 """
 # You can also adapt this script on your own mlm task. Pointers for this are left as comments.
 
@@ -31,12 +31,11 @@ import os
 import random
 import sys
 from dataclasses import dataclass, field
-from functools import partial
+from itertools import chain
 from pathlib import Path
 from typing import Optional
 
 import datasets
-import numpy as np
 import tensorflow as tf
 from datasets import load_dataset
 from sklearn.model_selection import train_test_split
@@ -49,12 +48,14 @@ from transformers import (
     TF_MODEL_FOR_MASKED_LM_MAPPING,
     AutoConfig,
     AutoTokenizer,
+    DataCollatorForLanguageModeling,
     HfArgumentParser,
     TFAutoModelForMaskedLM,
     TFTrainingArguments,
     create_optimizer,
     set_seed,
 )
+from transformers.utils import send_example_telemetry
 from transformers.utils.versions import require_version
 
 
@@ -74,8 +75,9 @@ class ModelArguments:
     model_name_or_path: Optional[str] = field(
         default=None,
         metadata={
-            "help": "The model checkpoint for weights initialization."
-            "Don't set if you want to train a model from scratch."
+            "help": (
+                "The model checkpoint for weights initialization.Don't set if you want to train a model from scratch."
+            )
         },
     )
     model_type: Optional[str] = field(
@@ -85,8 +87,10 @@ class ModelArguments:
     config_overrides: Optional[str] = field(
         default=None,
         metadata={
-            "help": "Override some existing default config settings when a model is trained from scratch. Example: "
-            "n_embd=10,resid_pdrop=0.2,scale_attn_weights=false,summary_type=cls_index"
+            "help": (
+                "Override some existing default config settings when a model is trained from scratch. Example: "
+                "n_embd=10,resid_pdrop=0.2,scale_attn_weights=false,summary_type=cls_index"
+            )
         },
     )
     config_name: Optional[str] = field(
@@ -110,8 +114,10 @@ class ModelArguments:
     use_auth_token: bool = field(
         default=False,
         metadata={
-            "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
-            "with private models)."
+            "help": (
+                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "with private models)."
+            )
         },
     )
 
@@ -151,8 +157,10 @@ class DataTrainingArguments:
     max_seq_length: Optional[int] = field(
         default=None,
         metadata={
-            "help": "The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated."
+            "help": (
+                "The maximum total input sequence length after tokenization. Sequences longer "
+                "than this will be truncated."
+            )
         },
     )
     preprocessing_num_workers: Optional[int] = field(
@@ -169,22 +177,28 @@ class DataTrainingArguments:
     pad_to_max_length: bool = field(
         default=False,
         metadata={
-            "help": "Whether to pad all samples to `max_seq_length`. "
-            "If False, will pad the samples dynamically when batching to the maximum length in the batch."
+            "help": (
+                "Whether to pad all samples to `max_seq_length`. "
+                "If False, will pad the samples dynamically when batching to the maximum length in the batch."
+            )
         },
     )
     max_train_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of training examples to this "
+                "value if set."
+            )
         },
     )
     max_eval_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
+                "value if set."
+            )
         },
     )
 
@@ -218,56 +232,6 @@ class SavePretrainedCallback(tf.keras.callbacks.Callback):
 
 # endregion
 
-# region Data generator
-def sample_generator(dataset, tokenizer, mlm_probability=0.15, pad_to_multiple_of=None):
-    if tokenizer.mask_token is None:
-        raise ValueError("This tokenizer does not have a mask token which is necessary for masked language modeling. ")
-    # Trim off the last partial batch if present
-    sample_ordering = np.random.permutation(len(dataset))
-    for sample_idx in sample_ordering:
-        example = dataset[int(sample_idx)]
-        # Handle dicts with proper padding and conversion to tensor.
-        example = tokenizer.pad(example, return_tensors="np", pad_to_multiple_of=pad_to_multiple_of)
-        special_tokens_mask = example.pop("special_tokens_mask", None)
-        example["input_ids"], example["labels"] = mask_tokens(
-            example["input_ids"], mlm_probability, tokenizer, special_tokens_mask=special_tokens_mask
-        )
-        if tokenizer.pad_token_id is not None:
-            example["labels"][example["labels"] == tokenizer.pad_token_id] = -100
-        example = {key: tf.convert_to_tensor(arr) for key, arr in example.items()}
-
-        yield example, example["labels"]  # TF needs some kind of labels, even if we don't use them
-    return
-
-
-def mask_tokens(inputs, mlm_probability, tokenizer, special_tokens_mask):
-    """
-    Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original.
-    """
-    labels = np.copy(inputs)
-    # We sample a few tokens in each sequence for MLM training (with probability `self.mlm_probability`)
-    probability_matrix = np.random.random_sample(labels.shape)
-    special_tokens_mask = special_tokens_mask.astype(np.bool_)
-
-    probability_matrix[special_tokens_mask] = 0.0
-    masked_indices = probability_matrix > (1 - mlm_probability)
-    labels[~masked_indices] = -100  # We only compute loss on masked tokens
-
-    # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
-    indices_replaced = (np.random.random_sample(labels.shape) < 0.8) & masked_indices
-    inputs[indices_replaced] = tokenizer.convert_tokens_to_ids(tokenizer.mask_token)
-
-    # 10% of the time, we replace masked input tokens with random word
-    indices_random = (np.random.random_sample(labels.shape) < 0.5) & masked_indices & ~indices_replaced
-    random_words = np.random.randint(low=0, high=len(tokenizer), size=np.count_nonzero(indices_random), dtype=np.int64)
-    inputs[indices_random] = random_words
-
-    # The rest of the time (10% of the time) we keep the masked input tokens unchanged
-    return inputs, labels
-
-
-# endregion
-
 
 def main():
     # region Argument Parsing
@@ -278,6 +242,10 @@ def main():
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
+    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
+    # information sent is the one passed as arguments along with your Python/PyTorch versions.
+    send_example_telemetry("run_mlm", model_args, data_args, framework="tensorflow")
 
     # Sanity checks
     if data_args.dataset_name is None and data_args.train_file is None and data_args.validation_file is None:
@@ -342,17 +310,23 @@ def main():
     # download the dataset.
     if data_args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
-        raw_datasets = load_dataset(data_args.dataset_name, data_args.dataset_config_name)
+        raw_datasets = load_dataset(
+            data_args.dataset_name,
+            data_args.dataset_config_name,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
         if "validation" not in raw_datasets.keys():
             raw_datasets["validation"] = load_dataset(
                 data_args.dataset_name,
                 data_args.dataset_config_name,
                 split=f"train[:{data_args.validation_split_percentage}%]",
+                use_auth_token=True if model_args.use_auth_token else None,
             )
             raw_datasets["train"] = load_dataset(
                 data_args.dataset_name,
                 data_args.dataset_config_name,
                 split=f"train[{data_args.validation_split_percentage}%:]",
+                use_auth_token=True if model_args.use_auth_token else None,
             )
     else:
         data_files = {}
@@ -363,7 +337,11 @@ def main():
         extension = data_args.train_file.split(".")[-1]
         if extension == "txt":
             extension = "text"
-        raw_datasets = load_dataset(extension, data_files=data_files)
+        raw_datasets = load_dataset(
+            extension,
+            data_files=data_files,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
 
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
@@ -462,7 +440,7 @@ def main():
         # max_seq_length.
         def group_texts(examples):
             # Concatenate all texts.
-            concatenated_examples = {k: sum(examples[k], []) for k in examples.keys()}
+            concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
             total_length = len(concatenated_examples[list(examples.keys())[0]])
             # We drop the small remainder, we could add padding if the model supported it instead of this drop, you can
             # customize this part to your needs.
@@ -496,7 +474,8 @@ def main():
         eval_dataset = tokenized_datasets["validation"]
     else:
         logger.info(
-            f"Validation file not found: using {data_args.validation_split_percentage}% of the dataset as validation as provided in data_args"
+            f"Validation file not found: using {data_args.validation_split_percentage}% of the dataset as validation"
+            " as provided in data_args"
         )
         train_indices, val_indices = train_test_split(
             list(range(len(train_dataset))), test_size=data_args.validation_split_percentage / 100
@@ -506,9 +485,11 @@ def main():
         train_dataset = train_dataset.select(train_indices)
 
     if data_args.max_train_samples is not None:
-        train_dataset = train_dataset.select(range(data_args.max_train_samples))
+        max_train_samples = min(len(train_dataset), data_args.max_train_samples)
+        train_dataset = train_dataset.select(range(max_train_samples))
     if data_args.max_eval_samples is not None:
-        eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
+        max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
+        eval_dataset = eval_dataset.select(range(max_eval_samples))
 
     # Log a few random samples from the training set:
     for index in random.sample(range(len(train_dataset)), 3):
@@ -530,35 +511,29 @@ def main():
 
         # region TF Dataset preparation
         num_replicas = training_args.strategy.num_replicas_in_sync
-        train_generator = partial(sample_generator, train_dataset, tokenizer)
-        train_signature = {
-            feature: tf.TensorSpec(shape=(None,), dtype=tf.int64)
-            for feature in train_dataset.features
-            if feature != "special_tokens_mask"
-        }
-        train_signature["labels"] = train_signature["input_ids"]
-        train_signature = (train_signature, train_signature["labels"])
+        data_collator = DataCollatorForLanguageModeling(
+            tokenizer=tokenizer, mlm_probability=data_args.mlm_probability, return_tensors="tf"
+        )
         options = tf.data.Options()
         options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
-        tf_train_dataset = (
-            tf.data.Dataset.from_generator(train_generator, output_signature=train_signature)
-            .with_options(options)
-            .batch(batch_size=num_replicas * training_args.per_device_train_batch_size, drop_remainder=True)
-            .repeat(int(training_args.num_train_epochs))
-        )
-        eval_generator = partial(sample_generator, eval_dataset, tokenizer)
-        eval_signature = {
-            feature: tf.TensorSpec(shape=(None,), dtype=tf.int64)
-            for feature in eval_dataset.features
-            if feature != "special_tokens_mask"
-        }
-        eval_signature["labels"] = eval_signature["input_ids"]
-        eval_signature = (eval_signature, eval_signature["labels"])
-        tf_eval_dataset = (
-            tf.data.Dataset.from_generator(eval_generator, output_signature=eval_signature)
-            .with_options(options)
-            .batch(batch_size=num_replicas * training_args.per_device_eval_batch_size, drop_remainder=True)
-        )
+
+        tf_train_dataset = train_dataset.to_tf_dataset(
+            # labels are passed as input, as we will use the model's internal loss
+            columns=[col for col in train_dataset.features if col != "special_tokens_mask"] + ["labels"],
+            shuffle=True,
+            batch_size=num_replicas * training_args.per_device_train_batch_size,
+            collate_fn=data_collator,
+            drop_remainder=True,
+        ).with_options(options)
+
+        tf_eval_dataset = eval_dataset.to_tf_dataset(
+            # labels are passed as input, as we will use the model's internal loss
+            columns=[col for col in eval_dataset.features if col != "special_tokens_mask"] + ["labels"],
+            shuffle=False,
+            batch_size=num_replicas * training_args.per_device_train_batch_size,
+            collate_fn=data_collator,
+            drop_remainder=True,
+        ).with_options(options)
         # endregion
 
         # region Optimizer and loss
@@ -574,10 +549,8 @@ def main():
             weight_decay_rate=training_args.weight_decay,
         )
 
-        def dummy_loss(y_true, y_pred):
-            return tf.reduce_mean(y_pred)
-
-        model.compile(optimizer=optimizer, loss={"loss": dummy_loss})
+        # no user-specified loss = will use the model internal loss
+        model.compile(optimizer=optimizer)
         # endregion
 
         # region Training and validation

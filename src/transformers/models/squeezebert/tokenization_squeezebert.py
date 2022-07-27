@@ -24,9 +24,13 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "squeezebert/squeezebert-uncased": "https://huggingface.co/squeezebert/squeezebert-uncased/resolve/main/vocab.txt",
+        "squeezebert/squeezebert-uncased": (
+            "https://huggingface.co/squeezebert/squeezebert-uncased/resolve/main/vocab.txt"
+        ),
         "squeezebert/squeezebert-mnli": "https://huggingface.co/squeezebert/squeezebert-mnli/resolve/main/vocab.txt",
-        "squeezebert/squeezebert-mnli-headless": "https://huggingface.co/squeezebert/squeezebert-mnli-headless/resolve/main/vocab.txt",
+        "squeezebert/squeezebert-mnli-headless": (
+            "https://huggingface.co/squeezebert/squeezebert-mnli-headless/resolve/main/vocab.txt"
+        ),
     }
 }
 
@@ -48,11 +52,10 @@ class SqueezeBertTokenizer(BertTokenizer):
     r"""
     Constructs a SqueezeBert tokenizer.
 
-    :class:`~transformers.SqueezeBertTokenizer is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
-    tokenization: punctuation splitting + wordpiece.
+    [`SqueezeBertTokenizer`] is identical to [`BertTokenizer`] and runs end-to-end tokenization: punctuation splitting
+    + wordpiece.
 
-    Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
-    parameters.
+    Refer to superclass [`BertTokenizer`] for usage examples and documentation concerning parameters.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

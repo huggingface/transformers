@@ -18,7 +18,8 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import (
+from ...utils import (
+    OptionalDependencyNotAvailable,
     _LazyModule,
     is_sentencepiece_available,
     is_tf_available,
@@ -27,17 +28,30 @@ from ...file_utils import (
 )
 
 
-_import_structure = {
-    "configuration_xlnet": ["XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLNetConfig"],
-}
+_import_structure = {"configuration_xlnet": ["XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLNetConfig"]}
 
-if is_sentencepiece_available():
+try:
+    if not is_sentencepiece_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["tokenization_xlnet"] = ["XLNetTokenizer"]
 
-if is_tokenizers_available():
+try:
+    if not is_tokenizers_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["tokenization_xlnet_fast"] = ["XLNetTokenizerFast"]
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_xlnet"] = [
         "XLNET_PRETRAINED_MODEL_ARCHIVE_LIST",
         "XLNetForMultipleChoice",
@@ -51,7 +65,12 @@ if is_torch_available():
         "load_tf_weights_in_xlnet",
     ]
 
-if is_tf_available():
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_tf_xlnet"] = [
         "TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFXLNetForMultipleChoice",
@@ -68,13 +87,28 @@ if is_tf_available():
 if TYPE_CHECKING:
     from .configuration_xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLNetConfig
 
-    if is_sentencepiece_available():
+    try:
+        if not is_sentencepiece_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .tokenization_xlnet import XLNetTokenizer
 
-    if is_tokenizers_available():
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .tokenization_xlnet_fast import XLNetTokenizerFast
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_xlnet import (
             XLNET_PRETRAINED_MODEL_ARCHIVE_LIST,
             XLNetForMultipleChoice,
@@ -88,7 +122,12 @@ if TYPE_CHECKING:
             load_tf_weights_in_xlnet,
         )
 
-    if is_tf_available():
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_tf_xlnet import (
             TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFXLNetForMultipleChoice,
@@ -104,4 +143,4 @@ if TYPE_CHECKING:
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)

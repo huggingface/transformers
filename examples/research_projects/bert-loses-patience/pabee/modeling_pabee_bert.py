@@ -56,7 +56,7 @@ class BertModelWithPabee(BertModel):
     the self-attention layers, following the architecture described in `Attention is all you need`_ by Ashish Vaswani,
     Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
 
-    To behave as an decoder the model needs to be initialized with the
+    To behave as a decoder the model needs to be initialized with the
     :obj:`is_decoder` argument of the configuration set to :obj:`True`; an
     :obj:`encoder_hidden_states` is expected as an input to the forward pass.
 
@@ -89,7 +89,10 @@ class BertModelWithPabee(BertModel):
 
     def log_stats(self):
         avg_inf_layers = self.inference_layers_num / self.inference_instances_num
-        message = f"*** Patience = {self.patience} Avg. Inference Layers = {avg_inf_layers:.2f} Speed Up = {1 - avg_inf_layers / self.config.num_hidden_layers:.2f} ***"
+        message = (
+            f"*** Patience = {self.patience} Avg. Inference Layers = {avg_inf_layers:.2f} Speed Up ="
+            f" {1 - avg_inf_layers / self.config.num_hidden_layers:.2f} ***"
+        )
         print(message)
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING)

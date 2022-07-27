@@ -20,9 +20,8 @@ import numpy as np
 from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...file_utils import TensorType
 from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
-from ...utils import logging
+from ...utils import TensorType, logging
 
 
 logger = logging.get_logger(__name__)
@@ -49,27 +48,27 @@ class ImageGPTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
     resolution (such as 32x32 or 64x64), normalize them and finally color quantize them to obtain sequences of "pixel
     values" (color clusters).
 
-    This feature extractor inherits from :class:`~transformers.FeatureExtractionMixin` which contains most of the main
-    methods. Users should refer to this superclass for more information regarding those methods.
+    This feature extractor inherits from [`FeatureExtractionMixin`] which contains most of the main methods. Users
+    should refer to this superclass for more information regarding those methods.
 
     Args:
-        clusters (:obj:`np.ndarray`):
-            The color clusters to use, as a :obj:`np.ndarray` of shape :obj:`(n_clusters, 3)`.
-        do_resize (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether to resize the input to a certain :obj:`size`.
-        size (:obj:`int` or :obj:`Tuple(int)`, `optional`, defaults to 32):
+        clusters (`np.ndarray`):
+            The color clusters to use, as a `np.ndarray` of shape `(n_clusters, 3)`.
+        do_resize (`bool`, *optional*, defaults to `True`):
+            Whether to resize the input to a certain `size`.
+        size (`int` or `Tuple(int)`, *optional*, defaults to 32):
             Resize the input to the given size. If a tuple is provided, it should be (width, height). If only an
-            integer is provided, then the input will be resized to (size, size). Only has an effect if :obj:`do_resize`
-            is set to :obj:`True`.
-        resample (:obj:`int`, `optional`, defaults to :obj:`PIL.Image.BILINEAR`):
-            An optional resampling filter. This can be one of :obj:`PIL.Image.NEAREST`, :obj:`PIL.Image.BOX`,
-            :obj:`PIL.Image.BILINEAR`, :obj:`PIL.Image.HAMMING`, :obj:`PIL.Image.BICUBIC` or :obj:`PIL.Image.LANCZOS`.
-            Only has an effect if :obj:`do_resize` is set to :obj:`True`.
-        do_normalize (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            integer is provided, then the input will be resized to (size, size). Only has an effect if `do_resize` is
+            set to `True`.
+        resample (`int`, *optional*, defaults to `PIL.Image.BILINEAR`):
+            An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
+            `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`. Only has an effect
+            if `do_resize` is set to `True`.
+        do_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to normalize the input to the range between -1 and +1.
     """
 
-    model_input_names = ["pixel_values"]
+    model_input_names = ["input_ids"]
 
     def __init__(self, clusters, do_resize=True, size=32, resample=Image.BILINEAR, do_normalize=True, **kwargs):
         super().__init__(**kwargs)
@@ -81,14 +80,14 @@ class ImageGPTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
 
     def normalize(self, image):
         """
-        Normalizes :obj:`image` into the range -1 to +1.
+        Normalizes `image` into the range -1 to +1.
 
         Args:
-            image (:obj:`PIL.Image.Image` or :obj:`np.ndarray` or :obj:`torch.Tensor`):
+            image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
                 The image to normalize.
 
         Returns:
-            :obj:`np.ndarray`: The normalized image.
+            `np.ndarray`: The normalized image.
         """
         image = self.to_numpy_array(image, rescale=False, channel_first=False)
 
@@ -105,30 +104,31 @@ class ImageGPTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
         """
         Main method to prepare for the model one or several image(s).
 
-        .. warning::
+        <Tip warning={true}>
 
-           NumPy arrays and PyTorch tensors are converted to PIL images when resizing, so the most efficient is to pass
-           PIL images.
+        NumPy arrays and PyTorch tensors are converted to PIL images when resizing, so the most efficient is to pass
+        PIL images.
+
+        </Tip>
 
         Args:
-            images (:obj:`PIL.Image.Image`, :obj:`np.ndarray`, :obj:`torch.Tensor`, :obj:`List[PIL.Image.Image]`, :obj:`List[np.ndarray]`, :obj:`List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
 
-            return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`, defaults to :obj:`'np'`):
+            return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to `'np'`):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
-                * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
-                * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
-                * :obj:`'np'`: Return NumPy :obj:`np.ndarray` objects.
-                * :obj:`'jax'`: Return JAX :obj:`jnp.ndarray` objects.
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return NumPy `np.ndarray` objects.
+                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
-            :class:`~transformers.BatchFeature`: A :class:`~transformers.BatchFeature` with the following fields:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
-            - **pixel_values** -- Pixel values to be fed to a model, of shape (batch_size, num_channels, height,
-              width).
+            - **input_ids** -- Input IDs to be fed to a model, of shape `(batch_size, height * width)`.
         """
         # Input type checking for clearer error
         valid_images = False
@@ -170,7 +170,7 @@ class ImageGPTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
         images = images.reshape(batch_size, -1)
 
         # return as BatchFeature
-        data = {"pixel_values": images}
+        data = {"input_ids": images}
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
 
         return encoded_inputs

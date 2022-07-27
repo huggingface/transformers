@@ -30,6 +30,8 @@ import transformers
 from transformers import (
     AutoConfig,
     AutoTokenizer,
+    DataCollatorWithPadding,
+    DefaultDataCollator,
     HfArgumentParser,
     PretrainedConfig,
     TFAutoModelForSequenceClassification,
@@ -37,51 +39,10 @@ from transformers import (
     set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
-from transformers.utils import check_min_version
+from transformers.utils import check_min_version, send_example_telemetry
 
 
 # region Helper functions
-
-
-def convert_dataset_for_tensorflow(
-    dataset, non_label_column_names, batch_size, dataset_mode="variable_batch", shuffle=True, drop_remainder=True
-):
-    """Converts a Hugging Face dataset to a Tensorflow Dataset. The dataset_mode controls whether we pad all batches
-    to the maximum sequence length, or whether we only pad to the maximum length within that batch. The former
-    is most useful when training on TPU, as a new graph compilation is required for each sequence length.
-    """
-
-    def densify_ragged_batch(features, label=None):
-        features = {
-            feature: ragged_tensor.to_tensor(shape=batch_shape[feature]) for feature, ragged_tensor in features.items()
-        }
-        if label is None:
-            return features
-        else:
-            return features, label
-
-    feature_keys = list(set(dataset.features.keys()) - set(non_label_column_names + ["label"]))
-    if dataset_mode == "variable_batch":
-        batch_shape = {key: None for key in feature_keys}
-        data = {key: tf.ragged.constant(dataset[key]) for key in feature_keys}
-    elif dataset_mode == "constant_batch":
-        data = {key: tf.ragged.constant(dataset[key]) for key in feature_keys}
-        batch_shape = {
-            key: tf.concat(([batch_size], ragged_tensor.bounding_shape()[1:]), axis=0)
-            for key, ragged_tensor in data.items()
-        }
-    else:
-        raise ValueError("Unknown dataset mode!")
-
-    if "label" in dataset.features:
-        labels = tf.convert_to_tensor(np.array(dataset["label"]))
-        tf_dataset = tf.data.Dataset.from_tensor_slices((data, labels))
-    else:
-        tf_dataset = tf.data.Dataset.from_tensor_slices(data)
-    if shuffle:
-        tf_dataset = tf_dataset.shuffle(buffer_size=len(dataset))
-    tf_dataset = tf_dataset.batch(batch_size=batch_size, drop_remainder=drop_remainder).map(densify_ragged_batch)
-    return tf_dataset
 
 
 class SavePretrainedCallback(tf.keras.callbacks.Callback):
@@ -100,7 +61,7 @@ class SavePretrainedCallback(tf.keras.callbacks.Callback):
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.13.0.dev0")
+check_min_version("4.21.0.dev0")
 
 task_to_keys = {
     "cola": ("sentence", None),
@@ -138,8 +99,10 @@ class DataTrainingArguments:
     max_seq_length: int = field(
         default=128,
         metadata={
-            "help": "The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded."
+            "help": (
+                "The maximum total input sequence length after tokenization. Sequences longer "
+                "than this will be truncated, sequences shorter will be padded."
+            )
         },
     )
     overwrite_cache: bool = field(
@@ -148,29 +111,37 @@ class DataTrainingArguments:
     pad_to_max_length: bool = field(
         default=False,
         metadata={
-            "help": "Whether to pad all samples to `max_seq_length`. "
-            "If False, will pad the samples dynamically when batching to the maximum length in the batch."
+            "help": (
+                "Whether to pad all samples to `max_seq_length`. "
+                "If False, will pad the samples dynamically when batching to the maximum length in the batch."
+            )
         },
     )
     max_train_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of training examples to this "
+                "value if set."
+            )
         },
     )
     max_eval_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
+                "value if set."
+            )
         },
     )
     max_predict_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of prediction examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of prediction examples to this "
+                "value if set."
+            )
         },
     )
 
@@ -210,8 +181,10 @@ class ModelArguments:
     use_auth_token: bool = field(
         default=False,
         metadata={
-            "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
-            "with private models)."
+            "help": (
+                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "with private models)."
+            )
         },
     )
 
@@ -232,6 +205,10 @@ def main():
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
+    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
+    # information sent is the one passed as arguments along with your Python/PyTorch versions.
+    send_example_telemetry("run_glue", model_args, data_args, framework="tensorflow")
 
     if not (training_args.do_train or training_args.do_eval or training_args.do_predict):
         exit("Must specify at least one of --do_train, --do_eval or --do_predict!")
@@ -275,7 +252,12 @@ def main():
 
     # Downloading and loading a dataset from the hub. In distributed training, the load_dataset function guarantee
     # that only one local process can concurrently download the dataset.
-    datasets = load_dataset("glue", data_args.task_name, cache_dir=model_args.cache_dir)
+    datasets = load_dataset(
+        "glue",
+        data_args.task_name,
+        cache_dir=model_args.cache_dir,
+        use_auth_token=True if model_args.use_auth_token else None,
+    )
     # See more about loading any type of standard or custom dataset at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
@@ -377,6 +359,10 @@ def main():
 
     datasets = datasets.map(preprocess_function, batched=True, load_from_cache_file=not data_args.overwrite_cache)
 
+    if data_args.pad_to_max_length:
+        data_collator = DefaultDataCollator(return_tensors="tf")
+    else:
+        data_collator = DataCollatorWithPadding(tokenizer, return_tensors="tf")
     # endregion
 
     # region Metric function
@@ -426,11 +412,6 @@ def main():
 
         # region Convert data to a tf.data.Dataset
         tf_data = dict()
-        if isinstance(training_args.strategy, tf.distribute.TPUStrategy) or data_args.pad_to_max_length:
-            logger.info("Padding all batches to max length because argument was set or we're on TPU.")
-            dataset_mode = "constant_batch"
-        else:
-            dataset_mode = "variable_batch"
         max_samples = {
             "train": data_args.max_train_samples,
             "validation": data_args.max_eval_samples,
@@ -456,13 +437,14 @@ def main():
             dataset = datasets[key]
             if samples_limit is not None:
                 dataset = dataset.select(range(samples_limit))
-            data = convert_dataset_for_tensorflow(
-                dataset,
-                non_label_column_names,
-                batch_size=batch_size,
-                dataset_mode=dataset_mode,
-                drop_remainder=drop_remainder,
+            data = dataset.to_tf_dataset(
+                columns=[col for col in dataset.column_names if col not in set(non_label_column_names + ["label"])],
                 shuffle=shuffle,
+                batch_size=batch_size,
+                collate_fn=data_collator,
+                drop_remainder=drop_remainder,
+                # `label_cols` is needed for user-defined losses, such as in this example
+                label_cols="label" if "label" in dataset.column_names else None,
             )
             tf_data[key] = data
         # endregion

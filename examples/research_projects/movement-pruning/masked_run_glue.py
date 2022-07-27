@@ -84,7 +84,7 @@ def schedule_threshold(
         spars_warmup_steps = initial_warmup * warmup_steps
         spars_schedu_steps = (final_warmup + initial_warmup) * warmup_steps
         mul_coeff = 1 - (step - spars_warmup_steps) / (total_step - spars_schedu_steps)
-        threshold = final_threshold + (initial_threshold - final_threshold) * (mul_coeff ** 3)
+        threshold = final_threshold + (initial_threshold - final_threshold) * (mul_coeff**3)
     regu_lambda = final_lambda * threshold / final_threshold
     return threshold, regu_lambda
 
@@ -285,14 +285,11 @@ def train(args, train_dataset, model, tokenizer, teacher=None):
                         attention_mask=inputs["attention_mask"],
                     )
 
-                loss_logits = (
-                    nn.functional.kl_div(
-                        input=nn.functional.log_softmax(logits_stu / args.temperature, dim=-1),
-                        target=nn.functional.softmax(logits_tea / args.temperature, dim=-1),
-                        reduction="batchmean",
-                    )
-                    * (args.temperature ** 2)
-                )
+                loss_logits = nn.functional.kl_div(
+                    input=nn.functional.log_softmax(logits_stu / args.temperature, dim=-1),
+                    target=nn.functional.softmax(logits_tea / args.temperature, dim=-1),
+                    reduction="batchmean",
+                ) * (args.temperature**2)
 
                 loss = args.alpha_distil * loss_logits + args.alpha_ce * loss
 
@@ -625,8 +622,10 @@ def main():
         "--max_seq_length",
         default=128,
         type=int,
-        help="The maximum total input sequence length after tokenization. Sequences longer "
-        "than this will be truncated, sequences shorter will be padded.",
+        help=(
+            "The maximum total input sequence length after tokenization. Sequences longer "
+            "than this will be truncated, sequences shorter will be padded."
+        ),
     )
     parser.add_argument("--do_train", action="store_true", help="Whether to run training.")
     parser.add_argument("--do_eval", action="store_true", help="Whether to run eval on the dev set.")
@@ -672,22 +671,29 @@ def main():
         "--initial_warmup",
         default=1,
         type=int,
-        help="Run `initial_warmup` * `warmup_steps` steps of threshold warmup during which threshold stays"
-        "at its `initial_threshold` value (sparsity schedule).",
+        help=(
+            "Run `initial_warmup` * `warmup_steps` steps of threshold warmup during which threshold stays"
+            "at its `initial_threshold` value (sparsity schedule)."
+        ),
     )
     parser.add_argument(
         "--final_warmup",
         default=2,
         type=int,
-        help="Run `final_warmup` * `warmup_steps` steps of threshold cool-down during which threshold stays"
-        "at its final_threshold value (sparsity schedule).",
+        help=(
+            "Run `final_warmup` * `warmup_steps` steps of threshold cool-down during which threshold stays"
+            "at its final_threshold value (sparsity schedule)."
+        ),
     )
 
     parser.add_argument(
         "--pruning_method",
         default="topK",
         type=str,
-        help="Pruning Method (l0 = L0 regularization, magnitude = Magnitude pruning, topK = Movement pruning, sigmoied_threshold = Soft movement pruning).",
+        help=(
+            "Pruning Method (l0 = L0 regularization, magnitude = Magnitude pruning, topK = Movement pruning,"
+            " sigmoied_threshold = Soft movement pruning)."
+        ),
     )
     parser.add_argument(
         "--mask_init",
@@ -720,7 +726,10 @@ def main():
         "--teacher_type",
         default=None,
         type=str,
-        help="Teacher type. Teacher tokenizer and student (model) tokenizer must output the same tokenization. Only for distillation.",
+        help=(
+            "Teacher type. Teacher tokenizer and student (model) tokenizer must output the same tokenization. Only for"
+            " distillation."
+        ),
     )
     parser.add_argument(
         "--teacher_name_or_path",
@@ -790,8 +799,10 @@ def main():
         "--fp16_opt_level",
         type=str,
         default="O1",
-        help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
-        "See details at https://nvidia.github.io/apex/amp.html",
+        help=(
+            "For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
+            "See details at https://nvidia.github.io/apex/amp.html"
+        ),
     )
     parser.add_argument("--local_rank", type=int, default=-1, help="For distributed training: local_rank")
 
@@ -808,7 +819,8 @@ def main():
         and not args.overwrite_output_dir
     ):
         raise ValueError(
-            f"Output directory ({args.output_dir}) already exists and is not empty. Use --overwrite_output_dir to overcome."
+            f"Output directory ({args.output_dir}) already exists and is not empty. Use --overwrite_output_dir to"
+            " overcome."
         )
 
     # Setup CUDA, GPU & distributed training

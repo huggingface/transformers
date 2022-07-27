@@ -26,12 +26,20 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.jso
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "microsoft/layoutlm-base-uncased": "https://huggingface.co/microsoft/layoutlm-base-uncased/resolve/main/vocab.txt",
-        "microsoft/layoutlm-large-uncased": "https://huggingface.co/microsoft/layoutlm-large-uncased/resolve/main/vocab.txt",
+        "microsoft/layoutlm-base-uncased": (
+            "https://huggingface.co/microsoft/layoutlm-base-uncased/resolve/main/vocab.txt"
+        ),
+        "microsoft/layoutlm-large-uncased": (
+            "https://huggingface.co/microsoft/layoutlm-large-uncased/resolve/main/vocab.txt"
+        ),
     },
     "tokenizer_file": {
-        "microsoft/layoutlm-base-uncased": "https://huggingface.co/microsoft/layoutlm-base-uncased/resolve/main/tokenizer.json",
-        "microsoft/layoutlm-large-uncased": "https://huggingface.co/microsoft/layoutlm-large-uncased/resolve/main/tokenizer.json",
+        "microsoft/layoutlm-base-uncased": (
+            "https://huggingface.co/microsoft/layoutlm-base-uncased/resolve/main/tokenizer.json"
+        ),
+        "microsoft/layoutlm-large-uncased": (
+            "https://huggingface.co/microsoft/layoutlm-large-uncased/resolve/main/tokenizer.json"
+        ),
     },
 }
 
@@ -52,11 +60,10 @@ class LayoutLMTokenizerFast(BertTokenizerFast):
     r"""
     Constructs a "Fast" LayoutLMTokenizer.
 
-    :class:`~transformers.LayoutLMTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs
-    end-to-end tokenization: punctuation splitting + wordpiece.
+    [`LayoutLMTokenizerFast`] is identical to [`BertTokenizerFast`] and runs end-to-end tokenization: punctuation
+    splitting + wordpiece.
 
-    Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
-    parameters.
+    Refer to superclass [`BertTokenizerFast`] for usage examples and documentation concerning parameters.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

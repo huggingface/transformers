@@ -147,8 +147,10 @@ if __name__ == "__main__":
         default=None,
         type=str,
         required=True,
-        help="The config json file corresponding to the pre-trained FNet model. \n"
-        "This specifies the model architecture.",
+        help=(
+            "The config json file corresponding to the pre-trained FNet model. \n"
+            "This specifies the model architecture."
+        ),
     )
     parser.add_argument("--save_path", default=None, type=str, required=True, help="Path to the output model.")
     args = parser.parse_args()

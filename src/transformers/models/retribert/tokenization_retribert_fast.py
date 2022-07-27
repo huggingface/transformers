@@ -25,10 +25,14 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.jso
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "yjernite/retribert-base-uncased": "https://huggingface.co/yjernite/retribert-base-uncased/resolve/main/vocab.txt",
+        "yjernite/retribert-base-uncased": (
+            "https://huggingface.co/yjernite/retribert-base-uncased/resolve/main/vocab.txt"
+        ),
     },
     "tokenizer_file": {
-        "yjernite/retribert-base-uncased": "https://huggingface.co/yjernite/retribert-base-uncased/resolve/main/tokenizer.json",
+        "yjernite/retribert-base-uncased": (
+            "https://huggingface.co/yjernite/retribert-base-uncased/resolve/main/tokenizer.json"
+        ),
     },
 }
 
@@ -44,13 +48,12 @@ PRETRAINED_INIT_CONFIGURATION = {
 
 class RetriBertTokenizerFast(BertTokenizerFast):
     r"""
-    Construct a "fast" RetriBERT tokenizer (backed by HuggingFace's `tokenizers` library).
+    Construct a "fast" RetriBERT tokenizer (backed by HuggingFace's *tokenizers* library).
 
-    :class:`~transformers.RetriBertTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs
-    end-to-end tokenization: punctuation splitting and wordpiece.
+    [`RetriBertTokenizerFast`] is identical to [`BertTokenizerFast`] and runs end-to-end tokenization: punctuation
+    splitting and wordpiece.
 
-    Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
-    parameters.
+    Refer to superclass [`BertTokenizerFast`] for usage examples and documentation concerning parameters.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

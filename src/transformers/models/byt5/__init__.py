@@ -18,12 +18,10 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule
+from ...utils import _LazyModule
 
 
-_import_structure = {
-    "tokenization_byt5": ["ByT5Tokenizer"],
-}
+_import_structure = {"tokenization_byt5": ["ByT5Tokenizer"]}
 
 
 if TYPE_CHECKING:
@@ -31,4 +29,4 @@ if TYPE_CHECKING:
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)

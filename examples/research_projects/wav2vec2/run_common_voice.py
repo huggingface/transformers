@@ -79,9 +79,11 @@ class ModelArguments:
     mask_time_prob: Optional[float] = field(
         default=0.05,
         metadata={
-            "help": "Propability of each feature vector along the time axis to be chosen as the start of the vector"
-            "span to be masked. Approximately ``mask_time_prob * sequence_length // mask_time_length`` feature"
-            "vectors will be masked along the time axis. This is only relevant if ``apply_spec_augment is True``."
+            "help": (
+                "Propability of each feature vector along the time axis to be chosen as the start of the vector"
+                "span to be masked. Approximately ``mask_time_prob * sequence_length // mask_time_length`` feature"
+                "vectors will be masked along the time axis. This is only relevant if ``apply_spec_augment is True``."
+            )
         },
     )
     layerdrop: Optional[float] = field(default=0.0, metadata={"help": "The LayerDrop probability."})
@@ -116,15 +118,19 @@ class DataTrainingArguments:
     max_train_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of training examples to this "
+                "value if set."
+            )
         },
     )
     max_val_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of validation examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of validation examples to this "
+                "value if set."
+            )
         },
     )
     chars_to_ignore: List[str] = list_field(
@@ -375,7 +381,8 @@ def main():
     )
 
     if data_args.max_train_samples is not None:
-        train_dataset = train_dataset.select(range(data_args.max_train_samples))
+        max_train_samples = min(len(train_dataset), data_args.max_train_samples)
+        train_dataset = train_dataset.select(range(max_train_samples))
 
     if data_args.max_val_samples is not None:
         eval_dataset = eval_dataset.select(range(data_args.max_val_samples))

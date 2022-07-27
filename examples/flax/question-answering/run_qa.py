@@ -18,12 +18,14 @@ Fine-tuning the library models for question answering.
 """
 # You can also adapt this script on your own question answering task. Pointers for this are left as comments.
 
+import json
 import logging
 import os
 import random
 import sys
 import time
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
+from enum import Enum
 from itertools import chain
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Tuple
@@ -39,7 +41,6 @@ import optax
 import transformers
 from flax import struct, traverse_util
 from flax.jax_utils import replicate, unreplicate
-from flax.metrics import tensorboard
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard
 from huggingface_hub import Repository
@@ -50,17 +51,16 @@ from transformers import (
     FlaxAutoModelForQuestionAnswering,
     HfArgumentParser,
     PreTrainedTokenizerFast,
-    TrainingArguments,
+    is_tensorboard_available,
 )
-from transformers.file_utils import get_full_repo_name
-from transformers.utils import check_min_version
+from transformers.utils import check_min_version, get_full_repo_name, send_example_telemetry
 from utils_qa import postprocess_qa_predictions
 
 
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.13.0.dev0")
+check_min_version("4.21.0.dev0")
 
 Array = Any
 Dataset = datasets.arrow_dataset.Dataset
@@ -68,6 +68,69 @@ PRNGKey = Any
 
 
 # region Arguments
+@dataclass
+class TrainingArguments:
+    output_dir: str = field(
+        metadata={"help": "The output directory where the model predictions and checkpoints will be written."},
+    )
+    overwrite_output_dir: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Overwrite the content of the output directory. "
+                "Use this to continue training if output_dir points to a checkpoint directory."
+            )
+        },
+    )
+    do_train: bool = field(default=False, metadata={"help": "Whether to run training."})
+    do_eval: bool = field(default=False, metadata={"help": "Whether to run eval on the dev set."})
+    do_predict: bool = field(default=False, metadata={"help": "Whether to run predictions on the test set."})
+    per_device_train_batch_size: int = field(
+        default=8, metadata={"help": "Batch size per GPU/TPU core/CPU for training."}
+    )
+    per_device_eval_batch_size: int = field(
+        default=8, metadata={"help": "Batch size per GPU/TPU core/CPU for evaluation."}
+    )
+    learning_rate: float = field(default=5e-5, metadata={"help": "The initial learning rate for AdamW."})
+    weight_decay: float = field(default=0.0, metadata={"help": "Weight decay for AdamW if we apply some."})
+    adam_beta1: float = field(default=0.9, metadata={"help": "Beta1 for AdamW optimizer"})
+    adam_beta2: float = field(default=0.999, metadata={"help": "Beta2 for AdamW optimizer"})
+    adam_epsilon: float = field(default=1e-8, metadata={"help": "Epsilon for AdamW optimizer."})
+    adafactor: bool = field(default=False, metadata={"help": "Whether or not to replace AdamW by Adafactor."})
+    num_train_epochs: float = field(default=3.0, metadata={"help": "Total number of training epochs to perform."})
+    warmup_steps: int = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
+    logging_steps: int = field(default=500, metadata={"help": "Log every X updates steps."})
+    save_steps: int = field(default=500, metadata={"help": "Save checkpoint every X updates steps."})
+    eval_steps: int = field(default=None, metadata={"help": "Run an evaluation every X steps."})
+    seed: int = field(default=42, metadata={"help": "Random seed that will be set at the beginning of training."})
+    push_to_hub: bool = field(
+        default=False, metadata={"help": "Whether or not to upload the trained model to the model hub after training."}
+    )
+    hub_model_id: str = field(
+        default=None, metadata={"help": "The name of the repository to keep in sync with the local `output_dir`."}
+    )
+    hub_token: str = field(default=None, metadata={"help": "The token to use to push to the Model Hub."})
+
+    def __post_init__(self):
+        if self.output_dir is not None:
+            self.output_dir = os.path.expanduser(self.output_dir)
+
+    def to_dict(self):
+        """
+        Serializes this instance while replace `Enum` by their values (for JSON serialization support). It obfuscates
+        the token values by removing their value.
+        """
+        d = asdict(self)
+        for k, v in d.items():
+            if isinstance(v, Enum):
+                d[k] = v.value
+            if isinstance(v, list) and len(v) > 0 and isinstance(v[0], Enum):
+                d[k] = [x.value for x in v]
+            if k.endswith("_token"):
+                d[k] = f"<{k.upper()}>"
+        return d
+
+
 @dataclass
 class ModelArguments:
     """
@@ -94,14 +157,19 @@ class ModelArguments:
     use_auth_token: bool = field(
         default=False,
         metadata={
-            "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
-            "with private models)."
+            "help": (
+                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "with private models)."
+            )
         },
     )
     dtype: Optional[str] = field(
         default="float32",
         metadata={
-            "help": "Floating-point format in which the model weights should be initialized and trained. Choose one of `[float32, float16, bfloat16]`."
+            "help": (
+                "Floating-point format in which the model weights should be initialized and trained. Choose one of"
+                " `[float32, float16, bfloat16]`."
+            )
         },
     )
 
@@ -137,37 +205,46 @@ class DataTrainingArguments:
     max_seq_length: int = field(
         default=384,
         metadata={
-            "help": "The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded."
+            "help": (
+                "The maximum total input sequence length after tokenization. Sequences longer "
+                "than this will be truncated, sequences shorter will be padded."
+            )
         },
     )
     pad_to_max_length: bool = field(
         default=False,
         metadata={
-            "help": "Whether to pad all samples to `max_seq_length`. "
-            "If False, will pad the samples dynamically when batching to the maximum length in the batch (which can "
-            "be faster on GPU but will be slower on TPU)."
+            "help": (
+                "Whether to pad all samples to `max_seq_length`. If False, will pad the samples dynamically when"
+                " batching to the maximum length in the batch (which can be faster on GPU but will be slower on TPU)."
+            )
         },
     )
     max_train_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of training examples to this "
+                "value if set."
+            )
         },
     )
     max_eval_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
+                "value if set."
+            )
         },
     )
     max_predict_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of prediction examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of prediction examples to this "
+                "value if set."
+            )
         },
     )
     version_2_with_negative: bool = field(
@@ -176,9 +253,11 @@ class DataTrainingArguments:
     null_score_diff_threshold: float = field(
         default=0.0,
         metadata={
-            "help": "The threshold used to select the null answer: if the best answer has a score that is less than "
-            "the score of the null answer minus this threshold, the null answer is selected for this example. "
-            "Only useful when `version_2_with_negative=True`."
+            "help": (
+                "The threshold used to select the null answer: if the best answer has a score that is less than "
+                "the score of the null answer minus this threshold, the null answer is selected for this example. "
+                "Only useful when `version_2_with_negative=True`."
+            )
         },
     )
     doc_stride: int = field(
@@ -192,8 +271,10 @@ class DataTrainingArguments:
     max_answer_length: int = field(
         default=30,
         metadata={
-            "help": "The maximum length of an answer that can be generated. This is needed because the start "
-            "and end predictions are not conditioned on one another."
+            "help": (
+                "The maximum length of an answer that can be generated. This is needed because the start "
+                "and end predictions are not conditioned on one another."
+            )
         },
     )
 
@@ -343,6 +424,10 @@ def main():
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
+    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
+    # information sent is the one passed as arguments along with your Python/PyTorch versions.
+    send_example_telemetry("run_qa", model_args, data_args, framework="flax")
     # endregion
 
     # region Logging
@@ -385,7 +470,10 @@ def main():
     if data_args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
         raw_datasets = load_dataset(
-            data_args.dataset_name, data_args.dataset_config_name, cache_dir=model_args.cache_dir
+            data_args.dataset_name,
+            data_args.dataset_config_name,
+            cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
         )
     else:
         # Loading the dataset from local csv or json file.
@@ -400,7 +488,13 @@ def main():
         if data_args.test_file is not None:
             data_files["test"] = data_args.test_file
             extension = data_args.test_file.split(".")[-1]
-        raw_datasets = load_dataset(extension, data_files=data_files, field="data", cache_dir=model_args.cache_dir)
+        raw_datasets = load_dataset(
+            extension,
+            data_files=data_files,
+            field="data",
+            cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
     # endregion
@@ -426,9 +520,9 @@ def main():
     # region Tokenizer check: this script requires a fast tokenizer.
     if not isinstance(tokenizer, PreTrainedTokenizerFast):
         raise ValueError(
-            "This example script only works for models that have a fast tokenizer. Checkout the big table of models "
-            "at https://huggingface.co/transformers/index.html#supported-frameworks to find the model types that meet this "
-            "requirement"
+            "This example script only works for models that have a fast tokenizer. Checkout the big table of models at"
+            " https://huggingface.co/transformers/index.html#supported-frameworks to find the model types that meet"
+            " this requirement"
         )
     # endregion
 
@@ -539,7 +633,8 @@ def main():
         train_dataset = raw_datasets["train"]
         if data_args.max_train_samples is not None:
             # We will select sample from whole data if agument is specified
-            train_dataset = train_dataset.select(range(data_args.max_train_samples))
+            max_train_samples = min(len(train_dataset), data_args.max_train_samples)
+            train_dataset = train_dataset.select(range(max_train_samples))
         # Create train feature from dataset
         train_dataset = train_dataset.map(
             prepare_train_features,
@@ -550,7 +645,8 @@ def main():
         )
         if data_args.max_train_samples is not None:
             # Number of samples might increase during Feature Creation, We select only specified max samples
-            train_dataset = train_dataset.select(range(data_args.max_train_samples))
+            max_train_samples = min(len(train_dataset), data_args.max_train_samples)
+            train_dataset = train_dataset.select(range(max_train_samples))
         processed_raw_datasets["train"] = train_dataset
 
     # Validation preprocessing
@@ -606,7 +702,8 @@ def main():
         eval_examples = raw_datasets["validation"]
         if data_args.max_eval_samples is not None:
             # We will select sample from whole data
-            eval_examples = eval_examples.select(range(data_args.max_eval_samples))
+            max_eval_samples = min(len(eval_examples), data_args.max_eval_samples)
+            eval_examples = eval_examples.select(range(max_eval_samples))
         # Validation Feature Creation
         eval_dataset = eval_examples.map(
             prepare_validation_features,
@@ -617,7 +714,8 @@ def main():
         )
         if data_args.max_eval_samples is not None:
             # During Feature creation dataset samples might increase, we will select required samples again
-            eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
+            max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
+            eval_dataset = eval_dataset.select(range(max_eval_samples))
         processed_raw_datasets["validation"] = eval_dataset
 
     if training_args.do_predict:
@@ -637,7 +735,8 @@ def main():
         )
         if data_args.max_predict_samples is not None:
             # During Feature creation dataset samples might increase, we will select required samples again
-            predict_dataset = predict_dataset.select(range(data_args.max_predict_samples))
+            max_predict_samples = min(len(predict_dataset), data_args.max_predict_samples)
+            predict_dataset = predict_dataset.select(range(max_predict_samples))
         processed_raw_datasets["test"] = predict_dataset
     # endregion
 
@@ -715,8 +814,23 @@ def main():
         logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
 
     # Define a summary writer
-    summary_writer = tensorboard.SummaryWriter(training_args.output_dir)
-    summary_writer.hparams({**training_args.to_dict(), **vars(model_args), **vars(data_args)})
+    has_tensorboard = is_tensorboard_available()
+    if has_tensorboard and jax.process_index() == 0:
+        try:
+            from flax.metrics.tensorboard import SummaryWriter
+
+            summary_writer = SummaryWriter(training_args.output_dir)
+            summary_writer.hparams({**training_args.to_dict(), **vars(model_args), **vars(data_args)})
+        except ImportError as ie:
+            has_tensorboard = False
+            logger.warning(
+                f"Unable to display metrics through TensorBoard because some package are not installed: {ie}"
+            )
+    else:
+        logger.warning(
+            "Unable to display metrics through TensorBoard because the package is not installed: "
+            "Please run pip install tensorboard to enable."
+        )
 
     def write_train_metric(summary_writer, train_metrics, train_time, step):
         summary_writer.scalar("train_time", train_time, step)
@@ -832,11 +946,12 @@ def main():
                 # Save metrics
                 train_metric = unreplicate(train_metric)
                 train_time += time.time() - train_start
-                if jax.process_index() == 0:
+                if has_tensorboard and jax.process_index() == 0:
                     write_train_metric(summary_writer, train_metrics, train_time, cur_step)
 
                 epochs.write(
-                    f"Step... ({cur_step}/{total_steps} | Training Loss: {train_metric['loss']}, Learning Rate: {train_metric['learning_rate']})"
+                    f"Step... ({cur_step}/{total_steps} | Training Loss: {train_metric['loss']}, Learning Rate:"
+                    f" {train_metric['learning_rate']})"
                 )
 
                 train_metrics = []
@@ -897,7 +1012,7 @@ def main():
 
                 logger.info(f"Step... ({cur_step}/{total_steps} | Evaluation metrics: {eval_metrics})")
 
-                if jax.process_index() == 0:
+                if has_tensorboard and jax.process_index() == 0:
                     write_eval_metric(summary_writer, eval_metrics, cur_step)
 
             if (cur_step % training_args.save_steps == 0 and cur_step > 0) or (cur_step == total_steps):
@@ -910,6 +1025,58 @@ def main():
                         repo.push_to_hub(commit_message=f"Saving weights and logs of step {cur_step}", blocking=False)
         epochs.desc = f"Epoch ... {epoch + 1}/{num_epochs}"
     # endregion
+
+    # Eval after training
+    if training_args.do_eval:
+        eval_metrics = {}
+        all_start_logits = []
+        all_end_logits = []
+
+        eva_loader = eval_data_collator(eval_dataset, eval_batch_size)
+        for batch in tqdm(eva_loader, total=len(eval_dataset) // eval_batch_size, desc="Evaluating ...", position=2):
+            _ = batch.pop("example_id")
+            _ = batch.pop("offset_mapping")
+            predictions = p_eval_step(state, batch)
+            start_logits = np.array([pred for pred in chain(*predictions[0])])
+            end_logits = np.array([pred for pred in chain(*predictions[1])])
+            all_start_logits.append(start_logits)
+            all_end_logits.append(end_logits)
+
+        # evaluate also on leftover examples (not divisible by batch_size)
+        num_leftover_samples = len(eval_dataset) % eval_batch_size
+
+        # make sure leftover batch is evaluated on one device
+        if num_leftover_samples > 0 and jax.process_index() == 0:
+            # take leftover samples
+            batch = eval_dataset[-num_leftover_samples:]
+            batch = {k: np.array(v) for k, v in batch.items()}
+            _ = batch.pop("example_id")
+            _ = batch.pop("offset_mapping")
+
+            predictions = eval_step(unreplicate(state), batch)
+            start_logits = np.array([pred for pred in predictions[0]])
+            end_logits = np.array([pred for pred in predictions[1]])
+            all_start_logits.append(start_logits)
+            all_end_logits.append(end_logits)
+
+        max_len = max([x.shape[1] for x in all_start_logits])  # Get the max_length of the tensor
+
+        # concatenate the numpy array
+        start_logits_concat = create_and_fill_np_array(all_start_logits, eval_dataset, max_len)
+        end_logits_concat = create_and_fill_np_array(all_end_logits, eval_dataset, max_len)
+
+        # delete the list of numpy arrays
+        del all_start_logits
+        del all_end_logits
+        outputs_numpy = (start_logits_concat, end_logits_concat)
+        prediction = post_processing_function(eval_examples, eval_dataset, outputs_numpy)
+        eval_metrics = compute_metrics(prediction)
+
+        if jax.process_index() == 0:
+            eval_metrics = {f"eval_{metric_name}": value for metric_name, value in eval_metrics.items()}
+            path = os.path.join(training_args.output_dir, "eval_results.json")
+            with open(path, "w") as f:
+                json.dump(eval_metrics, f, indent=4, sort_keys=True)
 
 
 if __name__ == "__main__":

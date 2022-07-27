@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" XLM-RoBERTa configuration """
+""" XLM-RoBERTa configuration"""
 from collections import OrderedDict
 from typing import Mapping
 
@@ -27,17 +27,26 @@ logger = logging.get_logger(__name__)
 XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "xlm-roberta-base": "https://huggingface.co/xlm-roberta-base/resolve/main/config.json",
     "xlm-roberta-large": "https://huggingface.co/xlm-roberta-large/resolve/main/config.json",
-    "xlm-roberta-large-finetuned-conll02-dutch": "https://huggingface.co/xlm-roberta-large-finetuned-conll02-dutch/resolve/main/config.json",
-    "xlm-roberta-large-finetuned-conll02-spanish": "https://huggingface.co/xlm-roberta-large-finetuned-conll02-spanish/resolve/main/config.json",
-    "xlm-roberta-large-finetuned-conll03-english": "https://huggingface.co/xlm-roberta-large-finetuned-conll03-english/resolve/main/config.json",
-    "xlm-roberta-large-finetuned-conll03-german": "https://huggingface.co/xlm-roberta-large-finetuned-conll03-german/resolve/main/config.json",
+    "xlm-roberta-large-finetuned-conll02-dutch": (
+        "https://huggingface.co/xlm-roberta-large-finetuned-conll02-dutch/resolve/main/config.json"
+    ),
+    "xlm-roberta-large-finetuned-conll02-spanish": (
+        "https://huggingface.co/xlm-roberta-large-finetuned-conll02-spanish/resolve/main/config.json"
+    ),
+    "xlm-roberta-large-finetuned-conll03-english": (
+        "https://huggingface.co/xlm-roberta-large-finetuned-conll03-english/resolve/main/config.json"
+    ),
+    "xlm-roberta-large-finetuned-conll03-german": (
+        "https://huggingface.co/xlm-roberta-large-finetuned-conll03-german/resolve/main/config.json"
+    ),
 }
 
 
 class XLMRobertaConfig(RobertaConfig):
     """
-    This class overrides :class:`~transformers.RobertaConfig`. Please check the superclass for the appropriate
-    documentation alongside usage examples.
+    This class overrides [`RobertaConfig`]. Please check the superclass for the appropriate documentation alongside
+    usage examples. Instantiating a configuration with the defaults will yield a similar configuration to that of the
+    XLMRoBERTa [xlm-roberta-base](https://huggingface.co/xlm-roberta-base) architecture.
     """
 
     model_type = "xlm-roberta"
@@ -47,13 +56,13 @@ class XLMRobertaConfig(RobertaConfig):
 class XLMRobertaOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        if self.task == "multiple-choice":
+            dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
+        else:
+            dynamic_axis = {0: "batch", 1: "sequence"}
         return OrderedDict(
             [
-                ("input_ids", {0: "batch", 1: "sequence"}),
-                ("attention_mask", {0: "batch", 1: "sequence"}),
+                ("input_ids", dynamic_axis),
+                ("attention_mask", dynamic_axis),
             ]
         )
-
-    @property
-    def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict([("last_hidden_state", {0: "batch", 1: "sequence"}), ("pooler_output", {0: "batch"})])

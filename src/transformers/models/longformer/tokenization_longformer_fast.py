@@ -26,24 +26,50 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "t
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "allenai/longformer-base-4096": "https://huggingface.co/allenai/longformer-base-4096/resolve/main/vocab.json",
-        "allenai/longformer-large-4096": "https://huggingface.co/allenai/longformer-large-4096/resolve/main/vocab.json",
-        "allenai/longformer-large-4096-finetuned-triviaqa": "https://huggingface.co/allenai/longformer-large-4096-finetuned-triviaqa/resolve/main/vocab.json",
-        "allenai/longformer-base-4096-extra.pos.embd.only": "https://huggingface.co/allenai/longformer-base-4096-extra.pos.embd.only/resolve/main/vocab.json",
-        "allenai/longformer-large-4096-extra.pos.embd.only": "https://huggingface.co/allenai/longformer-large-4096-extra.pos.embd.only/resolve/main/vocab.json",
+        "allenai/longformer-large-4096": (
+            "https://huggingface.co/allenai/longformer-large-4096/resolve/main/vocab.json"
+        ),
+        "allenai/longformer-large-4096-finetuned-triviaqa": (
+            "https://huggingface.co/allenai/longformer-large-4096-finetuned-triviaqa/resolve/main/vocab.json"
+        ),
+        "allenai/longformer-base-4096-extra.pos.embd.only": (
+            "https://huggingface.co/allenai/longformer-base-4096-extra.pos.embd.only/resolve/main/vocab.json"
+        ),
+        "allenai/longformer-large-4096-extra.pos.embd.only": (
+            "https://huggingface.co/allenai/longformer-large-4096-extra.pos.embd.only/resolve/main/vocab.json"
+        ),
     },
     "merges_file": {
         "allenai/longformer-base-4096": "https://huggingface.co/allenai/longformer-base-4096/resolve/main/merges.txt",
-        "allenai/longformer-large-4096": "https://huggingface.co/allenai/longformer-large-4096/resolve/main/merges.txt",
-        "allenai/longformer-large-4096-finetuned-triviaqa": "https://huggingface.co/allenai/longformer-large-4096-finetuned-triviaqa/resolve/main/merges.txt",
-        "allenai/longformer-base-4096-extra.pos.embd.only": "https://huggingface.co/allenai/longformer-base-4096-extra.pos.embd.only/resolve/main/merges.txt",
-        "allenai/longformer-large-4096-extra.pos.embd.only": "https://huggingface.co/allenai/longformer-large-4096-extra.pos.embd.only/resolve/main/merges.txt",
+        "allenai/longformer-large-4096": (
+            "https://huggingface.co/allenai/longformer-large-4096/resolve/main/merges.txt"
+        ),
+        "allenai/longformer-large-4096-finetuned-triviaqa": (
+            "https://huggingface.co/allenai/longformer-large-4096-finetuned-triviaqa/resolve/main/merges.txt"
+        ),
+        "allenai/longformer-base-4096-extra.pos.embd.only": (
+            "https://huggingface.co/allenai/longformer-base-4096-extra.pos.embd.only/resolve/main/merges.txt"
+        ),
+        "allenai/longformer-large-4096-extra.pos.embd.only": (
+            "https://huggingface.co/allenai/longformer-large-4096-extra.pos.embd.only/resolve/main/merges.txt"
+        ),
     },
     "tokenizer_file": {
-        "allenai/longformer-base-4096": "https://huggingface.co/allenai/longformer-base-4096/resolve/main/tokenizer.json",
-        "allenai/longformer-large-4096": "https://huggingface.co/allenai/longformer-large-4096/resolve/main/tokenizer.json",
-        "allenai/longformer-large-4096-finetuned-triviaqa": "https://huggingface.co/allenai/longformer-large-4096-finetuned-triviaqa/resolve/main/tokenizer.json",
-        "allenai/longformer-base-4096-extra.pos.embd.only": "https://huggingface.co/allenai/longformer-base-4096-extra.pos.embd.only/resolve/main/tokenizer.json",
-        "allenai/longformer-large-4096-extra.pos.embd.only": "https://huggingface.co/allenai/longformer-large-4096-extra.pos.embd.only/resolve/main/tokenizer.json",
+        "allenai/longformer-base-4096": (
+            "https://huggingface.co/allenai/longformer-base-4096/resolve/main/tokenizer.json"
+        ),
+        "allenai/longformer-large-4096": (
+            "https://huggingface.co/allenai/longformer-large-4096/resolve/main/tokenizer.json"
+        ),
+        "allenai/longformer-large-4096-finetuned-triviaqa": (
+            "https://huggingface.co/allenai/longformer-large-4096-finetuned-triviaqa/resolve/main/tokenizer.json"
+        ),
+        "allenai/longformer-base-4096-extra.pos.embd.only": (
+            "https://huggingface.co/allenai/longformer-base-4096-extra.pos.embd.only/resolve/main/tokenizer.json"
+        ),
+        "allenai/longformer-large-4096-extra.pos.embd.only": (
+            "https://huggingface.co/allenai/longformer-large-4096-extra.pos.embd.only/resolve/main/tokenizer.json"
+        ),
     },
 }
 
@@ -58,10 +84,10 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 class LongformerTokenizerFast(RobertaTokenizerFast):
     r"""
-    Construct a "fast" Longformer tokenizer (backed by HuggingFace's `tokenizers` library).
+    Construct a "fast" Longformer tokenizer (backed by HuggingFace's *tokenizers* library).
 
-    :class:`~transformers.LongformerTokenizerFast` is identical to :class:`~transformers.RobertaTokenizerFast`. Refer
-    to the superclass for usage examples and documentation concerning parameters.
+    [`LongformerTokenizerFast`] is identical to [`RobertaTokenizerFast`]. Refer to the superclass for usage examples
+    and documentation concerning parameters.
     """
     # merges and vocab same as Roberta
     vocab_files_names = VOCAB_FILES_NAMES

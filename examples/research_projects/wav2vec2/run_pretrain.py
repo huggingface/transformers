@@ -104,7 +104,9 @@ class DataTrainingArguments:
     validation_split_name: Optional[str] = field(
         default="validation",
         metadata={
-            "help": "The name of the validation data set split to use (via the datasets library). Defaults to 'validation'"
+            "help": (
+                "The name of the validation data set split to use (via the datasets library). Defaults to 'validation'"
+            )
         },
     )
     speech_file_column: Optional[str] = field(
@@ -200,7 +202,6 @@ class DataCollatorForWav2Vec2Pretraining:
             (batch_size, mask_indices_seq_length),
             self.model.config.mask_time_prob,
             self.model.config.mask_time_length,
-            device=batch["input_values"].device,
             attention_mask=attention_mask,
             min_masks=2,
         )
@@ -273,11 +274,11 @@ class Wav2Vec2PreTrainer(Trainer):
         # make sure gumbel softmax temperature is decayed
         if self.args.n_gpu > 1 or self.deepspeed:
             model.module.set_gumbel_temperature(
-                max(self.max_gumbel_temp * self.gumbel_temp_decay ** self.num_update_step, self.min_gumbel_temp)
+                max(self.max_gumbel_temp * self.gumbel_temp_decay**self.num_update_step, self.min_gumbel_temp)
             )
         else:
             model.set_gumbel_temperature(
-                max(self.max_gumbel_temp * self.gumbel_temp_decay ** self.num_update_step, self.min_gumbel_temp)
+                max(self.max_gumbel_temp * self.gumbel_temp_decay**self.num_update_step, self.min_gumbel_temp)
             )
 
         return loss.detach()
@@ -369,7 +370,8 @@ def main():
 
     if not config.do_stable_layer_norm or config.feat_extract_norm != "layer":
         raise ValueError(
-            "PreTraining is only supported for ``config.do_stable_layer_norm=True`` and ``config.feat_extract_norm='layer'"
+            "PreTraining is only supported for ``config.do_stable_layer_norm=True`` and"
+            " ``config.feat_extract_norm='layer'"
         )
 
     model = Wav2Vec2ForPreTraining(config)

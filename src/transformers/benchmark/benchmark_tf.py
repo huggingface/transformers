@@ -24,9 +24,8 @@ from functools import wraps
 from typing import Callable, Optional
 
 from ..configuration_utils import PretrainedConfig
-from ..file_utils import is_py3nvml_available, is_tf_available
 from ..models.auto.modeling_tf_auto import TF_MODEL_MAPPING, TF_MODEL_WITH_LM_HEAD_MAPPING
-from ..utils import logging
+from ..utils import is_py3nvml_available, is_tf_available, logging
 from .benchmark_utils import (
     Benchmark,
     Memory,
@@ -141,7 +140,8 @@ class TensorFlowBenchmark(Benchmark):
                 model = model_cls(config)
             except ImportError:
                 raise ImportError(
-                    f"{model_class} does not exist. If you just want to test the pretrained model, you might want to set `--only_pretrain_model` or `args.only_pretrain_model=True`."
+                    f"{model_class} does not exist. If you just want to test the pretrained model, you might want to"
+                    " set `--only_pretrain_model` or `args.only_pretrain_model=True`."
                 )
         else:
             model = TF_MODEL_MAPPING[config.__class__](config)
@@ -185,7 +185,8 @@ class TensorFlowBenchmark(Benchmark):
                 model = model_cls(config)
             except ImportError:
                 raise ImportError(
-                    f"{model_class} does not exist. If you just want to test the pretrained model, you might want to set `--only_pretrain_model` or `args.only_pretrain_model=True`."
+                    f"{model_class} does not exist. If you just want to test the pretrained model, you might want to"
+                    " set `--only_pretrain_model` or `args.only_pretrain_model=True`."
                 )
         else:
             model = TF_MODEL_WITH_LM_HEAD_MAPPING[config.__class__](config)
@@ -240,15 +241,17 @@ class TensorFlowBenchmark(Benchmark):
         with self.args.strategy.scope():
             try:
                 if self.args.trace_memory_line_by_line:
-                    assert (
-                        self.args.eager_mode
-                    ), "`args.eager_mode` is set to `False`. Make sure to run model in eager mode to measure memory consumption line by line."
+                    assert self.args.eager_mode, (
+                        "`args.eager_mode` is set to `False`. Make sure to run model in eager mode to measure memory"
+                        " consumption line by line."
+                    )
                     trace = start_memory_tracing("transformers")
 
                 if self.args.is_tpu:
                     # tpu
                     raise NotImplementedError(
-                        "Memory Benchmarking is currently not implemented for TPU. Please disable memory benchmarking with `args.memory=False`"
+                        "Memory Benchmarking is currently not implemented for TPU. Please disable memory benchmarking"
+                        " with `args.memory=False`"
                     )
                 elif self.args.is_gpu:
                     # gpu
@@ -260,7 +263,8 @@ class TensorFlowBenchmark(Benchmark):
                         memory = "N/A"
                     else:
                         logger.info(
-                            "Measuring total GPU usage on GPU device. Make sure to not have additional processes running on the same GPU."
+                            "Measuring total GPU usage on GPU device. Make sure to not have additional processes"
+                            " running on the same GPU."
                         )
                         # init nvml
                         nvml.nvmlInit()
@@ -275,7 +279,8 @@ class TensorFlowBenchmark(Benchmark):
                     # cpu
                     if self.args.trace_memory_line_by_line:
                         logger.info(
-                            "When enabling line by line tracing, the max peak memory for CPU is inaccurate in TensorFlow."
+                            "When enabling line by line tracing, the max peak memory for CPU is inaccurate in"
+                            " TensorFlow."
                         )
                         memory = None
                     else:

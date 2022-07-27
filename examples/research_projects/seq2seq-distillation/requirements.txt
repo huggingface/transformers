@@ -4,7 +4,7 @@ psutil
 sacrebleu
 rouge-score
 tensorflow_datasets
-pytorch-lightning==1.0.4
+pytorch-lightning
 matplotlib
 git-python==1.0.3
 faiss-cpu

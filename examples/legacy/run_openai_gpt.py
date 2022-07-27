@@ -126,15 +126,15 @@ def main():
         "--max_steps",
         default=-1,
         type=int,
-        help="If > 0: set total number of training \
-                        steps to perform. Override num_train_epochs.",
+        help=(
+            "If > 0: set total number of training                         steps to perform. Override num_train_epochs."
+        ),
     )
     parser.add_argument(
         "--gradient_accumulation_steps",
         type=int,
         default=1,
-        help="Number of updates steps to accumulate before\
-                        performing a backward/update pass.",
+        help="Number of updates steps to accumulate before                        performing a backward/update pass.",
     )
     parser.add_argument("--learning_rate", type=float, default=6.25e-5)
     parser.add_argument("--warmup_steps", default=0, type=int, help="Linear warmup over warmup_steps.")

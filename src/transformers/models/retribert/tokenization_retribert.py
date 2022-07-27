@@ -24,7 +24,9 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "yjernite/retribert-base-uncased": "https://huggingface.co/yjernite/retribert-base-uncased/resolve/main/vocab.txt",
+        "yjernite/retribert-base-uncased": (
+            "https://huggingface.co/yjernite/retribert-base-uncased/resolve/main/vocab.txt"
+        ),
     }
 }
 
@@ -42,11 +44,10 @@ class RetriBertTokenizer(BertTokenizer):
     r"""
     Constructs a RetriBERT tokenizer.
 
-    :class:`~transformers.RetroBertTokenizer` is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
-    tokenization: punctuation splitting and wordpiece.
+    [`RetriBertTokenizer`] is identical to [`BertTokenizer`] and runs end-to-end tokenization: punctuation splitting
+    and wordpiece.
 
-    Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
-    parameters.
+    Refer to superclass [`BertTokenizer`] for usage examples and documentation concerning parameters.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

@@ -24,7 +24,9 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "YituTech/conv-bert-base": "https://huggingface.co/YituTech/conv-bert-base/resolve/main/vocab.txt",
-        "YituTech/conv-bert-medium-small": "https://huggingface.co/YituTech/conv-bert-medium-small/resolve/main/vocab.txt",
+        "YituTech/conv-bert-medium-small": (
+            "https://huggingface.co/YituTech/conv-bert-medium-small/resolve/main/vocab.txt"
+        ),
         "YituTech/conv-bert-small": "https://huggingface.co/YituTech/conv-bert-small/resolve/main/vocab.txt",
     }
 }
@@ -45,9 +47,9 @@ PRETRAINED_INIT_CONFIGURATION = {
 
 class ConvBertTokenizer(BertTokenizer):
     r"""
-    Construct a ConvBERT tokenizer. :class:`~transformers.ConvBertTokenizer` is identical to
-    :class:`~transformers.BertTokenizer` and runs end-to-end tokenization: punctuation splitting and wordpiece. Refer
-    to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning parameters.
+    Construct a ConvBERT tokenizer. [`ConvBertTokenizer`] is identical to [`BertTokenizer`] and runs end-to-end
+    tokenization: punctuation splitting and wordpiece. Refer to superclass [`BertTokenizer`] for usage examples and
+    documentation concerning parameters.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
