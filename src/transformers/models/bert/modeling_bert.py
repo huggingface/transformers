@@ -18,6 +18,7 @@
 
 import math
 import os
+import datetime
 import warnings
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
@@ -1008,6 +1009,7 @@ class BertModel(BertPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
+        s = datetime.datetime.now()
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
@@ -1015,6 +1017,10 @@ class BertModel(BertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             past_key_values_length=past_key_values_length,
         )
+        e = datetime.datetime.now()
+        print(f"bert.embeddings: {(e - s).total_seconds()} seconds")
+
+        s = datetime.datetime.now()
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
@@ -1027,8 +1033,15 @@ class BertModel(BertPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+        e = datetime.datetime.now()
+        print(f"bert.encoder: {(e - s).total_seconds()} seconds")
+
         sequence_output = encoder_outputs[0]
+
+        s = datetime.datetime.now()
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
+        e = datetime.datetime.now()
+        print(f"bert.pooler: {(e - s).total_seconds()} seconds")
 
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
@@ -1246,7 +1259,11 @@ class BertLMHeadModel(BertPreTrainedModel):
         )
 
         sequence_output = outputs[0]
+
+        s = datetime.datetime.now()
         prediction_scores = self.cls(sequence_output)
+        e = datetime.datetime.now()
+        print(f"cls: {(e - s).total_seconds()} seconds")
 
         lm_loss = None
         if labels is not None:

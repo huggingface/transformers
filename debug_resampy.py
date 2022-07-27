@@ -165,11 +165,10 @@ if __name__ == "__main__":
     model = BertLMHeadModel.from_pretrained("hf-internal-testing/tiny-random-bert")
     decoder_input = torch.ones(batch_size, seq_len, dtype=torch.int32)
 
-    for i in tqdm(range(32)):
+    for i in tqdm(range(16)):
         output = model(input_ids=decoder_input)
         print(output.logits.shape)
-
-
+        print("=" * 40)
 
     # from transformers import AutoModelForSpeechSeq2Seq
     # model = AutoModelForSpeechSeq2Seq.from_pretrained("hf-internal-testing/tiny-random-speech-encoder-decoder")
