@@ -96,7 +96,7 @@ class BloomModelTester:
     def get_large_model_config(self):
         return BloomConfig.from_pretrained("bigscience/bloom")
 
-    def prepare_config_and_inputs(self, gradient_checkpointing=False, word_embeddings_in_fp32=True, torch_dtype="float32"):
+    def prepare_config_and_inputs(self, gradient_checkpointing=False, word_embeddings_in_fp32=True):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         input_mask = None
@@ -107,11 +107,11 @@ class BloomModelTester:
         if self.use_labels:
             sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
 
-        config = self.get_config(gradient_checkpointing=gradient_checkpointing, word_embeddings_in_fp32=word_embeddings_in_fp32, torch_dtype=torch_dtype)
+        config = self.get_config(gradient_checkpointing=gradient_checkpointing, word_embeddings_in_fp32=word_embeddings_in_fp32)
 
         return (config, input_ids, input_mask, sequence_labels)
 
-    def get_config(self, gradient_checkpointing=False, word_embeddings_in_fp32=True, torch_dtype="float32", slow_but_exact=True):
+    def get_config(self, gradient_checkpointing=False, word_embeddings_in_fp32=True, slow_but_exact=True):
         return BloomConfig(
             vocab_size=self.vocab_size,
             seq_length=self.seq_length,
@@ -131,7 +131,6 @@ class BloomModelTester:
             gradient_checkpointing=gradient_checkpointing,
             slow_but_exact=slow_but_exact,
             word_embeddings_in_fp32=word_embeddings_in_fp32,
-            torch_dtype=torch_dtype,
         )
 
     def create_and_check_bloom_model(self, config, input_ids, input_mask, *args):
@@ -370,14 +369,12 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         self.model_tester.create_and_check_bloom_weight_initialization(*config_and_inputs)
 
     def test_word_embeddings_in_fp32_is_close_to_fp16(self):
-        config, input_ids, input_mask, _ = self.model_tester.prepare_config_and_inputs(word_embeddings_in_fp32=True, torch_dtype="float16")
-        model = BloomForCausalLM(config).to(torch_device)
+        model_name = "bigscience/bigscience-small-testing"
 
-        config_in_fp32, *_ = self.model_tester.prepare_config_and_inputs(word_embeddings_in_fp32=False, torch_dtype="float32")
-        model_in_fp32 = BloomForCausalLM(config_in_fp32).to(torch_device)
-
-        config_in_fp16, *_ = self.model_tester.prepare_config_and_inputs(word_embeddings_in_fp32=False, torch_dtype="float16")
-        model_in_fp16 = BloomForCausalLM(config_in_fp16).to(torch_device)
+        _, input_ids, input_mask, _ = self.model_tester.prepare_config_and_inputs()
+        model = BloomForCausalLM.from_pretrained(model_name, word_embeddings_in_fp32=True, torch_dtype="float16").to(torch_device)
+        model_in_fp32 = BloomForCausalLM.from_pretrained(model_name, word_embeddings_in_fp32=False, torch_dtype="float32").to(torch_device)
+        model_in_fp16 = BloomForCausalLM.from_pretrained(model_name, word_embeddings_in_fp32=False, torch_dtype="float16").to(torch_device)
 
         model.eval()
         model_in_fp32.eval()
