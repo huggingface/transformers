@@ -27,10 +27,19 @@ from typing import List, Optional, Tuple
 
 import numpy as np
 
-import sacremoses as sm
-
 from ...tokenization_utils import PreTrainedTokenizer
-from ...utils import cached_path, is_torch_available, logging, torch_only_method
+from ...utils import (
+    cached_path,
+    is_sacremoses_available,
+    is_torch_available,
+    logging,
+    requires_backends,
+    torch_only_method,
+)
+
+
+if is_sacremoses_available():
+    import sacremoses as sm
 
 
 if is_torch_available():
@@ -187,6 +196,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             language=language,
             **kwargs,
         )
+        requires_backends(self, "sacremoses")
 
         if never_split is None:
             never_split = self.all_special_tokens
