@@ -82,7 +82,7 @@ def _resample_loop(x, t_out, interp_win, interp_delta, num_table, scale, y):
             y[t] += weight * x[n + k + 1]
 
 
-_resample_loop_p = jit(nopython=True, nogil=True, parallel=False)(_resample_loop)
+_resample_loop_p = jit(nopython=True, nogil=True, parallel=True)(_resample_loop)
 
 
 @guvectorize(
@@ -180,6 +180,8 @@ if __name__ == "__main__":
     # for i in tqdm(range(16)):
     #     output = model(inputs=encoder_input, decoder_input_ids=decoder_input)
     #     print(output.logits.shape)
+
+    from transformers import BertLMHeadModel
 
     batch_size = 64
     seq_len = 128
