@@ -190,29 +190,43 @@ if __name__ == "__main__":
 
     inputs = torch.ones(batch_size, seq_len, dtype=torch.int32)
 
-    for i in range(16):
-        s = datetime.datetime.now()
+    for i in range(10):
         output = layer(inputs)
+
+    for i in range(10):
+        s = datetime.datetime.now()
+        for j in range(100):
+            output = layer(inputs)
         e = datetime.datetime.now()
-        print(f"nn.Embedding: {(e - s).total_seconds()} seconds")
+        print(f"nn.Embedding ({i}): {(e - s).total_seconds() / 100} seconds")
     print("=" * 40)
+
 
     x = torch.ones(64, 128, 32, dtype=torch.float32)
     y = torch.ones(64, 128, 32, dtype=torch.float32)
 
-    for i in range(16):
-        s = datetime.datetime.now()
+    for i in range(10):
         z = x + y
+
+    for i in range(10):
+        s = datetime.datetime.now()
+        for j in range(100):
+            z = x + y
         e = datetime.datetime.now()
-        print(f"x + y: {(e - s).total_seconds()} seconds")
+        print(f"z = x + y ({i}): {(e - s).total_seconds() / 100} seconds")
     print("=" * 40)
+
 
     q = torch.ones(64, 4, 128, 8, dtype=torch.float32)
     k = torch.ones(64, 4, 8, 128, dtype=torch.float32)
 
-    for i in range(16):
-        s = datetime.datetime.now()
+    for i in range(10):
         attention_scores = torch.matmul(q, k)
+
+    for i in range(10):
+        s = datetime.datetime.now()
+        for j in range(100):
+            attention_scores = torch.matmul(q, k)
         e = datetime.datetime.now()
-        print(f"torch.matmul: {(e - s).total_seconds()} seconds")
+        print(f"torch.matmul ({i}): {(e - s).total_seconds() / 100} seconds")
     print("=" * 40)
