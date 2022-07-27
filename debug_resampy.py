@@ -193,7 +193,7 @@ if __name__ == "__main__":
     #from typing import List, Optional, Tuple, Union
 
     # import torch
-    import torch.utils.checkpoint
+    # import torch.utils.checkpoint
     # from packaging import version
     # from torch import nn
     from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
