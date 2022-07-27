@@ -372,9 +372,9 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         model_name = "bigscience/bigscience-small-testing"
 
         _, input_ids, input_mask, _ = self.model_tester.prepare_config_and_inputs()
-        model = BloomForCausalLM.from_pretrained(model_name, word_embeddings_in_fp32=True, torch_dtype="float16").to(torch_device)
-        model_in_fp32 = BloomForCausalLM.from_pretrained(model_name, word_embeddings_in_fp32=False, torch_dtype="float32").to(torch_device)
-        model_in_fp16 = BloomForCausalLM.from_pretrained(model_name, word_embeddings_in_fp32=False, torch_dtype="float16").to(torch_device)
+        model = BloomForCausalLM.from_pretrained(model_name, word_embeddings_in_fp32=True, torch_dtype=torch.float16).to(torch_device)
+        model_in_fp32 = BloomForCausalLM.from_pretrained(model_name, word_embeddings_in_fp32=False, torch_dtype=torch.float32).to(torch_device)
+        model_in_fp16 = BloomForCausalLM.from_pretrained(model_name, word_embeddings_in_fp32=False, torch_dtype=torch.float16).to(torch_device)
 
         model.eval()
         model_in_fp32.eval()
