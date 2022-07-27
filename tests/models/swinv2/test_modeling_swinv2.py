@@ -164,11 +164,7 @@ class Swinv2ModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            pixel_values,
-            labels,
-        ) = config_and_inputs
+        config, pixel_values, labels = config_and_inputs
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
@@ -177,14 +173,9 @@ class Swinv2ModelTester:
 class Swinv2ModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
-        (
-            Swinv2Model,
-            Swinv2ForImageClassification,
-            Swinv2ForMaskedImageModeling,
-        )
-        if is_torch_available()
-        else ()
+        (Swinv2Model, Swinv2ForImageClassification, Swinv2ForMaskedImageModeling) if is_torch_available() else ()
     )
+
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
