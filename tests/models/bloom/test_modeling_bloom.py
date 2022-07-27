@@ -135,6 +135,7 @@ class BloomModelTester:
             force_lm_head_in_fp32=force_lm_head_in_fp32,
         )
 
+    @require_torch
     @torch.no_grad()
     def create_and_check_bloom_model(self, config, input_ids, input_mask, *args):
         model = BloomModel(config=config)
@@ -146,6 +147,7 @@ class BloomModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(len(result.past_key_values), config.n_layer)
 
+    @require_torch
     @torch.no_grad()
     def create_and_check_bloom_model_past(self, config, input_ids, input_mask, *args):
         model = BloomModel(config=config)
@@ -180,6 +182,7 @@ class BloomModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice))
 
+    @require_torch
     @torch.no_grad()
     def create_and_check_bloom_model_attention_mask_past(self, config, input_ids, input_mask, *args):
         model = BloomModel(config=config)
@@ -221,6 +224,7 @@ class BloomModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice))
 
+    @require_torch
     @torch.no_grad()
     def create_and_check_bloom_model_past_large_inputs(self, config, input_ids, input_mask, *args):
         model = BloomModel(config=config)
@@ -254,6 +258,7 @@ class BloomModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice))
 
+    @require_torch
     @torch.no_grad()
     def create_and_check_lm_head_model(self, config, input_ids, input_mask, *args):
         model = BloomForCausalLM(config)
@@ -264,6 +269,7 @@ class BloomModelTester:
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
+    @require_torch
     @torch.no_grad()
     def create_and_check_sequence_classification_model(self, config, input_ids, input_mask, *args):
         config.num_labels = self.num_labels
@@ -274,6 +280,7 @@ class BloomModelTester:
         result = model(input_ids, attention_mask=input_mask)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
+    @require_torch
     @torch.no_grad()
     def create_and_check_token_classification_model(self, config, input_ids, input_mask, *args):
         model = BloomForTokenClassification(config)
@@ -383,9 +390,9 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         model_name = "bigscience/bigscience-small-testing"
 
         _, input_ids, input_mask, _ = self.model_tester.prepare_config_and_inputs()
-        model = BloomForCausalLM.from_pretrained(
-            model_name, force_lm_head_in_fp32=True, torch_dtype=torch.float16
-        ).to(torch_device)
+        model = BloomForCausalLM.from_pretrained(model_name, force_lm_head_in_fp32=True, torch_dtype=torch.float16).to(
+            torch_device
+        )
         model_in_fp16 = BloomForCausalLM.from_pretrained(
             model_name, force_lm_head_in_fp32=False, torch_dtype=torch.float16
         ).to(torch_device)
