@@ -1787,7 +1787,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         offload_folder = kwargs.pop("offload_folder", None)
         offload_state_dict = kwargs.pop("offload_state_dict", False)
         load_in_8bit = kwargs.pop("load_in_8bit", False)
-        int8_threshold = kwargs.pop("int8_threshold", None)
+        int8_threshold = kwargs.pop("int8_threshold", 6.0)
         subfolder = kwargs.pop("subfolder", "")
         if device_map is not None:
             if low_cpu_mem_usage is None:
@@ -1814,8 +1814,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "Using `load_in_8bit=True` requires Accelerate: `pip install accelerate` and the latest version of"
                     " bitsandbytes `pip install bitsandbytes`"
                 )
-            if not int8_threshold:
-                int8_threshold = 6.0
 
         from_pt = not (from_tf | from_flax)
 
