@@ -422,7 +422,6 @@ python run_bart_dlm_flax.py \
     --logging_steps="500" \
     --save_steps="2000" \
     --eval_steps="2000" \
-    --dtype bfloat16 \
     --push_to_hub
 ```
 
