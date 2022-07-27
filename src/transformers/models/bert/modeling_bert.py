@@ -233,15 +233,44 @@ class BertEmbeddings(nn.Module):
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
 
         if inputs_embeds is None:
-            inputs_embeds = self.word_embeddings(input_ids)
-        token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
+            s = datetime.datetime.now()
+            inputs_embeds = self.word_embeddings(input_ids)
+            e = datetime.datetime.now()
+            print(f"bert.embeddings.word_embeddings: {(e - s).total_seconds()} seconds")
+
+        s = datetime.datetime.now()
+        token_type_embeddings = self.token_type_embeddings(token_type_ids)
+        e = datetime.datetime.now()
+        print(f"bert.embeddings.token_type_embeddings: {(e - s).total_seconds()} seconds")
+
+        s = datetime.datetime.now()
         embeddings = inputs_embeds + token_type_embeddings
+        e = datetime.datetime.now()
+        print(f"bert.embeddings.(inputs_embeds + token_type_embeddings): {(e - s).total_seconds()} seconds")
+
         if self.position_embedding_type == "absolute":
+
+            s = datetime.datetime.now()
             position_embeddings = self.position_embeddings(position_ids)
+            e = datetime.datetime.now()
+            print(f"bert.embeddings.position_embeddings: {(e - s).total_seconds()} seconds")
+
+            s = datetime.datetime.now()
             embeddings += position_embeddings
+            e = datetime.datetime.now()
+            print(f"bert.embeddings.(embeddings += position_embeddings): {(e - s).total_seconds()} seconds")
+
+        s = datetime.datetime.now()
         embeddings = self.LayerNorm(embeddings)
+        e = datetime.datetime.now()
+        print(f"bert.embeddings.LayerNorm: {(e - s).total_seconds()} seconds")
+
+        s = datetime.datetime.now()
         embeddings = self.dropout(embeddings)
+        e = datetime.datetime.now()
+        print(f"bert.embeddings.dropout: {(e - s).total_seconds()} seconds")
+
         return embeddings
 
 
@@ -491,6 +520,8 @@ class BertLayer(nn.Module):
     ) -> Tuple[torch.Tensor]:
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
+
+        s = datetime.datetime.now()
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
@@ -498,6 +529,9 @@ class BertLayer(nn.Module):
             output_attentions=output_attentions,
             past_key_value=self_attn_past_key_value,
         )
+        e = datetime.datetime.now()
+        print(f"bert.encoder.encoder_layer.attention: {(e - s).total_seconds()} seconds")
+
         attention_output = self_attention_outputs[0]
 
         # if decoder, the last output is tuple of self-attn cache
@@ -517,6 +551,8 @@ class BertLayer(nn.Module):
 
             # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
+
+            s = datetime.datetime.now()
             cross_attention_outputs = self.crossattention(
                 attention_output,
                 attention_mask,
@@ -526,6 +562,9 @@ class BertLayer(nn.Module):
                 cross_attn_past_key_value,
                 output_attentions,
             )
+            e = datetime.datetime.now()
+            print(f"bert.encoder.encoder_layer.crossattention: {(e - s).total_seconds()} seconds")
+
             attention_output = cross_attention_outputs[0]
             outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
 
@@ -533,9 +572,13 @@ class BertLayer(nn.Module):
             cross_attn_present_key_value = cross_attention_outputs[-1]
             present_key_value = present_key_value + cross_attn_present_key_value
 
+        s = datetime.datetime.now()
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
         )
+        e = datetime.datetime.now()
+        print(f"bert.encoder.encoder_layer.apply_chunking_to_forward: {(e - s).total_seconds()} seconds")
+
         outputs = (layer_output,) + outputs
 
         # if decoder, return the attn key/values as the last output
@@ -657,8 +700,17 @@ class BertPooler(nn.Module):
         # We "pool" the model by simply taking the hidden state corresponding
         # to the first token.
         first_token_tensor = hidden_states[:, 0]
+
+        s = datetime.datetime.now()
         pooled_output = self.dense(first_token_tensor)
+        e = datetime.datetime.now()
+        print(f"bert.pooler.dense: {(e - s).total_seconds()} seconds")
+
+        s = datetime.datetime.now()
         pooled_output = self.activation(pooled_output)
+        e = datetime.datetime.now()
+        print(f"bert.pooler.activation: {(e - s).total_seconds()} seconds")
+
         return pooled_output
 
 
