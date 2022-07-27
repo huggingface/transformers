@@ -734,7 +734,7 @@ def prepare_img():
 @require_vision
 @require_torch
 class OwlViTModelIntegrationTest(unittest.TestCase):
-    @slow
+    # @slow
     def test_inference(self):
         model_name = "google/owlvit-base-patch32"
         model = OwlViTModel.from_pretrained(model_name).to(torch_device)
@@ -756,21 +756,11 @@ class OwlViTModelIntegrationTest(unittest.TestCase):
         # verify the logits
         self.assertEqual(
             outputs.logits_per_image.shape,
-            torch.Size(
-                (
-                    inputs.pixel_values.shape[0],
-                    inputs.input_ids.shape[0],
-                )
-            ),
+            torch.Size((inputs.pixel_values.shape[0], inputs.input_ids.shape[0])),
         )
         self.assertEqual(
             outputs.logits_per_text.shape,
-            torch.Size(
-                (
-                    inputs.input_ids.shape[0],
-                    inputs.pixel_values.shape[0],
-                )
-            ),
+            torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
         expected_logits = torch.tensor([[4.4420, 0.6181]], device=torch_device)
 
