@@ -186,23 +186,23 @@ class Jukebox1bModelTester(unittest.TestCase):
     def test_primed_sampling(self):
         torch.backends.cuda.matmul.allow_tf32 = False
 
-        model = JukeboxModel.from_pretrained(self.model_id, min_duration=0.5).eval()
+        model = JukeboxModel.from_pretrained(self.model_id, min_duration=0).eval()
         set_seed(0)
         waveform = torch.rand((1, 5120, 1))
         tokens = [i.cuda() for i in self.prepare_inputs()]
 
         zs = [None, None, model.vqvae.encode(waveform, start_level=2, bs_chunks=waveform.shape[0])[0].cuda()]
-        zs = model._sample(zs, tokens, sample_levels=[2], save_results=False, sample_length_in_seconds=1)
+        zs = model._sample(zs, tokens, sample_levels=[2], save_results=False, sample_length=40*model.priors[-1].raw_to_tokens)
         assert torch.allclose(zs[-1][0][:40].cpu(), torch.tensor(self.EXPECTED_PRIMED_0))
 
         upper_2 = torch.cat((zs[-1], torch.zeros(1, 1000000 - zs[-1].shape[-1]).cuda()), dim=-1).long()
         zs = [None, model.vqvae.encode(waveform, start_level=1, bs_chunks=waveform.shape[0])[0].cuda(), upper_2]
-        zs = model._sample(zs, tokens, sample_levels=[1], save_results=False, sample_length_in_seconds=1)
+        zs = model._sample(zs, tokens, sample_levels=[1], save_results=False, sample_length=40*model.priors[-2].raw_to_tokens)
         assert torch.allclose(zs[1][0][:40].cpu(), torch.tensor(self.EXPECTED_PRIMED_1))
 
         upper_1 = torch.cat((zs[1], torch.zeros(1, 1000000 - zs[1].shape[-1]).cuda()), dim=-1).long()
         zs = [model.vqvae.encode(waveform, start_level=0, bs_chunks=waveform.shape[0])[0].cuda(), upper_1, upper_2]
-        zs = model._sample(zs, tokens, sample_levels=[0], save_results=False, sample_length_in_seconds=1)
+        zs = model._sample(zs, tokens, sample_levels=[0], save_results=False, sample_length=40*model.priors[-3].raw_to_tokens)
         assert torch.allclose(zs[0][0][:40].cpu(), torch.tensor(self.EXPECTED_PRIMED_2))
 
     @slow
@@ -317,4 +317,4 @@ class Jukebox5bModelTester(unittest.TestCase):
 
 if __name__ == "__main__":
     tester = Jukebox1bModelTester()
-    tester.test_slow_sampling()
+    tester.test_primed_sampling()
