@@ -196,7 +196,9 @@ if __name__ == "__main__":
     # import torch.utils.checkpoint
     # from packaging import version
     # from torch import nn
-    from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+    # from torch.nn import BCEWithLogitsLoss
+    from torch.nn import CrossEntropyLoss
+    from torch.nn import MSELoss
 
     # from ...activations import ACT2FN
     # from ...modeling_outputs import (
