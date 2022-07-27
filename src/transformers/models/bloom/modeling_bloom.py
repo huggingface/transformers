@@ -15,6 +15,7 @@
 """PyTorch BLOOM model."""
 
 import math
+import warnings
 from typing import Tuple, Union
 
 import torch
