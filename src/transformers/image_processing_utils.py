@@ -15,8 +15,8 @@
 
 import copy
 import json
-import os
-from typing import Any, Dict, Tuple, Union
+from collections import UserDict
+from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 
@@ -31,13 +31,19 @@ from .utils import (
     PushToHubMixin,
     RepositoryNotFoundError,
     RevisionNotFoundError,
+    TensorType,
     cached_path,
     copy_func,
     hf_bucket_url,
-    is_offline_mode,
+    is_flax_available,
     is_remote_url,
+    is_torch_available,
+    is_tf_available,
+    is_offline_mode,
     logging,
+    torch_required,
 )
+from .utils.generic import _is_jax, _is_numpy, _is_torch_device
 
 
 logger = logging.get_logger(__name__)
