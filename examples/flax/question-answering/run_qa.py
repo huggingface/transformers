@@ -27,7 +27,6 @@ import sys
 import time
 from dataclasses import asdict, dataclass, field
 from enum import Enum
-from itertools import chain
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Tuple
 

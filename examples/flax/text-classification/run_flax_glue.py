@@ -22,7 +22,6 @@ import random
 import sys
 import time
 from dataclasses import dataclass, field
-from itertools import chain
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Tuple
 
