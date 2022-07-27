@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch DALLE_MEGA model."""
-from typing import List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -633,6 +633,7 @@ class DalleMegaPretrainedModel(PreTrainedModel):
         if isinstance(module, (DalleMegaDecoder, DalleMegaEncoder)):
             module.gradient_checkpointing = value
 
+
 class DalleMegaEncoder(DalleMegaPretrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
@@ -1091,7 +1092,7 @@ class DalleMegaModel(DalleMegaPretrainedModel):
 
     def get_decoder(self):
         return self.decoder
-    
+
     def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> nn.Embedding:
         """
         Resizes input token embeddings matrix of the encoder if `new_num_tokens != config.encoder_vocab_size`.
@@ -1100,9 +1101,10 @@ class DalleMegaModel(DalleMegaPretrainedModel):
 
         Arguments:
             new_num_tokens (`int`, *optional*):
-                The number of new tokens in the encoder embedding matrix. Increasing the size will add newly initialized
-                vectors at the end. Reducing the size will remove vectors from the end. If not provided or `None`, just
-                returns a pointer to the input tokens `torch.nn.Embedding` module of the model without doing anything.
+                The number of new tokens in the encoder embedding matrix. Increasing the size will add newly
+                initialized vectors at the end. Reducing the size will remove vectors from the end. If not provided or
+                `None`, just returns a pointer to the input tokens `torch.nn.Embedding` module of the model without
+                doing anything.
 
         Return:
             `torch.nn.Embedding`: Pointer to the input tokens Embeddings Module of the model.
@@ -1162,6 +1164,7 @@ class DalleMegaModel(DalleMegaPretrainedModel):
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[List[torch.FloatTensor]] = None,
+        encoder_outputs_unconditional: Optional[List[torch.FloatTensor]] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -1202,6 +1205,7 @@ class DalleMegaModel(DalleMegaPretrainedModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
+            encoder_hidden_states = encoder_outputs[0]
         # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
         elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
@@ -1209,12 +1213,19 @@ class DalleMegaModel(DalleMegaPretrainedModel):
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
+            encoder_hidden_states = encoder_outputs[0]
 
-        # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
+            # TODO: assert batch_size of encoder_outputs_unconditional is similar to encoder_hidden_states
+            if not self.training and self.encoder_outputs_unconditional is not None:
+                # concatenate unconditional encoder outputs to encoder outputs for classifier free guidance
+                encoder_hidden_states = torch.cat([encoder_hidden_states, encoder_outputs_unconditional[0]])
+                # extend the decoder_input_ids
+                decoder_input_ids = decoder_input_ids.repeat(2, 1)
+
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
-            encoder_hidden_states=encoder_outputs[0],
+            encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=attention_mask,
             head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
@@ -1269,9 +1280,10 @@ class DalleMegaForConditionalGeneration(DalleMegaPretrainedModel):
 
         Arguments:
             new_num_tokens (`int`, *optional*):
-                The number of new tokens in the encoder embedding matrix. Increasing the size will add newly initialized
-                vectors at the end. Reducing the size will remove vectors from the end. If not provided or `None`, just
-                returns a pointer to the input tokens `torch.nn.Embedding` module of the model without doing anything.
+                The number of new tokens in the encoder embedding matrix. Increasing the size will add newly
+                initialized vectors at the end. Reducing the size will remove vectors from the end. If not provided or
+                `None`, just returns a pointer to the input tokens `torch.nn.Embedding` module of the model without
+                doing anything.
 
         Return:
             `torch.nn.Embedding`: Pointer to the input tokens Embeddings Module of the model.
@@ -1342,6 +1354,7 @@ class DalleMegaForConditionalGeneration(DalleMegaPretrainedModel):
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[List[torch.FloatTensor]] = None,
+        encoder_outputs_unconditional: Optional[List[torch.FloatTensor]] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -1350,6 +1363,7 @@ class DalleMegaForConditionalGeneration(DalleMegaPretrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        superconditioning_scale: Optional[int] = None,
     ) -> Union[Tuple, Seq2SeqLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1370,11 +1384,15 @@ class DalleMegaForConditionalGeneration(DalleMegaPretrainedModel):
                     labels, self.config.pad_token_id, self.config.decoder_start_token_id
                 )
 
+        # TODO: assert here that the batch size of encoder_outputs_unconditional is the same as the batch size of
+        # encoder_outputs
+
         outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             encoder_outputs=encoder_outputs,
+            encoder_outputs_unconditional=encoder_outputs_unconditional,
             decoder_attention_mask=decoder_attention_mask,
             head_mask=head_mask,
             decoder_head_mask=decoder_head_mask,
@@ -1388,6 +1406,11 @@ class DalleMegaForConditionalGeneration(DalleMegaPretrainedModel):
             return_dict=return_dict,
         )
         lm_logits = self.lm_head(outputs[0])
+
+        superconditioning_scale = superconditioning_scale or self.config.superconditioning_scale
+        if not self.training and superconditioning_scale > 1 and encoder_outputs_unconditional is not None:
+            lm_logits, lm_logits_uncond = lm_logits.chunk(2)
+            lm_logits = lm_logits + superconditioning_scale * (lm_logits - lm_logits_uncond)
 
         masked_lm_loss = None
         if labels is not None:
@@ -1409,6 +1432,39 @@ class DalleMegaForConditionalGeneration(DalleMegaPretrainedModel):
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
         )
+
+    def _prepare_encoder_decoder_kwargs_for_generation(
+        self, inputs_tensor: torch.Tensor, model_kwargs, model_input_name: Optional[str] = None
+    ) -> Dict[str, Any]:
+        # 1. get encoder
+        encoder = self.get_encoder()
+
+        # 2. prepare encoder args and encoder kwargs from model kwargs
+        irrelevant_prefix = ["decoder_", "cross_attn", "use_cache"]
+        encoder_kwargs = {
+            argument: value
+            for argument, value in model_kwargs.items()
+            if not any(argument.startswith(p) for p in irrelevant_prefix)
+        }
+
+        # 3. make sure that encoder returns `ModelOutput`
+        model_input_name = model_input_name if model_input_name is not None else self.main_input_name
+        encoder_kwargs["return_dict"] = True
+        encoder_kwargs[model_input_name] = inputs_tensor
+        model_kwargs["encoder_outputs"]: BaseModelOutput = encoder(**encoder_kwargs)
+
+        superconditioning_scale = model_kwargs.get("superconditioning_scale", None)
+        superconditioning_scale = (
+            superconditioning_scale if superconditioning_scale is not None else self.config.superconditioning_scale
+        )
+        if superconditioning_scale > 1:
+            input_ids_uncond = torch.ones_like(inputs_tensor, device=inputs_tensor.device) * self.config.pad_token_id
+            attention_mask_uncond = torch.zeros(inputs_tensor, device=inputs_tensor.device)
+            model_kwargs["encoder_outputs_unconditional"] = encoder(
+                input_ids_uncond, attention_mask=attention_mask_uncond, return_dict=True
+            )
+
+        return model_kwargs
 
     def prepare_inputs_for_generation(
         self,

@@ -281,11 +281,11 @@ class DalleMegaHeadTests(unittest.TestCase):
     def test_lm_forward(self):
         config, input_ids, batch_size = self._get_config_and_data()
         lm_labels = ids_tensor([batch_size, input_ids.shape[1]], config.decoder_vocab_size).to(torch_device)
-        
+
         lm_model = DalleMegaForConditionalGeneration(config).to(torch_device)
-        
+
         outputs = lm_model(input_ids=input_ids, labels=lm_labels)
-        
+
         expected_shape = (batch_size, input_ids.shape[1], config.decoder_vocab_size)
         self.assertEqual(outputs["logits"].shape, expected_shape)
         self.assertIsInstance(outputs["loss"].item(), float)
@@ -387,16 +387,17 @@ class DalleMegaHeadTests(unittest.TestCase):
             return (m.get_input_embeddings().weight.data.clone(), m.get_output_embeddings().weight.data.clone())
 
         model = DalleMegaForConditionalGeneration(config).eval().to(torch_device)
-        
+
         new_encoder_vocab_size = 45
         new_decoder_vocab_size = 46
-        
+
         model.resize_token_embeddings(new_encoder_vocab_size)
         model.resize_decoder_token_embeddings(new_decoder_vocab_size)
-        
+
         input_new, output_new = _get_embs(model)
         self.assertEqual(input_new.shape, (new_encoder_vocab_size, config.d_model))
         self.assertEqual(output_new.shape, (new_decoder_vocab_size, config.d_model))
+
 
 @require_torch
 class DalleMegaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -433,7 +434,7 @@ class DalleMegaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(info["missing_keys"], [])
-    
+
     def test_resize_tokens_embeddings(self):
         (
             original_config,
@@ -482,11 +483,14 @@ class DalleMegaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
                     models_equal = False
 
             self.assertTrue(models_equal)
-    
-    @unittest.skip("DalleMega does not share the embeddingsbetween encoder and decoder. This test is implemented for decoder below.")
+
+    @unittest.skip(
+        "DalleMega does not share the embeddingsbetween encoder and decoder. This test is implemented for decoder"
+        " below."
+    )
     def test_resize_embeddings_untied(self):
         pass
-    
+
     def test_resize_decoder_embeddings_tied(self):
         (
             original_config,
@@ -494,7 +498,7 @@ class DalleMegaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
         ) = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
             return
-        
+
         original_config.tie_word_embeddings = True
 
         for model_class in self.all_model_classes:
@@ -636,13 +640,13 @@ class DalleMegaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
             # # Check that the embedding layer and decoding layer are the same in size and in value
             # self.assertTrue(model.transformer.wte.weight.shape, model.lm_head.weight.shape)
             # self.assertTrue(check_same_values(model.transformer.wte, model.lm_head))
-    
+
     def _check_scores(self, batch_size, scores, length, config):
         expected_shape = (batch_size, config.decoder_vocab_size)
         self.assertIsInstance(scores, tuple)
         self.assertEqual(len(scores), length)
         self.assertListEqual([iter_scores.shape for iter_scores in scores], [expected_shape] * len(scores))
-    
+
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)

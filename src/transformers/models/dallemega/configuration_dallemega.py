@@ -134,6 +134,7 @@ class DalleMegaConfig(PretrainedConfig):
         eos_token_id=16385,
         pad_token_id=16385,
         decoder_start_token_id=16384,
+        superconditioning_scale=1.0,
         **kwargs
     ):
         self.d_model = d_model
@@ -155,6 +156,7 @@ class DalleMegaConfig(PretrainedConfig):
         self.init_std = init_std
         self.num_hidden_layers = encoder_layers
         self.use_cache = use_cache
+        self.superconditioning_scale = superconditioning_scale
 
         super().__init__(
             pad_token_id=pad_token_id,
