@@ -133,6 +133,7 @@ class BloomModelTester:
             word_embeddings_in_fp32=word_embeddings_in_fp32,
         )
 
+    @torch.no_grad()
     def create_and_check_bloom_model(self, config, input_ids, input_mask, *args):
         model = BloomModel(config=config)
         model.to(torch_device)
@@ -143,6 +144,7 @@ class BloomModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(len(result.past_key_values), config.n_layer)
 
+    @torch.no_grad()
     def create_and_check_bloom_model_past(self, config, input_ids, input_mask, *args):
         model = BloomModel(config=config)
 
@@ -176,6 +178,7 @@ class BloomModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice))
 
+    @torch.no_grad()
     def create_and_check_bloom_model_attention_mask_past(self, config, input_ids, input_mask, *args):
         model = BloomModel(config=config)
         model.to(torch_device)
@@ -216,6 +219,7 @@ class BloomModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice))
 
+    @torch.no_grad()
     def create_and_check_bloom_model_past_large_inputs(self, config, input_ids, input_mask, *args):
         model = BloomModel(config=config)
         model.to(torch_device)
@@ -248,6 +252,7 @@ class BloomModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice))
 
+    @torch.no_grad()
     def create_and_check_lm_head_model(self, config, input_ids, input_mask, *args):
         model = BloomForCausalLM(config)
         model.to(torch_device)
@@ -257,6 +262,7 @@ class BloomModelTester:
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
+    @torch.no_grad()
     def create_and_check_sequence_classification_model(self, config, input_ids, input_mask, *args):
         config.num_labels = self.num_labels
         model = BloomForSequenceClassification(config)
@@ -266,6 +272,7 @@ class BloomModelTester:
         result = model(input_ids, attention_mask=input_mask)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
+    @torch.no_grad()
     def create_and_check_token_classification_model(self, config, input_ids, input_mask, *args):
         model = BloomForTokenClassification(config)
         model.to(torch_device)
@@ -368,24 +375,18 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bloom_weight_initialization(*config_and_inputs)
 
+    @torch.no_grad()
     def test_word_embeddings_in_fp32_is_close_to_fp16(self):
         model_name = "bigscience/bigscience-small-testing"
 
         _, input_ids, input_mask, _ = self.model_tester.prepare_config_and_inputs()
         model = BloomForCausalLM.from_pretrained(model_name, word_embeddings_in_fp32=True, torch_dtype=torch.float16).to(torch_device)
-        model_in_fp32 = BloomForCausalLM.from_pretrained(model_name, word_embeddings_in_fp32=False, torch_dtype=torch.float32).to(torch_device)
         model_in_fp16 = BloomForCausalLM.from_pretrained(model_name, word_embeddings_in_fp32=False, torch_dtype=torch.float16).to(torch_device)
 
         model.eval()
-        model_in_fp32.eval()
         model_in_fp16.eval()
 
-        print({name: value.dtype for name, value in model_in_fp16.state_dict().items()})
         output = model(
-            input_ids=input_ids,
-            attention_mask=input_mask,
-        ).logits
-        output_in_fp32 = model_in_fp32(
             input_ids=input_ids,
             attention_mask=input_mask,
         ).logits
@@ -394,18 +395,16 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
             attention_mask=input_mask,
         ).logits
 
-        # We guarantee that models in fp16 and fp32 and fp32 with word_embeddings_in_fp32 are close.
-        # We guarantee that models in fp16 and fp32 and fp32 with word_embeddings_in_fp32 are close.
-        # torch.testing.assert_close(output, output_in_fp32)
-        torch.testing.assert_close(output.to(torch.float16), output_in_fp16)
-        #self.assertTrue(torch.allclose(output, output_in_fp32))
-        #self.assertTrue(torch.allclose(output.to(torch.float16), output_in_fp16))
+        # We guarantee that models in fp16 and fp16 with `word_embeddings_in_fp32=True` are close.
+        self.assertTrue(torch.allclose(output.to(torch.float16), output_in_fp16))
 
         # We verify that fp16 have value collapses due to output vocabulary begin higher that maximum range of fp16.
         random_batch_id = torch.randint(input_ids.shape[0], ())
         random_sequence_id =torch.randint(input_ids.shape[1], ())
-        # Test that we see at least one collapse, ie the `len(unique_values) < vocabulary_size`. We could test that it's smaller that fp16 max range as well
-        self.assertTrue(torch.unique(output_in_fp16[random_batch_id, random_sequence_id]) < output_in_fp16.shape[-1])
+        # Test that we see at least one collapse in fp16 and none when `word_embeddings_in_fp32=True`,ie the `len(unique_values) < vocabulary_size`.
+        #  We could test that it's smaller that fp16 max range as well
+        self.assertTrue(len(torch.unique(output_in_fp16[random_batch_id, random_sequence_id])) < output_in_fp16.shape[-1])
+        self.assertTrue(len(torch.unique(output[random_batch_id, random_sequence_id])) < output_in_fp16.shape[-1])
 
     @slow
     def test_model_from_pretrained(self):
