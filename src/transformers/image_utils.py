@@ -92,7 +92,7 @@ def get_image_size(image: np.ndarray, channel_dim: ChannelDimension = None) -> T
         A tuple of the image's height and width.
     """
     if channel_dim is None:
-        channel_dim = infer_channel_dimension(image)
+        channel_dim = infer_channel_dimension_format(image)
 
     if channel_dim == ChannelDimension.FIRST:
         return image.shape[-2], image.shape[-1]
