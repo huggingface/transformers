@@ -17,12 +17,12 @@ import unittest
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 from transformers.testing_utils import (
-    require_torch,
-    slow,
-    require_bitsandbytes,
     require_accelerate,
+    require_bitsandbytes,
+    require_torch,
     require_torch_gpu,
     require_torch_multi_gpu,
+    slow,
 )
 
 
@@ -46,6 +46,7 @@ class MixedInt8Test(unittest.TestCase):
     input_text = "Hello my name is"
     EXPECTED_OUTPUT = "Hello my name is John.\nI am a friend of your father.\n"
     MAX_NEW_TOKENS = 10
+
     def setUp(self):
         # Models pipeline and tokenizer
         self.model_fp16 = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype="auto", device_map="auto")
