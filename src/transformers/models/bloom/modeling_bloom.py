@@ -312,7 +312,7 @@ class BloomAttention(nn.Module):
             # FIXME @thomasw21: `.view(...).transpose(0,1)` is used to be backward compatible
             present = (
                 key_layer.view(batch_size, self.num_heads, self.head_dim, kv_length).transpose(1, 3),
-                value_layer.view(batch_size, self.num_heads, kv_length, self.head_dim).tranpose(1, 2),
+                value_layer.view(batch_size, self.num_heads, kv_length, self.head_dim).transpose(1, 2),
             )
         else:
             present = None
