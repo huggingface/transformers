@@ -14,28 +14,30 @@
 # limitations under the License.
 
 import copy
-import os
 import json
+import os
 from typing import Any, Dict, Tuple, Union
 
 import numpy as np
+
 from requests import HTTPError
 
 from .dynamic_module_utils import custom_object_save
 from .utils import (
-    IMAGE_PROCESSOR_NAME,
-    PushToHubMixin,
-    logging,
     HUGGINGFACE_CO_RESOLVE_ENDPOINT,
+    IMAGE_PROCESSOR_NAME,
     EntryNotFoundError,
+    PushToHubMixin,
     RepositoryNotFoundError,
     RevisionNotFoundError,
     cached_path,
     copy_func,
     hf_bucket_url,
+    is_offline_mode,
     is_remote_url,
-    is_offline_mode
+    logging,
 )
+
 
 logger = logging.get_logger(__name__)
 
@@ -64,12 +66,10 @@ class ImageProcessorMixin(PushToHubMixin):
         self._processor_class = processor_class
 
     @classmethod
-    def from_pretrained(
-        cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
-    ):
+    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs):
         r"""
-        Instantiate a type of [`~image_processing_utils.ImageProcessorMixin`] from a image processor, *e.g.* a
-        derived class of [`BaseImageProcessor`].
+        Instantiate a type of [`~image_processing_utils.ImageProcessorMixin`] from a image processor, *e.g.* a derived
+        class of [`BaseImageProcessor`].
 
         Args:
             pretrained_model_name_or_path (`str` or `os.PathLike`):
@@ -87,8 +87,8 @@ class ImageProcessorMixin(PushToHubMixin):
                 Path to a directory in which a downloaded pretrained model image processor should be cached if the
                 standard cache should not be used.
             force_download (`bool`, *optional*, defaults to `False`):
-                Whether or not to force to (re-)download the image processor files and override the cached versions
-                if they exist.
+                Whether or not to force to (re-)download the image processor files and override the cached versions if
+                they exist.
             resume_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to delete incompletely received file. Attempts to resume the download if such a file
                 exists.
@@ -342,16 +342,16 @@ class ImageProcessorMixin(PushToHubMixin):
     @classmethod
     def from_json_file(cls, json_file: Union[str, os.PathLike]):
         """
-        Instantiates an image processor of type [`~image_processing_utils.ImageProcessorMixin`] from the path to
-        a JSON file of parameters.
+        Instantiates an image processor of type [`~image_processing_utils.ImageProcessorMixin`] from the path to a JSON
+        file of parameters.
 
         Args:
             json_file (`str` or `os.PathLike`):
                 Path to the JSON file containing the parameters.
 
         Returns:
-            A image processor of type [`~feature_extraction_utils.FeatureExtractionMixin`]: The image_processor
-            object instantiated from that JSON file.
+            A image processor of type [`~feature_extraction_utils.FeatureExtractionMixin`]: The image_processor object
+            instantiated from that JSON file.
         """
         with open(json_file, "r", encoding="utf-8") as reader:
             text = reader.read()
