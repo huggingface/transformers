@@ -17,7 +17,7 @@
 from typing import Union
 
 import PIL.Image
-from numpy import np
+import numpy as np
 
 from transformers.utils.generic import TensorType
 
