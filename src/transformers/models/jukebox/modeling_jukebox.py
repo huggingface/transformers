@@ -786,12 +786,16 @@ class JukeboxVQVAE(PreTrainedModel):
         for x_i in x_chunks:
             music_tokens_i = self._encode(x_i, start_level=start_level, end_level=end_level)
             music_tokens_list.append(music_tokens_i)
-        music_tokens = [torch.cat(music_tokens_level_list, dim=0) for music_tokens_level_list in zip(*music_tokens_list)]
+        music_tokens = [
+            torch.cat(music_tokens_level_list, dim=0) for music_tokens_level_list in zip(*music_tokens_list)
+        ]
         return music_tokens
 
     def sample(self, n_samples):
         # TODO handle device properly
-        music_tokens = [torch.randint(0, self.l_bins, size=(n_samples, *z_shape), device="cpu") for z_shape in self.z_shapes]
+        music_tokens = [
+            torch.randint(0, self.l_bins, size=(n_samples, *z_shape), device="cpu") for z_shape in self.z_shapes
+        ]
         return self.decode(music_tokens)
 
     def forward(self, x, hps, loss_fn="l1"):
@@ -2818,6 +2822,17 @@ class JukeboxPreTrainedModel(PreTrainedModel):
     config_class = JukeboxConfig
     base_model_prefix = "transformer"
 
+    def _init_weights(self, module):
+        std = self.config.init_std
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
 
@@ -2862,26 +2877,6 @@ def get_starts(total_length, n_ctx, hop_length):
     return starts
 
 
-def save_wav(fname, lvl, metas, aud, sr):
-    import soundfile
-
-    # clip before saving?
-    aud = torch.clamp(aud, -1, 1).cpu().numpy()
-    for i in list(range(aud.shape[0])):
-        if metas is not None:
-            artists, genres, lyrics = list(
-                metas[i].values()
-            )  # twitter prompts or inputs are in the form of a dictionnary
-            soundfile.write(
-                f"{fname}/lvl_{lvl}-{artists[i]}-{genres[i]}-{lyrics[i][:5]}{i}.wav",
-                aud[i],
-                samplerate=sr,
-                format="wav",
-            )
-        else:
-            soundfile.write(f"{fname}/lvl_{lvl}-sample-{i}.wav", aud[i], samplerate=sr, format="wav")
-
-
 def get_alignment(x, music_tokens, labels, prior, level, fp16, hps):
     level = level - 1  # Top level used
     n_ctx, n_tokens = prior.n_ctx, prior.n_tokens
@@ -2906,15 +2901,13 @@ def get_alignment(x, music_tokens, labels, prior, level, fp16, hps):
 
         # set y offset, sample_length and lyrics tokens
         y, indices_hop = prior.get_y(labels, start, total_length, get_indices=True)
-        for indices in indices_hop:
-            assert len(indices) == n_tokens
 
         z_bs = torch.chunk(z, bs, dim=0)
         y_bs = torch.chunk(y, bs, dim=0)
         w_hops = []
         for z_i, y_i in zip(z_bs, y_bs):
             w_hop = prior.z_forward(z_i[:, start:end], [], y_i, fp16=fp16, get_attn_weights=attn_layers)
-            assert len(w_hop) == 1
+
             w_hops.append(w_hop[0][:, alignment_head])
             del w_hop
         w = torch.cat(w_hops, dim=0)
@@ -2940,35 +2933,48 @@ def get_alignment(x, music_tokens, labels, prior, level, fp16, hps):
             end = start + n_ctx
             alignment_hop = alignment_hops[start][item]
             indices = indices_hops[start][item]
-            assert len(indices) == n_tokens
-            assert alignment_hop.shape == (n_ctx, n_tokens)
+
             alignment[start:end, indices] = alignment_hop
         alignment = alignment[: total_length - padding_length, :-1]  # remove token padding, and last lyric index
         alignments.append(alignment)
     return alignments
 
 
+def save_wav(fname, lvl, metas, aud, sr):
+    import soundfile
+
+    aud = torch.clamp(aud, -1, 1).cpu().numpy()
+    for i in list(range(aud.shape[0])):
+        if metas is not None:
+            # twitter prompts or inputs are in the form of a dictionnary
+            artists, genres, lyrics = list(metas[i].values())
+            path = f"{fname}/lvl_{lvl}-{artists[i]}-{genres[i]}-{lyrics[i][:5]}{i}.wav"
+            soundfile.write(path, aud[i], samplerate=sr, format="wav")
+        else:
+            soundfile.write(f"{fname}/lvl_{lvl}-sample-{i}.wav", aud[i], samplerate=sr, format="wav")
+
+
 def load_audio(file, sr, offset, duration, mono=False):
     import librosa
 
     # Librosa loads more filetypes than soundfile
-    x, _ = librosa.load(file, sr=sr, mono=mono, offset=offset / sr, duration=duration / sr)
-    if len(x.shape) == 1:
-        x = x.reshape((1, -1))
-    return x
+    raw_audio, _ = librosa.load(file, sr=sr, mono=mono, offset=offset / sr, duration=duration / sr)
+    if len(raw_audio.shape) == 1:
+        raw_audio = raw_audio.reshape((1, -1))
+    return raw_audio
 
 
 def load_prompts(audio_files, duration, hps):
-    xs = []
+    raw_audio_list = []
     for audio_file in audio_files:
-        x = load_audio(audio_file, sr=hps.sr, duration=duration, offset=0.0, mono=True)
-        x = x.T  # CT -> TC
-        xs.append(x)
-    while len(xs) < hps.n_samples:
-        xs.extend(xs)
-    xs = xs[: hps.n_samples]
-    x = torch.stack([torch.from_numpy(x) for x in xs])
-    return x
+        raw_audio = load_audio(audio_file, sr=hps.sr, duration=duration, offset=0.0, mono=True)
+        raw_audio = raw_audio.T  # CT -> TC
+        raw_audio_list.append(raw_audio)
+    while len(raw_audio_list) < hps.n_samples:
+        raw_audio_list.extend(raw_audio_list)
+    raw_audio_list = raw_audio_list[: hps.n_samples]
+    raw_audio = torch.stack([torch.from_numpy(raw_audio) for raw_audio in raw_audio_list])
+    return raw_audio
 
 
 @add_start_docstrings(
@@ -3009,11 +3015,8 @@ class JukeboxModel(JukeboxPreTrainedModel):
         n_samples = hps.n_samples
         n_ctx = prior.n_ctx
         end = start + n_ctx
-
-        # the tokenizer, as [total_length, offset, sample_length] can be written on the fly and changed without changing the
-        # lyric tokens.
         # get z already sampled at current level
-        z = music_tokens[level][:, start:end]
+        previous_sampled_tokens = music_tokens[level][:, start:end]
 
         if "sample_tokens" in sampling_kwargs:
             # Support sampling a window shorter than n_ctx
@@ -3023,7 +3026,10 @@ class JukeboxModel(JukeboxPreTrainedModel):
 
         else:
             sample_tokens = end - start
-        conditioning_tokens, new_tokens = z.shape[1], sample_tokens - z.shape[1]
+        conditioning_tokens, new_tokens = (
+            previous_sampled_tokens.shape[1],
+            sample_tokens - previous_sampled_tokens.shape[1],
+        )
 
         print(
             f"Sampling {sample_tokens} tokens for [{start},{start+sample_tokens}]. Conditioning on"
@@ -3046,7 +3052,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         max_batch_size = sampling_kwargs["max_batch_size"]
         del sampling_kwargs["max_batch_size"]
 
-        z_list = split_batch(z, n_samples, max_batch_size)
+        z_list = split_batch(previous_sampled_tokens, n_samples, max_batch_size)
         z_conds_list = split_batch(z_conds, n_samples, max_batch_size)
         y_list = split_batch(y, n_samples, max_batch_size)
         z_samples = []
@@ -3068,10 +3074,14 @@ class JukeboxModel(JukeboxPreTrainedModel):
         print(f"Sampling level {level}")
         if total_length >= self.priors[level].n_ctx:
             for start in get_range(get_starts(total_length, self.priors[level].n_ctx, hop_length)):
-                music_tokens = self.sample_single_window(music_tokens, labels, offset, sampling_kwargs, level, start, hps)
+                music_tokens = self.sample_single_window(
+                    music_tokens, labels, offset, sampling_kwargs, level, start, hps
+                )
 
         else:
-            music_tokens = self.sample_partial_window(music_tokens, labels, offset, sampling_kwargs, level, total_length, hps)
+            music_tokens = self.sample_partial_window(
+                music_tokens, labels, offset, sampling_kwargs, level, total_length, hps
+            )
         return music_tokens
 
     # Sample multiple levels
