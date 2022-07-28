@@ -771,17 +771,8 @@ class BloomForCausalLM(BloomPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *model_args, **kwargs):
-        model = super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-
-        if model.config.force_lm_head_in_fp32:
-            model.lm_head.to(torch.float32)
-
-        return model
-
-    def post_init(self):
-        super().post_init()
+    def tie_weights(self):
+        super(BloomForCausalLM, self).tie_weights()
 
         if self.config.force_lm_head_in_fp32:
             self.lm_head.to(torch.float32)
