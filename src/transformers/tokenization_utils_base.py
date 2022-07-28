@@ -3658,14 +3658,17 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # docstyle-ignore
         formatted_warning = """
 `prepare_seq2seq_batch` is deprecated and will be removed in version 5 of HuggingFace Transformers. Use the regular
-`__call__` method to prepare your inputs and the tokenizer under the `as_target_tokenizer` context manager to prepare
-your targets.
+`__call__` method to prepare your inputs and targets.
 
 Here is a short example:
 
+model_inputs = tokenizer(src_texts, text_target=tgt_texts, ...)
+
+If you either need to use different keyword arguments for the source and target texts, you should do two calls like
+this:
+
 model_inputs = tokenizer(src_texts, ...)
-with tokenizer.as_target_tokenizer():
-    labels = tokenizer(tgt_texts, ...)
+labels = tokenizer(text_target=tgt_texts, ...)
 model_inputs["labels"] = labels["input_ids"]
 
 See the documentation of your specific tokenizer for more details on the specific arguments to the tokenizer of choice.
@@ -3691,16 +3694,15 @@ For a more complete example, see the implementation of `prepare_seq2seq_batch`.
         # Process tgt_texts
         if max_target_length is None:
             max_target_length = max_length
-        with self.as_target_tokenizer():
-            labels = self(
-                tgt_texts,
-                add_special_tokens=True,
-                return_tensors=return_tensors,
-                padding=padding,
-                max_length=max_target_length,
-                truncation=truncation,
-                **kwargs,
-            )
+        labels = self(
+            text_target=tgt_texts,
+            add_special_tokens=True,
+            return_tensors=return_tensors,
+            padding=padding,
+            max_length=max_target_length,
+            truncation=truncation,
+            **kwargs,
+        )
         model_inputs["labels"] = labels["input_ids"]
         return model_inputs
 

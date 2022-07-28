@@ -97,10 +97,8 @@ class MBart50TokenizerFast(PreTrainedTokenizerFast):
     >>> tokenizer = MBart50TokenizerFast.from_pretrained("facebook/mbart-large-50", src_lang="en_XX", tgt_lang="ro_RO")
     >>> src_text = " UN Chief Says There Is No Military Solution in Syria"
     >>> tgt_text = "Şeful ONU declară că nu există o soluţie militară în Siria"
-    >>> model_inputs = tokenizer(src_text, return_tensors="pt")
-    >>> with tokenizer.as_target_tokenizer():
-    ...     labels = tokenizer(tgt_text, return_tensors="pt").input_ids
-    >>> # model(**model_inputs, labels=labels) should work
+    >>> model_inputs = tokenizer(src_text, text_target=tgt_text, return_tensors="pt")
+    >>> # model(**model_inputs) should work
     ```"""
 
     vocab_files_names = VOCAB_FILES_NAMES

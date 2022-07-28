@@ -81,10 +81,7 @@ class MBartTokenizerFast(PreTrainedTokenizerFast):
     ... )
     >>> example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
     >>> expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
-    >>> inputs = tokenizer(example_english_phrase, return_tensors="pt")
-    >>> with tokenizer.as_target_tokenizer():
-    ...     labels = tokenizer(expected_translation_romanian, return_tensors="pt")
-    >>> inputs["labels"] = labels["input_ids"]
+    >>> inputs = tokenizer(example_english_phrase, text_target=expected_translation_romanian, return_tensors="pt")
     ```"""
 
     vocab_files_names = VOCAB_FILES_NAMES

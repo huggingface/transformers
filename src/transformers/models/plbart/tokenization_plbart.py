@@ -152,10 +152,7 @@ class PLBartTokenizer(PreTrainedTokenizer):
     >>> tokenizer = PLBartTokenizer.from_pretrained("uclanlp/plbart-python-en_XX", src_lang="python", tgt_lang="en_XX")
     >>> example_python_phrase = "def maximum(a,b,c):NEW_LINE_INDENTreturn max([a,b,c])"
     >>> expected_translation_english = "Returns the maximum value of a b c."
-    >>> inputs = tokenizer(example_python_phrase, return_tensors="pt")
-    >>> with tokenizer.as_target_tokenizer():
-    ...     labels = tokenizer(expected_translation_english, return_tensors="pt")
-    >>> inputs["labels"] = labels["input_ids"]
+    >>> inputs = tokenizer(example_python_phrase, text_target=expected_translation_english, return_tensors="pt")
     ```"""
 
     vocab_files_names = VOCAB_FILES_NAMES
