@@ -597,6 +597,7 @@ class TFGroupViTStage(tf.keras.layers.Layer):
         **kwargs,
     ):
         super().__init__(**kwargs)
+        self.config = config
         self.depth = depth
         self.num_group_token = num_group_token
         self.gradient_checkpointing = False
@@ -665,8 +666,8 @@ class TFGroupViTStage(tf.keras.layers.Layer):
         """
         if self.with_group_token:
             group_token = tf.tile(
-                group_token,
-                shape=(shape_list(hidden_states)[0], 1, 1)
+                self.group_token,
+                multiples=(shape_list(hidden_states)[0], 1, 1)
             )
             if self.group_projector is not None:
                 group_token = group_token + self.group_projector(prev_group_token)
@@ -677,7 +678,13 @@ class TFGroupViTStage(tf.keras.layers.Layer):
 
         cat_x = self.concat_x(x, group_token)
         for layer in self.layers:
-            layer_out = layer(cat_x, attention_mask=None, causal_attention_mask=None)
+            layer_out = layer(
+                cat_x,
+                attention_mask=None,
+                causal_attention_mask=None,
+                output_attentions=None,
+                training=training
+            )
             cat_x = layer_out[0]
 
         x, group_token = self.split_x(cat_x)
@@ -712,16 +719,18 @@ class TFGroupViTMLP(tf.keras.layers.Layer):
         self.fc2 = tf.keras.layers.Dense(output_size, name="fc2")
 
     def call(self, hidden_states: tf.Tensor, training: bool = False) -> tf.Tensor:
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.fc1(hidden_states, training=training)
         hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.fc2(hidden_states, training=training)
         return hidden_states
 
 
 class TFGroupViTMixerMLP(TFGroupViTMLP):
     def call(self, x, training: bool = False):
-        x = super()(tf.transpose(x, perm=(0, 2, 1, 3)))
-        return tf.transpose(x, perm=(0, 2, 1, 3))
+        x = super().call(
+            hidden_states=tf.transpose(x, perm=(0, 2, 1)),
+            training=training)
+        return tf.transpose(x, perm=(0, 2, 1))
 
 
 # Adapted from transformers.models.clip.modeling_tf_clip.TFCLIPAttention
@@ -1249,13 +1258,13 @@ class TFGroupViTMainLayer(tf.keras.layers.Layer):
         self.vision_model = TFGroupViTVisionTransformer(vision_config, name="vision_model")
 
         self.visual_projection = tf.keras.Sequential([
-            tf.keras.layers.Desne(self.projection_intermediate_dim),
+            tf.keras.layers.Dense(self.projection_intermediate_dim),
             tf.keras.layers.BatchNormalization(),
             tf.keras.layers.ReLU(),
             tf.keras.layers.Dense(self.projection_dim),
         ], name="visual_projection")
         self.text_projection = tf.keras.Sequential([
-            tf.keras.layers.Desne(self.projection_intermediate_dim),
+            tf.keras.layers.Dense(self.projection_intermediate_dim),
             tf.keras.layers.BatchNormalization(),
             tf.keras.layers.ReLU(),
             tf.keras.layers.Dense(self.projection_dim),
