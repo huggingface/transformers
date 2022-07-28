@@ -471,10 +471,8 @@ Un processor combina un estrattore di caratteristiche e un tokenizer. Carica un 
 >>> def prepare_dataset(example):
 ...     audio = example["audio"]
 
-...     example["input_values"] = processor(audio["array"], sampling_rate=16000)
+...     example.update(processor(audio=audio["array"], text=example["text"], sampling_rate=16000))
 
-...     with processor.as_target_processor():
-...         example["labels"] = processor(example["text"]).input_ids
 ...     return example
 ```
 
