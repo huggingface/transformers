@@ -64,7 +64,7 @@ def _make_causal_mask(
     mask[:, past_key_values_length:].triu_(diagonal=1)
 
     if past_key_values_length > 0:
-        mask[:, past_key_values_length:] = False
+        mask[:, :past_key_values_length] = False
 
     expanded_mask = mask[None, None, :, :].expand(batch_size, 1, target_length, target_length + past_key_values_length)
     return expanded_mask
