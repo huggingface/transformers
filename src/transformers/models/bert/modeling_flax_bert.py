@@ -801,6 +801,7 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
         gradient_checkpointing: bool = False,
+        # Can only use_scan=True in init if loading scanned weights -> need to handle use_scan=True and unrolled weights
         use_scan: bool = False,
         **kwargs
     ):
@@ -838,6 +839,25 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
         # initialize the parameters
         if self._is_initialized:
             self.params = self.convert_unroll_to_scan(self.params)
+
+    def scan_disable(self):
+        self._module = self.module_class(
+            config=self.config,
+            dtype=self.dtype,
+            use_scan=False,
+        )
+        init_fn = partial(self.init_weights, input_shape=self.input_shape)
+        params_shape_tree = jax.eval_shape(init_fn, self.key)
+
+        # get the shape of the parameters
+        self._params_shape_tree = params_shape_tree
+
+        # save required_params as set
+        self._required_params = set(flatten_dict(unfreeze(params_shape_tree)).keys())
+
+        # initialize the parameters
+        if self._is_initialized:
+            self.params = self.convert_scan_to_unroll(self.params)
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors

@@ -1126,7 +1126,7 @@ class FlaxModelTesterMixin:
             for output, remat_output in zip(outputs, remat_outputs):
                 self.assertTrue((output == remat_output).all())
 
-    def test_scan_with_automatic_init(self):
+    def test_scan_enable_with_automatic_init(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -1155,7 +1155,7 @@ class FlaxModelTesterMixin:
             for output, scan_output in zip(outputs, scan_outputs):
                 self.assertTrue((output == scan_output).all())
 
-    def test_scan_with_no_automatic_init(self):
+    def test_scan_enable_with_no_automatic_init(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -1191,6 +1191,36 @@ class FlaxModelTesterMixin:
             # ensure that the outputs remain precisely equal
             for output, scan_output in zip(outputs, scan_outputs):
                 self.assertTrue((output == scan_output).all())
+
+    def test_scan_disable_with_automatic_init(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            # prepare inputs
+            prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            # prepare unrolled and scanned models
+            model = model_class(config)
+
+            try:
+                model.scan_enable()
+            except NotImplementedError:
+                continue
+
+            scan_outputs = model(**prepared_inputs_dict)
+
+            # Test scan disable gives same outputs as scan enable
+            model.scan_disable()
+            unrolled_outputs = model(**prepared_inputs_dict)
+
+            # ensure that the dicts of outputs contain the same keys
+            self.assertEqual(unrolled_outputs.keys(), scan_outputs.keys())
+
+            unrolled_outputs = unrolled_outputs.to_tuple()
+            scan_outputs = scan_outputs.to_tuple()
+
+            # ensure that the outputs remain precisely equal
+            for unrolled_output, scan_output in zip(unrolled_outputs, scan_outputs):
+                self.assertTrue((unrolled_output == scan_output).all())
 
 
 @require_flax

@@ -239,9 +239,15 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         raise NotImplementedError(f"gradient checkpointing method has to be implemented for {self}")
 
     def scan_enable(self):
-        raise NotImplementedError(f"scan method has to be implemented for {self}")
+        raise NotImplementedError(f"scan enable method has to be implemented for {self}")
 
-    def convert_unroll_to_scan(self, params=None):
+    def scan_disable(self):
+        raise NotImplementedError(f"scan disable method has to be implemented for {self}")
+
+    def convert_unroll_to_scan(self, params: Union[Dict, FrozenDict],):
+        if isinstance(params, FrozenDict):
+            params = unfreeze(params)
+
         params = flatten_dict(params, sep="/")
         keys = list(params.keys())
 
@@ -265,6 +271,10 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
         # Finally, unflatten the dict to restore the nested pytree structure
         params = unflatten_dict(params, sep="/")
+        return params
+
+    def convert_scan_to_unroll(self, params: Union[Dict, FrozenDict]):
+        # TODO!
         return params
 
     @classmethod
