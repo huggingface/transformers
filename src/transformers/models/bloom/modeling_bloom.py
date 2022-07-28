@@ -647,10 +647,8 @@ class BloomModel(BloomPreTrainedModel):
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             batch_size, seq_length = input_ids.shape
-            input_ids = input_ids.view(batch_size, seq_length)
-            output_shape = input_ids.shape + (self.embed_dim,)
         elif inputs_embeds is not None:
-            output_shape = inputs_embeds.shape
+            batch_size, seq_length, _ = inputs_embeds.shape
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
@@ -673,16 +671,15 @@ class BloomModel(BloomPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
 
         # Compute alibi tensor: check build_alibi_tensor documentation
-        current_sequence_length = hidden_states.shape[1]
+        seq_length_with_past = seq_length
         past_key_values_length = 0
         if past_key_values[0] is not None:
             past_key_values_length = past_key_values[0][0].shape[1]
-            current_sequence_length += past_key_values_length
+            seq_length_with_past += past_key_values_length
 
         if attention_mask is None:
-            attention_mask = torch.ones((hidden_states.shape[0], current_sequence_length), device=hidden_states.device)
+            attention_mask = torch.ones((batch_size, seq_length_with_past), device=hidden_states.device)
         else:
-            batch_size, seq_length = attention_mask.shape
             attention_mask = attention_mask.view(batch_size, seq_length)
             attention_mask = attention_mask.to(hidden_states.device)
 
@@ -743,8 +740,6 @@ class BloomModel(BloomPreTrainedModel):
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
-
-        hidden_states = hidden_states.view(output_shape)
 
         if not return_dict:
             return tuple(v for v in [hidden_states, presents, all_hidden_states, all_self_attentions] if v is not None)
@@ -1005,10 +1000,9 @@ class BloomForSequenceClassification(BloomPreTrainedModel):
                 else:
                     loss = loss_fct(pooled_logits, labels)
             elif self.config.problem_type == "single_label_classification":
-                batch_size, seq_length = labels.shape
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(
-                    pooled_logits.view(batch_size * seq_length, self.num_labels), labels.view(batch_size * seq_length)
+                    pooled_logits.view(batch_size, self.num_labels), labels.view(batch_size)
                 )
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
