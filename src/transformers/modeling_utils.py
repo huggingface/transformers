@@ -1840,7 +1840,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if not (is_accelerate_available() and is_bitsandbytes_available()):
                 raise ImportError(
                     "Using `load_in_8bit=True` requires Accelerate: `pip install accelerate` and the latest version of"
-                    " bitsandbytes `pip install bitsandbytes`"
+                    " bitsandbytes `pip install -i https://test.pypi.org/simple/ bitsandbytes-cudaXXX` with `XXX` corresponding"
+                    "to your CUDA version (e.g. `pip install -i https://test.pypi.org/simple/ bitsandbytes-cuda113` for CUDA 11.3)"
                 )
             if torch_dtype == "auto" or torch_dtype != torch.float16:
                 torch_dtype = (
