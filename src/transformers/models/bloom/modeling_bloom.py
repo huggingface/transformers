@@ -903,18 +903,22 @@ class BloomForCausalLM(BloomPreTrainedModel):
         # key: layer_past[0] [batch_size * num_heads, head_dim, seq_length]
         # value: layer_past[1] [batch_size * num_heads, seq_length, head_dim]
         return tuple(
-            (
-                layer_past[0]
-                .view(batch_size, num_heads, head_dim, seq_length)
-                .index_select(0, beam_idx.to(layer_past[0].device))
-                .view(batch_size_times_num_heads, head_dim, seq_length),
-                layer_past[1]
-                .view(batch_size, num_heads, seq_length, head_dim)
-                .index_select(0, beam_idx.to(layer_past[1].device))
-                .view(batch_size_times_num_heads, seq_length, head_dim),
-            )
+            tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
             for layer_past in past
         )
+        # return tuple(
+        #     (
+        #         layer_past[0]
+        #         .view(batch_size, num_heads, head_dim, seq_length)
+        #         .index_select(0, beam_idx.to(layer_past[0].device))
+        #         .view(batch_size_times_num_heads, head_dim, seq_length),
+        #         layer_past[1]
+        #         .view(batch_size, num_heads, seq_length, head_dim)
+        #         .index_select(0, beam_idx.to(layer_past[1].device))
+        #         .view(batch_size_times_num_heads, seq_length, head_dim),
+        #     )
+        #     for layer_past in past
+        # )
 
 
 @add_start_docstrings(
