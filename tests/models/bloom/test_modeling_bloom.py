@@ -455,7 +455,9 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     @require_torch_gpu
     def test_simple_generation_match_with_fp32(self):
         path_350m = "bigscience/bloom-350m"
-        model = BloomForCausalLM.from_pretrained(path_350m, torch_dtype="auto", use_cache=True, revision="gs555750").cuda()
+        model = BloomForCausalLM.from_pretrained(
+            path_350m, torch_dtype="auto", use_cache=True, revision="gs555750"
+        ).cuda()
         model_fp32 = BloomForCausalLM.from_pretrained(path_350m, use_cache=True, revision="gs555750").cuda()
         model.eval()
         model_fp32.eval()
