@@ -262,8 +262,6 @@
         title: M2M100
       - local: model_doc/marian
         title: MarianMT
-      - local: model_doc/maskformer
-        title: MaskFormer
       - local: model_doc/mbart
         title: MBart and MBart-50
       - local: model_doc/megatron-bert
@@ -347,8 +345,6 @@
       sections:
       - local: model_doc/beit
         title: BEiT
-      - local: model_doc/clip
-        title: CLIP
       - local: model_doc/convnext
         title: ConvNeXT
       - local: model_doc/cvt
@@ -369,6 +365,8 @@
         title: ImageGPT
       - local: model_doc/levit
         title: LeViT
+      - local: model_doc/maskformer
+        title: MaskFormer
       - local: model_doc/mobilevit
         title: MobileViT
       - local: model_doc/owlvit
@@ -404,8 +402,6 @@
         title: SEW
       - local: model_doc/sew-d
         title: SEW-D
-      - local: model_doc/speech-encoder-decoder
-        title: Speech Encoder Decoder Models
       - local: model_doc/speech_to_text
         title: Speech2Text
       - local: model_doc/speech_to_text_2
@@ -429,6 +425,8 @@
       title: Audio models
     - isExpanded: false
       sections:
+      - local: model_doc/clip
+        title: CLIP
       - local: model_doc/data2vec
         title: Data2Vec
       - local: model_doc/flava
@@ -441,6 +439,8 @@
         title: LayoutXLM
       - local: model_doc/perceiver
         title: Perceiver
+      - local: model_doc/speech-encoder-decoder
+        title: Speech Encoder Decoder Models
       - local: model_doc/trocr
         title: TrOCR
       - local: model_doc/vilt
