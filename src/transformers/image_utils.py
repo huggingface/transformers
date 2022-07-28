@@ -23,8 +23,8 @@ import PIL.ImageOps
 
 import requests
 
-from .utils import TensorType, is_torch_available, is_tf_available, is_jax_available
-from .utils.generic import ExplicitEnum, _is_torch, _is_tensorflow, _is_jax, _is_numpy, to_numpy
+from .utils import is_flax_available, is_tf_available, is_torch_available
+from .utils.generic import _is_jax, _is_tensorflow, _is_torch
 
 
 IMAGENET_DEFAULT_MEAN = [0.485, 0.456, 0.406]
@@ -61,7 +61,7 @@ def is_tf_tensor(obj):
 
 
 def is_jax_tensor(obj):
-    return _is_jax(obj) if is_jax_available() else False
+    return _is_jax(obj) if is_flax_available() else False
 
 
 def is_valid_image(img):

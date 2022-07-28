@@ -13,48 +13,43 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Tuple, List, Union
+from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
-import PIL
 import numpy as np
+import PIL
+
+from transformers.utils.import_utils import is_flax_available, is_tf_available, is_torch_available
 
 from .image_utils import (
     ChannelDimension,
     get_image_size,
     infer_channel_dimension,
-    is_torch_tensor,
+    is_jax_tensor,
     is_tf_tensor,
-    is_jax_tensor
+    is_torch_tensor,
 )
 
 
-def rescale(image: np.ndarray, scale: Union[float, int] = 255) -> np.ndarray:
-    """
-    Rescales `image` by `scale`.
-
-    Args:
-        image (`np.ndarray``):
-            The image to rescale.
-        scale (`float`, `int`):
-            The scale to use for rescaling the image.
-
-    Returns:
-        image: A rescaled np.ndarray image.
-    """
-    return image * scale
+if TYPE_CHECKING:
+    if is_torch_available():
+        import torch
+    if is_tf_available():
+        import tensorflow as tf
+    if is_flax_available():
+        import jax.numpy as jnp
 
 
 def to_pil_image(
-    image: Union[np.ndarray, PIL.Image.Image, "torch.Tensor", "tf.Tensor"],
+    image: Union[np.ndarray, PIL.Image.Image, "torch.Tensor", "tf.Tensor", "jnp.ndarray"],
     channel_dim: Optional[ChannelDimension] = None,
-    do_rescale: Optional[bool] = None
+    rescale=None,
 ) -> PIL.Image.Image:
     """
     Converts `image` to a PIL Image. Optionally rescales it and puts the channel dimension back as the last axis if
     needed.
 
     Args:
-        image (`PIL.Image.Image` or `numpy.ndarray` or `torch.Tensor`):
+        image (`PIL.Image.Image`, `numpy.ndarray`, `torch.Tensor`, `tf.Tensor`):
             The image to convert to the PIL Image format.
         rescale (`bool`, *optional*):
             Whether or not to apply the scaling factor (to make pixel values integers between 0 and 255). Will default
@@ -69,7 +64,7 @@ def to_pil_image(
         image = np.array(image)
 
     if not isinstance(image, np.ndarray):
-        raise ValueError("Input image must be of type PIL.Image.Image, numpy.ndarray or torch.Tensor")
+        raise ValueError("Input image type not supported: {}".format(type(image)))
 
     # If the channel as been moved to first dim, we put it back at the end.
     channel_dim = infer_channel_dimension(image) if channel_dim is None else channel_dim
@@ -88,7 +83,7 @@ def get_resize_output_image_size(
     input_image: np.ndarray,
     size: Union[int, Tuple[int, int], List[int]],
     default_to_square: bool = True,
-    max_size: int = None
+    max_size: int = None,
 ) -> np.ndarray:
     if isinstance(size, (tuple, list)):
         if len(size) == 2:
