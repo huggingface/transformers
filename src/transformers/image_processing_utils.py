@@ -361,16 +361,16 @@ class ImageProcessorMixin(PushToHubMixin):
     @classmethod
     def from_json_file(cls, json_file: Union[str, os.PathLike]):
         """
-        Instantiates an image processor of type [`~image_processing_utils.ImageProcessorMixin`] from the path to
-        a JSON file of parameters.
+        Instantiates an image processor of type [`~image_processing_utils.ImageProcessorMixin`] from the path to a JSON
+        file of parameters.
 
         Args:
             json_file (`str` or `os.PathLike`):
                 Path to the JSON file containing the parameters.
 
         Returns:
-            A image processor of type [`~feature_extraction_utils.FeatureExtractionMixin`]: The image_processor
-            object instantiated from that JSON file.
+            A image processor of type [`~feature_extraction_utils.FeatureExtractionMixin`]: The image_processor object
+            instantiated from that JSON file.
         """
         with open(json_file, "r", encoding="utf-8") as reader:
             text = reader.read()
