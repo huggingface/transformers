@@ -874,7 +874,7 @@ class TFXGLMForCausalLM(TFXGLMPreTrainedModel, TFCausalLanguageModelingLoss):
             name="lm_head",
         )
 
-        # TODO (Joao): investigate why LED has numerical issues in XLA generate
+        # TODO (Joao): investigate why XGLM has numerical issues in XLA generate
         self.supports_xla_generation = False
 
     def get_output_embeddings(self):
