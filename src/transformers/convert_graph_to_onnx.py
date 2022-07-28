@@ -463,7 +463,7 @@ def quantize(onnx_model_path: Path) -> Path:
         tensors_range=None,
         nodes_to_quantize=None,
         nodes_to_exclude=None,
-        op_types_to_quantize=list(IntegerOpsRegistry)
+        op_types_to_quantize=list(IntegerOpsRegistry),
     )
 
     # Quantize and export
