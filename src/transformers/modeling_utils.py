@@ -1570,6 +1570,24 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             url = self._push_to_hub(repo, commit_message=commit_message)
             logger.info(f"Model pushed to the hub in this commit: {url}")
 
+    def get_memory_footprint(self, return_buffers=True):
+        r"""
+        Get the memory footprint of a model. This will return the memory footprint of the current model in bytes.
+        Useful to benchmark the memory footprint of the current model and design some tests. Solution inspired from the
+        PyTorch discussions: https://discuss.pytorch.org/t/gpu-memory-that-model-uses/56822/2
+
+        Arguments:
+            return_buffers (`bool`, *optional*):
+                Whether to return the size of the buffer tensors in the computation of the memory footprint. Buffers
+                are tensors that do not require gradients and not registered as parameters. E.g. mean and std in batch
+                norm layers. Please see: https://discuss.pytorch.org/t/what-pytorch-means-by-buffers/120266/2
+        """
+        mem = sum([param.nelement() * param.element_size() for param in self.parameters()])
+        if return_buffers:
+            mem_bufs = sum([buf.nelement() * buf.element_size() for buf in self.buffers()])
+            mem = mem + mem_bufs
+        return mem
+
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *model_args, **kwargs):
         r"""

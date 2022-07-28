@@ -105,7 +105,7 @@ You can also write your own device map following the same format (a dictionary l
 device_map = {"shared": 0, "encoder": 0, "decoder": 1, "lm_head": 1}
 ```
 
-Another way to minimize the memory impact of your model is to instantiate it at a lower precision dtype (like `torch.float16`).
+Another way to minimize the memory impact of your model is to instantiate it at a lower precision dtype (like `torch.float16`) or use direct quantization techniques as described below.
 
 ### Model Instantiation dtype
 
@@ -133,6 +133,28 @@ model = AutoModel.from_config(config)
 
 Due to Pytorch design, this functionality is only available for floating dtypes.
 
+### Mixed int8 quantization 🪶
+
+From the paper `GPT3.int8() : 8-bit Matrix Multiplication for Transformers at Scale`, we suport HuggingFace 🤗  integration for all models in the Hub with few lines of code. 
+For models trained in  half-precision (aka, either `float16` or `bfloat16`). This method aims to reduce `nn.Linear` size by 2, without affecting too much quality by operating on the outliers in half-precision. Therefore the method is termed as mixed 8bit quantization.
+This technique is useful and works well for billion scale models (>1B parameters) therefore we advice you to use it only for models of that scale. This method has been tested for 2-billion to 176-billion scale models and supports onyl PyTorch models. 
+Note also that you would require a GPU to run mixed-8bit models as the kernels has been compiled for GPUs only. Make sure that you have enough GPU RAM to store the quarter (or half if your model is natively in half precision) of the model before using this feature. 
+
+#### Requirements
+
+- Install the correct version of `bitsandbytes` by running:
+`pip install -i https://test.pypi.org/simple/ bitsandbytes-cudaXXX` with `XXX` corresponding to your `CUDA` version. E.g, if you have `CUDA` 11.3 installed on your machine, run `pip install -i https://test.pypi.org/simple/ bitsandbytes-cuda113`
+- Install `accelerate`:
+`pip install accelerate`
+
+#### Running mixed-int8 models
+
+After carefully installing the required libraries, the way to load your mixed 8-bit model is as follows:
+```
+model_name = "bigscience/bloom-2b5"
+model_8bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_8bit=True, torch_dtype=torch.float16)
+```
+The implementation supports multi-GPU setup thanks to `accelerate` as backend. 
 
 
 ## ModuleUtilsMixin
