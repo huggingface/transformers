@@ -458,9 +458,9 @@ def quantize(onnx_model_path: Path) -> Path:
         reduce_range=False,
         mode=QuantizationMode.IntegerOps,
         static=False,
-        weight_qType=True, # weight_qType
-        input_qType=False, # input_qType
-        tensors_range=None, # tensors_range
+        weight_qType=True,
+        input_qType=False,
+        tensors_range=None,
         nodes_to_quantize=None,
         nodes_to_exclude=None,
         op_types_to_quantize=list(IntegerOpsRegistry)
