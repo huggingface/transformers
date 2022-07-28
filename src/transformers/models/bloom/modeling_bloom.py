@@ -897,15 +897,15 @@ class BloomForCausalLM(BloomPreTrainedModel):
         [`~PreTrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
         beam_idx at every generation step.
         """
-        batch_size_times_num_heads, head_dim, seq_length = past[0][0].shape
-        batch_size = len(beam_idx)
-        num_heads = batch_size_times_num_heads // batch_size
-        # key: layer_past[0] [batch_size * num_heads, head_dim, seq_length]
-        # value: layer_past[1] [batch_size * num_heads, seq_length, head_dim]
         return tuple(
             tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
             for layer_past in past
         )
+        # batch_size_times_num_heads, head_dim, seq_length = past[0][0].shape
+        # batch_size = len(beam_idx)
+        # num_heads = batch_size_times_num_heads // batch_size
+        # # key: layer_past[0] [batch_size * num_heads, head_dim, seq_length]
+        # # value: layer_past[1] [batch_size * num_heads, seq_length, head_dim]
         # return tuple(
         #     (
         #         layer_past[0]
