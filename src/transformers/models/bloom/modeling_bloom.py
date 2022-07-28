@@ -239,8 +239,6 @@ class BloomAttention(nn.Module):
         """
         Split the last dimension into (num_heads, head_dim)
         """
-        batch_size, seq_length, three_times_hidden_size = fused_qkv.shape
-        fused_qkv = fused_qkv.reshape(batch_size, seq_length, self.num_heads, 3 * self.head_dim)
         return torch.split(fused_qkv, self.head_dim, dim=-1)
 
     def _merge_heads(self, x):
@@ -276,10 +274,18 @@ class BloomAttention(nn.Module):
         # 3 x [batch_size, seq_length, num_heads, head_dim]
         (query_layer, key_layer, value_layer) = self._split_heads(fused_qkv)
 
+        batch_size, q_length, _, _ = query_layer.shape
+        _, kv_length, _, _ = key_layer.shape
+
+        query_layer = query_layer.transpose(1, 2).reshape(batch_size * self.num_heads, q_length, self.head_dim)
+        key_layer = key_layer.permute(0, 2, 3, 1).reshape(batch_size * self.num_heads, self.head_dim, kv_length)
+        value_layer = value_layer.transpose(1, 2).reshape(batch_size * self.num_heads, kv_length, self.head_dim)
         if layer_past is not None:
             past_key, past_value = layer_past
-            # concatenate along seq_length dimension -> [batch_size, kv_length, num_heads, head_dim]
-            key_layer = torch.cat((past_key.type_as(key_layer), key_layer), dim=1)
+            # concatenate along seq_length dimension:
+            #  - key: [batch_size * self.num_heads, head_dim, kv_length]
+            #  - value: [batch_size * self.num_heads, kv_length, head_dim]
+            key_layer = torch.cat((past_key.type_as(key_layer), key_layer), dim=2)
             value_layer = torch.cat((past_value.type_as(value_layer), value_layer), dim=1)
 
         if use_cache is True:
@@ -287,14 +293,11 @@ class BloomAttention(nn.Module):
         else:
             present = None
 
-        batch_size, q_length, _, _ = query_layer.shape
-        _, kv_length, _, _ = key_layer.shape
-
         # # [batch_size*num_heads, head_dim, q_length] x [batch_size*num_heads, head_dim, k_length] -> [batch_size*num_heads, q_length, k_length]
         matmul_result = torch.baddbmm(
             input=alibi,
-            batch1=query_layer.transpose(1, 2).reshape(batch_size * self.num_heads, q_length, self.head_dim),
-            batch2=key_layer.permute(0, 2, 3, 1).reshape(batch_size * self.num_heads, self.head_dim, kv_length),
+            batch1=query_layer,
+            batch2=key_layer,
             beta=self.beta,
             alpha=self.inv_norm_factor,
         )
@@ -322,7 +325,7 @@ class BloomAttention(nn.Module):
         # matmul: [batch_size * num_heads, q_length, head_dim]
         context_layer = torch.bmm(
             attention_probs_reshaped,
-            value_layer.transpose(1, 2).reshape(batch_size * self.num_heads, kv_length, self.head_dim),
+            value_layer,
         )
 
         # change view [batch_size, num_heads, q_length, head_dim]
@@ -680,7 +683,6 @@ class BloomModel(BloomPreTrainedModel):
         if attention_mask is None:
             attention_mask = torch.ones((batch_size, seq_length_with_past), device=hidden_states.device)
         else:
-            attention_mask = attention_mask.view(batch_size, seq_length)
             attention_mask = attention_mask.to(hidden_states.device)
 
         alibi = build_alibi_tensor(attention_mask, self.n_head, dtype=hidden_states.dtype)
@@ -1001,9 +1003,7 @@ class BloomForSequenceClassification(BloomPreTrainedModel):
                     loss = loss_fct(pooled_logits, labels)
             elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
-                loss = loss_fct(
-                    pooled_logits.view(batch_size, self.num_labels), labels.view(batch_size)
-                )
+                loss = loss_fct(pooled_logits, labels)
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(pooled_logits, labels)
