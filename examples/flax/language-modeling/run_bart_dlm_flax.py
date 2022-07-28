@@ -270,10 +270,10 @@ class FlaxDataCollatorForBartDenoisingLM:
     """
 
     tokenizer: PreTrainedTokenizerBase
+    decoder_start_token_id: int
     mask_ratio: float = 0.3
     poisson_lambda: float = 3.0
     permute_sentence_ratio: float = 1.0
-    decoder_start_token_id: int
 
     def __post_init__(self):
         if self.tokenizer.mask_token is None or self.tokenizer.eos_token is None:
