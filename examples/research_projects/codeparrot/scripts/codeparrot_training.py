@@ -7,14 +7,16 @@ from pathlib import Path
 import datasets
 import torch
 from datasets import load_dataset
+from torch.optim import AdamW
 from torch.utils.data import IterableDataset
 from torch.utils.data.dataloader import DataLoader
+from torch.utils.data.datapipes.iter.combinatorics import ShufflerIterDataPipe
 
 import transformers
 from accelerate import Accelerator, DistributedType
 from arguments import TrainingArguments
 from huggingface_hub import Repository
-from transformers import AdamW, AutoModelForCausalLM, AutoTokenizer, HfArgumentParser, get_scheduler, set_seed
+from transformers import AutoModelForCausalLM, AutoTokenizer, HfArgumentParser, get_scheduler, set_seed
 
 
 class ConstantLengthDataset(IterableDataset):
@@ -25,9 +27,9 @@ class ConstantLengthDataset(IterableDataset):
             dataset (dataset.Dataset): Dataset with text files.
             infinite (bool): If True the iterator is reset after dataset reaches end else stops.
             seq_length (int): Length of token sequences to return.
-            num_of_sequences: Number of token sequences to keep in buffer.
-            chars_per_token: Number of characters per token used to estimate number of tokens in text buffer.
-            tokenized: If true we use a pretokenized dataset.
+            num_of_sequences (int): Number of token sequences to keep in buffer.
+            chars_per_token (int): Number of characters per token used to estimate number of tokens in text buffer.
+            tokenized (bool): If true we use a pretokenized dataset.
     """
 
     def __init__(
@@ -88,6 +90,9 @@ class ConstantLengthDataset(IterableDataset):
                     self.current_size += 1
                     yield torch.tensor(input_ids)
 
+    def shuffle(self, buffer_size=1000):
+        return ShufflerIterDataPipe(self, buffer_size=buffer_size)
+
 
 def setup_logging(args):
     project_name = args.model_ckpt.split("/")[-1]
@@ -126,12 +131,13 @@ def create_dataloaders(args):
     valid_dataset = ConstantLengthDataset(
         tokenizer, valid_data, infinite=False, seq_length=args.seq_length, tokenized=args.tokenized
     )
-    train_dataloader = DataLoader(train_dataset, batch_size=args.train_batch_size)
+    train_dataset = train_dataset.shuffle(buffer_size=args.shuffle_buffer)
+    train_dataloader = DataLoader(train_dataset, batch_size=args.train_batch_size, shuffle=True)
     eval_dataloader = DataLoader(valid_dataset, batch_size=args.valid_batch_size)
     return train_dataloader, eval_dataloader
 
 
-def get_grouped_params(model, args, no_decay=["bias", "LayerNorm.weight"]):
+def get_grouped_params(model, args, no_decay=["bias", "ln_1.weight", "ln_2.weight", "ln_f.weight"]):
     params_with_wd, params_without_wd = [], []
     for n, p in model.named_parameters():
         if any(nd in n for nd in no_decay):
@@ -184,13 +190,13 @@ def evaluate(args):
     return loss.item(), perplexity.item()
 
 
-# Accelerator
-accelerator = Accelerator(log_with=["wandb", "tensorboard"])
-acc_state = {str(k): str(v) for k, v in accelerator.state.__dict__.items()}
-
 # Settings
 parser = HfArgumentParser(TrainingArguments)
 args = parser.parse_args()
+
+# Accelerator
+accelerator = Accelerator(log_with=["wandb", "tensorboard"], logging_dir=f"{args.save_dir}/log")
+acc_state = {str(k): str(v) for k, v in accelerator.state.__dict__.items()}
 
 args = Namespace(**vars(args), **acc_state)
 samples_per_step = accelerator.state.num_processes * args.train_batch_size
@@ -256,13 +262,14 @@ if args.resume_from_checkpoint:
 model.train()
 completed_steps = 0
 t_start = time.time()
+loss_tracking = 0
 for step, batch in enumerate(train_dataloader, start=1):
     if args.resume_from_checkpoint and step < resume_step:
         continue  # we need to skip steps until we reach the resumed step
     loss = model(batch, labels=batch, use_cache=False).loss
-    log_metrics(
-        step, {"lr": get_lr(), "samples": step * samples_per_step, "steps": completed_steps, "loss/train": loss.item()}
-    )
+    avg_loss = accelerator.gather(loss.repeat(args.train_batch_size)).mean()
+    loss_tracking += avg_loss.item() / args.gradient_accumulation_steps
+    log_metrics(step, {"samples": step * samples_per_step, "loss_per_step/train": loss.item()})
     loss = loss / args.gradient_accumulation_steps
     if step % args.gradient_accumulation_steps != 0:
         # Prevent backward from doing gradient all_reduce in every step
@@ -272,16 +279,27 @@ for step, batch in enumerate(train_dataloader, start=1):
         else:
             accelerator.backward(loss)
     else:
+        lr = get_lr()
         accelerator.backward(loss)
         accelerator.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
         lr_scheduler.step()
         optimizer.zero_grad()
-        completed_steps += 1
         elapsed_time = time.time() - t_start
         tflops = compute_tflops(elapsed_time, accelerator, args)
-        log_metrics(step, {"steps": completed_steps, "tflops": tflops, "time_per_iteration": elapsed_time})
+        log_metrics(
+            step,
+            {
+                "steps": completed_steps,
+                "loss/train": loss_tracking,
+                "lr": lr,
+                "tflops": tflops,
+                "time_per_iteration": elapsed_time,
+            },
+        )
         t_start = time.time()
+        loss_tracking = 0
+        completed_steps += 1
     if step % args.save_checkpoint_steps == 0:
         logger.info("Evaluating and saving model checkpoint")
         eval_loss, perplexity = evaluate(args)

@@ -28,9 +28,7 @@ from ...utils import (
 )
 
 
-_import_structure = {
-    "configuration_rembert": ["REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RemBertConfig"],
-}
+_import_structure = {"configuration_rembert": ["REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RemBertConfig"]}
 
 try:
     if not is_sentencepiece_available():

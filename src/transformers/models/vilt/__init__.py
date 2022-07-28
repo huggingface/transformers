@@ -21,9 +21,7 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
-_import_structure = {
-    "configuration_vilt": ["VILT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViltConfig"],
-}
+_import_structure = {"configuration_vilt": ["VILT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViltConfig"]}
 
 try:
     if not is_vision_available():
@@ -44,6 +42,7 @@ else:
         "VILT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ViltForImageAndTextRetrieval",
         "ViltForImagesAndTextClassification",
+        "ViltForTokenClassification",
         "ViltForMaskedLM",
         "ViltForQuestionAnswering",
         "ViltLayer",
@@ -76,6 +75,7 @@ if TYPE_CHECKING:
             ViltForImagesAndTextClassification,
             ViltForMaskedLM,
             ViltForQuestionAnswering,
+            ViltForTokenClassification,
             ViltLayer,
             ViltModel,
             ViltPreTrainedModel,

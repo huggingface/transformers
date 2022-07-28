@@ -27,9 +27,7 @@ from ...utils import (
 )
 
 
-_import_structure = {
-    "configuration_vision_encoder_decoder": ["VisionEncoderDecoderConfig"],
-}
+_import_structure = {"configuration_vision_encoder_decoder": ["VisionEncoderDecoderConfig"]}
 
 try:
     if not is_torch_available():

@@ -27,9 +27,7 @@ from ...utils import (
 )
 
 
-_import_structure = {
-    "configuration_beit": ["BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BeitConfig", "BeitOnnxConfig"],
-}
+_import_structure = {"configuration_beit": ["BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BeitConfig", "BeitOnnxConfig"]}
 
 try:
     if not is_vision_available():

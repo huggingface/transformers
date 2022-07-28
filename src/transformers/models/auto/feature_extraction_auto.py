@@ -49,9 +49,16 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("dpt", "DPTFeatureExtractor"),
         ("flava", "FlavaFeatureExtractor"),
         ("glpn", "GLPNFeatureExtractor"),
+        ("groupvit", "CLIPFeatureExtractor"),
         ("hubert", "Wav2Vec2FeatureExtractor"),
+        ("imagegpt", "ImageGPTFeatureExtractor"),
         ("layoutlmv2", "LayoutLMv2FeatureExtractor"),
+        ("layoutlmv3", "LayoutLMv3FeatureExtractor"),
+        ("levit", "LevitFeatureExtractor"),
         ("maskformer", "MaskFormerFeatureExtractor"),
+        ("mctct", "MCTCTFeatureExtractor"),
+        ("mobilevit", "MobileViTFeatureExtractor"),
+        ("owlvit", "OwlViTFeatureExtractor"),
         ("perceiver", "PerceiverFeatureExtractor"),
         ("poolformer", "PoolFormerFeatureExtractor"),
         ("regnet", "ConvNextFeatureExtractor"),
@@ -59,8 +66,9 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("segformer", "SegformerFeatureExtractor"),
         ("speech_to_text", "Speech2TextFeatureExtractor"),
         ("swin", "ViTFeatureExtractor"),
-        ("trillson_efficient", "Trillson_efficientFeatureExtractor"),
+        ("swinv2", "ViTFeatureExtractor"),
         ("van", "ConvNextFeatureExtractor"),
+        ("vilt", "ViltFeatureExtractor"),
         ("vit", "ViTFeatureExtractor"),
         ("vit_mae", "ViTFeatureExtractor"),
         ("wav2vec2", "Wav2Vec2FeatureExtractor"),
@@ -83,7 +91,7 @@ def feature_extractor_class_from_name(class_name: str):
             except AttributeError:
                 continue
 
-    for config, extractor in FEATURE_EXTRACTOR_MAPPING._extra_content.items():
+    for _, extractor in FEATURE_EXTRACTOR_MAPPING._extra_content.items():
         if getattr(extractor, "__name__", None) == class_name:
             return extractor
 

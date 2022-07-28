@@ -291,10 +291,10 @@ Also if you do set this environment variable it's the best to set it in your `~/
 The [`Trainer`] has been extended to support libraries that may dramatically improve your training
 time and fit much bigger models.
 
-Currently it supports third party solutions, [DeepSpeed](https://github.com/microsoft/DeepSpeed) and [FairScale](https://github.com/facebookresearch/fairscale/), which implement parts of the paper [ZeRO: Memory Optimizations
+Currently it supports third party solutions, [DeepSpeed](https://github.com/microsoft/DeepSpeed), [PyTorch FSDP](https://pytorch.org/docs/stable/fsdp.html) and [FairScale](https://github.com/facebookresearch/fairscale/), which implement parts of the paper [ZeRO: Memory Optimizations
 Toward Training Trillion Parameter Models, by Samyam Rajbhandari, Jeff Rasley, Olatunji Ruwase, Yuxiong He](https://arxiv.org/abs/1910.02054).
 
-This provided support is new and experimental as of this writing.
+This provided support is new and experimental as of this writing. While the support for DeepSpeed and PyTorch FSDP is active and we welcome issues around it, we don't support the FairScale integration anymore since it has been integrated in PyTorch main (see the [PyTorch FSDP integration](#pytorch-fully-sharded-data-parallel))
 
 <a id='zero-install-notes'></a>
 
@@ -407,6 +407,12 @@ should find `gcc-7` (and `g++7`) and then the build will succeed.
 As always make sure to edit the paths in the example to match your situation.
 
 ### FairScale
+
+<Tip warning={true}>
+
+This integration is not supported anymore, we recommend you either use DeepSpeed or PyTorch FSDP.
+
+</Tip>
 
 By integrating [FairScale](https://github.com/facebookresearch/fairscale/) the [`Trainer`]
 provides support for the following features from [the ZeRO paper](https://arxiv.org/abs/1910.02054):

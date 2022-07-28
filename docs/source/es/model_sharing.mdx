@@ -12,7 +12,7 @@ specific language governing permissions and limitations under the License.
 
 # Compartir un modelo
 
-Los últimos dos tutoriales mostraron como puedes realizar fine-tunning a un modelo con PyTorch, Keras y 🤗 Accelerate para distributed setups (entrenamiento distribuido). ¡El siguiente paso es compartir tu modelo con la comunidad! En Hugging Face creemos en compartir abiertamente a todos el conocimiento y los recursos para democratizar la inteligencia artificial. En este sentido, te animamos a considerar compartir tu modelo con la comunidad, de esta forma ayudas a otros ahorrando tiempo y recursos.
+Los últimos dos tutoriales mostraron cómo puedes realizar fine-tunning a un modelo con PyTorch, Keras y 🤗 Accelerate para configuraciones distribuidas. ¡El siguiente paso es compartir tu modelo con la comunidad! En Hugging Face creemos en compartir abiertamente a todos el conocimiento y los recursos para democratizar la inteligencia artificial. En este sentido, te animamos a considerar compartir tu modelo con la comunidad, de esta forma ayudas a otros ahorrando tiempo y recursos.
 
 En este tutorial aprenderás dos métodos para compartir un modelo trained o fine-tuned en el [Model Hub](https://huggingface.co/models):
 
@@ -43,13 +43,13 @@ Como resultado, puedes cargar una versión específica del modelo con el paráme
 ... )
 ```
 
-Los archivos son fácilmente editados dentro de un repositorio. Incluso puedes observar el commit history y las diferencias:
+Los archivos son editados fácilmente dentro de un repositorio. Incluso puedes observar el commit history y las diferencias:
 
 ![vis_diff](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/vis_diff.png)
 
 ## Configuración inicial
 
-Antes de compartir un modelo al Hub necesitarás tus credenciales de Hugging Face. Si tienes acceso a una terminal ejecuta el siguiente comando en el virtual environment donde 🤗 Transformers esté instalado. Esto guardará tu access token dentro de tu folder cache de Hugging Face (`~/.cache/` by default):
+Antes de compartir un modelo al Hub necesitarás tus credenciales de Hugging Face. Si tienes acceso a una terminal ejecuta el siguiente comando en el entorno virtual donde 🤗 Transformers esté instalado. Esto guardará tu token de acceso dentro de tu carpeta cache de Hugging Face (~/.cache/ by default):
 
 ```bash
 huggingface-cli login
@@ -71,11 +71,11 @@ Luego usa `notebook_login` para iniciar sesión al Hub, y sigue el link [aquí](
 
 ## Convertir un modelo para todos los Frameworks
 
-Para asegurarnos que tu modelo pueda ser usado por alguien que esté trabajando con un framework diferente, te recomendamos convertir y cargar tu modelo con pytorch y tensorflow checkpoints. Si bien los usuarios aún son capaces de cargar su modelo desde un framework diferente si se omite este paso, será más lento debido a que 🤗 Transformers necesitará convertir el checkpoint sobre-la-marcha.
+Para asegurarnos que tu modelo pueda ser usado por alguien que esté trabajando con un framework diferente, te recomendamos convertir y subir tu modelo con checkpoints de pytorch y tensorflow. Aunque los usuarios aún son capaces de cargar su modelo desde un framework diferente, si se omite este paso será más lento debido a que 🤗 Transformers necesitará convertir el checkpoint sobre-la-marcha.
 
 Convertir un checkpoint para otro framework es fácil. Asegúrate tener Pytorch y TensorFlow instalado (Véase [aquí](installation) para instrucciones de instalación), y luego encuentra el modelo específico para tu tarea en el otro Framework. 
 
-Por ejemplo, supongamos que has entrenado DistilBert para sequence classification en PyTorch y quieres convertirlo a su equivalente en TensorFlow. Cargas el equivalente en TensorFlow de tu modelo para tu tarea y especificas `from_pt=True` así 🤗 Transformers convertirá el Pytorch checkpoint a un TensorFlow Checkpoint:
+Por ejemplo, supongamos que has entrenado DistilBert para clasificación de secuencias en PyTorch y quieres convertirlo a su equivalente en TensorFlow. Cargas el equivalente en TensorFlow de tu modelo para tu tarea y especificas `from_pt=True` así 🤗 Transformers convertirá el Pytorch checkpoint a un TensorFlow Checkpoint:
 
 ```py
 >>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("path/to/awesome-name-you-picked", from_pt=True)
@@ -112,7 +112,7 @@ Compartir un modelo al Hub es tan simple como añadir un parámetro extra o un c
 >>> training_args = TrainingArguments(output_dir="my-awesome-model", push_to_hub=True)
 ```
 
-A continuación, pasa tus argumentos de entrenamiento como usualmente a [`Trainer`]:
+A continuación, como usualmente, pasa tus argumentos de entrenamiento a [`Trainer`]:
 
 ```py
 >>> trainer = Trainer(
@@ -124,7 +124,7 @@ A continuación, pasa tus argumentos de entrenamiento como usualmente a [`Traine
 ... )
 ```
 
-Luego que realizas fine-tune a tu modelo, llamas [`~transformers.Trainer.push_to_hub`] en [`Trainer`] para enviar el modelo al Hub. !🤗 Transformers incluso añadirá automáticamente los Hiperparámetros de entrenamiento, resultados de entrenamiento y versiones del Framework a tu model card!
+Luego que realizas fine-tune a tu modelo, llamas [`~transformers.Trainer.push_to_hub`] en [`Trainer`] para enviar el modelo al Hub!🤗 Transformers incluso añadirá automáticamente los Hiperparámetros de entrenamiento, resultados de entrenamiento y versiones del Framework a tu model card!
 
 ```py
 >>> trainer.push_to_hub()
@@ -135,7 +135,7 @@ Luego que realizas fine-tune a tu modelo, llamas [`~transformers.Trainer.push_to
 Los usuarios de TensorFlow pueden activar la misma funcionalidad con [`PushToHubCallback`]. En la funcion [`PushToHubCallback`], agrega:
 
 - Un directorio de salida para tu modelo.
-- Un tokenizer.
+- Un tokenizador.
 - El `hub_model_id`, el cual es tu usuario Hub y el nombre del modelo.
 
 ```py
@@ -156,7 +156,7 @@ Agregamos el callback a [`fit`](https://keras.io/api/models/model_training_apis/
 
 Puedes llamar la función `push_to_hub` directamente en tu modelo para subirlo al Hub.
 
-Específica el nombre del modelo en `push_to_hub`:
+Especifica el nombre del modelo en `push_to_hub`:
 
 ```py
 >>> pt_model.push_to_hub("my-awesome-model")
@@ -176,7 +176,7 @@ Si perteneces a una organización y quieres compartir tu modelo bajo el nombre d
 >>> pt_model.push_to_hub("my-awesome-model", organization="my-awesome-org")
 ```
 
-La función `push_to_hub` también puede ser usada para añadir archivos al repositorio del modelo. Por ejemplo, añade un tokenizer al repositorio:
+La función `push_to_hub` también puede ser usada para añadir archivos al repositorio del modelo. Por ejemplo, añade un tokenizador al repositorio:
 
 ```py
 >>> tokenizer.push_to_hub("my-awesome-model")
@@ -203,7 +203,7 @@ Desde aquí, añade información acerca del modelo:
 - Selecciona el **owner** (la persona propietaria) del repositorio. Puedes ser tú o cualquier organización a la que pertenezcas.
 - Escoge un nombre para tu modelo. También será el nombre del repositorio.
 - Elige si tu modelo es público o privado.
-- Específica la licencia que usará tu modelo.
+- Especifica la licencia que usará tu modelo.
 
 Ahora puedes hacer click en el tab **Files** y luego en el botón **Add file** para subir un nuevo archivo a tu repositorio. Luego arrastra y suelta un archivo a subir y le añades un mensaje al commit.
 
@@ -216,4 +216,4 @@ Para asegurarnos que los usuarios entiendan las capacidades de tu modelo, sus li
 * Elaborando y subiendo manualmente el archivo`README.md`.
 * Dando click en el botón **Edit model card** dentro del repositorio.
 
-Toma un momento para ver la tarjeta de modelo de DistilBert [model card](https://huggingface.co/distilbert-base-uncased) para que tengas un buen ejemplo del tipo de información que debería incluir. Consulta [la documentación](https://huggingface.co/docs/hub/model-repos) para más detalles acerca de otras opciones que puedes controlar dentro del archivo `README.md` como la huella de carbono del modelo o ejemplos de widgets.```
+Toma un momento para ver la [tarjeta de modelo](https://huggingface.co/distilbert-base-uncased) de DistilBert para que tengas un buen ejemplo del tipo de información que debería incluir. Consulta [la documentación](https://huggingface.co/docs/hub/model-repos) para más detalles acerca de otras opciones que puedes controlar dentro del archivo `README.md` como la huella de carbono del modelo o ejemplos de widgets. Consulta la documentación [aquí] (https://huggingface.co/docs/hub/model-repos).

@@ -74,6 +74,7 @@ from .hub import (
     is_local_clone,
     is_offline_mode,
     is_remote_url,
+    send_example_telemetry,
     url_to_filename,
 )
 from .import_utils import (
@@ -86,6 +87,7 @@ from .import_utils import (
     DummyObject,
     OptionalDependencyNotAvailable,
     _LazyModule,
+    ccl_version,
     is_accelerate_available,
     is_apex_available,
     is_bitsandbytes_available,
@@ -96,6 +98,7 @@ from .import_utils import (
     is_flax_available,
     is_ftfy_available,
     is_in_notebook,
+    is_ipex_available,
     is_librosa_available,
     is_onnx_available,
     is_pandas_available,
@@ -107,6 +110,7 @@ from .import_utils import (
     is_pytesseract_available,
     is_pytorch_quantization_available,
     is_rjieba_available,
+    is_sacremoses_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_scatter_available,
@@ -117,19 +121,24 @@ from .import_utils import (
     is_spacy_available,
     is_speech_available,
     is_tensorflow_probability_available,
+    is_tensorflow_text_available,
     is_tf2onnx_available,
     is_tf_available,
     is_timm_available,
     is_tokenizers_available,
     is_torch_available,
     is_torch_bf16_available,
+    is_torch_bf16_cpu_available,
+    is_torch_bf16_gpu_available,
     is_torch_cuda_available,
     is_torch_fx_available,
     is_torch_fx_proxy,
     is_torch_onnx_dict_inputs_support_available,
+    is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
     is_torchaudio_available,
+    is_torchdynamo_available,
     is_training_run_on_sagemaker,
     is_vision_available,
     requires_backends,
@@ -143,8 +152,10 @@ from .import_utils import (
 WEIGHTS_NAME = "pytorch_model.bin"
 WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
 TF2_WEIGHTS_NAME = "tf_model.h5"
+TF2_WEIGHTS_INDEX_NAME = "tf_model.h5.index.json"
 TF_WEIGHTS_NAME = "model.ckpt"
 FLAX_WEIGHTS_NAME = "flax_model.msgpack"
+FLAX_WEIGHTS_INDEX_NAME = "flax_model.msgpack.index.json"
 CONFIG_NAME = "config.json"
 FEATURE_EXTRACTOR_NAME = "preprocessor_config.json"
 MODEL_CARD_NAME = "modelcard.json"

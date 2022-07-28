@@ -278,7 +278,7 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         NER_MODEL = "dbmdz/bert-large-cased-finetuned-conll03-english"
         model = AutoModelForTokenClassification.from_pretrained(NER_MODEL)
         tokenizer = AutoTokenizer.from_pretrained(NER_MODEL, use_fast=True)
-        sentence = """Enzo works at the the UN"""
+        sentence = """Enzo works at the UN"""
         token_classifier = pipeline("ner", model=model, tokenizer=tokenizer)
         output = token_classifier(sentence)
         self.assertEqual(

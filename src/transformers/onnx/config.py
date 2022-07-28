@@ -77,9 +77,22 @@ class OnnxConfig(ABC):
         "causal-lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
         "default": OrderedDict({"last_hidden_state": {0: "batch", 1: "sequence"}}),
         "image-classification": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
+        "image-segmentation": OrderedDict(
+            {
+                "logits": {0: "batch", 1: "sequence"},
+                "pred_boxes": {0: "batch", 1: "sequence"},
+                "pred_masks": {0: "batch", 1: "sequence"},
+            }
+        ),
         "masked-im": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
         "masked-lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
         "multiple-choice": OrderedDict({"logits": {0: "batch"}}),
+        "object-detection": OrderedDict(
+            {
+                "logits": {0: "batch", 1: "sequence"},
+                "pred_boxes": {0: "batch", 1: "sequence"},
+            }
+        ),
         "question-answering": OrderedDict(
             {
                 "start_logits": {0: "batch", 1: "sequence"},
@@ -474,7 +487,7 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
 
     def fill_with_past_key_values_(self, inputs_or_outputs: Mapping[str, Mapping[int, str]], direction: str):
         """
-        Fill the input_or_ouputs mapping with past_key_values dynamic axes considering.
+        Fill the input_or_outputs mapping with past_key_values dynamic axes considering.
 
         Args:
             inputs_or_outputs: The mapping to fill.

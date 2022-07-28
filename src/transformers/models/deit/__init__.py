@@ -17,12 +17,16 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_tf_available,
+    is_torch_available,
+    is_vision_available,
+)
 
 
-_import_structure = {
-    "configuration_deit": ["DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeiTConfig", "DeiTOnnxConfig"],
-}
+_import_structure = {"configuration_deit": ["DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeiTConfig", "DeiTOnnxConfig"]}
 
 try:
     if not is_vision_available():
@@ -45,6 +49,21 @@ else:
         "DeiTForMaskedImageModeling",
         "DeiTModel",
         "DeiTPreTrainedModel",
+    ]
+
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["modeling_tf_deit"] = [
+        "TF_DEIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TFDeiTForImageClassification",
+        "TFDeiTForImageClassificationWithTeacher",
+        "TFDeiTForMaskedImageModeling",
+        "TFDeiTModel",
+        "TFDeiTPreTrainedModel",
     ]
 
 
@@ -72,6 +91,21 @@ if TYPE_CHECKING:
             DeiTForMaskedImageModeling,
             DeiTModel,
             DeiTPreTrainedModel,
+        )
+
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .modeling_tf_deit import (
+            TF_DEIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFDeiTForImageClassification,
+            TFDeiTForImageClassificationWithTeacher,
+            TFDeiTForMaskedImageModeling,
+            TFDeiTModel,
+            TFDeiTPreTrainedModel,
         )
 
 

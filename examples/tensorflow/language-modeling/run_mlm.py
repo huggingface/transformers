@@ -55,6 +55,7 @@ from transformers import (
     create_optimizer,
     set_seed,
 )
+from transformers.utils import send_example_telemetry
 from transformers.utils.versions import require_version
 
 
@@ -241,6 +242,10 @@ def main():
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
+    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
+    # information sent is the one passed as arguments along with your Python/PyTorch versions.
+    send_example_telemetry("run_mlm", model_args, data_args, framework="tensorflow")
 
     # Sanity checks
     if data_args.dataset_name is None and data_args.train_file is None and data_args.validation_file is None:

@@ -28,9 +28,7 @@ from ...utils import (
 )
 
 
-_import_structure = {
-    "configuration_xglm": ["XGLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "XGLMConfig"],
-}
+_import_structure = {"configuration_xglm": ["XGLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "XGLMConfig"]}
 
 try:
     if not is_sentencepiece_available():

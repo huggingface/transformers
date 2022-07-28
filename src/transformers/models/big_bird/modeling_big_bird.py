@@ -972,7 +972,7 @@ class BigBirdBlockSparseAttention(nn.Module):
         if params.shape[:2] != indices.shape[:2]:
             raise ValueError(
                 "Make sure that the first two dimensions of params and indices are identical,                 but"
-                f" they are params: {params.shape[:2]} vs. indices: {params.shape[:2]}"
+                f" they are params: {params.shape[:2]} vs. indices: {indices.shape[:2]}"
             )
         num_indices_to_gather = indices.shape[-2] * indices.shape[-1]
         num_indices_to_pick_from = params.shape[2]

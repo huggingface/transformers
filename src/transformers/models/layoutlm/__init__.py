@@ -25,8 +25,6 @@ from ...utils import (
     is_tokenizers_available,
     is_torch_available,
 )
-from .configuration_layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig
-from .tokenization_layoutlm import LayoutLMTokenizer
 
 
 _import_structure = {
