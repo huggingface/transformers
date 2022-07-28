@@ -23,7 +23,7 @@ from transformers.utils.import_utils import is_tf_available, is_torch_available
 from .image_utils import (
     ChannelDimension,
     get_image_size,
-    infer_channel_dimension,
+    infer_channel_dimension_format,
     is_jax_tensor,
     is_tf_tensor,
     is_torch_tensor,
@@ -50,7 +50,7 @@ def to_channel_dimension_format(image: np.ndarray, channel_dim: Union[ChannelDim
     Returns:
         image: A converted np.ndarray.
     """
-    current_channel_dim = infer_channel_dimension(image)
+    current_channel_dim = infer_channel_dimension_format(image)
     target_channel_dim = ChannelDimension(channel_dim)
     if current_channel_dim == target_channel_dim:
         return image
@@ -62,31 +62,6 @@ def to_channel_dimension_format(image: np.ndarray, channel_dim: Union[ChannelDim
         return image.transpose((1, 2, 0))
 
     raise ValueError("Unsupported channel dimension format: {}".format(channel_dim))
-
-
-def get_channel_dimension_format(image: np.ndarray) -> ChannelDimension:
-    """
-    Infers the channel dimension format of `image`.
-
-    Args:
-        image (`numpy.ndarray`):
-            The image to get the channel dimension format of.
-
-    Returns:
-        channel_dim: The channel dimension format of `image`.
-    """
-    if image.ndim == 3:
-        first_dim, last_dim = 0, 2
-    elif image.ndim == 4:
-        first_dim, last_dim = 1, 3
-    else:
-        raise ValueError("Unsupported number of image dimensions: {}".format(image.ndim))
-
-    if image[first_dim] in (1, 3):
-        return ChannelDimension.FIRST
-    elif image[last_dim] in (1, 3):
-        return ChannelDimension.LAST
-    raise Exception("Unable to infer channel dimension format")
 
 
 def to_pil_image(
@@ -218,7 +193,7 @@ def resize(
 
     # For all transformations, we want to keep the same data format as the input image unless otherwise specified.
     # The resized image from PIL will always have channels last, so find the input format first.
-    data_format = get_channel_dimension_format(image) if data_format is None else data_format
+    data_format = infer_channel_dimension_format(image) if data_format is None else data_format
 
     # To maintain backwards compatibility with the resizing done in previous image feature extractors, we use
     # the pillow library to resize the image and then convert back to numpy
