@@ -52,7 +52,9 @@ BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-def _make_causal_mask(input_ids_shape: torch.Size, device: torch.device, past_key_values_length: int) -> torch.BoolTensor:
+def _make_causal_mask(
+    input_ids_shape: torch.Size, device: torch.device, past_key_values_length: int
+) -> torch.BoolTensor:
     """
     Make causal mask used for self-attention.
     """
@@ -239,7 +241,9 @@ class BloomAttention(nn.Module):
         """
         Split the last dimension into (num_heads, head_dim)
         """
-        return torch.split(fused_qkv, self.head_dim, dim=-1)
+        batch_size, seq_length, three_times_hidden_size = fused_qkv.shape
+        fused_qkv = fused_qkv.view(batch_size, seq_length, self.num_heads, 3, self.head_dim)
+        return (fused_qkv[..., 0, :], fused_qkv[..., 1, :], fused_qkv[..., 2, :])
 
     def _merge_heads(self, x):
         # What we want to achieve is:
