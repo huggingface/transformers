@@ -53,9 +53,9 @@ class ChannelDimension(ExplicitEnum):
     LAST = "channels_last"
 
 
-def infer_channel_dimension(image: np.ndarray) -> ChannelDimension:
+def infer_channel_dimension_format(image: np.ndarray) -> ChannelDimension:
     """
-    Infers the channel dimension of the image.
+    Infers the channel dimension format of `image`.
 
     Args:
         image (`np.ndarray`):
@@ -65,19 +65,17 @@ def infer_channel_dimension(image: np.ndarray) -> ChannelDimension:
         The channel dimension of the image.
     """
     if image.ndim == 3:
-        first_dim = 0
-        last_dim = 2
+        first_dim, last_dim = 0, 2
     elif image.ndim == 4:
-        first_dim = 1
-        last_dim = 3
+        first_dim, last_dim = 1, 3
     else:
-        raise ValueError(f"Unsupported image dimension: {image.ndim}")
+        raise ValueError("Unsupported number of image dimensions: {}".format(image.ndim))
 
-    if image.shape[first_dim] in (1, 3):
+    if image[first_dim] in (1, 3):
         return ChannelDimension.FIRST
-    elif image.shape[last_dim] in (1, 3):
+    elif image[last_dim] in (1, 3):
         return ChannelDimension.LAST
-    raise Exception("Could not infer channel dimension")
+    raise Exception("Unable to infer channel dimension format")
 
 
 def get_image_size(image: np.ndarray, channel_dim: ChannelDimension = None) -> Tuple[int, int]:
@@ -94,7 +92,7 @@ def get_image_size(image: np.ndarray, channel_dim: ChannelDimension = None) -> T
         A tuple of the image's height and width.
     """
     if channel_dim is None:
-        channel_dim = infer_channel_dimension(image)
+        channel_dim = infer_channel_dimension_format(image)
 
     if channel_dim == ChannelDimension.FIRST:
         return image.shape[-2], image.shape[-1]
