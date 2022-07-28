@@ -29,9 +29,10 @@ import datasets
 import nltk  # Here to have a nice missing dependency error message early on
 import numpy as np
 import tensorflow as tf
-from datasets import load_dataset, load_metric
+from datasets import load_dataset
 from tqdm import tqdm
 
+import evaluate
 import transformers
 from filelock import FileLock
 from transformers import (
@@ -634,7 +635,7 @@ def main():
         # endregion
 
         # region Metric
-        metric = load_metric("rouge")
+        metric = evaluate.load("rouge")
         # endregion
 
         # region Training
