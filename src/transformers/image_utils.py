@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import enum
 import os
 from typing import List, Tuple, Union
 
@@ -24,7 +23,7 @@ import PIL.ImageOps
 import requests
 
 from .utils import is_flax_available, is_tf_available, is_torch_available
-from .utils.generic import _is_jax, _is_tensorflow, _is_torch
+from .utils.generic import ExplicitEnum, _is_jax, _is_tensorflow, _is_torch
 
 
 IMAGENET_DEFAULT_MEAN = [0.485, 0.456, 0.406]
@@ -49,9 +48,9 @@ def is_jax_tensor(obj):
     return _is_jax(obj) if is_flax_available() else False
 
 
-class ChannelDimension(enum.Enum):
-    FIRST = 1
-    LAST = 3
+class ChannelDimension(ExplicitEnum):
+    FIRST = "channels_first"
+    LAST = "channels_last"
 
 
 def infer_channel_dimension(image: np.ndarray) -> ChannelDimension:
