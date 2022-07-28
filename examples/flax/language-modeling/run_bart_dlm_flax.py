@@ -720,10 +720,10 @@ def main():
     # This one will take care of randomly masking the tokens and permuting the sentences.
     data_collator = FlaxDataCollatorForBartDenoisingLM(
         tokenizer=tokenizer,
+        decoder_start_token_id=model.config.decoder_start_token_id,
         mask_ratio=data_args.mlm_probability,
         poisson_lambda=data_args.poisson_lambda,
         permute_sentence_ratio=data_args.permute_sentence_ratio,
-        decoder_start_token_id=model.config.decoder_start_token_id,
     )
 
     # Store some constant
