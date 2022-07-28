@@ -556,6 +556,8 @@ class FlaxBertLayerCollection(nn.Module):
     gradient_checkpointing: bool = False
     use_scan: bool = False
 
+    # TODO(sanchit-gandhi): re-write as a `setup`
+    # TODO(sanchit-gandhi): re-introduce gradient checkpointing -> removed for PR iterating
     @nn.compact
     def __call__(
         self,
