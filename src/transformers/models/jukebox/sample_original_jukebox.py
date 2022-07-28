@@ -1,7 +1,10 @@
 # in order to be used, the following git repo has to be used :
 # git clone --branch adaptive_device https://github.com/ArthurZucker/jukebox.git
 import os
+import random
 
+import numpy as np
+import torch
 import torch as t
 
 from jukebox.hparams import HPARAMS_REGISTRY, Hyperparams, setup_hparams
@@ -12,11 +15,6 @@ from jukebox.utils.torch_utils import empty_cache
 
 
 rank, local_rank, device = setup_dist_from_mpi()
-import random
-
-import numpy as np
-import torch
-
 
 torch.backends.cuda.matmul.allow_tf32 = False
 torch.backends.cudnn.enabled = False
@@ -130,7 +128,6 @@ def test_sampling(model, device, tokens=40):
 
     empty_cache()
     del upsamplers
-    upsamplers = None
 
 
 def test_prime_samling(model, device, tokens=40):
