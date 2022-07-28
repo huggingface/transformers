@@ -590,12 +590,12 @@ class BloomModel(BloomPreTrainedModel):
     def get_input_embeddings(self):
         return self.word_embeddings
 
-    def _prepare_attn_mask(self, attention_mask: torch.Tensor, past_key_values_length: int):
+    def _prepare_attn_mask(self, attention_mask: torch.Tensor, input_shape: torch.Size, past_key_values_length: int):
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         combined_attention_mask = None
         device = attention_mask.device
-        _, seq_length = attention_mask.shape
+        _, seq_length = input_shape
 
         if seq_length > 1:
             combined_attention_mask = _make_causal_mask(
@@ -693,6 +693,7 @@ class BloomModel(BloomPreTrainedModel):
 
         causal_mask = self._prepare_attn_mask(
             attention_mask,
+            input_shape=torch.Size((batch_size, seq_length)),
             past_key_values_length=past_key_values_length,
         )
 
