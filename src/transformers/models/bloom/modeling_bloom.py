@@ -15,9 +15,8 @@
 """PyTorch BLOOM model."""
 
 import math
-import os
 import warnings
-from typing import Optional, Tuple, Union
+from typing import Tuple, Union
 
 import torch
 import torch.utils.checkpoint
