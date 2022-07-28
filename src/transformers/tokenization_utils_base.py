@@ -3694,15 +3694,16 @@ For a more complete example, see the implementation of `prepare_seq2seq_batch`.
         # Process tgt_texts
         if max_target_length is None:
             max_target_length = max_length
-        labels = self(
-            text_target=tgt_texts,
-            add_special_tokens=True,
-            return_tensors=return_tensors,
-            padding=padding,
-            max_length=max_target_length,
-            truncation=truncation,
-            **kwargs,
-        )
+        with self.as_target_tokenizer():
+            labels = self(
+                tgt_texts,
+                add_special_tokens=True,
+                return_tensors=return_tensors,
+                padding=padding,
+                max_length=max_target_length,
+                truncation=truncation,
+                **kwargs,
+            )
         model_inputs["labels"] = labels["input_ids"]
         return model_inputs
 

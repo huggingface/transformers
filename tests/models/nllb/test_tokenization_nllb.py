@@ -374,7 +374,7 @@ class NllbDistilledIntegrationTest(unittest.TestCase):
     def test_enro_tokenizer_prepare_batch(self):
         batch = self.tokenizer(
             self.src_text,
-            target_text=self.tgt_text,
+            text_target=self.tgt_text,
             padding=True,
             truncation=True,
             max_length=len(self.expected_src_tokens),

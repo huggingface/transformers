@@ -14,6 +14,8 @@
 # limitations under the License.
 
 
+import unittest
+
 from transformers import (
     DPRContextEncoderTokenizer,
     DPRContextEncoderTokenizerFast,
