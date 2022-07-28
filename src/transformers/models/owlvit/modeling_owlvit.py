@@ -1170,6 +1170,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         if not feature_map.ndim == 4:
             raise ValueError("Expected input shape is [batch_size, num_channels, height, width]")
 
+        device = feature_map.device
         height, width = feature_map.shape[1:3]
 
         box_coordinates = np.stack(np.meshgrid(np.arange(1, width + 1), np.arange(1, height + 1)), axis=-1).astype(
@@ -1181,7 +1182,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         box_coordinates = box_coordinates.reshape(
             box_coordinates.shape[0] * box_coordinates.shape[1], box_coordinates.shape[2]
         )
-        box_coordinates = torch.from_numpy(box_coordinates)
+        box_coordinates = torch.from_numpy(box_coordinates).to(device)
 
         return box_coordinates
 
@@ -1285,7 +1286,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         input_ids: torch.Tensor,
-        attention_mask: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
