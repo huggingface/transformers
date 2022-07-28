@@ -453,6 +453,31 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
 
     @slow
     @require_torch_gpu
+    def test_simple_generation_match_with_fp32(self):
+        path_350m = "bigscience/bloom-350m"
+        model = BloomForCausalLM.from_pretrained(path_350m, torch_dtype="auto", use_cache=True, revision="gs555750").cuda()
+        model_fp32 = BloomForCausalLM.from_pretrained(path_350m, use_cache=True, revision="gs555750").cuda()
+        model.eval()
+        model_fp32.eval()
+
+        tokenizer = BloomTokenizerFast.from_pretrained(path_350m)
+
+        input_sentence = "I enjoy walking with my cute dog"
+        EXPECTED_OUTPUT = (
+            "I enjoy walking with my cute dog, and I love to watch the kids play with the kids. I am a very active"
+            " person, and I enjoy working out, and I am a very active person. I am a very active person, and I"
+        )
+
+        input_ids = tokenizer.encode(input_sentence, return_tensors="pt")
+        greedy_output = model.generate(input_ids.cuda(), max_length=50)
+        greedy_output_in_fp32 = model_fp32.generate(input_ids.cuda(), max_length=50)
+
+        self.assertEqual(tokenizer.decode(greedy_output[0], skip_special_tokens=True), EXPECTED_OUTPUT)
+        # We test that fp32 has the same result
+        self.assertEqual(tokenizer.decode(greedy_output_in_fp32[0], skip_special_tokens=True), EXPECTED_OUTPUT)
+
+    @slow
+    @require_torch_gpu
     def test_batch_generation(self):
         path_350m = "bigscience/bloom-350m"
         model = BloomForCausalLM.from_pretrained(
