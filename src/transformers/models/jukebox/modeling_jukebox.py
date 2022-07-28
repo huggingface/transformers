@@ -82,9 +82,9 @@ except ImportError:
 
 
 # VQ-VAE building blocks
-class Conv1D(nn.Module):
-    def __init__(self, n_in, n_out, zero_out=False, init_scale=1.0):
-        super(Conv1D, self).__init__()
+class JukeboxConv1D(nn.Module):
+    def __init__(self, n_in, n_out, zero_out=False):
+        super(JukeboxConv1D, self).__init__()
         self.n_in = n_in
         self.n_out = n_out
         if zero_out:
@@ -93,7 +93,7 @@ class Conv1D(nn.Module):
             w = torch.empty(n_in, n_out)
 
         b = torch.zeros(n_out)
-        self.weight = nn.Parameter(w)  # modified self.w
+        self.weight = nn.Parameter(w)
         self.bias = nn.Parameter(b)
 
     def forward(self, x):
@@ -103,32 +103,6 @@ class Conv1D(nn.Module):
         )  # If x if float then float else half
         x = x.view(*size_out)
         return x
-
-
-class ResConvBlock(nn.Module):
-    def __init__(self, n_in, n_state):
-        super().__init__()
-        # TODO remvove the sequential in favor of a more understanble code
-        self.model = nn.Sequential(
-            nn.ReLU(),
-            nn.Conv2d(n_in, n_state, 3, 1, 1),
-            nn.ReLU(),
-            nn.Conv2d(n_state, n_in, 1, 1, 0),
-        )
-
-    def forward(self, x):
-        return x + self.model(x)
-
-
-class Resnet(nn.Module):
-    def __init__(self, n_in, n_depth, m_conv=1.0):
-        super().__init__()
-        # TODO remvove the sequential in favor of a more understanble code
-        # the list comprehension is maybe not very readable
-        self.model = nn.Sequential(*[ResConvBlock(n_in, int(m_conv * n_in)) for _ in range(n_depth)])
-
-    def forward(self, x):
-        return self.model(x)
 
 
 class ResConv1DBlock(nn.Module):
@@ -149,8 +123,8 @@ class ResConv1DBlock(nn.Module):
             nn.init.zeros_(out.bias)
         self.res_scale = res_scale
 
-    def forward(self, x):
-        return x + self.res_scale * self.model(x)
+    def forward(self, hidden_states):
+        return hidden_states + self.res_scale * self.model(hidden_states)
 
 
 class Resnet1D(nn.Module):
@@ -194,12 +168,12 @@ class Resnet1D(nn.Module):
         else:
             self.model = nn.Sequential(*blocks)
 
-    def forward(self, x):
+    def forward(self, hidden_states):
         if self.checkpoint_res == 1:
             for block in self.blocks:
-                x = block(x)
-            return x
-        return self.model(x)
+                hidden_states = block(hidden_states)
+            return hidden_states
+        return self.model(hidden_states)
 
 
 class EncoderConvBlock(nn.Module):
@@ -232,8 +206,8 @@ class EncoderConvBlock(nn.Module):
             blocks.append(block)
         self.model = nn.Sequential(*blocks)
 
-    def forward(self, x):
-        return self.model(x)
+    def forward(self, hidden_states):
+        return self.model(hidden_states)
 
 
 class DecoderConvBock(nn.Module):
@@ -279,8 +253,8 @@ class DecoderConvBock(nn.Module):
                 blocks.append(block)
         self.model = nn.Sequential(*blocks)
 
-    def forward(self, x):
-        return self.model(x)
+    def forward(self, hidden_states):
+        return self.model(hidden_states)
 
 
 class Encoder(nn.Module):
@@ -312,17 +286,17 @@ class Encoder(nn.Module):
         for level, down_t, stride_t in iterator:
             self.level_blocks.append(level_block(level, down_t, stride_t))
 
-    def forward(self, x):
-        xs = []
+    def forward(self, hidden_states):
+        all_hidden_states = []
 
         # 64, 32, ...
         iterator = zip(list(range(self.levels)), self.downs_t, self.strides_t)
         for level, down_t, stride_t in iterator:
             level_block = self.level_blocks[level]
-            x = level_block(x)
-            xs.append(x)
+            hidden_states = level_block(hidden_states)
+            all_hidden_states.append(hidden_states)
 
-        return xs
+        return all_hidden_states
 
 
 class Decoder(nn.Module):
@@ -345,19 +319,19 @@ class Decoder(nn.Module):
         self.out = nn.Conv1d(output_emb_width, input_emb_width, 3, 1, 1)
 
     def forward(self, xs, all_levels=True):
-        x = xs[-1]
+        hidden_states = xs[-1]
 
         # 32, 64 ...
         iterator = reversed(list(zip(list(range(self.levels)), self.downs_t, self.strides_t)))
         for level, down_t, stride_t in iterator:
             level_block = self.level_blocks[level]
-            x = level_block(x)
+            hidden_states = level_block(hidden_states)
 
             if level != 0 and all_levels:
-                x = x + xs[level - 1]
+                hidden_states = hidden_states + xs[level - 1]
 
-        x = self.out(x)
-        return x
+        hidden_states = self.out(hidden_states)
+        return hidden_states
 
 
 def dont_update(params):
@@ -411,22 +385,22 @@ class BottleneckBlock(nn.Module):
         self.k_elem = None
         self.register_buffer("k", torch.zeros(self.k_bins, self.emb_width))
 
-    def _tile(self, x):
-        d, ew = x.shape
+    def _tile(self, hidden_states):
+        d, ew = hidden_states.shape
         if d < self.k_bins:
             n_repeats = (self.k_bins + d - 1) // d
             std = 0.01 / np.sqrt(ew)
-            x = x.repeat(n_repeats, 1)
-            x = x + torch.randn_like(x) * std
-        return x
+            hidden_states = hidden_states.repeat(n_repeats, 1)
+            hidden_states = hidden_states + torch.randn_like(hidden_states) * std
+        return hidden_states
 
-    def init_k(self, x):
-        # TODO rename x to a way more meaningful name
+    def init_k(self, hidden_states):
+        # TODO rename hidden_states to a way more meaningful name
 
         _, k_bins = self.emb_width, self.k_bins  # mu,
         self.init = True
-        # init k_w using random vectors from x
-        y = self._tile(x)
+        # init k_w using random vectors from hidden_states
+        y = self._tile(hidden_states)
         _k_rand = y[torch.randperm(y.shape[0])][:k_bins]
         # dist.broadcast(_k_rand, 0)
         self.k = _k_rand
@@ -444,16 +418,16 @@ class BottleneckBlock(nn.Module):
             self.k_sum.data.mul_(expected_usage)
         self.threshold = threshold
 
-    def update_k(self, x, x_l):
+    def update_k(self, hidden_states, x_l):
         mu, emb_width, k_bins = self.mu, self.emb_width, self.k_bins
         with torch.no_grad():
             # Calculate new centres
-            x_l_onehot = torch.zeros(k_bins, x.shape[0], device=x.device)  # k_bins, N * L
-            x_l_onehot.scatter_(0, x_l.view(1, x.shape[0]), 1)
+            x_l_onehot = torch.zeros(k_bins, hidden_states.shape[0], device=hidden_states.device)  # k_bins, N * L
+            x_l_onehot.scatter_(0, x_l.view(1, hidden_states.shape[0]), 1)
 
-            _k_sum = torch.matmul(x_l_onehot, x)  # k_bins, w
+            _k_sum = torch.matmul(x_l_onehot, hidden_states)  # k_bins, w
             _k_elem = x_l_onehot.sum(dim=-1)  # k_bins
-            y = self._tile(x)
+            y = self._tile(hidden_states)
             _k_rand = y[torch.randperm(y.shape[0])][:k_bins]
 
             # Update centres
@@ -469,24 +443,23 @@ class BottleneckBlock(nn.Module):
             dk = torch.norm(self.k - old_k) / np.sqrt(np.prod(old_k.shape))
         return dict(entropy=entropy, used_curr=used_curr, usage=usage, dk=dk)
 
-    def preprocess(self, x):
+    def preprocess(self, hidden_states):
         # NCT -> NTC -> [NT, C]
-        x = x.permute(0, 2, 1).contiguous()
-        x = x.view(-1, x.shape[-1])  # x_en = (N * L, w), k_j = (w, k_bins)
+        hidden_states = hidden_states.permute(0, 2, 1).contiguous()
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])  # x_en = (N * L, w), k_j = (w, k_bins)
 
-        if x.shape[-1] == self.emb_width:
-            prenorm = torch.norm(x - torch.mean(x)) / np.sqrt(np.prod(x.shape))
-        elif x.shape[-1] == 2 * self.emb_width:
-            x1, x2 = x[..., : self.emb_width], x[..., self.emb_width :]
+        if hidden_states.shape[-1] == self.emb_width:
+            prenorm = torch.norm(hidden_states - torch.mean(hidden_states)) / np.sqrt(np.prod(hidden_states.shape))
+        elif hidden_states.shape[-1] == 2 * self.emb_width:
+            x1, x2 = hidden_states[..., : self.emb_width], hidden_states[..., self.emb_width :]
             prenorm = (torch.norm(x1 - torch.mean(x1)) / np.sqrt(np.prod(x1.shape))) + (
                 torch.norm(x2 - torch.mean(x2)) / np.sqrt(np.prod(x2.shape))
             )
 
             # Normalise
-            x = x1 + x2
-        else:
-            assert False, f"Expected {x.shape[-1]} to be (1 or 2) * {self.emb_width}"
-        return x, prenorm
+            hidden_states = x1 + x2
+
+        return hidden_states, prenorm
 
     def postprocess(self, x_l, x_d, x_shape):
         # [NT, C] -> NTC -> NCT
@@ -511,15 +484,15 @@ class BottleneckBlock(nn.Module):
         x = F.embedding(x_l, self.k)
         return x
 
-    def encode(self, x):
-        N, width, T = x.shape
+    def encode(self, hidden_states):
+        N, _, T = hidden_states.shape
 
         # Preprocess.
-        x, prenorm = self.preprocess(x)
+        hidden_states, _ = self.preprocess(hidden_states)
         # TODO remvove unused prenorm variable
 
         # Quantise
-        x_l, fit = self.quantise(x)
+        x_l, _ = self.quantise(hidden_states)
         # TODO remvove unused fit and the return variable
 
         # Postprocess.
@@ -537,31 +510,31 @@ class BottleneckBlock(nn.Module):
         x_d = x_d.view(N, T, width).permute(0, 2, 1).contiguous()
         return x_d
 
-    def forward(self, x, update_k=True):
-        N, width, T = x.shape
+    def forward(self, hidden_states, update_k=True):
+        N, width, T = hidden_states.shape
 
         # Preprocess
-        x, prenorm = self.preprocess(x)
+        hidden_states, prenorm = self.preprocess(hidden_states)
 
         # Init k if not inited
         if update_k and not self.init:
-            self.init_k(x)
+            self.init_k(hidden_states)
 
         # Quantise and dequantise through bottleneck
-        x_l, fit = self.quantise(x)
+        x_l, fit = self.quantise(hidden_states)
         x_d = self.dequantise(x_l)
 
         # Update embeddings
         if update_k:
-            update_metrics = self.update_k(x, x_l)
+            update_metrics = self.update_k(hidden_states, x_l)
         else:
             update_metrics = {}
 
         # Loss
-        commit_loss = torch.norm(x_d.detach() - x) ** 2 / np.prod(x.shape)
+        commit_loss = torch.norm(x_d.detach() - hidden_states) ** 2 / np.prod(hidden_states.shape)
 
         # Passthrough
-        x_d = x + (x_d - x).detach()
+        x_d = hidden_states + (x_d - hidden_states).detach()
 
         # Postprocess
         x_l, x_d = self.postprocess(x_l, x_d, (N, T))
@@ -572,13 +545,9 @@ class Bottleneck(nn.Module):
     def __init__(self, l_bins, emb_width, mu, levels):
         super().__init__()
         self.levels = levels
-
-        def level_block(level):
-            return BottleneckBlock(l_bins, emb_width, mu)
-
         self.level_blocks = nn.ModuleList()
         for level in range(self.levels):
-            self.level_blocks.append(level_block(level))
+            self.level_blocks.append(BottleneckBlock(l_bins, emb_width, mu))
 
     def encode(self, xs):
         zs = [level_block.encode(x) for (level_block, x) in zip(self.level_blocks, xs)]
@@ -860,12 +829,10 @@ class JukeboxVQVAE(PreTrainedModel):
         recons_loss = torch.zeros(()).to(x.device)
         spec_loss = torch.zeros(()).to(x.device)
         multispec_loss = torch.zeros(()).to(x.device)
-        # x_target = audio_postprocess(x.float(), hps)
         x_target = x.float()
 
         for level in reversed(range(self.levels)):
             x_out = self.postprocess(x_outs[level])
-            # x_out = audio_postprocess(x_out, hps)
             this_recons_loss = _loss_fn(loss_fn, x_target, x_out, hps)
             this_spec_loss = _spectral_loss(x_target, x_out, hps)
             this_multispec_loss = _multispectral_loss(x_target, x_out, hps)
@@ -914,8 +881,8 @@ class JukeboxMLP(nn.Module):
     def __init__(self, width, n_state, resid_dropout=0.0, afn="gelu", zero_out=False, init_scale=1.0):
         # a single channel is always used in original code
         super().__init__()
-        self.c_fc = Conv1D(width, n_state, init_scale=init_scale)
-        self.c_proj = Conv1D(n_state, width, zero_out, init_scale=init_scale)
+        self.c_fc = JukeboxConv1D(width, n_state)
+        self.c_proj = JukeboxConv1D(n_state, width, zero_out)
         self.act = ACT2FN[afn]
         self.dropout = nn.Dropout(resid_dropout) if resid_dropout > 0.0 else lambda x: x
 
@@ -1006,11 +973,11 @@ class JukeboxAttention(nn.Module):
         self.scale = scale
         self.mask = mask
         if attn_func == 6:
-            self.c_attn = Conv1D(width, n_state, init_scale=init_scale)
-            self.c_enc_kv = Conv1D(width, n_state * 2, init_scale=init_scale)
+            self.c_attn = JukeboxConv1D(width, n_state)
+            self.c_enc_kv = JukeboxConv1D(width, n_state * 2)
         else:
-            self.c_attn = Conv1D(width, n_state * 3, init_scale=init_scale)
-        self.c_proj = Conv1D(n_state, width, zero_out, init_scale=init_scale)
+            self.c_attn = JukeboxConv1D(width, n_state * 3)
+        self.c_proj = JukeboxConv1D(n_state, width, zero_out)
         self.attn_dropout = nn.Dropout(attn_dropout) if attn_dropout > 0.0 else lambda x: x
         self.resid_dropout = nn.Dropout(resid_dropout) if resid_dropout > 0.0 else lambda x: x
 
@@ -2563,9 +2530,7 @@ class JukeboxPrior(nn.Module):
                 self.prime_prior = JukeboxConditionalAutoregressive(
                     input_shape=prime_input_shape, x_cond=False, y_cond=False, only_encode=True, **prime_kwargs
                 )
-                self.prime_state_proj = Conv1D(
-                    self.prime_acts_width, self.prime_state_width, init_scale=prime_kwargs["init_scale"]
-                )
+                self.prime_state_proj = JukeboxConv1D(self.prime_acts_width, self.prime_state_width)
                 self.prime_state_ln = LayerNorm(self.prime_state_width)
                 self.prime_bins = prime_kwargs["bins"]
                 self.prime_x_out = nn.Linear(self.prime_state_width, self.prime_bins, bias=False)
@@ -2595,7 +2560,6 @@ class JukeboxPrior(nn.Module):
 
     def get_y(self, labels, start, total_length, offset, get_indices=False):
         y = labels.clone()
-        # y = labels.clone()
         y[:, 0] = total_length
         # Set sample_length to match this level
         y[:, 2] = int(self.sample_length)
@@ -2653,14 +2617,11 @@ class JukeboxPrior(nn.Module):
     def prior_postprocess(self, z):
         N = z.shape[0]
         dims = (self.prior_dims[0], z.shape[1] - self.prior_dims[0])
-        # xs = list(t.split(z, self.prior_dims, dim=1))
         xs = list(torch.split(z, dims, dim=1))
 
         for i in range(len(xs)):
-
             shape = self.prior_shapes[i]
             _, bins_shift = int(self.prior_bins[i]), int(self.prior_bins_shift[i])  # bins, -> _,
-            # xs[i] = (xs[i] - bins_shift).view(N, *shape) #view(N, -1, *shape[1:])
             xs[i] = (xs[i] - bins_shift).view(N, -1, *shape[1:])
             xs[i] = torch.clamp(
                 xs[i], min=0

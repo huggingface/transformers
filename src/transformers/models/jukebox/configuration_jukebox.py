@@ -226,6 +226,7 @@ class JukeboxConfig(PretrainedConfig):
         cond_m_conv=1,
         max_bow_genre_size=1,  # this should only be in the tokenizer
         name="AudioSamples",
+        init_std=0.2,
         **kwargs,
     ):
         self.name = name
@@ -353,6 +354,7 @@ class JukeboxConfig(PretrainedConfig):
         self.alignment_head = alignment_head
         self.m_attn = m_attn
 
+        self.init_std = init_std
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
 
