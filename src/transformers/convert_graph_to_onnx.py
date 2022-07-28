@@ -474,6 +474,7 @@ def quantize(onnx_model_path: Path) -> Path:
 
     # Save model
     print(f"Quantized model has been written at {quantized_model_path}: \N{heavy check mark}")
+    onnx.save_model(quantizer.model.model, quantized_model_path.as_posix())
 
     return quantized_model_path
 
