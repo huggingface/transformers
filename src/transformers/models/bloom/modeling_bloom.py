@@ -59,12 +59,12 @@ def _make_causal_mask(
     Make causal mask used for self-attention.
     """
     batch_size, target_length = input_ids_shape
-    mask = torch.ones((target_length, target_length), dtype=torch.bool, device=device)
-    mask.triu_(diagonal=1)
+    mask = torch.empty((target_length, target_length + past_key_values_length), dtype=torch.bool, device=device)
+    mask[:, past_key_values_length:] = True
+    mask[:, past_key_values_length:].triu_(diagonal=1)
 
     if past_key_values_length > 0:
-        past_key_values_mask = torch.zeros((target_length, past_key_values_length), dtype=torch.bool, device=device)
-        mask = torch.cat([past_key_values_mask, mask], dim=-1)
+        mask[:, past_key_values_length:] = False
 
     expanded_mask = mask[None, None, :, :].expand(batch_size, 1, target_length, target_length + past_key_values_length)
     return expanded_mask
@@ -77,8 +77,8 @@ def _expand_mask(mask: torch.Tensor, tgt_len: int) -> torch.BoolTensor:
     batch_size, source_length = mask.shape
     tgt_len = tgt_len if tgt_len is not None else source_length
 
-    expanded_mask = mask[:, None, None, :].to(torch.bool).expand(batch_size, 1, tgt_len, source_length)
-    return ~expanded_mask
+    expanded_mask = ~(mask[:, None, None, :].to(torch.bool))
+    return expanded_mask.expand(batch_size, 1, tgt_len, source_length)
 
 
 def build_alibi_tensor(attention_mask: torch.Tensor, n_head: int, dtype: torch.dtype) -> torch.Tensor:
