@@ -101,7 +101,7 @@ speech inputs) and `labels` (which are the `input_ids` of the encoded target seq
 >>> model.config.decoder_start_token_id = tokenizer.cls_token_id
 >>> model.config.pad_token_id = tokenizer.pad_token_id
 
->>> # load an audio input and pre-process for model input
+>>> # load an audio input and pre-process (normalise mean/std to 0/1)
 >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 >>> input_values = feature_extractor(ds[0]["audio"]["array"], return_tensors="pt").input_values
 
