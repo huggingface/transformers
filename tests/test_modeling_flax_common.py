@@ -1126,6 +1126,72 @@ class FlaxModelTesterMixin:
             for output, remat_output in zip(outputs, remat_outputs):
                 self.assertTrue((output == remat_output).all())
 
+    def test_scan_with_automatic_init(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            # prepare inputs
+            prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            # prepare unrolled and scanned models
+            model = model_class(config)
+            scan_model = model_class(config)
+
+            try:
+                scan_model.scan_enable()
+            except NotImplementedError:
+                continue
+
+            # compute unrolled and scanned outputs
+            outputs = model(**prepared_inputs_dict)
+            scan_outputs = scan_model(**prepared_inputs_dict)
+
+            # ensure that the dicts of outputs contain the same keys
+            self.assertEqual(outputs.keys(), scan_outputs.keys())
+
+            outputs = outputs.to_tuple()
+            scan_outputs = scan_outputs.to_tuple()
+
+            # ensure that the outputs remain precisely equal
+            for output, scan_output in zip(outputs, scan_outputs):
+                self.assertTrue((output == scan_output).all())
+
+    def test_scan_with_no_automatic_init(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            # prepare inputs
+            prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            # init the unrolled model
+            model = model_class(config)
+
+            # save the model in the temporary directory
+            # load the saved model with _do_init=False
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                scan_model, scan_params = model_class.from_pretrained(tmpdirname, _do_init=False)
+
+            try:
+                scan_model.scan_enable()
+            except NotImplementedError:
+                continue
+
+            # convert the unrolled params to scan
+            scan_params = scan_model.convert_unroll_to_scan(scan_params)
+
+            # compute unrolled and scan outputs
+            outputs = model(**prepared_inputs_dict)
+            scan_outputs = scan_model(**prepared_inputs_dict, params=scan_params)
+
+            # ensure that the dicts of outputs contain the same keys
+            self.assertEqual(outputs.keys(), scan_outputs.keys())
+
+            outputs = outputs.to_tuple()
+            scan_outputs = scan_outputs.to_tuple()
+
+            # ensure that the outputs remain precisely equal
+            for output, scan_output in zip(outputs, scan_outputs):
+                self.assertTrue((output == scan_output).all())
+
 
 @require_flax
 @is_staging_test

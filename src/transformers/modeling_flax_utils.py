@@ -238,6 +238,35 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
     def enable_gradient_checkpointing(self):
         raise NotImplementedError(f"gradient checkpointing method has to be implemented for {self}")
 
+    def scan_enable(self):
+        raise NotImplementedError(f"scan method has to be implemented for {self}")
+
+    def convert_unroll_to_scan(self, params=None):
+        params = flatten_dict(params, sep="/")
+        keys = list(params.keys())
+
+        for k in keys:
+            # Identify all "unrolled" layers formed as part of the FlaxBertLayerCollection
+            # These params contain the identifier `layer` in their key
+            if "layer/0" in k:
+                # Squash the keys for the N unrolled layers into one single key: (layer/0, ..., layer/N) -> FlaxBertLayers
+                scan_key = k.replace("0", "ScanLayers")
+                stacked_params = []
+
+                # Iterate over the unrolled layers (1,...,N)
+                for i in range(self.config.num_hidden_layers):
+                    # Stack the params for the N layers into one super block
+                    stacked_params.append(params[k.replace("0", str(i))])
+                    # Remove the unrolled layer params on the fly
+                    # -> Memory overhead for conversion is at most 2x the per-layer memory
+                    params.pop(k.replace("0", str(i)))
+
+                params[scan_key] = jnp.stack(stacked_params)
+
+        # Finally, unflatten the dict to restore the nested pytree structure
+        params = unflatten_dict(params, sep="/")
+        return params
+
     @classmethod
     def _from_config(cls, config, **kwargs):
         """

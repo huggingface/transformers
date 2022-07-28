@@ -23,8 +23,8 @@ import jax
 import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen import combine_masks, make_causal_mask
-from flax.linen.partitioning import remat, scan_with_axes
 from flax.linen.attention import dot_product_attention_weights
+from flax.linen.partitioning import remat, scan_with_axes
 from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
 
@@ -599,7 +599,7 @@ class FlaxBertLayerCollection(nn.Module):
                 split_rngs={"params": True, "dropout": True},
                 in_axes=(nn.broadcast, 0, nn.broadcast, nn.broadcast, nn.broadcast, nn.broadcast, nn.broadcast),
                 length=self.config.num_hidden_layers,
-            )(self.config, dtype=self.dtype, use_scan=True, name="FlaxBertLayers")(
+            )(self.config, dtype=self.dtype, use_scan=True, name="ScanLayers")(
                 hidden_states,
                 attention_mask,
                 head_mask,
@@ -838,32 +838,6 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
         # initialize the parameters
         if self._is_initialized:
             self.params = self.convert_unroll_to_scan(self.params)
-
-    def convert_unroll_to_scan(self, params=None):
-        params = flatten_dict(params, sep="/")
-        keys = list(params.keys())
-
-        for k in keys:
-            # Identify all "unrolled" layers formed as part of the FlaxBertLayerCollection
-            # These params contain the identifier `layer` in their key
-            if "layer/0" in k:
-                # Squash the keys for the N unrolled layers into one single key: (layer/0, ..., layer/N) -> FlaxBertLayers
-                scan_key = k.replace("0", "FlaxBertLayers")
-                stacked_params = []
-
-                # Iterate over the unrolled layers (1,...,N)
-                for i in range(self.config.num_hidden_layers):
-                    # Stack the params for the N layers into one super block
-                    stacked_params.append(params[k.replace("0", str(i))])
-                    # Remove the unrolled layer params on the fly
-                    # -> Memory overhead for conversion is at most 2x the per-layer memory
-                    params.pop(k.replace("0", str(i)))
-
-                params[scan_key] = jnp.stack(stacked_params)
-
-        # Finally, unflatten the dict to restore the nested pytree structure
-        params = unflatten_dict(params, sep="/")
-        return params
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
