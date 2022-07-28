@@ -13,25 +13,34 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Tuple, List, Union
+from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
-import PIL
 import numpy as np
+import PIL
+
+from transformers.utils.import_utils import is_tf_available, is_torch_available
 
 from .image_utils import (
     ChannelDimension,
     get_image_size,
     infer_channel_dimension,
-    is_torch_tensor,
+    is_jax_tensor,
     is_tf_tensor,
-    is_jax_tensor
+    is_torch_tensor,
 )
+
+
+if TYPE_CHECKING:
+    if is_torch_available():
+        import torch
+    if is_tf_available():
+        import tensorflow as tf
 
 
 def to_pil_image(
     image: Union[np.ndarray, PIL.Image.Image, "torch.Tensor", "tf.Tensor"],
     channel_dim: Optional[ChannelDimension] = None,
-    rescale=None
+    rescale=None,
 ) -> PIL.Image.Image:
     """
     Converts `image` to a PIL Image. Optionally rescales it and puts the channel dimension back as the last axis if
@@ -70,10 +79,37 @@ def to_pil_image(
 
 def get_resize_output_image_size(
     input_image: np.ndarray,
-    size: Union[int, Tuple[int, int], List[int]],
+    size: Union[int, Tuple[int, int], List[int], Tuple[int]],
     default_to_square: bool = True,
-    max_size: int = None
+    max_size: int = None,
 ) -> np.ndarray:
+    """
+    Find the target (height, width) dimension of the output image after resizing given the input image and the desired
+    size.
+
+    Args:
+        input_image (`np.ndarray`):
+            The image to resize.
+        size (`int` or `Tuple[int, int]` or List[int] or Tuple[int]):
+            The size to use for resizing the image. If `size` is a sequence like (h, w), output size will be matched to
+            this.
+
+            If `size` is an int and `default_to_square` is `True`, then image will be resized to (size, size). If
+            `size` is an int and `default_to_square` is `False`, then smaller edge of the image will be matched to this
+            number. i.e, if height > width, then image will be rescaled to (size * height / width, size).
+        resample (`int`, *optional*, defaults to `PIL.Image.BILINEAR`):
+            The filter to user for resampling.
+        default_to_square (`bool`, *optional*, defaults to `True`):
+            How to convert `size` when it is a single int. If set to `True`, the `size` will be converted to a square
+            (`size`,`size`). If set to `False`, will replicate
+            [`torchvision.transforms.Resize`](https://pytorch.org/vision/stable/transforms.html#torchvision.transforms.Resize)
+            with support for resizing only the smallest edge and providing an optional `max_size`.
+        max_size (`int`, *optional*, defaults to `None`):
+            The maximum allowed for the longer edge of the resized image: if the longer edge of the image is greater
+            than `max_size` after being resized according to `size`, then the image is resized again so that the longer
+            edge is equal to `max_size`. As a result, `size` might be overruled, i.e the smaller edge may be shorter
+            than `size`. Only used if `default_to_square` is `False`.
+    """
     if isinstance(size, (tuple, list)):
         if len(size) == 2:
             return size
