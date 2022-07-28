@@ -32,6 +32,8 @@ from transformers.testing_utils import (
 @require_torch_gpu
 @slow
 class MixedInt8Test(unittest.TestCase):
+    # We keep the constants inside the init function and model loading inside setUp function
+
     # We need to test on relatively large models (aka >1b parameters otherwise the quantiztion may not work as expected)
     # Therefore here we use only bloom-1b3 to test our module
     model_name = "bigscience/bloom-1b3"
@@ -40,14 +42,16 @@ class MixedInt8Test(unittest.TestCase):
     EXPECTED_RELATIVE_DIFFERENCE = (
         1.540025  # This was obtained on a Quadro RTX 8000 so the number might slightly change
     )
+
     input_text = "Hello my name is"
     EXPECTED_OUTPUT = "Hello my name is John.\nI am a friend of your father.\n"
     MAX_NEW_TOKENS = 10
-
-    # Models pipeline and tokenizer
-    model_fp16 = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype="auto", device_map="auto")
-    model_8bit = AutoModelForCausalLM.from_pretrained(model_name, load_in_8bit=True, device_map="auto")
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    def setUp(self):
+        # Models pipeline and tokenizer
+        self.model_fp16 = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype="auto", device_map="auto")
+        self.model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+        return super().setUp()
 
     def test_memory_footprint(self):
         r"""
