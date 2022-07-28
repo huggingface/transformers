@@ -285,35 +285,16 @@ class BloomAttention(nn.Module):
         value_layer = value_layer.transpose(1, 2).reshape(batch_size * self.num_heads, q_length, self.head_dim)
         if layer_past is not None:
             past_key, past_value = layer_past
-            # FIXME @thomasw21: `transpose(0,1).view(...)` is used to be backward compatible
             # concatenate along seq_length dimension:
             #  - key: [batch_size * self.num_heads, head_dim, kv_length]
             #  - value: [batch_size * self.num_heads, kv_length, head_dim]
-            key_layer = torch.cat(
-                (
-                    past_key.transpose(1, 3).view(batch_size * self.num_heads, self.head_dim, -1).type_as(key_layer),
-                    key_layer,
-                ),
-                dim=2,
-            )
-            value_layer = torch.cat(
-                (
-                    past_value.transpose(1, 2)
-                    .view(batch_size * self.num_heads, -1, self.head_dim)
-                    .type_as(value_layer),
-                    value_layer,
-                ),
-                dim=1,
-            )
+            key_layer = torch.cat((past_key.type_as(key_layer), key_layer), dim=2)
+            value_layer = torch.cat((past_value.type_as(value_layer), value_layer), dim=1)
 
         _, _, kv_length = key_layer.shape
 
         if use_cache is True:
-            # FIXME @thomasw21: `.view(...).transpose(0,1)` is used to be backward compatible
-            present = (
-                key_layer.view(batch_size, self.num_heads, self.head_dim, kv_length).transpose(1, 3),
-                value_layer.view(batch_size, self.num_heads, kv_length, self.head_dim).transpose(1, 2),
-            )
+            present = (key_layer, value_layer)
         else:
             present = None
 
@@ -897,28 +878,24 @@ class BloomForCausalLM(BloomPreTrainedModel):
         [`~PreTrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
         beam_idx at every generation step.
         """
+        batch_size_times_num_heads, head_dim, seq_length = past[0][0].shape
+        batch_size = len(beam_idx)
+        num_heads = batch_size_times_num_heads // batch_size
+        # key: layer_past[0] [batch_size * num_heads, head_dim, seq_length]
+        # value: layer_past[1] [batch_size * num_heads, seq_length, head_dim]
         return tuple(
-            tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
+            (
+                layer_past[0]
+                .view(batch_size, num_heads, head_dim, seq_length)
+                .index_select(0, beam_idx.to(layer_past[0].device))
+                .view(batch_size_times_num_heads, head_dim, seq_length),
+                layer_past[1]
+                .view(batch_size, num_heads, seq_length, head_dim)
+                .index_select(0, beam_idx.to(layer_past[1].device))
+                .view(batch_size_times_num_heads, seq_length, head_dim),
+            )
             for layer_past in past
         )
-        # batch_size_times_num_heads, head_dim, seq_length = past[0][0].shape
-        # batch_size = len(beam_idx)
-        # num_heads = batch_size_times_num_heads // batch_size
-        # # key: layer_past[0] [batch_size * num_heads, head_dim, seq_length]
-        # # value: layer_past[1] [batch_size * num_heads, seq_length, head_dim]
-        # return tuple(
-        #     (
-        #         layer_past[0]
-        #         .view(batch_size, num_heads, head_dim, seq_length)
-        #         .index_select(0, beam_idx.to(layer_past[0].device))
-        #         .view(batch_size_times_num_heads, head_dim, seq_length),
-        #         layer_past[1]
-        #         .view(batch_size, num_heads, seq_length, head_dim)
-        #         .index_select(0, beam_idx.to(layer_past[1].device))
-        #         .view(batch_size_times_num_heads, seq_length, head_dim),
-        #     )
-        #     for layer_past in past
-        # )
 
 
 @add_start_docstrings(
