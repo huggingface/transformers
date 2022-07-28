@@ -397,7 +397,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
 
         # Test that the model have the correct precisions
         for key, value in model.state_dict().items():
-            if key == "transformer.word_embeddings.weight":
+            if key in ["transformer.word_embeddings.weight", "lm_head.weight"]:
                 self.assertEqual(value.dtype, torch.float32)
             else:
                 self.assertEqual(value.dtype, torch.float16)
