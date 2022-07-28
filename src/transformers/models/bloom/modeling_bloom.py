@@ -330,7 +330,7 @@ class BloomAttention(nn.Module):
 
         # aggregate results across tp ranks. See here: https://github.com/pytorch/pytorch/issues/76232
         if self.pretraining_tp > 1 and self.slow_but_exact:
-            slices = self.config.hidden_size / self.pretraining_tp
+            slices = self.hidden_size / self.pretraining_tp
             output_tensor = torch.zeros_like(context_layer)
             for i in range(self.pretraining_tp):
                 output_tensor = output_tensor + nn.functional.linear(
