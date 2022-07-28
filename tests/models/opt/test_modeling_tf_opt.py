@@ -18,7 +18,7 @@ import unittest
 import numpy as np
 
 from transformers import OPTConfig, is_tf_available
-from transformers.testing_utils import require_sentencepiece, require_tf, slow
+from transformers.testing_utils import require_sentencepiece, require_tf, slow, tooslow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -227,8 +227,8 @@ class TFOPTModelTest(TFModelTesterMixin, unittest.TestCase):
                             models_equal = False
                     self.assertTrue(models_equal)
 
+    @tooslow
     def test_saved_model_creation(self):
-        # This test is too long (>30sec) and makes fail the CI
         pass
 
 

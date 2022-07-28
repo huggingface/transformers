@@ -260,7 +260,7 @@ class LayoutLMv2ModelTester:
 class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
 
     test_pruning = False
-    test_torchscript = False
+    test_torchscript = True
     test_mismatched_shapes = False
 
     all_model_classes = (
