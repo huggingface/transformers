@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+from functools import partial
 from typing import Callable, Optional, Tuple
 
 import numpy as np
@@ -821,35 +821,49 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
         )
 
     def scan_enable(self):
-        """self.params = flatten_dict(self.params, sep="/")
-        keys = list(self.params.keys())
+        self._module = self.module_class(
+            config=self.config,
+            dtype=self.dtype,
+            use_scan=True,
+        )
+        init_fn = partial(self.init_weights, input_shape=self.input_shape)
+        params_shape_tree = jax.eval_shape(init_fn, self.key)
+
+        # get the shape of the parameters
+        self._params_shape_tree = params_shape_tree
+
+        # save required_params as set
+        self._required_params = set(flatten_dict(unfreeze(params_shape_tree)).keys())
+
+        # initialize the parameters
+        if self._is_initialized:
+            self.params = self.convert_unroll_to_scan(self.params)
+
+    def convert_unroll_to_scan(self, params=None):
+        params = flatten_dict(params, sep="/")
+        keys = list(params.keys())
 
         for k in keys:
             # Identify all "unrolled" layers formed as part of the FlaxBertLayerCollection
             # These params contain the identifier `layer` in their key
             if "layer/0" in k:
                 # Squash the keys for the N unrolled layers into one single key: (layer/0, ..., layer/N) -> FlaxBertLayers
-                scan_key = k.replace("layer/0", "FlaxBertLayers")
+                scan_key = k.replace("0", "FlaxBertLayers")
                 stacked_params = []
 
                 # Iterate over the unrolled layers (1,...,N)
                 for i in range(self.config.num_hidden_layers):
                     # Stack the params for the N layers into one super block
-                    stacked_params.append(self.params[k.replace("0", str(i))])
+                    stacked_params.append(params[k.replace("0", str(i))])
                     # Remove the unrolled layer params on the fly
                     # -> Memory overhead for conversion is at most 2x the per-layer memory
-                    self.params.pop(k.replace("0", str(i)))
+                    params.pop(k.replace("0", str(i)))
 
-                self.params[scan_key] = jnp.stack(stacked_params)
+                params[scan_key] = jnp.stack(stacked_params)
 
         # Finally, unflatten the dict to restore the nested pytree structure
-        self.params = unflatten_dict(self.params, sep="/")"""
-
-        self._module = self.module_class(
-            config=self.config,
-            dtype=self.dtype,
-            use_scan=True,
-        )
+        params = unflatten_dict(params, sep="/")
+        return params
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
