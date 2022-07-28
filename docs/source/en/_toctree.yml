@@ -166,7 +166,8 @@
   - sections:
     - local: model_doc/auto
       title: Auto Classes
-    - sections:
+    - isExpanded: false
+      sections:
       - local: model_doc/albert
         title: ALBERT
       - local: model_doc/bart
@@ -342,8 +343,8 @@
       - local: model_doc/yoso
         title: YOSO
       title: Text models
-      isExpanded: False
-    - sections:
+    - isExpanded: false
+      sections:
       - local: model_doc/beit
         title: BEiT
       - local: model_doc/clip
@@ -393,8 +394,8 @@
       - local: model_doc/yolos
         title: YOLOS
       title: Vision models
-      isExpanded: False
-    - sections:
+    - isExpanded: false
+      sections:
       - local: model_doc/hubert
         title: Hubert
       - local: model_doc/mctct
@@ -426,8 +427,8 @@
       - local: model_doc/xlsr_wav2vec2
         title: XLSR-Wav2Vec2
       title: Audio models
-      isExpanded: False
-    - sections:
+    - isExpanded: false
+      sections:
       - local: model_doc/data2vec
         title: Data2Vec
       - local: model_doc/flava
@@ -451,14 +452,13 @@
       - local: model_doc/visual_bert
         title: VisualBERT
       title: Multimodal models
-      isExpanded: False
-    - sections:
+    - isExpanded: false
+      sections:
       - local: model_doc/decision_transformer
         title: Decision Transformer
       - local: model_doc/trajectory_transformer
         title: Trajectory Transformer
       title: Reinforcement learning models
-      isExpanded: False
     title: Models
   - sections:
     - local: internal/modeling_utils
