@@ -52,7 +52,7 @@ BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-def _make_causal_mask(input_ids_shape: torch.Size, device: torch.device, past_key_values_length: int = 0):
+def _make_causal_mask(input_ids_shape: torch.Size, device: torch.device, past_key_values_length: int) -> torch.BoolTensor:
     """
     Make causal mask used for self-attention.
     """
@@ -68,7 +68,7 @@ def _make_causal_mask(input_ids_shape: torch.Size, device: torch.device, past_ke
     return expanded_mask
 
 
-def _expand_mask(mask: torch.Tensor, tgt_len: int = None):
+def _expand_mask(mask: torch.Tensor, tgt_len: int) -> torch.BoolTensor:
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
@@ -583,24 +583,23 @@ class BloomModel(BloomPreTrainedModel):
     def get_input_embeddings(self):
         return self.word_embeddings
 
-    def _prepare_attn_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
+    def _prepare_attn_mask(self, attention_mask: torch.Tensor, past_key_values_length: int):
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         combined_attention_mask = None
         device = attention_mask.device
-        _, seq_length = input_shape
+        _, seq_length = attention_mask.shape
 
         if seq_length > 1:
             combined_attention_mask = _make_causal_mask(
-                input_shape, device=device, past_key_values_length=past_key_values_length
+                attention_mask.shape, device=device, past_key_values_length=past_key_values_length
             )
 
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            expanded_attn_mask = _expand_mask(attention_mask, tgt_len=seq_length)
-            combined_attention_mask = (
-                expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask | combined_attention_mask
-            )
+        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+        expanded_attn_mask = _expand_mask(attention_mask, tgt_len=seq_length)
+        combined_attention_mask = (
+            expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask | combined_attention_mask
+        )
 
         return combined_attention_mask
 
@@ -691,8 +690,6 @@ class BloomModel(BloomPreTrainedModel):
 
         causal_mask = self._prepare_attn_mask(
             attention_mask,
-            input_shape=output_shape[:-1],
-            inputs_embeds=inputs_embeds,
             past_key_values_length=past_key_values_length,
         )
 
