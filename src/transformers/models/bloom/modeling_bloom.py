@@ -292,6 +292,8 @@ class BloomAttention(nn.Module):
             key_layer = torch.cat((past_key.type_as(key_layer), key_layer), dim=2)
             value_layer = torch.cat((past_value.type_as(value_layer), value_layer), dim=1)
 
+        _, _, kv_length = key_layer.shape
+
         if use_cache is True:
             present = (key_layer, value_layer)
         else:
