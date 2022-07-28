@@ -285,16 +285,35 @@ class BloomAttention(nn.Module):
         value_layer = value_layer.transpose(1, 2).reshape(batch_size * self.num_heads, q_length, self.head_dim)
         if layer_past is not None:
             past_key, past_value = layer_past
+            # FIXME @thomasw21: `transpose(0,1).view(...)` is used to be backward compatible
             # concatenate along seq_length dimension:
             #  - key: [batch_size * self.num_heads, head_dim, kv_length]
             #  - value: [batch_size * self.num_heads, kv_length, head_dim]
-            key_layer = torch.cat((past_key.type_as(key_layer), key_layer), dim=2)
-            value_layer = torch.cat((past_value.type_as(value_layer), value_layer), dim=1)
+            key_layer = torch.cat(
+                (
+                    past_key.transpose(1, 3).view(batch_size * self.num_heads, self.head_dim, -1).type_as(key_layer),
+                    key_layer,
+                ),
+                dim=2,
+            )
+            value_layer = torch.cat(
+                (
+                    past_value.transpose(1, 2)
+                    .view(batch_size * self.num_heads, -1, self.head_dim)
+                    .type_as(value_layer),
+                    value_layer,
+                ),
+                dim=1,
+            )
 
         _, _, kv_length = key_layer.shape
 
         if use_cache is True:
-            present = (key_layer, value_layer)
+            # FIXME @thomasw21: `.view(...).transpose(0,1)` is used to be backward compatible
+            present = (
+                key_layer.view(batch_size, self.num_heads, self.head_dim, kv_length).transpose(1, 3),
+                value_layer.view(batch_size, self.num_heads, kv_length, self.head_dim).tranpose(1, 2),
+            )
         else:
             present = None
 
