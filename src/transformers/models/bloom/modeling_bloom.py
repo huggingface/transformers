@@ -689,7 +689,12 @@ class BloomModel(BloomPreTrainedModel):
 
         alibi = build_alibi_tensor(attention_mask, self.n_head, dtype=hidden_states.dtype)
 
-        causal_mask = self._prepare_attn_mask(attention_mask, input_shape=output_shape[:-1], inputs_embeds=inputs_embeds, past_key_values_length=past_key_values_length)
+        causal_mask = self._prepare_attn_mask(
+            attention_mask,
+            input_shape=output_shape[:-1],
+            inputs_embeds=inputs_embeds,
+            past_key_values_length=past_key_values_length,
+        )
 
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
 
@@ -855,7 +860,9 @@ class BloomForCausalLM(BloomPreTrainedModel):
             batch_size, seq_length, vocab_size = shift_logits.shape
             # Flatten the tokens
             loss_fct = CrossEntropyLoss()
-            loss = loss_fct(shift_logits.view(batch_size * seq_length, vocab_size), shift_labels.view(batch_size * seq_length))
+            loss = loss_fct(
+                shift_logits.view(batch_size * seq_length, vocab_size), shift_labels.view(batch_size * seq_length)
+            )
 
         if not return_dict:
             output = (lm_logits,) + transformer_outputs[1:]
@@ -1003,7 +1010,9 @@ class BloomForSequenceClassification(BloomPreTrainedModel):
             elif self.config.problem_type == "single_label_classification":
                 batch_size, seq_length = labels.shape
                 loss_fct = CrossEntropyLoss()
-                loss = loss_fct(pooled_logits.view(batch_size * seq_length, self.num_labels), labels.view(batch_size * seq_length))
+                loss = loss_fct(
+                    pooled_logits.view(batch_size * seq_length, self.num_labels), labels.view(batch_size * seq_length)
+                )
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(pooled_logits, labels)
@@ -1106,7 +1115,9 @@ class BloomForTokenClassification(BloomPreTrainedModel):
         if labels is not None:
             batch_size, seq_length = labels.shape
             loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(batch_size * seq_length, self.num_labels), labels.view(batch_size * seq_length))
+            loss = loss_fct(
+                logits.view(batch_size * seq_length, self.num_labels), labels.view(batch_size * seq_length)
+            )
 
         if not return_dict:
             output = (logits,) + transformer_outputs[2:]
