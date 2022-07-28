@@ -352,9 +352,9 @@ class BloomMLP(nn.Module):
         self.pretraining_tp = config.pretraining_tp
         self.slow_but_exact = config.slow_but_exact
         self.dense_h_to_4h = nn.Linear(hidden_size, 4 * hidden_size)
+        self.gelu_impl = BloomGelu()
         self.dense_4h_to_h = nn.Linear(4 * hidden_size, hidden_size)
         self.hidden_dropout = config.hidden_dropout
-        self.gelu_impl = BloomGelu()
 
     def forward(self, hidden_states, residual):
         hidden_states = self.gelu_impl(self.dense_h_to_4h(hidden_states))
