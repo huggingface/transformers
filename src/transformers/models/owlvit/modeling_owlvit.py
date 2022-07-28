@@ -1374,7 +1374,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         pred_boxes = self.box_predictor(image_feats, feature_map)
 
         if not return_dict:
-            return (
+            output = (
                 pred_logits,
                 pred_boxes,
                 query_embeds,
@@ -1383,6 +1383,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
                 text_model_last_hidden_states,
                 vision_model_last_hidden_states,
             )
+            output = tuple(x for x in output if x is not None)
+            return output
 
         return OwlViTObjectDetectionOutput(
             image_embeds=feature_map,
