@@ -682,7 +682,7 @@ class BloomModel(BloomPreTrainedModel):
         seq_length_with_past = seq_length
         past_key_values_length = 0
         if past_key_values[0] is not None:
-            past_key_values_length = past_key_values[0][0].shape[1]
+            past_key_values_length = past_key_values[0][0].shape[2]
             seq_length_with_past += past_key_values_length
 
         if attention_mask is None:
@@ -883,8 +883,16 @@ class BloomForCausalLM(BloomPreTrainedModel):
         [`~PreTrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
         beam_idx at every generation step.
         """
+        batch_size_times_num_heads, head_dim, seq_length = past[0].shape
+        batch_size = len(beam_idx)
+        num_heads = batch_size_times_num_heads // batch_size
+        # key: layer_past[0] [batch_size * num_heads, head_dim, seq_length]
+        # value: layer_past[1] [batch_size * num_heads, seq_length, head_dim]
         return tuple(
-            tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
+            (
+                layer_past[0].view(batch_size, num_heads, seq_length).index_select(0, beam_idx.to(layer_past[0].device)).view(batch_size_times_num_heads, head_dim, seq_length),
+                layer_past[1].view(batch_size, num_heads, seq_length).index_select(0, beam_idx.to(layer_past[1].device)).view(batch_size_times_num_heads, seq_length, head_dim)
+            )
             for layer_past in past
         )
 
