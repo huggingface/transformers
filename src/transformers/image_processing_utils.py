@@ -14,15 +14,16 @@
 # limitations under the License.
 
 import copy
-import os
 import json
-from collections import UserDict
-from typing import Any, Dict, Optional, Tuple, Union
+import os
+from typing import Any, Dict, Tuple, Union
 
 import numpy as np
+
 from requests import HTTPError
 
 from .dynamic_module_utils import custom_object_save
+from .feature_extraction_utils import BatchFeature as BaseBatchFeature
 from .utils import (
     HUGGINGFACE_CO_RESOLVE_ENDPOINT,
     IMAGE_PROCESSOR_NAME,
@@ -30,24 +31,21 @@ from .utils import (
     PushToHubMixin,
     RepositoryNotFoundError,
     RevisionNotFoundError,
-    TensorType,
     cached_path,
     copy_func,
     hf_bucket_url,
-    is_flax_available,
-    is_remote_url,
-    is_torch_available,
-    is_tf_available,
     is_offline_mode,
+    is_remote_url,
     logging,
-    torch_required,
 )
-from .utils.generic import _is_jax, _is_numpy, _is_torch_device
+
 
 logger = logging.get_logger(__name__)
 
 
-class BatchFeature(UserDict):
+# TODO: Move BatchFeature to be imported by both feature_extraction_utils and image_processing_utils
+# We override the class string here, but logic is the same.
+class BatchFeature(BaseBatchFeature):
     r"""
     Holds the output of the image processor specific `__call__` methods.
 
@@ -55,143 +53,12 @@ class BatchFeature(UserDict):
 
     Args:
         data (`dict`):
-            Dictionary of lists/arrays/tensors returned by the __call__/pad methods ('input_values', 'attention_mask',
+            Dictionary of lists/arrays/tensors returned by the __call__/pad methods ('pixel_values', 'attention_mask',
             etc.).
         tensor_type (`Union[None, str, TensorType]`, *optional*):
             You can give a tensor_type here to convert the lists of integers in PyTorch/TensorFlow/Numpy Tensors at
             initialization.
     """
-
-    def __init__(self, data: Optional[Dict[str, Any]] = None, tensor_type: Union[None, str, TensorType] = None):
-        super().__init__(data)
-        self.convert_to_tensors(tensor_type=tensor_type)
-
-    # Copied from transformers.tokenization_utils_base.BatchEncoding.__getitem__
-    def __getitem__(self, item: str) -> Any:
-        """
-        If the key is a string, returns the value of the dict associated to `key` ('input_values', 'attention_mask',
-        etc.).
-        """
-        if isinstance(item, str):
-            return self.data[item]
-        else:
-            raise KeyError("Indexing with integers is not available when using Python based feature extractors")
-
-    # Copied from transformers.tokenization_utils_base.BatchEncoding.__getattr__
-    def __getattr__(self, item: str):
-        try:
-            return self.data[item]
-        except KeyError:
-            raise AttributeError
-
-    # Copied from transformers.feature_extraction_utils.BatchFeature.__getstate__
-    def __getstate__(self):
-        return {"data": self.data}
-
-    # Copied from transformers.feature_extraction_utils.BatchFeature.__setstate__
-    def __setstate__(self, state):
-        if "data" in state:
-            self.data = state["data"]
-
-    # Copied from transformers.tokenization_utils_base.BatchEncoding.keys
-    def keys(self):
-        return self.data.keys()
-
-    # Copied from transformers.tokenization_utils_base.BatchEncoding.values
-    def values(self):
-        return self.data.values()
-
-    # Copied from transformers.tokenization_utils_base.BatchEncoding.items
-    def items(self):
-        return self.data.items()
-
-    # Copied from transformers.feature_extraction_utils.BatchFeature.convert_to_tensors
-    def convert_to_tensors(self, tensor_type: Optional[Union[str, TensorType]] = None):
-        """
-        Convert the inner content to tensors.
-
-        Args:
-            tensor_type (`str` or [`~utils.TensorType`], *optional*):
-                The type of tensors to use. If `str`, should be one of the values of the enum [`~utils.TensorType`]. If
-                `None`, no modification is done.
-        """
-        if tensor_type is None:
-            return self
-
-        # Convert to TensorType
-        if not isinstance(tensor_type, TensorType):
-            tensor_type = TensorType(tensor_type)
-
-        # Get a function reference for the correct framework
-        if tensor_type == TensorType.TENSORFLOW:
-            if not is_tf_available():
-                raise ImportError(
-                    "Unable to convert output to TensorFlow tensors format, TensorFlow is not installed."
-                )
-            import tensorflow as tf
-
-            as_tensor = tf.constant
-            is_tensor = tf.is_tensor
-        elif tensor_type == TensorType.PYTORCH:
-            if not is_torch_available():
-                raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
-            import torch
-
-            def as_tensor(value):
-                if isinstance(value, (list, tuple)) and len(value) > 0 and isinstance(value[0], np.ndarray):
-                    value = np.array(value)
-                return torch.tensor(value)
-
-            is_tensor = torch.is_tensor
-        elif tensor_type == TensorType.JAX:
-            if not is_flax_available():
-                raise ImportError("Unable to convert output to JAX tensors format, JAX is not installed.")
-            import jax.numpy as jnp  # noqa: F811
-
-            as_tensor = jnp.array
-            is_tensor = _is_jax
-        else:
-            as_tensor = np.asarray
-            is_tensor = _is_numpy
-
-        # Do the tensor conversion in batch
-        for key, value in self.items():
-            try:
-                if not is_tensor(value):
-                    tensor = as_tensor(value)
-
-                    self[key] = tensor
-            except:  # noqa E722
-                if key == "overflowing_values":
-                    raise ValueError("Unable to create tensor returning overflowing values of different lengths. ")
-                raise ValueError(
-                    "Unable to create tensor, you should probably activate padding "
-                    "with 'padding=True' to have batched tensors with the same length."
-                )
-
-        return self
-
-    @torch_required
-    # Copied from transformers.tokenization_utils_base.BatchEncoding.to with BatchEncoding->BatchFeature
-    def to(self, device: Union[str, "torch.device"]) -> "BatchFeature":
-        """
-        Send all values to device by calling `v.to(device)` (PyTorch only).
-
-        Args:
-            device (`str` or `torch.device`): The device to put the tensors on.
-
-        Returns:
-            [`BatchFeature`]: The same instance after modification.
-        """
-
-        # This check catches things like APEX blindly calling "to" on all inputs to a module
-        # Otherwise it passes the casts down and casts the LongTensor containing the token idxs
-        # into a HalfTensor
-        if isinstance(device, str) or _is_torch_device(device) or isinstance(device, int):
-            self.data = {k: v.to(device=device) for k, v in self.data.items()}
-        else:
-            logger.warning(f"Attempting to cast a BatchFeature to type {str(device)}. This is not supported.")
-        return self
 
 
 class ImageProcessorMixin(PushToHubMixin):
@@ -218,12 +85,10 @@ class ImageProcessorMixin(PushToHubMixin):
         self._processor_class = processor_class
 
     @classmethod
-    def from_pretrained(
-        cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
-    ):
+    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs):
         r"""
-        Instantiate a type of [`~image_processing_utils.ImageProcessorMixin`] from a image processor, *e.g.* a
-        derived class of [`BaseImageProcessor`].
+        Instantiate a type of [`~image_processing_utils.ImageProcessorMixin`] from a image processor, *e.g.* a derived
+        class of [`BaseImageProcessor`].
 
         Args:
             pretrained_model_name_or_path (`str` or `os.PathLike`):
@@ -241,8 +106,8 @@ class ImageProcessorMixin(PushToHubMixin):
                 Path to a directory in which a downloaded pretrained model image processor should be cached if the
                 standard cache should not be used.
             force_download (`bool`, *optional*, defaults to `False`):
-                Whether or not to force to (re-)download the image processor files and override the cached versions
-                if they exist.
+                Whether or not to force to (re-)download the image processor files and override the cached versions if
+                they exist.
             resume_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to delete incompletely received file. Attempts to resume the download if such a file
                 exists.
@@ -496,16 +361,16 @@ class ImageProcessorMixin(PushToHubMixin):
     @classmethod
     def from_json_file(cls, json_file: Union[str, os.PathLike]):
         """
-        Instantiates an image processor of type [`~image_processing_utils.ImageProcessorMixin`] from the path to
-        a JSON file of parameters.
+        Instantiates an image processor of type [`~image_processing_utils.ImageProcessorMixin`] from the path to a JSON
+        file of parameters.
 
         Args:
             json_file (`str` or `os.PathLike`):
                 Path to the JSON file containing the parameters.
 
         Returns:
-            A image processor of type [`~feature_extraction_utils.FeatureExtractionMixin`]: The image_processor
-            object instantiated from that JSON file.
+            A image processor of type [`~feature_extraction_utils.FeatureExtractionMixin`]: The image_processor object
+            instantiated from that JSON file.
         """
         with open(json_file, "r", encoding="utf-8") as reader:
             text = reader.read()
