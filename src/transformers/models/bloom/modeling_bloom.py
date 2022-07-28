@@ -279,11 +279,10 @@ class BloomAttention(nn.Module):
         (query_layer, key_layer, value_layer) = self._split_heads(fused_qkv)
 
         batch_size, q_length, _, _ = query_layer.shape
-        _, kv_length, _, _ = key_layer.shape
 
         query_layer = query_layer.transpose(1, 2).reshape(batch_size * self.num_heads, q_length, self.head_dim)
-        key_layer = key_layer.permute(0, 2, 3, 1).reshape(batch_size * self.num_heads, self.head_dim, kv_length)
-        value_layer = value_layer.transpose(1, 2).reshape(batch_size * self.num_heads, kv_length, self.head_dim)
+        key_layer = key_layer.permute(0, 2, 3, 1).reshape(batch_size * self.num_heads, self.head_dim, q_length)
+        value_layer = value_layer.transpose(1, 2).reshape(batch_size * self.num_heads, q_length, self.head_dim)
         if layer_past is not None:
             past_key, past_value = layer_past
             # concatenate along seq_length dimension:
