@@ -139,6 +139,13 @@ class OwlViTProcessor(ProcessorMixin):
         else:
             return BatchEncoding(data=dict(**image_features), tensor_type=return_tensors)
 
+    def post_process(self, *args, **kwargs):
+        """
+        This method forwards all its arguments to [`OwlViTFeatureExtractor.post_process`]. Please refer to the
+        docstring of this method for more information.
+        """
+        return self.feature_extractor.post_process(*args, **kwargs)
+
     def batch_decode(self, *args, **kwargs):
         """
         This method forwards all its arguments to CLIPTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
