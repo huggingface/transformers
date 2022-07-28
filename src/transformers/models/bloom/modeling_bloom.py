@@ -313,9 +313,7 @@ class BloomAttention(nn.Module):
         # we cast attention scores to fp32, compute scaled softmax and cast back into initial dtype - [batch_size, num_heads, q_length, kv_length]        input_dtype = attention_scores.dtype
         input_dtype = attention_scores.dtype
         attention_scores = attention_scores.float()
-        attn_weights = torch.masked_fill(
-            attention_scores, attention_mask, torch.finfo(torch.float32).min
-        )
+        attn_weights = torch.masked_fill(attention_scores, attention_mask, torch.finfo(torch.float32).min)
         attention_probs = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(input_dtype)
 
         # [batch_size, num_heads, q_length, kv_length]
