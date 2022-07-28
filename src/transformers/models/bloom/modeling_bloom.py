@@ -588,7 +588,7 @@ class BloomModel(BloomPreTrainedModel):
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         combined_attention_mask = None
         device = attention_mask.device
-        seq_length, _ = input_shape
+        _, seq_length = input_shape
 
         if seq_length > 1:
             combined_attention_mask = _make_causal_mask(
@@ -649,7 +649,7 @@ class BloomModel(BloomPreTrainedModel):
         elif input_ids is not None:
             batch_size, seq_length = input_ids.shape
             input_ids = input_ids.view(batch_size, seq_length)
-            output_shape = input_ids.shape + (self.config.hidden_size,)
+            output_shape = input_ids.shape + (self.embed_dim,)
         elif inputs_embeds is not None:
             output_shape = inputs_embeds.shape
         else:
