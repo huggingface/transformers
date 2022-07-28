@@ -600,7 +600,7 @@ class BloomModel(BloomPreTrainedModel):
 
         if seq_length > 1:
             combined_attention_mask = _make_causal_mask(
-                attention_mask.shape, device=device, past_key_values_length=past_key_values_length
+                input_shape, device=device, past_key_values_length=past_key_values_length
             )
 
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
