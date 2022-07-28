@@ -550,24 +550,24 @@ class Bottleneck(nn.Module):
             self.level_blocks.append(BottleneckBlock(l_bins, emb_width, mu))
 
     def encode(self, xs):
-        zs = [level_block.encode(x) for (level_block, x) in zip(self.level_blocks, xs)]
-        return zs
+        music_tokens = [level_block.encode(x) for (level_block, x) in zip(self.level_blocks, xs)]
+        return music_tokens
 
-    def decode(self, zs, start_level=0, end_level=None):
+    def decode(self, music_tokens, start_level=0, end_level=None):
         if end_level is None:
             end_level = self.levels
         xs_quantised = [
-            level_block.decode(z) for (level_block, z) in zip(self.level_blocks[start_level:end_level], zs)
+            level_block.decode(z) for (level_block, z) in zip(self.level_blocks[start_level:end_level], music_tokens)
         ]
         return xs_quantised
 
     def forward(self, xs):
-        zs, xs_quantised, commit_losses, metrics = [], [], [], []
+        music_tokens, xs_quantised, commit_losses, metrics = [], [], [], []
         for level in range(self.levels):
             level_block = self.level_blocks[-level - 1]
             x = xs[level]
             z, x_quantised, commit_loss, metric = level_block(x, update_k=self.training)
-            zs.append(z)
+            music_tokens.append(z)
             if not self.training:
                 # Be extra paranoid and make sure the encoder weights can't
                 # change from straight-through estimator
@@ -576,7 +576,7 @@ class Bottleneck(nn.Module):
             commit_losses.append(commit_loss)
             if self.training:
                 metrics.append(metric)
-        return zs, xs_quantised, commit_losses, metrics
+        return music_tokens, xs_quantised, commit_losses, metrics
 
 
 # TODO replace FFT calls with torch.fft
@@ -747,23 +747,23 @@ class JukeboxVQVAE(PreTrainedModel):
         x = x.permute(0, 2, 1)
         return x
 
-    def _decode(self, zs, start_level=0, end_level=None):
+    def _decode(self, music_tokens, start_level=0, end_level=None):
         # Decode
         if end_level is None:
             end_level = self.levels
-        xs_quantised = self.bottleneck.decode(zs, start_level=start_level, end_level=end_level)
+        xs_quantised = self.bottleneck.decode(music_tokens, start_level=start_level, end_level=end_level)
         # Use only lowest level
         decoder, x_quantised = self.decoders[start_level], xs_quantised[0:1]
         x_out = decoder(x_quantised, all_levels=False)
         x_out = self.postprocess(x_out)
         return x_out
 
-    def decode(self, zs, start_level=0, end_level=None, bs_chunks=1):
-        z_chunks = [torch.chunk(z, bs_chunks, dim=0) for z in zs]
+    def decode(self, music_tokens, start_level=0, end_level=None, bs_chunks=1):
+        z_chunks = [torch.chunk(z, bs_chunks, dim=0) for z in music_tokens]
         x_outs = []
         for i in range(bs_chunks):
-            zs_i = [z_chunk[i] for z_chunk in z_chunks]
-            x_out = self._decode(zs_i, start_level=start_level, end_level=end_level)
+            music_tokens_i = [z_chunk[i] for z_chunk in z_chunks]
+            x_out = self._decode(music_tokens_i, start_level=start_level, end_level=end_level)
             x_outs.append(x_out)
         return torch.cat(x_outs, dim=0)
 
@@ -777,22 +777,22 @@ class JukeboxVQVAE(PreTrainedModel):
             encoder = self.encoders[level]
             x_out = encoder(x_in)
             xs.append(x_out[-1])
-        zs = self.bottleneck.encode(xs)
-        return zs[start_level:end_level]
+        music_tokens = self.bottleneck.encode(xs)
+        return music_tokens[start_level:end_level]
 
     def encode(self, x, start_level=0, end_level=None, bs_chunks=1):
         x_chunks = torch.chunk(x, bs_chunks, dim=0)
-        zs_list = []
+        music_tokens_list = []
         for x_i in x_chunks:
-            zs_i = self._encode(x_i, start_level=start_level, end_level=end_level)
-            zs_list.append(zs_i)
-        zs = [torch.cat(zs_level_list, dim=0) for zs_level_list in zip(*zs_list)]
-        return zs
+            music_tokens_i = self._encode(x_i, start_level=start_level, end_level=end_level)
+            music_tokens_list.append(music_tokens_i)
+        music_tokens = [torch.cat(music_tokens_level_list, dim=0) for music_tokens_level_list in zip(*music_tokens_list)]
+        return music_tokens
 
     def sample(self, n_samples):
         # TODO handle device properly
-        zs = [torch.randint(0, self.l_bins, size=(n_samples, *z_shape), device="cpu") for z_shape in self.z_shapes]
-        return self.decode(zs)
+        music_tokens = [torch.randint(0, self.l_bins, size=(n_samples, *z_shape), device="cpu") for z_shape in self.z_shapes]
+        return self.decode(music_tokens)
 
     def forward(self, x, hps, loss_fn="l1"):
         metrics = {}
@@ -805,7 +805,7 @@ class JukeboxVQVAE(PreTrainedModel):
             x_out = encoder(x_in)
             xs.append(x_out[-1])
 
-        zs, xs_quantised, commit_losses, quantiser_metrics = self.bottleneck(xs)
+        music_tokens, xs_quantised, commit_losses, quantiser_metrics = self.bottleneck(xs)
         x_outs = []
         for level in range(self.levels):
             decoder = self.decoders[level]
@@ -2592,10 +2592,10 @@ class JukeboxPrior(nn.Module):
         else:
             return labels, None
 
-    def get_z_conds(self, zs, start, end):
+    def get_z_conds(self, music_tokens, start, end):
         if self.level != self.levels - 1:
             assert start % self.cond_downsample == end % self.cond_downsample == 0
-            z_cond = zs[self.level + 1][:, start // self.cond_downsample : end // self.cond_downsample]
+            z_cond = music_tokens[self.level + 1][:, start // self.cond_downsample : end // self.cond_downsample]
             assert z_cond.shape[1] == self.n_ctx // self.cond_downsample
             z_conds = [z_cond]
         else:
@@ -2644,17 +2644,17 @@ class JukeboxPrior(nn.Module):
             end_level = self.levels
         # Get latents
         with torch.no_grad():
-            zs = self.encoder(x, start_level=start_level, end_level=end_level, bs_chunks=bs_chunks)
-        return zs
+            music_tokens = self.encoder(x, start_level=start_level, end_level=end_level, bs_chunks=bs_chunks)
+        return music_tokens
 
     # same as above, the va-vae is no longer part of the prior
-    def decode(self, zs, start_level=None, end_level=None, bs_chunks=1):
+    def decode(self, music_tokens, start_level=None, end_level=None, bs_chunks=1):
         if start_level is None:
             start_level = self.level
         if end_level is None:
             end_level = self.levels
         with torch.no_grad():
-            x_out = self.decoder(zs, start_level=start_level, end_level=end_level, bs_chunks=bs_chunks)
+            x_out = self.decoder(music_tokens, start_level=start_level, end_level=end_level, bs_chunks=bs_chunks)
         return x_out
 
     def get_cond(self, z_conds, y):
@@ -2882,10 +2882,10 @@ def save_wav(fname, lvl, metas, aud, sr):
             soundfile.write(f"{fname}/lvl_{lvl}-sample-{i}.wav", aud[i], samplerate=sr, format="wav")
 
 
-def get_alignment(x, zs, labels, prior, level, fp16, hps):
+def get_alignment(x, music_tokens, labels, prior, level, fp16, hps):
     level = level - 1  # Top level used
     n_ctx, n_tokens = prior.n_ctx, prior.n_tokens
-    z = zs[level]
+    z = music_tokens[level]
     bs, total_length = z.shape[0], z.shape[1]
     if total_length < n_ctx:
         padding_length = n_ctx - total_length
@@ -2899,7 +2899,7 @@ def get_alignment(x, zs, labels, prior, level, fp16, hps):
     attn_layers = set([alignment_layer])
     alignment_hops = {}
     indices_hops = {}
-    prior.to(zs.device)
+    prior.to(music_tokens.device)
     empty_cache()
     for start in get_starts(total_length, n_ctx, hop_length):
         end = start + n_ctx
@@ -2989,9 +2989,9 @@ class JukeboxModel(JukeboxPreTrainedModel):
         self.priors = nn.ModuleList([JukeboxPrior(config, level=i) for i in range(config.nb_priors)])
 
     # Sample a partial window of length<n_ctx with tokens_to_sample new tokens on level=level
-    def sample_partial_window(self, zs, labels, offset, sampling_kwargs, level, tokens_to_sample, hps):
+    def sample_partial_window(self, music_tokens, labels, offset, sampling_kwargs, level, tokens_to_sample, hps):
         prior = self.priors[level]
-        z = zs[level]
+        z = music_tokens[level]
         n_ctx = prior.n_ctx
         current_tokens = z.shape[1]
         if current_tokens < n_ctx - tokens_to_sample:
@@ -3001,10 +3001,10 @@ class JukeboxModel(JukeboxPreTrainedModel):
             sampling_kwargs["sample_tokens"] = n_ctx
             start = current_tokens - n_ctx + tokens_to_sample
 
-        return self.sample_single_window(zs, labels, offset, sampling_kwargs, level, start, hps)
+        return self.sample_single_window(music_tokens, labels, offset, sampling_kwargs, level, start, hps)
 
     # Sample a single window of length=n_ctx at position=start on level=level
-    def sample_single_window(self, zs, labels, offset, sampling_kwargs, level, start, hps):
+    def sample_single_window(self, music_tokens, labels, offset, sampling_kwargs, level, start, hps):
         prior = self.priors[level]
         n_samples = hps.n_samples
         n_ctx = prior.n_ctx
@@ -3013,7 +3013,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         # the tokenizer, as [total_length, offset, sample_length] can be written on the fly and changed without changing the
         # lyric tokens.
         # get z already sampled at current level
-        z = zs[level][:, start:end]
+        z = music_tokens[level][:, start:end]
 
         if "sample_tokens" in sampling_kwargs:
             # Support sampling a window shorter than n_ctx
@@ -3032,10 +3032,10 @@ class JukeboxModel(JukeboxPreTrainedModel):
 
         if new_tokens <= 0:
             # Nothing new to sample
-            return zs
+            return music_tokens
 
         # get z_conds from level above
-        z_conds = prior.get_z_conds(zs, start, end)
+        z_conds = prior.get_z_conds(music_tokens, start, end)
         # if there are no levels above should return None!
 
         # set y offset, sample_length and lyrics okens
@@ -3059,25 +3059,25 @@ class JukeboxModel(JukeboxPreTrainedModel):
 
         # Update z with new sample
         z_new = z[:, -new_tokens:]
-        zs[level] = torch.cat([zs[level], z_new], dim=1)
-        return zs
+        music_tokens[level] = torch.cat([music_tokens[level], z_new], dim=1)
+        return music_tokens
 
     # Sample total_length tokens at level=level with hop_length=hop_length
-    def sample_level(self, zs, labels, offset, sampling_kwargs, level, total_length, hop_length, hps):
+    def sample_level(self, music_tokens, labels, offset, sampling_kwargs, level, total_length, hop_length, hps):
         # print(f"Sampling level {level}")
         print(f"Sampling level {level}")
         if total_length >= self.priors[level].n_ctx:
             for start in get_range(get_starts(total_length, self.priors[level].n_ctx, hop_length)):
-                zs = self.sample_single_window(zs, labels, offset, sampling_kwargs, level, start, hps)
+                music_tokens = self.sample_single_window(music_tokens, labels, offset, sampling_kwargs, level, start, hps)
 
         else:
-            zs = self.sample_partial_window(zs, labels, offset, sampling_kwargs, level, total_length, hps)
-        return zs
+            music_tokens = self.sample_partial_window(music_tokens, labels, offset, sampling_kwargs, level, total_length, hps)
+        return music_tokens
 
     # Sample multiple levels
     def _sample(
         self,
-        zs,
+        music_tokens,
         labels,
         sample_levels,
         metas=None,
@@ -3130,64 +3130,70 @@ class JukeboxModel(JukeboxPreTrainedModel):
             sample_levels = range(len(self.priors))
         for level in reversed(sample_levels):
             self.total_length = sampling_kwargs[level].pop("total_length")
-            self.priors[level].to(zs[level].device).eval()
+            self.priors[level].to(music_tokens[level].device).eval()
             empty_cache()
             hps.sample_length = self.total_length  # generated length of the signal
             # Set correct total_length, hop_length, labels and sampling_kwargs for level
             total_length = hps.sample_length // self.priors[level].raw_to_tokens
             hop_length = int(hps.hop_fraction[-level - 1] * self.priors[level].n_ctx)
 
-            zs = self.sample_level(
-                zs, labels[level], offset, sampling_kwargs[level], level, total_length, hop_length, hps
+            music_tokens = self.sample_level(
+                music_tokens, labels[level], offset, sampling_kwargs[level], level, total_length, hop_length, hps
             )
 
             self.priors[level].to("cpu")
             empty_cache()
-            self.vqvae.to(zs[level].device)
+            self.vqvae.to(music_tokens[level].device)
             # Decode sample
             with torch.no_grad():
-                x = self.vqvae.decode(zs[level:], start_level=level, bs_chunks=zs[level].shape[0])
+                raw_audio = self.vqvae.decode(
+                    music_tokens[level:], start_level=level, bs_chunks=music_tokens[level].shape[0]
+                )
             self.vqvae.to("cpu")
 
             if save_results:
                 logdir = f"{self.start_time}/level_{level}"
                 if not os.path.exists(logdir):
                     os.makedirs(logdir)
-                torch.save(dict(zs=zs, labels=labels, sampling_kwargs=sampling_kwargs, x=x), f"{logdir}/data.pth.tar")
-                save_wav(logdir, level, metas=metas, aud=x, sr=hps.sr)
+                # torch.save(dict(music_tokens=music_tokens, labels=labels, sampling_kwargs=sampling_kwargs, raw_audio=raw_audio), f"{logdir}/data.pth.tar")
+                save_wav(logdir, level, metas=metas, aud=raw_audio, sr=hps.sr)
                 if (
                     alignments is None and self.priors[-1] is not None and self.priors[-1].n_tokens > 0
                 ):  # and not isinstance(self.priors[-1].labeller, Empty`Labeller`):
                     # either use level which will be the given lovel or use the total nb of levels?
-                    # alignments = get_alignment(x, zs, labels[-1], self.priors[-1], level, sampling_kwargs[-1]["fp16"], hps)
+                    # alignments = get_alignment(x, music_tokens, labels[-1], self.priors[-1], level, sampling_kwargs[-1]["fp16"], hps)
                     pass  # TODO this is a really dirty fix
-        return zs
+        return music_tokens
 
     # Generate ancestral samples given a list of artists and genres
     def ancestral_sample(self, labels, n_samples=1, **sampling_kwargs):
         sample_levels = sampling_kwargs.pop("sample_levels", list(range(len(self.priors))))
-        zs = [torch.zeros(n_samples, 0, dtype=torch.long, device=labels[0].device) for _ in range(len(self.priors))]
-        zs = self._sample(zs, labels, sample_levels, **sampling_kwargs)
-        return zs
+        music_tokens = [
+            torch.zeros(n_samples, 0, dtype=torch.long, device=labels[0].device) for _ in range(len(self.priors))
+        ]
+        music_tokens = self._sample(music_tokens, labels, sample_levels, **sampling_kwargs)
+        return music_tokens
 
     # Continue ancestral sampling from previously saved codes
-    def continue_sample(self, zs, labels, **sampling_kwargs):
+    def continue_sample(self, music_tokens, labels, **sampling_kwargs):
         sample_levels = list(range(len(self.priors)))
-        zs = self._sample(zs, labels, sample_levels, **sampling_kwargs)
-        return zs
+        music_tokens = self._sample(music_tokens, labels, sample_levels, **sampling_kwargs)
+        return music_tokens
 
     # Upsample given already generated upper-level codes
-    def upsample(self, zs, labels, **sampling_kwargs):
+    def upsample(self, music_tokens, labels, **sampling_kwargs):
         sample_levels = list(range(len(self.priors) - 1))
-        zs = self._sample(zs, labels, sample_levels, **sampling_kwargs)
-        return zs
+        music_tokens = self._sample(music_tokens, labels, sample_levels, **sampling_kwargs)
+        return music_tokens
 
     # Prompt the model with raw audio input (dimension: NTC) and generate continuations
-    def primed_sample(self, x, labels, **sampling_kwargs):
+    def primed_sample(self, raw_audio, labels, **sampling_kwargs):
         sample_levels = list(range(len(self.priors)))
-        self.vqvae.to(x.device)
+        self.vqvae.to(raw_audio.device)
         with torch.no_grad():
-            zs = self.vqvae.encode(x, start_level=0, end_level=len(self.priors), bs_chunks=x.shape[0])
+            music_tokens = self.vqvae.encode(
+                raw_audio, start_level=0, end_level=len(self.priors), bs_chunks=raw_audio.shape[0]
+            )
         self.vqvae.to("cpu")
-        zs = self._sample(zs, labels, sample_levels, **sampling_kwargs)
-        return zs
+        music_tokens = self._sample(music_tokens, labels, sample_levels, **sampling_kwargs)
+        return music_tokens
