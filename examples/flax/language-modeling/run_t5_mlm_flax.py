@@ -325,7 +325,7 @@ class FlaxDataCollatorForT5MLM:
     pad_token_id: int
     decoder_start_token_id: int
 
-    def __call__(self, examples: List[Dict[str, np.ndarray]]) -> Dict[str, np.ndarray]:
+    def __call__(self, examples: List[Dict[str, np.ndarray]]) -> BatchEncoding:
 
         # convert list to dict and tensorize input
         batch = BatchEncoding(
