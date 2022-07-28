@@ -103,7 +103,7 @@ class SwinModelOutput(ModelOutput):
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*, returned when `add_pooling_layer=True` is passed):
             Average pooling of the last layer hidden-state.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
@@ -125,7 +125,7 @@ class SwinModelOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor = None
-    pooler_output: torch.FloatTensor = None
+    pooler_output: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None

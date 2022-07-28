@@ -65,6 +65,15 @@ class KerasMetricCallback(Callback):
             Batch size. Only used when the data is not a pre-batched `tf.data.Dataset`.
         predict_with_generate (`bool`, *optional*, defaults to `False`):
             Whether we should use `model.generate()` to get outputs for the model.
+        use_xla_generation (`bool`, *optional*, defaults to `False`):
+            If we're generating, whether to compile model generation with XLA. This can massively increase the speed of
+            generation (up to 100X speedup) but will require a new XLA compilation for each input shape. When using XLA
+            generation, it's a good idea to pad your inputs to the same size, or to use the `pad_to_multiple_of`
+            argument in your `tokenizer` or `DataCollator`, which will reduce the number of unique input shapes and
+            save a lot of compilation time. This option has no effect is `predict_with_generate` is `False`.
+        generate_kwargs (`dict`, *optional*):
+            Keyword arguments to pass to `model.generate()` when generating. Has no effect if `predict_with_generate`
+            is `False`.
 
     """
 
@@ -75,7 +84,9 @@ class KerasMetricCallback(Callback):
         output_cols: Optional[List[str]] = None,
         label_cols: Optional[List[str]] = None,
         batch_size: Optional[int] = None,
-        predict_with_generate: Optional[bool] = False,
+        predict_with_generate: bool = False,
+        use_xla_generation: bool = False,
+        generate_kwargs: Optional[dict] = None,
     ):
         super().__init__()
         self.metric_fn = metric_fn
@@ -125,6 +136,11 @@ class KerasMetricCallback(Callback):
             raise ValueError("Could not autodetect label_cols for KerasMetricCallback, please specify them!")
         if parse(tf.__version__) < parse("2.7"):
             logging.warning("TF versions less than 2.7 may encounter issues with KerasMetricCallback!")
+
+        self.use_xla_generation = use_xla_generation
+        self.generate_kwargs = {} if generate_kwargs is None else generate_kwargs
+
+        self.generation_function = None
 
     @staticmethod
     def _concatenate_batches(batches, padding_index=-100):
@@ -183,6 +199,13 @@ class KerasMetricCallback(Callback):
             else:
                 main_input_name = getattr(self.model, "main_input_name", "input_ids")
 
+            if self.use_xla_generation and self.generation_function is None:
+
+                def generation_function(inputs, attention_mask):
+                    return self.model.generate(inputs, attention_mask=attention_mask, **self.generate_kwargs)
+
+                self.generation_function = tf.function(generation_function, jit_compile=True)
+
         prediction_list = []
         label_list = []
 
@@ -199,10 +222,12 @@ class KerasMetricCallback(Callback):
                 else:
                     generation_inputs = batch
                     attention_mask = None
-
-                predictions = self.model.generate(generation_inputs, attention_mask=attention_mask)
+                if self.use_xla_generation:
+                    predictions = self.generation_function(generation_inputs, attention_mask=attention_mask)
+                else:
+                    predictions = self.model.generate(generation_inputs, attention_mask=attention_mask)
             else:
-                predictions = self.model.predict(batch)
+                predictions = self.model.predict_on_batch(batch)
                 if isinstance(predictions, dict):
                     # This converts any dict-subclass to a regular dict
                     # Keras REALLY doesn't like it when we pass around a BatchEncoding or other derived class

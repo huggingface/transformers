@@ -65,19 +65,20 @@ jobs:
     run_tests_torch_and_tf:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             RUN_PT_TF_CROSS_TESTS: yes
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.4-torch_and_tf-{{ checksum "setup.py" }}
-                      - v0.4-{{ checksum "setup.py" }}
+                      - v0.5-torch_and_tf-{{ checksum "setup.py" }}
+                      - v0.5-{{ checksum "setup.py" }}
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng git-lfs
             - run: git lfs install
             - run: pip install --upgrade pip
@@ -87,7 +88,7 @@ jobs:
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - run: pip install git+https://github.com/huggingface/accelerate
             - save_cache:
-                key: v0.4-{{ checksum "setup.py" }}
+                key: v0.5-{{ checksum "setup.py" }}
                 paths:
                     - '~/.cache/pip'
             - run: python utils/tests_fetcher.py | tee test_preparation.txt
@@ -105,19 +106,20 @@ jobs:
     run_tests_torch_and_tf_all:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             RUN_PT_TF_CROSS_TESTS: yes
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.4-torch_and_tf-{{ checksum "setup.py" }}
-                      - v0.4-{{ checksum "setup.py" }}
+                      - v0.5-torch_and_tf-{{ checksum "setup.py" }}
+                      - v0.5-{{ checksum "setup.py" }}
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng git-lfs
             - run: git lfs install
             - run: pip install --upgrade pip
@@ -127,7 +129,7 @@ jobs:
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - run: pip install git+https://github.com/huggingface/accelerate
             - save_cache:
-                key: v0.4-{{ checksum "setup.py" }}
+                key: v0.5-{{ checksum "setup.py" }}
                 paths:
                     - '~/.cache/pip'
             - run: |
@@ -140,19 +142,20 @@ jobs:
     run_tests_torch_and_flax:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             RUN_PT_FLAX_CROSS_TESTS: yes
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.4-torch_and_flax-{{ checksum "setup.py" }}
-                      - v0.4-{{ checksum "setup.py" }}
+                      - v0.5-torch_and_flax-{{ checksum "setup.py" }}
+                      - v0.5-{{ checksum "setup.py" }}
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,flax,torch,testing,sentencepiece,torch-speech,vision]
@@ -160,7 +163,7 @@ jobs:
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - run: pip install git+https://github.com/huggingface/accelerate
             - save_cache:
-                key: v0.4-{{ checksum "setup.py" }}
+                key: v0.5-{{ checksum "setup.py" }}
                 paths:
                     - '~/.cache/pip'
             - run: python utils/tests_fetcher.py | tee test_preparation.txt
@@ -178,19 +181,20 @@ jobs:
     run_tests_torch_and_flax_all:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             RUN_PT_FLAX_CROSS_TESTS: yes
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.4-torch_and_flax-{{ checksum "setup.py" }}
-                      - v0.4-{{ checksum "setup.py" }}
+                      - v0.5-torch_and_flax-{{ checksum "setup.py" }}
+                      - v0.5-{{ checksum "setup.py" }}
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,flax,torch,testing,sentencepiece,torch-speech,vision]
@@ -198,7 +202,7 @@ jobs:
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - run: pip install git+https://github.com/huggingface/accelerate
             - save_cache:
-                key: v0.4-{{ checksum "setup.py" }}
+                key: v0.5-{{ checksum "setup.py" }}
                 paths:
                     - '~/.cache/pip'
             - run: |
@@ -211,18 +215,19 @@ jobs:
     run_tests_torch:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.4-torch-{{ checksum "setup.py" }}
-                      - v0.4-{{ checksum "setup.py" }}
+                      - v0.5-torch-{{ checksum "setup.py" }}
+                      - v0.5-{{ checksum "setup.py" }}
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng time
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]
@@ -230,7 +235,7 @@ jobs:
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - run: pip install git+https://github.com/huggingface/accelerate
             - save_cache:
-                  key: v0.4-torch-{{ checksum "setup.py" }}
+                  key: v0.5-torch-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - run: python utils/tests_fetcher.py | tee test_preparation.txt
@@ -248,18 +253,19 @@ jobs:
     run_tests_torch_all:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.4-torch-{{ checksum "setup.py" }}
-                      - v0.4-{{ checksum "setup.py" }}
+                      - v0.5-torch-{{ checksum "setup.py" }}
+                      - v0.5-{{ checksum "setup.py" }}
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]
@@ -267,7 +273,7 @@ jobs:
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - run: pip install git+https://github.com/huggingface/accelerate
             - save_cache:
-                  key: v0.4-torch-{{ checksum "setup.py" }}
+                  key: v0.5-torch-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - run: |
@@ -280,25 +286,26 @@ jobs:
     run_tests_tf:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.4-tf-{{ checksum "setup.py" }}
-                      - v0.4-{{ checksum "setup.py" }}
+                      - v0.5-tf-{{ checksum "setup.py" }}
+                      - v0.5-{{ checksum "setup.py" }}
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]
             - run: pip install tensorflow_probability
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - save_cache:
-                  key: v0.4-tf-{{ checksum "setup.py" }}
+                  key: v0.5-tf-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - run: python utils/tests_fetcher.py | tee test_preparation.txt
@@ -316,25 +323,26 @@ jobs:
     run_tests_tf_all:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.4-tf-{{ checksum "setup.py" }}
-                      - v0.4-{{ checksum "setup.py" }}
+                      - v0.5-tf-{{ checksum "setup.py" }}
+                      - v0.5-{{ checksum "setup.py" }}
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]
             - run: pip install tensorflow_probability
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - save_cache:
-                  key: v0.4-tf-{{ checksum "setup.py" }}
+                  key: v0.5-tf-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - run: |
@@ -347,24 +355,25 @@ jobs:
     run_tests_flax:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
             - checkout
             - restore_cache:
                 keys:
-                    - v0.4-flax-{{ checksum "setup.py" }}
-                    - v0.4-{{ checksum "setup.py" }}
+                    - v0.5-flax-{{ checksum "setup.py" }}
+                    - v0.5-{{ checksum "setup.py" }}
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[flax,testing,sentencepiece,flax-speech,vision]
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - save_cache:
-                  key: v0.4-flax-{{ checksum "setup.py" }}
+                  key: v0.5-flax-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - run: python utils/tests_fetcher.py | tee test_preparation.txt
@@ -382,24 +391,25 @@ jobs:
     run_tests_flax_all:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
             - checkout
             - restore_cache:
                 keys:
-                    - v0.4-flax-{{ checksum "setup.py" }}
-                    - v0.4-{{ checksum "setup.py" }}
+                    - v0.5-flax-{{ checksum "setup.py" }}
+                    - v0.5-{{ checksum "setup.py" }}
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[flax,testing,sentencepiece,vision,flax-speech]
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - save_cache:
-                  key: v0.4-flax-{{ checksum "setup.py" }}
+                  key: v0.5-flax-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - run: |
@@ -412,26 +422,27 @@ jobs:
     run_tests_pipelines_torch:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             RUN_PIPELINE_TESTS: yes
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.4-torch-{{ checksum "setup.py" }}
-                      - v0.4-{{ checksum "setup.py" }}
+                      - v0.5-torch-{{ checksum "setup.py" }}
+                      - v0.5-{{ checksum "setup.py" }}
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - save_cache:
-                  key: v0.4-torch-{{ checksum "setup.py" }}
+                  key: v0.5-torch-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - run: python utils/tests_fetcher.py | tee test_preparation.txt
@@ -449,26 +460,27 @@ jobs:
     run_tests_pipelines_torch_all:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             RUN_PIPELINE_TESTS: yes
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.4-torch-{{ checksum "setup.py" }}
-                      - v0.4-{{ checksum "setup.py" }}
+                      - v0.5-torch-{{ checksum "setup.py" }}
+                      - v0.5-{{ checksum "setup.py" }}
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - save_cache:
-                  key: v0.4-torch-{{ checksum "setup.py" }}
+                  key: v0.5-torch-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - run: |
@@ -481,24 +493,25 @@ jobs:
     run_tests_pipelines_tf:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             RUN_PIPELINE_TESTS: yes
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.4-tf-{{ checksum "setup.py" }}
-                      - v0.4-{{ checksum "setup.py" }}
+                      - v0.5-tf-{{ checksum "setup.py" }}
+                      - v0.5-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,tf-cpu,testing,sentencepiece]
             - run: pip install tensorflow_probability
             - save_cache:
-                  key: v0.4-tf-{{ checksum "setup.py" }}
+                  key: v0.5-tf-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - run: python utils/tests_fetcher.py | tee test_preparation.txt
@@ -516,24 +529,25 @@ jobs:
     run_tests_pipelines_tf_all:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             RUN_PIPELINE_TESTS: yes
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.4-tf-{{ checksum "setup.py" }}
-                      - v0.4-{{ checksum "setup.py" }}
+                      - v0.5-tf-{{ checksum "setup.py" }}
+                      - v0.5-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,tf-cpu,testing,sentencepiece]
             - run: pip install tensorflow_probability
             - save_cache:
-                  key: v0.4-tf-{{ checksum "setup.py" }}
+                  key: v0.5-tf-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - run: |
@@ -546,21 +560,22 @@ jobs:
     run_tests_custom_tokenizers:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             RUN_CUSTOM_TOKENIZERS: yes
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         steps:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.4-custom_tokenizers-{{ checksum "setup.py" }}
-                      - v0.4-{{ checksum "setup.py" }}
+                      - v0.5-custom_tokenizers-{{ checksum "setup.py" }}
+                      - v0.5-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install .[ja,testing,sentencepiece,jieba,spacy,ftfy,rjieba]
             - run: python -m unidic download
             - save_cache:
-                  key: v0.4-custom_tokenizers-{{ checksum "setup.py" }}
+                  key: v0.5-custom_tokenizers-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - run: |
@@ -579,24 +594,25 @@ jobs:
     run_examples_torch:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.4-torch_examples-{{ checksum "setup.py" }}
-                      - v0.4-{{ checksum "setup.py" }}
+                      - v0.5-torch_examples-{{ checksum "setup.py" }}
+                      - v0.5-{{ checksum "setup.py" }}
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,sentencepiece,testing,torch-speech]
             - run: pip install -r examples/pytorch/_tests_requirements.txt
             - save_cache:
-                  key: v0.4-torch_examples-{{ checksum "setup.py" }}
+                  key: v0.5-torch_examples-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - run: python utils/tests_fetcher.py --filters examples tests | tee test_preparation.txt
@@ -614,24 +630,25 @@ jobs:
     run_examples_torch_all:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.4-torch_examples-{{ checksum "setup.py" }}
-                      - v0.4-{{ checksum "setup.py" }}
+                      - v0.5-torch_examples-{{ checksum "setup.py" }}
+                      - v0.5-{{ checksum "setup.py" }}
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,sentencepiece,testing,torch-speech]
             - run: pip install -r examples/pytorch/_tests_requirements.txt
             - save_cache:
-                  key: v0.4-torch_examples-{{ checksum "setup.py" }}
+                  key: v0.5-torch_examples-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - run: |
@@ -644,23 +661,24 @@ jobs:
     run_examples_flax:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
             - checkout
             - restore_cache:
                 keys:
-                    - v0.4-flax_examples-{{ checksum "setup.py" }}
-                    - v0.4-{{ checksum "setup.py" }}
+                    - v0.5-flax_examples-{{ checksum "setup.py" }}
+                    - v0.5-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: sudo pip install .[flax,testing,sentencepiece]
+            - run: pip install .[flax,testing,sentencepiece]
             - run: pip install -r examples/flax/_tests_requirements.txt
             - save_cache:
-                  key: v0.4-flax_examples-{{ checksum "setup.py" }}
+                  key: v0.5-flax_examples-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - run: python utils/tests_fetcher.py --filters examples tests | tee test_preparation.txt
@@ -678,23 +696,24 @@ jobs:
     run_examples_flax_all:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
             - checkout
             - restore_cache:
                 keys:
-                    - v0.4-flax_examples-{{ checksum "setup.py" }}
-                    - v0.4-{{ checksum "setup.py" }}
+                    - v0.5-flax_examples-{{ checksum "setup.py" }}
+                    - v0.5-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: sudo pip install .[flax,testing,sentencepiece]
+            - run: pip install .[flax,testing,sentencepiece]
             - run: pip install -r examples/flax/_tests_requirements.txt
             - save_cache:
-                  key: v0.4-flax_examples-{{ checksum "setup.py" }}
+                  key: v0.5-flax_examples-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - run: |
@@ -707,27 +726,28 @@ jobs:
     run_tests_hub:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             HUGGINGFACE_CO_STAGING: yes
             RUN_GIT_LFS_TESTS: yes
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.4-hub-{{ checksum "setup.py" }}
-                      - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get install git-lfs
+                      - v0.5-hub-{{ checksum "setup.py" }}
+                      - v0.5-{{ checksum "setup.py" }}
+            - run: sudo apt-get -y update && sudo apt-get install git-lfs
             - run: |
                 git config --global user.email "ci@dummy.com"
                 git config --global user.name "ci"
             - run: pip install --upgrade pip
             - run: pip install .[torch,sentencepiece,testing]
             - save_cache:
-                  key: v0.4-hub-{{ checksum "setup.py" }}
+                  key: v0.5-hub-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - run: python utils/tests_fetcher.py | tee test_preparation.txt
@@ -745,27 +765,28 @@ jobs:
     run_tests_hub_all:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             HUGGINGFACE_CO_STAGING: yes
             RUN_GIT_LFS_TESTS: yes
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.4-hub-{{ checksum "setup.py" }}
-                      - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get install git-lfs
+                      - v0.5-hub-{{ checksum "setup.py" }}
+                      - v0.5-{{ checksum "setup.py" }}
+            - run: sudo apt-get -y update && sudo apt-get install git-lfs
             - run: |
                 git config --global user.email "ci@dummy.com"
                 git config --global user.name "ci"
             - run: pip install --upgrade pip
             - run: pip install .[torch,sentencepiece,testing]
             - save_cache:
-                  key: v0.4-hub-{{ checksum "setup.py" }}
+                  key: v0.5-hub-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - run: |
@@ -778,22 +799,23 @@ jobs:
     run_tests_onnxruntime:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.4-torch-{{ checksum "setup.py" }}
-                      - v0.4-{{ checksum "setup.py" }}
+                      - v0.5-torch-{{ checksum "setup.py" }}
+                      - v0.5-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install .[torch,testing,sentencepiece,onnxruntime,vision,rjieba]
             - save_cache:
-                  key: v0.4-onnx-{{ checksum "setup.py" }}
+                  key: v0.5-onnx-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - run: python utils/tests_fetcher.py | tee test_preparation.txt
@@ -811,22 +833,23 @@ jobs:
     run_tests_onnxruntime_all:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.4-torch-{{ checksum "setup.py" }}
-                      - v0.4-{{ checksum "setup.py" }}
+                      - v0.5-torch-{{ checksum "setup.py" }}
+                      - v0.5-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install .[torch,testing,sentencepiece,onnxruntime,vision]
             - save_cache:
-                  key: v0.4-onnx-{{ checksum "setup.py" }}
+                  key: v0.5-onnx-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - run: |
@@ -839,21 +862,22 @@ jobs:
     check_code_quality:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         resource_class: large
         environment:
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         parallelism: 1
         steps:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.4-code_quality-{{ checksum "setup.py" }}
-                      - v0.4-{{ checksum "setup.py" }}
+                      - v0.5-code_quality-{{ checksum "setup.py" }}
+                      - v0.5-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install .[all,quality]
             - save_cache:
-                  key: v0.4-code_quality-{{ checksum "setup.py" }}
+                  key: v0.5-code_quality-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - run: black --check --preview examples tests src utils
@@ -867,21 +891,22 @@ jobs:
     check_repository_consistency:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         resource_class: large
         environment:
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         parallelism: 1
         steps:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.4-repository_consistency-{{ checksum "setup.py" }}
-                      - v0.4-{{ checksum "setup.py" }}
+                      - v0.5-repository_consistency-{{ checksum "setup.py" }}
+                      - v0.5-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install .[all,quality]
             - save_cache:
-                  key: v0.4-repository_consistency-{{ checksum "setup.py" }}
+                  key: v0.5-repository_consistency-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - run: python utils/check_copies.py
@@ -896,18 +921,19 @@ jobs:
     run_tests_layoutlmv2_and_v3:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.4-torch-{{ checksum "setup.py" }}
-                      - v0.4-{{ checksum "setup.py" }}
+                      - v0.5-torch-{{ checksum "setup.py" }}
+                      - v0.5-{{ checksum "setup.py" }}
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
             - run: pip install --upgrade pip
             - run: pip install .[torch,testing,vision]
@@ -916,7 +942,7 @@ jobs:
             - run: sudo apt install tesseract-ocr
             - run: pip install pytesseract
             - save_cache:
-                  key: v0.4-torch-{{ checksum "setup.py" }}
+                  key: v0.5-torch-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - run: python utils/tests_fetcher.py | tee test_preparation.txt
@@ -934,7 +960,7 @@ jobs:
 # TPU JOBS
     run_examples_tpu:
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
@@ -954,7 +980,7 @@ jobs:
 
     cleanup-gke-jobs:
         docker:
-            - image: circleci/python:3.7
+            - image: cimg/python:3.7.12
         steps:
             - gcp-gke/install
             - gcp-gke/update-kubeconfig-with-credentials:
