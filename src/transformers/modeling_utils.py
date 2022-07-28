@@ -1842,6 +1842,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "Using `load_in_8bit=True` requires Accelerate: `pip install accelerate` and the latest version of"
                     " bitsandbytes `pip install bitsandbytes`"
                 )
+            if torch_dtype == "auto" or torch_dtype != torch.float16:
+                torch_dtype = (
+                    torch.float16
+                )  # We force the `dtype` to be float16, this is a requirement from `bitsandbytes`
+                logger.info("Loading the model in mixed int8 - forcing the weights to be casted in float16")
 
         from_pt = not (from_tf | from_flax)
 
