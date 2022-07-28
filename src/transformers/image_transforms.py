@@ -68,7 +68,7 @@ def to_pil_image(
 
     # If the channel as been moved to first dim, we put it back at the end.
     channel_dim = infer_channel_dimension(image) if channel_dim is None else channel_dim
-    if channel_dim == ChannelDimension.CHANNEL_FIRST:
+    if channel_dim == ChannelDimension.FIRST:
         image = image.transpose((1, 2, 0))
 
     # PIL.Image can only store uint8 values, so we rescale the image to be between 0 and 255 if needed.
