@@ -28,9 +28,10 @@ from typing import Optional
 import datasets
 import numpy as np
 import tensorflow as tf
-from datasets import load_dataset, load_metric
+from datasets import load_dataset
 from tqdm import tqdm
 
+import evaluate
 import transformers
 from transformers import (
     AutoConfig,
@@ -590,7 +591,7 @@ def main():
         # endregion
 
         # region Metric and postprocessing
-        metric = load_metric("sacrebleu")
+        metric = evaluate.load("sacrebleu")
 
         def postprocess_text(preds, labels):
             preds = [pred.strip() for pred in preds]
