@@ -633,7 +633,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["image_processing_utils"] = ["ImageProcessorMixin"]
-    _import_structure["image_transforms"] = ["resize", "to_pil_image"]
+    _import_structure["image_transforms"] = ["rescale", "resize", "to_pil_image"]
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
     _import_structure["models.beit"].append("BeitFeatureExtractor")
     _import_structure["models.clip"].append("CLIPFeatureExtractor")
@@ -3342,7 +3342,7 @@ if TYPE_CHECKING:
         from .utils.dummy_vision_objects import *
     else:
         from .image_processing_utils import ImageProcessorMixin
-        from .image_transforms import resize, to_pil_image
+        from .image_transforms import rescale, resize, to_pil_image
         from .image_utils import ImageFeatureExtractionMixin
         from .models.beit import BeitFeatureExtractor
         from .models.clip import CLIPFeatureExtractor, CLIPProcessor

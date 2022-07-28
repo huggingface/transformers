@@ -39,10 +39,26 @@ if TYPE_CHECKING:
         import jax.numpy as jnp
 
 
+def rescale(image: np.ndarray, scale: Union[float, int] = 255) -> np.ndarray:
+    """
+    Rescales `image` by `scale`.
+
+    Args:
+        image (`np.ndarray``):
+            The image to rescale.
+        scale (`float`, `int`):
+            The scale to use for rescaling the image.
+
+    Returns:
+        image: A rescaled np.ndarray image.
+    """
+    return image * scale
+
+
 def to_pil_image(
     image: Union[np.ndarray, PIL.Image.Image, "torch.Tensor", "tf.Tensor", "jnp.ndarray"],
     channel_dim: Optional[ChannelDimension] = None,
-    rescale=None,
+    do_rescale=None,
 ) -> PIL.Image.Image:
     """
     Converts `image` to a PIL Image. Optionally rescales it and puts the channel dimension back as the last axis if

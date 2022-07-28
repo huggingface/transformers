@@ -10,6 +10,10 @@ class ImageProcessorMixin(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+def rescale(*args, **kwargs):
+    requires_backends(rescale, ["vision"])
+
+
 def resize(*args, **kwargs):
     requires_backends(resize, ["vision"])
 

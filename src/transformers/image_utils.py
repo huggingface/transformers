@@ -24,7 +24,7 @@ import PIL.ImageOps
 import requests
 
 from .utils import is_flax_available, is_tf_available, is_torch_available
-from .utils.generic import _is_jax, _is_tensorflow, _is_torch
+from .utils.generic import _is_jax, _is_tensorflow, _is_torch, to_numpy
 
 
 IMAGENET_DEFAULT_MEAN = [0.485, 0.456, 0.406]
@@ -36,20 +36,10 @@ ImageInput = Union[
     PIL.Image.Image, np.ndarray, "torch.Tensor", List[PIL.Image.Image], List[np.ndarray], List["torch.Tensor"]  # noqa
 ]
 
+
 class ChannelDimension(enum.Enum):
     FIRST = 1
     LAST = 3
-
-
-class ImageType(ExplicitEnum):
-    """
-    Possible image data formats that can be fed into an image processor
-    """
-    PYTORCH = "pt"
-    TENSORFLOW = "tf"
-    NUMPY = "np"
-    JAX = "jax"
-    PIL = "pillow"
 
 
 def is_torch_tensor(obj):
@@ -83,24 +73,8 @@ def is_batched(img):
     return False
 
 
-def get_image_type(obj) -> TensorType:
-    if is_torch_tensor(obj):
-        return TensorType.TORCH
-    elif is_tf_tensor(obj):
-        return TensorType.TF
-    elif is_jax_tensor(obj):
-        return TensorType.JAX
-    elif _is_numpy(obj):
-        return TensorType.NUMPY
-    elif isinstance(obj, PIL.Image.Image):
-        return TensorType.PIL
-    else:
-        raise ValueError("Could not infer tensor type")
-
-
 def to_numpy_array(img) -> np.ndarray:
-    input_type = get_image_type(img)
-    if input_type == ImageType.PIL:
+    if isinstance(img, PIL.Image.Image):
         return np.array(img)
     return to_numpy(img)
 
