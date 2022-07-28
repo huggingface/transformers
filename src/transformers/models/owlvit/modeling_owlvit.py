@@ -1246,8 +1246,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
     def image_text_embedder(
         self,
-        pixel_values: torch.FloatTensor,
         input_ids: torch.Tensor,
+        pixel_values: torch.FloatTensor,
         attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = None,
     ) -> torch.FloatTensor:
@@ -1284,8 +1284,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
     @replace_return_docstrings(output_type=OwlViTObjectDetectionOutput, config_class=OwlViTConfig)
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
         input_ids: torch.Tensor,
+        pixel_values: torch.FloatTensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1338,8 +1338,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         if output_hidden_states:
             outputs = self.owlvit(
-                pixel_values=pixel_values,
                 input_ids=input_ids,
+                pixel_values=pixel_values,
                 attention_mask=attention_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
@@ -1350,8 +1350,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         # Embed images and text queries
         feature_map, query_embeds = self.image_text_embedder(
-            pixel_values=pixel_values,
             input_ids=input_ids,
+            pixel_values=pixel_values,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
         )
