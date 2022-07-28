@@ -76,14 +76,19 @@ from .utils.versions import require_version_core
 
 
 if is_accelerate_available():
+    from accelerate import __version__ as accelerate_version
     from accelerate import dispatch_model, infer_auto_device_map, init_empty_weights
     from accelerate.utils import (
-        get_balanced_memory,
         load_offloaded_weights,
         offload_weight,
         save_offload_index,
         set_module_tensor_to_device,
     )
+
+    if version.parse(accelerate_version) > version.parse("0.11.0"):
+        from accelerate.utils import get_balanced_memory
+    else:
+        get_balanced_memory = None
 
 logger = logging.get_logger(__name__)
 
@@ -2117,7 +2122,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "If passing a string for `device_map`, please choose 'auto', 'balanced', 'balanced_low_0' or "
                     "'sequential'."
                 )
-            if device_map != "sequential":
+            elif device_map in ["balanced", "balanced_low_0"] and get_balanced_memory is None:
+                raise ValueError(f"`device_map={device_map}` requires a source install of Accelerate.")
+            if device_map != "sequential" and get_balanced_memory is not None:
                 max_memory = get_balanced_memory(
                     model,
                     max_memory=max_memory,
