@@ -779,7 +779,7 @@ class BloomForCausalLM(BloomPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    def prepare_inputs_for_generation(self, input_ids: torch.LongTensor, use_cache: bool, past=None, attention_mask=None, **kwargs):
+    def prepare_inputs_for_generation(self, input_ids: torch.LongTensor, past=None, attention_mask=None, **kwargs):
         # only last token for inputs_ids if past is not None
         if past:
             input_ids = input_ids[:, -1].unsqueeze(-1)
@@ -787,7 +787,7 @@ class BloomForCausalLM(BloomPreTrainedModel):
         return {
             "input_ids": input_ids,
             "past_key_values": past,
-            "use_cache": use_cache,
+            "use_cache": kwargs.get("use_cache"),
             "attention_mask": attention_mask,
         }
 
