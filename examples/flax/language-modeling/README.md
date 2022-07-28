@@ -338,7 +338,7 @@ of 2.36 and 57.0 respectively after 3 epochs on a single TPUv3-8.
 This should take around 4.5 hours.
 Training statistics can be accessed on directly on the 🤗 [hub](https://huggingface.co/patrickvonplaten/t5-base-norwegian/tensorboard)
 
-## BART denoising language modeling
+## BART: Denoising language modeling
 
 In the following, we demonstrate how to train a BART model 
 using denoising language modeling objective as introduced in [BART: Denoising Sequence-to-Sequence Pre-training for Natural Language Generation, Translation, and Comprehension](https://arxiv.org/abs/1910.13461).
@@ -422,7 +422,6 @@ python run_bart_dlm_flax.py \
     --logging_steps="500" \
     --save_steps="2000" \
     --eval_steps="2000" \
-    --dtype bfloat16 \
     --push_to_hub
 ```
 
