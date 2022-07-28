@@ -774,7 +774,9 @@ class BloomForCausalLM(BloomPreTrainedModel):
         super().post_init()
 
         if self.config.force_lm_head_in_fp32:
-            self.lm_head.to(torch.float32)
+            # FIXME @thomasw21: it's quite annoying that weight tie is not done in `super().post_init()` but in `from_pretrained`, not sure about the reason why. Consequently, we need to modify the word embeddings instead ...
+            # self.lm_head.to(torch.float32)
+            self.transformer.word_embeddings.to(torch.float32)
 
     def get_output_embeddings(self):
         return self.lm_head
