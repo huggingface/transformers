@@ -72,7 +72,7 @@ def _make_causal_mask(
 
 def _expand_mask(mask: torch.Tensor, tgt_len: int) -> torch.BoolTensor:
     """
-    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
+    Expands attention_mask from `[batch_size, seq_length]` to `[batch_size, 1, tgt_seq_length, src_seq_length]`.
     """
     batch_size, source_length = mask.shape
     tgt_len = tgt_len if tgt_len is not None else source_length
@@ -81,7 +81,7 @@ def _expand_mask(mask: torch.Tensor, tgt_len: int) -> torch.BoolTensor:
     return expanded_mask.expand(batch_size, 1, tgt_len, source_length)
 
 
-def build_alibi_tensor(attention_mask: torch.Tensor, n_head: int, dtype: torch.dtype) -> torch.Tensor:
+def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int, dtype: torch.dtype) -> torch.Tensor:
     """
     Link to paper: https://arxiv.org/abs/2108.12409 Alibi tensor is not causal as the original paper mentions, it
     relies on a translation invariance of softmax for quick implementation: with l being a tensor, and a fixed value
@@ -90,10 +90,10 @@ def build_alibi_tensor(attention_mask: torch.Tensor, n_head: int, dtype: torch.d
     TODO @thomasw21 this doesn't work as nicely due to the masking strategy, and so masking varies slightly.
 
     Args:
-    Returns tensor shaped (batch_size * n_head, 1, max_seq_len)
+    Returns tensor shaped (batch_size * num_heads, 1, max_seq_len)
         attention_mask (`torch.Tensor`):
             Token-wise attention mask, this should be of shape (batch_size, max_seq_len).
-        n_head (`int`, *required*):
+        num_heads (`int`, *required*):
             number of heads
         dtype (`torch.dtype`, *optional*, default=`torch.bfloat16`):
             dtype of the output tensor
@@ -101,30 +101,30 @@ def build_alibi_tensor(attention_mask: torch.Tensor, n_head: int, dtype: torch.d
             device of the output alibi tensor
     """
     batch_size, seq_length = attention_mask.shape
-    closest_power_of_2 = 2 ** math.floor(math.log2(n_head))
+    closest_power_of_2 = 2 ** math.floor(math.log2(num_heads))
     base = torch.tensor(
         2 ** (-(2 ** -(math.log2(closest_power_of_2) - 3))), device=attention_mask.device, dtype=torch.float32
     )
     powers = torch.arange(1, 1 + closest_power_of_2, device=attention_mask.device, dtype=torch.int32)
     slopes = torch.pow(base, powers)
 
-    if closest_power_of_2 != n_head:
+    if closest_power_of_2 != num_heads:
         extra_base = torch.tensor(
             2 ** (-(2 ** -(math.log2(2 * closest_power_of_2) - 3))), device=attention_mask.device, dtype=torch.float32
         )
-        num_remaining_heads = min(closest_power_of_2, n_head - closest_power_of_2)
+        num_remaining_heads = min(closest_power_of_2, num_heads - closest_power_of_2)
         extra_powers = torch.arange(1, 1 + 2 * num_remaining_heads, 2, device=attention_mask.device, dtype=torch.int32)
         slopes = torch.cat([slopes, torch.pow(extra_base, extra_powers)], dim=0)
 
     # Note: alibi will added to the attention bias that will be applied to the query, key product of attention
     # => therefore alibi will have to be of shape (batch_size, num_heads, query_length, key_length)
-    # => here we set (batch_size=1, num_heads=n_head, query_length=1, key_length=max_length)
+    # => here we set (batch_size=1, num_heads=num_heads, query_length=1, key_length=max_length)
     # => the query_length dimension will then be broadcasted correctly
     # This is more or less identical to T5's relative position bias:
     # https://github.com/huggingface/transformers/blob/f681437203baa7671de3174b0fa583c349d9d5e1/src/transformers/models/t5/modeling_t5.py#L527
     arange_tensor = ((attention_mask.cumsum(dim=-1) - 1) * attention_mask)[:, None, :]
     alibi = slopes[..., None] * arange_tensor
-    return alibi.reshape(batch_size * n_head, 1, seq_length).to(dtype)
+    return alibi.reshape(batch_size * num_heads, 1, seq_length).to(dtype)
 
 
 def dropout_add(x, residual, prob, training):
@@ -247,19 +247,19 @@ class BloomAttention(nn.Module):
 
     def _merge_heads(self, x):
         # What we want to achieve is:
-        # batch_size * num_heads, seq_len, head_dim -> batch_size, seq_len, num_heads * head_dim
-        batch_size_and_num_heads, seq_len, _ = x.shape
+        # batch_size * num_heads, seq_length, head_dim -> batch_size, seq_length, num_heads * head_dim
+        batch_size_and_num_heads, seq_length, _ = x.shape
         batch_size = batch_size_and_num_heads // self.num_heads
 
         # First view to decompose the batch size
-        # batch_size*num_heads, seq_len, head_dim -> batch_size, num_heads, seq_len, head_dim
-        x = x.view(batch_size, self.num_heads, seq_len, self.head_dim)
+        # batch_size * num_heads, seq_length, head_dim -> batch_size, num_heads, seq_length, head_dim
+        x = x.view(batch_size, self.num_heads, seq_length, self.head_dim)
 
-        # batch_size, num_heads, seq_len, head_dim -> batch_size, seq_len, num_heads, head_dim
+        # batch_size, num_heads, seq_length, head_dim -> batch_size, seq_length, num_heads, head_dim
         x = x.permute(0, 2, 1, 3)
 
-        # batch_size, seq_len, num_heads, head_dim -> batch_size, seq_len, num_heads * head_dim
-        return x.reshape(batch_size, seq_len, self.num_heads * self.head_dim)
+        # batch_size, seq_length, num_heads, head_dim -> batch_size, seq_length, num_heads * head_dim
+        return x.reshape(batch_size, seq_length, self.num_heads * self.head_dim)
 
     def forward(
         self,
@@ -297,7 +297,7 @@ class BloomAttention(nn.Module):
         else:
             present = None
 
-        # # [batch_size*num_heads, head_dim, q_length] x [batch_size*num_heads, head_dim, kv_length] -> [batch_size*num_heads, q_length, kv_length]
+        # [batch_size * num_heads, q_length, kv_length]
         matmul_result = torch.baddbmm(
             input=alibi,
             batch1=query_layer,
@@ -388,7 +388,7 @@ class BloomBlock(nn.Module):
         hidden_size = config.hidden_size
 
         self.input_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-        self.n_head = config.n_head
+        self.num_heads = config.n_head
         self.self_attention = BloomAttention(config, layer_number=layer_number)
         self.post_attention_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
@@ -568,7 +568,7 @@ class BloomModel(BloomPreTrainedModel):
         super().__init__(config)
 
         self.embed_dim = config.hidden_size
-        self.n_head = config.n_head
+        self.num_heads = config.n_head
 
         # Embedding + LN Embedding
         self.word_embeddings = nn.Embedding(config.vocab_size, self.embed_dim)
@@ -590,7 +590,7 @@ class BloomModel(BloomPreTrainedModel):
 
     def _prepare_attn_mask(self, attention_mask: torch.Tensor, input_shape: torch.Size, past_key_values_length: int):
         # create causal mask
-        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+        # [batch_size, seq_length] -> [batch_size, 1, tgt_seq_length, src_seq_length]
         combined_attention_mask = None
         device = attention_mask.device
         _, seq_length = input_shape
@@ -600,7 +600,7 @@ class BloomModel(BloomPreTrainedModel):
                 input_shape, device=device, past_key_values_length=past_key_values_length
             )
 
-        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+        # [batch_size, seq_length] -> [batch_size, 1, tgt_seq_length, src_seq_length]
         expanded_attn_mask = _expand_mask(attention_mask, tgt_len=seq_length)
         combined_attention_mask = (
             expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask | combined_attention_mask
@@ -662,8 +662,8 @@ class BloomModel(BloomPreTrainedModel):
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_head x N x N
-        # head_mask has shape n_layer x batch x n_head x N x N
+        # attention_probs has shape batch_size x num_heads x N x N
+        # head_mask has shape n_layer x batch x num_heads x N x N
         head_mask = self.get_head_mask(head_mask, self.config.n_layer)
 
         if inputs_embeds is None:
@@ -687,7 +687,7 @@ class BloomModel(BloomPreTrainedModel):
         else:
             attention_mask = attention_mask.to(hidden_states.device)
 
-        alibi = build_alibi_tensor(attention_mask, self.n_head, dtype=hidden_states.dtype)
+        alibi = build_alibi_tensor(attention_mask, self.num_heads, dtype=hidden_states.dtype)
 
         causal_mask = self._prepare_attn_mask(
             attention_mask,
