@@ -90,7 +90,7 @@ def flatten_nested_dict(params, parent_key="", sep="/"):
 
 
 def to_f32(params):
-    return jax.tree_map(lambda x: x.astype(jnp.float32) if x.dtype == jnp.bfloat16 else x, params)
+    return jax.tree_util.tree_map(lambda x: x.astype(jnp.float32) if x.dtype == jnp.bfloat16 else x, params)
 
 
 def copy_attn_layer(hf_attn_layer, pt_attn_layer):
@@ -398,7 +398,7 @@ if __name__ == "__main__":
 
     # Load from checkpoint and convert params to float-32
     variables = checkpoints.restore_checkpoint(args.owlvit_checkpoint, target=None)["optimizer"]["target"]
-    flax_params = jax.tree_map(lambda x: x.astype(jnp.float32) if x.dtype == jnp.bfloat16 else x, variables)
+    flax_params = jax.tree_util.tree_map(lambda x: x.astype(jnp.float32) if x.dtype == jnp.bfloat16 else x, variables)
     del variables
 
     # Convert CLIP backbone

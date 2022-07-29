@@ -551,7 +551,7 @@ def main():
         # normalize eval metrics
         eval_metrics = get_metrics(eval_metrics)
 
-        eval_metrics = jax.tree_map(jnp.mean, eval_metrics)
+        eval_metrics = jax.tree_util.tree_map(jnp.mean, eval_metrics)
 
         # Print metrics and update progress bar
         eval_step_progress_bar.close()

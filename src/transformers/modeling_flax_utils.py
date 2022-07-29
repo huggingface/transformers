@@ -309,10 +309,10 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             return param
 
         if mask is None:
-            return jax.tree_map(conditional_cast, params)
+            return jax.tree_util.tree_map(conditional_cast, params)
 
         flat_params = flatten_dict(params)
-        flat_mask, _ = jax.tree_flatten(mask)
+        flat_mask, _ = jax.tree_util.tree_flatten(mask)
 
         for masked, key in zip(flat_mask, flat_params.keys()):
             if masked:
@@ -806,10 +806,10 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             # NOTE: This is to prevent a bug this will be fixed in Flax >= v0.3.4:
             # https://github.com/google/flax/issues/1261
             if _do_init:
-                state = jax.tree_util.tree_map(jnp.array, state)
+                state = jax.tree_util.tree_util.tree_map(jnp.array, state)
             else:
                 # keep the params on CPU if we don't want to initialize
-                state = jax.tree_util.tree_map(lambda x: jax.device_put(x, jax.devices("cpu")[0]), state)
+                state = jax.tree_util.tree_util.tree_map(lambda x: jax.device_put(x, jax.devices("cpu")[0]), state)
 
         # if model is base model only use model_prefix key
         if cls.base_model_prefix not in dict(model.params_shape_tree) and cls.base_model_prefix in state:
@@ -901,7 +901,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             )
 
         # dictionary of key: dtypes for the model params
-        param_dtypes = jax.tree_map(lambda x: x.dtype, state)
+        param_dtypes = jax.tree_util.tree_map(lambda x: x.dtype, state)
         # extract keys of parameters not in jnp.float32
         fp16_params = [k for k in param_dtypes if param_dtypes[k] == jnp.float16]
         bf16_params = [k for k in param_dtypes if param_dtypes[k] == jnp.bfloat16]

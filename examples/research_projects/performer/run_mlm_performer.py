@@ -674,9 +674,9 @@ if __name__ == "__main__":
             eval_metrics.append(metrics)
 
         eval_metrics_np = get_metrics(eval_metrics)
-        eval_metrics_np = jax.tree_map(jnp.sum, eval_metrics_np)
+        eval_metrics_np = jax.tree_util.tree_map(jnp.sum, eval_metrics_np)
         eval_normalizer = eval_metrics_np.pop("normalizer")
-        eval_summary = jax.tree_map(lambda x: x / eval_normalizer, eval_metrics_np)
+        eval_summary = jax.tree_util.tree_map(lambda x: x / eval_normalizer, eval_metrics_np)
 
         # Update progress bar
         epochs.desc = (
