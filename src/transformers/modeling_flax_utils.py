@@ -806,10 +806,10 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             # NOTE: This is to prevent a bug this will be fixed in Flax >= v0.3.4:
             # https://github.com/google/flax/issues/1261
             if _do_init:
-                state = jax.tree_util.tree_util.tree_map(jnp.array, state)
+                state = jax.tree_util.tree_map(jnp.array, state)
             else:
                 # keep the params on CPU if we don't want to initialize
-                state = jax.tree_util.tree_util.tree_map(lambda x: jax.device_put(x, jax.devices("cpu")[0]), state)
+                state = jax.tree_util.tree_map(lambda x: jax.device_put(x, jax.devices("cpu")[0]), state)
 
         # if model is base model only use model_prefix key
         if cls.base_model_prefix not in dict(model.params_shape_tree) and cls.base_model_prefix in state:
