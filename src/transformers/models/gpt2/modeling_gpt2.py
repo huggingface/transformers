@@ -230,8 +230,8 @@ class GPT2Attention(nn.Module):
         self, query, key, value, num_heads: int, original_dtype: torch.dtype, attention_mask=None, head_mask=None
     ):
         # Use `torch.baddbmm` (a bit more efficient w/ alpha param for scaling -- from Megatron-LM)
-        bsz_times_num_heads, q_seq_len, _ = query.size()
-        _, _, k_seq_len = key.size()
+        bsz_times_num_heads, query_length, _ = query.size()
+        _, _, key_length = key.size()
         batch_size = bsz_times_num_heads // num_heads
 
         # Preallocate attn_weights for `baddbmm`
@@ -239,7 +239,7 @@ class GPT2Attention(nn.Module):
             # Apply the attention mask
             attn_weights = attention_mask
         else:
-            attn_weights = torch.empty(bsz_times_num_heads, q_seq_len, k_seq_len, dtype=torch.float32, device=query.device)
+            attn_weights = torch.empty(bsz_times_num_heads, query_length, key_length, dtype=torch.float32, device=query.device)
 
         # Compute Scale Factor
         scale_factor = 1.0
@@ -259,11 +259,10 @@ class GPT2Attention(nn.Module):
             attn_weights = torch.baddbmm(
                 attn_weights, query, key, beta=0 if attention_mask is None else 1, alpha=scale_factor
             )
-        attn_weights = attn_weights.view(batch_size, num_heads, q_seq_len, k_seq_len)
+        attn_weights = attn_weights.view(batch_size, num_heads, query_length, key_length)
 
         if not self.is_cross_attention:
             # if only "normal" attention layer implements causal mask
-            query_length, key_length = query.size(-2), key.size(-2)
             causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].bool()
             mask_value = torch.finfo(attn_weights.dtype).min
             # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
