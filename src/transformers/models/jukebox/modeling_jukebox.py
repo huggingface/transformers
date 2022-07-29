@@ -47,9 +47,9 @@ from .tokenization_jukebox import get_relevant_lyric_tokens
 
 logger = logging.get_logger(__name__)
 
-# _CHECKPOINT_FOR_DOC = "ArthurZ/jukebox-dummy"
-# _CONFIG_FOR_DOC = "JukeboxConfig"
-# _TOKENIZER_FOR_DOC = "JukeboxTokenizer"
+_CHECKPOINT_FOR_DOC = "ArthurZ/jukebox-dummy"
+_CONFIG_FOR_DOC = "JukeboxConfig"
+_TOKENIZER_FOR_DOC = "JukeboxTokenizer"
 
 JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "ArthurZ/jukebox-dummy",
@@ -2982,37 +2982,34 @@ def load_prompts(audio_files, duration, hps):
     JUKEBOX_START_DOCSTRING,
 )
 class JukeboxModel(JukeboxPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["attn.masked_bias"]
     _no_split_modules = ["JukeboxBlock"]
 
     def __init__(self, config):
         super().__init__(config)
-
         self.embed_dim = config.hidden_size
-
         self.vqvae = JukeboxVQVAE(config)
         config.vqvae_z_shapes = self.vqvae.z_shapes
         self.priors = nn.ModuleList([JukeboxPrior(config, level=i) for i in range(config.nb_priors)])
 
     # Sample a partial window of length<n_ctx with tokens_to_sample new tokens on level=level
-    def sample_partial_window(self, music_tokens, labels, offset, sampling_kwargs, level, tokens_to_sample, hps):
+    def sample_partial_window(self, music_tokens, labels, offset, sampling_kwargs, level, tokens_to_sample):
         prior = self.priors[level]
-        z = music_tokens[level]
+        sampled_tokens = music_tokens[level]
         n_ctx = prior.n_ctx
-        current_tokens = z.shape[1]
-        if current_tokens < n_ctx - tokens_to_sample:
-            sampling_kwargs["sample_tokens"] = current_tokens + tokens_to_sample
+        nb_sampled_tokens = sampled_tokens.shape[1]
+        if nb_sampled_tokens < n_ctx - tokens_to_sample:
+            sampling_kwargs["sample_tokens"] = nb_sampled_tokens + tokens_to_sample
             start = 0
         else:
             sampling_kwargs["sample_tokens"] = n_ctx
-            start = current_tokens - n_ctx + tokens_to_sample
+            start = nb_sampled_tokens - n_ctx + tokens_to_sample
 
-        return self.sample_single_window(music_tokens, labels, offset, sampling_kwargs, level, start, hps)
+        return self.sample_single_window(music_tokens, labels, offset, sampling_kwargs, level, start)
 
     # Sample a single window of length=n_ctx at position=start on level=level
-    def sample_single_window(self, music_tokens, labels, offset, sampling_kwargs, level, start, hps):
+    def sample_single_window(self, music_tokens, labels, offset, sampling_kwargs, level, start):
         prior = self.priors[level]
-        n_samples = hps.n_samples
+        n_samples = self.config.n_samples
         n_ctx = prior.n_ctx
         end = start + n_ctx
         # get z already sampled at current level
@@ -3040,15 +3037,14 @@ class JukeboxModel(JukeboxPreTrainedModel):
             # Nothing new to sample
             return music_tokens
 
-        # get z_conds from level above
+        # get z_conds from level above TODO rename to latent_cond? Or music_token_cond
         z_conds = prior.get_z_conds(music_tokens, start, end)
         # if there are no levels above should return None!
 
-        # set y offset, sample_length and lyrics okens
-        y = prior.get_y(labels, start, self.total_length, offset)
+        # set y offset, sample_length and lyrics okens TODO rename to lyric_cond
+        y = prior.get_y(labels, start, self.config.sample_length, offset)
 
         empty_cache()
-        max_batch_size = 2
         max_batch_size = sampling_kwargs["max_batch_size"]
         del sampling_kwargs["max_batch_size"]
 
@@ -3069,18 +3065,17 @@ class JukeboxModel(JukeboxPreTrainedModel):
         return music_tokens
 
     # Sample total_length tokens at level=level with hop_length=hop_length
-    def sample_level(self, music_tokens, labels, offset, sampling_kwargs, level, total_length, hop_length, hps):
-        # print(f"Sampling level {level}")
+    def sample_level(self, music_tokens, labels, offset, sampling_kwargs, level, total_length, hop_length):
         print(f"Sampling level {level}")
         if total_length >= self.priors[level].n_ctx:
             for start in get_range(get_starts(total_length, self.priors[level].n_ctx, hop_length)):
                 music_tokens = self.sample_single_window(
-                    music_tokens, labels, offset, sampling_kwargs, level, start, hps
+                    music_tokens, labels, offset, sampling_kwargs, level, start
                 )
 
         else:
             music_tokens = self.sample_partial_window(
-                music_tokens, labels, offset, sampling_kwargs, level, total_length, hps
+                music_tokens, labels, offset, sampling_kwargs, level, total_length
             )
         return music_tokens
 
@@ -3115,7 +3110,6 @@ class JukeboxModel(JukeboxPreTrainedModel):
                 max_batch_size=lower_batch_size,
                 chunk_size=chunk_size,
                 sample_tokens=sample_tokens,
-                total_length=total_length,
             ),
             dict(
                 temp=0.99,
@@ -3123,7 +3117,6 @@ class JukeboxModel(JukeboxPreTrainedModel):
                 max_batch_size=lower_batch_size,
                 chunk_size=chunk_size,
                 sample_tokens=sample_tokens,
-                total_length=total_length,
             ),
             dict(
                 temp=sampling_temperature,
@@ -3131,24 +3124,22 @@ class JukeboxModel(JukeboxPreTrainedModel):
                 max_batch_size=max_batch_size,
                 chunk_size=chunk_size,
                 sample_tokens=sample_tokens,
-                total_length=total_length,
             ),
         ]
-        hps = self.config
         self.start_time = time.strftime("%Y-%m-%d-%Hh%M")
         if sample_levels is None:
             sample_levels = range(len(self.priors))
         for level in reversed(sample_levels):
-            self.total_length = sampling_kwargs[level].pop("total_length")
+            self.config.sample_length = total_length  # total length of the signal, might be bit different 
+            # from the actual generated length
             self.priors[level].to(music_tokens[level].device).eval()
             empty_cache()
-            hps.sample_length = self.total_length  # generated length of the signal
             # Set correct total_length, hop_length, labels and sampling_kwargs for level
-            total_length = hps.sample_length // self.priors[level].raw_to_tokens
-            hop_length = int(hps.hop_fraction[-level - 1] * self.priors[level].n_ctx)
+            total_length = self.config.sample_length // self.priors[level].raw_to_tokens
+            hop_length = int(self.config.hop_fraction[-level - 1] * self.priors[level].n_ctx)
 
             music_tokens = self.sample_level(
-                music_tokens, labels[level], offset, sampling_kwargs[level], level, total_length, hop_length, hps
+                music_tokens, labels[level], offset, sampling_kwargs[level], level, total_length, hop_length
             )
 
             self.priors[level].to("cpu")
