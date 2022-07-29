@@ -276,7 +276,7 @@ class GPT2Attention(nn.Module):
         # Downcast (if necessary) back to V's dtype (if in mixed-precision) -- No-Op if otherwise
         if attn_weights.dtype != torch.float32:
             raise RuntimeError("Error with upcasting, attn_weights does not have dtype torch.float32")
-        attn_weights = attn_weights.type(value.dtype)
+        attn_weights = attn_weights.type(original_dtype)
         attn_weights = self.attn_dropout(attn_weights)
 
         # Mask heads if we want to
@@ -330,13 +330,12 @@ class GPT2Attention(nn.Module):
         # Depending on the `reorder_and_upcast_attn` flag we perform attention in a higher precision
         attention_dtype = torch.float32 if self.reorder_and_upcast_attn else query.dtype
 
-        bsz, num_heads, q_seq_len, dk = query.size()
-
         query = self._split_heads(query, self.num_heads, self.head_dim)
         key = self._split_heads(key, self.num_heads, self.head_dim)
         value = self._split_heads(value, self.num_heads, self.head_dim)
 
         if self.reorder_and_upcast_attn:
+            bsz, num_heads, q_seq_len, dk = query.size()
             query = query.reshape(-1, q_seq_len, dk).to(attention_dtype)
             key = key.transpose(-1, -2).reshape(-1, dk, q_seq_len).to(attention_dtype)
             value = value.reshape(-1, q_seq_len, dk).to(attention_dtype)
