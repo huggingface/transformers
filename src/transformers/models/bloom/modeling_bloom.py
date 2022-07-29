@@ -244,7 +244,7 @@ class BloomAttention(nn.Module):
         new_tensor_shape = fused_qkv.size()[:-1] + (self.num_heads, 3 * self.head_dim)
         # new_tensor_shape = (fused_qkv.size(1), fused_qkv.size(0)*fused_qkv.size(2), fused_qkv.size(-1))
         # fused_qkv = fused_qkv.transpose(1, 0)
-        fused_qkv = fused_qkv.reshape(*new_tensor_shape)
+        fused_qkv = fused_qkv.reshape(new_tensor_shape)
         # fused_qkv = fused_qkv.permute(0, 2, 1, 3)
         return torch.split(fused_qkv, self.head_dim, -1)
 
@@ -306,7 +306,7 @@ class BloomAttention(nn.Module):
         attn_weights = (attention_scores * self.layer_number) + attention_mask
         attn_weights = torch.max(attn_weights, torch.tensor(torch.finfo(attn_weights.dtype).min))
         attention_probs = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(input_dtype)
-        attention_probs = attention_probs * (~attention_mask.bool())
+        attention_probs = attention_probs * (~attention_mask.to(torch.bool))
         # [batch_size, num_heads, q_length, k_length]
         attention_probs = self.attention_dropout(attention_probs)
 
@@ -314,7 +314,7 @@ class BloomAttention(nn.Module):
             attention_probs = attention_probs * head_mask
 
         # change view [batch_size x num_heads, q_length, k_length]
-        attention_probs_reshaped = attention_probs.view(*matmul_result.shape)
+        attention_probs_reshaped = attention_probs.view(matmul_result.shape)
 
         # matmul: [batch_size * num_heads, q_length, head_dim]
         context_layer = torch.bmm(
