@@ -128,7 +128,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "trocr",
     "vit",
     "xglm",
-    "xlnet",
+    #    "xlnet",
 ]
 
 _REGULAR_SUPPORTED_MODELS = []
@@ -562,10 +562,8 @@ class HFProxy(Proxy):
         return self.tracer.create_proxy("call_function", operator.setitem, (self, indices, values), {})
 
     def __contains__(self, key):
-        # To handle cases such as :
-        # `"some_key" in kwargs`
-        if self.node.op == "placeholder":
-            return False
+        if hasattr(self, "_metadata") and self._metadata is not None:
+            return key in self._metadata
         return super().__contains__(key)
 
 
