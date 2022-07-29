@@ -39,22 +39,6 @@ if TYPE_CHECKING:
         import jax.numpy as jnp
 
 
-def rescale(image: np.ndarray, scale: Union[float, int] = 255) -> np.ndarray:
-    """
-    Rescales `image` by `scale`.
-
-    Args:
-        image (`np.ndarray``):
-            The image to rescale.
-        scale (`float`, `int`):
-            The scale to use for rescaling the image.
-
-    Returns:
-        image: A rescaled np.ndarray image.
-    """
-    return image * scale
-
-
 def to_channel_dimension_format(image: np.ndarray, channel_dim: Union[ChannelDimension, str]) -> np.ndarray:
     """
     Converts `image` to the channel dimension format specified by `channel_dim`.
@@ -80,6 +64,27 @@ def to_channel_dimension_format(image: np.ndarray, channel_dim: Union[ChannelDim
         return image.transpose((1, 2, 0))
 
     raise ValueError("Unsupported channel dimension format: {}".format(channel_dim))
+
+
+def rescale(
+    image: np.ndarray, scale: Union[float, int] = 255, data_format: Optional[ChannelDimension] = None
+) -> np.ndarray:
+    """
+    Rescales `image` by `scale`.
+
+    Args:
+        image (`np.ndarray``):
+            The image to rescale.
+        scale (`float`, `int`):
+            The scale to use for rescaling the image.
+
+    Returns:
+        image: A rescaled np.ndarray image.
+    """
+    rescaled_image = image * scale
+    if data_format is not None:
+        rescaled_image = to_channel_dimension_format(rescaled_image, data_format)
+    return rescaled_image
 
 
 def to_pil_image(
