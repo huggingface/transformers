@@ -149,7 +149,6 @@ class LukeModelTester:
         sequence_labels = None
         token_labels = None
         choice_labels = None
-        # labels = None
         entity_labels = None
         entity_classification_labels = None
         entity_pair_classification_labels = None
@@ -160,7 +159,6 @@ class LukeModelTester:
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
-            # labels = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
             entity_labels = ids_tensor([self.batch_size, self.entity_length], self.entity_vocab_size)
 
             entity_classification_labels = ids_tensor([self.batch_size], self.num_entity_classification_labels)
