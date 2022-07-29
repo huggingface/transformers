@@ -53,6 +53,9 @@ _TOKENIZER_FOR_DOC = "GPT2Tokenizer"
 # Base model docstring
 _EXPECTED_OUTPUT_SHAPE = [1, 8, 1024]
 
+# Causal LM output
+_EXPECTED_CAUSAL_LM_OUTPUT = "Hey, are you consciours? Can you talk to me?\nI'm not consciours, but I can talk to you."
+
 LARGE_NEGATIVE = -1e8
 
 
@@ -899,7 +902,7 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFCausalLMOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
-        expected_output="Hey, are you consciours? Can you talk to me?\nI'm not consciours, but I can talk to you.",
+        expected_output=_EXPECTED_CAUSAL_LM_OUTPUT,
     )
     def call(
         self,
