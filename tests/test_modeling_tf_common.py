@@ -33,17 +33,18 @@ from requests.exceptions import HTTPError
 from transformers import is_tf_available, is_torch_available
 from transformers.configuration_utils import PretrainedConfig
 from transformers.models.auto import get_values
-from transformers.testing_utils import tooslow  # noqa: F401
-from transformers.testing_utils import (
+from transformers.testing_utils import (  # noqa: F401
     TOKEN,
     USER,
     CaptureLogger,
+    CaptureStdout,
     _tf_gpu_memory_limit,
     is_pt_tf_cross_test,
     is_staging_test,
     require_tf,
     require_tf2onnx,
     slow,
+    tooslow,
     torch_device,
 )
 from transformers.utils import logging
@@ -2189,41 +2190,65 @@ class TFModelPushToHubTester(unittest.TestCase):
         model = TFBertModel(config)
         # Make sure model is properly initialized
         _ = model(model.dummy_inputs)
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(os.path.join(tmp_dir, "test-model-tf"), push_to_hub=True, use_auth_token=self._token)
 
-            new_model = TFBertModel.from_pretrained(f"{USER}/test-model-tf")
-            models_equal = True
-            for p1, p2 in zip(model.weights, new_model.weights):
-                if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
-                    models_equal = False
-            self.assertTrue(models_equal)
+        logging.set_verbosity_info()
+        logger = logging.get_logger("transformers.utils.hub")
+        with CaptureLogger(logger) as cl:
+            model.push_to_hub("test-model-tf", use_auth_token=self._token)
+        logging.set_verbosity_warning()
+        # Check the model card was created and uploaded.
+        self.assertIn("Uploading README.md to __DUMMY_TRANSFORMERS_USER__/test-model-tf", cl.out)
 
-    def test_push_to_hub_with_model_card(self):
-        config = BertConfig(
-            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-        )
-        model = TFBertModel(config)
+        new_model = TFBertModel.from_pretrained(f"{USER}/test-model-tf")
+        models_equal = True
+        for p1, p2 in zip(model.weights, new_model.weights):
+            if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+                models_equal = False
+        self.assertTrue(models_equal)
+
+        # Reset repo
+        delete_repo(token=self._token, repo_id="test-model-tf")
+
+        # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.push_to_hub(os.path.join(tmp_dir, "test-model-tf"))
-            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "test-model-tf", "README.md")))
+            model.save_pretrained(tmp_dir, repo_id="test-model-tf", push_to_hub=True, use_auth_token=self._token)
+
+        new_model = TFBertModel.from_pretrained(f"{USER}/test-model-tf")
+        models_equal = True
+        for p1, p2 in zip(model.weights, new_model.weights):
+            if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+                models_equal = False
+        self.assertTrue(models_equal)
 
     def test_push_to_hub_in_organization(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
         )
         model = TFBertModel(config)
+        # Make sure model is properly initialized
+        _ = model(model.dummy_inputs)
+
+        model.push_to_hub("valid_org/test-model-tf-org", use_auth_token=self._token)
+
+        new_model = TFBertModel.from_pretrained("valid_org/test-model-tf-org")
+        models_equal = True
+        for p1, p2 in zip(model.weights, new_model.weights):
+            if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+                models_equal = False
+        self.assertTrue(models_equal)
+
+        # Reset repo
+        delete_repo(token=self._token, repo_id="valid_org/test-model-tf-org")
+
+        # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(
-                os.path.join(tmp_dir, "test-model-tf-org"),
-                push_to_hub=True,
-                use_auth_token=self._token,
-                organization="valid_org",
+                tmp_dir, push_to_hub=True, use_auth_token=self._token, repo_id="valid_org/test-model-tf-org"
             )
 
-            new_model = TFBertModel.from_pretrained("valid_org/test-model-tf-org")
-            models_equal = True
-            for p1, p2 in zip(model.weights, new_model.weights):
-                if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
-                    models_equal = False
-            self.assertTrue(models_equal)
+        new_model = TFBertModel.from_pretrained("valid_org/test-model-tf-org")
+        models_equal = True
+        for p1, p2 in zip(model.weights, new_model.weights):
+            if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+                models_equal = False
+        self.assertTrue(models_equal)

@@ -32,7 +32,7 @@ from typing import Dict, List, Tuple
 import numpy as np
 
 import transformers
-from huggingface_hub import HfFolder, Repository, delete_repo, set_access_token
+from huggingface_hub import HfFolder, delete_repo, set_access_token
 from requests.exceptions import HTTPError
 from transformers import (
     AutoConfig,
@@ -2962,39 +2962,51 @@ class ModelPushToHubTester(unittest.TestCase):
         except HTTPError:
             pass
 
-        try:
-            delete_repo(token=cls._token, repo_id="test-dynamic-model-config")
-        except HTTPError:
-            pass
-
     def test_push_to_hub(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
         )
         model = BertModel(config)
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(os.path.join(tmp_dir, "test-model"), push_to_hub=True, use_auth_token=self._token)
+        model.push_to_hub("test-model", use_auth_token=self._token)
 
-            new_model = BertModel.from_pretrained(f"{USER}/test-model")
-            for p1, p2 in zip(model.parameters(), new_model.parameters()):
-                self.assertTrue(torch.equal(p1, p2))
+        new_model = BertModel.from_pretrained(f"{USER}/test-model")
+        for p1, p2 in zip(model.parameters(), new_model.parameters()):
+            self.assertTrue(torch.equal(p1, p2))
+
+        # Reset repo
+        delete_repo(token=self._token, repo_id="test-model")
+
+        # Push to hub via save_pretrained
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, repo_id="test-model", push_to_hub=True, use_auth_token=self._token)
+
+        new_model = BertModel.from_pretrained(f"{USER}/test-model")
+        for p1, p2 in zip(model.parameters(), new_model.parameters()):
+            self.assertTrue(torch.equal(p1, p2))
 
     def test_push_to_hub_in_organization(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
         )
         model = BertModel(config)
+        model.push_to_hub("valid_org/test-model-org", use_auth_token=self._token)
+
+        new_model = BertModel.from_pretrained("valid_org/test-model-org")
+        for p1, p2 in zip(model.parameters(), new_model.parameters()):
+            self.assertTrue(torch.equal(p1, p2))
+
+        # Reset repo
+        delete_repo(token=self._token, repo_id="valid_org/test-model-org")
+
+        # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(
-                os.path.join(tmp_dir, "test-model-org"),
-                push_to_hub=True,
-                use_auth_token=self._token,
-                organization="valid_org",
+                tmp_dir, push_to_hub=True, use_auth_token=self._token, repo_id="valid_org/test-model-org"
             )
 
-            new_model = BertModel.from_pretrained("valid_org/test-model-org")
-            for p1, p2 in zip(model.parameters(), new_model.parameters()):
-                self.assertTrue(torch.equal(p1, p2))
+        new_model = BertModel.from_pretrained("valid_org/test-model-org")
+        for p1, p2 in zip(model.parameters(), new_model.parameters()):
+            self.assertTrue(torch.equal(p1, p2))
 
     def test_push_to_hub_dynamic_model(self):
         CustomConfig.register_for_auto_class()
@@ -3003,16 +3015,12 @@ class ModelPushToHubTester(unittest.TestCase):
         config = CustomConfig(hidden_size=32)
         model = CustomModel(config)
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-model", use_auth_token=self._token)
-            model.save_pretrained(tmp_dir)
-            # checks
-            self.assertDictEqual(
-                config.auto_map,
-                {"AutoConfig": "custom_configuration.CustomConfig", "AutoModel": "custom_modeling.CustomModel"},
-            )
-
-            repo.push_to_hub()
+        model.push_to_hub("test-dynamic-model", use_auth_token=self._token)
+        # checks
+        self.assertDictEqual(
+            config.auto_map,
+            {"AutoConfig": "custom_configuration.CustomConfig", "AutoModel": "custom_modeling.CustomModel"},
+        )
 
         new_model = AutoModel.from_pretrained(f"{USER}/test-dynamic-model", trust_remote_code=True)
         # Can't make an isinstance check because the new_model is from the CustomModel class of a dynamic module
