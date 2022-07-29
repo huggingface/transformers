@@ -1131,7 +1131,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         #  - False: key/value [batch_size, num_heads, seq_length, head_dim]
         past_num_dimensions = len(past[0][0].shape)
         device_to_beam_idx = {
-            torch.device: beam_idx.to(past_state.device) for layer_past in past for past_state in layer_past
+            past_state.device: beam_idx.to(past_state.device) for layer_past in past for past_state in layer_past
         }
 
         if past_num_dimensions == 3:
