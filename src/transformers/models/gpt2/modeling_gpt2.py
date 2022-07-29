@@ -186,6 +186,8 @@ class GPT2Attention(nn.Module):
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
+        attn_weights = torch.matmul(query, key.transpose(-1,-2))
+
         normalizer = 1
         if self.scale_attn_weights:
             normalizer *= torch.tensor(value.size(-1) ** 0.5, dtype=query.dtype, device=query.device)
@@ -194,22 +196,7 @@ class GPT2Attention(nn.Module):
         if self.scale_attn_by_inverse_layer_idx:
             normalizer *= float(self.layer_idx + 1)
 
-        # Preallocate attn_weights for `baddbmm`
-        if attention_mask is not None:
-            # Apply the attention mask
-            attn_weights = attention_mask
-        else:
-            bsz, num_heads, q_seq_len, _ = query.size()
-            _, _, k_seq_len, _ = key.size()
-            attn_weights = torch.empty(bsz * num_heads, q_seq_len, k_seq_len, dtype=query.dtype, device=query.device)
-
-        attn_weights = torch.baddbmm(
-            input=attn_weights,
-            batch1=query,
-            batch2=key.transpose(-1, -2),
-            alpha=1 / normalizer,
-            beta=0 if attention_mask is None else 1,
-        )
+        attn_weights = attn_weights / normalizer
 
         if not self.is_cross_attention:
             # if only "normal" attention layer implements causal mask
@@ -220,6 +207,10 @@ class GPT2Attention(nn.Module):
             # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
             mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype, device=attn_weights.device)
             attn_weights = torch.where(causal_mask, attn_weights, mask_value)
+
+        if attention_mask is not None:
+            # Apply the attention mask
+            attn_weights = attn_weights + attention_mask
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
