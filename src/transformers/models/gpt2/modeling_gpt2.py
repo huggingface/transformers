@@ -201,7 +201,7 @@ class GPT2Attention(nn.Module):
         if not self.is_cross_attention:
             # if only "normal" attention layer implements causal mask
             query_length, key_length = query.size(-2), key.size(-2)
-            causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].to(torch.bool)
+            causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
             mask_value = torch.finfo(attn_weights.dtype).min
             # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
             # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
@@ -326,7 +326,6 @@ class GPT2Attention(nn.Module):
 
         # Depending on the `reorder_and_upcast_attn` flag we perform attention in a higher precision
         original_dtype = query.dtype
-        attention_dtype = torch.float32 if self.reorder_and_upcast_attn else query.dtype
 
         query = self._split_heads(query, self.num_heads, self.head_dim)
         key = self._split_heads(key, self.num_heads, self.head_dim)
@@ -334,9 +333,9 @@ class GPT2Attention(nn.Module):
 
         batch_size, num_heads, query_length, head_dim = query.size()
         if self.reorder_and_upcast_attn:
-            query = query.reshape(-1, query_length, head_dim).to(attention_dtype)
-            key = key.transpose(-1, -2).reshape(-1, head_dim, query_length).to(attention_dtype)
-            value = value.reshape(-1, query_length, head_dim).to(attention_dtype)
+            query = query.to(torch.float32).view(-1, query_length, head_dim)
+            key = key.transpose(-1, -2).to(torch.float32).view(-1, head_dim, query_length)
+            value = value.to(torch.float32).view(-1, query_length, head_dim)
 
         if layer_past is not None:
             past_key, past_value = layer_past
@@ -1097,8 +1096,8 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         loss = None
         if labels is not None:
             # Shift so that tokens < n predict n
-            shift_logits = lm_logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
+            shift_logits = lm_logits[..., :-1, :]
+            shift_labels = labels[..., 1:]
             # Flatten the tokens
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
@@ -1336,8 +1335,8 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
             mc_loss = loss_fct(mc_logits.view(-1, mc_logits.size(-1)), mc_labels.view(-1))
         lm_loss = None
         if labels is not None:
-            shift_logits = lm_logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
+            shift_logits = lm_logits[..., :-1, :]
+            shift_labels = labels[..., 1:]
             loss_fct = CrossEntropyLoss()
             lm_loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
 
