@@ -21,7 +21,6 @@ import sys
 from dataclasses import dataclass, field
 from typing import Optional
 
-import datasets
 import numpy as np
 import torch
 from datasets import load_dataset
