@@ -730,7 +730,7 @@ class DalleMegaEncoder(DalleMegaPretrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        superconditioning_scale: Optional[int] = None,
+        superconditioning_scale: Optional[int] = 1,
     ) -> Union[Tuple, DalleMegaEncoderOutput]:
         r"""
         Args:
@@ -799,6 +799,7 @@ class DalleMegaEncoder(DalleMegaPretrainedModel):
 
             # concatenate the embeddings of the conditioned and unconditioned inputs
             inputs_embeds = torch.cat([inputs_embeds, inputs_embeds_unconditional], dim=0)
+            input_shape = inputs_embeds.size()[:-1]
 
             # concatenate the attention masks of the conditioned and unconditioned inputs
             # if attention_mask is None, create an all-ones mask
@@ -943,6 +944,7 @@ class DalleMegaDecoder(DalleMegaPretrainedModel):
             encoder_attention_mask = torch.zeros(input_shape, dtype=torch.long, device=device)
 
         encoder_attention_mask = torch.cat([encoder_attention_mask, encoder_attention_mask_uncond], dim=0)
+        return encoder_attention_mask
 
     def forward(
         self,
@@ -956,10 +958,10 @@ class DalleMegaDecoder(DalleMegaPretrainedModel):
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
+        superconditioning_scale: Optional[int] = 1,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        superconditioning_scale: Optional[int] = None,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
         r"""
         Args:
@@ -1047,11 +1049,7 @@ class DalleMegaDecoder(DalleMegaPretrainedModel):
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
         # validate the encoder_hidden_states_uncond if do_superconditioning is True
-        expected_shape = (
-            input_shape[0] * 2,
-            input_shape[1],
-            self.config.hidden_size,
-        )
+        expected_shape = (input_shape[0], encoder_hidden_states.shape[1], self.config.hidden_size)
         if do_superconditioning and encoder_hidden_states_uncond is None:
             raise ValueError("If superconditioning is enabled, you have to provide encoder_hidden_states_uncond")
         elif do_superconditioning and encoder_hidden_states_uncond.shape != expected_shape:
@@ -1060,13 +1058,11 @@ class DalleMegaDecoder(DalleMegaPretrainedModel):
                 " sequence_length, hidden_size)"
             )
         elif do_superconditioning:
-            encoder_hidden_states = torch.cat([encoder_hidden_states, encoder_hidden_states_uncond], dim=0)
-            input_shape = inputs_embeds.size()[:-1]
-
             # extend the encoder_attention_mask to match the shape of encoder_hidden_states
             encoder_attention_mask = self._prepare_encoder_attention_mask_unconditional(
-                encoder_attention_mask, input_shape, encoder_hidden_states.device
+                encoder_attention_mask, encoder_hidden_states.shape[:2], encoder_hidden_states.device
             )
+            encoder_hidden_states = torch.cat([encoder_hidden_states, encoder_hidden_states_uncond], dim=0)
 
             # extend the decoder input_ids to match the shape with the encoder_hidden_states
             input_ids = input_ids.repeat(2, 1)
@@ -1302,7 +1298,7 @@ class DalleMegaModel(DalleMegaPretrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        superconditioning_scale: Optional[int] = None,
+        superconditioning_scale: Optional[int] = 1,
     ) -> Union[Tuple, Seq2SeqModelOutput]:
 
         # different to other models, DalleMega automatically creates decoder_input_ids from
@@ -1352,7 +1348,7 @@ class DalleMegaModel(DalleMegaPretrainedModel):
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_outputs[0],
-            encodert_hidden_states_unconditional=encoder_outputs[1] if do_superconditioning else None,
+            encoder_hidden_states_uncond=encoder_outputs.last_hidden_state_unconditional,
             encoder_attention_mask=attention_mask,
             head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
@@ -1486,11 +1482,11 @@ class DalleMegaForConditionalGeneration(DalleMegaPretrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
+        superconditioning_scale: Optional[int] = 1,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        superconditioning_scale: Optional[int] = None,
     ) -> Union[Tuple, Seq2SeqLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1523,6 +1519,7 @@ class DalleMegaForConditionalGeneration(DalleMegaPretrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
+            superconditioning_scale=superconditioning_scale,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1570,7 +1567,7 @@ class DalleMegaForConditionalGeneration(DalleMegaPretrainedModel):
         cross_attn_head_mask=None,
         use_cache=None,
         encoder_outputs=None,
-        superconditioning_scale: int = None,
+        superconditioning_scale: int = 1,
         **kwargs
     ):
         # cut decoder_input_ids if past is used
