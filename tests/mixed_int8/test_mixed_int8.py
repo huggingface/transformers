@@ -13,16 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import tempfile
 import unittest
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 from transformers.testing_utils import (
-    require_torch,
-    slow,
-    require_bitsandbytes,
     require_accelerate,
+    require_bitsandbytes,
+    require_torch,
     require_torch_gpu,
     require_torch_multi_gpu,
+    slow,
 )
 
 
@@ -30,7 +31,7 @@ from transformers.testing_utils import (
 @require_accelerate
 @require_torch
 @require_torch_gpu
-@slow
+# @slow
 class MixedInt8Test(unittest.TestCase):
     # We keep the constants inside the init function and model loading inside setUp function
 
@@ -46,6 +47,7 @@ class MixedInt8Test(unittest.TestCase):
     input_text = "Hello my name is"
     EXPECTED_OUTPUT = "Hello my name is John.\nI am a friend of your father.\n"
     MAX_NEW_TOKENS = 10
+
     def setUp(self):
         # Models pipeline and tokenizer
         self.model_fp16 = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype="auto", device_map="auto")
@@ -98,7 +100,11 @@ class MixedInt8Test(unittest.TestCase):
         The aim of this test is to verify whether if we save and load back a quantized model we retain the same performance.
         If this test pass people can safely push quantized models on the Hub.
         """
-        pass
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            # Save and load 8bit model
+            self.model_8bit.save_pretrained(tmpdirname)
+            loaded_model_8bit = AutoModelForCausalLM.from_pretrained(tmpdirname, load_in_8bit=True, device_map="auto")
+            print(loaded_model_8bit)
 
     @require_torch_multi_gpu
     def test_multi_gpu_loading(self):
