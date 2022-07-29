@@ -188,14 +188,18 @@ class GPT2Attention(nn.Module):
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
         attn_weights = torch.matmul(query, key.transpose(-1, -2))
 
+        normalizer = 1
         if self.scale_attn_weights:
-            attn_weights = attn_weights / torch.tensor(
+            normalizer *= torch.tensor(
                 value.size(-1) ** 0.5, dtype=attn_weights.dtype, device=attn_weights.device
             )
 
         # Layer-wise attention scaling
         if self.scale_attn_by_inverse_layer_idx:
-            attn_weights = attn_weights / float(self.layer_idx + 1)
+            normalizer *= float(self.layer_idx + 1)
+
+        if normalizer != 1:
+            attn_weights = attn_weights / normalizer
 
         if not self.is_cross_attention:
             # if only "normal" attention layer implements causal mask
@@ -204,7 +208,7 @@ class GPT2Attention(nn.Module):
             mask_value = torch.finfo(attn_weights.dtype).min
             # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
             # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
-            mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
+            mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype, device=attn_weights.device)
             attn_weights = torch.where(causal_mask, attn_weights, mask_value)
 
         if attention_mask is not None:
@@ -225,9 +229,9 @@ class GPT2Attention(nn.Module):
 
         return attn_output, attn_weights
 
-    def _upcast_and_reordered_attn(self, query, key, value, attention_mask=None, head_mask=None):
+    def _upcast_and_reordered_attn(self, query, key, value, original_dtype: torch.dtype, attention_mask=None, head_mask=None):
         # Use `torch.baddbmm` (a bit more efficient w/ alpha param for scaling -- from Megatron-LM)
-        bsz, num_heads, q_seq_len, dk = query.size()
+        bsz, num_heads, q_seq_len, _ = query.size()
         _, _, k_seq_len, _ = key.size()
 
         # Preallocate attn_weights for `baddbmm`
@@ -244,12 +248,10 @@ class GPT2Attention(nn.Module):
         # Upcast (turn off autocast) and reorder (Scale K by 1 / root(dk))
         if is_amp_available:
             with autocast(enabled=False):
-                q, k = query.reshape(-1, q_seq_len, dk), key.transpose(-1, -2).reshape(-1, dk, k_seq_len)
-                attn_weights = torch.baddbmm(attn_weights, q.float(), k.float(), beta=0, alpha=scale_factor)
+                attn_weights = torch.baddbmm(attn_weights, query, key, beta=0, alpha=scale_factor)
                 attn_weights = attn_weights.reshape(bsz, num_heads, q_seq_len, k_seq_len)
         else:
-            q, k = query.reshape(-1, q_seq_len, dk), key.transpose(-1, -2).reshape(-1, dk, k_seq_len)
-            attn_weights = torch.baddbmm(attn_weights, q.float(), k.float(), beta=0, alpha=scale_factor)
+            attn_weights = torch.baddbmm(attn_weights, query, key, beta=0, alpha=scale_factor)
             attn_weights = attn_weights.reshape(bsz, num_heads, q_seq_len, k_seq_len)
 
         if not self.is_cross_attention:
@@ -259,7 +261,7 @@ class GPT2Attention(nn.Module):
             mask_value = torch.finfo(attn_weights.dtype).min
             # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
             # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
-            mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
+            mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype, device=attn_weights.device)
             attn_weights = torch.where(causal_mask, attn_weights, mask_value)
 
         if attention_mask is not None:
@@ -301,7 +303,7 @@ class GPT2Attention(nn.Module):
     def forward(
         self,
         hidden_states: Optional[Tuple[torch.FloatTensor]],
-        layer_past: Optional[Tuple[torch.Tensor]] = None,
+        layer_past: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
@@ -322,9 +324,14 @@ class GPT2Attention(nn.Module):
         else:
             query, key, value = self.c_attn(hidden_states).split(self.split_size, dim=2)
 
-        query = self._split_heads(query, self.num_heads, self.head_dim)
-        key = self._split_heads(key, self.num_heads, self.head_dim)
-        value = self._split_heads(value, self.num_heads, self.head_dim)
+        # Depending on the `reorder_and_upcast_attn` flag we perform attention in a higher precision
+        attention_dtype = torch.float32 if self.reorder_and_upcast_attn else query.dtype
+
+        bsz, num_heads, q_seq_len, dk = query.size()
+
+        query = self._split_heads(query, self.num_heads, self.head_dim).reshape(-1, q_seq_len, dk).to(attention_dtype)
+        key = self._split_heads(key, self.num_heads, self.head_dim).transpose(-1, -2).reshape(-1, dk, q_seq_len).to(attention_dtype)
+        value = self._split_heads(value, self.num_heads, self.head_dim).reshape(-1, q_seq_len, dk).to(attention_dtype)
 
         if layer_past is not None:
             past_key, past_value = layer_past
@@ -337,7 +344,9 @@ class GPT2Attention(nn.Module):
             present = None
 
         if self.reorder_and_upcast_attn:
-            attn_output, attn_weights = self._upcast_and_reordered_attn(query, key, value, attention_mask, head_mask)
+            attn_output, attn_weights = self._upcast_and_reordered_attn(
+                query, key, value, original_dtype=self.c_attn.dtype, attention_mask=attention_mask, head_mask=head_mask
+            )
         else:
             attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
 
