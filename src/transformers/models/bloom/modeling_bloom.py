@@ -312,8 +312,7 @@ class BloomAttention(nn.Module):
             present = None
 
         # [batch_size * num_heads, q_length, kv_length]
-        matmul_result = torch.baddbmm(
-            input=alibi,
+        matmul_result = alibi.baddbmm(
             batch1=query_layer,
             batch2=key_layer,
             beta=self.beta,
@@ -605,7 +604,7 @@ class BloomModel(BloomPreTrainedModel):
         return self.word_embeddings
 
     def _prepare_attn_mask(
-        self, attention_mask: torch.Tensor, input_shape: torch.Size, past_key_values_length: int
+        self, attention_mask: torch.Tensor, input_shape: Tuple[int, int], past_key_values_length: int
     ) -> torch.BoolTensor:
         # create causal mask
         # [batch_size, seq_length] -> [batch_size, 1, tgt_length, src_length]
