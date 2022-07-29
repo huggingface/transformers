@@ -1049,10 +1049,17 @@ class DalleMegaDecoder(DalleMegaPretrainedModel):
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
         # validate the encoder_hidden_states_uncond if do_superconditioning is True
-        expected_shape = (input_shape[0], encoder_hidden_states.shape[1], self.config.hidden_size)
-        if do_superconditioning and encoder_hidden_states_uncond is None:
+        if do_superconditioning and encoder_hidden_states is None:
+            raise ValueError(
+                "If superconditioning is enabled, you have to pass the encoder_hidden_states to the decoder."
+            )
+        elif do_superconditioning and encoder_hidden_states_uncond is None:
             raise ValueError("If superconditioning is enabled, you have to provide encoder_hidden_states_uncond")
-        elif do_superconditioning and encoder_hidden_states_uncond.shape != expected_shape:
+        elif do_superconditioning and encoder_hidden_states_uncond.shape != (
+            input_shape[0],
+            encoder_hidden_states.shape[1],
+            self.config.hidden_size,
+        ):
             raise ValueError(
                 "If superconditioning is enabled, encoder_hidden_states_uncond must have shape (batch_size * 2,"
                 " sequence_length, hidden_size)"
@@ -1301,20 +1308,6 @@ class DalleMegaModel(DalleMegaPretrainedModel):
         superconditioning_scale: Optional[int] = 1,
     ) -> Union[Tuple, Seq2SeqModelOutput]:
 
-        # different to other models, DalleMega automatically creates decoder_input_ids from
-        # input_ids if no decoder_input_ids are provided
-        if decoder_input_ids is None and decoder_inputs_embeds is None:
-            if input_ids is None:
-                raise ValueError(
-                    "If no `decoder_input_ids` or `decoder_inputs_embeds` are "
-                    "passed, `input_ids` cannot be `None`. Please pass either "
-                    "`input_ids` or `decoder_input_ids` or `decoder_inputs_embeds`."
-                )
-
-            decoder_input_ids = shift_tokens_right(
-                input_ids, self.config.pad_token_id, self.config.decoder_start_token_id
-            )
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1344,11 +1337,18 @@ class DalleMegaModel(DalleMegaPretrainedModel):
                 last_hidden_state_unconditional=encoder_outputs[3] if do_superconditioning else None,
             )
 
+        encoder_hidden_states_uncond = None
+        if do_superconditioning:
+            if output_hidden_states and output_attentions:
+                encoder_hidden_states_uncond = encoder_outputs[3]
+            else:
+                encoder_hidden_states_uncond = encoder_outputs[1]
+
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_outputs[0],
-            encoder_hidden_states_uncond=encoder_outputs.last_hidden_state_unconditional,
+            encoder_hidden_states_uncond=encoder_hidden_states_uncond,
             encoder_attention_mask=attention_mask,
             head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
