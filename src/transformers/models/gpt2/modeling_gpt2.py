@@ -334,7 +334,7 @@ class GPT2Attention(nn.Module):
         if self.reorder_and_upcast_attn:
             query = query.to(torch.float32).view(-1, query_length, head_dim)
             key = key.transpose(-1, -2).to(torch.float32).view(-1, head_dim, query_length)
-            value = value.to(torch.float32).view(-1, query_length, head_dim)
+            value = value.reshape(-1, query_length, head_dim)
 
         if layer_past is not None:
             past_key, past_value = layer_past
