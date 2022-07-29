@@ -906,6 +906,9 @@ class HFTracer(Tracer):
             inputs.update(self._generate_dummy_input(root, input_name, shape))
 
         concrete_metas = {input_name: input_.to("meta") for input_name, input_ in inputs.items()}
+        for param in sig.parameters.values():
+            if param.kind == inspect.Parameter.VAR_KEYWORD and param.name not in input_names:
+                concrete_metas[f"**{param.name}"] = {}
         self.meta_args = concrete_metas
         self.patched_torch_methods = {
             target: _gen_constructor_wrapper(getattr(torch, target)) for target in self._TORCH_METHODS_TO_PATCH
@@ -934,18 +937,15 @@ class HFTracer(Tracer):
                     node.type = torch.Tensor
                 # It is a concrete arg so it is not used and should be removed.
                 else:
-                    if hasattr(torch.fx._symbolic_trace, "_assert_is_none"):
-                        # Newer versions of torch.fx emit an assert statement
-                        # for concrete arguments; delete those before we delete
-                        # the concrete arg.
-                        to_delete = []
-                        for user in node.users:
-                            if user.target == torch.fx._symbolic_trace._assert_is_none:
-                                to_delete.append(user)
-                        for user in to_delete:
-                            self.graph.erase_node(user)
+                    to_visit = [node]
+                    to_delete = collections.OrderedDict()
+                    while to_visit:
+                        n = to_visit.pop(0)
+                        to_delete[n] = None
+                        to_visit += list(n.users.keys())
 
-                    self.graph.erase_node(node)
+                    for user in reversed(to_delete.keys()):
+                        self.graph.erase_node(user)
 
             # TODO: solves GraphModule creation.
             # Without this, return type annotation "Tuple" is causing code execution failure.
