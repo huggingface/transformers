@@ -52,7 +52,7 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "nvidia/groupvit-gcc-yfcc"
 
-GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+TF_GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "nvidia/groupvit-gcc-yfcc",
     # See all GroupViT models at https://huggingface.co/models?filter=groupvit
 ]
@@ -149,10 +149,9 @@ def resize_attention_map(
     """
     Args:
     Refernece: https://gist.github.com/ariG23498/3777f8d9be25de8ae782256f5aacb2c5
-        attentions (`tf.Tensor`): attention map of shape [batch_size, groups, feat_height*feat_width]
-        height (`int`): height of the output attention map
-        width (`int`): width of the output attention map
-        align_corners (`bool`, *optional*): the `align_corner` argument for `nn.functional.interpolate`.
+        attentions (`tf.Tensor`): attention map of shape [batch_size, groups, feat_height*feat_width] height (`int`):
+        height of the output attention map width (`int`): width of the output attention map align_corners (`bool`,
+        *optional*): the `align_corner` argument for `nn.functional.interpolate`.
 
     Returns:
         `tf.Tensor`: resized attention map of shape [batch_size, groups, height, width]
