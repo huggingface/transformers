@@ -23,8 +23,6 @@ from typing import Any, Dict, Optional, Tuple, Union
 import numpy as np
 import tensorflow as tf
 
-import tensorflow_probability as tfp
-
 from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPooling
 
@@ -42,6 +40,7 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_tensorflow_probability_available,
     logging,
     replace_return_docstrings,
 )
@@ -49,6 +48,21 @@ from .configuration_groupvit import GroupViTConfig, GroupViTTextConfig, GroupViT
 
 
 logger = logging.get_logger(__name__)
+
+# soft dependency
+if is_tensorflow_probability_available():
+    try:
+        import tensorflow_probability as tfp
+
+        # On the first call, check whether a compatible version of TensorFlow is installed
+        # TensorFlow Probability depends on a recent stable release of TensorFlow
+        n = tfp.distributions.Normal(loc=0.0, scale=1.0)
+    except ImportError:
+        logger.error(
+            "GroupViT models are not usable since `tensorflow_probability` can't be loaded."
+            "It seems you have `tensorflow_probability` installed with the wrong tensorflow version."
+            "Please try to reinstall it following the instructions here: https://github.com/tensorflow/probability."
+        )
 
 _CHECKPOINT_FOR_DOC = "nvidia/groupvit-gcc-yfcc"
 
