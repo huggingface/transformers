@@ -47,7 +47,7 @@ src/transformers/models/mobilebert/modeling_tf_mobilebert.py
 src/transformers/models/mobilevit/modeling_mobilevit.py
 src/transformers/models/opt/modeling_opt.py
 src/transformers/models/opt/modeling_tf_opt.py
-src/transformers/models/opt/modeling_flax_opt.py
+src/transformers/models/owlvit/modeling_owlvit.py
 src/transformers/models/pegasus/modeling_pegasus.py
 src/transformers/models/plbart/modeling_plbart.py
 src/transformers/models/poolformer/modeling_poolformer.py
@@ -64,6 +64,7 @@ src/transformers/models/sew_d/modeling_sew_d.py
 src/transformers/models/speech_encoder_decoder/modeling_speech_encoder_decoder.py
 src/transformers/models/speech_to_text/modeling_speech_to_text.py
 src/transformers/models/speech_to_text_2/modeling_speech_to_text_2.py
+src/transformers/models/segformer/modeling_tf_segformer.py
 src/transformers/models/swin/modeling_swin.py
 src/transformers/models/trocr/modeling_trocr.py
 src/transformers/models/unispeech/modeling_unispeech.py

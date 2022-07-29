@@ -70,6 +70,7 @@ jobs:
             OMP_NUM_THREADS: 1
             RUN_PT_TF_CROSS_TESTS: yes
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
@@ -110,6 +111,7 @@ jobs:
             OMP_NUM_THREADS: 1
             RUN_PT_TF_CROSS_TESTS: yes
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
@@ -145,6 +147,7 @@ jobs:
             OMP_NUM_THREADS: 1
             RUN_PT_FLAX_CROSS_TESTS: yes
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
@@ -183,6 +186,7 @@ jobs:
             OMP_NUM_THREADS: 1
             RUN_PT_FLAX_CROSS_TESTS: yes
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
@@ -215,6 +219,7 @@ jobs:
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
@@ -252,6 +257,7 @@ jobs:
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
@@ -284,6 +290,7 @@ jobs:
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
@@ -320,6 +327,7 @@ jobs:
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
@@ -351,6 +359,7 @@ jobs:
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
@@ -386,6 +395,7 @@ jobs:
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
@@ -417,6 +427,7 @@ jobs:
             OMP_NUM_THREADS: 1
             RUN_PIPELINE_TESTS: yes
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
@@ -454,6 +465,7 @@ jobs:
             OMP_NUM_THREADS: 1
             RUN_PIPELINE_TESTS: yes
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
@@ -486,6 +498,7 @@ jobs:
             OMP_NUM_THREADS: 1
             RUN_PIPELINE_TESTS: yes
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
@@ -521,6 +534,7 @@ jobs:
             OMP_NUM_THREADS: 1
             RUN_PIPELINE_TESTS: yes
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
@@ -550,6 +564,7 @@ jobs:
         environment:
             RUN_CUSTOM_TOKENIZERS: yes
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         steps:
             - checkout
             - restore_cache:
@@ -583,6 +598,7 @@ jobs:
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
@@ -618,6 +634,7 @@ jobs:
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
@@ -648,6 +665,7 @@ jobs:
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
@@ -682,6 +700,7 @@ jobs:
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
@@ -712,6 +731,7 @@ jobs:
             HUGGINGFACE_CO_STAGING: yes
             RUN_GIT_LFS_TESTS: yes
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
@@ -750,6 +770,7 @@ jobs:
             HUGGINGFACE_CO_STAGING: yes
             RUN_GIT_LFS_TESTS: yes
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
@@ -782,6 +803,7 @@ jobs:
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
@@ -815,6 +837,7 @@ jobs:
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
@@ -843,6 +866,7 @@ jobs:
         resource_class: large
         environment:
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         parallelism: 1
         steps:
             - checkout
@@ -871,6 +895,7 @@ jobs:
         resource_class: large
         environment:
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         parallelism: 1
         steps:
             - checkout
@@ -900,6 +925,7 @@ jobs:
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:

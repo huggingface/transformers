@@ -98,6 +98,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("nystromformer", "NystromformerModel"),
         ("openai-gpt", "OpenAIGPTModel"),
         ("opt", "OPTModel"),
+        ("owlvit", "OwlViTModel"),
         ("pegasus", "PegasusModel"),
         ("perceiver", "PerceiverModel"),
         ("plbart", "PLBartModel"),
@@ -118,6 +119,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("splinter", "SplinterModel"),
         ("squeezebert", "SqueezeBertModel"),
         ("swin", "SwinModel"),
+        ("swinv2", "Swinv2Model"),
         ("t5", "T5Model"),
         ("tapas", "TapasModel"),
         ("trajectory_transformer", "TrajectoryTransformerModel"),
@@ -308,6 +310,7 @@ MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
     [
         ("deit", "DeiTForMaskedImageModeling"),
         ("swin", "SwinForMaskedImageModeling"),
+        ("swinv2", "Swinv2ForMaskedImageModeling"),
         ("vit", "ViTForMaskedImageModeling"),
     ]
 )
@@ -344,6 +347,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("resnet", "ResNetForImageClassification"),
         ("segformer", "SegformerForImageClassification"),
         ("swin", "SwinForImageClassification"),
+        ("swinv2", "Swinv2ForImageClassification"),
         ("van", "VanForImageClassification"),
         ("vit", "ViTForImageClassification"),
     ]
