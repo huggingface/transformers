@@ -244,7 +244,43 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
     def scan_disable(self):
         raise NotImplementedError(f"scan disable method has to be implemented for {self}")
 
-    def convert_unroll_to_scan(self, params: Union[Dict, FrozenDict],):
+    def convert_unroll_to_scan(self, params: Union[Dict, FrozenDict]):
+        r"""
+        Convert a `PyTree` of unrolled model parameters to a scanned block of model parameters. This method can be used
+        to explicitly convert the model parameters to scanned format. This returns a new `params` tree and does not
+        convert the `params` in place.
+
+        To give an example, for the Flax BERT model, the unrolled structure for the query projection params are:
+            ('bert', 'encoder', 'layer', '0', 'self_attn', 'q_proj')
+            ('bert', 'encoder', 'layer', '1', 'self_attn', 'q_proj')
+            ...
+            ('bert', 'encoder', 'layer', '23', 'self_attn', 'q_proj')
+        The scanned model structure takes each of the `q_proj` matrices for layers (0, ..., 23) and stacks them into a
+        single 'super' matrix, giving a *single* block of weights for all 24 layers:
+            ('bert', 'encoder', 'layer', 'ScanLayers', 'self_attn', 'q_proj')
+
+        When enabling scan with _do_init=True (default), this method will be called automatically under the hood.
+        With _do_init=False, it will have to be called explicitly (see example below).
+
+        Arguments:
+            params (`Union[Dict, FrozenDict]`):
+                A `PyTree` of model parameters.
+
+        Examples:
+
+        ```python
+        >>> from transformers import FlaxBertModel
+
+        >>> # Download model and configuration from huggingface.co
+        >>> model, params = FlaxBertModel.from_pretrained("bert-base-cased", _do_init=False)
+        >>> # By default, the model params will be in unrolled format. To illustrate the use of this method,
+        >>> # we'll first convert to scan format and then back to unrolled
+        >>> model.scan_enable()
+        >>> params = model.convert_unroll_to_scan(params)
+        >>> # now convert back to unrolled
+        >>> model.scan_disable()
+        >>> params = model.convert_scan_to_unroll(params)
+        ```"""
         if isinstance(params, FrozenDict):
             params = unfreeze(params)
 
@@ -255,17 +291,18 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             # Identify all "unrolled" layers formed as part of the FlaxBertLayerCollection
             # These params contain the identifier `layer` in their key
             if "layer/0" in k:
-                # Squash the keys for the N unrolled layers into one single key: (layer/0, ..., layer/N) -> FlaxBertLayers
+                # Squash the keys for the N unrolled layers into one single key:
+                # (layer/0, ..., layer/N) -> layer/FlaxBertLayers
                 scan_key = k.replace("0", "ScanLayers")
                 stacked_params = []
 
                 # Iterate over the unrolled layers (1,...,N)
                 for i in range(self.config.num_hidden_layers):
                     # Stack the params for the N layers into one super block
-                    stacked_params.append(params[k.replace("0", str(i))])
-                    # Remove the unrolled layer params on the fly
-                    # -> Memory overhead for conversion is at most 2x the per-layer memory
-                    params.pop(k.replace("0", str(i)))
+                    # and remove the unrolled layer params on the fly
+                    # -> no memory overhead for conversion!
+                    unrolled_layer = params.pop(k.replace("0", str(i)))
+                    stacked_params.append(unrolled_layer)
 
                 params[scan_key] = jnp.stack(stacked_params)
 
