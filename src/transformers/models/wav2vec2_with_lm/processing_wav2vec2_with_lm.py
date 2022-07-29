@@ -19,13 +19,16 @@ import os
 import warnings
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
-from multiprocessing import Pool, get_context
+from multiprocessing import Pool, get_context, get_start_method
 from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Union
 
 import numpy as np
 
 from ...processing_utils import ProcessorMixin
-from ...utils import ModelOutput, requires_backends
+from ...utils import ModelOutput, logging, requires_backends
+
+
+logger = logging.get_logger(__name__)
 
 
 if TYPE_CHECKING:
@@ -298,7 +301,11 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
 
         <Tip>
 
-        This function makes use of Python's multiprocessing.
+        This function makes use of Python's multiprocessing. Currently, multiprocessing is available only on Unix
+        systems (see this [issue](https://github.com/kensho-technologies/pyctcdecode/issues/65)).
+
+        If you are decoding multiple batches, consider creating a `Pool` and passing it to `batch_decode`. Otherwise,
+        `batch_decode` will be very slow since it will create a fresh `Pool` for each call. See usage example below.
 
         </Tip>
 
@@ -306,10 +313,20 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
             logits (`np.ndarray`):
                 The logits output vector of the model representing the log probabilities for each token.
             pool (`multiprocessing.Pool`, *optional*):
-                An optional user-managed pool. If not set, one will be automatically created and closed.
+                An optional user-managed pool. If not set, one will be automatically created and closed. The pool
+                should be instantiated *after* `Wav2Vec2ProcessorWithLM`. Otherwise, the LM won't be available to the
+                pool's sub-processes.
+
+                <Tip>
+
+                Currently, only pools created with a 'fork' context can be used. If a 'spawn' pool is passed, it will
+                be ignored and sequential decoding will be used instead.
+
+                </Tip>
+
             num_processes (`int`, *optional*):
-                If `pool` is not set, number of processes on which the function should be parallelized over.
-                Defaults to the number of available CPUs.
+                If `pool` is not set, number of processes on which the function should be parallelized over. Defaults
+                to the number of available CPUs.
             beam_width (`int`, *optional*):
                 Maximum number of beams at each step in decoding. Defaults to pyctcdecode's DEFAULT_BEAM_WIDTH.
             beam_prune_logp (`int`, *optional*):
@@ -343,9 +360,61 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
                 </Tip>
 
         Returns:
-            [`~models.wav2vec2.Wav2Vec2DecoderWithLMOutput`] or `tuple`.
+            [`~models.wav2vec2.Wav2Vec2DecoderWithLMOutput`].
 
+        Example:
+
+        ```python
+        >>> # Let's see how to use a user-managed pool for batch decoding multiple audios
+        >>> from multiprocessing import get_context
+        >>> from transformers import AutoTokenizer, AutoProcessor, AutoModelForCTC
+        >>> from datasets import load_dataset
+        >>> import datasets
+        >>> import torch
+
+        >>> # import model, feature extractor, tokenizer
+        >>> model = AutoModelForCTC.from_pretrained("patrickvonplaten/wav2vec2-base-100h-with-lm").to("cuda")
+        >>> processor = AutoProcessor.from_pretrained("patrickvonplaten/wav2vec2-base-100h-with-lm")
+
+        >>> # load example dataset
+        >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> dataset = dataset.cast_column("audio", datasets.Audio(sampling_rate=16_000))
+
+
+        >>> def map_to_array(batch):
+        ...     batch["speech"] = batch["audio"]["array"]
+        ...     return batch
+
+
+        >>> # prepare speech data for batch inference
+        >>> dataset = dataset.map(map_to_array, remove_columns=["audio"])
+
+
+        >>> def map_to_pred(batch, pool):
+        ...     inputs = processor(batch["speech"], sampling_rate=16_000, padding=True, return_tensors="pt")
+        ...     inputs = {k: v.to("cuda") for k, v in inputs.items()}
+
+        ...     with torch.no_grad():
+        ...         logits = model(**inputs).logits
+
+        ...     transcription = processor.batch_decode(logits.cpu().numpy(), pool).text
+        ...     batch["transcription"] = transcription
+        ...     return batch
+
+
+        >>> # note: pool should be instantiated *after* `Wav2Vec2ProcessorWithLM`.
+        >>> #       otherwise, the LM won't be available to the pool's sub-processes
+        >>> # select number of processes and batch_size based on number of CPU cores available and on dataset size
+        >>> with get_context("fork").Pool(processes=2) as pool:
+        ...     result = dataset.map(
+        ...         map_to_pred, batched=True, batch_size=2, fn_kwargs={"pool": pool}, remove_columns=["speech"]
+        ...     )
+
+        >>> result["transcription"][:2]
+        ['MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL', "NOR IS MISTER COULTER'S MANNER LESS INTERESTING THAN HIS MATTER"]
+        ```
         """
+
         from pyctcdecode.constants import (
             DEFAULT_BEAM_WIDTH,
             DEFAULT_HOTWORD_WEIGHT,
@@ -370,20 +439,30 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
 
         # create a pool if necessary while also using it as a context manager to close itself
         if pool is None:
-            cm = pool = get_context("fork").Pool(num_processes)
+            # fork is safe to use only on Unix, see "Contexts and start methods" section on multiprocessing's docs
+            default_context = get_start_method()
+
+            if default_context == "fork":
+                cm = pool = get_context().Pool(num_processes)
+            else:
+                logger.warning(
+                    "Parallel batch decoding is not currently supported in this platform. "
+                    "Falling back to sequential decoding."
+                )
+                cm = nullcontext()
         else:
             # pool is managed by the user, so we don't need to close it
             cm = nullcontext()
 
             if num_processes is not None:
-                warnings.warn(
+                logger.warning(
                     "Parameter `num_process` was passed, but it will be ignored since `pool` was also specified."
                 )
 
         # pyctcdecode
         with cm:
             decoded_beams = self.decoder.decode_beams_batch(
-                pool,
+                pool=pool,
                 logits_list=logits_list,
                 beam_width=beam_width,
                 beam_prune_logp=beam_prune_logp,
@@ -458,7 +537,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
                 </Tip>
 
         Returns:
-            [`~models.wav2vec2.Wav2Vec2DecoderWithLMOutput`] or `tuple`.
+            [`~models.wav2vec2.Wav2Vec2DecoderWithLMOutput`].
 
         Example:
 
