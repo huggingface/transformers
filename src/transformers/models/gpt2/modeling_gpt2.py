@@ -328,6 +328,7 @@ class GPT2Attention(nn.Module):
             query, key, value = self.c_attn(hidden_states).split(self.split_size, dim=2)
 
         # Depending on the `reorder_and_upcast_attn` flag we perform attention in a higher precision
+        original_dtype = query.dtype
         attention_dtype = torch.float32 if self.reorder_and_upcast_attn else query.dtype
 
         query = self._split_heads(query, self.num_heads, self.head_dim)
@@ -352,7 +353,7 @@ class GPT2Attention(nn.Module):
 
         if self.reorder_and_upcast_attn:
             attn_output, attn_weights = self._upcast_and_reordered_attn(
-                query, key, value, original_dtype=self.c_attn.dtype, attention_mask=attention_mask, head_mask=head_mask
+                query, key, value, original_dtype=original_dtype, attention_mask=attention_mask, head_mask=head_mask
             )
         else:
             attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
