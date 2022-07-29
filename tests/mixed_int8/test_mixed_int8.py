@@ -31,7 +31,7 @@ from transformers.testing_utils import (
 @require_accelerate
 @require_torch
 @require_torch_gpu
-# @slow
+@slow
 class MixedInt8Test(unittest.TestCase):
     # We keep the constants inside the init function and model loading inside setUp function
 

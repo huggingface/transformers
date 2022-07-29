@@ -1845,17 +1845,19 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     " bitsandbytes-cuda113` for CUDA 11.3)"
                 )
             if torch_dtype == "auto" or torch_dtype != torch.float16:
-                torch_dtype = torch.float16  # We force the `dtype` to be float16, this is a requirement from `bitsandbytes`
+                torch_dtype = (
+                    torch.float16
+                )  # We force the `dtype` to be float16, this is a requirement from `bitsandbytes`
                 logger.info("Loading the model in mixed int8 - forcing the weights to be casted in float16")
             if device_map is None:
                 raise ValueError(
                     "A device map needs to be passed to run convert models into mixed-int8 format. Please run"
                     "`.from_pretrained` with `device_map='auto'`"
                 )
-            if (from_tf | from_flax):
+            if from_tf | from_flax:
                 raise ValueError(
-                    "Converting into mixed 8-bit weights from tf/flax weights is currently not supported, please make sure"
-                    "the weights are in PyTorch format."
+                    "Converting into mixed 8-bit weights from tf/flax weights is currently not supported, please make"
+                    " surethe weights are in PyTorch format."
                 )
 
         from_pt = not (from_tf | from_flax)
