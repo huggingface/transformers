@@ -208,7 +208,7 @@ class BloomGelu(nn.Module):
 
 
 class BloomAttention(nn.Module):
-    def __init__(self, config: BloomConfig, layer_number: int):
+    def __init__(self, config: BloomConfig):
         super().__init__()
 
         self.pretraining_tp = config.pretraining_tp
@@ -227,7 +227,6 @@ class BloomAttention(nn.Module):
             )
 
         # Layer-wise attention scaling
-        self.layer_number = max(1, layer_number)
         self.inv_norm_factor = 1.0 / math.sqrt(self.head_dim)
         self.beta = 1.0
 
@@ -400,13 +399,13 @@ class BloomMLP(nn.Module):
 
 
 class BloomBlock(nn.Module):
-    def __init__(self, config: BloomConfig, layer_number: int):
+    def __init__(self, config: BloomConfig):
         super().__init__()
         hidden_size = config.hidden_size
 
         self.input_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         self.num_heads = config.n_head
-        self.self_attention = BloomAttention(config, layer_number=layer_number)
+        self.self_attention = BloomAttention(config)
         self.post_attention_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
         self.mlp = BloomMLP(config)
@@ -592,7 +591,7 @@ class BloomModel(BloomPreTrainedModel):
         self.word_embeddings_layernorm = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
         # Transformer blocks
-        self.h = nn.ModuleList([BloomBlock(config, layer_number=i) for i in range(config.num_hidden_layers)])
+        self.h = nn.ModuleList([BloomBlock(config) for _ in range(config.num_hidden_layers)])
 
         # Final Layer Norm
         self.ln_f = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
