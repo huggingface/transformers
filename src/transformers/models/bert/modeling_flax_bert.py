@@ -599,7 +599,7 @@ class FlaxBertLayerCollection(nn.Module):
                 split_rngs={"params": True, "dropout": True},
                 in_axes=(nn.broadcast, 0, nn.broadcast, nn.broadcast, nn.broadcast, nn.broadcast, nn.broadcast),
                 length=self.config.num_hidden_layers,
-            )(self.config, dtype=self.dtype, use_scan=True, name="ScanLayers")(
+            )(self.config, dtype=self.dtype, use_scan=True, name="FlaxScanLayers")(
                 hidden_states,
                 attention_mask,
                 head_mask,

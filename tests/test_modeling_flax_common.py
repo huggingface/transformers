@@ -1153,7 +1153,8 @@ class FlaxModelTesterMixin:
 
             # ensure that the outputs remain precisely equal
             for output, scan_output in zip(outputs, scan_outputs):
-                self.assertTrue((output == scan_output).all())
+                max_diff = np.max(np.abs(output) - np.abs(scan_output))
+                assert max_diff < 1e-5, f"outputs for scan_enable do not match unrolled, difference is {max_diff}"
 
     def test_scan_enable_with_no_automatic_init(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1161,14 +1162,14 @@ class FlaxModelTesterMixin:
         for model_class in self.all_model_classes:
             # prepare inputs
             prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+
             # init the unrolled model
             model = model_class(config)
+            # to init the params
+            params = model.init_weights(model.key, model.input_shape)
 
-            # save the model in the temporary directory
-            # load the saved model with _do_init=False
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                scan_model, scan_params = model_class.from_pretrained(tmpdirname, _do_init=False)
+            # init the scanned model
+            scan_model = model_class(config)
 
             try:
                 scan_model.scan_enable()
@@ -1176,10 +1177,10 @@ class FlaxModelTesterMixin:
                 continue
 
             # convert the unrolled params to scan
-            scan_params = scan_model.convert_unroll_to_scan(scan_params)
+            scan_params = scan_model.convert_unroll_to_scan(params)
 
             # compute unrolled and scan outputs
-            outputs = model(**prepared_inputs_dict)
+            outputs = model(**prepared_inputs_dict, params=params)
             scan_outputs = scan_model(**prepared_inputs_dict, params=scan_params)
 
             # ensure that the dicts of outputs contain the same keys
@@ -1190,7 +1191,8 @@ class FlaxModelTesterMixin:
 
             # ensure that the outputs remain precisely equal
             for output, scan_output in zip(outputs, scan_outputs):
-                self.assertTrue((output == scan_output).all())
+                max_diff = np.max(np.abs(output) - np.abs(scan_output))
+                assert max_diff < 1e-5, f"outputs for scan_enable do not match unrolled, difference is {max_diff}"
 
     def test_scan_disable_with_automatic_init(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1198,7 +1200,7 @@ class FlaxModelTesterMixin:
         for model_class in self.all_model_classes:
             # prepare inputs
             prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            # prepare unrolled and scanned models
+
             model = model_class(config)
 
             try:
@@ -1206,9 +1208,10 @@ class FlaxModelTesterMixin:
             except NotImplementedError:
                 continue
 
+            # Compute scan outputs
             scan_outputs = model(**prepared_inputs_dict)
 
-            # Test scan disable gives same outputs as scan enable
+            # Check scan disable gives same outputs as scan enable
             model.scan_disable()
             unrolled_outputs = model(**prepared_inputs_dict)
 
@@ -1220,7 +1223,50 @@ class FlaxModelTesterMixin:
 
             # ensure that the outputs remain precisely equal
             for unrolled_output, scan_output in zip(unrolled_outputs, scan_outputs):
-                self.assertTrue((unrolled_output == scan_output).all())
+                max_diff = np.max(np.abs(unrolled_output) - np.abs(scan_output))
+                assert (
+                    max_diff < 1e-5
+                ), f"outputs for scan_disable do not match scanned model, difference is {max_diff}"
+
+    def test_scan_disable_with_no_automatic_init(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            # prepare inputs
+            prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            # init the unrolled model
+            model = model_class(config)
+            # to init the params
+            params = model.init_weights(model.key, model.input_shape)
+
+            try:
+                model.scan_enable()
+            except NotImplementedError:
+                continue
+
+            # convert the unrolled params to scan
+            params = model.convert_unroll_to_scan(params)
+
+            # compute scan outputs
+            scan_outputs = model(**prepared_inputs_dict, params=params)
+
+            # Check scan disable gives same outputs as scan enable
+            model.scan_disable()
+            params = model.convert_scan_to_unroll(params)
+            unrolled_outputs = model(**prepared_inputs_dict, params=params)
+
+            # ensure that the dicts of outputs contain the same keys
+            self.assertEqual(unrolled_outputs.keys(), scan_outputs.keys())
+
+            unrolled_outputs = unrolled_outputs.to_tuple()
+            scan_outputs = scan_outputs.to_tuple()
+
+            # ensure that the outputs remain precisely equal
+            for unrolled_output, scan_output in zip(unrolled_outputs, scan_outputs):
+                max_diff = np.max(np.abs(unrolled_output) - np.abs(scan_output))
+                assert (
+                    max_diff < 1e-5
+                ), f"outputs for scan_disable do not match scanned model, difference is {max_diff}"
 
 
 @require_flax
