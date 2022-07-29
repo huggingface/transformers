@@ -134,7 +134,7 @@ class GPT2Attention(nn.Module):
         max_positions = config.max_position_embeddings
         self.register_buffer(
             "bias",
-            torch.tril(torch.ones((max_positions, max_positions), dtype=torch.uint8)).view(
+            torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
                 1, 1, max_positions, max_positions
             ),
         )
@@ -259,16 +259,14 @@ class GPT2Attention(nn.Module):
             attn_weights = torch.baddbmm(
                 attn_weights, query, key, beta=0 if attention_mask is None else 1, alpha=scale_factor
             )
-        attn_weights = attn_weights.view(batch_size, num_heads, query_length, key_length)
 
         if not self.is_cross_attention:
             # if only "normal" attention layer implements causal mask
-            causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].bool()
-            mask_value = torch.finfo(attn_weights.dtype).min
-            # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
-            # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
-            mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype, device=attn_weights.device)
-            attn_weights = torch.where(causal_mask, attn_weights, mask_value)
+            causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
+            # In-place update of `attn_weights`
+            attn_weights\
+                .view(batch_size, num_heads, query_length, key_length)\
+                .masked_fill_(causal_mask, torch.finfo(attn_weights.dtype).min)
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
@@ -334,11 +332,11 @@ class GPT2Attention(nn.Module):
         key = self._split_heads(key, self.num_heads, self.head_dim)
         value = self._split_heads(value, self.num_heads, self.head_dim)
 
-        bsz, num_heads, q_seq_len, dk = query.size()
+        batch_size, num_heads, query_length, head_dim = query.size()
         if self.reorder_and_upcast_attn:
-            query = query.reshape(-1, q_seq_len, dk).to(attention_dtype)
-            key = key.transpose(-1, -2).reshape(-1, dk, q_seq_len).to(attention_dtype)
-            value = value.reshape(-1, q_seq_len, dk).to(attention_dtype)
+            query = query.reshape(-1, query_length, head_dim).to(attention_dtype)
+            key = key.transpose(-1, -2).reshape(-1, head_dim, query_length).to(attention_dtype)
+            value = value.reshape(-1, query_length, head_dim).to(attention_dtype)
 
         if layer_past is not None:
             past_key, past_value = layer_past
@@ -354,6 +352,7 @@ class GPT2Attention(nn.Module):
             attn_output, attn_weights = self._upcast_and_reordered_attn(
                 query, key, value, num_heads=num_heads, original_dtype=original_dtype, attention_mask=attention_mask, head_mask=head_mask
             )
+            attn_output = attn_output.view(batch_size, num_heads, query_length, head_dim)
         else:
             attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
 
