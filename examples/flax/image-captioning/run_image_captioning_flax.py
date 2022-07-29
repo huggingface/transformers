@@ -553,7 +553,7 @@ def main():
         model_inputs = {}
 
         labels = tokenizer(
-            targets, max_length=max_target_length, padding="max_length", truncation=True, return_tensors="np"
+            text_target=targets, max_length=max_target_length, padding="max_length", truncation=True, return_tensors="np"
         )
         model_inputs["labels"] = labels["input_ids"]
         decoder_input_ids = shift_tokens_right_fn(
