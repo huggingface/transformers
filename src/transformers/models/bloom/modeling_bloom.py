@@ -326,9 +326,11 @@ class BloomAttention(nn.Module):
 
         # we cast attention scores to fp32, compute scaled softmax and cast back into initial dtype - [batch_size, num_heads, q_length, kv_length]
         input_dtype = attention_scores.dtype
-        attention_scores = attention_scores.float()
-        attn_weights = torch.masked_fill(attention_scores, attention_mask, torch.finfo(torch.float32).min)
-        attention_probs = F.softmax(attn_weights, dim=-1).to(input_dtype)
+        # `float16` has a minimum value of -65504.0, whereas `bfloat16` and `float32` have a minimum value of `-3.4e+38`
+        if input_dtype == torch.float16:
+            attention_scores = attention_scores.float()
+        attn_weights = torch.masked_fill(attention_scores, attention_mask, torch.finfo(attention_scores.dtype).min)
+        attention_probs = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(input_dtype)
 
         # [batch_size, num_heads, q_length, kv_length]
         attention_probs = self.attention_dropout(attention_probs)
