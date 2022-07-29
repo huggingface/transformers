@@ -222,13 +222,10 @@ def window_partition(input_feature: tf.Tensor, window_size: int) -> tf.Tensor:
     return windows
 
 
-def window_reverse(windows: tf.Tensor, window_size: int, height: int, width: int) -> tf.Tensor:
+def window_reverse(windows: tf.Tensor, batch_size: int, window_size: int, height: int, width: int) -> tf.Tensor:
     """
     Merges windows to produce higher resolution features.
     """
-    x = shape_list(windows)[0]
-    y = tf.cast(height * width / (window_size * window_size), tf.int32)
-    batch_size = int(x / y)
     windows = tf.reshape(
         windows, (batch_size, height // window_size, width // window_size, window_size, window_size, -1)
     )
@@ -688,16 +685,18 @@ class TFSwinLayer(tf.keras.layers.Layer):
         img_mask = tf.expand_dims(img_mask, -1)
         img_mask = tf.expand_dims(img_mask, 0)
 
-        mask_windows = window_partition(img_mask, self.window_size)
-        mask_windows = tf.reshape(mask_windows, (-1, self.window_size * self.window_size))
+        mask_windows = window_partition(img_mask, window_size)
+        mask_windows = tf.reshape(mask_windows, (-1, window_size * window_size))
         attn_mask = tf.expand_dims(mask_windows, 1) - tf.expand_dims(mask_windows, 2)
         attn_mask = tf.where(attn_mask != 0, float(-100.0), attn_mask)
         attn_mask = tf.where(attn_mask == 0, float(0.0), attn_mask)
         return attn_mask
 
-    def maybe_pad(self, hidden_states: tf.Tensor, height: int, width: int) -> Tuple[tf.Tensor, tf.Tensor]:
-        pad_right = (self.window_size - width % self.window_size) % self.window_size
-        pad_bottom = (self.window_size - height % self.window_size) % self.window_size
+    def maybe_pad(
+        self, hidden_states: tf.Tensor, height: int, width: int, window_size: int
+    ) -> Tuple[tf.Tensor, tf.Tensor]:
+        pad_right = (window_size - width % window_size) % window_size
+        pad_bottom = (window_size - height % window_size) % window_size
         pad_values = [[0, 0], [0, pad_bottom], [0, pad_right], [0, 0]]
         hidden_states = tf.pad(hidden_states, pad_values)
         pad_values = tf.reshape(pad_values, (-1,))
@@ -746,7 +745,7 @@ class TFSwinLayer(tf.keras.layers.Layer):
         attention_output = attention_outputs[0]
 
         attention_windows = tf.reshape(attention_output, (-1, window_size, window_size, channels))
-        shifted_windows = window_reverse(attention_windows, window_size, height_pad, width_pad)
+        shifted_windows = window_reverse(attention_windows, batch_size, window_size, height_pad, width_pad)
 
         # reverse cyclic shift
         if shift_size > 0:
