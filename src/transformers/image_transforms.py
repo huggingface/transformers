@@ -194,7 +194,7 @@ def resize(
     size: Tuple[int, int],
     resample=PIL.Image.Resampling.BILINEAR,
     data_format: Optional[ChannelDimension] = None,
-) -> np.np.ndarray:
+) -> np.ndarray:
     """
     Resizes `image` to (h, w) specified by `size` using the PIL library.
 
