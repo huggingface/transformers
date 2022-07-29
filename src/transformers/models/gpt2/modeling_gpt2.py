@@ -235,11 +235,10 @@ class GPT2Attention(nn.Module):
         batch_size = bsz_times_num_heads // num_heads
 
         # Preallocate attn_weights for `baddbmm`
+        attn_weights = torch.empty(bsz_times_num_heads, query_length, key_length, dtype=torch.float32, device=query.device)
         if attention_mask is not None:
             # Apply the attention mask
-            attn_weights = attention_mask
-        else:
-            attn_weights = torch.empty(bsz_times_num_heads, query_length, key_length, dtype=torch.float32, device=query.device)
+            attn_weights.view(batch_size, num_heads, query_length, key_length)[:] = attention_mask
 
         # Compute Scale Factor
         scale_factor = 1.0
