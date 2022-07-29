@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import os
-from contextlib import contextmanager
 from shutil import copyfile
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -67,10 +66,7 @@ class NllbTokenizer(PreTrainedTokenizer):
     ... )
     >>> example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
     >>> expected_translation_french = "Le chef de l'ONU affirme qu'il n'y a pas de solution militaire en Syrie."
-    >>> inputs = tokenizer(example_english_phrase, return_tensors="pt")
-    >>> with tokenizer.as_target_tokenizer():
-    ...     labels = tokenizer(expected_translation_french, return_tensors="pt")
-    >>> inputs["labels"] = labels["input_ids"]
+    >>> inputs = tokenizer(example_english_phrase, text_target=expected_translation_french, return_tensors="pt")
     ```
 
     Args:
@@ -386,15 +382,11 @@ class NllbTokenizer(PreTrainedTokenizer):
         self.tgt_lang = tgt_lang
         return super().prepare_seq2seq_batch(src_texts, tgt_texts, **kwargs)
 
-    @contextmanager
-    def as_target_tokenizer(self):
-        """
-        Temporarily sets the tokenizer for encoding the targets. Useful for tokenizer associated to
-        sequence-to-sequence models that need a slightly different processing for the labels.
-        """
-        self.set_tgt_lang_special_tokens(self.tgt_lang)
-        yield
-        self.set_src_lang_special_tokens(self.src_lang)
+    def _switch_to_input_mode(self):
+        return self.set_src_lang_special_tokens(self.src_lang)
+
+    def _switch_to_target_mode(self):
+        return self.set_tgt_lang_special_tokens(self.tgt_lang)
 
     def set_src_lang_special_tokens(self, src_lang) -> None:
         """Reset the special tokens to the source lang setting. No prefix and suffix=[eos, src_lang_code]."""

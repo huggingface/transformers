@@ -1650,9 +1650,8 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
         >>> # compute loss
         >>> target_transcription = "A MAN SAID TO THE UNIVERSE SIR I EXIST"
 
-        >>> # wrap processor as target processor to encode labels
-        >>> with processor.as_target_processor():
-        ...     labels = processor(transcription, return_tensors="tf").input_ids
+        >>> # Pass transcription as `text` to encode labels
+        >>> labels = processor(text=transcription, return_tensors="tf").input_ids
 
         >>> loss = model(input_values, labels=labels).loss
         ```"""

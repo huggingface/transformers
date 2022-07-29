@@ -45,8 +45,9 @@ target text format is `[tgt_lang_code] X [eos]`. `bos` is never used.
 
 However, for fine-tuning, in some cases no language token is provided in cases where a single language is used. Please refer to [the paper](https://arxiv.org/abs/2103.06333) to learn more about this.
 
-In cases where the language code is needed, The regular [`~PLBartTokenizer.__call__`] will encode source text format, and it should be wrapped
-inside the context manager [`~PLBartTokenizer.as_target_tokenizer`] to encode target text format.
+In cases where the language code is needed, the regular [`~PLBartTokenizer.__call__`] will encode source text format 
+when you pass texts as the first argument or with the keyword argument `text`, and will encode target text format if
+it's passed with the `text_target` keyword argument.
 
 - Supervised training
 
@@ -56,11 +57,7 @@ inside the context manager [`~PLBartTokenizer.as_target_tokenizer`] to encode ta
 >>> tokenizer = PLBartTokenizer.from_pretrained("uclanlp/plbart-base", src_lang="en_XX", tgt_lang="python")
 >>> example_python_phrase = "def maximum(a,b,c):NEW_LINE_INDENTreturn max([a,b,c])"
 >>> expected_translation_english = "Returns the maximum value of a b c."
->>> inputs = tokenizer(example_python_phrase, return_tensors="pt")
->>> with tokenizer.as_target_tokenizer():
-...     labels = tokenizer(expected_translation_english, return_tensors="pt")
->>> inputs["labels"] = labels["input_ids"]
->>> # forward pass
+>>> inputs = tokenizer(example_python_phrase, text_target=expected_translation_english, return_tensors="pt")
 >>> model(**inputs)
 ```
 
@@ -88,7 +85,6 @@ inside the context manager [`~PLBartTokenizer.as_target_tokenizer`] to encode ta
 ## PLBartTokenizer
 
 [[autodoc]] PLBartTokenizer
-    - as_target_tokenizer
     - build_inputs_with_special_tokens
 
 ## PLBartModel
