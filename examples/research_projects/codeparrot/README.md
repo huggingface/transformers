@@ -39,7 +39,7 @@ The source of the dataset is the GitHub dump available on Google's [BigQuery](ht
 ### Preprocessing
 The raw dataset contains many duplicates. We deduplicated and filtered the dataset using the heuristics proposed in OpenAI's Codex [paper](https://arxiv.org/abs/2107.03374) and some new ones:
 
-- exact deduplication using each file's hash
+- exact deduplication using each file's hash after having removed whistespaces.
 - near deduplication using MinHash and Jaccard similarity. MinHash with a Jaccard threshold (default=0.85) is first used to create duplicate clusters. Then these clusters are then reduced to unique files based on the exact Jaccard similarity. See `deduplicate_dataset` in `minhash_deduplication.py` for a detailed description.
 - filtering files with max line length > 1000
 - filtering files with mean line length > 100
