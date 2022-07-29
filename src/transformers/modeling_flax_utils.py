@@ -250,13 +250,14 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         to explicitly convert the model parameters to scanned format. This returns a new `params` tree and does not
         convert the `params` in place.
 
-        To give an example, for the Flax BERT model, the unrolled structure for the query projection params are:
+        To illustrate the workings of this method, take the Flax BERT model. The unrolled structure for the query
+        projection params is as follows:
             ('bert', 'encoder', 'layer', '0', 'self_attn', 'q_proj')
             ('bert', 'encoder', 'layer', '1', 'self_attn', 'q_proj')
             ...
             ('bert', 'encoder', 'layer', '23', 'self_attn', 'q_proj')
-        The scanned model structure takes each of the `q_proj` matrices for layers (0, ..., 23) and stacks them into a
-        single 'super' matrix, giving a *single* block of weights for all 24 layers:
+        This method takes each of the `q_proj` matrices for layers (0, ..., 23) and stacks them into a single 'super'
+        matrix, giving a *single* block of weights for all 24 layers compatible with the scanned model:
             ('bert', 'encoder', 'layer', 'ScanLayers', 'self_attn', 'q_proj')
 
         When enabling scan with _do_init=True (default), this method will be called automatically under the hood.
