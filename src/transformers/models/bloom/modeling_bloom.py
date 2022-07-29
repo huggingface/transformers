@@ -882,17 +882,21 @@ class BloomForCausalLM(BloomPreTrainedModel):
         batch_size_times_num_heads, head_dim, seq_length = past[0][0].shape
         batch_size = len(beam_idx)
         num_heads = batch_size_times_num_heads // batch_size
+        # Get a copy of `beam_idx` on all the devices where we need those values.
+        device_to_beam_idx = {
+            past_state.device: beam_idx.to(past_state.device) for layer_past in past for past_state in layer_past
+        }
         # key: layer_past[0] [batch_size * num_heads, head_dim, seq_length]
         # value: layer_past[1] [batch_size * num_heads, seq_length, head_dim]
         return tuple(
             (
                 layer_past[0]
                 .view(batch_size, num_heads, head_dim, seq_length)
-                .index_select(0, beam_idx.to(layer_past[0].device))
+                .index_select(0, device_to_beam_idx[layer_past[0].device])
                 .view(batch_size_times_num_heads, head_dim, seq_length),
                 layer_past[1]
                 .view(batch_size, num_heads, seq_length, head_dim)
-                .index_select(0, beam_idx.to(layer_past[1].device))
+                .index_select(0, device_to_beam_idx[layer_past[0].device])
                 .view(batch_size_times_num_heads, seq_length, head_dim),
             )
             for layer_past in past
