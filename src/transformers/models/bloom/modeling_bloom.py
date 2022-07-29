@@ -709,7 +709,7 @@ class BloomModel(BloomPreTrainedModel):
 
         causal_mask = self._prepare_attn_mask(
             attention_mask,
-            input_shape=torch.Size(batch_size, seq_length),
+            input_shape=torch.Size((batch_size, seq_length)),
             past_key_values_length=past_key_values_length,
         )
 
