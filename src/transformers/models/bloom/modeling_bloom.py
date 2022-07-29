@@ -71,15 +71,15 @@ def _make_causal_mask(
     return expanded_mask
 
 
-def _expand_mask(mask: torch.Tensor, tgt_len: int) -> torch.BoolTensor:
+def _expand_mask(mask: torch.Tensor, tgt_length: int) -> torch.BoolTensor:
     """
-    Expands attention_mask from `[batch_size, seq_length]` to `[batch_size, 1, tgt_seq_length, src_seq_length]`.
+    Expands attention_mask from `[batch_size, src_length]` to `[batch_size, 1, tgt_length, src_length]`.
     """
-    batch_size, source_length = mask.shape
-    tgt_len = tgt_len if tgt_len is not None else source_length
+    batch_size, src_length = mask.shape
+    tgt_length = tgt_length if tgt_length is not None else src_length
 
     expanded_mask = ~(mask[:, None, None, :].to(torch.bool))
-    return expanded_mask.expand(batch_size, 1, tgt_len, source_length)
+    return expanded_mask.expand(batch_size, 1, tgt_length, src_length)
 
 
 def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int, dtype: torch.dtype) -> torch.Tensor:
@@ -237,7 +237,7 @@ class BloomAttention(nn.Module):
 
     def _split_heads(self, fused_qkv: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
-        Split the last dimension into (num_heads, head_dim)
+        Split the last dimension into (num_heads, head_dim) without making any copies, results share same memory storage as `fused_qkv`
 
         Args:
             fused_qkv (`torch.tensor`, *required*): [batch_size, seq_length, num_heads * 3 * head_dim]
@@ -606,18 +606,18 @@ class BloomModel(BloomPreTrainedModel):
         self, attention_mask: torch.Tensor, input_shape: torch.Size, past_key_values_length: int
     ) -> torch.BoolTensor:
         # create causal mask
-        # [batch_size, seq_length] -> [batch_size, 1, tgt_seq_length, src_seq_length]
+        # [batch_size, seq_length] -> [batch_size, 1, tgt_length, src_length]
         combined_attention_mask = None
         device = attention_mask.device
-        _, seq_length = input_shape
+        _, src_length = input_shape
 
-        if seq_length > 1:
+        if src_length > 1:
             combined_attention_mask = _make_causal_mask(
                 input_shape, device=device, past_key_values_length=past_key_values_length
             )
 
-        # [batch_size, seq_length] -> [batch_size, 1, tgt_seq_length, src_seq_length]
-        expanded_attn_mask = _expand_mask(attention_mask, tgt_len=seq_length)
+        # [batch_size, seq_length] -> [batch_size, 1, tgt_length, src_length]
+        expanded_attn_mask = _expand_mask(attention_mask, tgt_length=src_length)
         combined_attention_mask = (
             expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask | combined_attention_mask
         )
@@ -901,11 +901,13 @@ class BloomForCausalLM(BloomPreTrainedModel):
         This function is used to re-order the `past_key_values` cache if [`~PreTrainedModel.beam_search`] or
         [`~PreTrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
         beam_idx at every generation step.
+
+        Output shares the same memory storage as `past`.
         """
         batch_size_times_num_heads, head_dim, seq_length = past[0][0].shape
         batch_size = len(beam_idx)
         num_heads = batch_size_times_num_heads // batch_size
-        # Get a copy of `beam_idx` on all the devices where we need those values.
+        # Get a copy of `beam_idx` on all the devices where we need those indices.
         device_to_beam_idx = {
             past_state.device: beam_idx.to(past_state.device) for layer_past in past for past_state in layer_past
         }
