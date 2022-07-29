@@ -75,7 +75,7 @@ def infer_channel_dimension_format(image: np.ndarray) -> ChannelDimension:
         return ChannelDimension.FIRST
     elif image.shape[last_dim] in (1, 3):
         return ChannelDimension.LAST
-    raise Exception("Unable to infer channel dimension format")
+    raise ValueError("Unable to infer channel dimension format")
 
 
 def get_image_size(image: np.ndarray, channel_dim: ChannelDimension = None) -> Tuple[int, int]:
