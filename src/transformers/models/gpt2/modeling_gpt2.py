@@ -188,9 +188,7 @@ class GPT2Attention(nn.Module):
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
         normalizer = 1
         if self.scale_attn_weights:
-            normalizer *= torch.tensor(
-                value.size(-1) ** 0.5, dtype=query.dtype, device=query.device
-            )
+            normalizer *= torch.tensor(value.size(-1) ** 0.5, dtype=query.dtype, device=query.device)
 
         # Layer-wise attention scaling
         if self.scale_attn_by_inverse_layer_idx:
@@ -228,7 +226,9 @@ class GPT2Attention(nn.Module):
 
         return attn_output, attn_weights
 
-    def _upcast_and_reordered_attn(self, query, key, value, original_dtype: torch.dtype, attention_mask=None, head_mask=None):
+    def _upcast_and_reordered_attn(
+        self, query, key, value, original_dtype: torch.dtype, attention_mask=None, head_mask=None
+    ):
         # Use `torch.baddbmm` (a bit more efficient w/ alpha param for scaling -- from Megatron-LM)
         bsz, num_heads, q_seq_len, _ = query.size()
         _, _, k_seq_len, _ = key.size()
@@ -251,10 +251,14 @@ class GPT2Attention(nn.Module):
         # Upcast (turn off autocast) and reorder (Scale K by 1 / root(dk))
         if is_amp_available:
             with autocast(enabled=False):
-                attn_weights = torch.baddbmm(attn_weights, query, key, beta=0 if attention_mask is None else 1, alpha=scale_factor)
+                attn_weights = torch.baddbmm(
+                    attn_weights, query, key, beta=0 if attention_mask is None else 1, alpha=scale_factor
+                )
                 attn_weights = attn_weights.reshape(bsz, num_heads, q_seq_len, k_seq_len)
         else:
-            attn_weights = torch.baddbmm(attn_weights, query, key, beta=0 if attention_mask is None else 1, alpha=scale_factor)
+            attn_weights = torch.baddbmm(
+                attn_weights, query, key, beta=0 if attention_mask is None else 1, alpha=scale_factor
+            )
             attn_weights = attn_weights.reshape(bsz, num_heads, q_seq_len, k_seq_len)
 
         if not self.is_cross_attention:
@@ -1115,7 +1119,9 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         )
 
     @staticmethod
-    def _reorder_cache(past: Tuple[Tuple[torch.Tensor, torch.Tensor],...], beam_idx: torch.Tensor) -> Tuple[Tuple[torch.Tensor, torch.Tensor], ...]:
+    def _reorder_cache(
+        past: Tuple[Tuple[torch.Tensor, torch.Tensor], ...], beam_idx: torch.Tensor
+    ) -> Tuple[Tuple[torch.Tensor, torch.Tensor], ...]:
         """
         This function is used to re-order the `past_key_values` cache if [`~PreTrainedModel.beam_search`] or
         [`~PreTrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
@@ -1126,9 +1132,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         #  - False: key/value [batch_size, num_heads, seq_length, head_dim]
         past_num_dimensions = len(past[0][0].shape)
         device_to_beam_idx = {
-            torch.device: beam_idx.to(past_state.device)
-            for layer_past in past
-            for past_state in layer_past
+            torch.device: beam_idx.to(past_state.device) for layer_past in past for past_state in layer_past
         }
 
         if past_num_dimensions == 3:
@@ -1154,7 +1158,10 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
                 for layer_past in past
             )
         else:
-            raise ValueError(f"Past keys and values have to be either 3 or 4 dimensional depending on `config.reorder_and_upcast_attn`, for {past_num_dimensions} dimensions")
+            raise ValueError(
+                "Past keys and values have to be either 3 or 4 dimensional depending on"
+                f" `config.reorder_and_upcast_attn`, for {past_num_dimensions} dimensions"
+            )
 
 
 @add_start_docstrings(
