@@ -693,7 +693,7 @@ class TFSwinLayer(tf.keras.layers.Layer):
         return attn_mask
 
     def maybe_pad(
-        self, hidden_states: tf.Tensor, height: int, width: int, window_size: int
+        self, hidden_states: tf.Tensor, window_size: int, height: int, width: int
     ) -> Tuple[tf.Tensor, tf.Tensor]:
         pad_right = (window_size - width % window_size) % window_size
         pad_bottom = (window_size - height % window_size) % window_size
@@ -722,7 +722,7 @@ class TFSwinLayer(tf.keras.layers.Layer):
         hidden_states = self.layernorm_before(hidden_states, training=training)
         hidden_states = tf.reshape(hidden_states, (batch_size, height, width, channels))
         # pad hidden_states to multiples of window size
-        hidden_states, pad_values = self.maybe_pad(hidden_states, height, width)
+        hidden_states, pad_values = self.maybe_pad(hidden_states, window_size, height, width)
 
         _, height_pad, width_pad, _ = shape_list(hidden_states)
         # cyclic shift
