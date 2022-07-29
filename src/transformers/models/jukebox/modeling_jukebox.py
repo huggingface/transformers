@@ -2900,7 +2900,7 @@ def get_alignment(x, music_tokens, labels, prior, level, fp16, hps):
         end = start + n_ctx
 
         # set y offset, sample_length and lyrics tokens
-        y, indices_hop = prior.get_y(labels, start, total_length, get_indices=True,offset=0)
+        y, indices_hop = prior.get_y(labels, start, hps.sample_length, get_indices=True,offset=0)
 
         tokens_bs = torch.chunk(tokens, bs, dim=0)
         y_bs = torch.chunk(y, bs, dim=0)
@@ -3171,7 +3171,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
                     alignments is None and self.priors[-1] is not None and self.priors[-1].n_tokens > 0
                 ): 
                     alignments = get_alignment(raw_audio, music_tokens, labels[-1], self.priors[-1], level, sampling_kwargs[-1]["fp16"], hps)
-                    pass  # TODO this is a really dirty fix
+                    pass  # consumes too much ram
         return music_tokens
 
     # Generate ancestral samples given a list of artists and genres
