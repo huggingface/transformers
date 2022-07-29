@@ -186,20 +186,23 @@ class GPT2Attention(nn.Module):
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
-        attn_weights = torch.matmul(query, key.transpose(-1, -2))
-
         normalizer = 1
         if self.scale_attn_weights:
             normalizer *= torch.tensor(
-                value.size(-1) ** 0.5, dtype=attn_weights.dtype, device=attn_weights.device
+                value.size(-1) ** 0.5, dtype=query.dtype, device=query.device
             )
 
         # Layer-wise attention scaling
         if self.scale_attn_by_inverse_layer_idx:
             normalizer *= float(self.layer_idx + 1)
 
-        if normalizer != 1:
-            attn_weights = attn_weights / normalizer
+        attn_weights = torch.baddbmm(
+            input=attention_mask,
+            batch1=query,
+            batch2=key.transpose(-1, -2),
+            alpha=1 / normalizer,
+            beta=0 if attention_mask is None else 1,
+        )
 
         if not self.is_cross_attention:
             # if only "normal" attention layer implements causal mask
@@ -210,10 +213,6 @@ class GPT2Attention(nn.Module):
             # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
             mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype, device=attn_weights.device)
             attn_weights = torch.where(causal_mask, attn_weights, mask_value)
-
-        if attention_mask is not None:
-            # Apply the attention mask
-            attn_weights = attn_weights + attention_mask
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
@@ -235,7 +234,11 @@ class GPT2Attention(nn.Module):
         _, _, k_seq_len, _ = key.size()
 
         # Preallocate attn_weights for `baddbmm`
-        attn_weights = torch.empty(bsz * num_heads, q_seq_len, k_seq_len, dtype=torch.float32, device=query.device)
+        if attention_mask is not None:
+            # Apply the attention mask
+            attn_weights = attention_mask
+        else:
+            attn_weights = torch.empty(bsz * num_heads, q_seq_len, k_seq_len, dtype=torch.float32, device=query.device)
 
         # Compute Scale Factor
         scale_factor = 1.0
@@ -248,10 +251,10 @@ class GPT2Attention(nn.Module):
         # Upcast (turn off autocast) and reorder (Scale K by 1 / root(dk))
         if is_amp_available:
             with autocast(enabled=False):
-                attn_weights = torch.baddbmm(attn_weights, query, key, beta=0, alpha=scale_factor)
+                attn_weights = torch.baddbmm(attn_weights, query, key, beta=0 if attention_mask is None else 1, alpha=scale_factor)
                 attn_weights = attn_weights.reshape(bsz, num_heads, q_seq_len, k_seq_len)
         else:
-            attn_weights = torch.baddbmm(attn_weights, query, key, beta=0, alpha=scale_factor)
+            attn_weights = torch.baddbmm(attn_weights, query, key, beta=0 if attention_mask is None else 1, alpha=scale_factor)
             attn_weights = attn_weights.reshape(bsz, num_heads, q_seq_len, k_seq_len)
 
         if not self.is_cross_attention:
@@ -263,10 +266,6 @@ class GPT2Attention(nn.Module):
             # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
             mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype, device=attn_weights.device)
             attn_weights = torch.where(causal_mask, attn_weights, mask_value)
-
-        if attention_mask is not None:
-            # Apply the attention mask
-            attn_weights = attn_weights + attention_mask
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
@@ -329,9 +328,14 @@ class GPT2Attention(nn.Module):
 
         bsz, num_heads, q_seq_len, dk = query.size()
 
-        query = self._split_heads(query, self.num_heads, self.head_dim).reshape(-1, q_seq_len, dk).to(attention_dtype)
-        key = self._split_heads(key, self.num_heads, self.head_dim).transpose(-1, -2).reshape(-1, dk, q_seq_len).to(attention_dtype)
-        value = self._split_heads(value, self.num_heads, self.head_dim).reshape(-1, q_seq_len, dk).to(attention_dtype)
+        query = self._split_heads(query, self.num_heads, self.head_dim)
+        key = self._split_heads(key, self.num_heads, self.head_dim)
+        value = self._split_heads(value, self.num_heads, self.head_dim)
+
+        if self.reorder_and_upcast_attn:
+            query = query.reshape(-1, q_seq_len, dk).to(attention_dtype)
+            key = key.transpose(-1, -2).reshape(-1, dk, q_seq_len).to(attention_dtype)
+            value = value.reshape(-1, q_seq_len, dk).to(attention_dtype)
 
         if layer_past is not None:
             past_key, past_value = layer_past
@@ -1111,16 +1115,46 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         )
 
     @staticmethod
-    def _reorder_cache(past: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor) -> Tuple[Tuple[torch.Tensor]]:
+    def _reorder_cache(past: Tuple[Tuple[torch.Tensor, torch.Tensor],...], beam_idx: torch.Tensor) -> Tuple[Tuple[torch.Tensor, torch.Tensor], ...]:
         """
         This function is used to re-order the `past_key_values` cache if [`~PreTrainedModel.beam_search`] or
         [`~PreTrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
         beam_idx at every generation step.
         """
-        return tuple(
-            tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
+        # Depending on `config.reorder_and_upcast_attn` values, stored past are different:
+        #  - True: key [batch_size * num_heads, head_dim, seq_length], value [batch_size * num_heads, seq_length, head_dim]
+        #  - False: key/value [batch_size, num_heads, seq_length, head_dim]
+        past_num_dimensions = len(past[0][0].shape)
+        device_to_beam_idx = {
+            torch.device: beam_idx.to(past_state.device)
             for layer_past in past
-        )
+            for past_state in layer_past
+        }
+
+        if past_num_dimensions == 3:
+            batch_size_times_num_heads, head_dim, seq_length = past[0][0].shape
+            batch_size = len(beam_idx)
+            num_heads = batch_size_times_num_heads // batch_size
+            return tuple(
+                (
+                    layer_past[0]
+                    .view(batch_size, num_heads, head_dim, seq_length)
+                    .index_select(0, device_to_beam_idx[layer_past[0].device])
+                    .view(batch_size_times_num_heads, head_dim, seq_length),
+                    layer_past[1]
+                    .view(batch_size, num_heads, seq_length, head_dim)
+                    .index_select(0, device_to_beam_idx[layer_past[0].device])
+                    .view(batch_size_times_num_heads, seq_length, head_dim),
+                )
+                for layer_past in past
+            )
+        elif past_num_dimensions == 4:
+            return tuple(
+                tuple(past_state.index_select(0, device_to_beam_idx[past_state.device]) for past_state in layer_past)
+                for layer_past in past
+            )
+        else:
+            raise ValueError(f"Past keys and values have to be either 3 or 4 dimensional depending on `config.reorder_and_upcast_attn`, for {past_num_dimensions} dimensions")
 
 
 @add_start_docstrings(
