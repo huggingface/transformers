@@ -227,18 +227,19 @@ class GPT2Attention(nn.Module):
         return attn_output, attn_weights
 
     def _upcast_and_reordered_attn(
-        self, query, key, value, original_dtype: torch.dtype, attention_mask=None, head_mask=None
+        self, query, key, value, num_heads: int, original_dtype: torch.dtype, attention_mask=None, head_mask=None
     ):
         # Use `torch.baddbmm` (a bit more efficient w/ alpha param for scaling -- from Megatron-LM)
-        bsz, num_heads, q_seq_len, _ = query.size()
-        _, _, k_seq_len, _ = key.size()
+        bsz_times_num_heads, q_seq_len, _ = query.size()
+        _, _, k_seq_len = key.size()
+        batch_size = bsz_times_num_heads // num_heads
 
         # Preallocate attn_weights for `baddbmm`
         if attention_mask is not None:
             # Apply the attention mask
             attn_weights = attention_mask
         else:
-            attn_weights = torch.empty(bsz * num_heads, q_seq_len, k_seq_len, dtype=torch.float32, device=query.device)
+            attn_weights = torch.empty(bsz_times_num_heads, q_seq_len, k_seq_len, dtype=torch.float32, device=query.device)
 
         # Compute Scale Factor
         scale_factor = 1.0
@@ -254,12 +255,11 @@ class GPT2Attention(nn.Module):
                 attn_weights = torch.baddbmm(
                     attn_weights, query, key, beta=0 if attention_mask is None else 1, alpha=scale_factor
                 )
-                attn_weights = attn_weights.reshape(bsz, num_heads, q_seq_len, k_seq_len)
         else:
             attn_weights = torch.baddbmm(
                 attn_weights, query, key, beta=0 if attention_mask is None else 1, alpha=scale_factor
             )
-            attn_weights = attn_weights.reshape(bsz, num_heads, q_seq_len, k_seq_len)
+        attn_weights = attn_weights.view(batch_size, num_heads, q_seq_len, k_seq_len)
 
         if not self.is_cross_attention:
             # if only "normal" attention layer implements causal mask
@@ -335,8 +335,8 @@ class GPT2Attention(nn.Module):
         key = self._split_heads(key, self.num_heads, self.head_dim)
         value = self._split_heads(value, self.num_heads, self.head_dim)
 
+        bsz, num_heads, q_seq_len, dk = query.size()
         if self.reorder_and_upcast_attn:
-            bsz, num_heads, q_seq_len, dk = query.size()
             query = query.reshape(-1, q_seq_len, dk).to(attention_dtype)
             key = key.transpose(-1, -2).reshape(-1, dk, q_seq_len).to(attention_dtype)
             value = value.reshape(-1, q_seq_len, dk).to(attention_dtype)
@@ -353,7 +353,7 @@ class GPT2Attention(nn.Module):
 
         if self.reorder_and_upcast_attn:
             attn_output, attn_weights = self._upcast_and_reordered_attn(
-                query, key, value, original_dtype=original_dtype, attention_mask=attention_mask, head_mask=head_mask
+                query, key, value, num_heads=num_heads, original_dtype=original_dtype, attention_mask=attention_mask, head_mask=head_mask
             )
         else:
             attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
