@@ -811,16 +811,14 @@ class DonutModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_slice = torch.tensor([24.2731, -6.4522, 32.4130]).to(torch_device)
-
         self.assertTrue(torch.allclose(logits[0, 0, :3], expected_slice, atol=1e-4))
 
         # step 2: generation
         task_prompt = "<s_docvqa><s_question>{user_input}</s_question><s_answer>"
         question = "When is the coffee break?"
         prompt = task_prompt.replace("{user_input}", question)
-        decoder_input_ids = processor.tokenizer(prompt, add_special_tokens=False, return_tensors="pt").input_ids.to(
-            torch_device
-        )
+        decoder_input_ids = processor.tokenizer(prompt, add_special_tokens=False, return_tensors="pt").input_ids
+        decoder_input_ids = decoder_input_ids.to(torch_device)
 
         outputs = model.generate(
             pixel_values,
@@ -864,7 +862,7 @@ class DonutModelIntegrationTest(unittest.TestCase):
             "<s_cord-v2>", add_special_tokens=False, return_tensors="pt"
         ).input_ids.to(torch_device)
 
-        # forward pass
+        # step 1: single forward pass
         with torch.no_grad():
             outputs = model(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids)
             logits = outputs.logits
@@ -874,8 +872,43 @@ class DonutModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_slice = torch.tensor([-24.4937, -2.8204, -15.3401], device=torch_device)
-
         self.assertTrue(torch.allclose(logits[0, 0, :3], expected_slice, atol=1e-4))
+
+        # step 2: generation
+        task_prompt = "<s_cord-v2>"
+        decoder_input_ids = processor.tokenizer(task_prompt, add_special_tokens=False, return_tensors="pt").input_ids
+        decoder_input_ids = decoder_input_ids.to(torch_device)
+
+        outputs = model.generate(
+            pixel_values,
+            decoder_input_ids=decoder_input_ids,
+            max_length=model.decoder.config.max_position_embeddings,
+            early_stopping=True,
+            pad_token_id=processor.tokenizer.pad_token_id,
+            eos_token_id=processor.tokenizer.eos_token_id,
+            use_cache=True,
+            num_beams=1,
+            bad_words_ids=[[processor.tokenizer.unk_token_id]],
+            output_scores=True,
+        )
+
+        sequence = processor.batch_decode(outputs.sequences)[0]
+        sequence = sequence.replace(processor.tokenizer.eos_token, "").replace(processor.tokenizer.pad_token, "")
+        sequence = re.sub(r"<.*?>", "", sequence, count=1).strip()  # remove first task start token
+
+        # verify generated sequence
+        # fmt: off
+        expected_sequence = "<s_menu><s_nm> CINNAMON SUGAR</s_nm><s_unitprice> 17,000</s_unitprice><s_cnt> 1 x</s_cnt><s_price> 17,000</s_price></s_menu><s_sub_total><s_subtotal_price> 17,000</s_subtotal_price></s_sub_total><s_total><s_total_price> 17,000</s_total_price><s_cashprice> 20,000</s_cashprice><s_changeprice> 3,000</s_changeprice></s_total>"  # noqa: E231
+        # fmt: on
+        self.assertEqual(sequence, expected_sequence)
+
+        # verify scores
+        self.assertEqual(len(outputs.scores), 43)
+        self.assertTrue(
+            torch.allclose(
+                outputs.scores[0][0, :3], torch.tensor([-27.4344, -3.2686, -19.3524], device=torch_device), atol=1e-4
+            )
+        )
 
     @slow
     def test_inference_rvlcdip(self):
@@ -887,7 +920,7 @@ class DonutModelIntegrationTest(unittest.TestCase):
 
         pixel_values = processor(images=image, return_tensors="pt").pixel_values.to(torch_device)
 
-        # forward pass
+        # step 1: single forward pass
         decoder_input_ids = processor.tokenizer(
             "<s_rvlcdip>", add_special_tokens=False, return_tensors="pt"
         ).input_ids.to(torch_device)
@@ -900,5 +933,37 @@ class DonutModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_slice = torch.tensor([-17.6490, -4.8381, -15.7577], device=torch_device)
-
         self.assertTrue(torch.allclose(logits[0, 0, :3], expected_slice, atol=1e-4))
+
+        # step 2: generation
+        task_prompt = "<s_rvlcdip>"
+        decoder_input_ids = processor.tokenizer(task_prompt, add_special_tokens=False, return_tensors="pt").input_ids
+        decoder_input_ids = decoder_input_ids.to(torch_device)
+
+        outputs = model.generate(
+            pixel_values,
+            decoder_input_ids=decoder_input_ids,
+            max_length=model.decoder.config.max_position_embeddings,
+            early_stopping=True,
+            pad_token_id=processor.tokenizer.pad_token_id,
+            eos_token_id=processor.tokenizer.eos_token_id,
+            use_cache=True,
+            num_beams=1,
+            bad_words_ids=[[processor.tokenizer.unk_token_id]],
+            output_scores=True,
+        )
+
+        sequence = processor.batch_decode(outputs.sequences)[0]
+        sequence = sequence.replace(processor.tokenizer.eos_token, "").replace(processor.tokenizer.pad_token, "")
+        sequence = re.sub(r"<.*?>", "", sequence, count=1).strip()  # remove first task start token
+
+        # verify generated sequence
+        self.assertEqual(sequence, ["<s_class><advertisement/></s_class>"])
+
+        # verify scores
+        self.assertEqual(len(outputs.scores), 4)
+        self.assertTrue(
+            torch.allclose(
+                outputs.scores[0][0, :3], torch.tensor([-17.6490, -4.8381, -15.7577], device=torch_device), atol=1e-4
+            )
+        )

@@ -1,0 +1,79 @@
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an
+"AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License. -->
+
+# Donut
+
+## Overview
+
+The Donut model was proposed in [OCR-free Document Understanding Transformer](https://arxiv.org/abs/2111.15664) by
+Geewook Kim, Teakgyu Hong, Moonbin Yim, Jeongyeon Nam, Jinyoung Park, Jinyeong Yim, Wonseok Hwang, Sangdoo Yun, Dongyoon Han, Seunghyun Park.
+Donut consists of an image Transformer encoder and an autoregressive text Transformer decoder to perform document understanding
+tasks such as document image classification, form understanding and visual question answering.
+
+The abstract from the paper is the following:
+
+*Understanding document images (e.g., invoices) is a core but challenging task since it requires complex functions such as reading text and a holistic understanding of the document. Current Visual Document Understanding (VDU) methods outsource the task of reading text to off-the-shelf Optical Character Recognition (OCR) engines and focus on the understanding task with the OCR outputs. Although such OCR-based approaches have shown promising performance, they suffer from 1) high computational costs for using OCR; 2) inflexibility of OCR models on languages or types of document; 3) OCR error propagation to the subsequent process. To address these issues, in this paper, we introduce a novel OCR-free VDU model named Donut, which stands for Document understanding transformer. As the first step in OCR-free VDU research, we propose a simple architecture (i.e., Transformer) with a pre-training objective (i.e., cross-entropy loss). Donut is conceptually simple yet effective. Through extensive experiments and analyses, we show a simple OCR-free VDU model, Donut, achieves state-of-the-art performances on various VDU tasks in terms of both speed and accuracy. In addition, we offer a synthetic data generator that helps the model pre-training to be flexible in various languages and domains.*
+
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/donut_architecture.jpg"
+alt="drawing" width="600"/> 
+
+<small> Donut high-level overview. Taken from the <a href="https://arxiv.org/abs/2111.15664">original paper</a>. </small>
+
+This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found
+[here](https://github.com/clovaai/donut).
+
+Tips:
+
+- The quickest way to get started with Donut is by checking the [tutorial
+  notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/donut), which show how to use the model
+  at inference time as well as fine-tuning on custom data.
+- Donut is always used within the [VisionEncoderDecoder](vision-encoder-decoder) framework.
+
+## Inference
+
+Donut's [`VisionEncoderDecoder`] model accepts images as input and makes use of
+[`~generation_utils.GenerationMixin.generate`] to autoregressively generate text given the input image.
+
+The [`DonutFeatureExtractor`] class is responsible for preprocessing the input image and
+[`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`] decodes the generated target tokens to the target string. The
+[`DonutProcessor`] wraps [`DonutFeatureExtractor`] and [`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`]
+into a single instance to both extract the input features and decode the predicted token ids.
+
+- Step-by-step Document Visual Question Answering (DocVQA)
+
+``` py
+>>> from transformers import DonutProcessor, VisionEncoderDecoderModel
+>>> from datasets import load_dataset
+
+>>> processor = DonutProcessor.from_pretrained("microsoft/trocr-base-handwritten") 
+>>> model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-handwritten")
+
+>>> # load document image from the DocVQA dataset
+>>> dataset = load_dataset("hf-internal-testing/example-documents", split="test")
+>>> image = dataset[0]["image"]
+
+>>> pixel_values = processor(image, return_tensors="pt").pixel_values 
+>>> generated_ids = model.generate(pixel_values)
+
+>>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0] 
+```
+
+See the [model hub](https://huggingface.co/models?filter=donut) to look for Donut checkpoints.
+
+## DonutProcessor
+
+[[autodoc]] DonutProcessor
+    - __call__
+    - from_pretrained
+    - save_pretrained
+    - batch_decode
+    - decode
+    - as_target_processor
