@@ -2880,12 +2880,12 @@ def get_starts(total_length, n_ctx, hop_length):
 def get_alignment(x, music_tokens, labels, prior, level, fp16, hps):
     level = level - 1  # Top level used
     n_ctx, n_tokens = prior.n_ctx, prior.n_tokens
-    z = music_tokens[level]
-    bs, total_length = z.shape[0], z.shape[1]
+    tokens = music_tokens[level]
+    bs, total_length = tokens.shape[0], tokens.shape[1]
     if total_length < n_ctx:
         padding_length = n_ctx - total_length
-        z = torch.cat([z, torch.zeros(bs, n_ctx - total_length, dtype=z.dtype, device=z.device)], dim=1)
-        total_length = z.shape[1]
+        tokens = torch.cat([tokens, torch.zeros(bs, n_ctx - total_length, dtype=tokens.dtype, device=tokens.device)], dim=1)
+        total_length = tokens.shape[1]
     else:
         padding_length = 0
 
@@ -2894,19 +2894,19 @@ def get_alignment(x, music_tokens, labels, prior, level, fp16, hps):
     attn_layers = set([alignment_layer])
     alignment_hops = {}
     indices_hops = {}
-    prior.to(music_tokens.device)
+    prior.to(tokens.device)
     empty_cache()
     for start in get_starts(total_length, n_ctx, hop_length):
         end = start + n_ctx
 
         # set y offset, sample_length and lyrics tokens
-        y, indices_hop = prior.get_y(labels, start, total_length, get_indices=True)
+        y, indices_hop = prior.get_y(labels, start, total_length, get_indices=True,offset=0)
 
-        z_bs = torch.chunk(z, bs, dim=0)
+        tokens_bs = torch.chunk(tokens, bs, dim=0)
         y_bs = torch.chunk(y, bs, dim=0)
         w_hops = []
-        for z_i, y_i in zip(z_bs, y_bs):
-            w_hop = prior.z_forward(z_i[:, start:end], [], y_i, fp16=fp16, get_attn_weights=attn_layers)
+        for tokens_i, y_i in zip(tokens_bs, y_bs):
+            w_hop = prior.z_forward(tokens_i[:, start:end], [], y_i, fp16=fp16, get_attn_weights=attn_layers)
 
             w_hops.append(w_hop[0][:, alignment_head])
             del w_hop
@@ -2947,8 +2947,8 @@ def save_wav(fname, lvl, metas, aud, sr):
     for i in list(range(aud.shape[0])):
         if metas is not None:
             # twitter prompts or inputs are in the form of a dictionnary
-            artists, genres, lyrics = list(metas[i].values())
-            path = f"{fname}/lvl_{lvl}-{artists[i]}-{genres[i]}-{lyrics[i][:5]}{i}.wav"
+            artists, genres, lyrics =  list(metas)[i].values()
+            path = f"{fname}/lvl_{lvl}-{artists}-{genres}-{lyrics[:5]}-{i}.wav"
             soundfile.write(path, aud[i], samplerate=sr, format="wav")
         else:
             soundfile.write(f"{fname}/lvl_{lvl}-sample-{i}.wav", aud[i], samplerate=sr, format="wav")
@@ -3169,9 +3169,8 @@ class JukeboxModel(JukeboxPreTrainedModel):
                 save_wav(logdir, level, metas=metas, aud=raw_audio, sr=hps.sr)
                 if (
                     alignments is None and self.priors[-1] is not None and self.priors[-1].n_tokens > 0
-                ):  # and not isinstance(self.priors[-1].labeller, Empty`Labeller`):
-                    # either use level which will be the given lovel or use the total nb of levels?
-                    # alignments = get_alignment(x, music_tokens, labels[-1], self.priors[-1], level, sampling_kwargs[-1]["fp16"], hps)
+                ): 
+                    alignments = get_alignment(raw_audio, music_tokens, labels[-1], self.priors[-1], level, sampling_kwargs[-1]["fp16"], hps)
                     pass  # TODO this is a really dirty fix
         return music_tokens
 
