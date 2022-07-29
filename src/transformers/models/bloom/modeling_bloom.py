@@ -973,8 +973,8 @@ class BloomForSequenceClassification(BloomPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[torch.bool] = None,
-        return_dict: Optional[torch.bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         **deprecated_arguments
     ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutputWithPast]:
         r"""
