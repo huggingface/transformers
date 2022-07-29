@@ -144,6 +144,7 @@ Below are some notes to help you use this module, or follow this demo on Google 
 
 #### Requirements
 
+- Make sure you run that on a NVIDIA T4 or A100 GPU that supports 8-bit tensor cores. Note that previous generations of NVIDIA GPUs do not support 8-bit tensor cores.
 - Install the correct version of `bitsandbytes` by running:
 `pip install -i https://test.pypi.org/simple/ bitsandbytes-cudaXXX` with `XXX` corresponding to your `CUDA` version. E.g, if you have `CUDA` 11.3 installed on your machine, run `pip install -i https://test.pypi.org/simple/ bitsandbytes-cuda113`
 - Install `accelerate`:
