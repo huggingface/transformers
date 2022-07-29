@@ -67,7 +67,7 @@ def to_channel_dimension_format(image: np.ndarray, channel_dim: Union[ChannelDim
 
 
 def rescale(
-    image: np.ndarray, scale: Union[float, int] = 255, data_format: Optional[ChannelDimension] = None
+    image: np.ndarray, scale: Union[float, int] = 255, data_format: Optional[ChannelDimension] = None, dtype=np.float32
 ) -> np.ndarray:
     """
     Rescales `image` by `scale`.
@@ -77,6 +77,11 @@ def rescale(
             The image to rescale.
         scale (`float`, `int`):
             The scale to use for rescaling the image.
+        data_format (`ChannelDimension`, *optional*):
+            The channel dimension format of the image. If not provided, it will be the same as the input image.
+        dtype (`np.dtype`, *optional*):
+            The dtype of the output image. Defaults to `np.float32`.Used for backwards compatibility
+            with feature extractors
 
     Returns:
         image: A rescaled np.ndarray image.
@@ -84,6 +89,7 @@ def rescale(
     rescaled_image = image * scale
     if data_format is not None:
         rescaled_image = to_channel_dimension_format(rescaled_image, data_format)
+    rescaled_image = rescaled_image.astype(dtype)
     return rescaled_image
 
 

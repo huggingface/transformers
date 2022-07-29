@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for GLPN."""
 
-from typing import Union
+from typing import Optional, Union
 
 import numpy as np
 import PIL.Image
@@ -22,8 +22,8 @@ import PIL.Image
 from transformers.utils.generic import TensorType
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_transforms import rescale, resize
-from ...image_utils import get_image_size, is_batched, to_numpy_array, valid_images
+from ...image_transforms import rescale, resize, to_channel_dimension_format
+from ...image_utils import ChannelDimension, get_image_size, is_batched, to_numpy_array, valid_images
 from ...utils import logging
 
 
@@ -41,19 +41,34 @@ class GLPNImageProcessor(BaseImageProcessor):
         super().__init__(**kwargs)
 
     def resize(
-        self, image: np.ndarray, size_divisor: Union[int, float], resample: PIL.Image.Resampling, **kwargs
+        self,
+        image: np.ndarray,
+        size_divisor: Union[int, float],
+        resample: PIL.Image.Resampling,
+        data_format: Optional[ChannelDimension] = None,
+        **kwargs
     ) -> np.ndarray:
         height, width = get_image_size(image)
         new_h = height // size_divisor * size_divisor
         new_w = width // size_divisor * size_divisor
-        image = resize(image, (new_h, new_w), resample=resample, **kwargs)
+        image = resize(image, (new_h, new_w), resample=resample, data_format=data_format, **kwargs)
         return image
 
-    def rescale(self, image: np.ndarray, scale: Union[int, float], **kwargs) -> np.ndarray:
-        return rescale(image, scale, **kwargs)
+    def rescale(
+        self, image: np.ndarray, scale: Union[int, float], data_format: Optional[ChannelDimension] = None, **kwargs
+    ) -> np.ndarray:
+        return rescale(image=image, scale=scale, data_format=data_format, **kwargs)
 
     def preprocess(
-        self, images, do_resize=None, do_rescale=None, size_divisor=None, resample=None, return_tensors=None, **kwargs
+        self,
+        images,
+        do_resize: bool = None,
+        do_rescale: bool = None,
+        size_divisor: int = None,
+        resample: PIL.Image.Resampling = None,
+        return_tensors: Optional[Union[TensorType, str]] = None,
+        data_format: ChannelDimension = ChannelDimension.FIRST,
+        **kwargs
     ) -> BatchFeature:
         do_resize = do_resize if do_resize is not None else self.do_resize
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
@@ -79,7 +94,9 @@ class GLPNImageProcessor(BaseImageProcessor):
             images = [self.resize(image, size_divisor=size_divisor, resample=resample) for image in images]
 
         if do_rescale:
-            images = [self.rescale(image, scale=255) for image in images]
+            images = [self.rescale(image, scale=1/255) for image in images]
+
+        images = [to_channel_dimension_format(image, data_format) for image in images]
 
         data = {"pixel_values": images}
-        return BatchFeature(**data, return_tensors=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors)
