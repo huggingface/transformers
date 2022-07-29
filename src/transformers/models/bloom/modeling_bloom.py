@@ -244,7 +244,7 @@ class BloomAttention(nn.Module):
         new_tensor_shape = fused_qkv.size()[:-1] + (self.num_heads, 3 * self.head_dim)
         # new_tensor_shape = (fused_qkv.size(1), fused_qkv.size(0)*fused_qkv.size(2), fused_qkv.size(-1))
         # fused_qkv = fused_qkv.transpose(1, 0)
-        fused_qkv = fused_qkv.reshape(*new_tensor_shape)
+        fused_qkv = fused_qkv.reshape(new_tensor_shape)
         # fused_qkv = fused_qkv.permute(0, 2, 1, 3)
         return torch.split(fused_qkv, self.head_dim, -1)
 
@@ -314,7 +314,7 @@ class BloomAttention(nn.Module):
             attention_probs = attention_probs * head_mask
 
         # change view [batch_size x num_heads, q_length, k_length]
-        attention_probs_reshaped = attention_probs.view(*matmul_result.shape)
+        attention_probs_reshaped = attention_probs.view(matmul_result.shape)
 
         # matmul: [batch_size * num_heads, q_length, head_dim]
         context_layer = torch.bmm(
@@ -619,8 +619,9 @@ class BloomModel(BloomPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        **deprecated_arguments
+        #        **deprecated_arguments
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
+        deprecated_arguments = {}
         if deprecated_arguments.pop("position_ids", False) is not False:
             # `position_ids` could have been `torch.Tensor` or `None` so defaulting pop to `False` allows to detect if users were passing explicitly `None`
             warnings.warn(

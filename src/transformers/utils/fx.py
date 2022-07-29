@@ -98,6 +98,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "bert",
     "blenderbot",
     "blenderbot-small",
+    "bloom",
     "clip",
     "deberta",
     "deberta-v2",
