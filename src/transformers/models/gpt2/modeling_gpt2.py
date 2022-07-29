@@ -194,8 +194,17 @@ class GPT2Attention(nn.Module):
         if self.scale_attn_by_inverse_layer_idx:
             normalizer *= float(self.layer_idx + 1)
 
+        # Preallocate attn_weights for `baddbmm`
+        if attention_mask is not None:
+            # Apply the attention mask
+            attn_weights = attention_mask
+        else:
+            bsz, num_heads, q_seq_len, _ = query.size()
+            _, _, k_seq_len, _ = key.size()
+            attn_weights = torch.empty(bsz * num_heads, q_seq_len, k_seq_len, dtype=query.dtype, device=query.device)
+
         attn_weights = torch.baddbmm(
-            input=attention_mask,
+            input=attn_weights,
             batch1=query,
             batch2=key.transpose(-1, -2),
             alpha=1 / normalizer,
