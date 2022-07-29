@@ -272,7 +272,6 @@ class BloomAttention(nn.Module):
         use_cache=False,
         output_attentions=False,
     ):
-        alibi = alibi.to(hidden_states.device)  # to make the model possible to run under accelerate
         fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
 
         # 3 x [batch_size, seq_length, num_heads, head_dim]
@@ -288,8 +287,8 @@ class BloomAttention(nn.Module):
             # concatenate along seq_length dimension:
             #  - key: [batch_size * self.num_heads, head_dim, kv_length]
             #  - value: [batch_size * self.num_heads, kv_length, head_dim]
-            key_layer = torch.cat((past_key.type_as(key_layer), key_layer), dim=2)
-            value_layer = torch.cat((past_value.type_as(value_layer), value_layer), dim=1)
+            key_layer = torch.cat((past_key, key_layer), dim=2)
+            value_layer = torch.cat((past_value, value_layer), dim=1)
 
         _, _, kv_length = key_layer.shape
 
