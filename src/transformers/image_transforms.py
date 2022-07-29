@@ -23,7 +23,7 @@ from transformers.utils.import_utils import is_flax_available, is_tf_available, 
 from .image_utils import (
     ChannelDimension,
     get_image_size,
-    infer_channel_dimension,
+    infer_channel_dimension_format,
     is_jax_tensor,
     is_tf_tensor,
     is_torch_tensor,
@@ -55,10 +55,35 @@ def rescale(image: np.ndarray, scale: Union[float, int] = 255) -> np.ndarray:
     return image * scale
 
 
+def to_channel_dimension_format(image: np.ndarray, channel_dim: Union[ChannelDimension, str]) -> np.ndarray:
+    """
+    Converts `image` to the channel dimension format specified by `channel_dim`.
+
+    Args:
+        image (`numpy.ndarray`):
+            The image to convert to the PIL Image format.
+        channel_dim (`ChannelDimension`):
+            The channel dimension format to use.
+
+    Returns:
+        image: A converted np.ndarray.
+    """
+    current_channel_dim = infer_channel_dimension_format(image)
+    target_channel_dim = ChannelDimension(channel_dim)
+    if current_channel_dim == target_channel_dim:
+        return image
+
+    if target_channel_dim == ChannelDimension.FIRST:
+        return image.transpose((2, 0, 1))
+
+    if target_channel_dim == ChannelDimension.LAST:
+        return image.transpose((1, 2, 0))
+
+    raise ValueError("Unsupported channel dimension format: {}".format(channel_dim))
+
+
 def to_pil_image(
-    image: Union[np.ndarray, PIL.Image.Image, "torch.Tensor", "tf.Tensor", "jnp.ndarray"],
-    channel_dim: Optional[ChannelDimension] = None,
-    do_rescale=None,
+    image: Union[np.ndarray, PIL.Image.Image, "torch.Tensor", "tf.Tensor", "jnp.Tensor"], do_rescale=None
 ) -> PIL.Image.Image:
     """
     Converts `image` to a PIL Image. Optionally rescales it and puts the channel dimension back as the last axis if
@@ -83,9 +108,7 @@ def to_pil_image(
         raise ValueError("Input image type not supported: {}".format(type(image)))
 
     # If the channel as been moved to first dim, we put it back at the end.
-    channel_dim = infer_channel_dimension(image) if channel_dim is None else channel_dim
-    if channel_dim == ChannelDimension.FIRST:
-        image = image.transpose((1, 2, 0))
+    image = to_channel_dimension_format(image, ChannelDimension.LAST)
 
     # PIL.Image can only store uint8 values, so we rescale the image to be between 0 and 255 if needed.
     do_rescale = isinstance(image.flat[0], float) if do_rescale is None else do_rescale
@@ -161,9 +184,14 @@ def get_resize_output_image_size(
     return (new_short, new_long) if width <= height else (new_long, new_short)
 
 
-def resize(image, size: Tuple[int, int], resample=PIL.Image.Resampling.BILINEAR):
+def resize(
+    image,
+    size: Tuple[int, int],
+    resample=PIL.Image.Resampling.BILINEAR,
+    data_format: Optional[ChannelDimension] = None,
+) -> np.np.ndarray:
     """
-    Resizes `image`. Enforces conversion of input to PIL.Image.
+    Resizes `image` to (h, w) specified by `size` using the PIL library.
 
     Args:
         image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
@@ -172,13 +200,26 @@ def resize(image, size: Tuple[int, int], resample=PIL.Image.Resampling.BILINEAR)
             The size to use for resizing the image.
         resample (`int`, *optional*, defaults to `PIL.Image.BILINEAR`):
             The filter to user for resampling.
+        data_format (`ChannelDimension`, *optional*, defaults to `None`):
+            The channel dimension format of the output image. If `None`, will use the inferred format from the input.
 
     Returns:
         image: A resized np.ndarray.
     """
+    if not len(size) == 2:
+        raise ValueError("size must have 2 elements")
+
+    # For all transformations, we want to keep the same data format as the input image unless otherwise specified.
+    # The resized image from PIL will always have channels last, so find the input format first.
+    data_format = infer_channel_dimension_format(image) if data_format is None else data_format
+
     # To maintain backwards compatibility with the resizing done in previous image feature extractors, we use
     # the pillow library to resize the image and then convert back to numpy
     if not isinstance(image, PIL.Image.Image):
         image = to_pil_image(image)
-    resized_image = image.resize(size, resample=resample)
-    return resized_image.numpy()
+    # PIL images are in the format (width, height)
+    h, w = size
+    resized_image = image.resize((w, h), resample=resample)
+    resized_image = np.array(resized_image)
+    resized_image = to_channel_dimension_format(resized_image, data_format)
+    return resized_image

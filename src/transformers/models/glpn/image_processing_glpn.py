@@ -16,8 +16,8 @@
 
 from typing import Union
 
-import PIL.Image
 import numpy as np
+import PIL.Image
 
 from transformers.utils.generic import TensorType
 
