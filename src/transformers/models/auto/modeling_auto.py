@@ -559,6 +559,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("funnel", "FunnelForQuestionAnswering"),
         ("gptj", "GPTJForQuestionAnswering"),
         ("ibert", "IBertForQuestionAnswering"),
+        ("layoutlm", "LayoutLMForQuestionAnswering"),
         ("layoutlmv2", "LayoutLMv2ForQuestionAnswering"),
         ("layoutlmv3", "LayoutLMv3ForQuestionAnswering"),
         ("led", "LEDForQuestionAnswering"),
