@@ -329,8 +329,8 @@ class GPT2Attention(nn.Module):
 
         batch_size, num_heads, query_length, head_dim = query.size()
         if self.reorder_and_upcast_attn:
-            query = query.to(torch.float32).view(-1, query_length, head_dim)
-            key = key.transpose(-1, -2).to(torch.float32).view(-1, head_dim, query_length)
+            query = query.to(torch.float32).reshape(-1, query_length, head_dim)
+            key = key.transpose(-1, -2).to(torch.float32).reshape(-1, head_dim, query_length)
             value = value.reshape(-1, query_length, head_dim)
 
         if layer_past is not None:
