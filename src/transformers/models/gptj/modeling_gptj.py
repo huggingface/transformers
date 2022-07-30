@@ -97,7 +97,7 @@ class GPTJAttention(nn.Module):
         max_positions = config.max_position_embeddings
         self.register_buffer(
             "bias",
-            torch.tril(torch.ones((max_positions, max_positions), dtype=torch.uint8)).view(
+            torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
                 1, 1, max_positions, max_positions
             ),
         )
@@ -163,11 +163,7 @@ class GPTJAttention(nn.Module):
 
         # compute causal mask from causal mask buffer
         query_length, key_length = query.size(-2), key.size(-2)
-        causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].to(torch.bool)
-
-        # Keep the attention weights computation in fp32 to avoid overflow issues
-        query = query.to(torch.float32)
-        key = key.to(torch.float32)
+        causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
 
         attn_weights = torch.matmul(query, key.transpose(-1, -2))
 
@@ -243,6 +239,10 @@ class GPTJAttention(nn.Module):
 
         key = key.permute(0, 2, 1, 3)
         query = query.permute(0, 2, 1, 3)
+
+        # Keep the attention weights computation in fp32 to avoid overflow issues
+        key = key.to(torch.float32)
+        query = query.to(torch.float32)
 
         if layer_past is not None:
             past_key = layer_past[0]
