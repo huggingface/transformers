@@ -186,7 +186,7 @@ class GPT2Attention(nn.Module):
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
-        attn_weights = torch.matmul(query, key.transpose(-1,-2))
+        attn_weights = torch.matmul(query, key.transpose(-1, -2))
 
         normalizer = 1
         if self.scale_attn_weights:
@@ -226,16 +226,16 @@ class GPT2Attention(nn.Module):
 
         return attn_output, attn_weights
 
-    def _upcast_and_reordered_attn(
-        self, query, key, value, num_heads: int, attention_mask=None, head_mask=None
-    ):
+    def _upcast_and_reordered_attn(self, query, key, value, num_heads: int, attention_mask=None, head_mask=None):
         # Use `torch.baddbmm` (a bit more efficient w/ alpha param for scaling -- from Megatron-LM)
         bsz_times_num_heads, query_length, _ = query.size()
         _, _, key_length = key.size()
         batch_size = bsz_times_num_heads // num_heads
 
         # Preallocate attn_weights for `baddbmm`
-        attn_weights = torch.empty(bsz_times_num_heads, query_length, key_length, dtype=torch.float32, device=query.device)
+        attn_weights = torch.empty(
+            bsz_times_num_heads, query_length, key_length, dtype=torch.float32, device=query.device
+        )
         if attention_mask is not None:
             # Apply the attention mask
             attn_weights.view(batch_size, num_heads, query_length, key_length)[:] = attention_mask
@@ -263,9 +263,9 @@ class GPT2Attention(nn.Module):
             # if only "normal" attention layer implements causal mask
             causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
             # In-place update of `attn_weights`
-            attn_weights\
-                .view(batch_size, num_heads, query_length, key_length)\
-                .masked_fill_(causal_mask, torch.finfo(attn_weights.dtype).min)
+            attn_weights.view(batch_size, num_heads, query_length, key_length).masked_fill_(
+                causal_mask, torch.finfo(attn_weights.dtype).min
+            )
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
