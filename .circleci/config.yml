@@ -69,29 +69,14 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            #- run: sudo apt update
-            #- run: sudo apt-get update; sudo apt-get install make build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev wget curl llvm libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev
-            #- run: sudo apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg
-            #- run: sudo python3 -m pip install --no-cache-dir --upgrade pip
-            #- run: cd .. && ls -l && cd transformers
-            #- run: ls -l .
-            # - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip3 install --upgrade pip
-            # - run: pip3 install .[sklearn,torch,sentencepiece,testing,torch-speech]
-            # - run: pip3 install -r examples/pytorch/_tests_requirements.txt
-            # - run: git clone https://github.com/ydshieh/resampy.git && cd resampy && git checkout d902312ba508b8aef24a1e0e74efc17130240020 && pip3 install -U -e . && cd ..
             - run: pip3 uninstall -y torch numba resampy numpy
             - run: pip3 install -U numba
             - run: pip3 install -U resampy==0.3.1
             - run: wget https://download.pytorch.org/whl/nightly/cpu/torch-1.12.0.dev20220520%2Bcpu-cp37-cp37m-linux_x86_64.whl
-            - run: pip3 install -U --no-cache-dir -f torch-1.12.0.dev20220520+cpu-cp37-cp37m-linux_x86_64.whl
-#            - run: pip3 install -U numpy==1.21.6
-            # - run: pip3 uninstall -y librosa
-            # - run: python3 -m pytest -n 1 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/test_pytorch_examples.py -k "(test_run_audio_classification or test_run_clm)"
+            - run: pip3 install -U torch-1.12.0.dev20220520+cpu-cp37-cp37m-linux_x86_64.whl --no-cache-dir
             - run: pip3 freeze
-#            - run: python3 ./debug_resampy_parallel_false.py
             - run: python3 ./debug_resampy_parallel_true.py
-
 
 workflow_filters: &workflow_filters
     filters:
