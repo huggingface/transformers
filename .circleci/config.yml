@@ -73,7 +73,7 @@ jobs:
             - run: pip3 uninstall -y torch numba resampy numpy
             - run: pip3 install -U numba
             - run: pip3 install -U resampy==0.3.1
-            - run: wget https://download.pytorch.org/whl/nightly/cpu/torch-1.12.0.dev20220520%2Bcpu-cp37-cp37m-linux_x86_64.whl
+            - run: wget https://download.pytorch.org/whl/nightly/cpu/torch-1.12.0.dev20220205%2Bcpu-cp37-cp37m-linux_x86_64.whl
             - run: pip3 install -U torch-1.12.0.dev20220520+cpu-cp37-cp37m-linux_x86_64.whl --no-cache-dir
             - run: pip3 freeze
             - run: python3 ./debug_resampy_parallel_true.py
