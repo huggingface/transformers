@@ -2,7 +2,7 @@ import datetime
 
 import torch
 from torch import nn
-from tqdm import tqdm
+
 
 
 """Numba implementation of resampler"""
