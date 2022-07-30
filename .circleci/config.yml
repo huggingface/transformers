@@ -83,7 +83,8 @@ jobs:
             - run: pip3 uninstall -y torch numba resampy numpy
             - run: pip3 install -U numba
             - run: pip3 install -U resampy==0.3.1
-            - run: pip3 install -U torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu/torch-1.12.0.dev20220520%2Bcpu-cp37-cp37m-linux_x86_64.whl
+            - run: wget https://download.pytorch.org/whl/nightly/cpu/torch-1.12.0.dev20220520%2Bcpu-cp37-cp37m-linux_x86_64.whl
+            - run: pip3 install -U --no-cache-dir -f torch-1.12.0.dev20220520+cpu-cp37-cp37m-linux_x86_64.whl
 #            - run: pip3 install -U numpy==1.21.6
             # - run: pip3 uninstall -y librosa
             # - run: python3 -m pytest -n 1 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/test_pytorch_examples.py -k "(test_run_audio_classification or test_run_clm)"
