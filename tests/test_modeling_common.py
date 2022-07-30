@@ -342,8 +342,18 @@ class ModelTesterMixin:
                 model_slow_init = model_class_copy.from_pretrained(tmpdirname, _fast_init=False)
 
                 for key in model_fast_init.state_dict().keys():
-                    max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
-                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
+                    slow_dtype = model_slow_init.state_dict()[key].dtype
+                    fast_dtype = model_fast_init.state_dict()[key].dtype
+                    self.assertEqual(slow_dtype, fast_dtype)
+
+                    if fast_dtype == torch.bool:
+                        self.assertEqual(model_slow_init.state_dict()[key], model_fast_init.state_dict()[key])
+                    else:
+                        self.assertTrue(
+                            torch.allclose(model_slow_init.state_dict()[key], model_fast_init.state_dict()[key])
+                        )
+                        max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
+                        self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
     def test_save_load_fast_init_to_base(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
