@@ -123,7 +123,7 @@ class DecisionTransformerGPT2Attention(nn.Module):
         max_positions = config.max_position_embeddings
         self.register_buffer(
             "bias",
-            torch.tril(torch.ones((max_positions, max_positions), dtype=torch.uint8)).view(
+            torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
                 1, 1, max_positions, max_positions
             ),
         )
@@ -177,23 +177,24 @@ class DecisionTransformerGPT2Attention(nn.Module):
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
         attn_weights = torch.matmul(query, key.transpose(-1, -2))
 
+        normalizer = 1
         if self.scale_attn_weights:
-            attn_weights = attn_weights / torch.tensor(
-                value.size(-1) ** 0.5, dtype=attn_weights.dtype, device=attn_weights.device
-            )
+            normalizer *= torch.tensor(value.size(-1) ** 0.5, dtype=query.dtype, device=query.device)
 
         # Layer-wise attention scaling
         if self.scale_attn_by_inverse_layer_idx:
-            attn_weights = attn_weights / float(self.layer_idx + 1)
+            normalizer *= float(self.layer_idx + 1)
+
+        attn_weights = attn_weights / normalizer
 
         if not self.is_cross_attention:
             # if only "normal" attention layer implements causal mask
             query_length, key_length = query.size(-2), key.size(-2)
-            causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].to(torch.bool)
+            causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
             mask_value = torch.finfo(attn_weights.dtype).min
             # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
             # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
-            mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
+            mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype, device=attn_weights.device)
             attn_weights = torch.where(causal_mask, attn_weights, mask_value)
 
         if attention_mask is not None:
@@ -214,13 +215,19 @@ class DecisionTransformerGPT2Attention(nn.Module):
 
         return attn_output, attn_weights
 
-    def _upcast_and_reordered_attn(self, query, key, value, attention_mask=None, head_mask=None):
+    def _upcast_and_reordered_attn(self, query, key, value, num_heads: int, attention_mask=None, head_mask=None):
         # Use `torch.baddbmm` (a bit more efficient w/ alpha param for scaling -- from Megatron-LM)
-        bsz, num_heads, q_seq_len, dk = query.size()
-        _, _, k_seq_len, _ = key.size()
+        bsz_times_num_heads, query_length, _ = query.size()
+        _, _, key_length = key.size()
+        batch_size = bsz_times_num_heads // num_heads
 
         # Preallocate attn_weights for `baddbmm`
-        attn_weights = torch.empty(bsz * num_heads, q_seq_len, k_seq_len, dtype=torch.float32, device=query.device)
+        attn_weights = torch.empty(
+            bsz_times_num_heads, query_length, key_length, dtype=torch.float32, device=query.device
+        )
+        if attention_mask is not None:
+            # Apply the attention mask
+            attn_weights.view(batch_size, num_heads, query_length, key_length)[:] = attention_mask
 
         # Compute Scale Factor
         scale_factor = 1.0
@@ -233,27 +240,21 @@ class DecisionTransformerGPT2Attention(nn.Module):
         # Upcast (turn off autocast) and reorder (Scale K by 1 / root(dk))
         if is_amp_available:
             with autocast(enabled=False):
-                q, k = query.reshape(-1, q_seq_len, dk), key.transpose(-1, -2).reshape(-1, dk, k_seq_len)
-                attn_weights = torch.baddbmm(attn_weights, q.float(), k.float(), beta=0, alpha=scale_factor)
-                attn_weights = attn_weights.reshape(bsz, num_heads, q_seq_len, k_seq_len)
+                attn_weights = torch.baddbmm(
+                    attn_weights, query, key, beta=0 if attention_mask is None else 1, alpha=scale_factor
+                )
         else:
-            q, k = query.reshape(-1, q_seq_len, dk), key.transpose(-1, -2).reshape(-1, dk, k_seq_len)
-            attn_weights = torch.baddbmm(attn_weights, q.float(), k.float(), beta=0, alpha=scale_factor)
-            attn_weights = attn_weights.reshape(bsz, num_heads, q_seq_len, k_seq_len)
+            attn_weights = torch.baddbmm(
+                attn_weights, query, key, beta=0 if attention_mask is None else 1, alpha=scale_factor
+            )
 
         if not self.is_cross_attention:
             # if only "normal" attention layer implements causal mask
-            query_length, key_length = query.size(-2), key.size(-2)
-            causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].bool()
-            mask_value = torch.finfo(attn_weights.dtype).min
-            # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
-            # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
-            mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
-            attn_weights = torch.where(causal_mask, attn_weights, mask_value)
-
-        if attention_mask is not None:
-            # Apply the attention mask
-            attn_weights = attn_weights + attention_mask
+            causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
+            # In-place update of `attn_weights`
+            attn_weights.view(batch_size, num_heads, query_length, key_length).masked_fill_(
+                causal_mask, torch.finfo(attn_weights.dtype).min
+            )
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
@@ -290,7 +291,7 @@ class DecisionTransformerGPT2Attention(nn.Module):
     def forward(
         self,
         hidden_states: Optional[Tuple[torch.FloatTensor]],
-        layer_past: Optional[Tuple[torch.Tensor]] = None,
+        layer_past: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
@@ -315,6 +316,12 @@ class DecisionTransformerGPT2Attention(nn.Module):
         key = self._split_heads(key, self.num_heads, self.head_dim)
         value = self._split_heads(value, self.num_heads, self.head_dim)
 
+        batch_size, num_heads, query_length, head_dim = query.size()
+        if self.reorder_and_upcast_attn:
+            query = query.to(torch.float32).reshape(-1, query_length, head_dim)
+            key = key.transpose(-1, -2).to(torch.float32).reshape(-1, head_dim, query_length)
+            value = value.reshape(-1, query_length, head_dim)
+
         if layer_past is not None:
             past_key, past_value = layer_past
             key = torch.cat((past_key, key), dim=-2)
@@ -326,7 +333,10 @@ class DecisionTransformerGPT2Attention(nn.Module):
             present = None
 
         if self.reorder_and_upcast_attn:
-            attn_output, attn_weights = self._upcast_and_reordered_attn(query, key, value, attention_mask, head_mask)
+            attn_output, attn_weights = self._upcast_and_reordered_attn(
+                query, key, value, num_heads=num_heads, attention_mask=attention_mask, head_mask=head_mask
+            )
+            attn_output = attn_output.view(batch_size, num_heads, query_length, head_dim)
         else:
             attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
 
