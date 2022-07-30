@@ -347,11 +347,9 @@ class ModelTesterMixin:
                     self.assertEqual(slow_dtype, fast_dtype)
 
                     if fast_dtype == torch.bool:
+                        # torch.BoolTensor should be deterministic
                         self.assertEqual(model_slow_init.state_dict()[key], model_fast_init.state_dict()[key])
                     else:
-                        self.assertTrue(
-                            torch.allclose(model_slow_init.state_dict()[key], model_fast_init.state_dict()[key])
-                        )
                         max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
                         self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 

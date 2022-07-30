@@ -358,8 +358,17 @@ class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
                     if key == "layoutlmv2.visual_segment_embedding":
                         # we skip the visual segment embedding as it has a custom initialization scheme
                         continue
-                    max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
-                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
+
+                    slow_dtype = model_slow_init.state_dict()[key].dtype
+                    fast_dtype = model_fast_init.state_dict()[key].dtype
+                    self.assertEqual(slow_dtype, fast_dtype)
+
+                    if fast_dtype == torch.bool:
+                        # torch.BoolTensor should be deterministic
+                        self.assertEqual(model_slow_init.state_dict()[key], model_fast_init.state_dict()[key])
+                    else:
+                        max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
+                        self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
