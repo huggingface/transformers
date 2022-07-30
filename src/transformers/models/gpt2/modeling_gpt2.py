@@ -227,7 +227,7 @@ class GPT2Attention(nn.Module):
         return attn_output, attn_weights
 
     def _upcast_and_reordered_attn(
-        self, query, key, value, num_heads: int, original_dtype: torch.dtype, attention_mask=None, head_mask=None
+        self, query, key, value, num_heads: int, attention_mask=None, head_mask=None
     ):
         # Use `torch.baddbmm` (a bit more efficient w/ alpha param for scaling -- from Megatron-LM)
         bsz_times_num_heads, query_length, _ = query.size()
@@ -272,7 +272,7 @@ class GPT2Attention(nn.Module):
         # Downcast (if necessary) back to V's dtype (if in mixed-precision) -- No-Op if otherwise
         if attn_weights.dtype != torch.float32:
             raise RuntimeError("Error with upcasting, attn_weights does not have dtype torch.float32")
-        attn_weights = attn_weights.type(original_dtype)
+        attn_weights = attn_weights.type(value.dtype)
         attn_weights = self.attn_dropout(attn_weights)
 
         # Mask heads if we want to
@@ -323,9 +323,6 @@ class GPT2Attention(nn.Module):
         else:
             query, key, value = self.c_attn(hidden_states).split(self.split_size, dim=2)
 
-        # Depending on the `reorder_and_upcast_attn` flag we perform attention in a higher precision
-        original_dtype = query.dtype
-
         query = self._split_heads(query, self.num_heads, self.head_dim)
         key = self._split_heads(key, self.num_heads, self.head_dim)
         value = self._split_heads(value, self.num_heads, self.head_dim)
@@ -348,7 +345,7 @@ class GPT2Attention(nn.Module):
 
         if self.reorder_and_upcast_attn:
             attn_output, attn_weights = self._upcast_and_reordered_attn(
-                query, key, value, num_heads=num_heads, original_dtype=original_dtype, attention_mask=attention_mask, head_mask=head_mask
+                query, key, value, num_heads=num_heads, attention_mask=attention_mask, head_mask=head_mask
             )
             attn_output = attn_output.view(batch_size, num_heads, query_length, head_dim)
         else:
@@ -1095,8 +1092,8 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         loss = None
         if labels is not None:
             # Shift so that tokens < n predict n
-            shift_logits = lm_logits[..., :-1, :]
-            shift_labels = labels[..., 1:]
+            shift_logits = lm_logits[..., :-1, :].contiguous()
+            shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
@@ -1334,8 +1331,8 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
             mc_loss = loss_fct(mc_logits.view(-1, mc_logits.size(-1)), mc_labels.view(-1))
         lm_loss = None
         if labels is not None:
-            shift_logits = lm_logits[..., :-1, :]
-            shift_labels = labels[..., 1:]
+            shift_logits = lm_logits[..., :-1, :].contiguous()
+            shift_labels = labels[..., 1:].contiguous()
             loss_fct = CrossEntropyLoss()
             lm_loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
 
