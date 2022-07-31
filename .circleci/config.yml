@@ -79,56 +79,62 @@ jobs:
             - run: python3 ./debug_resampy_parallel_true.py
 
             - run: pip3 uninstall -y torch
+            - run: wget https://download.pytorch.org/whl/nightly/cpu/torch-1.12.0.dev20220211%2Bcpu-cp37-cp37m-linux_x86_64.whl
+            - run: pip3 install -U torch-1.12.0.dev20220211+cpu-cp37-cp37m-linux_x86_64.whl --no-cache-dir
+            - run: pip3 freeze
+            - run: python3 ./debug_resampy_parallel_true.py
+
+            - run: pip3 uninstall -y torch
+            - run: wget https://download.pytorch.org/whl/nightly/cpu/torch-1.12.0.dev20220212%2Bcpu-cp37-cp37m-linux_x86_64.whl
+            - run: pip3 install -U torch-1.12.0.dev20220212+cpu-cp37-cp37m-linux_x86_64.whl --no-cache-dir
+            - run: pip3 freeze
+            - run: python3 ./debug_resampy_parallel_true.py
+
+            - run: pip3 uninstall -y torch
+            - run: wget https://download.pytorch.org/whl/nightly/cpu/torch-1.12.0.dev20220213%2Bcpu-cp37-cp37m-linux_x86_64.whl
+            - run: pip3 install -U torch-1.12.0.dev20220213+cpu-cp37-cp37m-linux_x86_64.whl --no-cache-dir
+            - run: pip3 freeze
+            - run: python3 ./debug_resampy_parallel_true.py
+
+            - run: pip3 uninstall -y torch
+            - run: wget https://download.pytorch.org/whl/nightly/cpu/torch-1.12.0.dev20220214%2Bcpu-cp37-cp37m-linux_x86_64.whl
+            - run: pip3 install -U torch-1.12.0.dev20220214+cpu-cp37-cp37m-linux_x86_64.whl --no-cache-dir
+            - run: pip3 freeze
+            - run: python3 ./debug_resampy_parallel_true.py
+
+            - run: pip3 uninstall -y torch
+            - run: wget https://download.pytorch.org/whl/nightly/cpu/torch-1.12.0.dev20220215%2Bcpu-cp37-cp37m-linux_x86_64.whl
+            - run: pip3 install -U torch-1.12.0.dev20220215+cpu-cp37-cp37m-linux_x86_64.whl --no-cache-dir
+            - run: pip3 freeze
+            - run: python3 ./debug_resampy_parallel_true.py
+
+            - run: pip3 uninstall -y torch
+            - run: wget https://download.pytorch.org/whl/nightly/cpu/torch-1.12.0.dev20220216%2Bcpu-cp37-cp37m-linux_x86_64.whl
+            - run: pip3 install -U torch-1.12.0.dev20220216+cpu-cp37-cp37m-linux_x86_64.whl --no-cache-dir
+            - run: pip3 freeze
+            - run: python3 ./debug_resampy_parallel_true.py
+
+            - run: pip3 uninstall -y torch
+            - run: wget https://download.pytorch.org/whl/nightly/cpu/torch-1.12.0.dev20220217%2Bcpu-cp37-cp37m-linux_x86_64.whl
+            - run: pip3 install -U torch-1.12.0.dev20220217+cpu-cp37-cp37m-linux_x86_64.whl --no-cache-dir
+            - run: pip3 freeze
+            - run: python3 ./debug_resampy_parallel_true.py
+
+            - run: pip3 uninstall -y torch
+            - run: wget https://download.pytorch.org/whl/nightly/cpu/torch-1.12.0.dev20220218%2Bcpu-cp37-cp37m-linux_x86_64.whl
+            - run: pip3 install -U torch-1.12.0.dev20220218+cpu-cp37-cp37m-linux_x86_64.whl --no-cache-dir
+            - run: pip3 freeze
+            - run: python3 ./debug_resampy_parallel_true.py
+
+            - run: pip3 uninstall -y torch
+            - run: wget https://download.pytorch.org/whl/nightly/cpu/torch-1.12.0.dev20220219%2Bcpu-cp37-cp37m-linux_x86_64.whl
+            - run: pip3 install -U torch-1.12.0.dev20220219+cpu-cp37-cp37m-linux_x86_64.whl --no-cache-dir
+            - run: pip3 freeze
+            - run: python3 ./debug_resampy_parallel_true.py
+
+            - run: pip3 uninstall -y torch
             - run: wget https://download.pytorch.org/whl/nightly/cpu/torch-1.12.0.dev20220220%2Bcpu-cp37-cp37m-linux_x86_64.whl
             - run: pip3 install -U torch-1.12.0.dev20220220+cpu-cp37-cp37m-linux_x86_64.whl --no-cache-dir
-            - run: pip3 freeze
-            - run: python3 ./debug_resampy_parallel_true.py
-
-            - run: pip3 uninstall -y torch
-            - run: wget https://download.pytorch.org/whl/nightly/cpu/torch-1.12.0.dev20220301%2Bcpu-cp37-cp37m-linux_x86_64.whl
-            - run: pip3 install -U torch-1.12.0.dev20220301+cpu-cp37-cp37m-linux_x86_64.whl --no-cache-dir
-            - run: pip3 freeze
-            - run: python3 ./debug_resampy_parallel_true.py
-
-            - run: pip3 uninstall -y torch
-            - run: wget https://download.pytorch.org/whl/nightly/cpu/torch-1.12.0.dev20220310%2Bcpu-cp37-cp37m-linux_x86_64.whl
-            - run: pip3 install -U torch-1.12.0.dev20220310+cpu-cp37-cp37m-linux_x86_64.whl --no-cache-dir
-            - run: pip3 freeze
-            - run: python3 ./debug_resampy_parallel_true.py
-
-            - run: pip3 uninstall -y torch
-            - run: wget https://download.pytorch.org/whl/nightly/cpu/torch-1.12.0.dev20220320%2Bcpu-cp37-cp37m-linux_x86_64.whl
-            - run: pip3 install -U torch-1.12.0.dev20220320+cpu-cp37-cp37m-linux_x86_64.whl --no-cache-dir
-            - run: pip3 freeze
-            - run: python3 ./debug_resampy_parallel_true.py
-
-            - run: pip3 uninstall -y torch
-            - run: wget https://download.pytorch.org/whl/nightly/cpu/torch-1.12.0.dev20220401%2Bcpu-cp37-cp37m-linux_x86_64.whl
-            - run: pip3 install -U torch-1.12.0.dev20220401+cpu-cp37-cp37m-linux_x86_64.whl --no-cache-dir
-            - run: pip3 freeze
-            - run: python3 ./debug_resampy_parallel_true.py
-
-            - run: pip3 uninstall -y torch
-            - run: wget https://download.pytorch.org/whl/nightly/cpu/torch-1.12.0.dev20220410%2Bcpu-cp37-cp37m-linux_x86_64.whl
-            - run: pip3 install -U torch-1.12.0.dev20220410+cpu-cp37-cp37m-linux_x86_64.whl --no-cache-dir
-            - run: pip3 freeze
-            - run: python3 ./debug_resampy_parallel_true.py
-
-            - run: pip3 uninstall -y torch
-            - run: wget https://download.pytorch.org/whl/nightly/cpu/torch-1.12.0.dev20220420%2Bcpu-cp37-cp37m-linux_x86_64.whl
-            - run: pip3 install -U torch-1.12.0.dev20220420+cpu-cp37-cp37m-linux_x86_64.whl --no-cache-dir
-            - run: pip3 freeze
-            - run: python3 ./debug_resampy_parallel_true.py
-
-            - run: pip3 uninstall -y torch
-            - run: wget https://download.pytorch.org/whl/nightly/cpu/torch-1.12.0.dev20220501%2Bcpu-cp37-cp37m-linux_x86_64.whl
-            - run: pip3 install -U torch-1.12.0.dev20220501+cpu-cp37-cp37m-linux_x86_64.whl --no-cache-dir
-            - run: pip3 freeze
-            - run: python3 ./debug_resampy_parallel_true.py
-
-            - run: pip3 uninstall -y torch
-            - run: wget https://download.pytorch.org/whl/nightly/cpu/torch-1.12.0.dev20220510%2Bcpu-cp37-cp37m-linux_x86_64.whl
-            - run: pip3 install -U torch-1.12.0.dev20220510+cpu-cp37-cp37m-linux_x86_64.whl --no-cache-dir
             - run: pip3 freeze
             - run: python3 ./debug_resampy_parallel_true.py
 
