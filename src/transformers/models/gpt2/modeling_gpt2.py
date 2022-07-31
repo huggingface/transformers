@@ -295,9 +295,9 @@ class GPT2Attention(nn.Module):
         """
         Merges attn_head_size dim and num_attn_heads dim into hidden_size
         """
-        tensor = tensor.permute(0, 2, 1, 3).contiguous()
+        tensor = tensor.permute(0, 2, 1, 3)
         new_shape = tensor.size()[:-2] + (num_heads * attn_head_size,)
-        return tensor.view(new_shape)
+        return tensor.reshape(new_shape)
 
     def forward(
         self,
