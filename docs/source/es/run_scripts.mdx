@@ -10,21 +10,21 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# Train with a script
+# Entrenamiento con un script
 
-Along with the 🤗 Transformers [notebooks](./noteboks/README), there are also example scripts demonstrating how to train a model for a task with [PyTorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch), [TensorFlow](https://github.com/huggingface/transformers/tree/main/examples/tensorflow), or [JAX/Flax](https://github.com/huggingface/transformers/tree/main/examples/flax).
+Junto con los [notebooks](./noteboks/README) de 🤗 Transformers, también hay scripts con ejemplos que muestran cómo entrenar un modelo para una tarea con [PyTorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch), [TensorFlow](https://github.com/huggingface/transformers/tree/main/examples/tensorflow), o [JAX/Flax](https://github.com/huggingface/transformers/tree/main/examples/flax).
 
-You will also find scripts we've used in our [research projects](https://github.com/huggingface/transformers/tree/main/examples/research_projects) and [legacy examples](https://github.com/huggingface/transformers/tree/main/examples/legacy) which are mostly community contributed. These scripts are not actively maintained and require a specific version of 🤗 Transformers that will most likely be incompatible with the latest version of the library.
+También encontrarás scripts que hemos usado en nuestros [proyectos de investigación](https://github.com/huggingface/transformers/tree/main/examples/research_projects) y [ejemplos pasados](https://github.com/huggingface/transformers/tree/main/examples/legacy) que en su mayoría son aportados por la comunidad. Estos scripts no se mantienen activamente y requieren una versión específica de 🤗 Transformers que probablemente sea incompatible con la última versión de la librería.
 
-The example scripts are not expected to work out-of-the-box on every problem, and you may need to adapt the script to the problem you're trying to solve. To help you with this, most of the scripts fully expose how data is preprocessed, allowing you to edit it as necessary for your use case.
+No se espera que los scripts de ejemplo funcionen de inmediato en todos los problemas, y es posible que debas adaptar el script al problema que estás tratando de resolver. Para ayudarte con esto, la mayoría de los scripts exponen completamente cómo se preprocesan los datos, lo que te permite editarlos según sea necesario para tu caso de uso.
 
-For any feature you'd like to implement in an example script, please discuss it on the [forum](https://discuss.huggingface.co/) or in an [issue](https://github.com/huggingface/transformers/issues) before submitting a Pull Request. While we welcome bug fixes, it is unlikely we will merge a Pull Request that adds more functionality at the cost of readability.
+Para cualquier característica que te gustaría implementar en un script de ejemplo, por favor discútelo en el [foro](https://discuss.huggingface.co/) o en un [issue](https://github.com/huggingface/transformers/issues) antes de enviar un Pull Request. Si bien agradecemos las correcciones de errores, es poco probable que fusionemos un Pull Request que agregue más funcionalidad a costa de la legibilidad.
 
-This guide will show you how to run an example summarization training script in [PyTorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization) and [TensorFlow](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/summarization). All examples are expected to work with both frameworks unless otherwise specified.
+Esta guía te mostrará cómo ejecutar un ejemplo resumido de un script de entranamiento en [PyTorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization) y [TensorFlow](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/summarization). Se espera que todos los ejemplos funcionen con ambos frameworks a menos que se especifique lo contrario.
 
-## Setup
+## Configuración
 
-To successfully run the latest version of the example scripts, you have to **install 🤗 Transformers from source** in a new virtual environment:
+Para ejecutar con éxito la última versión de los scripts de ejemplo, debes **instalar 🤗 Transformers desde su fuente** en un nuevo entorno virtual:
 
 ```bash
 git clone https://github.com/huggingface/transformers
@@ -32,10 +32,10 @@ cd transformers
 pip install .
 ```
 
-For older versions of the example scripts, click on the toggle below:
+Para versiones anteriores de los scripts de ejemplo, haz clic en alguno de los siguientes links:
 
 <details>
-  <summary>Examples for older versions of 🤗 Transformers</summary>
+  <summary>Ejemplos de versiones anteriores de 🤗 Transformers</summary>
 	<ul>
 		<li><a href="https://github.com/huggingface/transformers/tree/v4.5.1/examples">v4.5.1</a></li>
 		<li><a href="https://github.com/huggingface/transformers/tree/v4.4.2/examples">v4.4.2</a></li>
@@ -67,19 +67,19 @@ For older versions of the example scripts, click on the toggle below:
 	</ul>
 </details>
 
-Then switch your current clone of 🤗 Transformers to a specific version, like v3.5.1 for example:
+Luego cambia tu clon actual de 🤗 Transformers a una versión específica, por ejemplo v3.5.1:
 
 ```bash
 git checkout tags/v3.5.1
 ```
 
-After you've setup the correct library version, navigate to the example folder of your choice and install the example specific requirements:
+Una vez que hayas configurado la versión correcta de la librería, ve a la carpeta de ejemplo de tu elección e instala los requisitos específicos del ejemplo:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## Run a script
+## Ejecutar script
 
 <frameworkcontent>
 <pt>
