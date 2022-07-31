@@ -167,11 +167,7 @@ class GPTJAttention(nn.Module):
 
         attn_weights = torch.matmul(query, key.transpose(-1, -2))
 
-        mask_value = torch.finfo(attn_weights.dtype).min
-        # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
-        # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
-        mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
-        attn_weights = torch.where(causal_mask, attn_weights, mask_value)
+        attn_weights = torch.masked_fill(attn_weights, causal_mask, torch.finfo(attn_weights.dtype).min)
 
         attn_weights = attn_weights / self.scale_attn
 
