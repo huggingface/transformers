@@ -602,8 +602,8 @@ class CLIPTextTransformer(nn.Module):
         super().__init__()
         self.config = config
         embed_dim = config.hidden_size
-        self.embeddings = CLIPTextEmbeddings(config)
-        self.encoder = CLIPEncoder(config)
+        self.embeddings = CLIPTextEmbeddings(self.config)
+        self.encoder = CLIPEncoder(self.config)
         self.final_layer_norm = nn.LayerNorm(embed_dim)
 
     @add_start_docstrings_to_model_forward(CLIP_TEXT_INPUTS_DOCSTRING)
@@ -741,9 +741,9 @@ class CLIPVisionTransformer(nn.Module):
         self.config = config
         embed_dim = config.hidden_size
 
-        self.embeddings = CLIPVisionEmbeddings(config)
+        self.embeddings = CLIPVisionEmbeddings(self.config)
         self.pre_layrnorm = nn.LayerNorm(embed_dim)
-        self.encoder = CLIPEncoder(config)
+        self.encoder = CLIPEncoder(self.config)
         self.post_layernorm = nn.LayerNorm(embed_dim)
 
     @add_start_docstrings_to_model_forward(CLIP_VISION_INPUTS_DOCSTRING)
