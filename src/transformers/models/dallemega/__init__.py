@@ -22,6 +22,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 _import_structure = {
     "configuration_dallemega": ["DALLE_MEGA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DalleMegaConfig", "DalleMegaOnnxConfig"],
+    "tokenization_dallemega": ["DalleMegaTokenizer"],
 }
 
 try:
@@ -39,6 +40,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_dallemega import DALLE_MEGA_PRETRAINED_CONFIG_ARCHIVE_MAP, DalleMegaConfig, DalleMegaOnnxConfig
+    from .tokenization_dallemega import DalleMegaTokenizer
 
     try:
         if not is_torch_available():

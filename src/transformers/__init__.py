@@ -175,7 +175,7 @@ _import_structure = {
     "models.cpm": [],
     "models.ctrl": ["CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CTRLConfig", "CTRLTokenizer"],
     "models.cvt": ["CVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CvtConfig"],
-    "models.dallemega": ["DalleMegaConfig"],
+    "models.dallemega": ["DalleMegaConfig", "DalleMegaTokenizer"],
     "models.data2vec": [
         "DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -2915,7 +2915,7 @@ if TYPE_CHECKING:
     from .models.convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
     from .models.cvt import CVT_PRETRAINED_CONFIG_ARCHIVE_MAP, CvtConfig
-    from .models.dallemega import DalleMegaConfig
+    from .models.dallemega import DalleMegaConfig, DalleMegaTokenizer
     from .models.data2vec import (
         DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP,
