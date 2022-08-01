@@ -62,7 +62,7 @@ class MixedInt8Test(unittest.TestCase):
         from bitsandbytes.nn import Int8Params
 
         model_fp16 = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype="auto", device_map="auto")
-        model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")       
+        model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
 
         mem_fp16 = model_fp16.get_memory_footprint()
         mem_8bit = model_8bit.get_memory_footprint()
@@ -77,7 +77,6 @@ class MixedInt8Test(unittest.TestCase):
         the same output across GPUs. So we'll generate few tokens (5-10) and check their output.
         """
         model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
-        
 
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
         output_sequences = model_8bit.generate(input_ids=encoded_input["input_ids"].cuda(), max_new_tokens=10)
@@ -104,11 +103,11 @@ class MixedInt8Test(unittest.TestCase):
         If this test pass people can safely push quantized models on the Hub.
         """
         model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
-        
+
         with tempfile.TemporaryDirectory() as tmpdirname:
             # create a dummy tensor
             input_ids = torch.LongTensor([[1, 2, 3, 4]]).to(0)
-            
+
             # Save and load 8bit model
             model_8bit.save_pretrained(tmpdirname)
             loaded_model_8bit = AutoModelForCausalLM.from_pretrained(tmpdirname, load_in_8bit=True, device_map="auto")
@@ -118,7 +117,6 @@ class MixedInt8Test(unittest.TestCase):
             logits_native = model_8bit(input_ids).logits
 
             # TODO: @younesbelkada understand why the test does not pass
-            
 
     @require_torch_multi_gpu
     def test_multi_gpu_loading(self):
@@ -126,8 +124,10 @@ class MixedInt8Test(unittest.TestCase):
         This tests that the model has been loaded and can be used correctly on a multi-GPU setup.
         Let's just try to load a model on 2 GPUs and see if it works. The model we test has ~2GB of total, 3GB should suffice
         """
-        memory_mapping = {0:"1GB", 1:"2GB"}
-        model_parallel = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, max_memory=memory_mapping, device_map="auto")
+        memory_mapping = {0: "1GB", 1: "2GB"}
+        model_parallel = AutoModelForCausalLM.from_pretrained(
+            self.model_name, load_in_8bit=True, max_memory=memory_mapping, device_map="auto"
+        )
 
         def get_list_devices(model):
             list_devices = []
@@ -135,15 +135,14 @@ class MixedInt8Test(unittest.TestCase):
                 if len(list(module.children())) > 0:
                     list_devices.extend(get_list_devices(module))
                 else:
-                    # Do a try except since we can encounter Dropout modules that does not 
+                    # Do a try except since we can encounter Dropout modules that does not
                     # have any device set
                     try:
                         list_devices.append(next(module.parameters()).device.index)
                     except:
                         continue
             return list_devices
-        
+
         list_devices = get_list_devices(model_parallel)
         # Check that we have dispatched the model into 2 separate devices
         self.assertTrue((1 in list_devices) and (0 in list_devices))
-
