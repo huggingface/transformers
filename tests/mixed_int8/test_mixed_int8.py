@@ -52,16 +52,7 @@ class MixedInt8Test(unittest.TestCase):
 
     def setUp(self):
         # Models and tokenizer
-        self.model_fp16 = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype="auto", device_map="auto")
-        self.model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-
-    def tearDown(self):
-        # This needs to be done because after each test we need to free the GPU memories otherwise 
-        # we get some unexpected behaviors (CUDA illegal memory access errors)
-        # This is fine since the model is loaded from the cache
-        self.model_8bit = None
-        self.model_fp16 = None
 
     def test_memory_footprint(self):
         r"""
@@ -70,11 +61,14 @@ class MixedInt8Test(unittest.TestCase):
         """
         from bitsandbytes.nn import Int8Params
 
-        mem_fp16 = self.model_fp16.get_memory_footprint()
-        mem_8bit = self.model_8bit.get_memory_footprint()
+        model_fp16 = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype="auto", device_map="auto")
+        model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")       
+
+        mem_fp16 = model_fp16.get_memory_footprint()
+        mem_8bit = model_8bit.get_memory_footprint()
 
         self.assertAlmostEqual(mem_fp16 / mem_8bit, self.EXPECTED_RELATIVE_DIFFERENCE)
-        self.assertTrue(self.model_8bit.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
+        self.assertTrue(model_8bit.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
 
     def test_generate_quality(self):
         r"""
@@ -82,9 +76,11 @@ class MixedInt8Test(unittest.TestCase):
         Given that we are operating on small numbers + the testing model is relatively small, we might not get
         the same output across GPUs. So we'll generate few tokens (5-10) and check their output.
         """
+        model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
+        
 
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
-        output_sequences = self.model_8bit.generate(input_ids=encoded_input["input_ids"].cuda(), max_new_tokens=10)
+        output_sequences = model_8bit.generate(input_ids=encoded_input["input_ids"].cuda(), max_new_tokens=10)
 
         self.assertEqual(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
@@ -94,7 +90,6 @@ class MixedInt8Test(unittest.TestCase):
         we used pipline for inference speed benchmarking we want to make sure that this feature does not break anything
         on pipline.
         """
-
         pipe = pipeline(
             model=self.model_name,
             model_kwargs={"device_map": "auto", "load_in_8bit": True},
@@ -108,17 +103,19 @@ class MixedInt8Test(unittest.TestCase):
         The aim of this test is to verify whether if we save and load back a quantized model we retain the same performance.
         If this test pass people can safely push quantized models on the Hub.
         """
+        model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
+        
         with tempfile.TemporaryDirectory() as tmpdirname:
             # create a dummy tensor
             input_ids = torch.LongTensor([[1, 2, 3, 4]]).to(0)
             
             # Save and load 8bit model
-            self.model_8bit.save_pretrained(tmpdirname)
+            model_8bit.save_pretrained(tmpdirname)
             loaded_model_8bit = AutoModelForCausalLM.from_pretrained(tmpdirname, load_in_8bit=True, device_map="auto")
 
             # Get both logits
             logits_loaded = loaded_model_8bit(input_ids).logits
-            logits_native = self.model_8bit(input_ids).logits
+            logits_native = model_8bit(input_ids).logits
 
             # TODO: @younesbelkada understand why the test does not pass
             
@@ -132,23 +129,21 @@ class MixedInt8Test(unittest.TestCase):
         memory_mapping = {0:"1GB", 1:"2GB"}
         model_parallel = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, max_memory=memory_mapping, device_map="auto")
 
-        # TODO: @younesbelkada correct this function
         def get_list_devices(model):
             list_devices = []
-            for n, module in model.named_children():
+            for _, module in model.named_children():
                 if len(list(module.children())) > 0:
-                    device = get_list_devices(module)
-                    if device not in list_devices:
-                        list_devices.append(device)
+                    list_devices.extend(get_list_devices(module))
                 else:
-                    return module.parameters().device.index
+                    # Do a try except since we can encounter Dropout modules that does not 
+                    # have any device set
+                    try:
+                        list_devices.append(next(module.parameters()).device.index)
+                    except:
+                        continue
             return list_devices
         
         list_devices = get_list_devices(model_parallel)
-        self.assertEqual(len(list_devices), 2)
-        
-        # Do also a quality test and check everything is correct
-        encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
-        output_sequences = model_parallel.generate(input_ids=encoded_input["input_ids"].cuda(), max_new_tokens=10)
-        self.assertEqual(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+        # Check that we have dispatched the model into 2 separate devices
+        self.assertTrue((1 in list_devices) and (0 in list_devices))
 
