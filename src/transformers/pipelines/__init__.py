@@ -374,10 +374,9 @@ def check_task(task: str) -> Tuple[Dict, Any]:
             - `"zero-shot-image-classification"`
 
     Returns:
-        (normalized_task: `str`, task_defaults: `dict`, task_options: (`tuple`, None))
-        The normalized task name (removed alias and options).
-        The actual dictionary required to initialize the pipeline
-        and some extra task options for parametrized tasks like "translation_XX_to_YY"
+        (normalized_task: `str`, task_defaults: `dict`, task_options: (`tuple`, None)) The normalized task name
+        (removed alias and options). The actual dictionary required to initialize the pipeline and some extra task
+        options for parametrized tasks like "translation_XX_to_YY"
 
 
     """
