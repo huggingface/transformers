@@ -710,7 +710,7 @@ def main():
                     references=decoded_labels,
                 )
         result = metric.compute(use_stemmer=True)
-        result = {k: round(v, 4) for k, v in result.items()}
+        result = {k: round(v * 100, 4) for k, v in result.items()}
 
         logger.info(result)
 
