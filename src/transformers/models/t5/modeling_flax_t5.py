@@ -490,13 +490,11 @@ class FlaxT5LayerSelfAttention(nn.Module):
         normed_hidden_states = self.layer_norm(hidden_states)
         attention_output = self.SelfAttention(
             normed_hidden_states,
-            attention_mask,
-            key_value_states,
-            position_bias,
-            use_cache,
-            output_attentions,
-            deterministic,
-            init_cache,
+            attention_mask=attention_mask,
+            position_bias=position_bias,
+            output_attentions=output_attentions,
+            deterministic=deterministic,
+            init_cache=init_cache,
         )
         hidden_states = hidden_states + self.dropout(attention_output[0], deterministic=deterministic)
         outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
@@ -517,24 +515,19 @@ class FlaxT5LayerCrossAttention(nn.Module):
     def __call__(
         self,
         hidden_states,
+        key_value_states,
         attention_mask=None,
-        key_value_states=None,
         position_bias=None,
-        use_cache=False,
         output_attentions=False,
         deterministic=True,
-        init_cache=False,
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
         attention_output = self.EncDecAttention(
             normed_hidden_states,
-            attention_mask,
-            key_value_states,
-            position_bias,
-            use_cache,
-            output_attentions,
-            deterministic,
-            init_cache
+            attention_mask=attention_mask,
+            key_value_states=key_value_states,
+            position_bias=position_bias,
+            output_attentions=output_attentions,
         )
         hidden_states = hidden_states + self.dropout(attention_output[0], deterministic=deterministic)
         outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
@@ -567,26 +560,22 @@ class FlaxT5Block(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        key_value_states=None,
         position_bias=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         encoder_decoder_position_bias=None,
         output_attentions=False,
-        use_cache=False,
         return_dict=True,
         deterministic=True,
         init_cache=False,
     ):
         self_attention_outputs = self.layer[0](
             hidden_states,
-            attention_mask,
-            key_value_states,
-            position_bias,
-            use_cache,
-            output_attentions,
-            deterministic,
-            init_cache,
+            attention_mask=attention_mask,
+            position_bias=position_bias,
+            output_attentions=output_attentions,
+            deterministic=deterministic,
+            init_cache=init_cache,
         )
         hidden_states = self_attention_outputs[0]
         attention_outputs = self_attention_outputs[1:]  # Keep self-attention outputs and relative position weights
@@ -595,13 +584,11 @@ class FlaxT5Block(nn.Module):
         if do_cross_attention:
             cross_attention_outputs = self.layer[1](
                 hidden_states,
-                encoder_attention_mask,
-                encoder_hidden_states,
-                encoder_decoder_position_bias,
-                use_cache,
-                output_attentions,
-                deterministic,
-                init_cache
+                key_value_states=encoder_hidden_states,
+                attention_mask=encoder_attention_mask,
+                position_bias=encoder_decoder_position_bias,
+                output_attentions=output_attentions,
+                deterministic=deterministic,
             )
             hidden_states = cross_attention_outputs[0]
 
@@ -635,30 +622,25 @@ class FlaxT5LayerCollection(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        key_value_states=None,
         position_bias=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         encoder_decoder_position_bias=None,
         output_attentions=False,
-        use_cache=False,
         return_dict=True,
         deterministic=True,
         init_cache=False,
     ):
         return self.layer(
             hidden_states,
-            attention_mask,
-            key_value_states,
-            position_bias,
-            encoder_hidden_states,
-            encoder_attention_mask,
-            encoder_decoder_position_bias,
-            output_attentions,
-            use_cache,
-            return_dict,
-            deterministic,
-            init_cache,
+            attention_mask=attention_mask,
+            position_bias=position_bias,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            encoder_decoder_position_bias=encoder_decoder_position_bias,
+            output_attentions=output_attentions,
+            deterministic=deterministic,
+            init_cache=init_cache,
         )
 
 
@@ -685,12 +667,10 @@ class FlaxT5BlockCollection(nn.Module):
         self,
         hidden_states=None,
         attention_mask=None,
-        key_value_states=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-        use_cache: bool = False,
         return_dict: bool = True,
         deterministic: bool = True,
         init_cache: bool = False,
@@ -709,13 +689,11 @@ class FlaxT5BlockCollection(nn.Module):
             layer_outputs = layer_module(
                 hidden_states,
                 attention_mask,
-                key_value_states,
                 position_bias,
                 encoder_hidden_states,
                 encoder_attention_mask,
                 encoder_decoder_position_bias,
                 output_attentions,
-                use_cache,
                 return_dict,
                 deterministic,
                 init_cache,
@@ -763,12 +741,10 @@ class FlaxT5Stack(nn.Module):
         self,
         input_ids=None,
         attention_mask=None,
-        key_value_states=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-        use_cache: bool = False,
         return_dict: bool = True,
         deterministic: bool = True,
         init_cache: bool = False,
@@ -778,16 +754,13 @@ class FlaxT5Stack(nn.Module):
 
         outputs = self.block(
             hidden_states,
-            attention_mask,
-            key_value_states,
-            encoder_hidden_states,
-            encoder_attention_mask,
-            output_attentions,
-            output_hidden_states,
-            use_cache,
-            return_dict,
-            deterministic,
-            init_cache,
+            attention_mask=attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            deterministic=deterministic,
+            init_cache=init_cache,
         )
 
         hidden_states = outputs[0]
@@ -1009,7 +982,6 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
         self,
         input_ids: jnp.ndarray,
         attention_mask: Optional[jnp.ndarray] = None,
-        key_value_states: Optional[jnp.ndarray] = None,
         decoder_input_ids: jnp.ndarray = None,
         decoder_attention_mask: Optional[jnp.ndarray] = None,
         output_attentions: Optional[bool] = None,
@@ -1046,7 +1018,6 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
             {"params": params or self.params},
             input_ids=jnp.array(input_ids, dtype="i4"),
             attention_mask=jnp.array(attention_mask, dtype="i4"),
-            key_value_states=key_value_states,
             decoder_input_ids=jnp.array(decoder_input_ids, dtype="i4"),
             decoder_attention_mask=jnp.array(decoder_attention_mask, dtype="i4"),
             output_attentions=output_attentions,
@@ -1329,49 +1300,36 @@ class FlaxT5Module(nn.Module):
         self,
         input_ids=None,
         attention_mask=None,
-        key_value_states=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
         encoder_outputs=None,
         output_attentions=None,
         output_hidden_states=None,
-        use_cache: bool = False,
         return_dict: bool = True,
         deterministic: bool = True,
-        init_cache: bool = False,
     ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # Encode if needed (training, first prediction pass)
         encoder_outputs = self.encoder(
-            input_ids,
-            attention_mask,
-            key_value_states,
-            encoder_hidden_states,
-            encoder_attention_mask,
-            output_attentions,
-            output_hidden_states,
-            use_cache,
-            return_dict,
-            deterministic,
-            init_cache,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            deterministic=deterministic,
         )
 
         # Decode
         decoder_outputs = self.decoder(
-            decoder_input_ids,
-            decoder_attention_mask,
-            key_value_states,
-            encoder_outputs[0],
-            attention_mask,
-            output_attentions,
-            output_hidden_states,
-            use_cache,
-            return_dict,
-            deterministic,
-            init_cache,
+            input_ids=decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            encoder_hidden_states=encoder_outputs[0],
+            encoder_attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            deterministic=deterministic,
         )
 
         if not return_dict:
@@ -1450,30 +1408,20 @@ class FlaxT5EncoderModule(nn.Module):
         self,
         input_ids=None,
         attention_mask=None,
-        key_value_states=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         output_attentions=False,
         output_hidden_states=False,
-        use_cache: bool = False,
         return_dict: bool = True,
         deterministic: bool = True,
-        init_cache: bool = False,
     ):
 
         # Encode if needed (training, first prediction pass)
         encoder_outputs = self.encoder(
-            input_ids,
-            attention_mask,
-            key_value_states,
-            encoder_hidden_states,
-            encoder_attention_mask,
-            output_attentions,
-            output_hidden_states,
-            use_cache,
-            return_dict,
-            deterministic,
-            init_cache,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            deterministic=deterministic,
         )
 
         return encoder_outputs
@@ -1563,51 +1511,38 @@ class FlaxT5ForConditionalGenerationModule(nn.Module):
         self,
         input_ids=None,
         attention_mask=None,
-        key_value_states=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
         encoder_outputs=None,
         output_attentions=None,
         output_hidden_states=None,
-        use_cache: bool = False,
         return_dict=None,
         deterministic: bool = True,
-        init_cache: bool = False,
     ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # Encode
         encoder_outputs = self.encoder(
-            input_ids,
-            attention_mask,
-            key_value_states,
-            encoder_hidden_states,
-            encoder_attention_mask,
-            output_attentions,
-            output_hidden_states,
-            use_cache,
-            return_dict,
-            deterministic,
-            init_cache,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            deterministic=deterministic,
         )
 
         hidden_states = encoder_outputs[0]
 
         # Decode
         decoder_outputs = self.decoder(
-            decoder_input_ids,
-            decoder_attention_mask,
-            key_value_states,
-            hidden_states,
-            attention_mask,
-            output_attentions,
-            output_hidden_states,
-            use_cache,
-            return_dict,
-            deterministic,
-            init_cache,
+            input_ids=decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            encoder_hidden_states=hidden_states,
+            encoder_attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            deterministic=deterministic,
         )
 
         sequence_output = decoder_outputs[0]
