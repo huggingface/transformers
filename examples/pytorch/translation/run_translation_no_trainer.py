@@ -695,7 +695,7 @@ def main():
         if args.with_tracking:
             accelerator.log(
                 {
-                    "blue": eval_metric["score"],
+                    "bleu": eval_metric["score"],
                     "train_loss": total_loss.item() / len(train_dataloader),
                     "epoch": epoch,
                     "step": completed_steps,
