@@ -315,7 +315,7 @@ jobs:
                   path: ~/transformers/test_preparation.txt
             - run: |
                   if [ -f test_list.txt ]; then
-                    python3 -m pytest --forked -n 4 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_tf $(cat test_list.txt) | tee tests_output.txt
+                    python3 -m pytest --forked -n 4 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_tf tests/models/ -k "test_modeling and ModelTest" | tee tests_output.txt
                   fi
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
