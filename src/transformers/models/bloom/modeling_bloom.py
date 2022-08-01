@@ -312,6 +312,7 @@ class BloomAttention(nn.Module):
             present = None
 
         # [batch_size * num_heads, q_length, kv_length]
+        # we use `torch.Tensor.baddbmm` instead of `torch.baddbmm` as the latter isn't supported by TorchScript v1.11
         matmul_result = alibi.baddbmm(
             batch1=query_layer,
             batch2=key_layer,
