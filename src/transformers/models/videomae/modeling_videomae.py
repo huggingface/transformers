@@ -28,7 +28,6 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
@@ -39,6 +38,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from .configuration_videomae import VideoMAEConfig
 
 
