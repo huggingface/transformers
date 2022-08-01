@@ -206,11 +206,9 @@ class TFCausalLanguageModelingLoss:
         unmasked_loss = loss_fn(tf.nn.relu(labels), logits)
         # make sure only labels that are not equal to -100 affect the loss
         loss_mask = tf.cast(labels != -100, dtype=unmasked_loss.dtype)
-        # Avoid division by zero later
-        loss_denominator = tf.math.maximum(tf.cast(1, loss_mask.dtype), tf.reduce_sum(loss_mask, axis=1))
         masked_loss = unmasked_loss * loss_mask
-        reduced_masked_loss = tf.reduce_sum(masked_loss, axis=1) / loss_denominator
-        return reduced_masked_loss
+        reduced_masked_loss = tf.reduce_sum(masked_loss) / tf.reduce_sum(loss_mask)
+        return tf.reshape(reduced_masked_loss, (1,))
 
 
 class TFQuestionAnsweringLoss:
@@ -266,11 +264,10 @@ class TFTokenClassificationLoss:
         # are taken into account as loss
         loss_mask = tf.cast(labels >= 0, dtype=unmasked_loss.dtype)
         # Avoid possible division by zero later
-        loss_denominator = tf.math.maximum(tf.cast(1, loss_mask.dtype), tf.reduce_sum(loss_mask, axis=1))
         # Masked positions will have a loss of NaN because -100 and -1 are not valid labels
         masked_loss = unmasked_loss * loss_mask
-        reduced_masked_loss = tf.reduce_sum(masked_loss, axis=1) / loss_denominator
-        return reduced_masked_loss
+        reduced_masked_loss = tf.reduce_sum(masked_loss) / tf.reduce_sum(loss_mask)
+        return tf.reshape(reduced_masked_loss, (1,))
 
 
 class TFSequenceClassificationLoss:
@@ -349,8 +346,7 @@ class TFNextSentencePredictionLoss:
 
 def booleans_processing(config, **kwargs):
     """
-    Process the input booleans of each model in order to be sure they are compliant with the execution mode (eager or
-    graph)
+    Process the input booleans of each model.
 
     Args:
         config ([`PretrainedConfig`]):
@@ -363,42 +359,21 @@ def booleans_processing(config, **kwargs):
     """
     final_booleans = {}
 
-    if tf.executing_eagerly():
-        # Pure conv models (such as ConvNext) do not have `output_attentions`. If the signature has
-        # `output_attentions`, it will be present here in `kwargs`, even if unset (in that case, as `None`)
-        if "output_attentions" in kwargs:
-            final_booleans["output_attentions"] = (
-                kwargs["output_attentions"] if kwargs["output_attentions"] is not None else config.output_attentions
-            )
-        final_booleans["output_hidden_states"] = (
-            kwargs["output_hidden_states"]
-            if kwargs["output_hidden_states"] is not None
-            else config.output_hidden_states
+    # Pure conv models (such as ConvNext) do not have `output_attentions`. If the signature has
+    # `output_attentions`, it will be present here in `kwargs`, even if unset (in that case, as `None`)
+    if "output_attentions" in kwargs:
+        final_booleans["output_attentions"] = (
+            kwargs["output_attentions"] if kwargs["output_attentions"] is not None else config.output_attentions
         )
-        final_booleans["return_dict"] = (
-            kwargs["return_dict"] if kwargs["return_dict"] is not None else config.return_dict
+    final_booleans["output_hidden_states"] = (
+        kwargs["output_hidden_states"] if kwargs["output_hidden_states"] is not None else config.output_hidden_states
+    )
+    final_booleans["return_dict"] = kwargs["return_dict"] if kwargs["return_dict"] is not None else config.return_dict
+
+    if "use_cache" in kwargs:
+        final_booleans["use_cache"] = (
+            kwargs["use_cache"] if kwargs["use_cache"] is not None else getattr(config, "use_cache", None)
         )
-
-        if "use_cache" in kwargs:
-            final_booleans["use_cache"] = (
-                kwargs["use_cache"] if kwargs["use_cache"] is not None else getattr(config, "use_cache", None)
-            )
-    else:
-        # Pure conv models (such as ConvNext) do not have `output_attentions`. If the signature has
-        # `output_attentions`, it will be present here in `kwargs`, even if unset (in that case, as `None`)
-        if "output_attentions" in kwargs:
-            final_booleans["output_attentions"] = config.output_attentions
-        final_booleans["output_hidden_states"] = config.output_hidden_states
-
-        if kwargs.get("return_dict", None) not in (None, True):
-            tf_logger.warning(
-                "The parameter `return_dict` cannot be set in graph mode and will always be set to `True`."
-            )
-        final_booleans["return_dict"] = True
-
-        if "use_cache" in kwargs:
-            final_booleans["use_cache"] = getattr(config, "use_cache", None)
-
     return final_booleans
 
 
@@ -428,10 +403,13 @@ def unpack_inputs(func):
         # move any arg into kwargs, if they exist
         fn_args_and_kwargs.update(dict(zip(func.__code__.co_varnames[1:], args)))
 
-        # process the inputs and call the wrapped function
-        main_input_name = getattr(self, "main_input_name", func.__code__.co_varnames[1])
-        main_input = fn_args_and_kwargs.pop(main_input_name, None)
-        unpacked_inputs = input_processing(func, self.config, main_input, **fn_args_and_kwargs)
+        # Encoder Decoder models delegate the application of the configuration options to their inner models.
+        if "encoder_decoder" in str(self).lower():
+            config = None
+        else:
+            config = self.config
+
+        unpacked_inputs = input_processing(func, config, **fn_args_and_kwargs)
         return func(self, **unpacked_inputs)
 
     # Keras enforces the first layer argument to be passed, and checks it through `inspect.getfullargspec()`. This
@@ -442,7 +420,7 @@ def unpack_inputs(func):
     return run_call_with_unpacked_inputs
 
 
-def input_processing(func, config, input_ids, **kwargs):
+def input_processing(func, config, **kwargs):
     """
     Process the input of each TensorFlow model including the booleans. In case of a list of symbolic inputs, each input
     has to be named accordingly to the parameters name, i.e. `input_ids = tf.keras.Input(shape=(128,), dtype='int32',
@@ -463,6 +441,8 @@ def input_processing(func, config, input_ids, **kwargs):
     has_kwargs = bool(signature.pop("kwargs", None))
     signature.pop("self", None)
     parameter_names = list(signature.keys())
+    main_input_name = parameter_names[0]
+    main_input = kwargs.pop(main_input_name, None)
     output = {}
     allowed_types = (tf.Tensor, bool, int, ModelOutput, tuple, list, dict, np.ndarray, KerasTensor)
 
@@ -508,8 +488,8 @@ def input_processing(func, config, input_ids, **kwargs):
         else:
             raise ValueError(f"Data of type {type(v)} is not allowed only {allowed_types} is accepted for {k}.")
 
-    if isinstance(input_ids, (tuple, list)):
-        for i, input in enumerate(input_ids):
+    if isinstance(main_input, (tuple, list)):
+        for i, input in enumerate(main_input):
             # EagerTensors don't allow to use the .name property so we check for a real Tensor
             if type(input) == tf.Tensor:
                 # Tensor names have always the pattern `name:id` then we check only the
@@ -527,25 +507,25 @@ def input_processing(func, config, input_ids, **kwargs):
                     f"Data of type {type(input)} is not allowed only {allowed_types} is accepted for"
                     f" {parameter_names[i]}."
                 )
-    elif isinstance(input_ids, Mapping):
-        if "inputs" in input_ids:
+    elif isinstance(main_input, Mapping):
+        if "inputs" in main_input:
             warnings.warn(
                 "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids`"
                 " instead.",
                 FutureWarning,
             )
 
-            output["input_ids"] = input_ids.pop("inputs")
+            output["input_ids"] = main_input.pop("inputs")
 
-        if "decoder_cached_states" in input_ids:
+        if "decoder_cached_states" in main_input:
             warnings.warn(
                 "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use"
                 " `past_key_values` instead.",
                 FutureWarning,
             )
-            output["past_key_values"] = input_ids.pop("decoder_cached_states")
+            output["past_key_values"] = main_input.pop("decoder_cached_states")
 
-        for k, v in dict(input_ids).items():
+        for k, v in dict(main_input).items():
             if isinstance(v, allowed_types) or v is None:
                 output[k] = v
             elif k not in parameter_names and "args" not in parameter_names:
@@ -556,12 +536,12 @@ def input_processing(func, config, input_ids, **kwargs):
             else:
                 raise ValueError(f"Data of type {type(v)} is not allowed only {allowed_types} is accepted for {k}.")
     else:
-        if isinstance(input_ids, (tf.Tensor, KerasTensor)) or input_ids is None:
-            output[parameter_names[0]] = input_ids
+        if isinstance(main_input, (tf.Tensor, KerasTensor)) or main_input is None:
+            output[main_input_name] = main_input
         else:
             raise ValueError(
-                f"Data of type {type(input_ids)} is not allowed only {allowed_types} is accepted for"
-                f" {parameter_names[0]}."
+                f"Data of type {type(main_input)} is not allowed only {allowed_types} is accepted for"
+                f" {main_input_name}."
             )
 
     # Populates any unspecified argument with their default value, according to the signature.
@@ -584,18 +564,19 @@ def input_processing(func, config, input_ids, **kwargs):
     if "kwargs" in output:
         del output["kwargs"]
 
-    boolean_dict = {
-        k: v
-        for k, v in output.items()
-        if k in ["return_dict", "output_attentions", "output_hidden_states", "use_cache"]
-    }
+    if config is not None:
+        boolean_dict = {
+            k: v
+            for k, v in output.items()
+            if k in ["return_dict", "output_attentions", "output_hidden_states", "use_cache"]
+        }
 
-    output.update(
-        booleans_processing(
-            config=config,
-            **boolean_dict,
+        output.update(
+            booleans_processing(
+                config=config,
+                **boolean_dict,
+            )
         )
-    )
 
     return output
 
@@ -1192,7 +1173,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         prefetch: bool = True,
     ):
         """
-        Wraps a HuggingFace `datasets.Dataset` as a `tf.data.Dataset` with collation and batching. This method is
+        Wraps a HuggingFace [`~datasets.Dataset`] as a `tf.data.Dataset` with collation and batching. This method is
         designed to create a "ready-to-use" dataset that can be passed directly to Keras methods like `fit()` without
         further modification. The method will drop columns from the dataset if they don't match input names for the
         model. If you want to specify the column names to return rather than using the names that match this model, we
@@ -1200,7 +1181,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         Args:
             dataset (`Any`):
-                A `datasets.Dataset` to be wrapped as a `tf.data.Dataset`.
+                A [~`datasets.Dataset`] to be wrapped as a `tf.data.Dataset`.
             batch_size (`int`, defaults to 8):
                 The size of batches to return.
             shuffle (`bool`, defaults to `True`):
@@ -1241,18 +1222,26 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             raise TypeError("Dataset argument should be a datasets.Dataset!")
         model_inputs = list(dict(inspect.signature(self.call).parameters).keys())
         model_labels = find_labels(self.__class__)
-        unwanted_columns = [
-            feature
-            for feature in dataset.features
-            if feature not in model_inputs and feature not in ("label_ids", "label")
-        ]
-        dataset = dataset.remove_columns(unwanted_columns)
-        output_signature, _ = dataset._get_output_signature(
-            dataset,
-            batch_size=None,
-            collate_fn=collate_fn,
-            collate_fn_args=collate_fn_args,
-        )
+        if "cols_to_retain" in list(inspect.signature(dataset._get_output_signature).parameters.keys()):
+            output_signature, _ = dataset._get_output_signature(
+                dataset,
+                batch_size=None,
+                collate_fn=collate_fn,
+                collate_fn_args=collate_fn_args,
+                cols_to_retain=model_inputs,
+            )
+        else:
+            # TODO Matt: This is a workaround for older versions of datasets that are missing the `cols_to_retain`
+            #            argument. We should remove this once the minimum supported version of datasets is > 2.3.2
+            unwanted_columns = [
+                feature
+                for feature in dataset.features
+                if feature not in model_inputs and feature not in ("label_ids", "label")
+            ]
+            dataset = dataset.remove_columns(unwanted_columns)
+            output_signature, _ = dataset._get_output_signature(
+                dataset, batch_size=None, collate_fn=collate_fn, collate_fn_args=collate_fn_args
+            )
         output_columns = list(output_signature.keys())
         feature_cols = [col for col in output_columns if col in model_inputs and col not in model_labels]
         label_cols = [col for col in output_columns if col in model_labels]

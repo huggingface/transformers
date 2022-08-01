@@ -19,7 +19,6 @@ import unicodedata
 from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as sp
-import six
 
 from ...tokenization_utils import PreTrainedTokenizer
 
@@ -523,17 +522,9 @@ def _is_punctuation(char):
 
 def convert_to_unicode(text):
     """Converts `text` to Unicode (if it's not already), assuming utf-8 input."""
-    if six.PY3:
-        if isinstance(text, str):
-            return text
-        elif isinstance(text, bytes):
-            return text.decode("utf-8", "ignore")
-        else:
-            raise ValueError(f"Unsupported string type: {type(text)}")
-    elif six.PY2:
-        if isinstance(text, str):
-            return text.decode("utf-8", "ignore")
-        else:
-            raise ValueError(f"Unsupported string type: {type(text)}")
+    if isinstance(text, str):
+        return text
+    elif isinstance(text, bytes):
+        return text.decode("utf-8", "ignore")
     else:
-        raise ValueError("Not running on Python2 or Python 3?")
+        raise ValueError(f"Unsupported string type: {type(text)}")

@@ -2330,7 +2330,7 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.led = TFLEDMainLayer(config, name="led")
         self.use_cache = config.use_cache
-        # final_bias_logits is registered as a buffer in pytorch, so not trainable for the the sake of consistency.
+        # final_bias_logits is registered as a buffer in pytorch, so not trainable for the sake of consistency.
         self.final_logits_bias = self.add_weight(
             name="final_logits_bias", shape=[1, config.vocab_size], initializer="zeros", trainable=False
         )
@@ -2518,7 +2518,6 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
         unmasked_loss = loss_fn(tf.nn.relu(labels), logits)
         # make sure only non-padding labels affect the loss
         loss_mask = tf.cast(labels != self.config.pad_token_id, dtype=unmasked_loss.dtype)
-        loss_denominator = tf.math.maximum(tf.cast(1, loss_mask.dtype), tf.reduce_sum(loss_mask, axis=1))
         masked_loss = unmasked_loss * loss_mask
-        reduced_masked_loss = tf.reduce_sum(masked_loss, axis=1) / loss_denominator
-        return reduced_masked_loss
+        reduced_masked_loss = tf.reduce_sum(masked_loss) / tf.reduce_sum(loss_mask)
+        return tf.reshape(reduced_masked_loss, (1,))
