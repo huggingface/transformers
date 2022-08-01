@@ -1285,9 +1285,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                 Increasing the size will add newly initialized vectors at the end. Reducing the size will remove
                 vectors from the end. If not provided or `None`, just returns a pointer to the input tokens
-                `torch.nn.Linear` module of the model without doing anything. transposed (`bool`, *optional*,
-                defaults to `False`): Whether `old_lm_head` is transposed or not. If True `old_lm_head.size()` is
-                `lm_head_dim, vocab_size` else `vocab_size, lm_head_dim`.
+                `torch.nn.Linear` module of the model without doing anything. transposed (`bool`, *optional*, defaults
+                to `False`): Whether `old_lm_head` is transposed or not. If True `old_lm_head.size()` is `lm_head_dim,
+                vocab_size` else `vocab_size, lm_head_dim`.
 
         Return:
             `torch.nn.Linear`: Pointer to the resized Linear Module or the old Linear Module if `new_num_tokens` is
