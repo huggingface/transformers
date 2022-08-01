@@ -58,6 +58,8 @@ def set_module_8bit_tensor_to_device(module, tensor_name, device, value=None):
                 new_value = old_value.to(device)
             elif isinstance(value, torch.Tensor):
                 new_value = value.to("cpu")
+                if value.dtype == torch.int8:
+                    raise ValueError(f"You cannot load weights that are saved in int8 using `load_in_8bit=True`, make sure you are using `load_in_8bit=True` on float32/float16/bfloat16 weights.")
             else:
                 new_value = torch.tensor(value, device="cpu")
             new_value = bnb.nn.Int8Params(new_value, requires_grad=False, has_fp16_weights=has_fp16_weights).to(device)
