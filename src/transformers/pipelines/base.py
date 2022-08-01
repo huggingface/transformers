@@ -630,7 +630,6 @@ class PipedPipelineDataFormat(PipelineDataFormat):
         for line in sys.stdin:
             # Split for multi-columns
             if "\t" in line:
-
                 line = line.split("\t")
                 if self.column:
                     # Dictionary to map arguments
@@ -752,7 +751,6 @@ class Pipeline(_ScikitCompat):
         binary_output: bool = False,
         **kwargs,
     ):
-
         if framework is None:
             framework, model = infer_framework_load_model(model, config=model.config)
 
