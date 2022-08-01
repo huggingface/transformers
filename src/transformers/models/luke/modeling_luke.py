@@ -1383,15 +1383,20 @@ class LukeForMaskedLM(LukePreTrainedModel):
                     loss = loss + mep_loss
 
         if not return_dict:
-            output = (logits, entity_logits, outputs.hidden_states, outputs.entity_hidden_states, outputs.attentions)
-            if mlm_loss is not None and mep_loss is not None:
-                return (loss, mlm_loss, mep_loss) + output
-            elif mlm_loss is not None:
-                return (loss, mlm_loss) + output
-            elif mep_loss is not None:
-                return (loss, mep_loss) + output
-            else:
-                return output
+            return tuple(
+                v
+                for v in [
+                    loss,
+                    mlm_loss,
+                    mep_loss,
+                    logits,
+                    entity_logits,
+                    outputs.hidden_states,
+                    outputs.entity_hidden_states,
+                    outputs.attentions,
+                ]
+                if v is not None
+            )
 
         return LukeMaskedLMOutput(
             loss=loss,
@@ -1503,13 +1508,11 @@ class LukeForEntityClassification(LukePreTrainedModel):
                 loss = nn.functional.binary_cross_entropy_with_logits(logits.view(-1), labels.view(-1).type_as(logits))
 
         if not return_dict:
-            output = (
-                logits,
-                outputs.hidden_states,
-                outputs.entity_hidden_states,
-                outputs.attentions,
+            return tuple(
+                v
+                for v in [loss, logits, outputs.hidden_states, outputs.entity_hidden_states, outputs.attentions]
+                if v is not None
             )
-            return ((loss,) + output) if loss is not None else output
 
         return EntityClassificationOutput(
             loss=loss,
@@ -1623,13 +1626,11 @@ class LukeForEntityPairClassification(LukePreTrainedModel):
                 loss = nn.functional.binary_cross_entropy_with_logits(logits.view(-1), labels.view(-1).type_as(logits))
 
         if not return_dict:
-            output = (
-                logits,
-                outputs.hidden_states,
-                outputs.entity_hidden_states,
-                outputs.attentions,
+            return tuple(
+                v
+                for v in [loss, logits, outputs.hidden_states, outputs.entity_hidden_states, outputs.attentions]
+                if v is not None
             )
-            return ((loss,) + output) if loss is not None else output
 
         return EntityPairClassificationOutput(
             loss=loss,
@@ -1763,13 +1764,11 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
                 loss = nn.functional.binary_cross_entropy_with_logits(logits.view(-1), labels.view(-1).type_as(logits))
 
         if not return_dict:
-            output = (
-                logits,
-                outputs.hidden_states,
-                outputs.entity_hidden_states,
-                outputs.attentions,
+            return tuple(
+                v
+                for v in [loss, logits, outputs.hidden_states, outputs.entity_hidden_states, outputs.attentions]
+                if v is not None
             )
-            return ((loss,) + output) if loss is not None else output
 
         return EntitySpanClassificationOutput(
             loss=loss,
@@ -1877,13 +1876,11 @@ class LukeForSequenceClassification(LukePreTrainedModel):
                 loss = loss_fct(logits, labels)
 
         if not return_dict:
-            output = (
-                logits,
-                outputs.hidden_states,
-                outputs.entity_hidden_states,
-                outputs.attentions,
+            return tuple(
+                v
+                for v in [loss, logits, outputs.hidden_states, outputs.entity_hidden_states, outputs.attentions]
+                if v is not None
             )
-            return ((loss,) + output) if loss is not None else output
 
         return LukeSequenceClassifierOutput(
             loss=loss,
@@ -1975,13 +1972,11 @@ class LukeForTokenClassification(LukePreTrainedModel):
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
-            output = (
-                logits,
-                outputs.hidden_states,
-                outputs.entity_hidden_states,
-                outputs.attentions,
+            return tuple(
+                v
+                for v in [loss, logits, outputs.hidden_states, outputs.entity_hidden_states, outputs.attentions]
+                if v is not None
             )
-            return ((loss,) + output) if loss is not None else output
 
         return LukeTokenClassifierOutput(
             loss=loss,
@@ -2089,14 +2084,18 @@ class LukeForQuestionAnswering(LukePreTrainedModel):
             total_loss = (start_loss + end_loss) / 2
 
         if not return_dict:
-            output = (
-                start_logits,
-                end_logits,
-                outputs.hidden_states,
-                outputs.entity_hidden_states,
-                outputs.attentions,
+            return tuple(
+                v
+                for v in [
+                    total_loss,
+                    start_logits,
+                    end_logits,
+                    outputs.hidden_states,
+                    outputs.entity_hidden_states,
+                    outputs.attentions,
+                ]
+                if v is not None
             )
-            return ((total_loss,) + output) if total_loss is not None else output
 
         return LukeQuestionAnsweringModelOutput(
             loss=total_loss,
@@ -2216,13 +2215,17 @@ class LukeForMultipleChoice(LukePreTrainedModel):
             loss = loss_fct(reshaped_logits, labels)
 
         if not return_dict:
-            output = (
-                reshaped_logits,
-                outputs.hidden_states,
-                outputs.entity_hidden_states,
-                outputs.attentions,
+            return tuple(
+                v
+                for v in [
+                    loss,
+                    reshaped_logits,
+                    outputs.hidden_states,
+                    outputs.entity_hidden_states,
+                    outputs.attentions,
+                ]
+                if v is not None
             )
-            return ((loss,) + output) if loss is not None else output
 
         return LukeMultipleChoiceModelOutput(
             loss=loss,
