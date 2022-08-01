@@ -141,7 +141,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         framework: Optional[str] = None,
         device: int = -1,
         task: str = "",
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             model=model,

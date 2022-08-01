@@ -178,7 +178,7 @@ def infer_framework_load_model(
     model_classes: Optional[Dict[str, Tuple[type]]] = None,
     task: Optional[str] = None,
     framework: Optional[str] = None,
-    **model_kwargs
+    **model_kwargs,
 ):
     """
     Select framework (TensorFlow or PyTorch) to use from the `model` passed. Returns a tuple (framework, model).
@@ -274,7 +274,7 @@ def infer_framework_from_model(
     model_classes: Optional[Dict[str, Tuple[type]]] = None,
     task: Optional[str] = None,
     framework: Optional[str] = None,
-    **model_kwargs
+    **model_kwargs,
 ):
     """
     Select framework (TensorFlow or PyTorch) to use from the `model` passed. Returns a tuple (framework, model).
