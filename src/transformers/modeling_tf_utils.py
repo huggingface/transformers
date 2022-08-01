@@ -1920,6 +1920,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         version=1,
         push_to_hub=False,
         max_shard_size: Union[int, str] = "10GB",
+        create_pr: bool = False,
         **kwargs
     ):
         """
@@ -1949,6 +1950,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 which will be bigger than `max_shard_size`.
 
                 </Tip>
+
+            create_pr (`bool`, *optional*, defaults to `False`):
+                Whether or not to create a PR with the uploaded files or directly commit.
 
             kwargs:
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
@@ -2483,18 +2487,17 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         **model_card_kwargs
     ) -> str:
         """
-        Upload the {object_files} to the 🤗 Model Hub while synchronizing a local clone of the repo in
-        `repo_path_or_name`.
+        Upload the model files to the 🤗 Model Hub while synchronizing a local clone of the repo in `repo_path_or_name`.
 
         Parameters:
             repo_id (`str`):
-                The name of the repository you want to push your {object} to. It should contain your organization name
+                The name of the repository you want to push your model to. It should contain your organization name
                 when pushing to a given organization.
             use_temp_dir (`bool`, *optional*):
                 Whether or not to use a temporary directory to store the files saved before they are pushed to the Hub.
                 Will default to `True` if there is no directory named like `repo_id`, `False` otherwise.
             commit_message (`str`, *optional*):
-                Message to commit while pushing. Will default to `"Upload file_name"` for each file uploaded.
+                Message to commit while pushing. Will default to `"Upload model"`.
             private (`bool`, *optional*):
                 Whether or not the repository created should be private (requires a paying subscription).
             use_auth_token (`bool` or `str`, *optional*):
@@ -2511,18 +2514,15 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         Examples:
 
         ```python
-        from transformers import {object_class}
+        from transformers import TFAutoModel
 
-        {object} = {object_class}.from_pretrained("bert-base-cased")
+        model = TFAutoModel.from_pretrained("bert-base-cased")
 
-        # Push the {object} to your namespace with the name "my-finetuned-bert".
-        {object}.push_to_hub("my-finetuned-bert")
+        # Push the model to your namespace with the name "my-finetuned-bert".
+        model.push_to_hub("my-finetuned-bert")
 
-        # Push the {object} to your namespace with the name "my-finetuned-bert" with no local clone.
-        {object}.push_to_hub("my-finetuned-bert", use_temp_dir=True)
-
-        # Push the {object} to an organization with the name "my-finetuned-bert".
-        {object}.push_to_hub("huggingface/my-finetuned-bert")
+        # Push the model to an organization with the name "my-finetuned-bert".
+        model.push_to_hub("huggingface/my-finetuned-bert")
         ```
         """
         if "repo_path_or_name" in model_card_kwargs:

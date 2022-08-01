@@ -36,7 +36,7 @@ from zipfile import ZipFile, is_zipfile
 
 import requests
 from filelock import FileLock
-from huggingface_hub import HfFolder, create_repo, list_repo_files, upload_file, whoami
+from huggingface_hub import CommitOperationAdd, HfFolder, create_commit, create_repo, list_repo_files, whoami
 from requests.exceptions import HTTPError
 from requests.models import Response
 from transformers.utils.logging import tqdm
@@ -919,27 +919,36 @@ class PushToHubMixin:
         files_timestamps: Dict[str, float],
         commit_message: Optional[str] = None,
         token: Optional[str] = None,
+        create_pr: bool = False,
     ):
         """
         Uploads all modified files in `working_dir` to `repo_id`, based on `files_timestamps`.
         """
+        if commit_message is None:
+            if "Model" in self.__class__.__name__:
+                commit_message = "Upload model"
+            elif "Config" in self.__class__.__name__:
+                commit_message = "Upload config"
+            elif "Tokenizer" in self.__class__.__name__:
+                commit_message = "Upload tokenizer"
+            elif "FeatureExtractor" in self.__class__.__name__:
+                commit_message = "Upload feature extractor"
+            elif "Processor" in self.__class__.__name__:
+                commit_message = "Upload processor"
+            else:
+                commit_message = f"Upload {self.__class__.__name__}"
         modified_files = [
             f
             for f in os.listdir(working_dir)
             if f not in files_timestamps or os.path.getmtime(os.path.join(working_dir, f)) > files_timestamps[f]
         ]
+        operations = []
         for file in modified_files:
-            if commit_message is None:
-                commit_message = f"Upload {file}."
-            logger.info(f"Uploading {file} to {repo_id}")
-            url = upload_file(
-                path_or_fileobj=os.path.join(working_dir, file),
-                path_in_repo=file,
-                repo_id=repo_id,
-                token=token,
-                commit_message=commit_message,
-            )
-        logger.info(f"{file} was uploaded, you can find it at {url}.")
+            operations.append(CommitOperationAdd(path_or_fileobj=os.path.join(working_dir, file), path_in_repo=file))
+        logger.info(f"Uploading the following files to {repo_id}: {','.join(modified_files)}")
+        return create_commit(
+            repo_id=repo_id, operations=operations, commit_message=commit_message, token=token, create_pr=create_pr
+        )
 
     def push_to_hub(
         self,
@@ -949,6 +958,7 @@ class PushToHubMixin:
         private: Optional[bool] = None,
         use_auth_token: Optional[Union[bool, str]] = None,
         max_shard_size: Optional[Union[int, str]] = "10GB",
+        create_pr: bool = False,
         **deprecated_kwargs
     ) -> str:
         """
@@ -963,7 +973,7 @@ class PushToHubMixin:
                 Whether or not to use a temporary directory to store the files saved before they are pushed to the Hub.
                 Will default to `True` if there is no directory named like `repo_id`, `False` otherwise.
             commit_message (`str`, *optional*):
-                Message to commit while pushing. Will default to `"Upload file_name"` for each file uploaded.
+                Message to commit while pushing. Will default to `"Upload {object}"`.
             private (`bool`, *optional*):
                 Whether or not the repository created should be private (requires a paying subscription).
             use_auth_token (`bool` or `str`, *optional*):
@@ -974,6 +984,8 @@ class PushToHubMixin:
                 Only applicable for models. The maximum size for a checkpoint before being sharded. Checkpoints shard
                 will then be each of size lower than this size. If expressed as a string, needs to be digits followed
                 by a unit (like `"5MB"`).
+            create_pr (`bool`, *optional*, defaults to `False`):
+                Whether or not to create a PR with the uploaded files or directly commit.
 
         Examples:
 
@@ -984,9 +996,6 @@ class PushToHubMixin:
 
         # Push the {object} to your namespace with the name "my-finetuned-bert".
         {object}.push_to_hub("my-finetuned-bert")
-
-        # Push the {object} to your namespace with the name "my-finetuned-bert" with no local clone.
-        {object}.push_to_hub("my-finetuned-bert", use_temp_dir=True)
 
         # Push the {object} to an organization with the name "my-finetuned-bert".
         {object}.push_to_hub("huggingface/my-finetuned-bert")
@@ -1021,8 +1030,8 @@ class PushToHubMixin:
             # Save all files.
             self.save_pretrained(work_dir, max_shard_size=max_shard_size)
 
-            self._upload_modified_files(
-                work_dir, repo_id, files_timestamps, commit_message=commit_message, token=token
+            return self._upload_modified_files(
+                work_dir, repo_id, files_timestamps, commit_message=commit_message, token=token, create_pr=create_pr
             )
 
 
