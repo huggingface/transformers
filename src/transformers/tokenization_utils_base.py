@@ -1809,6 +1809,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             *init_inputs,
             use_auth_token=use_auth_token,
             cache_dir=cache_dir,
+            local_files_only=local_files_only,
             **kwargs,
         )
 
@@ -1821,6 +1822,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         *init_inputs,
         use_auth_token=None,
         cache_dir=None,
+        local_files_only=False,
         **kwargs
     ):
         # We instantiate fast tokenizers based on a slow tokenizer if we don't have access to the tokenizer.json
@@ -1833,6 +1835,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 pretrained_model_name_or_path,
                 copy.deepcopy(init_configuration),
                 *init_inputs,
+                use_auth_token=use_auth_token,
+                cache_dir=cache_dir,
+                local_files_only=local_files_only,
                 **(copy.deepcopy(kwargs)),
             )
         else:
@@ -1864,6 +1869,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     pretrained_model_name_or_path,
                     use_auth_token=use_auth_token,
                     cache_dir=cache_dir,
+                    local_files_only=local_files_only,
                 )
                 config_tokenizer_class = config.tokenizer_class
             except (OSError, ValueError, KeyError):
