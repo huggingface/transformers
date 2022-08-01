@@ -941,16 +941,9 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             save_directory (`str` or `os.PathLike`):
                 Directory to which to save. Will be created if it doesn't exist.
             push_to_hub (`bool`, *optional*, defaults to `False`):
-                Whether or not to push your model to the Hugging Face model hub after saving it.
-
-                <Tip warning={true}>
-
-                Using `push_to_hub=True` will synchronize the repository you are pushing to with `save_directory`,
-                which requires `save_directory` to be a local clone of the repo you are pushing to if it's an existing
-                folder. Pass along `temp_dir=True` to use a temporary directory instead.
-
-                </Tip>
-
+                Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
+                repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
+                namespace).
             max_shard_size (`int` or `str`, *optional*, defaults to `"10GB"`):
                 The maximum size for a checkpoint before being sharded. Checkpoints shard will then be each of size
                 lower than this size. If expressed as a string, needs to be digits followed by a unit (like `"5MB"`).
@@ -969,11 +962,13 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
 
+        os.makedirs(save_directory, exist_ok=True)
+
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
-            repo = self._create_or_get_repo(save_directory, **kwargs)
-
-        os.makedirs(save_directory, exist_ok=True)
+            repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
+            repo_id, token = self._create_repo(repo_id, **kwargs)
+            files_timestamps = self._get_files_timestamps(save_directory)
 
         # get abs dir
         save_directory = os.path.abspath(save_directory)
@@ -1028,8 +1023,9 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         logger.info(f"Model weights saved in {output_model_file}")
 
         if push_to_hub:
-            url = self._push_to_hub(repo, commit_message=commit_message)
-            logger.info(f"Model pushed to the hub in this commit: {url}")
+            self._upload_modified_files(
+                save_directory, repo_id, files_timestamps, commit_message=commit_message, token=token
+            )
 
     @classmethod
     def register_for_auto_class(cls, auto_class="FlaxAutoModel"):
