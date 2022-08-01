@@ -680,10 +680,7 @@ def main():
                 metric.add_batch(predictions=decoded_preds, references=decoded_labels)
 
             result = metric.compute(use_stemmer=True)
-            # Extract a few results from ROUGE
-            result = {key: value.mid.fmeasure * 100 for key, value in result.items()}
-
-            result = {k: round(v, 4) for k, v in result.items()}
+            result = {k: round(v * 100, 4) for k, v in result.items()}
 
             logger.info(result)
         # endregion
