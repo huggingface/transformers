@@ -1854,7 +1854,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "A device map needs to be passed to run convert models into mixed-int8 format. Please run"
                     "`.from_pretrained` with `device_map='auto'`"
                 )
-            if from_tf | from_flax:
+            if from_tf or from_flax:
                 raise ValueError(
                     "Converting into mixed 8-bit weights from tf/flax weights is currently not supported, please make"
                     " surethe weights are in PyTorch format."
