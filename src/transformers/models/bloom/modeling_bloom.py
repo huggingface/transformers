@@ -793,6 +793,12 @@ class BloomForCausalLM(BloomPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def tie_weights(self):
+        super().tie_weights()
+
+        if self.config.force_lm_head_in_fp32:
+            self.lm_head.to(torch.float32)
+
     def get_output_embeddings(self):
         return self.lm_head
 

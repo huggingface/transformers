@@ -138,7 +138,8 @@ class BloomModelTester:
         model.to(torch_device)
         model.eval()
 
-        result = model(input_ids)
+        with torch.no_grad():
+            result = model(input_ids)
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(len(result.past_key_values), config.n_layer)
@@ -150,9 +151,10 @@ class BloomModelTester:
         model.eval()
 
         # first forward pass
-        outputs = model(input_ids, attention_mask=torch.ones_like(input_ids), use_cache=True)
-        outputs_use_cache_conf = model(input_ids, attention_mask=torch.ones_like(input_ids))
-        outputs_no_past = model(input_ids, use_cache=False, attention_mask=torch.ones_like(input_ids))
+        with torch.no_grad():
+            outputs = model(input_ids, attention_mask=torch.ones_like(input_ids), use_cache=True)
+            outputs_use_cache_conf = model(input_ids, attention_mask=torch.ones_like(input_ids))
+            outputs_no_past = model(input_ids, use_cache=False, attention_mask=torch.ones_like(input_ids))
 
         self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
         self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
@@ -165,8 +167,9 @@ class BloomModelTester:
         # append to next input_ids and token_type_ids
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
 
-        output_from_no_past = model(next_input_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past)["last_hidden_state"]
+        with torch.no_grad():
+            output_from_no_past = model(next_input_ids)["last_hidden_state"]
+            output_from_past = model(next_tokens, past_key_values=past)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -187,7 +190,8 @@ class BloomModelTester:
         attn_mask[:, half_seq_length:] = 0
 
         # first forward pass
-        output, past = model(input_ids, attention_mask=attn_mask).to_tuple()
+        with torch.no_grad():
+            output, past = model(input_ids, attention_mask=attn_mask).to_tuple()
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -205,8 +209,9 @@ class BloomModelTester:
         )
 
         # get two different outputs
-        output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past, attention_mask=attn_mask)["last_hidden_state"]
+        with torch.no_grad():
+            output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
+            output_from_past = model(next_tokens, past_key_values=past, attention_mask=attn_mask)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -222,7 +227,8 @@ class BloomModelTester:
         model.eval()
 
         # first forward pass
-        outputs = model(input_ids, attention_mask=input_mask, use_cache=True)
+        with torch.no_grad():
+            outputs = model(input_ids, attention_mask=input_mask, use_cache=True)
 
         output, past = outputs.to_tuple()
 
@@ -234,10 +240,11 @@ class BloomModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
 
-        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past)[
-            "last_hidden_state"
-        ]
+        with torch.no_grad():
+            output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
+            output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past)[
+                "last_hidden_state"
+            ]
         self.parent.assertTrue(output_from_past.shape[1] == next_tokens.shape[1])
 
         # select random slice
@@ -253,7 +260,9 @@ class BloomModelTester:
         model.to(torch_device)
         model.eval()
 
-        result = model(input_ids, labels=input_ids)
+        with torch.no_grad():
+            result = model(input_ids, labels=input_ids)
+
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
@@ -263,7 +272,9 @@ class BloomModelTester:
         model.to(torch_device)
         model.eval()
 
-        result = model(input_ids, attention_mask=input_mask)
+        with torch.no_grad():
+            result = model(input_ids, attention_mask=input_mask)
+
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_token_classification_model(self, config, input_ids, input_mask, *args):
@@ -271,7 +282,9 @@ class BloomModelTester:
         model.to(torch_device)
         model.eval()
 
-        result = model(input_ids, attention_mask=input_mask)
+        with torch.no_grad():
+            result = model(input_ids, attention_mask=input_mask)
+
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def create_and_check_forward_and_backwards(
@@ -282,7 +295,9 @@ class BloomModelTester:
         if gradient_checkpointing:
             model.gradient_checkpointing_enable()
 
-        result = model(input_ids, labels=input_ids)
+        with torch.no_grad():
+            result = model(input_ids, labels=input_ids)
+
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
         result.loss.backward()
@@ -368,6 +383,53 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bloom_weight_initialization(*config_and_inputs)
 
+    @require_torch_gpu
+    def test_force_lm_head_in_fp32_is_close_to_fp16(self):
+        model_name = "bigscience/bigscience-small-testing"
+        torch_dtype = torch.float16
+
+        _, input_ids, input_mask, _ = self.model_tester.prepare_config_and_inputs()
+        # model: fp16 model with fp32 lm_head
+        # model_in_fp16: fp16 model with fp16 lm_head
+        model = BloomForCausalLM.from_pretrained(model_name, force_lm_head_in_fp32=True, torch_dtype=torch.torch_dtype).to(torch_device)
+        model_in_fp16 = BloomForCausalLM.from_pretrained(
+            model_name, force_lm_head_in_fp32=False, torch_dtype=torch.float16
+        ).to(torch_device)
+
+        # Test that the model have the correct precisions
+        for key, value in model.state_dict().items():
+            if key in ["transformer.word_embeddings.weight", "lm_head.weight"]:
+                self.assertEqual(value.dtype, torch.float32)
+            else:
+                self.assertEqual(value.dtype, torch.float16)
+        for value in model_in_fp16.state_dict().values():
+            self.assertEqual(value.dtype, torch.float16)
+
+        model.eval()
+        model_in_fp16.eval()
+
+        with torch.no_grad():
+            output = model(input_ids=input_ids, attention_mask=input_mask).logits
+            output_in_fp16 = model_in_fp16(input_ids=input_ids, attention_mask=input_mask).logits
+
+        # We guarantee that models in fp16 and fp16 with `force_lm_head_in_fp32=True` are close.
+        torch.testing.assert_close(output, output_in_fp16.to(torch.float32))
+        self.assertTrue(torch.allclose(output, output_in_fp16.to(torch.float32), atol=1e-4, rtol=1e-4))
+
+        # We verify that fp16 have value collapses due to output vocabulary begin higher that maximum range of fp16.
+        random_batch_id = torch.randint(input_ids.shape[0], ())
+        random_sequence_id = torch.randint(input_ids.shape[1], ())
+        # Test that we see at least one collapse in fp16 ,ie `len(unique_values) < vocabulary_size`.
+        self.assertTrue(
+            len(torch.unique(output_in_fp16[random_batch_id, random_sequence_id])) < 2 ** torch.finfo(torch_dtype).bits < output_in_fp16.shape[-1]
+        )
+        # Test that we see no collapse when `force_lm_head_in_fp32=True`, ie `len(unique_values) == vocabulary_size`
+        self.assertTrue(len(torch.unique(output[random_batch_id, random_sequence_id])) == output_in_fp16.shape[-1])
+
+    @require_torch_gpu
+    def test_force_lm_head_in_fp32_is_close_to_fp16(self):
+
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
@@ -377,25 +439,6 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     @slow
     @require_torch_gpu
     def test_simple_generation(self):
-        # This test is a bit flaky. For some GPU architectures, pytorch sets by default allow_fp16_reduced_precision_reduction = True and some operations
-        # do not give the same results under this configuration, especially torch.baddmm and torch.bmm. https://pytorch.org/docs/stable/notes/numerical_accuracy.html#fp16-on-mi200
-        # As we leave the default value (True) for allow_fp16_reduced_precision_reduction , the tests failed when running in half-precision with smaller models (350m)
-        # Please see: https://pytorch.org/docs/stable/notes/cuda.html#reduced-precision-reduction-in-fp16-gemms
-        # This discrepancy is observed only when using small models and seems to be stable for larger models.
-        # Our conclusion is that these operations are flaky for small inputs but seems to be stable for larger inputs (for the functions `baddmm` and `bmm`), and therefore for larger models.
-
-        # Here is a summary of an ablation study of our observations
-        # EXPECTED_OUTPUT = "I enjoy walking with my cute dog, and I love to watch the kids play. I am a very active person, and I am a very good listener. I am a very good person, and I am a very good person. I am a"
-        # 350m + allow_fp16_reduced_precision_reduction = False  + torch.bmm  ==> PASS
-        # 350m + allow_fp16_reduced_precision_reduction = False  + torch.baddm  ==> PASS
-        # 350m + allow_fp16_reduced_precision_reduction = True  + torch.baddm  ==> PASS
-        # 350m + allow_fp16_reduced_precision_reduction = True  + torch.bmm  ==> FAIL
-
-        # EXPECTED_OUTPUT = "I enjoy walking with my cute dog, but I also enjoy hiking, biking, and swimming. I love to cook and bake. I love to cook and bake. I love to cook and bake. I love to cook and bake. I love"
-        # >=760m + allow_fp16_reduced_precision_reduction = True  + torch.baddm  ==> PASS  (for use_cache=True and use_cache=False)
-        # >=760m + allow_fp16_reduced_precision_reduction = True  + torch.bmm  ==> PASS
-        # >=760m + allow_fp16_reduced_precision_reduction = False  + torch.bmm  ==> PASS
-
         path_350m = "bigscience/bloom-350m"
         model = BloomForCausalLM.from_pretrained(path_350m, use_cache=True, revision="gs555750").cuda()
         model = model.eval()
@@ -412,6 +455,31 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         greedy_output = model.generate(input_ids.cuda(), max_length=50)
 
         self.assertEqual(tokenizer.decode(greedy_output[0], skip_special_tokens=True), EXPECTED_OUTPUT)
+
+    @slow
+    @require_torch_gpu
+    def test_simple_generation_match_with_fp32(self):
+        path_350m = "bigscience/bloom-350m"
+        model = BloomForCausalLM.from_pretrained(path_350m, torch_dtype="auto", use_cache=True, revision="gs555750").cuda()
+        model_fp32 = BloomForCausalLM.from_pretrained(path_350m, use_cache=True, revision="gs555750").cuda()
+        model.eval()
+        model_fp32.eval()
+
+        tokenizer = BloomTokenizerFast.from_pretrained(path_350m)
+
+        input_sentence = "I enjoy walking with my cute dog"
+        EXPECTED_OUTPUT = (
+            "I enjoy walking with my cute dog, and I love to watch the kids play with the kids. I am a very active"
+            " person, and I enjoy working out, and I am a very active person. I am a very active person, and I"
+        )
+
+        input_ids = tokenizer.encode(input_sentence, return_tensors="pt")
+        greedy_output = model.generate(input_ids.cuda(), max_length=50)
+        greedy_output_in_fp32 = model_fp32.generate(input_ids.cuda(), max_length=50)
+
+        self.assertEqual(tokenizer.decode(greedy_output[0], skip_special_tokens=True), EXPECTED_OUTPUT)
+        # We test that fp32 has the same result
+        self.assertEqual(tokenizer.decode(greedy_output_in_fp32[0], skip_special_tokens=True), EXPECTED_OUTPUT)
 
     @slow
     @require_torch_gpu
