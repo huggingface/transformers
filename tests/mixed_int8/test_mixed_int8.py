@@ -36,7 +36,7 @@ if is_torch_available():
 @require_accelerate
 @require_torch
 @require_torch_gpu
-@slow
+#@slow
 class MixedInt8Test(unittest.TestCase):
     # We keep the constants inside the init function and model loading inside setUp function
 
@@ -120,6 +120,7 @@ class MixedInt8Test(unittest.TestCase):
             logits_native = model_8bit(input_ids).logits
 
             # TODO: @younesbelkada understand why the test does not pass
+            # This won't work since in the model state dict the quantization statistics are not saved 
 
     @require_torch_multi_gpu
     def test_multi_gpu_loading(self):
@@ -142,7 +143,7 @@ class MixedInt8Test(unittest.TestCase):
                     # have any device set
                     try:
                         list_devices.append(next(module.parameters()).device.index)
-                    except:
+                    except BaseException:
                         continue
             return list_devices
 
