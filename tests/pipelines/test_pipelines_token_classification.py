@@ -596,11 +596,11 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
 
     @require_torch
     def test_word_heuristic_leading_space(self):
-        model_name = "microsoft/deberta-base"
+        model_name = "hf-internal-testing/tiny-random-deberta-v2"
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
         token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="pt")
 
-        sentence = "I play the harmonica"
+        sentence = "I play the theremin"
 
         tokens = tokenizer(
             sentence,
@@ -623,10 +623,10 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
             aggregation_strategy=AggregationStrategy.FIRST,
         )
 
-        # check is_subword values for each token - "harmonica" is two tokens
+        # ensure expected tokenization and correct is_subword values
         self.assertEqual(
-            [entity["is_subword"] for entity in pre_entities],
-            [False, False, False, False, True],
+            [(entity["word"], entity["is_subword"]) for entity in pre_entities],
+            [("▁I", False), ("▁play", False), ("▁the", False), ("▁there", False), ("min", True)],
         )
 
     @require_tf
