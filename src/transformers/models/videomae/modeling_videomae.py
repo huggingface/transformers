@@ -722,11 +722,7 @@ class VideoMAEDecoder(nn.Module):
 
         if not return_dict:
             return tuple(v for v in [logits, all_hidden_states, all_self_attentions] if v is not None)
-        return VideoMAEDecoderOutput(
-            logits=logits,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-        )
+        return VideoMAEDecoderOutput(logits=logits, hidden_states=all_hidden_states, attentions=all_self_attentions)
 
 
 @add_start_docstrings(
