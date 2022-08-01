@@ -902,7 +902,7 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFCausalLMOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
-        expected_output=_EXPECTED_CAUSAL_LM_OUTPUT,
+        expected_output=_CAUSAL_LM_EXPECTED_OUTPUT,
     )
     def call(
         self,
