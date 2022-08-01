@@ -374,7 +374,9 @@ def check_task(task: str) -> Tuple[Dict, Any]:
             - `"zero-shot-image-classification"`
 
     Returns:
-        (task_defaults`dict`, task_options: (`tuple`, None)) The actual dictionary required to initialize the pipeline
+        (normalized_task: `str`, task_defaults: `dict`, task_options: (`tuple`, None))
+        The normalized task name (removed alias and options).
+        The actual dictionary required to initialize the pipeline
         and some extra task options for parametrized tasks like "translation_XX_to_YY"
 
 
@@ -608,8 +610,7 @@ def pipeline(
                 model, module_file + ".py", class_name, revision=revision, use_auth_token=use_auth_token
             )
     else:
-        # This overrides task aliases with their standard name
-        task, targeted_task, task_options = check_task(task)
+        normalized_task, targeted_task, task_options = check_task(task)
         if pipeline_class is None:
             pipeline_class = targeted_task["impl"]
 
@@ -662,6 +663,30 @@ def pipeline(
     load_tokenizer = type(model_config) in TOKENIZER_MAPPING or model_config.tokenizer_class is not None
     load_feature_extractor = type(model_config) in FEATURE_EXTRACTOR_MAPPING or feature_extractor is not None
 
+    if (
+        tokenizer is None
+        and not load_tokenizer
+        and normalized_task not in NO_TOKENIZER_TASKS
+        and task != "feature-extraction"
+    ):
+        raise EnvironmentError(
+            f"There is a problem in `transformers`. The task {task} requires a tokenizer, however the model"
+            f" {type(model_config)} seems to not support tokenizer. This is likely a misconfiguration in the library,"
+            " please report this issue."
+        )
+    # Feature extraction is very special, it can't be statically known
+    # if it needs feature_extractor/tokenizer or not
+    if (
+        feature_extractor is None
+        and not load_feature_extractor
+        and normalized_task not in NO_FEATURE_EXTRACTOR_TASKS
+        and task != "feature-extraction"
+    ):
+        raise EnvironmentError(
+            f"There is a problem in `transformers`. The task {task} requires a feature extractor, however the model"
+            f" {type(model_config)} seems to not support feature-extractors. This is likely a misconfiguration in the"
+            " library, please report this issue."
+        )
     if task in NO_TOKENIZER_TASKS:
         # These will never require a tokenizer.
         # the model on the other hand might have a tokenizer, but
@@ -669,20 +694,6 @@ def pipeline(
         # on such repos, we just force to not load it.
         load_tokenizer = False
 
-    # Feature extraction is very special, it can't be statically known
-    # if it needs feature_extractor/tokenizer or not
-    if not load_feature_extractor and task not in NO_FEATURE_EXTRACTOR_TASKS and task != "feature-extraction":
-        raise EnvironmentError(
-            f"There is a problem in `transformers`. The task {task} requires a feature extractor, however the model"
-            f" {type(model_config)} seems to not support feature-extractors. This is likely a misconfiguration in the"
-            " library, please report this issue."
-        )
-    if not load_tokenizer and task not in NO_TOKENIZER_TASKS and task != "feature-extraction":
-        raise EnvironmentError(
-            f"There is a problem in `transformers`. The task {task} requires a tokenizer, however the model"
-            f" {type(model_config)} seems to not support tokenizer. This is likely a misconfiguration in the library,"
-            " please report this issue."
-        )
     if task in NO_FEATURE_EXTRACTOR_TASKS:
         load_feature_extractor = False
 
