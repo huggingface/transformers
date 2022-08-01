@@ -290,7 +290,7 @@ jobs:
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
-            PYTEST_TIMEOUT: 120
+#            PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
