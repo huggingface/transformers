@@ -579,15 +579,39 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
         Examples:
 
         ```python
+        >>> from decord import VideoReader, cpu
+        >>> import numpy as np
         >>> from transformers import VideoMAEFeatureExtractor, VideoMAEModel
-        >>> import torch
 
-        >>> video = torch.randn(1, 16, 3, 224, 224)
 
-        >>> feature_extractor = VideoMAEFeatureExtractor.from_pretrained("nanjing/videomae-base")
-        >>> model = VideoMAEModel.from_pretrained("nanjing/videomae-base")
+        >>> def sample_frame_indices(clip_len, frame_sample_rate):
+        ...     converted_len = int(clip_len * frame_sample_rate)
+        ...     end_idx = np.random.randint(converted_len, seg_len)
+        ...     start_idx = end_idx - converted_len
+        ...     indices = np.linspace(start_idx, end_idx, num=clip_len)
+        ...     indices = np.clip(index, start_idx, end_idx - 1).astype(np.int64)
+        ...     return indices
 
+
+        >>> # video clip consists of 300 frames (10 seconds at 30 FPS)
+        >>> video_url = "https://huggingface.co/datasets/nielsr/video-demo/resolve/main/eating_spaghetti.mp4"
+        >>> vr = VideoReader(video_url, num_threads=1, ctx=cpu(0))
+
+        >>> # sample 16 frames
+        >>> vr.seek(0)
+        >>> indices = sample_frame_indices(clip_len=16, frame_sample_rate=4)
+        >>> buffer = vr.get_batch(indices).asnumpy()
+
+        >>> # create a list of NumPy arrays
+        >>> video = [buffer[i] for i in range(buffer.shape[0])]
+
+        >>> feature_extractor = VideoMAEFeatureExtractor.from_pretrained("nielsr/videomae-base")
+        >>> model = VideoMAEModel.from_pretrained("nielsr/videomae-base")
+
+        >>> # prepare video for the model
         >>> inputs = feature_extractor(video, return_tensors="pt")
+
+        >>> # forward pass
         >>> outputs = model(**inputs)
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
@@ -745,14 +769,19 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
         ```python
         >>> from transformers import VideoMAEFeatureExtractor, VideoMAEForPreTraining
         >>> import numpy as np
+        >>> import torch
 
-        >>> video = np.random.randn(16, 3, 224, 224).tolist()
+        >>> num_frames = 16
+        >>> video = list(np.random.randn(16, 3, 224, 224))
 
-        >>> feature_extractor = VideoMAEFeatureExtractor.from_pretrained("nanjing/vit-mae-base")
-        >>> model = VideoMAEForPreTraining.from_pretrained("nanjing/vit-mae-base")
+        >>> feature_extractor = VideoMAEFeatureExtractor.from_pretrained("nielsr/videomae-base")
+        >>> model = VideoMAEForPreTraining.from_pretrained("nielsr/videomae-base")
 
         >>> pixel_values = feature_extractor(video, return_tensors="pt").pixel_values
-        >>> bool_masked_pos = ...
+
+        >>> num_patches_per_frame = (model.config.image_size // model.config.patch_size) ** 2
+        >>> seq_length = (num_frames // model.config.tubelet_size) * num_patches_per_frame
+        >>> bool_masked_pos = torch.randint(0, 2, (1, seq_length)).bool()
 
         >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
         >>> loss = outputs.loss
@@ -914,14 +943,14 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
         >>> from transformers import VideoMAEFeatureExtractor, VideoMAEForVideoClassification
         >>> import numpy as np
 
-        >>> video = np.random.randn(16, 3, 224, 224).tolist()
+        >>> video = list(np.random.randn(16, 3, 224, 224))
 
-        >>> feature_extractor = VideoMAEFeatureExtractor.from_pretrained("nanjing/videomae-base")
-        >>> model = VideoMAEForVideoClassification.from_pretrained("nanjing/videomae-base")
+        >>> feature_extractor = VideoMAEFeatureExtractor.from_pretrained("nielsr/videomae-base")
+        >>> model = VideoMAEForVideoClassification.from_pretrained("nielsr/videomae-base")
 
         >>> inputs = feature_extractor(video, return_tensors="pt")
         >>> outputs = model(**inputs)
-        >>> last_hidden_states = outputs.last_hidden_state
+        >>> logits = outputs.logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
