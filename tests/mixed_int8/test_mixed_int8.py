@@ -12,8 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-import tempfile
 import unittest
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
@@ -25,18 +23,13 @@ from transformers.testing_utils import (
     require_torch_multi_gpu,
     slow,
 )
-from transformers.utils.import_utils import is_torch_available
-
-
-if is_torch_available():
-    import torch
 
 
 @require_bitsandbytes
 @require_accelerate
 @require_torch
 @require_torch_gpu
-#@slow
+@slow
 class MixedInt8Test(unittest.TestCase):
     # We keep the constants inside the init function and model loading inside setUp function
 
@@ -99,28 +92,6 @@ class MixedInt8Test(unittest.TestCase):
         )
         pipeline_output = pipe(self.input_text)
         self.assertEqual(pipeline_output[0]["generated_text"], self.EXPECTED_OUTPUT)
-
-    def test_save_load(self):
-        r"""
-        The aim of this test is to verify whether if we save and load back a quantized model we retain the same performance.
-        If this test pass people can safely push quantized models on the Hub.
-        """
-        model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
-
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            # create a dummy tensor
-            input_ids = torch.LongTensor([[1, 2, 3, 4]]).to(0)
-
-            # Save and load 8bit model
-            model_8bit.save_pretrained(tmpdirname)
-            loaded_model_8bit = AutoModelForCausalLM.from_pretrained(tmpdirname, load_in_8bit=True, device_map="auto")
-
-            # Get both logits
-            logits_loaded = loaded_model_8bit(input_ids).logits
-            logits_native = model_8bit(input_ids).logits
-
-            # TODO: @younesbelkada understand why the test does not pass
-            # This won't work since in the model state dict the quantization statistics are not saved 
 
     @require_torch_multi_gpu
     def test_multi_gpu_loading(self):
