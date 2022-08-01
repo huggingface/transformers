@@ -56,6 +56,7 @@ _TOKENIZER_FOR_DOC = "T5Tokenizer"
 
 remat = nn_partitioning.remat
 
+
 # Copied from transformers.models.bart.modeling_flax_bart.shift_tokens_right
 def shift_tokens_right(input_ids: np.array, pad_token_id: int, decoder_start_token_id: int) -> np.ndarray:
     """
@@ -121,8 +122,7 @@ def _make_3block_relative_position_ids(block_len: int) -> jnp.ndarray:
 
 
 def _mask_local_attention_mask(local_attention_mask: np.ndarray, block_len: int) -> jnp.ndarray:
-    """Mask local attention mask to enforce that tokens are not allowed to attend tokens farther than ``local_radius.
-    """
+    """Mask local attention mask to enforce that tokens are not allowed to attend tokens farther than ``local_radius."""
     relative_position_ids = _make_3block_relative_position_ids(block_len)
     locality_mask = jnp.abs(relative_position_ids) < block_len
     locality_mask = locality_mask[None, None, :, :]
@@ -1201,7 +1201,9 @@ class FlaxLongT5LayerSelfAttention(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
+        key_value_states=None,
         position_bias=None,
+        use_cache=False,
         output_attentions=False,
         deterministic=True,
         init_cache=False,
@@ -1346,6 +1348,7 @@ class FlaxLongT5LayerCollection(nn.Module):
     config: LongT5Config
     has_relative_attention_bias: bool
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    gradient_checkpointing: bool = False
 
     def setup(self):
         self.layer = FlaxLongT5Block(
@@ -1382,13 +1385,33 @@ class FlaxLongT5LayerCollection(nn.Module):
 class FlaxLongT5BlockCollection(nn.Module):
     config: LongT5Config
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    gradient_checkpointing: bool = False
 
     def setup(self):
         self.causal = self.config.causal
-        self.blocks = [
-            FlaxLongT5LayerCollection(self.config, has_relative_attention_bias=(i == 0), dtype=self.dtype, name=str(i))
-            for i in range(self.config.num_layers)
-        ]
+        if self.gradient_checkpointing:
+            FlaxLongT5CheckpointLayer = remat(FlaxLongT5LayerCollection, static_argnums=(6, 7, 8, 9))
+            self.blocks = [
+                FlaxLongT5CheckpointLayer(
+                    self.config,
+                    has_relative_attention_bias=(i == 0),
+                    dtype=self.dtype,
+                    name=str(i),
+                    gradient_checkpointing=self.gradient_checkpointing,
+                )
+                for i in range(self.config.num_layers)
+            ]
+        else:
+            self.blocks = [
+                FlaxLongT5LayerCollection(
+                    self.config,
+                    has_relative_attention_bias=(i == 0),
+                    dtype=self.dtype,
+                    name=str(i),
+                    gradient_checkpointing=self.gradient_checkpointing,
+                )
+                for i in range(self.config.num_layers)
+            ]
 
     def __call__(
         self,
@@ -1398,6 +1421,7 @@ class FlaxLongT5BlockCollection(nn.Module):
         encoder_attention_mask=None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
+        return_dict: bool = True,
         deterministic: bool = True,
         init_cache: bool = False,
     ):
@@ -1414,14 +1438,15 @@ class FlaxLongT5BlockCollection(nn.Module):
 
             layer_outputs = layer_module(
                 hidden_states,
-                attention_mask=attention_mask,
-                position_bias=position_bias,
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=encoder_attention_mask,
-                encoder_decoder_position_bias=encoder_decoder_position_bias,
-                output_attentions=output_attentions,
-                deterministic=deterministic,
-                init_cache=init_cache,
+                attention_mask,
+                position_bias,
+                encoder_hidden_states,
+                encoder_attention_mask,
+                encoder_decoder_position_bias,
+                output_attentions,
+                return_dict,
+                deterministic,
+                init_cache,
             )
 
             hidden_states = layer_outputs[0]
@@ -1452,11 +1477,14 @@ class FlaxLongT5Stack(nn.Module):
     config: LongT5Config
     embed_tokens: nn.Embed
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    gradient_checkpointing: bool = False
 
     def setup(self):
         self.causal = self.config.causal
 
-        self.block = FlaxLongT5BlockCollection(self.config, dtype=self.dtype)
+        self.block = FlaxLongT5BlockCollection(
+            self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+        )
         self.final_layer_norm = FlaxLongT5LayerNorm(
             self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype
         )
@@ -2014,6 +2042,7 @@ LONGT5_START_DOCSTRING = r"""
 class FlaxLongT5Module(nn.Module):
     config: LongT5Config
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    gradient_checkpointing: bool = False
 
     def _get_encoder_module(self):
         return self.encoder
@@ -2030,12 +2059,22 @@ class FlaxLongT5Module(nn.Module):
 
         encoder_config = copy.deepcopy(self.config)
         encoder_config.causal = False
-        self.encoder = FlaxLongT5Stack(encoder_config, embed_tokens=self.shared, dtype=self.dtype)
+        self.encoder = FlaxLongT5Stack(
+            encoder_config,
+            embed_tokens=self.shared,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
+        )
 
         decoder_config = copy.deepcopy(self.config)
         decoder_config.causal = True
         decoder_config.num_layers = self.config.num_decoder_layers
-        self.decoder = FlaxLongT5Stack(decoder_config, embed_tokens=self.shared, dtype=self.dtype)
+        self.decoder = FlaxLongT5Stack(
+            decoder_config,
+            embed_tokens=self.shared,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
+        )
 
     def __call__(
         self,
@@ -2046,7 +2085,7 @@ class FlaxLongT5Module(nn.Module):
         encoder_outputs=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_dict=None,
+        return_dict: bool = True,
         deterministic: bool = True,
     ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -2129,6 +2168,7 @@ append_replace_return_docstrings(FlaxLongT5Model, output_type=FlaxSeq2SeqLMOutpu
 class FlaxLongT5ForConditionalGenerationModule(nn.Module):
     config: LongT5Config
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    gradient_checkpointing: bool = False
 
     def _get_encoder_module(self):
         return self.encoder
@@ -2149,13 +2189,17 @@ class FlaxLongT5ForConditionalGenerationModule(nn.Module):
         encoder_config.causal = False
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
-        self.encoder = FlaxLongT5Stack(encoder_config, self.shared, dtype=self.dtype)
+        self.encoder = FlaxLongT5Stack(
+            encoder_config, self.shared, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+        )
 
         decoder_config = copy.deepcopy(self.config)
         decoder_config.causal = True
         decoder_config.is_encoder_decoder = False
         decoder_config.num_layers = self.config.num_decoder_layers
-        self.decoder = FlaxLongT5Stack(decoder_config, self.shared, dtype=self.dtype)
+        self.decoder = FlaxLongT5Stack(
+            decoder_config, self.shared, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+        )
 
         self.lm_head = nn.Dense(
             self.config.vocab_size,
