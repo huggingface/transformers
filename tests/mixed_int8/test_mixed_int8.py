@@ -16,6 +16,8 @@
 import tempfile
 import unittest
 
+import torch
+
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 from transformers.testing_utils import (
     require_accelerate,
@@ -49,11 +51,17 @@ class MixedInt8Test(unittest.TestCase):
     MAX_NEW_TOKENS = 10
 
     def setUp(self):
-        # Models pipeline and tokenizer
+        # Models and tokenizer
         self.model_fp16 = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype="auto", device_map="auto")
         self.model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-        return super().setUp()
+
+    def tearDown(self):
+        # This needs to be done because after each test we need to free the GPU memories otherwise 
+        # we get some unexpected behaviors (CUDA illegal memory access errors)
+        # This is fine since the model is loaded from the cache
+        self.model_8bit = None
+        self.model_fp16 = None
 
     def test_memory_footprint(self):
         r"""
@@ -101,14 +109,46 @@ class MixedInt8Test(unittest.TestCase):
         If this test pass people can safely push quantized models on the Hub.
         """
         with tempfile.TemporaryDirectory() as tmpdirname:
+            # create a dummy tensor
+            input_ids = torch.LongTensor([[1, 2, 3, 4]]).to(0)
+            
             # Save and load 8bit model
             self.model_8bit.save_pretrained(tmpdirname)
             loaded_model_8bit = AutoModelForCausalLM.from_pretrained(tmpdirname, load_in_8bit=True, device_map="auto")
-            print(loaded_model_8bit)
+
+            # Get both logits
+            logits_loaded = loaded_model_8bit(input_ids).logits
+            logits_native = self.model_8bit(input_ids).logits
+
+            # TODO: @younesbelkada understand why the test does not pass
+            
 
     @require_torch_multi_gpu
     def test_multi_gpu_loading(self):
         r"""
-        This tests that the model has been loaded and can be used correctly on a multi-GPU setup
+        This tests that the model has been loaded and can be used correctly on a multi-GPU setup.
+        Let's just try to load a model on 2 GPUs and see if it works. The model we test has ~2GB of total, 3GB should suffice
         """
-        pass
+        memory_mapping = {0:"1GB", 1:"2GB"}
+        model_parallel = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, max_memory=memory_mapping, device_map="auto")
+
+        # TODO: @younesbelkada correct this function
+        def get_list_devices(model):
+            list_devices = []
+            for n, module in model.named_children():
+                if len(list(module.children())) > 0:
+                    device = get_list_devices(module)
+                    if device not in list_devices:
+                        list_devices.append(device)
+                else:
+                    return module.parameters().device.index
+            return list_devices
+        
+        list_devices = get_list_devices(model_parallel)
+        self.assertEqual(len(list_devices), 2)
+        
+        # Do also a quality test and check everything is correct
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
+        output_sequences = model_parallel.generate(input_ids=encoded_input["input_ids"].cuda(), max_new_tokens=10)
+        self.assertEqual(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+
