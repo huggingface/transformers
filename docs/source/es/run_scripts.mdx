@@ -79,11 +79,11 @@ Una vez que hayas configurado la versión correcta de la librería, ve a la carp
 pip install -r requirements.txt
 ```
 
-## Ejecutar script
+## Ejecutar un script
 
 <frameworkcontent>
 <pt>
-The example script downloads and preprocesses a dataset from the 🤗 [Datasets](https://huggingface.co/docs/datasets/) library. Then the script fine-tunes a dataset with the [Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) on an architecture that supports summarization. The following example shows how to fine-tune [T5-small](https://huggingface.co/t5-small) on the [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail) dataset. The T5 model requires an additional `source_prefix` argument due to how it was trained. This prompt lets T5 know this is a summarization task.
+El script de ejemplo descarga y preprocesa un conjunto de datos de la librería 🤗 [Datasets](https://huggingface.co/docs/datasets/). Luego, el script ajusta un conjunto de datos con [Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) en una arquitectura que soporta la tarea de resumen. El siguiente ejemplo muestra cómo ajustar [T5-small](https://huggingface.co/t5-small) en el conjunto de datos [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail). El modelo T5 requiere un argumento adicional `source_prefix` debido a cómo fue entrenado. Este aviso le permite a T5 saber que se trata de una tarea de resumen.
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py \
@@ -101,7 +101,7 @@ python examples/pytorch/summarization/run_summarization.py \
 ```
 </pt>
 <tf>
-The example script downloads and preprocesses a dataset from the 🤗 [Datasets](https://huggingface.co/docs/datasets/) library. Then the script fine-tunes a dataset using Keras on an architecture that supports summarization. The following example shows how to fine-tune [T5-small](https://huggingface.co/t5-small) on the [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail) dataset. The T5 model requires an additional `source_prefix` argument due to how it was trained. This prompt lets T5 know this is a summarization task.
+El script de ejemplo descarga y preprocesa un conjunto de datos de la librería 🤗 [Datasets](https://huggingface.co/docs/datasets/). Luego, el script ajusta un conjunto de datos utilizando Keras en una arquitectura que soporta la tarea de resumen. El siguiente ejemplo muestra cómo ajustar [T5-small](https://huggingface.co/t5-small) en el conjunto de datos [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail). El modelo T5 requiere un argumento adicional `source_prefix` debido a cómo fue entrenado. Este aviso le permite a T5 saber que se trata de una tarea de resumen.
 
 ```bash
 python examples/tensorflow/summarization/run_summarization.py  \
@@ -118,12 +118,12 @@ python examples/tensorflow/summarization/run_summarization.py  \
 </tf>
 </frameworkcontent>
 
-## Distributed training and mixed precision
+## Entrenamiento distribuido y precisión mixta
 
-The [Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) supports distributed training and mixed precision, which means you can also use it in a script. To enable both of these features:
+[Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) admite un entrenamiento distribuido y precisión mixta, lo que significa que también puedes usarlo en un script. Para habilitar ambas características:
 
-- Add the `fp16` argument to enable mixed precision.
-- Set the number of GPUs to use with the `nproc_per_node` argument.
+- Agregue el argumento `fp16` para habilitar la precisión mixta.
+- Establece la cantidad de GPU que se usarás con el argumento `nproc_per_node`.
 
 ```bash
 python -m torch.distributed.launch \
@@ -142,13 +142,13 @@ python -m torch.distributed.launch \
     --predict_with_generate
 ```
 
-TensorFlow scripts utilize a [`MirroredStrategy`](https://www.tensorflow.org/guide/distributed_training#mirroredstrategy) for distributed training, and you don't need to add any additional arguments to the training script. The TensorFlow script will use multiple GPUs by default if they are available.
+Los scripts de TensorFlow utilizan una [`MirroredStrategy`](https://www.tensorflow.org/guide/distributed_training#mirroredstrategy) para el entrenamiento distribuido, y no es necesario agregar argumentos adicionales al script de entrenamiento. El script de TensorFlow utilizará múltiples GPUs de forma predeterminada si están disponibles.
 
-## Run a script on a TPU
+## Ejecutar un script en una TPU
 
 <frameworkcontent>
 <pt>
-Tensor Processing Units (TPUs) are specifically designed to accelerate performance. PyTorch supports TPUs with the [XLA](https://www.tensorflow.org/xla) deep learning compiler (see [here](https://github.com/pytorch/xla/blob/master/README.md) for more details). To use a TPU, launch the `xla_spawn.py` script and use the `num_cores` argument to set the number of TPU cores you want to use.
+Las Unidades de Procesamiento de Tensor (TPUs) están diseñadas específicamente para acelerar el rendimiento. PyTorch admite TPU con el compilador de aprendizaje profundo [XLA](https://www.tensorflow.org/xla) (consulta [aquí](https://github.com/pytorch/xla/blob/master/README.md) para obtener más detalles). Para usar una TPU, inicie el script `xla_spawn.py` y use el argumento `num_cores` para establecer la cantidad de núcleos de TPU que deseas usar.
 
 ```bash
 python xla_spawn.py --num_cores 8 \
@@ -167,7 +167,7 @@ python xla_spawn.py --num_cores 8 \
 ```
 </pt>
 <tf>
-Tensor Processing Units (TPUs) are specifically designed to accelerate performance. TensorFlow scripts utilize a [`TPUStrategy`](https://www.tensorflow.org/guide/distributed_training#tpustrategy) for training on TPUs. To use a TPU, pass the name of the TPU resource to the `tpu` argument.
+Las Unidades de Procesamiento de Tensor (TPUs) están diseñadas específicamente para acelerar el rendimiento. TensorFlow utiliza una [`TPUStrategy`](https://www.tensorflow.org/guide/distributed_training#tpustrategy) para entrenar en TPUs. Para usar una TPU, pase el nombre del recurso de la TPU al argumento `tpu`
 
 ```bash
 python run_summarization.py  \
@@ -185,28 +185,28 @@ python run_summarization.py  \
 </tf>
 </frameworkcontent>
 
-## Run a script with 🤗 Accelerate
+## Ejecutar un script con 🤗 Accelerate
 
-🤗 [Accelerate](https://huggingface.co/docs/accelerate/index.html) is a PyTorch-only library that offers a unified method for training a model on several types of setups (CPU-only, multiple GPUs, TPUs) while maintaining complete visibility into the PyTorch training loop. Make sure you have 🤗 Accelerate installed if you don't already have it:
+🤗 [Accelerate](https://huggingface.co/docs/accelerate/index.html) es una biblioteca exclusiva de PyTorch que ofrece un método unificado para entrenar un modelo en varios tipos de configuraciones (solo CPU, GPU múltiples, TPU) mientras mantiene una visibilidad completa en el ciclo de entrenamiento de PyTorch. Asegúrate de tener 🤗 Accelerate instalado si aún no lo tienes:
 
-> Note: As Accelerate is rapidly developing, the git version of accelerate must be installed to run the scripts
+> Nota: Como Accelerate se está desarrollando rápidamente, debes instalar la versión git de Accelerate para ejecutar los scripts
 ```bash
 pip install git+https://github.com/huggingface/accelerate
 ```
 
-Instead of the `run_summarization.py` script, you need to use the `run_summarization_no_trainer.py` script. 🤗 Accelerate supported scripts will have a `task_no_trainer.py` file in the folder. Begin by running the following command to create and save a configuration file:
+En lugar del script `run_summarization.py`, debes usar el script `run_summarization_no_trainer.py`. Los scripts compatibles con 🤗 Accelerate tendrán un archivo `task_no_trainer.py` en la carpeta. Comienza ejecutando el siguiente comando para crear y guardar un archivo de configuración:
 
 ```bash
 accelerate config
 ```
 
-Test your setup to make sure it is configured correctly:
+Prueba tu configuración para asegurarte que esta configurada correctamente:
 
 ```bash
 accelerate test
 ```
 
-Now you are ready to launch the training:
+Ahora estás listo para iniciar el entrenamiento:
 
 ```bash
 accelerate launch run_summarization_no_trainer.py \
