@@ -285,8 +285,10 @@ jobs:
 
     run_tests_tf:
         working_directory: ~/transformers
-        docker:
-            - image: cimg/python:3.9.13
+#        docker:
+#            - image: cimg/python:3.9.13
+        machine:
+          image: ubuntu-2004:current
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
@@ -295,25 +297,25 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - restore_cache:
-                  keys:
-                      - v0.5-tf-{{ checksum "setup.py" }}
-                      - v0.5-{{ checksum "setup.py" }}
+#            - restore_cache:
+#                  keys:
+#                      - v0.5-tf-{{ checksum "setup.py" }}
+#                      - v0.5-{{ checksum "setup.py" }}
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
-            - run: pip install --upgrade pip
-            - run: pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]
-            - run: pip install tensorflow_probability
-            - run: pip install https://github.com/kpu/kenlm/archive/master.zip
-            - save_cache:
-                  key: v0.5-tf-{{ checksum "setup.py" }}
-                  paths:
-                      - '~/.cache/pip'
-            - run: python utils/tests_fetcher.py | tee test_preparation.txt
+            - run: pip3 install --upgrade pip
+            - run: pip3 install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]
+            - run: pip3 install tensorflow_probability
+            - run: pip3 install https://github.com/kpu/kenlm/archive/master.zip
+#            - save_cache:
+#                  key: v0.5-tf-{{ checksum "setup.py" }}
+#                  paths:
+#                      - '~/.cache/pip'
+            - run: python3 utils/tests_fetcher.py | tee test_preparation.txt
             - store_artifacts:
                   path: ~/transformers/test_preparation.txt
             - run: |
                   if [ -f test_list.txt ]; then
-                    python -m pytest --forked -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_tf $(cat test_list.txt) | tee tests_output.txt
+                    python3 -m pytest --forked -n 4 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_tf $(cat test_list.txt) | tee tests_output.txt
                   fi
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
