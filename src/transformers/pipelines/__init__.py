@@ -667,6 +667,15 @@ def pipeline(
         # the files could be missing from the hub, instead of failing
         # on such repos, we just force to not load it.
         load_tokenizer = False
+
+    if not load_feature_extractor and task not in NO_FEATURE_EXTRACTOR_TASKS:
+        raise EnvironmentError(
+            f"There is a problem in `transformers`. The task {task} requires a feature extractor, however the model {type(model_config)} seems to not support feature-extractors. Please report this issue. This is likely a misconfiguration in the library, please report this issue."
+        )
+    if not load_tokenizer and task not in NO_TOKENIZER_TASKS:
+        raise EnvironmentError(
+            f"There is a problem in `transformers`. The task {task} requires a tokenizer, however the model {type(model_config)} seems to not support tokenizer. This is likely a misconfiguration in the library, please report this issue."
+        )
     if task in NO_FEATURE_EXTRACTOR_TASKS:
         load_feature_extractor = False
 
