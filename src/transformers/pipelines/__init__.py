@@ -608,6 +608,7 @@ def pipeline(
                 model, module_file + ".py", class_name, revision=revision, use_auth_token=use_auth_token
             )
     else:
+        # This overrides task aliases with their standard name
         task, targeted_task, task_options = check_task(task)
         if pipeline_class is None:
             pipeline_class = targeted_task["impl"]
