@@ -1857,7 +1857,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if from_tf or from_flax:
                 raise ValueError(
                     "Converting into mixed 8-bit weights from tf/flax weights is currently not supported, please make"
-                    " surethe weights are in PyTorch format."
+                    " sure the weights are in PyTorch format."
                 )
 
         from_pt = not (from_tf | from_flax)
