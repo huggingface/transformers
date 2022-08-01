@@ -54,7 +54,7 @@ _TOKENIZER_FOR_DOC = "GPT2Tokenizer"
 _EXPECTED_OUTPUT_SHAPE = [1, 8, 1024]
 
 # Causal LM output
-_EXPECTED_CAUSAL_LM_OUTPUT = "Hey, are you consciours? Can you talk to me?\nI'm not consciours, but I can talk to you."
+_CAUSAL_LM_EXPECTED_OUTPUT = "Hey, are you consciours? Can you talk to me?\nI'm not consciours, but I can talk to you."
 
 LARGE_NEGATIVE = -1e8
 
