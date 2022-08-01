@@ -130,7 +130,6 @@ class BloomConfig(PretrainedConfig):
         attention_dropout=0.0,
         pretraining_tp=1,  # TP rank used when training with megatron
         slow_but_exact=False,
-        scale_attn_by_inverse_layer_idx=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -150,7 +149,6 @@ class BloomConfig(PretrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.slow_but_exact = slow_but_exact
-        self.scale_attn_by_inverse_layer_idx = scale_attn_by_inverse_layer_idx
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
