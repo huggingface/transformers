@@ -426,10 +426,6 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         # Test that we see no collapse when `force_lm_head_in_fp32=True`, ie `len(unique_values) == vocabulary_size`
         self.assertTrue(len(torch.unique(output[random_batch_id, random_sequence_id])) == output_in_fp16.shape[-1])
 
-    @require_torch_gpu
-    def test_force_lm_head_in_fp32_is_close_to_fp16(self):
-
-
     @slow
     def test_model_from_pretrained(self):
         for model_name in BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
