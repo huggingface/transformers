@@ -327,7 +327,7 @@ jobs:
         environment:
             OMP_NUM_THREADS: 1
             TRANSFORMERS_IS_CI: yes
-            PYTEST_TIMEOUT: 120
+            # PYTEST_TIMEOUT: 120
         resource_class: xlarge
         parallelism: 1
         steps:
@@ -997,21 +997,21 @@ workflows:
     version: 2
     build_and_test:
         jobs:
-            - check_code_quality
-            - check_repository_consistency
-            - run_examples_torch
-            - run_examples_flax
-            - run_tests_custom_tokenizers
-            - run_tests_torch_and_tf
-            - run_tests_torch_and_flax
-            - run_tests_torch
+#            - check_code_quality
+#            - check_repository_consistency
+#            - run_examples_torch
+#            - run_examples_flax
+#            - run_tests_custom_tokenizers
+#            - run_tests_torch_and_tf
+#            - run_tests_torch_and_flax
+#            - run_tests_torch
             - run_tests_tf
-            - run_tests_flax
-            - run_tests_pipelines_torch
-            - run_tests_pipelines_tf
-            - run_tests_onnxruntime
-            - run_tests_hub
-            - run_tests_layoutlmv2_and_v3
+#            - run_tests_flax
+#            - run_tests_pipelines_torch
+#            - run_tests_pipelines_tf
+#            - run_tests_onnxruntime
+#            - run_tests_hub
+#            - run_tests_layoutlmv2_and_v3
     nightly:
         triggers:
             - schedule:
