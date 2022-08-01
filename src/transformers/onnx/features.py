@@ -377,6 +377,13 @@ class FeaturesManager:
             "image-classification",
             onnx_config_cls="models.mobilevit.MobileViTOnnxConfig",
         ),
+        "mt5": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "seq2seq-lm",
+            "seq2seq-lm-with-past",
+            onnx_config_cls="models.t5.T5OnnxConfig",
+        ),
         "m2m-100": supported_features_mapping(
             "default",
             "default-with-past",
