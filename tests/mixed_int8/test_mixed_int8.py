@@ -16,8 +16,6 @@
 import tempfile
 import unittest
 
-import torch
-
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 from transformers.testing_utils import (
     require_accelerate,
@@ -27,6 +25,11 @@ from transformers.testing_utils import (
     require_torch_multi_gpu,
     slow,
 )
+from transformers.utils.import_utils import is_torch_available
+
+
+if is_torch_available():
+    import torch
 
 
 @require_bitsandbytes
