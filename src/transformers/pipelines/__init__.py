@@ -673,7 +673,9 @@ def pipeline(
     # if it needs feature_extractor/tokenizer or not
     if not load_feature_extractor and task not in NO_FEATURE_EXTRACTOR_TASKS and task != "feature-extraction":
         raise EnvironmentError(
-            f"There is a problem in `transformers`. The task {task} requires a feature extractor, however the model {type(model_config)} seems to not support feature-extractors. This is likely a misconfiguration in the library, please report this issue."
+            f"There is a problem in `transformers`. The task {task} requires a feature extractor, however the model"
+            f" {type(model_config)} seems to not support feature-extractors. This is likely a misconfiguration in the"
+            " library, please report this issue."
         )
     if not load_tokenizer and task not in NO_TOKENIZER_TASKS and task != "feature-extraction":
         raise EnvironmentError(
