@@ -1723,10 +1723,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 not compiled and adapted for CPUs.
             int8_threshold (`int`, *optional*):
                 Works together with `load_in_8bit`. This corresponds to the outlier threshold for outlier detection as
-                described in `GPT3.int8() : 8-bit Matrix Multiplication for Transformers at Scale` paper (#TODO provide
-                link to paper). Any hidden states value that is above this threshold will be considered an outlier and
-                the operation on those values will be done in fp16. A lower value means more outliers will be detected,
-                therefore more operations in fp16. Set to `6.0` by default as described in the paper.
+                described in `GPT3.int8() : 8-bit Matrix Multiplication for Transformers at Scale` paper. Any hidden
+                states value that is above this threshold will be considered an outlier and the operation on those
+                values will be done in fp16. Values are usually normally distributed, that is, most values are in the
+                range [-3.5, 3.5], but there are some exceptional systematic outliers that are very differently
+                distributed for large models. These outliers are often in the interval [-60, -6] or [6, 60]. Int8
+                quantization works well for values of magnitude ~5, but beyond that, there is a significant performance
+                penalty. A good default threshold is 6, but a lower threshold might be needed for more unstable models
+                (small models, fine-tuning).
             subfolder (`str`, *optional*, defaults to `""`):
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
                 specify the folder name here.

@@ -92,7 +92,10 @@ def replace_8bit_linear(model, threshold=6.0):
 
     The function will be run recursively and replace all `torch.nn.Linear` modules except for the `lm_head` that should
     be kept as a `torch.nn.Linear` module. The replacement is done under `init_empty_weights` context manager so no
-    CPU/GPU memory is required to run this function.
+    CPU/GPU memory is required to run this function. Int8 mixed-precision matrix decomposition works by separating a
+    matrix multiplication into two streams: (1) and systematic feature outlier stream matrix multiplied in fp16
+    (0.01%), (2) a regular stream of int8 matrix multiplication (99.9%). With this method, int8 inference with no
+    predictive degradation is possible for very large models (>=176B parameters).
 
     Parameters:
         model (`torch.nn.Module`):
