@@ -98,6 +98,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "bert",
     "blenderbot",
     "blenderbot-small",
+    "bloom",
     "clip",
     "deberta",
     "deberta-v2",
@@ -127,8 +128,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "trocr",
     "vit",
     "xglm",
-    # "xlnet",
-    # TODO: add support for them as it should be quite easy to do so (small blocking issues).
+    #    "xlnet",
 ]
 
 _REGULAR_SUPPORTED_MODELS = []
@@ -562,10 +562,8 @@ class HFProxy(Proxy):
         return self.tracer.create_proxy("call_function", operator.setitem, (self, indices, values), {})
 
     def __contains__(self, key):
-        # To handle cases such as :
-        # `"some_key" in kwargs`
-        if self.node.op == "placeholder":
-            return False
+        if hasattr(self, "_metadata") and self._metadata is not None:
+            return key in self._metadata
         return super().__contains__(key)
 
 
@@ -905,6 +903,9 @@ class HFTracer(Tracer):
             inputs.update(self._generate_dummy_input(root, input_name, shape))
 
         concrete_metas = {input_name: input_.to("meta") for input_name, input_ in inputs.items()}
+        for param in sig.parameters.values():
+            if param.kind == inspect.Parameter.VAR_KEYWORD and param.name not in input_names:
+                concrete_metas[f"**{param.name}"] = {}
         self.meta_args = concrete_metas
         self.patched_torch_methods = {
             target: _gen_constructor_wrapper(getattr(torch, target)) for target in self._TORCH_METHODS_TO_PATCH
@@ -933,18 +934,15 @@ class HFTracer(Tracer):
                     node.type = torch.Tensor
                 # It is a concrete arg so it is not used and should be removed.
                 else:
-                    if hasattr(torch.fx._symbolic_trace, "_assert_is_none"):
-                        # Newer versions of torch.fx emit an assert statement
-                        # for concrete arguments; delete those before we delete
-                        # the concrete arg.
-                        to_delete = []
-                        for user in node.users:
-                            if user.target == torch.fx._symbolic_trace._assert_is_none:
-                                to_delete.append(user)
-                        for user in to_delete:
-                            self.graph.erase_node(user)
+                    to_visit = [node]
+                    to_delete = collections.OrderedDict()
+                    while to_visit:
+                        n = to_visit.pop(0)
+                        to_delete[n] = None
+                        to_visit += list(n.users.keys())
 
-                    self.graph.erase_node(node)
+                    for user in reversed(to_delete.keys()):
+                        self.graph.erase_node(user)
 
             # TODO: solves GraphModule creation.
             # Without this, return type annotation "Tuple" is causing code execution failure.

@@ -307,6 +307,11 @@ class NotebookProgressCallback(TrainerCallback):
         else:
             self.prediction_bar.update(self.prediction_bar.value + 1)
 
+    def on_predict(self, args, state, control, **kwargs):
+        if self.prediction_bar is not None:
+            self.prediction_bar.close()
+        self.prediction_bar = None
+
     def on_log(self, args, state, control, logs=None, **kwargs):
         # Only for when there is no evaluation
         if args.evaluation_strategy == IntervalStrategy.NO and "loss" in logs:

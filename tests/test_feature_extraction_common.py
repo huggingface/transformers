@@ -22,7 +22,7 @@ import unittest
 import unittest.mock as mock
 from pathlib import Path
 
-from huggingface_hub import HfFolder, Repository, delete_repo, set_access_token
+from huggingface_hub import HfFolder, delete_repo, set_access_token
 from requests.exceptions import HTTPError
 from transformers import AutoFeatureExtractor, Wav2Vec2FeatureExtractor
 from transformers.testing_utils import TOKEN, USER, check_json_file_has_correct_format, get_tests_dir, is_staging_test
@@ -167,47 +167,57 @@ class FeatureExtractorPushToHubTester(unittest.TestCase):
 
     def test_push_to_hub(self):
         feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR)
+        feature_extractor.push_to_hub("test-feature-extractor", use_auth_token=self._token)
+
+        new_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(f"{USER}/test-feature-extractor")
+        for k, v in feature_extractor.__dict__.items():
+            self.assertEqual(v, getattr(new_feature_extractor, k))
+
+        # Reset repo
+        delete_repo(token=self._token, repo_id="test-feature-extractor")
+
+        # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
             feature_extractor.save_pretrained(
-                os.path.join(tmp_dir, "test-feature-extractor"), push_to_hub=True, use_auth_token=self._token
+                tmp_dir, repo_id="test-feature-extractor", push_to_hub=True, use_auth_token=self._token
             )
 
-            new_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(f"{USER}/test-feature-extractor")
-            for k, v in feature_extractor.__dict__.items():
-                self.assertEqual(v, getattr(new_feature_extractor, k))
+        new_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(f"{USER}/test-feature-extractor")
+        for k, v in feature_extractor.__dict__.items():
+            self.assertEqual(v, getattr(new_feature_extractor, k))
 
     def test_push_to_hub_in_organization(self):
         feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR)
+        feature_extractor.push_to_hub("valid_org/test-feature-extractor", use_auth_token=self._token)
 
+        new_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("valid_org/test-feature-extractor")
+        for k, v in feature_extractor.__dict__.items():
+            self.assertEqual(v, getattr(new_feature_extractor, k))
+
+        # Reset repo
+        delete_repo(token=self._token, repo_id="valid_org/test-feature-extractor")
+
+        # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
             feature_extractor.save_pretrained(
-                os.path.join(tmp_dir, "test-feature-extractor-org"),
-                push_to_hub=True,
-                use_auth_token=self._token,
-                organization="valid_org",
+                tmp_dir, repo_id="valid_org/test-feature-extractor-org", push_to_hub=True, use_auth_token=self._token
             )
 
-            new_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("valid_org/test-feature-extractor-org")
-            for k, v in feature_extractor.__dict__.items():
-                self.assertEqual(v, getattr(new_feature_extractor, k))
+        new_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("valid_org/test-feature-extractor-org")
+        for k, v in feature_extractor.__dict__.items():
+            self.assertEqual(v, getattr(new_feature_extractor, k))
 
     def test_push_to_hub_dynamic_feature_extractor(self):
         CustomFeatureExtractor.register_for_auto_class()
         feature_extractor = CustomFeatureExtractor.from_pretrained(SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR)
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-feature-extractor", use_auth_token=self._token)
-            feature_extractor.save_pretrained(tmp_dir)
+        feature_extractor.push_to_hub("test-dynamic-feature-extractor", use_auth_token=self._token)
 
-            # This has added the proper auto_map field to the config
-            self.assertDictEqual(
-                feature_extractor.auto_map,
-                {"AutoFeatureExtractor": "custom_feature_extraction.CustomFeatureExtractor"},
-            )
-            # The code has been copied from fixtures
-            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "custom_feature_extraction.py")))
-
-            repo.push_to_hub()
+        # This has added the proper auto_map field to the config
+        self.assertDictEqual(
+            feature_extractor.auto_map,
+            {"AutoFeatureExtractor": "custom_feature_extraction.CustomFeatureExtractor"},
+        )
 
         new_feature_extractor = AutoFeatureExtractor.from_pretrained(
             f"{USER}/test-dynamic-feature-extractor", trust_remote_code=True

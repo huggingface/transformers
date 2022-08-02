@@ -46,11 +46,11 @@ def normalize_box(box, width, height):
     ]
 
 
-def apply_tesseract(image: Image.Image, lang: Optional[str]):
+def apply_tesseract(image: Image.Image, lang: Optional[str], tesseract_config: Optional[str]):
     """Applies Tesseract OCR on a document image, and returns recognized words + normalized bounding boxes."""
 
     # apply OCR
-    data = pytesseract.image_to_data(image, lang=lang, output_type="dict")
+    data = pytesseract.image_to_data(image, lang=lang, output_type="dict", config=tesseract_config)
     words, left, top, width, height = data["text"], data["left"], data["top"], data["width"], data["height"]
 
     # filter empty words and corresponding coordinates
@@ -100,9 +100,12 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             if `do_resize` is set to `True`.
         apply_ocr (`bool`, *optional*, defaults to `True`):
             Whether to apply the Tesseract OCR engine to get words + normalized bounding boxes.
-        ocr_lang (`Optional[str]`, *optional*):
+        ocr_lang (`str`, *optional*):
             The language, specified by its ISO code, to be used by the Tesseract OCR engine. By default, English is
             used.
+        tesseract_config (`str`, *optional*):
+            Any additional custom configuration flags that are forwarded to the `config` parameter when calling
+            Tesseract. For example: '--psm 6'.
 
             <Tip>
 
@@ -112,13 +115,23 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
     model_input_names = ["pixel_values"]
 
-    def __init__(self, do_resize=True, size=224, resample=Image.BILINEAR, apply_ocr=True, ocr_lang=None, **kwargs):
+    def __init__(
+        self,
+        do_resize=True,
+        size=224,
+        resample=Image.BILINEAR,
+        apply_ocr=True,
+        ocr_lang=None,
+        tesseract_config="",
+        **kwargs
+    ):
         super().__init__(**kwargs)
         self.do_resize = do_resize
         self.size = size
         self.resample = resample
         self.apply_ocr = apply_ocr
         self.ocr_lang = ocr_lang
+        self.tesseract_config = tesseract_config
 
     def __call__(
         self, images: ImageInput, return_tensors: Optional[Union[str, TensorType]] = None, **kwargs
@@ -201,7 +214,7 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             words_batch = []
             boxes_batch = []
             for image in images:
-                words, boxes = apply_tesseract(self.to_pil_image(image), self.ocr_lang)
+                words, boxes = apply_tesseract(self.to_pil_image(image), self.ocr_lang, self.tesseract_config)
                 words_batch.append(words)
                 boxes_batch.append(boxes)
 

@@ -72,18 +72,12 @@ class BloomConfig(PretrainedConfig):
             If set to `True`, it will skip bias add for each linear layer in the transformer blocks
         skip_bias_add_qkv (`bool`, *optional*, defaults to `False`):
             If set to `True`, it will skip bias add for the first linear layer in the transformer blocks
-        attention_softmax_in_fp32 (`bool`, *optional*, defaults to `True`):
-            If set to `True` and the `dtype` is set to `float16` it will scale the input of the Softmax function to
-            `fp32`
         hidden_dropout (`float`, *optional*, defaults to 0.1):
             Dropout rate of the dropout function on the bias dropout.
         attention_dropout (`float`, *optional*, defaults to 0.1):
             Dropout rate applied to the attention probs
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        dtype (`str`, *optional*, defaults to `"bfloat16"`):
-            Precision that has been used for the model's training in Megatron. Please load the model in the correct
-            precision by doing `model = BloomModel.from_pretrained(model_name, torch_dtype="auto")`.`
         pretraining_tp (`int`, *optional*, defaults to `1`):
             Experimental feature. Tensor parallelism rank used during pretraining with Megatron. Please refer to [this
             document](https://huggingface.co/docs/transformers/parallelism) to understand more about it. This value is
@@ -117,9 +111,7 @@ class BloomConfig(PretrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_hidden_layers": "n_layer",
-        "n_head": "num_attention_heads",
-        "hidden_size": "n_embed",
-        "dtype": "torch_dtype",
+        "num_attention_heads": "n_head",
     }
 
     def __init__(
@@ -128,7 +120,6 @@ class BloomConfig(PretrainedConfig):
         hidden_size=64,
         n_layer=2,
         n_head=8,
-        masked_softmax_fusion=True,
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
         use_cache=False,
@@ -137,17 +128,16 @@ class BloomConfig(PretrainedConfig):
         apply_residual_connection_post_layernorm=False,
         hidden_dropout=0.0,
         attention_dropout=0.0,
-        attention_softmax_in_fp32=True,
         pretraining_tp=1,  # TP rank used when training with megatron
-        dtype="bfloat16",
         slow_but_exact=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
+        # Backward compatibility with n_embed kwarg
+        n_embed = kwargs.pop("n_embed", None)
+        self.hidden_size = hidden_size if n_embed is None else n_embed
         self.n_layer = n_layer
         self.n_head = n_head
-        self.masked_softmax_fusion = masked_softmax_fusion
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_range = initializer_range
         self.use_cache = use_cache
@@ -155,11 +145,9 @@ class BloomConfig(PretrainedConfig):
         self.apply_residual_connection_post_layernorm = apply_residual_connection_post_layernorm
         self.hidden_dropout = hidden_dropout
         self.attention_dropout = attention_dropout
-        self.attention_softmax_in_fp32 = attention_softmax_in_fp32
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
-        self.dtype = dtype
         self.slow_but_exact = slow_but_exact
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
