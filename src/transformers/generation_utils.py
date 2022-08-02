@@ -928,43 +928,43 @@ class GenerationMixin:
                 the prompt.
             max_new_tokens (`int`, *optional*):
                 The maximum numbers of tokens to generate, ignoring the number of tokens in the prompt.
-            min_length (`int`, *optional*, defaults to 10):
+            min_length (`int`, *optional*, defaults to `model.config.min_length` or 10 if the config does not set any value):
                 The minimum length of the sequence to be generated.
-            do_sample (`bool`, *optional*, defaults to `False`):
+            do_sample (`bool`, *optional*, defaults to `model.config.do_sample` or `False` if the config does not set any value):
                 Whether or not to use sampling ; use greedy decoding otherwise.
             early_stopping (`bool`, *optional*, defaults to `False`):
                 Whether to stop the beam search when at least `num_beams` sentences are finished per batch or not.
-            num_beams (`int`, *optional*, defaults to 1):
+            num_beams (`int`, *optional*, defaults to `model.config.num_beams` or 1 if the config does not set any value):
                 Number of beams for beam search. 1 means no beam search.
-            temperature (`float`, *optional*, defaults to 1.0):
+            temperature (`float`, *optional*, defaults to `model.config.temperature` or 1.0 if the config does not set any value):
                 The value used to module the next token probabilities.
-            top_k (`int`, *optional*, defaults to 50):
+            top_k (`int`, *optional*, defaults to `model.config.top_k` or 50 if the config does not set any value):
                 The number of highest probability vocabulary tokens to keep for top-k-filtering.
-            top_p (`float`, *optional*, defaults to 1.0):
+            top_p (`float`, *optional*, defaults to `model.config.top_p` or 1.0 if the config does not set any value):
                 If set to float < 1, only the most probable tokens with probabilities that add up to `top_p` or higher
                 are kept for generation.
-            typical_p (`float`, *optional*, defaults to 1.0):
+            typical_p (`float`, *optional*, defaults to `model.config.typical_p` or 1.0 if the config does not set any value):
                 The amount of probability mass from the original distribution to be considered in typical decoding. If
                 set to 1.0 it takes no effect. See [this paper](https://arxiv.org/pdf/2202.00666.pdf) for more details.
-            repetition_penalty (`float`, *optional*, defaults to 1.0):
+            repetition_penalty (`float`, *optional*, defaults to `model.config.repetition_penalty` or 1.0 if the config does not set any value):
                 The parameter for repetition penalty. 1.0 means no penalty. See [this
                 paper](https://arxiv.org/pdf/1909.05858.pdf) for more details.
-            pad_token_id (`int`, *optional*):
+            pad_token_id (`int`, *optional*, defaults to `model.config.pad_token_id`):
                 The id of the *padding* token.
-            bos_token_id (`int`, *optional*):
+            bos_token_id (`int`, *optional*, defaults to `model.config.bos_token_id`):
                 The id of the *beginning-of-sequence* token.
-            eos_token_id (`int`, *optional*):
+            eos_token_id (`int`, *optional*, defaults to `model.config.eos_token_id`):
                 The id of the *end-of-sequence* token.
-            length_penalty (`float`, *optional*, defaults to 1.0):
+            length_penalty (`float`, *optional*, defaults to `model.config.length_penalty` or 1.0 if the config does not set any value):
                  Exponential penalty to the length. 1.0 means that the beam score is penalized by the sequence length.
                  0.0 means no penalty. Set to values < 0.0 in order to encourage the model to generate longer
                  sequences, to a value > 0.0 in order to encourage the model to produce shorter sequences.
-            no_repeat_ngram_size (`int`, *optional*, defaults to 0):
+            no_repeat_ngram_size (`int`, *optional*, defaults to `model.config.no_repeat_ngram_size` or 0 if the config does not set any value):
                 If set to int > 0, all ngrams of that size can only occur once.
-            encoder_no_repeat_ngram_size (`int`, *optional*, defaults to 0):
+            encoder_no_repeat_ngram_size (`int`, *optional*, defaults to `model.config.encoder_no_repeat_ngram_size` or 0 if the config does not set any value):
                 If set to int > 0, all ngrams of that size that occur in the `encoder_input_ids` cannot occur in the
                 `decoder_input_ids`.
-            bad_words_ids(`List[List[int]]`, *optional*):
+            bad_words_ids(`List[List[int]]`, *optional*, defaults to `model.config.bad_words_ids`):
                 List of token ids that are not allowed to be generated. In order to get the token ids of the words that
                 should not appear in the generated text, use `tokenizer(bad_words, add_prefix_space=True,
                 add_special_tokens=False).input_ids`.
@@ -973,7 +973,7 @@ class GenerationMixin:
                 list of words that must be included, the opposite to `bad_words_ids`. If given `List[List[List[int]]]`,
                 this triggers a [disjunctive constraint](https://github.com/huggingface/transformers/issues/14081),
                 where one can allow different forms of each word.
-            num_return_sequences(`int`, *optional*, defaults to 1):
+            num_return_sequences(`int`, *optional*, defaults to `model.config.num_return_sequences` or 1 if the config does not set any value):
                 The number of independently computed returned sequences for each element in the batch.
             max_time(`float`, *optional*):
                 The maximum amount of time you allow the computation to run for in seconds. generation will still
@@ -987,10 +987,10 @@ class GenerationMixin:
             use_cache: (`bool`, *optional*, defaults to `True`):
                 Whether or not the model should use the past last key/values attentions (if applicable to the model) to
                 speed up decoding.
-            num_beam_groups (`int`, *optional*, defaults to 1):
+            num_beam_groups (`int`, *optional*, defaults to `model.config.num_beam_groups` or 1 if the config does not set any value):
                 Number of groups to divide `num_beams` into in order to ensure diversity among different groups of
                 beams. [this paper](https://arxiv.org/pdf/1610.02424.pdf) for more details.
-            diversity_penalty (`float`, *optional*, defaults to 0.0):
+            diversity_penalty (`float`, *optional*, defaults to `model.config.diversity_penalty` or 0.0 if the config does not set any value):
                 This value is subtracted from a beam's score if it generates a token same as any beam from other group
                 at a particular time. Note that `diversity_penalty` is only effective if `group beam search` is
                 enabled.
@@ -1016,28 +1016,28 @@ class GenerationMixin:
             constraints (`List[Constraint]`, *optional*):
                  Custom constraints that can be added to the generation to ensure that the output will contain the use
                  of certain tokens as defined by `Constraint` objects, in the most sensible way possible.
-            output_attentions (`bool`, *optional*, defaults to `False`):
+            output_attentions (`bool`, *optional*, defaults to `model.config.output_attentions` or `False` if the config does not set any value):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
-            output_hidden_states (`bool`, *optional*, defaults to `False`):
+            output_hidden_states (`bool`, *optional*, defaults to `model.config.output_hidden_states` or `False` if the config does not set any value):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more details.
-            output_scores (`bool`, *optional*, defaults to `False`):
+            output_scores (`bool`, *optional*, defaults to `model.config.output_scores` or `False` if the config does not set any value):
                 Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
-            return_dict_in_generate (`bool`, *optional*, defaults to `False`):
+            return_dict_in_generate (`bool`, *optional*, defaults to `model.config.return_dict_in_generate` or `False` if the config does not set any value):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-            forced_bos_token_id (`int`, *optional*):
+            forced_bos_token_id (`int`, *optional*, defaults to `model.config.forced_bos_token_id`):
                 The id of the token to force as the first generated token after the `decoder_start_token_id`. Useful
                 for multilingual models like [mBART](../model_doc/mbart) where the first generated token needs to be
                 the target language token.
-            forced_eos_token_id (`int`, *optional*):
+            forced_eos_token_id (`int`, *optional*, defaults to `model.config.forced_eos_token_id`):
                 The id of the token to force as the last generated token when `max_length` is reached.
-            remove_invalid_values (`bool`, *optional*):
+            remove_invalid_values (`bool`, *optional*, defaults to `model.config.remove_invalid_values`):
                 Whether to remove possible *nan* and *inf* outputs of the model to prevent the generation method to
                 crash. Note that using `remove_invalid_values` can slow down generation.
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
-            exponential_decay_length_penalty (`tuple(int, float)`, *optional*):
+            exponential_decay_length_penalty (`tuple(int, float)`, *optional*, defaults to `model.config.exponential_decay_length_penalty`):
                 This Tuple adds an exponentially increasing length penalty, after a certain amount of tokens have been
                 generated. The tuple shall consist of: `(start_index, decay_factor)` where `start_index` indicates
                 where penalty starts and `decay_factor` represents the factor of exponential decay
