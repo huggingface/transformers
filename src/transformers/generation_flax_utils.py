@@ -217,11 +217,14 @@ class FlaxGenerationMixin:
                 the prompt.
             max_new_tokens (`int`, *optional*):
                 The maximum numbers of tokens to generate, ignoring the number of tokens in the prompt.
-            min_length (`int`, *optional*, defaults to `model.config.min_length` or 10 if the config does not set any value):
+            min_length (`int`, *optional*, defaults to `model.config.min_length` or 10 if the config does not set any
+                value):
                 The minimum length of the sequence to be generated
-            do_sample (`bool`, *optional*, defaults to `model.config.do_sample` or `False` if the config does not set any value):
+            do_sample (`bool`, *optional*, defaults to `model.config.do_sample` or `False` if the config does not set
+                any value):
                 Whether or not to use sampling ; use greedy decoding otherwise.
-            temperature (`float`, *optional*, defaults to `model.config.temperature` or 1.0 if the config does not set any value):
+            temperature (`float`, *optional*, defaults to `model.config.temperature` or 1.0 if the config does not set
+                any value):
                 The value used to module the next token probabilities.
             top_k (`int`, *optional*, defaults to `model.config.top_k` or 50 if the config does not set any value):
                 The number of highest probability vocabulary tokens to keep for top-k-filtering.
@@ -234,13 +237,16 @@ class FlaxGenerationMixin:
                 The id of the *beginning-of-sequence* token.
             eos_token_id (`int`, *optional*, defaults to `model.config.eos_token_id`):
                 The id of the *end-of-sequence* token.
-            length_penalty (`float`, *optional*, defaults to `model.config.length_penalty` or 1.0 if the config does not set any value):
+            length_penalty (`float`, *optional*, defaults to `model.config.length_penalty` or 1.0 if the config does
+                not set any value):
                  Exponential penalty to the length. 1.0 means that the beam score is penalized by the sequence length.
                  0.0 means no penalty. Set to values < 0.0 in order to encourage the model to generate longer
                  sequences, to a value > 0.0 in order to encourage the model to produce shorter sequences.
-            no_repeat_ngram_size (`int`, *optional*, defaults to `model.config.no_repeat_ngram_size` or 0 if the config does not set any value):
+            no_repeat_ngram_size (`int`, *optional*, defaults to `model.config.no_repeat_ngram_size` or 0 if the config
+                does not set any value):
                 If set to int > 0, all ngrams of that size can only occur once.
-            num_beams (`int`, *optional*, defaults to `model.config.num_beams` or 1 if the config does not set any value):
+            num_beams (`int`, *optional*, defaults to `model.config.num_beams` or 1 if the config does not set any
+                value):
                 Number of beams for beam search. 1 means no beam search.
             forced_bos_token_id (`int`, *optional*, defaults to `model.config.forced_bos_token_id`):
                 The id of the token to force as the first generated token after the `decoder_start_token_id`. Useful
