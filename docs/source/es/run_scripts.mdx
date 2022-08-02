@@ -206,7 +206,7 @@ Prueba tu configuración para asegurarte que esta configurada correctamente:
 accelerate test
 ```
 
-Ahora estás listo para iniciar el entrenamiento:
+Todo listo para iniciar el entrenamiento:
 
 ```bash
 accelerate launch run_summarization_no_trainer.py \
@@ -217,15 +217,15 @@ accelerate launch run_summarization_no_trainer.py \
     --output_dir ~/tmp/tst-summarization
 ```
 
-## Use a custom dataset
+## Usar un conjunto de datos personalizado
 
-The summarization script supports custom datasets as long as they are a CSV or JSON Line file. When you use your own dataset, you need to specify several additional arguments:
+El script de resumen admite conjuntos de datos personalizados siempre que sean un archivo CSV o JSON Line. Cuando uses tu propio conjunto de datos, necesitas especificar varios argumentos adicionales:
 
-- `train_file` and `validation_file` specify the path to your training and validation files.
-- `text_column` is the input text to summarize.
-- `summary_column` is the target text to output.
+- `train_file` y `validation_file` especifican la ruta a tus archivos de entrenamiento y validación.
+- `text_column` es el texto de entrada para resumir.
+- `summary_column` es el texto de destino para la salida.
 
-A summarization script using a custom dataset would look like this:
+Un script de resumen que utilice un conjunto de datos personalizado se vería así:
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py \
@@ -244,9 +244,9 @@ python examples/pytorch/summarization/run_summarization.py \
     --predict_with_generate
 ```
 
-## Test a script
+## Prueba un script
 
-It is often a good idea to run your script on a smaller number of dataset examples to ensure everything works as expected before committing to an entire dataset which may take hours to complete. Use the following arguments to truncate the dataset to a maximum number of samples:
+A veces, es una buena idea ejecutar tu secuencia de comandos en una cantidad menor de ejemplos para asegurarse de que todo funcione como se espera antes de comprometerse con un conjunto de datos completo, lo que puede demorar horas en completarse. Utiliza los siguientes argumentos para truncar el conjunto de datos a un número máximo de muestras:
 
 - `max_train_samples`
 - `max_eval_samples`
@@ -270,17 +270,17 @@ python examples/pytorch/summarization/run_summarization.py \
     --predict_with_generate
 ```
 
-Not all example scripts support the `max_predict_samples` argument. If you aren't sure whether your script supports this argument, add the `-h` argument to check:
+No todos los scripts de ejemplo admiten el argumento `max_predict_samples`. Puede que desconozcas si tu secuencia de comandos admite este argumento, agrega el argumento `-h` para verificar:
 
 ```bash
 examples/pytorch/summarization/run_summarization.py -h
 ```
 
-## Resume training from checkpoint
+## Reanudar el entrenamiento desde el punto de control
 
-Another helpful option to enable is resuming training from a previous checkpoint. This will ensure you can pick up where you left off without starting over if your training gets interrupted. There are two methods to resume training from a checkpoint.
+Otra opción útil para habilitar es reanudar el entrenamiento desde un punto de control anterior. Esto asegurará que puedas continuar donde lo dejaste sin comenzar de nuevo si tu entrenamiento se interrumpe. Hay dos métodos para reanudar el entrenamiento desde un punto de control.
 
-The first method uses the `output_dir previous_output_dir` argument to resume training from the latest checkpoint stored in `output_dir`. In this case, you should remove `overwrite_output_dir`:
+El primer método utiliza el argumento `output_dir previous_output_dir` para reanudar el entrenamiento desde el último punto de control almacenado en `output_dir`. En este caso, debes eliminar `overwrite_output_dir`:
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py
@@ -297,7 +297,7 @@ python examples/pytorch/summarization/run_summarization.py
     --predict_with_generate
 ```
 
-The second method uses the `resume_from_checkpoint path_to_specific_checkpoint` argument to resume training from a specific checkpoint folder.
+El segundo método utiliza el argumento `resume_from_checkpoint path_to_specific_checkpoint` para reanudar el entrenamiento desde una carpeta de punto de control específica.
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py
@@ -315,19 +315,19 @@ python examples/pytorch/summarization/run_summarization.py
     --predict_with_generate
 ```
 
-## Share your model
+## Comparte tu modelo
 
-All scripts can upload your final model to the [Model Hub](https://huggingface.co/models). Make sure you are logged into Hugging Face before you begin:
+Todos los scripts pueden cargar tu modelo final en [Model Hub](https://huggingface.co/models). Asegúrate de haber iniciado sesión en Hugging Face antes de comenzar:
 
 ```bash
 huggingface-cli login
 ```
 
-Then add the `push_to_hub` argument to the script. This argument will create a repository with your Hugging Face username and the folder name specified in `output_dir`.
+Luego agrega el argumento `push_to_hub` al script. Este argumento creará un repositorio con tu nombre de usuario Hugging Face y el nombre de la carpeta especificado en `output_dir`.
 
-To give your repository a specific name, use the `push_to_hub_model_id` argument to add it. The repository will be automatically listed under your namespace.
+Para darle a tu repositorio un nombre específico, usa el argumento `push_to_hub_model_id` para añadirlo. El repositorio se incluirá automáticamente en tu _namespace_.
 
-The following example shows how to upload a model with a specific repository name:
+El siguiente ejemplo muestra cómo cargar un modelo con un nombre de repositorio específico:
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py
