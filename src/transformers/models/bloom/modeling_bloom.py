@@ -294,8 +294,6 @@ class BloomAttention(nn.Module):
         batch_size, q_length, _, _ = query_layer.shape
 
         query_layer = query_layer.transpose(1, 2).reshape(batch_size * self.num_heads, q_length, self.head_dim)
-        key_layer = key_layer.permute(0, 2, 3, 1).reshape(batch_size * self.num_heads, self.head_dim, q_length)
-        value_layer = value_layer.transpose(1, 2).reshape(batch_size * self.num_heads, q_length, self.head_dim)
         if layer_past is not None:
             # Cached past key/value:
             #  - key: [batch_size * self.num_heads, head_dim, kv_length]
@@ -309,11 +307,13 @@ class BloomAttention(nn.Module):
                 past_key = torch.cat((past_key, torch.empty_like(past_key)), dim=2)
                 past_value = torch.cat((past_value, torch.empty_like(past_value)), dim=1)
 
-            past_key[:, :, kv_past_length:new_kv_past_length] = key_layer
-            past_value[:, kv_past_length:new_kv_past_length, :] = value_layer
+            past_key[:, :, kv_past_length:new_kv_past_length] = key_layer.permute(0, 2, 3, 1).reshape(batch_size * self.num_heads, self.head_dim, q_length)
+            past_value[:, kv_past_length:new_kv_past_length, :] = value_layer.transpose(1, 2).reshape(batch_size * self.num_heads, q_length, self.head_dim)
             key_layer = past_key[:, :, :new_kv_past_length]
             value_layer = past_value[:, :new_kv_past_length, :]
         else:
+            key_layer = key_layer.permute(0, 2, 3, 1).reshape(batch_size * self.num_heads, self.head_dim, q_length)
+            value_layer = value_layer.transpose(1, 2).reshape(batch_size * self.num_heads, q_length, self.head_dim)
             new_kv_past_length = key_layer.shape[-1]
 
         _, _, kv_length = key_layer.shape
