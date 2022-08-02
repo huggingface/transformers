@@ -534,7 +534,6 @@ class GenerationMixin:
         model_kwargs: Optional[Dict[str, torch.Tensor]] = None,
         device: torch.device = None,
     ) -> torch.LongTensor:
-
         if model_kwargs is not None and "decoder_input_ids" in model_kwargs:
             return model_kwargs.pop("decoder_input_ids")
         else:
@@ -1688,7 +1687,6 @@ class GenerationMixin:
 
         this_peer_finished = False  # used by synced_gpus only
         while True:
-
             if synced_gpus:
                 # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
                 # The following logic allows an early break if all peers finished generating their sequence
@@ -1943,7 +1941,6 @@ class GenerationMixin:
         this_peer_finished = False  # used by synced_gpus only
         # auto-regressive generation
         while True:
-
             if synced_gpus:
                 # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
                 # The following logic allows an early break if all peers finished generating their sequence
@@ -2212,7 +2209,6 @@ class GenerationMixin:
 
         this_peer_finished = False  # used by synced_gpus only
         while True:
-
             if synced_gpus:
                 # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
                 # The following logic allows an early break if all peers finished generating their sequence
@@ -2525,7 +2521,6 @@ class GenerationMixin:
 
         this_peer_finished = False  # used by synced_gpus only
         while True:
-
             if synced_gpus:
                 # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
                 # The following logic allows an early break if all peers finished generating their sequence
@@ -2849,7 +2844,6 @@ class GenerationMixin:
 
         this_peer_finished = False  # used by synced_gpus only
         while True:
-
             if synced_gpus:
                 # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
                 # The following logic allows an early break if all peers finished generating their sequence
@@ -3047,7 +3041,6 @@ class GenerationMixin:
         synced_gpus: Optional[bool] = None,
         **model_kwargs,
     ) -> Union[BeamSearchOutput, torch.LongTensor]:
-
         r"""
         Generates sequences of token ids for models with a language modeling head using **constrained beam search
         decoding** and can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
@@ -3209,7 +3202,6 @@ class GenerationMixin:
 
         this_peer_finished = False  # used by synced_gpus only
         while True:
-
             if synced_gpus:
                 # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
                 # The following logic allows an early break if all peers finished generating their sequence
