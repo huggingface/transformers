@@ -168,6 +168,7 @@ class VisualQuestionAnsweringPipeline(Pipeline):
                 "return_token_type_ids": True,
                 "return_attention_mask": True,
                 "is_split_into_words": True,
+                # "max_length": 512,
             }
             padding = "max_length"
             truncation = True
@@ -223,8 +224,7 @@ class VisualQuestionAnsweringPipeline(Pipeline):
         }
 
     def _forward(self, inputs):
-        model_inputs = {k: inputs["encoding"][k] for k in self.tokenizer.model_input_names}
-        model_outputs = self.model(**model_inputs)
+        model_outputs = self.model(**inputs["encoding"])
         return {"outputs": model_outputs, "inputs": inputs}
 
     def postprocess(self, result, top_k=5):
