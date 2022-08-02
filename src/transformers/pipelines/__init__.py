@@ -25,6 +25,8 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 from numpy import isin
 
+from transformers import SpeechEncoderDecoderConfig, VisionTextDualEncoderConfig
+
 from ..configuration_utils import PretrainedConfig
 from ..dynamic_module_utils import get_class_from_dynamic_module
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
@@ -305,6 +307,7 @@ SUPPORTED_TASKS = {
 
 NO_FEATURE_EXTRACTOR_TASKS = set()
 NO_TOKENIZER_TASKS = set()
+MULTI_MODEL_CONFIGS = {VisionTextDualEncoderConfig, SpeechEncoderDecoderConfig}
 for task, values in SUPPORTED_TASKS.items():
     if values["type"] == "text":
         NO_FEATURE_EXTRACTOR_TASKS.add(task)
@@ -666,26 +669,25 @@ def pipeline(
         tokenizer is None
         and not load_tokenizer
         and normalized_task not in NO_TOKENIZER_TASKS
-        and task != "feature-extraction"
+        and type(model_config) in MULTI_MODEL_CONFIGS
     ):
-        raise EnvironmentError(
-            f"There is a problem in `transformers`. The task {task} requires a tokenizer, however the model"
-            f" {type(model_config)} seems to not support tokenizer. This is likely a misconfiguration in the library,"
-            " please report this issue."
-        )
+        # This is a special category of models, that are fusions of multiple models
+        # so the model_config might not define a tokenizer, but it seems to be
+        # necessary for the task, so we're force-trying to load it.
+        load_tokenizer = True
     # Feature extraction is very special, it can't be statically known
     # if it needs feature_extractor/tokenizer or not
     if (
         feature_extractor is None
         and not load_feature_extractor
         and normalized_task not in NO_FEATURE_EXTRACTOR_TASKS
-        and task != "feature-extraction"
+        and type(model_config) in MULTI_MODEL_CONFIGS
     ):
-        raise EnvironmentError(
-            f"There is a problem in `transformers`. The task {task} requires a feature extractor, however the model"
-            f" {type(model_config)} seems to not support feature-extractors. This is likely a misconfiguration in the"
-            " library, please report this issue."
-        )
+        # This is a special category of models, that are fusions of multiple models
+        # so the model_config might not define a tokenizer, but it seems to be
+        # necessary for the task, so we're force-trying to load it.
+        load_feature_extractor = True
+
     if task in NO_TOKENIZER_TASKS:
         # These will never require a tokenizer.
         # the model on the other hand might have a tokenizer, but

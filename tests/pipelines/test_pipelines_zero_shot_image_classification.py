@@ -174,22 +174,6 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
 
     @slow
     @require_torch
-    def test_large_model_misconfigured(self):
-        # XXX this should be a fast test, but the triggering arch
-        # VisionTextDualEncoderModel is missing for small tests
-        # https://huggingface.co/hf-internal-testing
-        # This test will also start to fail, once this architecture
-        # correctly defines AutoFeatureExtractor. At this point
-        # we can safely remove this test as we don't really want
-        # to keep around an invalid model around just for this.
-        with self.assertRaises(EnvironmentError):
-            pipeline(
-                task="zero-shot-image-classification",
-                model="Bingsu/vitB32_bert_ko_small_clip",
-            )
-
-    @slow
-    @require_torch
     def test_large_model_pt(self):
         image_classifier = pipeline(
             task="zero-shot-image-classification",
