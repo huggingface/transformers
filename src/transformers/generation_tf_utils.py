@@ -418,7 +418,6 @@ class TFGenerationMixin:
         post](https://huggingface.co/blog/how-to-generate).
 
         Parameters:
-
             input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`, `(batch_size, sequence_length,
             feature_dim)` or `(batch_size, num_channels, height, width)`, *optional*):
                 The sequence used as a prompt for the generation or as model inputs to the encoder. If `None` the
@@ -446,7 +445,7 @@ class TFGenerationMixin:
             top_p (`float`, *optional*, defaults to `model.config.top_p` or 1.0 if the config does not set any value):
                 If set to float < 1, only the most probable tokens with probabilities that add up to `top_p` or higher
                 are kept for generation.
-            repetition_penalty (`float`, *optional*, defaults to `model.config.repetition_penalty` or 1.0 if the config
+            repetition_penalty (`float`, *optional*, defaults to `model.config.repetition_penalty` or 1.0 if the config:
                 does not set any value): The parameter for repetition penalty. 1.0 means no penalty. See [this
                 paper](https://arxiv.org/pdf/1909.05858.pdf) for more details.
             pad_token_id (`int`, *optional*, defaults to `model.config.pad_token_id`):
@@ -460,7 +459,7 @@ class TFGenerationMixin:
 
                 Set to values < 1.0 in order to encourage the model to generate shorter sequences, to a value > 1.0 in
                 order to encourage the model to produce longer sequences.
-            no_repeat_ngram_size (`int`, *optional*, defaults to `model.config.no_repeat_ngram_size` or 0 if the config
+            no_repeat_ngram_size (`int`, *optional*, defaults to `model.config.no_repeat_ngram_size` or 0 if the config:
                 does not set any value): If set to int > 0, all ngrams of that size can only occur once.
             bad_words_ids(`List[int]`, *optional*, defaults to `model.config.bad_words_ids`):
                 List of token ids that are not allowed to be generated. In order to get the tokens of the words that
@@ -483,7 +482,7 @@ class TFGenerationMixin:
             output_attentions (`bool`, *optional*, defaults to `model.config.output_attentions` or `False` if the
                 config does not set any value): Whether or not to return the attentions tensors of all attention
                 layers. See `attentions` under returned tensors for more details.
-            output_hidden_states (`bool`, *optional*, defaults to `model.config.output_hidden_states` or `False` if the
+            output_hidden_states (`bool`, *optional*, defaults to `model.config.output_hidden_states` or `False` if the:
                 config does not set any value): Whether or not to return the hidden states of all layers. See
                 `hidden_states` under returned tensors for more details.
             output_scores (`bool`, *optional*, defaults to `model.config.output_scores` or `False` if the config does
@@ -1337,7 +1336,6 @@ class TFGenerationMixin:
         post](https://huggingface.co/blog/how-to-generate).
 
         Parameters:
-
             input_ids (`tf.Tensor` of `dtype=tf.int32` and shape `(batch_size, sequence_length)`, *optional*):
                 The sequence used as a prompt for the generation. If `None` the method initializes it with
                 `bos_token_id` and a batch size of 1.
@@ -2069,7 +2067,6 @@ class TFGenerationMixin:
         Generates sequences for models with a language modeling head using greedy decoding.
 
         Parameters:
-
             input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
             logits_processor (`TFLogitsProcessorList`, *optional*):
@@ -2322,7 +2319,6 @@ class TFGenerationMixin:
         Generates sequences for models with a language modeling head using multinomial sampling.
 
         Parameters:
-
             input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
             logits_processor (`TFLogitsProcessorList`, *optional*):
@@ -2599,7 +2595,6 @@ class TFGenerationMixin:
         Generates sequences for models with a language modeling head using beam search with multinomial sampling.
 
         Parameters:
-
             input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
             max_length (`int`, *optional*, defaults to 20):

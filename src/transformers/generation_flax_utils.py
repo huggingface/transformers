@@ -208,7 +208,6 @@ class FlaxGenerationMixin:
         post](https://huggingface.co/blog/how-to-generate).
 
         Parameters:
-
             input_ids (`jnp.ndarray` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
             max_length (`int`, *optional*, defaults to `model.config.max_length`):
@@ -239,7 +238,7 @@ class FlaxGenerationMixin:
                  Exponential penalty to the length. 1.0 means that the beam score is penalized by the sequence length.
                  0.0 means no penalty. Set to values < 0.0 in order to encourage the model to generate longer
                  sequences, to a value > 0.0 in order to encourage the model to produce shorter sequences.
-            no_repeat_ngram_size (`int`, *optional*, defaults to `model.config.no_repeat_ngram_size` or 0 if the config
+            no_repeat_ngram_size (`int`, *optional*, defaults to `model.config.no_repeat_ngram_size` or 0 if the config:
                 does not set any value): If set to int > 0, all ngrams of that size can only occur once.
             num_beams (`int`, *optional*, defaults to `model.config.num_beams` or 1 if the config does not set any
                 value): Number of beams for beam search. 1 means no beam search.

@@ -1560,7 +1560,6 @@ class GenerationMixin:
         used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
 
         Parameters:
-
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
             logits_processor (`LogitsProcessorList`, *optional*):
@@ -1793,7 +1792,6 @@ class GenerationMixin:
         can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
 
         Parameters:
-
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
             logits_processor (`LogitsProcessorList`, *optional*):
@@ -2049,7 +2047,6 @@ class GenerationMixin:
         can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
 
         Parameters:
-
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
             beam_scorer (`BeamScorer`):
@@ -2357,7 +2354,6 @@ class GenerationMixin:
         sampling** and can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
 
         Parameters:
-
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
             beam_scorer (`BeamScorer`):
@@ -2673,7 +2669,6 @@ class GenerationMixin:
         decoding** and can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
 
         Parameters:
-
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
             beam_scorer (`BeamScorer`):
