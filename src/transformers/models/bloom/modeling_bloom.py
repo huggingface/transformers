@@ -321,7 +321,7 @@ class BloomAttention(nn.Module):
             new_kv_past_length = key_layer.shape[-1]
 
             if use_cache is True:
-                present = (key_layer, past_value, new_kv_past_length)
+                present = (key_layer, value_layer, new_kv_past_length)
 
         _, _, kv_length = key_layer.shape
 
