@@ -12,15 +12,15 @@ specific language governing permissions and limitations under the License.
 
 # Entrenamiento con un script
 
-Junto con los [notebooks](./noteboks/README) de 🤗 Transformers, también hay scripts con ejemplos que muestran cómo entrenar un modelo para una tarea con [PyTorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch), [TensorFlow](https://github.com/huggingface/transformers/tree/main/examples/tensorflow), o [JAX/Flax](https://github.com/huggingface/transformers/tree/main/examples/flax).
+Junto con los [notebooks](./noteboks/README) de 🤗 Transformers, también hay scripts con ejemplos que muestran cómo entrenar un modelo para una tarea en [PyTorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch), [TensorFlow](https://github.com/huggingface/transformers/tree/main/examples/tensorflow), o [JAX/Flax](https://github.com/huggingface/transformers/tree/main/examples/flax).
 
 También encontrarás scripts que hemos usado en nuestros [proyectos de investigación](https://github.com/huggingface/transformers/tree/main/examples/research_projects) y [ejemplos pasados](https://github.com/huggingface/transformers/tree/main/examples/legacy) que en su mayoría son aportados por la comunidad. Estos scripts no se mantienen activamente y requieren una versión específica de 🤗 Transformers que probablemente sea incompatible con la última versión de la librería.
 
 No se espera que los scripts de ejemplo funcionen de inmediato en todos los problemas, y es posible que debas adaptar el script al problema que estás tratando de resolver. Para ayudarte con esto, la mayoría de los scripts exponen completamente cómo se preprocesan los datos, lo que te permite editarlos según sea necesario para tu caso de uso.
 
-Para cualquier característica que te gustaría implementar en un script de ejemplo, por favor discútelo en el [foro](https://discuss.huggingface.co/) o en un [issue](https://github.com/huggingface/transformers/issues) antes de enviar un Pull Request. Si bien agradecemos las correcciones de errores, es poco probable que fusionemos un Pull Request que agregue más funcionalidad a costa de la legibilidad.
+Para cualquier característica que te gustaría implementar en un script de ejemplo, por favor discútelo en el [foro](https://discuss.huggingface.co/) o con un [issue](https://github.com/huggingface/transformers/issues) antes de enviar un Pull Request. Si bien agradecemos las correcciones de errores, es poco probable que fusionemos un Pull Request que agregue más funcionalidad a costa de la legibilidad.
 
-Esta guía te mostrará cómo ejecutar un ejemplo resumido de un script de entranamiento en [PyTorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization) y [TensorFlow](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/summarization). Se espera que todos los ejemplos funcionen con ambos frameworks a menos que se especifique lo contrario.
+Esta guía te mostrará cómo ejecutar un ejemplo de un script de entranamiento para resumir texto en [PyTorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization) y [TensorFlow](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/summarization). Se espera que todos los ejemplos funcionen con ambos frameworks a menos que se especifique lo contrario.
 
 ## Configuración
 
@@ -83,7 +83,7 @@ pip install -r requirements.txt
 
 <frameworkcontent>
 <pt>
-El script de ejemplo descarga y preprocesa un conjunto de datos de la librería 🤗 [Datasets](https://huggingface.co/docs/datasets/). Luego, el script ajusta un conjunto de datos con [Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) en una arquitectura que soporta la tarea de resumen. El siguiente ejemplo muestra cómo ajustar [T5-small](https://huggingface.co/t5-small) en el conjunto de datos [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail). El modelo T5 requiere un argumento adicional `source_prefix` debido a cómo fue entrenado. Este aviso le permite a T5 saber que se trata de una tarea de resumen.
+El script de ejemplo descarga y preprocesa un conjunto de datos de la librería 🤗 [Datasets](https://huggingface.co/docs/datasets/). Luego, el script ajusta un conjunto de datos con [Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) en una arquitectura que soporta la tarea de resumen. El siguiente ejemplo muestra cómo ajustar [T5-small](https://huggingface.co/t5-small) en el conjunto de datos [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail). El modelo T5 requiere un argumento adicional `source_prefix` debido a cómo fue entrenado. Este aviso le permite a T5 saber que se trata de una tarea de resumir.
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py \
@@ -101,7 +101,7 @@ python examples/pytorch/summarization/run_summarization.py \
 ```
 </pt>
 <tf>
-El script de ejemplo descarga y preprocesa un conjunto de datos de la librería 🤗 [Datasets](https://huggingface.co/docs/datasets/). Luego, el script ajusta un conjunto de datos utilizando Keras en una arquitectura que soporta la tarea de resumen. El siguiente ejemplo muestra cómo ajustar [T5-small](https://huggingface.co/t5-small) en el conjunto de datos [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail). El modelo T5 requiere un argumento adicional `source_prefix` debido a cómo fue entrenado. Este aviso le permite a T5 saber que se trata de una tarea de resumen.
+El script de ejemplo descarga y preprocesa un conjunto de datos de la librería 🤗 [Datasets](https://huggingface.co/docs/datasets/). Luego, el script ajusta un conjunto de datos utilizando Keras en una arquitectura que soporta la tarea de resumir. El siguiente ejemplo muestra cómo ajustar [T5-small](https://huggingface.co/t5-small) en el conjunto de datos [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail). El modelo T5 requiere un argumento adicional `source_prefix` debido a cómo fue entrenado. Este aviso le permite a T5 saber que se trata de una tarea de resumir.
 
 ```bash
 python examples/tensorflow/summarization/run_summarization.py  \
@@ -118,11 +118,11 @@ python examples/tensorflow/summarization/run_summarization.py  \
 </tf>
 </frameworkcontent>
 
-## Entrenamiento distribuido y precisión mixta
+## Entrenamiento distribuido y de precisión mixta
 
-[Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) admite un entrenamiento distribuido y precisión mixta, lo que significa que también puedes usarlo en un script. Para habilitar ambas características:
+[Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) admite un entrenamiento distribuido y de precisión mixta, lo que significa que también puedes usarlo en un script. Para habilitar ambas características:
 
-- Agregue el argumento `fp16` para habilitar la precisión mixta.
+- Agrega el argumento `fp16` para habilitar la precisión mixta.
 - Establece la cantidad de GPU que se usarás con el argumento `nproc_per_node`.
 
 ```bash
@@ -142,13 +142,13 @@ python -m torch.distributed.launch \
     --predict_with_generate
 ```
 
-Los scripts de TensorFlow utilizan una [`MirroredStrategy`](https://www.tensorflow.org/guide/distributed_training#mirroredstrategy) para el entrenamiento distribuido, y no es necesario agregar argumentos adicionales al script de entrenamiento. El script de TensorFlow utilizará múltiples GPUs de forma predeterminada si están disponibles.
+Los scripts de TensorFlow utilizan [`MirroredStrategy`](https://www.tensorflow.org/guide/distributed_training#mirroredstrategy) para el entrenamiento distribuido, y no es necesario agregar argumentos adicionales al script de entrenamiento. El script de TensorFlow utilizará múltiples GPUs de forma predeterminada si están disponibles.
 
 ## Ejecutar un script en una TPU
 
 <frameworkcontent>
 <pt>
-Las Unidades de Procesamiento de Tensor (TPUs) están diseñadas específicamente para acelerar el rendimiento. PyTorch admite TPU con el compilador de aprendizaje profundo [XLA](https://www.tensorflow.org/xla) (consulta [aquí](https://github.com/pytorch/xla/blob/master/README.md) para obtener más detalles). Para usar una TPU, inicie el script `xla_spawn.py` y use el argumento `num_cores` para establecer la cantidad de núcleos de TPU que deseas usar.
+Las Unidades de Procesamiento de Tensor (TPUs) están diseñadas específicamente para acelerar el rendimiento. PyTorch admite TPU con el compilador de aprendizaje profundo [XLA](https://www.tensorflow.org/xla) (consulta [aquí](https://github.com/pytorch/xla/blob/master/README.md) para obtener más detalles). Para usar una TPU, inicia el script `xla_spawn.py` y usa el argumento `num_cores` para establecer la cantidad de núcleos de TPU que deseas usar.
 
 ```bash
 python xla_spawn.py --num_cores 8 \
@@ -167,7 +167,7 @@ python xla_spawn.py --num_cores 8 \
 ```
 </pt>
 <tf>
-Las Unidades de Procesamiento de Tensor (TPUs) están diseñadas específicamente para acelerar el rendimiento. TensorFlow utiliza una [`TPUStrategy`](https://www.tensorflow.org/guide/distributed_training#tpustrategy) para entrenar en TPUs. Para usar una TPU, pase el nombre del recurso de la TPU al argumento `tpu`
+Las Unidades de Procesamiento de Tensor (TPUs) están diseñadas específicamente para acelerar el rendimiento. TensorFlow utiliza [`TPUStrategy`](https://www.tensorflow.org/guide/distributed_training#tpustrategy) para entrenar en TPUs. Para usar una TPU, pasa el nombre del recurso de la TPU al argumento `tpu`
 
 ```bash
 python run_summarization.py  \
@@ -219,13 +219,13 @@ accelerate launch run_summarization_no_trainer.py \
 
 ## Usar un conjunto de datos personalizado
 
-El script de resumen admite conjuntos de datos personalizados siempre que sean un archivo CSV o JSON Line. Cuando uses tu propio conjunto de datos, necesitas especificar varios argumentos adicionales:
+El script de la tarea resumir admite conjuntos de datos personalizados siempre que sean un archivo CSV o JSON Line. Cuando uses tu propio conjunto de datos, necesitas especificar varios argumentos adicionales:
 
 - `train_file` y `validation_file` especifican la ruta a tus archivos de entrenamiento y validación.
 - `text_column` es el texto de entrada para resumir.
 - `summary_column` es el texto de destino para la salida.
 
-Un script de resumen que utilice un conjunto de datos personalizado se vería así:
+Un script para resumir que utiliza un conjunto de datos personalizado se vera así:
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py \
@@ -246,7 +246,7 @@ python examples/pytorch/summarization/run_summarization.py \
 
 ## Prueba un script
 
-A veces, es una buena idea ejecutar tu secuencia de comandos en una cantidad menor de ejemplos para asegurarse de que todo funcione como se espera antes de comprometerse con un conjunto de datos completo, lo que puede demorar horas en completarse. Utiliza los siguientes argumentos para truncar el conjunto de datos a un número máximo de muestras:
+A veces, es una buena idea ejecutar tu secuencia de comandos en una cantidad menor de ejemplos para asegurarte de que todo funciona como se espera antes de comprometerte con un conjunto de datos completo, lo que puede demorar horas en completarse. Utiliza los siguientes argumentos para truncar el conjunto de datos a un número máximo de muestras:
 
 - `max_train_samples`
 - `max_eval_samples`
@@ -270,7 +270,7 @@ python examples/pytorch/summarization/run_summarization.py \
     --predict_with_generate
 ```
 
-No todos los scripts de ejemplo admiten el argumento `max_predict_samples`. Puede que desconozcas si tu secuencia de comandos admite este argumento, agrega el argumento `-h` para verificar:
+No todos los scripts de ejemplo admiten el argumento `max_predict_samples`. Puede que desconozcas si la secuencia de comandos admite este argumento, agrega `-h` para verificar:
 
 ```bash
 examples/pytorch/summarization/run_summarization.py -h
@@ -317,7 +317,7 @@ python examples/pytorch/summarization/run_summarization.py
 
 ## Comparte tu modelo
 
-Todos los scripts pueden cargar tu modelo final en [Model Hub](https://huggingface.co/models). Asegúrate de haber iniciado sesión en Hugging Face antes de comenzar:
+Todos los scripts pueden cargar tu modelo final en el [Model Hub](https://huggingface.co/models). Asegúrate de haber iniciado sesión en Hugging Face antes de comenzar:
 
 ```bash
 huggingface-cli login
@@ -325,7 +325,7 @@ huggingface-cli login
 
 Luego agrega el argumento `push_to_hub` al script. Este argumento creará un repositorio con tu nombre de usuario Hugging Face y el nombre de la carpeta especificado en `output_dir`.
 
-Para darle a tu repositorio un nombre específico, usa el argumento `push_to_hub_model_id` para añadirlo. El repositorio se incluirá automáticamente en tu _namespace_.
+Para darle a tu repositorio un nombre específico, usa el argumento `push_to_hub_model_id` para añadirlo. El repositorio se incluirá automáticamente en tu namespace.
 
 El siguiente ejemplo muestra cómo cargar un modelo con un nombre de repositorio específico:
 
