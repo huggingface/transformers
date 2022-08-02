@@ -227,9 +227,11 @@ def resize(
     # To maintain backwards compatibility with the resizing done in previous image feature extractors, we use
     # the pillow library to resize the image and then convert back to numpy
     if not isinstance(image, PIL.Image.Image):
+        # PIL expects image to have channels last
+        image = to_channel_dimension_format(image, ChannelDimension.LAST)
         image = to_pil_image(image)
-    # PIL images are in the format (width, height)
     h, w = size
+    # PIL images are in the format (width, height)
     resized_image = image.resize((w, h), resample=resample)
     resized_image = np.array(resized_image)
     resized_image = to_channel_dimension_format(resized_image, data_format)
