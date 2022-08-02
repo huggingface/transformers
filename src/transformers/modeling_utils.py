@@ -1803,9 +1803,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         offload_state_dict = kwargs.pop("offload_state_dict", None)
         subfolder = kwargs.pop("subfolder", "")
 
-        if trust_remote_code is not None:
+        if trust_remote_code is True:
             logger.warning(
-                "The argument `trust_remote_code` is to be used with Auto classes. It has no effect here and is ignored."
+                "The argument `trust_remote_code` is to be used with Auto classes. It has no effect here and is"
+                " ignored."
             )
 
         if device_map is not None:
