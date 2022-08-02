@@ -1103,7 +1103,7 @@ class FlaxModelTesterMixin:
     def test_from_sharded_pt(self):
         model = FlaxBertModel.from_pretrained("hf-internal-testing/tiny-random-bert-sharded", from_pt=True)
         ref_model = FlaxBertModel.from_pretrained("hf-internal-testing/tiny-random-bert-fx-only")
-        for key,ref_val in flatten_dict(ref_model.params).items():
+        for key, ref_val in flatten_dict(ref_model.params).items():
             val = flatten_dict(model.params)[key]
             assert np.allclose(np.array(val), np.array(ref_val))
 
