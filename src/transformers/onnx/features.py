@@ -233,7 +233,7 @@ class FeaturesManager:
             "default",
             "image-classification",
             "image-segmentation",
-            onnx_config_cls="models.data2vec.Data2VecVisionConfig",
+            onnx_config_cls="models.data2vec.Data2VecVisionOnnxConfig",
         ),
         "deberta": supported_features_mapping(
             "default",
