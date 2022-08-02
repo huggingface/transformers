@@ -207,6 +207,7 @@ PYTORCH_EXPORT_MODELS = {
     ("deit", "facebook/deit-small-patch16-224"),
     ("beit", "microsoft/beit-base-patch16-224"),
     ("data2vec-text", "facebook/data2vec-text-base"),
+    ("data2vec-vision", "facebook/data2vec-vision-base"),
     ("perceiver", "deepmind/language-perceiver", ("masked-lm", "sequence-classification")),
     ("perceiver", "deepmind/vision-perceiver-conv", ("image-classification",)),
     ("yolos", "hustvl/yolos-tiny"),
