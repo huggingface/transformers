@@ -107,7 +107,7 @@ def get_resize_output_image_size(
     size: Union[int, Tuple[int, int], List[int], Tuple[int]],
     default_to_square: bool = True,
     max_size: int = None,
-) -> np.ndarray:
+) -> tuple:
     """
     Find the target (height, width) dimension of the output image after resizing given the input image and the desired
     size.
@@ -137,7 +137,7 @@ def get_resize_output_image_size(
     """
     if isinstance(size, (tuple, list)):
         if len(size) == 2:
-            return size
+            return tuple(size)
         elif len(size) == 1:
             # Perform same logic as if size was an int
             size = size[0]
@@ -165,7 +165,7 @@ def get_resize_output_image_size(
         if new_long > max_size:
             new_short, new_long = int(max_size * new_short / new_long), max_size
 
-    return (new_short, new_long) if width <= height else (new_long, new_short)
+    return (new_long, new_short) if width <= height else (new_short, new_long)
 
 
 def resize(
@@ -173,7 +173,7 @@ def resize(
     size: Tuple[int, int],
     resample=PIL.Image.Resampling.BILINEAR,
     data_format: Optional[ChannelDimension] = None,
-) -> np.np.ndarray:
+) -> np.ndarray:
     """
     Resizes `image` to (h, w) specified by `size` using the PIL library.
 
