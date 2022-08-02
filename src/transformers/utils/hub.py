@@ -36,7 +36,16 @@ from zipfile import ZipFile, is_zipfile
 
 import requests
 from filelock import FileLock
-from huggingface_hub import CommitOperationAdd, HfFolder, create_commit, create_repo, hf_hub_download, list_repo_files, whoami
+from huggingface_hub import (
+    CommitOperationAdd,
+    HfFolder,
+    create_commit,
+    create_repo,
+    hf_hub_download,
+    list_repo_files,
+    whoami,
+)
+from huggingface_hub.utils import EntryNotFoundError, RepositoryNotFoundError, RevisionNotFoundError
 from requests.exceptions import HTTPError
 from requests.models import Response
 from transformers.utils.logging import tqdm
@@ -385,21 +394,6 @@ def http_user_agent(user_agent: Union[Dict, str, None] = None) -> str:
     return ua
 
 
-class RepositoryNotFoundError(HTTPError):
-    """
-    Raised when trying to access a hf.co URL with an invalid repository name, or with a private repo name the user does
-    not have access to.
-    """
-
-
-class EntryNotFoundError(HTTPError):
-    """Raised when trying to access a hf.co URL with a valid repository and revision but an invalid filename."""
-
-
-class RevisionNotFoundError(HTTPError):
-    """Raised when trying to access a hf.co URL with a valid repository but an invalid revision."""
-
-
 def _raise_for_status(response: Response):
     """
     Internal version of `request.raise_for_status()` that will refine a potential HTTPError.
@@ -640,6 +634,8 @@ def cached_file(
     local_files_only: bool = False,
     subfolder: str = "",
     user_agent: Optional[Union[str, Dict[str, str]]] = None,
+    _raise_exceptions_for_missing_entries=True,
+    _raise_exceptions_for_connection_errors=True,
 ):
     """
     Tries to locate a file in a local folder and repo, downloads and cache it if necessary.
@@ -696,13 +692,16 @@ def cached_file(
         local_files_only = True
 
     path_or_repo_id = str(path_or_repo_id)
+    full_filename = os.path.join(subfolder, filename)
     if os.path.isdir(path_or_repo_id):
         resolved_file = os.path.join(os.path.join(path_or_repo_id, subfolder), filename)
         if not os.path.isfile(resolved_file):
-            full_filename = os.path.join(subfolder, filename)
-            raise FileNotFoundError(f"Could not locate {full_filename} inside {path_or_repo_id}.")
+            if _raise_exceptions_for_missing_entries:
+                raise FileNotFoundError(f"Could not locate {full_filename} inside {path_or_repo_id}.")
+            else:
+                return None
         return resolved_file
-    
+
     if cache_dir is None:
         cache_dir = TRANSFORMERS_CACHE
     if isinstance(cache_dir, Path):
@@ -713,7 +712,7 @@ def cached_file(
         resolved_file = hf_hub_download(
             path_or_repo_id,
             filename,
-            subfolder=subfolder,
+            subfolder=None if len(subfolder) == 0 else subfolder,
             revision=revision,
             cache_dir=cache_dir,
             user_agent=user_agent,
@@ -738,32 +737,27 @@ def cached_file(
             f"'https://huggingface.co/{path_or_repo_id}' for available revisions."
         )
     except EntryNotFoundError:
-        full_filename = os.path.join(subfolder, filename)
+        if not _raise_exceptions_for_missing_entries:
+            return None
+        if revision is None:
+            revision = "main"
         raise EnvironmentError(
             f"{path_or_repo_id} exists, but it doesn't look like it contains a file named {full_filename}. Checkout "
             f"'https://huggingface.co/{path_or_repo_id}/{revision}' for available files."
         )
     except HTTPError as err:
+        if not _raise_exceptions_for_connection_errors:
+            return None
+        raise EnvironmentError(f"There was a specific connection error when trying to load {path_or_repo_id}:\n{err}")
+    except ValueError:
+        if not _raise_exceptions_for_connection_errors:
+            return None
         raise EnvironmentError(
-            f"There was a specific connection error when trying to load {pretrained_model_name_or_path}:\n"
-            f"{err}"
+            f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this file, couldn't find it in the"
+            f" cached files and it looks like {path_or_repo_id} is not the path to a directory containing a file named"
+            f" {full_filename}.\nCheckout your internet connection or see how to run the library in offline mode at"
+            " 'https://huggingface.co/docs/transformers/installation#offline-mode'."
         )
-            except ValueError:
-                raise EnvironmentError(
-                    f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this model, couldn't find it"
-                    f" in the cached files and it looks like {pretrained_model_name_or_path} is not the path to a"
-                    f" directory containing a file named {WEIGHTS_NAME}, {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME} or"
-                    f" {FLAX_WEIGHTS_NAME}.\nCheckout your internet connection or see how to run the library in"
-                    " offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'."
-                )
-            except EnvironmentError:
-                raise EnvironmentError(
-                    f"Can't load the model for '{pretrained_model_name_or_path}'. If you were trying to load it from "
-                    "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
-                    f"Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory "
-                    f"containing a file named {WEIGHTS_NAME}, {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME} or "
-                    f"{FLAX_WEIGHTS_NAME}."
-                )
 
     return resolved_file
 
@@ -778,7 +772,6 @@ def get_file_from_repo(
     use_auth_token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
     local_files_only: bool = False,
-    subfolder: str = "",
 ):
     """
     Tries to locate a file in a local folder and repo, downloads and cache it if necessary.
@@ -833,47 +826,19 @@ def get_file_from_repo(
     # This model does not have a tokenizer config so the result will be None.
     tokenizer_config = get_file_from_repo("xlm-roberta-base", "tokenizer_config.json")
     ```"""
-    if is_offline_mode() and not local_files_only:
-        logger.info("Offline mode: forcing local_files_only=True")
-        local_files_only = True
-
-    path_or_repo = str(path_or_repo)
-    if os.path.isdir(path_or_repo):
-        resolved_file = os.path.join(path_or_repo, filename)
-        return resolved_file if os.path.isfile(resolved_file) else None
-    else:
-        resolved_file = hf_bucket_url(path_or_repo, filename=filename, revision=revision, mirror=None)
-
-    try:
-        # Load from URL or cache if already cached
-        resolved_file = cached_path(
-            resolved_file,
-            cache_dir=cache_dir,
-            force_download=force_download,
-            proxies=proxies,
-            resume_download=resume_download,
-            local_files_only=local_files_only,
-            use_auth_token=use_auth_token,
-        )
-
-    except RepositoryNotFoundError:
-        raise EnvironmentError(
-            f"{path_or_repo} is not a local folder and is not a valid model identifier "
-            "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to "
-            "pass a token having permission to this repo with `use_auth_token` or log in with "
-            "`huggingface-cli login` and pass `use_auth_token=True`."
-        )
-    except RevisionNotFoundError:
-        raise EnvironmentError(
-            f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists "
-            "for this model name. Check the model page at "
-            f"'https://huggingface.co/{path_or_repo}' for available revisions."
-        )
-    except EnvironmentError:
-        # The repo and revision exist, but the file does not or there was a connection error fetching it.
-        return None
-
-    return resolved_file
+    return cached_file(
+        path_or_repo_id=path_or_repo,
+        filename=filename,
+        cache_dir=cache_dir,
+        force_download=force_download,
+        resume_download=resume_download,
+        proxies=proxies,
+        use_auth_token=use_auth_token,
+        revision=revision,
+        local_files_only=local_files_only,
+        _raise_exceptions_for_missing_entries=False,
+        _raise_exceptions_for_connection_errors=False,
+    )
 
 
 def has_file(

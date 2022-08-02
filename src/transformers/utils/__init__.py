@@ -59,6 +59,7 @@ from .hub import (
     PushToHubMixin,
     RepositoryNotFoundError,
     RevisionNotFoundError,
+    cached_file,
     cached_path,
     default_cache_path,
     define_sagemaker_information,
