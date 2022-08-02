@@ -285,7 +285,12 @@ SUPPORTED_TASKS = {
         "impl": ImageClassificationPipeline,
         "tf": (TFAutoModelForImageClassification,) if is_tf_available() else (),
         "pt": (AutoModelForImageClassification,) if is_torch_available() else (),
-        "default": {"model": {"pt": ("google/vit-base-patch16-224", "5dca96d")}},
+        "default": {
+            "model": {
+                "pt": ("google/vit-base-patch16-224", "5dca96d"),
+                "tf": ("google/vit-base-patch16-224", "5dca96d"),
+            }
+        },
         "type": "image",
     },
     "image-segmentation": {
