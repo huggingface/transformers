@@ -320,7 +320,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     )
 
     all_generative_model_classes = (BloomForCausalLM,) if is_torch_available() else ()
-    fx_compatible = False
+    fx_compatible = True
     test_missing_keys = False
     test_pruning = False
     test_torchscript = True  # torch.autograd functions seems to be not supported
