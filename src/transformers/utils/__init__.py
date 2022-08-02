@@ -42,6 +42,7 @@ from .generic import (
     is_tensor,
     to_numpy,
     to_py_obj,
+    working_or_temp_dir,
 )
 from .hub import (
     CLOUDFRONT_DISTRIB_PREFIX,
@@ -87,6 +88,7 @@ from .import_utils import (
     DummyObject,
     OptionalDependencyNotAvailable,
     _LazyModule,
+    ccl_version,
     is_accelerate_available,
     is_apex_available,
     is_bitsandbytes_available,
@@ -109,6 +111,7 @@ from .import_utils import (
     is_pytesseract_available,
     is_pytorch_quantization_available,
     is_rjieba_available,
+    is_sacremoses_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_scatter_available,

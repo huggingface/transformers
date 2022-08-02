@@ -55,9 +55,7 @@ tokenizer = M2M100Tokenizer.from_pretrained("facebook/m2m100_418M", src_lang="en
 src_text = "Life is like a box of chocolates."
 tgt_text = "La vie est comme une boîte de chocolat."
 
-model_inputs = tokenizer(src_text, return_tensors="pt")
-with tokenizer.as_target_tokenizer():
-    labels = tokenizer(tgt_text, return_tensors="pt").input_ids
+model_inputs = tokenizer(src_text, text_target=tgt_text, return_tensors="pt")
 
 loss = model(**model_inputs, labels=labels)  # forward pass
 ```
