@@ -20,6 +20,7 @@ import json
 import numpy as np
 import torch
 
+import gdown
 from huggingface_hub import hf_hub_download
 from transformers import (
     VideoMAEConfig,
@@ -29,14 +30,18 @@ from transformers import (
 )
 
 
-def get_videomae_config(checkpoint_path, model_name):
+def get_videomae_config(model_name):
     config = VideoMAEConfig()
 
-    if "large" in checkpoint_path:
+    if "large" in model_name:
         config.hidden_size = 1024
         config.intermediate_size = 4096
         config.num_hidden_layers = 24
         config.num_attention_heads = 16
+        config.decoder_num_hidden_layers = 12
+        config.decoder_num_attention_heads = 8
+        config.decoder_hidden_size = 512
+        config.decoder_intermediate_size = 2048
 
     if "finetuned" not in model_name:
         config.use_mean_pooling = False
@@ -145,19 +150,22 @@ def prepare_video():
     return list(video)
 
 
-def convert_videomae_checkpoint(checkpoint_path, pytorch_dump_folder_path, model_name, push_to_hub):
-    config = get_videomae_config(checkpoint_path, model_name)
+def convert_videomae_checkpoint(checkpoint_url, pytorch_dump_folder_path, model_name, push_to_hub):
+    config = get_videomae_config(model_name)
 
     if "finetuned" in model_name:
         model = VideoMAEForVideoClassification(config)
     else:
         model = VideoMAEForPreTraining(config)
 
-    state_dict = torch.load(checkpoint_path, map_location="cpu")
-    if "finetuned" in model_name:
-        state_dict = state_dict["module"]
+    # download original checkpoint, hosted on Google Drive
+    output = "pytorch_model.bin"
+    gdown.cached_download(checkpoint_url, output, quiet=False)
+    files = torch.load(output, map_location="cpu")
+    if "model" in files:
+        state_dict = files["model"]
     else:
-        state_dict = state_dict["model"]
+        state_dict = files["module"]
     new_state_dict = convert_state_dict(state_dict, config)
 
     model.load_state_dict(new_state_dict)
@@ -169,7 +177,7 @@ def convert_videomae_checkpoint(checkpoint_path, pytorch_dump_folder_path, model
     inputs = feature_extractor(video, return_tensors="pt")
 
     if "finetuned" not in model_name:
-        local_path = hf_hub_download(repo_id="nielsr/bool-masked-pos", filename="bool_masked_pos.pt")
+        local_path = hf_hub_download(repo_id="hf-internal-testing/bool-masked-pos", filename="bool_masked_pos.pt")
         inputs["bool_masked_pos"] = torch.load(local_path)
 
     outputs = model(**inputs)
@@ -189,33 +197,54 @@ def convert_videomae_checkpoint(checkpoint_path, pytorch_dump_folder_path, model
         "videomae-base-ssv2",
         "videomae-base-finetuned-ssv2",
     ]
-    if model_name not in model_names:
-        raise ValueError("Model name not supported.")
 
-    if model_name == "videomae-base-short":
+    if model_name == "videomae-base":
+        expected_shape = torch.Size([1, 1408, 1536])
+        expected_slice = torch.tensor([[0.7739, 0.7968, 0.7089], [0.6701, 0.7487, 0.6209], [0.4287, 0.5158, 0.4773]])
+    elif model_name == "videomae-base-short":
         expected_shape = torch.Size([1, 1408, 1536])
         expected_slice = torch.tensor([[0.7994, 0.9612, 0.8508], [0.7401, 0.8958, 0.8302], [0.5862, 0.7468, 0.7325]])
         # we verified the loss both for normalized and unnormalized targets for this one
         expected_loss = torch.tensor([0.5142]) if config.norm_pix_loss else torch.tensor([0.6469])
+    elif model_name == "videomae-large":
+        expected_shape = torch.Size([1, 1408, 1536])
+        expected_slice = torch.tensor([[0.7149, 0.7997, 0.6966], [0.6768, 0.7869, 0.6948], [0.5139, 0.6221, 0.5605]])
+    elif model_name == "videomae-large-finetuned-kinetics":
+        expected_shape = torch.Size([1, 400])
+        expected_slice = torch.tensor([0.0771, 0.0011, -0.3625])
+    elif model_name == "videomae-base-short-finetuned-kinetics":
+        expected_shape = torch.Size([1, 400])
+        expected_slice = torch.tensor([0.6588, 0.0990, -0.2493])
     elif model_name == "videomae-base-finetuned-kinetics":
         expected_shape = torch.Size([1, 400])
         expected_slice = torch.tensor([0.3669, -0.0688, -0.2421])
-    elif model_name == "videomae-base-finetuned-ssv2":
+    elif model_name == "videomae-base-short-ssv2":
+        expected_shape = torch.Size([1, 1408, 1536])
+        expected_slice = torch.tensor([[0.4712, 0.5296, 0.5786], [0.2278, 0.2729, 0.4026], [0.0352, 0.0730, 0.2506]])
+    elif model_name == "videomae-base-short-finetuned-ssv2":
         expected_shape = torch.Size([1, 174])
         expected_slice = torch.tensor([-0.0537, -0.1539, -0.3266])
+    elif model_name == "videomae-base-ssv2":
+        expected_shape = torch.Size([1, 1408, 1536])
+        expected_slice = torch.tensor([[0.8131, 0.8727, 0.8546], [0.7366, 0.9377, 0.8870], [0.5935, 0.8874, 0.8564]])
+    elif model_name == "videomae-base-finetuned-ssv2":
+        expected_shape = torch.Size([1, 174])
+        expected_slice = torch.tensor([0.1961, -0.8337, -0.6389])
+    else:
+        raise ValueError(f"Model name not supported. Should be one of {model_names}")
 
     # verify logits
     assert logits.shape == expected_shape
     if "finetuned" in model_name:
         assert torch.allclose(logits[0, :3], expected_slice, atol=1e-4)
     else:
+        print("Logits:", logits[0, :3, :3])
         assert torch.allclose(logits[0, :3, :3], expected_slice, atol=1e-4)
     print("Logits ok!")
 
     # verify loss, if applicable
-    if "finetuned" not in model_name:
+    if model_name == "videomae-base-short":
         loss = outputs.loss
-        print("Loss:", loss)
         assert torch.allclose(loss, expected_loss, atol=1e-4)
         print("Loss ok!")
 
@@ -233,23 +262,24 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--checkpoint_path",
-        default=(
-            "/Users/nielsrogge/Documents/VideoMAE/Original"
-            " checkpoints/Kinetics-400/videomae-base-finetuned-kinetics/checkpoint.pth"
-        ),
+        "--checkpoint_url",
+        default="https://drive.google.com/u/1/uc?id=1tEhLyskjb755TJ65ptsrafUG2llSwQE1&amp;export=download&amp;confirm=t&amp;uuid=aa3276eb-fb7e-482a-adec-dc7171df14c4",
         type=str,
-        help="Path of the original PyTorch checkpoint you'd like to convert.",
+        help=(
+            "URL of the original PyTorch checkpoint (on Google Drive) you'd like to convert. Should be a direct"
+            " download link."
+        ),
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        default="/Users/nielsrogge/Documents/VideoMAE/Test",
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
-    parser.add_argument(
-        "--model_name", default="videomae-base-finetuned-kinetics", type=str, help="Name of the model."
-    )
+    parser.add_argument("--model_name", default="videomae-base", type=str, help="Name of the model.")
     parser.add_argument(
         "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
     )
 
     args = parser.parse_args()
-    convert_videomae_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path, args.model_name, args.push_to_hub)
+    convert_videomae_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path, args.model_name, args.push_to_hub)
