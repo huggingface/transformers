@@ -483,7 +483,7 @@ class TFGroupViTVisionEmbeddings(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.patch_embeddings = TFGroupViTPatchEmbeddings(config, name="patch_embeddings")
-        self.dropout = tf.keras.layers.Dropout(config.dropout, name="dropout")
+        self.dropout = tf.keras.layers.Dropout(rate=config.dropout, name="dropout")
         self.layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
         self.config = config
 
@@ -508,33 +508,30 @@ class TFGroupViTVisionEmbeddings(tf.keras.layers.Layer):
         https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
         """
 
-        npatch = shape_list(embeddings)[1]
-        if npatch == shape_list(self.position_embeddings)[1] and height == width:
+        batch_size, num_patches, dim = shape_list(embeddings)
+        num_positions = shape_list(self.position_embeddings)[1]
+
+        if num_patches == num_positions and height == width:
             return self.position_embeddings
         patch_pos_embed = self.position_embeddings
-        num_original_pos_embed = shape_list(patch_pos_embed)[1]
-        dim = shape_list(embeddings)[-1]
-        feat_height = height // self.config.patch_size
-        feat_width = width // self.config.patch_size
-        original_height = original_width = math.sqrt(num_original_pos_embed)
+        h0 = height // self.config.patch_size
+        w0 = width // self.config.patch_size
         patch_pos_embed = tf.image.resize(
             images=tf.reshape(
-                patch_pos_embed, shape=(1, int(math.sqrt(original_height)), int(math.sqrt(original_width)), dim)
+                patch_pos_embed, shape=(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
             ),
-            size=(feat_height, feat_width),
+            size=(h0, w0),
             method="bicubic",
         )
         patch_pos_embed = tf.reshape(tensor=patch_pos_embed, shape=(1, -1, dim))
         return patch_pos_embed
 
     def call(
-        self, pixel_values: tf.Tensor, interpolate_pos_encoding: bool = False, training: Optional[bool] = False
+        self, pixel_values: tf.Tensor, interpolate_pos_encoding: bool = False, training: bool = False
     ) -> tf.Tensor:
-        batch_size, num_channels, height, width = shape_list(pixel_values)
+        _, _, height, width = shape_list(pixel_values)
         embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
         embeddings = self.layernorm(embeddings)
-
-        batch_size, seq_len, _ = shape_list(embeddings)
 
         # add positional encoding to each token
         if interpolate_pos_encoding:
