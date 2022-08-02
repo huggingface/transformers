@@ -591,7 +591,7 @@ class PretrainedConfig(PushToHubMixin):
                 )
             except EnvironmentError:
                 raise
-            except:
+            except Exception:
                 raise EnvironmentError(
                     f"Can't load the configuration of '{pretrained_model_name_or_path}'. If you were trying to load it"
                     " from 'https://huggingface.co/models', make sure you don't have a local directory with the same"
