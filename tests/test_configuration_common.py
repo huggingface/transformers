@@ -23,7 +23,7 @@ import unittest
 import unittest.mock as mock
 from pathlib import Path
 
-from huggingface_hub import HfFolder, Repository, delete_repo, set_access_token
+from huggingface_hub import HfFolder, delete_repo, set_access_token
 from requests.exceptions import HTTPError
 from transformers import AutoConfig, BertConfig, GPT2Config, is_torch_available
 from transformers.configuration_utils import PretrainedConfig
@@ -42,6 +42,7 @@ config_common_kwargs = {
     "torchscript": True,
     "torch_dtype": "float16",
     "use_bfloat16": True,
+    "tf_legacy_loss": True,
     "pruned_heads": {"a": 1},
     "tie_word_embeddings": False,
     "is_decoder": True,
@@ -156,6 +157,17 @@ class ConfigTester(object):
 
         self.parent.assertEqual(config_second.to_dict(), config_first.to_dict())
 
+    def create_and_test_config_from_and_save_pretrained_subfolder(self):
+        config_first = self.config_class(**self.inputs_dict)
+
+        subfolder = "test"
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            sub_tmpdirname = os.path.join(tmpdirname, subfolder)
+            config_first.save_pretrained(sub_tmpdirname)
+            config_second = self.config_class.from_pretrained(tmpdirname, subfolder=subfolder)
+
+        self.parent.assertEqual(config_second.to_dict(), config_first.to_dict())
+
     def create_and_test_config_with_num_labels(self):
         config = self.config_class(**self.inputs_dict, num_labels=5)
         self.parent.assertEqual(len(config.id2label), 5)
@@ -196,6 +208,7 @@ class ConfigTester(object):
         self.create_and_test_config_to_json_string()
         self.create_and_test_config_to_json_file()
         self.create_and_test_config_from_and_save_pretrained()
+        self.create_and_test_config_from_and_save_pretrained_subfolder()
         self.create_and_test_config_with_num_labels()
         self.check_config_can_be_init_without_params()
         self.check_config_arguments_init()
@@ -230,46 +243,58 @@ class ConfigPushToHubTester(unittest.TestCase):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
         )
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            config.save_pretrained(os.path.join(tmp_dir, "test-config"), push_to_hub=True, use_auth_token=self._token)
+        config.push_to_hub("test-config", use_auth_token=self._token)
 
-            new_config = BertConfig.from_pretrained(f"{USER}/test-config")
-            for k, v in config.__dict__.items():
-                if k != "transformers_version":
-                    self.assertEqual(v, getattr(new_config, k))
+        new_config = BertConfig.from_pretrained(f"{USER}/test-config")
+        for k, v in config.__dict__.items():
+            if k != "transformers_version":
+                self.assertEqual(v, getattr(new_config, k))
+
+        # Reset repo
+        delete_repo(token=self._token, repo_id="test-config")
+
+        # Push to hub via save_pretrained
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir, repo_id="test-config", push_to_hub=True, use_auth_token=self._token)
+
+        new_config = BertConfig.from_pretrained(f"{USER}/test-config")
+        for k, v in config.__dict__.items():
+            if k != "transformers_version":
+                self.assertEqual(v, getattr(new_config, k))
 
     def test_push_to_hub_in_organization(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
         )
+        config.push_to_hub("valid_org/test-config-org", use_auth_token=self._token)
 
+        new_config = BertConfig.from_pretrained("valid_org/test-config-org")
+        for k, v in config.__dict__.items():
+            if k != "transformers_version":
+                self.assertEqual(v, getattr(new_config, k))
+
+        # Reset repo
+        delete_repo(token=self._token, repo_id="valid_org/test-config-org")
+
+        # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
             config.save_pretrained(
-                os.path.join(tmp_dir, "test-config-org"),
-                push_to_hub=True,
-                use_auth_token=self._token,
-                organization="valid_org",
+                tmp_dir, repo_id="valid_org/test-config-org", push_to_hub=True, use_auth_token=self._token
             )
 
-            new_config = BertConfig.from_pretrained("valid_org/test-config-org")
-            for k, v in config.__dict__.items():
-                if k != "transformers_version":
-                    self.assertEqual(v, getattr(new_config, k))
+        new_config = BertConfig.from_pretrained("valid_org/test-config-org")
+        for k, v in config.__dict__.items():
+            if k != "transformers_version":
+                self.assertEqual(v, getattr(new_config, k))
 
     def test_push_to_hub_dynamic_config(self):
         CustomConfig.register_for_auto_class()
         config = CustomConfig(attribute=42)
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-config", use_auth_token=self._token)
-            config.save_pretrained(tmp_dir)
+        config.push_to_hub("test-dynamic-config", use_auth_token=self._token)
 
-            # This has added the proper auto_map field to the config
-            self.assertDictEqual(config.auto_map, {"AutoConfig": "custom_configuration.CustomConfig"})
-            # The code has been copied from fixtures
-            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "custom_configuration.py")))
-
-            repo.push_to_hub()
+        # This has added the proper auto_map field to the config
+        self.assertDictEqual(config.auto_map, {"AutoConfig": "custom_configuration.CustomConfig"})
 
         new_config = AutoConfig.from_pretrained(f"{USER}/test-dynamic-config", trust_remote_code=True)
         # Can't make an isinstance check because the new_config is from the FakeConfig class of a dynamic module
@@ -306,6 +331,15 @@ class ConfigTestUtils(unittest.TestCase):
                 " `test_configuration_common.config_common_kwargs` pick another value for them:"
                 f" {', '.join(keys_with_defaults)}."
             )
+
+    def test_from_pretrained_subfolder(self):
+        with self.assertRaises(OSError):
+            # config is in subfolder, the following should not work without specifying the subfolder
+            _ = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert-subfolder")
+
+        config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert-subfolder", subfolder="bert")
+
+        self.assertIsNotNone(config)
 
     def test_cached_files_are_used_when_internet_is_down(self):
         # A mock response for an HTTP head request to emulate server down

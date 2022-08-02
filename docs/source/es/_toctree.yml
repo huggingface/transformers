@@ -25,6 +25,8 @@
     title: Usa tokenizadores de 🤗 Tokenizers
   - local: create_a_model
     title: Crea una arquitectura personalizada
+  - local: custom_models
+    title: Compartir modelos personalizados
   - sections:
     - local: tasks/language_modeling
       title: Modelado de lenguaje

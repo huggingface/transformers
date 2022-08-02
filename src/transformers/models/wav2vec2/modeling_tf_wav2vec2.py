@@ -25,7 +25,13 @@ import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import TFBaseModelOutput, TFCausalLMOutput
-from ...modeling_tf_utils import TFPreTrainedModel, booleans_processing, get_initializer, keras_serializable
+from ...modeling_tf_utils import (
+    TFPreTrainedModel,
+    booleans_processing,
+    get_initializer,
+    keras_serializable,
+    unpack_inputs,
+)
 from ...tf_utils import shape_list, stable_softmax
 from ...utils import (
     ModelOutput,
@@ -238,7 +244,7 @@ def _compute_mask_indices(
     Computes random mask spans for a given shape
 
     Args:
-        shape: the the shape for which to compute masks.
+        shape: the shape for which to compute masks.
             should be of size 2 where first element is batch size and 2nd is timesteps
         attention_mask: optional padding mask of the same size as shape, which will prevent masking padded elements
         mask_prob:
@@ -262,12 +268,13 @@ def _compute_mask_indices(
             f" `sequence_length`: {sequence_length}`"
         )
     # compute number of masked spans in batch
-    num_masked_spans = int(mask_prob * sequence_length / mask_length + tf.random.uniform((1,)))
-    num_masked_spans = max(num_masked_spans, min_masks)
+    num_masked_spans = mask_prob * sequence_length / mask_length + tf.random.uniform((1,))
+    num_masked_spans = tf.maximum(num_masked_spans, min_masks)
+    num_masked_spans = tf.cast(num_masked_spans, tf.int32)
 
     # make sure num masked indices <= sequence_length
-    if num_masked_spans * mask_length > sequence_length:
-        num_masked_spans = sequence_length // mask_length
+    num_masked_spans = tf.math.minimum(sequence_length // mask_length, num_masked_spans)
+    num_masked_spans = tf.squeeze(num_masked_spans)
 
     # SpecAugment mask to fill
     spec_aug_mask = tf.zeros((batch_size, sequence_length), dtype=tf.int32)
@@ -291,7 +298,7 @@ def _compute_mask_indices(
 
     # scatter indices to mask
     spec_aug_mask = _scatter_values_on_batch_indices(
-        tf.ones_like(spec_aug_mask_idxs), spec_aug_mask_idxs, spec_aug_mask.shape
+        tf.ones_like(spec_aug_mask_idxs), spec_aug_mask_idxs, tf.shape(spec_aug_mask)
     )
 
     return spec_aug_mask
@@ -1346,7 +1353,15 @@ class TFWav2Vec2PreTrainedModel(TFPreTrainedModel):
             "to train/fine-tine this model, you need a GPU or a TPU"
         )
 
-    @tf.function
+    @tf.function(
+        input_signature=[
+            {
+                "input_values": tf.TensorSpec((None, None), tf.float32, name="input_values"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+                "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
+            }
+        ]
+    )
     def serving(self, inputs):
         output = self.call(input_values=inputs, training=False)
 
@@ -1538,14 +1553,14 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
         return outputs
 
     def serving_output(self, output):
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFWav2Vec2BaseModelOutput(
             last_hidden_state=output.last_hidden_state,
             extract_features=output.extract_features,
-            hidden_states=hs,
-            attentions=attns,
+            hidden_states=hidden_states,
+            attentions=attentions,
         )
 
 
@@ -1580,6 +1595,7 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
         """
         self.wav2vec2.feature_extractor.trainable = False
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFCausalLMOutput, config_class=_CONFIG_FOR_DOC)
     def call(
@@ -1634,9 +1650,8 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
         >>> # compute loss
         >>> target_transcription = "A MAN SAID TO THE UNIVERSE SIR I EXIST"
 
-        >>> # wrap processor as target processor to encode labels
-        >>> with processor.as_target_processor():
-        ...     labels = processor(transcription, return_tensors="tf").input_ids
+        >>> # Pass transcription as `text` to encode labels
+        >>> labels = processor(text=transcription, return_tensors="tf").input_ids
 
         >>> loss = model(input_values, labels=labels).loss
         ```"""
@@ -1702,6 +1717,8 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
                 loss = tf.reduce_sum(loss)
             if self.config.ctc_loss_reduction == "mean":
                 loss = tf.reduce_mean(loss)
+
+            loss = tf.reshape(loss, (1,))
         else:
             loss = None
 
@@ -1717,6 +1734,6 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
         )
 
     def serving_output(self, output: TFCausalLMOutput) -> TFCausalLMOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-        return TFCausalLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        return TFCausalLMOutput(logits=output.logits, hidden_states=hidden_states, attentions=attentions)

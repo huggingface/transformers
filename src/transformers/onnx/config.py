@@ -487,7 +487,7 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
 
     def fill_with_past_key_values_(self, inputs_or_outputs: Mapping[str, Mapping[int, str]], direction: str):
         """
-        Fill the input_or_ouputs mapping with past_key_values dynamic axes considering.
+        Fill the input_or_outputs mapping with past_key_values dynamic axes considering.
 
         Args:
             inputs_or_outputs: The mapping to fill.

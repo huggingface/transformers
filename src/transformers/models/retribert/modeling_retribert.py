@@ -201,7 +201,7 @@ class RetriBertModel(RetriBertPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary for the documents in a batch.
             attention_mask_doc (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on documents padding token indices.
-            checkpoint_batch_size (`int`, *optional*, defaults to ```-1`):
+            checkpoint_batch_size (`int`, *optional*, defaults to `-1`):
                 If greater than 0, uses gradient checkpointing to only compute sequence representation on
                 `checkpoint_batch_size` examples at a time on the GPU. All query representations are still compared to
                 all document representations in the batch.
