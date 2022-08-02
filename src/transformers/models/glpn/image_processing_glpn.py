@@ -75,9 +75,6 @@ class GLPNImageProcessor(BaseImageProcessor):
         size_divisor = size_divisor if size_divisor is not None else self.size_divisor
         resample = resample if resample is not None else self.resample
 
-        # If a return type isn't specified, default to numpy arrays.
-        return_tensors = TensorType.NUMPY if return_tensors is None else return_tensors
-
         if do_resize and size_divisor is None:
             raise ValueError("size_divisor is required for resizing")
 
