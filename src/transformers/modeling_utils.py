@@ -2169,6 +2169,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 max_memory=max_memory,
             )
 
+            if load_in_8bit:
+                if "cpu" in device_map.values() or "disk" in device_map.values():
+                    raise ValueError("8-bit operations on `bitsandbytes` are not supported under CPU!")
+
         if from_tf:
             if resolved_archive_file.endswith(".index"):
                 # Load from a TensorFlow 1.X checkpoint - provided by original authors
