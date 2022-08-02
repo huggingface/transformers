@@ -98,7 +98,7 @@ class TrOCRProcessor(ProcessorMixin):
         warnings.warn(
             "`as_target_processor` is deprecated and will be removed in v5 of Transformers. You can process your "
             "labels by using the argument `text` of the regular `__call__` method (either in the same call as "
-            "your audio inputs, or in a separate call."
+            "your images inputs, or in a separate call."
         )
         self._in_target_context_manager = True
         self.current_processor = self.tokenizer
