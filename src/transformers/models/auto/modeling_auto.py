@@ -541,6 +541,10 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+# TODO: Do the LayoutLM classes belong here, or should they only be in VisualQuestionAnsweringPipeline?
+# Because the bounding boxes are optional inputs to the model, you technically _can_ execute these models
+# through the question answering pipeline (because its output shape matches), but I'm not sure if models
+# should belong in multiple mappings.
 MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
         # Model for Question Answering mapping
@@ -562,10 +566,6 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("funnel", "FunnelForQuestionAnswering"),
         ("gptj", "GPTJForQuestionAnswering"),
         ("ibert", "IBertForQuestionAnswering"),
-        # TODO: Do the LayoutLM classes belong here, or should they only be in VisualQuestionAnsweringPipeline?
-        # Because the bounding boxes are optional inputs to the model, you technically _can_ execute these models
-        # through the question answering pipeline (because its output shape matches), but I'm not sure if models
-        # should belong in multiple mappings.
         ("layoutlmv2", "LayoutLMv2ForQuestionAnswering"),
         ("layoutlmv3", "LayoutLMv3ForQuestionAnswering"),
         ("led", "LEDForQuestionAnswering"),
@@ -603,10 +603,10 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
-        ("vilt", "ViltForQuestionAnswering"),
         ("layoutlm", "LayoutLMForQuestionAnswering"),
         ("layoutlmv2", "LayoutLMv2ForQuestionAnswering"),
         ("layoutlmv3", "LayoutLMv3ForQuestionAnswering"),
+        ("vilt", "ViltForQuestionAnswering"),
     ]
 )
 
