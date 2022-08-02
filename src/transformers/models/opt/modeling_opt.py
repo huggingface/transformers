@@ -150,7 +150,7 @@ class OPTAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        fast_attention = False,
+        fast_attention = True,
         fast_attention_causal = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
@@ -193,20 +193,29 @@ class OPTAttention(nn.Module):
             # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_states, value_states)
 
-        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
-        query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
-        key_states = key_states.view(*proj_shape)
-        value_states = value_states.view(*proj_shape)
-
-        src_len = key_states.size(1)
-
         if fast_attention:
-            qkv = torch.cat([query_states, key_states, value_states])
-            num_heads = self.num_heads
-            attn_output = torch._scaled_dot_product_self_attention(
-                qkv, num_heads, dropout_p=0.0, causal=fast_attention_causal
+            key_states_fast = key_states.view(bsz, -1, self.embed_dim)
+            value_states_fast = value_states.view(bsz, -1, self.embed_dim)
+            seqlen = key_states_fast.shape[1]
+            query_states_fast = torch.nested_tensor(torch.unbind(query_states, dim=0))
+            key_states_fast = torch.nested_tensor(torch.unbind(key_states_fast, dim=0))
+            value_states_fast = torch.nested_tensor(torch.unbind(value_states_fast, dim=0))
+
+            # requires self.head_dim == 16, 32, 64, or 128
+            print(self.num_heads, self.head_dim)
+            attn_output, attn_weights_reshaped = torch._scaled_dot_product_attention(
+                query_states_fast, key_states_fast, value_states_fast, num_heads=self.num_heads, attn_mask=None, dropout_p=0.0, need_attn_weights=False, is_causal=fast_attention_causal
             )
+            attn_output = attn_output.to_padded_tensor(0.)
+            attn_weights_reshaped = None
         else:
+            proj_shape = (bsz * self.num_heads, -1, self.head_dim)
+            query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
+            key_states = key_states.view(*proj_shape)
+            value_states = value_states.view(*proj_shape)
+
+            src_len = key_states.size(1)
+
             attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
 
             if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):

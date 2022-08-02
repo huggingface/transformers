@@ -62,9 +62,9 @@ class OPTModelTester:
         is_training=True,
         use_labels=False,
         vocab_size=99,
-        hidden_size=16,
+        hidden_size=32,
         num_hidden_layers=5,
-        num_attention_heads=4,
+        num_attention_heads=2,
         intermediate_size=4,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
@@ -73,9 +73,9 @@ class OPTModelTester:
         eos_token_id=2,
         pad_token_id=1,
         bos_token_id=0,
-        embed_dim=16,
+        embed_dim=32,
         num_labels=3,
-        word_embed_proj_dim=16,
+        word_embed_proj_dim=32,
         type_sequence_label_size=2,
     ):
         self.parent = parent
