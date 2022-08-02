@@ -16,6 +16,7 @@ Hub utilities: utilities related to download and cache models
 """
 import copy
 import fnmatch
+import functools
 import io
 import json
 import os
@@ -26,6 +27,7 @@ import sys
 import tarfile
 import tempfile
 import traceback
+import time
 import warnings
 from contextlib import contextmanager
 from functools import partial
@@ -456,6 +458,35 @@ def http_get(
     progress.close()
 
 
+def timed_cache(ttl):
+    cache = {}
+
+    def true_decorator(f):
+        @functools.wraps(f)
+        def wrapped(url, headers, *args, **kwargs):
+
+            key = (url, headers.get("authorization", None))
+            result_time, result = cache.get(key, (None, None))
+            if result_time is not None and (time.time() - result_time) < ttl:
+                return result
+            result = f(url, headers, *args, **kwargs)
+            cache[key] = (time.time(), result)
+            return result
+
+        return wrapped
+
+    return true_decorator
+
+
+@timed_cache(ttl=10)
+def request_head(url, headers, allow_redirects, proxies, timeout):
+
+    print("----")
+    print(f"Fetching {url}")
+    r = requests.head(url, headers=headers, allow_redirects=allow_redirects, proxies=proxies, timeout=timeout)
+    return r
+
+
 def get_from_cache(
     url: str,
     cache_dir=None,
@@ -497,7 +528,13 @@ def get_from_cache(
     etag = None
     if not local_files_only:
         try:
-            r = requests.head(url, headers=headers, allow_redirects=False, proxies=proxies, timeout=etag_timeout)
+            r = request_head(
+                url,
+                headers=headers,
+                allow_redirects=False,
+                proxies=proxies,
+                timeout=etag_timeout,
+            )
             _raise_for_status(r)
             etag = r.headers.get("X-Linked-Etag") or r.headers.get("ETag")
             # We favor a custom header indicating the etag of the linked resource, and
