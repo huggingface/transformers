@@ -121,3 +121,7 @@ class MixedInt8Test(unittest.TestCase):
         list_devices = get_list_devices(model_parallel)
         # Check that we have dispatched the model into 2 separate devices
         self.assertTrue((1 in list_devices) and (0 in list_devices))
+
+        # Check that inference pass works on the model
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
+        _ = model_parallel.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
