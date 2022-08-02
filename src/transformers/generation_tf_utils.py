@@ -432,27 +432,22 @@ class TFGenerationMixin:
             max_new_tokens (`int`, *optional*):
                 The maximum numbers of tokens to generate, ignoring the number of tokens in the prompt.
             min_length (`int`, *optional*, defaults to `model.config.min_length` or 10 if the config does not set any
-                value):
-                The minimum length of the sequence to be generated.
+                value): The minimum length of the sequence to be generated.
             do_sample (`bool`, *optional*, defaults to `model.config.do_sample` or `False` if the config does not set
-                any value):
-                Whether or not to use sampling ; use greedy decoding otherwise.
+                any value): Whether or not to use sampling ; use greedy decoding otherwise.
             early_stopping (`bool`, *optional*, defaults to `False`):
                 Whether to stop the beam search when at least `num_beams` sentences are finished per batch or not.
             num_beams (`int`, *optional*, defaults to `model.config.num_beams` or 1 if the config does not set any
-                value):
-                Number of beams for beam search. 1 means no beam search.
+                value): Number of beams for beam search. 1 means no beam search.
             temperature (`float`, *optional*, defaults to `model.config.temperature` or 1.0 if the config does not set
-                any value):
-                The value used to module the next token probabilities.
+                any value): The value used to module the next token probabilities.
             top_k (`int`, *optional*, defaults to `model.config.top_k` or 50 if the config does not set any value):
                 The number of highest probability vocabulary tokens to keep for top-k-filtering.
             top_p (`float`, *optional*, defaults to `model.config.top_p` or 1.0 if the config does not set any value):
                 If set to float < 1, only the most probable tokens with probabilities that add up to `top_p` or higher
                 are kept for generation.
             repetition_penalty (`float`, *optional*, defaults to `model.config.repetition_penalty` or 1.0 if the config
-                does not set any value):
-                The parameter for repetition penalty. 1.0 means no penalty. See [this
+                does not set any value): The parameter for repetition penalty. 1.0 means no penalty. See [this
                 paper](https://arxiv.org/pdf/1909.05858.pdf) for more details.
             pad_token_id (`int`, *optional*, defaults to `model.config.pad_token_id`):
                 The id of the *padding* token.
@@ -461,20 +456,18 @@ class TFGenerationMixin:
             eos_token_id (`int`, *optional*, defaults to `model.config.eos_token_id`):
                 The id of the *end-of-sequence* token.
             length_penalty (`float`, *optional*, defaults to `model.config.length_penalty` or 1.0 if the config does
-                not set any value):
-                Exponential penalty to the length. 1.0 means no penalty.
+                not set any value): Exponential penalty to the length. 1.0 means no penalty.
 
                 Set to values < 1.0 in order to encourage the model to generate shorter sequences, to a value > 1.0 in
                 order to encourage the model to produce longer sequences.
             no_repeat_ngram_size (`int`, *optional*, defaults to `model.config.no_repeat_ngram_size` or 0 if the config
-                does not set any value):
-                If set to int > 0, all ngrams of that size can only occur once.
+                does not set any value): If set to int > 0, all ngrams of that size can only occur once.
             bad_words_ids(`List[int]`, *optional*, defaults to `model.config.bad_words_ids`):
                 List of token ids that are not allowed to be generated. In order to get the tokens of the words that
                 should not appear in the generated text, use `tokenizer.encode(bad_word, add_prefix_space=True)`.
             num_return_sequences(`int`, *optional*, defaults to `model.config.num_return_sequences` or 1 if the config
-                does not set any value):
-                The number of independently computed returned sequences for each element in the batch.
+                does not set any value): The number of independently computed returned sequences for each element in
+                the batch.
             attention_mask (`tf.Tensor` of `dtype=tf.int32` and shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values are in `[0, 1]`, 1 for tokens
                 that are not masked, and 0 for masked tokens.
@@ -488,19 +481,17 @@ class TFGenerationMixin:
                 Whether or not the model should use the past last key/values attentions (if applicable to the model) to
                 speed up decoding.
             output_attentions (`bool`, *optional*, defaults to `model.config.output_attentions` or `False` if the
-                config does not set any value):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more details.
+                config does not set any value): Whether or not to return the attentions tensors of all attention
+                layers. See `attentions` under returned tensors for more details.
             output_hidden_states (`bool`, *optional*, defaults to `model.config.output_hidden_states` or `False` if the
-                config does not set any value):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more details.
+                config does not set any value): Whether or not to return the hidden states of all layers. See
+                `hidden_states` under returned tensors for more details.
             output_scores (`bool`, *optional*, defaults to `model.config.output_scores` or `False` if the config does
-                not set any value):
-                Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
+                not set any value): Whether or not to return the prediction scores. See `scores` under returned tensors
+                for more details.
             return_dict_in_generate (`bool`, *optional*, defaults to `model.config.return_dict_in_generate` or `False`
-                if the config does not set any value):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+                if the config does not set any value): Whether or not to return a [`~utils.ModelOutput`] instead of a
+                plain tuple.
             forced_bos_token_id (`int`, *optional*, defaults to `model.config.forced_bos_token_id`):
                 The id of the token to force as the first generated token after the `decoder_start_token_id`. Useful
                 for multilingual models like [mBART](../model_doc/mbart) where the first generated token needs to be
