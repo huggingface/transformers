@@ -1813,14 +1813,12 @@ class TFGroupViTVisionModel(TFGroupViTPreTrainedModel):
         return outputs
 
     def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
+        # hidden_states and attentions not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
         return TFBaseModelOutputWithPooling(
             last_hidden_state=output.last_hidden_state,
             pooler_output=output.pooler_output,
-            hidden_states=hs,
-            attentions=attns,
+            hidden_states=output.hidden_states,
+            attentions=output.attentions,
         )
 
 
