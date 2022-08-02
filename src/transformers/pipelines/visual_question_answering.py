@@ -1,7 +1,6 @@
 from typing import List, Optional, Union
 
 from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging
-from ..modeling_outputs import SequenceClassifierOutput, QuestionAnsweringModelOutput
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
 
@@ -151,9 +150,9 @@ class VisualQuestionAnsweringPipeline(Pipeline):
         # with the words/bounding boxes.
         #
         # TODO: LayoutLMv1 does not come with a feature extractor that can run OCR, but v2 and v3 do.
-        # We could either (a) add a feature extractor for v1 that does OCR (and is a no-op otherwise)
-        # or build the OCR implementation into this pipeline (and expect users of v2 and v3 to
-        # instantiate the pipeline with feature extractors that have OCR disabled.
+        # We could either (a) require users of v1 pass in words (or implement a v1 feature extractor)
+        # or (b) build the OCR implementation into this pipeline (and expect users of v2 and v3 to
+        # instantiate the pipeline with feature extractors that have OCR disabled).
 
         if not ("image" in inputs or "words" in inputs):
             raise ValueError("Must provide at least one of an image or words/bounding boxes")
