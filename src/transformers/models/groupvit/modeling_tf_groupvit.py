@@ -1486,7 +1486,7 @@ class TFGroupViTPreTrainedModel(TFPreTrainedModel):
     """
 
     config_class = GroupViTConfig
-    base_model_prefix = "groupvit"
+    base_model_prefix = "group_vit"
 
 
 ################################################################################

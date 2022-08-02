@@ -21,26 +21,19 @@ import tempfile
 import unittest
 from importlib import import_module
 
-import numpy as np
-
 import requests
 from transformers import GroupViTConfig, GroupViTTextConfig, GroupViTVisionConfig
 from transformers.testing_utils import require_tf, require_vision, slow
 from transformers.utils import is_tf_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_tf_common import (
-    TFModelTesterMixin,
-    floats_tensor,
-    ids_tensor,
-    random_attention_mask,
-)
+from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import TFGroupViTModel, TFGroupViTTextModel, TFGroupViTVisionModel
+    from transformers import TFGroupViTModel, TFGroupViTTextModel, TFGroupViTVisionModel, TFSharedEmbeddings
     from transformers.models.groupvit.modeling_tf_groupvit import TF_GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -279,7 +272,7 @@ class TFGroupViTVisionModelTest(TFModelTesterMixin, unittest.TestCase):
         for model_name in TF_GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = TFGroupViTVisionModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
-    
+
     @slow
     def test_saved_model_creation_extended(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -551,15 +544,15 @@ class TFGroupViTModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    # hidden_states are tested in individual model tests
+    @unittest.skip(reason="hidden_states are tested in individual model tests")
     def test_hidden_states_output(self):
         pass
 
-    # input_embeds are tested in individual model tests
+    @unittest.skip(reason="input_embeds are tested in individual model tests")
     def test_inputs_embeds(self):
         pass
 
-    # GroupViTModel does not have input/output embeddings
+    @unittest.skip(reason="CLIPModel does not have input/output embeddings")
     def test_model_common_attributes(self):
         pass
 
@@ -586,7 +579,14 @@ class TFGroupViTModelTest(TFModelTesterMixin, unittest.TestCase):
             and getattr(module_member, "_keras_serializable", False)
         )
         for main_layer_class in tf_main_layer_classes:
-            main_layer = main_layer_class(config)
+            # T5MainLayer needs an embed_tokens parameter when called without the inputs_embeds parameter
+            if "T5" in main_layer_class.__name__:
+                # Take the same values than in TFT5ModelTester for this shared layer
+                shared = TFSharedEmbeddings(99, 32, name="shared")
+                config.use_cache = inputs_dict.pop("use_cache", None)
+                main_layer = main_layer_class(config, embed_tokens=shared)
+            else:
+                main_layer = main_layer_class(config)
 
             symbolic_inputs = {
                 name: tf.keras.Input(tensor.shape[1:], dtype=tensor.dtype) for name, tensor in inputs_dict.items()
@@ -598,7 +598,16 @@ class TFGroupViTModelTest(TFModelTesterMixin, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 filepath = os.path.join(tmpdirname, "keras_model.h5")
                 model.save(filepath)
-                model = tf.keras.models.load_model(
+                if "T5" in main_layer_class.__name__:
+                    model = tf.keras.models.load_model(
+                        filepath,
+                        custom_objects={
+                            main_layer_class.__name__: main_layer_class,
+                            "TFSharedEmbeddings": TFSharedEmbeddings,
+                        },
+                    )
+                else:
+                    model = tf.keras.models.load_model(
                         filepath, custom_objects={main_layer_class.__name__: main_layer_class}
                     )
                 assert isinstance(model, tf.keras.Model)
