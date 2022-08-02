@@ -281,7 +281,7 @@ class BloomAttention(nn.Module):
         residual: torch.Tensor,
         alibi: torch.Tensor,
         attention_mask: torch.Tensor,
-        layer_past: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        layer_past: Optional[Tuple[torch.Tensor, torch.Tensor, int]] = None,
         head_mask: Optional[torch.Tensor] = None,
         use_cache: bool = False,
         output_attentions: bool = False,
@@ -297,17 +297,29 @@ class BloomAttention(nn.Module):
         key_layer = key_layer.permute(0, 2, 3, 1).reshape(batch_size * self.num_heads, self.head_dim, q_length)
         value_layer = value_layer.transpose(1, 2).reshape(batch_size * self.num_heads, q_length, self.head_dim)
         if layer_past is not None:
-            past_key, past_value = layer_past
-            # concatenate along seq_length dimension:
+            # Cached past key/value:
             #  - key: [batch_size * self.num_heads, head_dim, kv_length]
             #  - value: [batch_size * self.num_heads, kv_length, head_dim]
-            key_layer = torch.cat((past_key, key_layer), dim=2)
-            value_layer = torch.cat((past_value, value_layer), dim=1)
+            past_key, past_value, kv_past_length = layer_past
+            past_buffer_size = past_key.shape[-1]
+            new_kv_past_length = kv_past_length + 1
+
+            # We double the buffer for past keys and values everytime we fill it up.
+            if new_kv_past_length >= past_buffer_size:
+                past_key = torch.cat((past_key, torch.empty_like(past_key)), dim=2)
+                past_value = torch.cat((past_value, torch.empty_like(past_value)))
+
+            past_key[:, :, new_kv_past_length] = key_layer
+            past_value[:, new_kv_past_length, :] = value_layer
+            key_layer = past_key[:, :, :new_kv_past_length]
+            value_layer = past_value[:, :new_kv_past_length, :]
+        else:
+            new_kv_past_length = key_layer.shape[-1]
 
         _, _, kv_length = key_layer.shape
 
         if use_cache is True:
-            present = (key_layer, value_layer)
+            present = (key_layer, value_layer, new_kv_past_length)
         else:
             present = None
 
@@ -418,7 +430,7 @@ class BloomBlock(nn.Module):
         hidden_states: torch.Tensor,
         alibi: torch.Tensor,
         attention_mask: torch.Tensor,
-        layer_past: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        layer_past: Optional[Tuple[torch.Tensor, torch.Tensor, int]] = None,
         head_mask: Optional[torch.Tensor] = None,
         use_cache: bool = False,
         output_attentions: bool = False,
@@ -802,7 +814,7 @@ class BloomForCausalLM(BloomPreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         input_ids: torch.LongTensor,
-        past: Optional[torch.Tensor] = None,
+        past: Optional[Tuple[Tuple[torch.Tensor, torch.Tensor, int]], ...] = None,
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs
     ) -> dict:
@@ -827,7 +839,7 @@ class BloomForCausalLM(BloomPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor, torch.Tensor], ...]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.Tensor, torch.Tensor, int], ...]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
@@ -897,7 +909,7 @@ class BloomForCausalLM(BloomPreTrainedModel):
 
     @staticmethod
     def _reorder_cache(
-        past: Tuple[Tuple[torch.Tensor, torch.Tensor], ...], beam_idx: torch.LongTensor
+        past: Tuple[Tuple[torch.Tensor, torch.Tensor, int], ...], beam_idx: torch.LongTensor
     ) -> Tuple[Tuple[torch.Tensor, torch.Tensor], ...]:
         """
         This function is used to re-order the `past_key_values` cache if [`~PreTrainedModel.beam_search`] or
@@ -913,8 +925,9 @@ class BloomForCausalLM(BloomPreTrainedModel):
         device_to_beam_idx = {
             past_state.device: beam_idx.to(past_state.device) for layer_past in past for past_state in layer_past
         }
-        # key: layer_past[0] [batch_size * num_heads, head_dim, seq_length]
-        # value: layer_past[1] [batch_size * num_heads, seq_length, head_dim]
+        # key: layer_past[0], [batch_size * num_heads, head_dim, seq_length]
+        # value: layer_past[1], [batch_size * num_heads, seq_length, head_dim]
+        # kv_past_length: layer_past[2], int
         return tuple(
             (
                 layer_past[0]
@@ -925,6 +938,7 @@ class BloomForCausalLM(BloomPreTrainedModel):
                 .view(batch_size, num_heads, seq_length, head_dim)
                 .index_select(0, device_to_beam_idx[layer_past[0].device])
                 .view(batch_size_times_num_heads, seq_length, head_dim),
+                layer_past[2]
             )
             for layer_past in past
         )
