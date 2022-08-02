@@ -331,63 +331,67 @@ class TFSegformerModelTest(TFModelTesterMixin, unittest.TestCase):
 
             # todo: incorporate label support for semantic segmentation in `test_modeling_tf_common.py`.
 
+    @unittest.skipIf(
+        not is_tf_available() or len(tf.config.list_physical_devices("GPU")) == 0,
+        reason="TF (<=2.8) does not support backprop for grouped convolutions on CPU.",
+    )
     def test_dataset_conversion(self):
-        gpus = tf.config.list_physical_devices("GPU")
-        # Grouped convs aren't supported on CPUs for backprop.
-        if len(gpus) >= 1:
-            super().test_dataset_conversion()
+        super().test_dataset_conversion()
 
+    @unittest.skipIf(
+        not is_tf_available() or len(tf.config.list_physical_devices("GPU")) == 0,
+        reason="TF (<=2.8) does not support backprop for grouped convolutions on CPU.",
+    )
     def test_keras_fit(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        gpus = tf.config.list_physical_devices("GPU")
 
         def apply(model):
-            if getattr(model, "hf_compute_loss", None):
-                model_weights = model.get_weights()
+            model(model.dummy_inputs)
+            model_weights = model.get_weights()
 
-                # Test that model correctly compute the loss with kwargs
-                for_segmentation = True if model_class.__name__ == "TFSegformerForSemanticSegmentation" else False
-                _, prepared_for_class = self.model_tester.prepare_config_and_inputs_for_keras_fit(
-                    for_segmentation=for_segmentation
-                )
+            model.compile(optimizer=tf.keras.optimizers.SGD(0.0), run_eagerly=True)
 
-                label_names = {"labels"}
-                self.assertGreater(len(label_names), 0, msg="No matching label names found!")
-                labels = {key: val for key, val in prepared_for_class.items() if key in label_names}
-                inputs_minus_labels = {key: val for key, val in prepared_for_class.items() if key not in label_names}
-                self.assertGreater(len(inputs_minus_labels), 0)
-                model.compile(optimizer=tf.keras.optimizers.SGD(0.0), run_eagerly=True)
+            # Test that model correctly compute the loss with kwargs
+            for_segmentation = True if model_class.__name__ == "TFSegformerForSemanticSegmentation" else False
+            _, input_for_model_fit = self.model_tester.prepare_config_and_inputs_for_keras_fit(
+                for_segmentation=for_segmentation
+            )
 
-                # Make sure the model fits without crashing regardless of where we pass the labels
-                history1 = model.fit(
-                    prepared_for_class,
-                    validation_data=prepared_for_class,
-                    steps_per_epoch=1,
-                    validation_steps=1,
-                    shuffle=False,
-                )
-                val_loss1 = history1.history["val_loss"][0]
+            label_names = {"labels"}
+            self.assertGreater(len(label_names), 0, msg="No matching label names found!")
+            labels = {key: val for key, val in input_for_model_fit.items() if key in label_names}
+            inputs_minus_labels = {key: val for key, val in input_for_model_fit.items() if key not in label_names}
+            self.assertGreater(len(inputs_minus_labels), 0)
 
-                # We reinitialize the model here even though our learning rate was zero
-                # because BatchNorm updates weights by means other than gradient descent.
-                model.set_weights(model_weights)
-                history2 = model.fit(
-                    inputs_minus_labels,
-                    labels,
-                    validation_data=(inputs_minus_labels, labels),
-                    steps_per_epoch=1,
-                    validation_steps=1,
-                    shuffle=False,
-                )
-                val_loss2 = history2.history["val_loss"][0]
-                self.assertTrue(np.allclose(val_loss1, val_loss2, atol=1e-2, rtol=1e-3))
+            # Make sure the model fits without crashing regardless of where we pass the labels
+            history1 = model.fit(
+                input_for_model_fit,
+                validation_data=input_for_model_fit,
+                steps_per_epoch=1,
+                validation_steps=1,
+                shuffle=False,
+            )
+            val_loss1 = history1.history["val_loss"][0]
+
+            # We reinitialize the model here even though our learning rate was zero
+            # because BatchNorm updates weights by means other than gradient descent.
+            model.set_weights(model_weights)
+            history2 = model.fit(
+                inputs_minus_labels,
+                labels,
+                validation_data=(inputs_minus_labels, labels),
+                steps_per_epoch=1,
+                validation_steps=1,
+                shuffle=False,
+            )
+            val_loss2 = history2.history["val_loss"][0]
+            self.assertTrue(np.allclose(val_loss1, val_loss2, atol=1e-2, rtol=1e-3))
 
         for model_class in self.all_model_classes:
             # Since `TFSegformerModel` cannot operate with the default `fit()` method.
             if model_class.__name__ != "TFSegformerModel":
-                # Grouped convs and backprop with them isn't supported on CPUs.
                 model = model_class(config)
-                if len(gpus) > 1:
+                if getattr(model, "hf_compute_loss", None):
                     apply(model)
 
     def test_loss_computation(self):
