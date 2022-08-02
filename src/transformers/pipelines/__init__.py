@@ -675,8 +675,6 @@ def pipeline(
         # so the model_config might not define a tokenizer, but it seems to be
         # necessary for the task, so we're force-trying to load it.
         load_tokenizer = True
-    # Feature extraction is very special, it can't be statically known
-    # if it needs feature_extractor/tokenizer or not
     if (
         feature_extractor is None
         and not load_feature_extractor
