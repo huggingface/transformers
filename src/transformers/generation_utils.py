@@ -926,7 +926,7 @@ class GenerationMixin:
                 The maximum length the generated tokens can have. Corresponds to the length of the input prompt +
                 `max_new_tokens`. In general, prefer the use of `max_new_tokens`, which ignores the number of tokens in
                 the prompt.
-            max_new_tokens (`int`, *optional*, defaults to None):
+            max_new_tokens (`int`, *optional*):
                 The maximum numbers of tokens to generate, ignoring the number of tokens in the prompt.
             min_length (`int`, *optional*, defaults to `model.config.min_length` or 10 if the config does not set any value):
                 The minimum length of the sequence to be generated.
