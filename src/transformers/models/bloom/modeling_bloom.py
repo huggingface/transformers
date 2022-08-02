@@ -294,6 +294,7 @@ class BloomAttention(nn.Module):
         batch_size, q_length, _, _ = query_layer.shape
 
         query_layer = query_layer.transpose(1, 2).reshape(batch_size * self.num_heads, q_length, self.head_dim)
+        present = None
         if layer_past is not None:
             # Cached past key/value:
             #  - key: [batch_size * self.num_heads, head_dim, kv_length]
@@ -311,17 +312,18 @@ class BloomAttention(nn.Module):
             past_value[:, kv_past_length:new_kv_past_length, :] = value_layer.transpose(1, 2).reshape(batch_size * self.num_heads, q_length, self.head_dim)
             key_layer = past_key[:, :, :new_kv_past_length]
             value_layer = past_value[:, :new_kv_past_length, :]
+
+            if use_cache is True:
+                present = (past_key, past_value, new_kv_past_length)
         else:
             key_layer = key_layer.permute(0, 2, 3, 1).reshape(batch_size * self.num_heads, self.head_dim, q_length)
             value_layer = value_layer.transpose(1, 2).reshape(batch_size * self.num_heads, q_length, self.head_dim)
             new_kv_past_length = key_layer.shape[-1]
 
-        _, _, kv_length = key_layer.shape
+            if use_cache is True:
+                present = (key_layer, past_value, new_kv_past_length)
 
-        if use_cache is True:
-            present = (key_layer, value_layer, new_kv_past_length)
-        else:
-            present = None
+        _, _, kv_length = key_layer.shape
 
         # [batch_size * num_heads, q_length, kv_length]
         # we use `torch.Tensor.baddbmm` instead of `torch.baddbmm` as the latter isn't supported by TorchScript v1.11
