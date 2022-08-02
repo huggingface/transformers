@@ -42,6 +42,7 @@ from .utils import (
 logger = logging.get_logger(__name__)
 
 
+# TODO: Abstract out common logic between ImageProcessorMixin and FeatureExtractorMixin
 class ImageProcessorMixin(PushToHubMixin):
     """
     Image processor mixin used to provide saving/loading functionality
@@ -79,7 +80,7 @@ class ImageProcessorMixin(PushToHubMixin):
                   huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
                   namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
                 - a path to a *directory* containing a image processor file saved using the
-                  [`~feature_extraction_utils.FeatureExtractionMixin.save_pretrained`] method, e.g.,
+                  [`~image_processing_utils.ImageProcessorMixin.save_pretrained`] method, e.g.,
                   `./my_model_directory/`.
                 - a path or url to a saved image processor JSON *file*, e.g.,
                   `./my_model_directory/preprocessor_config.json`.
@@ -131,7 +132,7 @@ class ImageProcessorMixin(PushToHubMixin):
     def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
         """
         Save an image_processor object to the directory `save_directory`, so that it can be re-loaded using the
-        [`~feature_extraction_utils.FeatureExtractionMixin.from_pretrained`] class method.
+        [`~image_processing_utils.ImageProcessorMixin.from_pretrained`] instance method.
 
         Args:
             save_directory (`str` or `os.PathLike`):
@@ -181,7 +182,7 @@ class ImageProcessorMixin(PushToHubMixin):
     ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         """
         From a `pretrained_model_name_or_path`, resolve to a dictionary of parameters, to be used for instantiating a
-        image processor of type [`~feature_extraction_utils.FeatureExtractionMixin`] using `from_dict`.
+        image processor of type [`~image_processing_utils.ImageProcessorMixin`] using `from_dict`.
 
         Parameters:
             pretrained_model_name_or_path (`str` or `os.PathLike`):
@@ -293,19 +294,19 @@ class ImageProcessorMixin(PushToHubMixin):
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
         """
-        Instantiates a type of [`~feature_extraction_utils.FeatureExtractionMixin`] from a Python dictionary of
+        Instantiates a type of [`~image_processing_utils.ImageProcessorMixin`] from a Python dictionary of
         parameters.
 
         Args:
             image_processor_dict (`Dict[str, Any]`):
                 Dictionary that will be used to instantiate the image processor object. Such a dictionary can be
                 retrieved from a pretrained checkpoint by leveraging the
-                [`~feature_extraction_utils.FeatureExtractionMixin.to_dict`] method.
+                [`~image_processing_utils.ImageProcessorMixin.to_dict`] method.
             kwargs (`Dict[str, Any]`):
                 Additional parameters from which to initialize the image processor object.
 
         Returns:
-            [`~feature_extraction_utils.FeatureExtractionMixin`]: The image processor object instantiated from those
+            [`~image_processing_utils.ImageProcessorMixin`]: The image processor object instantiated from those
             parameters.
         """
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
@@ -350,7 +351,7 @@ class ImageProcessorMixin(PushToHubMixin):
                 Path to the JSON file containing the parameters.
 
         Returns:
-            A image processor of type [`~feature_extraction_utils.FeatureExtractionMixin`]: The image_processor object
+            A image processor of type [`~image_processing_utils.ImageProcessorMixin`]: The image_processor object
             instantiated from that JSON file.
         """
         with open(json_file, "r", encoding="utf-8") as reader:
