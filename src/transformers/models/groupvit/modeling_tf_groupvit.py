@@ -418,7 +418,9 @@ class TFGroupViTPatchEmbeddings(tf.keras.layers.Layer):
     def __init__(self, config: GroupViTConfig, **kwargs):
         super().__init__(**kwargs)
         image_size, patch_size = config.image_size, config.patch_size
-        num_channels, hidden_size = config.num_channels, config.hidden_size
+        num_channels = config.num_channels
+        # hidden_size is a member as it will be required in the call method
+        self.hidden_size = config.hidden_size
 
         image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
         patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
@@ -430,7 +432,7 @@ class TFGroupViTPatchEmbeddings(tf.keras.layers.Layer):
         self.config = config
 
         self.projection = tf.keras.layers.Conv2D(
-            filters=hidden_size,
+            filters=self.hidden_size,
             kernel_size=patch_size,
             strides=patch_size,
             padding="valid",
@@ -467,7 +469,10 @@ class TFGroupViTPatchEmbeddings(tf.keras.layers.Layer):
         # Change the 2D spatial dimensions to a single temporal dimension.
         # shape = (batch_size, num_patches, out_channels=embed_dim)
         num_patches = (width // self.patch_size[1]) * (height // self.patch_size[0])
-        embeddings = tf.reshape(tensor=projection, shape=(batch_size, num_patches, -1))
+        # In the TFGroupViTVisionEmbeddings the embeddings from this layer will be layer normalized
+        # LayerNormalization layer needs to have static last dimension (otherwise the test_keras_save_load fails with symbolic tensors)
+        # This is why we have used the hidden_size in the reshape method
+        embeddings = tf.reshape(tensor=projection, shape=(batch_size, num_patches, self.hidden_size))
 
         return embeddings
 
@@ -1643,7 +1648,7 @@ class TFGroupViTTextModel(TFGroupViTPreTrainedModel):
     def __init__(self, config: GroupViTTextConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.group_vit = TFGroupViTTextMainLayer(config, name="groupvit")
+        self.group_vit = TFGroupViTTextMainLayer(config, name="group_vit")
 
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
@@ -1730,7 +1735,7 @@ class TFGroupViTVisionModel(TFGroupViTPreTrainedModel):
     def __init__(self, config: GroupViTVisionConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.group_vit = TFGroupViTVisionMainLayer(config, name="groupvit")
+        self.group_vit = TFGroupViTVisionMainLayer(config, name="group_vit")
 
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
@@ -1826,7 +1831,7 @@ class TFGroupViTModel(TFGroupViTPreTrainedModel):
     def __init__(self, config: GroupViTConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.group_vit = TFGroupViTMainLayer(config, name="groupvit")
+        self.group_vit = TFGroupViTMainLayer(config, name="group_vit")
 
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
