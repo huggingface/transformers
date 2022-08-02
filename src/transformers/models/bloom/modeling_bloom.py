@@ -307,7 +307,7 @@ class BloomAttention(nn.Module):
             # We double the buffer for past keys and values everytime we fill it up.
             if new_kv_past_length >= past_buffer_size:
                 past_key = torch.cat((past_key, torch.empty_like(past_key)), dim=2)
-                past_value = torch.cat((past_value, torch.empty_like(past_value)))
+                past_value = torch.cat((past_value, torch.empty_like(past_value)), dim=1)
 
             past_key[:, :, kv_past_length:new_kv_past_length] = key_layer
             past_value[:, kv_past_length:new_kv_past_length, :] = value_layer
