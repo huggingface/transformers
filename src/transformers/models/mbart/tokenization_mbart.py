@@ -57,8 +57,8 @@ class MBartTokenizer(PreTrainedTokenizer):
     Adapted from [`RobertaTokenizer`] and [`XLNetTokenizer`]. Based on
     [SentencePiece](https://github.com/google/sentencepiece).
 
-    The tokenization method is `<tokens> <eos> <language code>` for source language documents, and ``<language code>
-    <tokens> <eos>``` for target language documents.
+    The tokenization method is `<tokens> <eos> <language code>` for source language documents, and `<language code>
+    <tokens> <eos>` for target language documents.
 
     Examples:
 

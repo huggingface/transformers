@@ -1419,7 +1419,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         ...     if score > 0.9:
         ...         print(
         ...             f"Detected {model.config.id2label[label.item()]} with confidence "
-        ...             f"{round(score.item(), 3)} at location {box}."
+        ...             f"{round(score.item(), 3)} at location {box}"
         ...         )
         Detected remote with confidence 0.998 at location [40.16, 70.81, 175.55, 117.98]
         Detected remote with confidence 0.996 at location [333.24, 72.55, 368.33, 187.66]

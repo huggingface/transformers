@@ -31,10 +31,11 @@ from typing import Optional, Union
 
 import datasets
 import torch
-from datasets import load_dataset, load_metric
+from datasets import load_dataset
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
+import evaluate
 import transformers
 from accelerate import Accelerator
 from accelerate.logging import get_logger
@@ -51,8 +52,11 @@ from transformers import (
     default_data_collator,
     get_scheduler,
 )
-from transformers.utils import PaddingStrategy, get_full_repo_name, send_example_telemetry
+from transformers.utils import PaddingStrategy, check_min_version, get_full_repo_name, send_example_telemetry
 
+
+# Will error if the minimal version of Transformers is not installed. Remove at your own risks.
+check_min_version("4.22.0.dev0")
 
 logger = get_logger(__name__)
 # You should update this to your particular problem to have better documentation of `model_type`
@@ -514,7 +518,7 @@ def main():
             accelerator.init_trackers("swag_no_trainer", experiment_config)
 
     # Metrics
-    metric = load_metric("accuracy")
+    metric = evaluate.load("accuracy")
 
     # Train!
     total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps

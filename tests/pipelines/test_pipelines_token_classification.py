@@ -536,6 +536,20 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         )
 
     @require_torch
+    @slow
+    def test_aggregation_strategy_offsets_with_leading_space(self):
+        sentence = "We're from New York"
+        model_name = "brandon25/deberta-base-finetuned-ner"
+        ner = pipeline("ner", model=model_name, ignore_labels=[], aggregation_strategy="max")
+        self.assertEqual(
+            nested_simplify(ner(sentence)),
+            [
+                {"entity_group": "O", "score": 1.0, "word": " We're from", "start": 0, "end": 10},
+                {"entity_group": "LOC", "score": 1.0, "word": " New York", "start": 10, "end": 19},
+            ],
+        )
+
+    @require_torch
     def test_gather_pre_entities(self):
         model_name = "sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03-english"
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
@@ -578,6 +592,41 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
                     "is_subword": False,
                 },
             ],
+        )
+
+    @require_torch
+    def test_word_heuristic_leading_space(self):
+        model_name = "hf-internal-testing/tiny-random-deberta-v2"
+        tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
+        token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="pt")
+
+        sentence = "I play the theremin"
+
+        tokens = tokenizer(
+            sentence,
+            return_attention_mask=False,
+            return_tensors="pt",
+            return_special_tokens_mask=True,
+            return_offsets_mapping=True,
+        )
+        offset_mapping = tokens.pop("offset_mapping").cpu().numpy()[0]
+        special_tokens_mask = tokens.pop("special_tokens_mask").cpu().numpy()[0]
+        input_ids = tokens["input_ids"].numpy()[0]
+        scores = np.array([[1, 0] for _ in input_ids])  # values irrelevant for heuristic
+
+        pre_entities = token_classifier.gather_pre_entities(
+            sentence,
+            input_ids,
+            scores,
+            offset_mapping,
+            special_tokens_mask,
+            aggregation_strategy=AggregationStrategy.FIRST,
+        )
+
+        # ensure expected tokenization and correct is_subword values
+        self.assertEqual(
+            [(entity["word"], entity["is_subword"]) for entity in pre_entities],
+            [("▁I", False), ("▁play", False), ("▁the", False), ("▁there", False), ("min", True)],
         )
 
     @require_tf
