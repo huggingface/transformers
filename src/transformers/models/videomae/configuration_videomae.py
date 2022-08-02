@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Facebook AI and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" ViT MAE model configuration"""
+""" VideoMAE model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -21,20 +21,19 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "nanjing/videomae-base": "https://huggingface.co/nanjing/videomae-base/resolve/main/config.json",
+    "MCG-NJU/videomae-base": "https://huggingface.co/MCG-NJU/videomae-base/resolve/main/config.json",
 }
 
 
 class VideoMAEConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`VideoMAEModel`]. It is used to instantiate an ViT
-    MAE model according to the specified arguments, defining the model architecture. Instantiating a configuration with
-    the defaults will yield a similar configuration to that of the ViT
-    [nanjing/videomae-base](https://huggingface.co/nanjing/videomae-base) architecture.
+    This is the configuration class to store the configuration of a [`VideoMAEModel`]. It is used to instantiate a
+    VideoMAE model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the VideoMAE
+    [MCG-NJU/videomae-base](https://huggingface.co/MCG-NJU/videomae-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
-
 
     Args:
         image_size (`int`, *optional*, defaults to 224):
@@ -84,12 +83,12 @@ class VideoMAEConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import VideoMAEModel, VideoMAEConfig
+    >>> from transformers import VideoMAEConfig, VideoMAEModel
 
-    >>> # Initializing a ViT MAE vit-mae-base style configuration
+    >>> # Initializing a VideoMAE videomae-base style configuration
     >>> configuration = VideoMAEConfig()
 
-    >>> # Initializing a model from the vit-mae-base style configuration
+    >>> # Randomly initializing a model from the configuration
     >>> model = VideoMAEModel(configuration)
 
     >>> # Accessing the model configuration

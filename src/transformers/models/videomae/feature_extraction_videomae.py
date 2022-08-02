@@ -35,7 +35,7 @@ logger = logging.get_logger(__name__)
 
 class VideoMAEFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
-    Constructs a VideoMAE feature extractor.
+    Constructs a VideoMAE feature extractor. This feature extractor can be used to prepare videos for the model.
 
     This feature extractor inherits from [`FeatureExtractionMixin`] which contains most of the main methods. Users
     should refer to this superclass for more information regarding those methods.
@@ -43,10 +43,8 @@ class VideoMAEFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the shorter edge of the input to a certain `size`.
-        size (`int` or `Tuple(int)`, *optional*, defaults to 224):
-            Resize the shorter edge of the input to the given size. If a tuple is provided, it should be (width,
-            height). If only an integer is provided, then the input will be resized to (size, size). Only has an effect
-            if `do_resize` is set to `True`.
+        size (`int`, *optional*, defaults to 224):
+            Resize the shorter edge of the input to the given size. Only has an effect if `do_resize` is set to `True`.
         resample (`int`, *optional*, defaults to `PIL.Image.BILINEAR`):
             An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
             `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`. Only has an effect

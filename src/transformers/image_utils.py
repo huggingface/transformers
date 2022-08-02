@@ -32,10 +32,6 @@ from .utils.constants import (  # noqa: F401
 from .utils.generic import _is_torch
 
 
-IMAGENET_DEFAULT_MEAN = IMAGENET_DEFAULT_MEAN
-IMAGENET_DEFAULT_STD = IMAGENET_DEFAULT_STD
-
-
 ImageInput = Union[
     PIL.Image.Image, np.ndarray, "torch.Tensor", List[PIL.Image.Image], List[np.ndarray], List["torch.Tensor"]  # noqa
 ]

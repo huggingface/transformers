@@ -23,7 +23,13 @@ The abstract from the paper is the following:
 
 Tips:
 
-- One can use [`VideoMAEFeatureExtractor`] to prepare videos for the model.
+- One can use [`VideoMAEFeatureExtractor`] to prepare videos for the model. It will resize + normalize all frames of a video for you.
+- [`VideoMAEForPreTraining`] includes the decoder on top for self-supervised pre-training.
+
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/videomae_architecture.jpeg"
+alt="drawing" width="600"/> 
+
+<small> VideoMAE pre-training. Taken from the <a href="https://arxiv.org/abs/2203.12602">original paper</a>. </small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/MCG-NJU/VideoMAE).
@@ -32,7 +38,6 @@ The original code can be found [here](https://github.com/MCG-NJU/VideoMAE).
 ## VideoMAEConfig
 
 [[autodoc]] VideoMAEConfig
-
 
 ## VideoMAEFeatureExtractor
 
@@ -44,12 +49,10 @@ The original code can be found [here](https://github.com/MCG-NJU/VideoMAE).
 [[autodoc]] VideoMAEModel
     - forward
 
-
 ## VideoMAEForPreTraining
 
 [[autodoc]] transformers.VideoMAEForPreTraining
     - forward
-
 
 ## VideoMAEForVideoClassification
 

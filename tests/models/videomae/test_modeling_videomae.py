@@ -352,13 +352,11 @@ def prepare_video():
 class VideoMAEModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        # TODO update to appropriate organization
-        return VideoMAEFeatureExtractor() if is_vision_available() else None
+        return VideoMAEFeatureExtractor.from_pretrained("MCG-NJU/videomae-base") if is_vision_available() else None
 
     @slow
     def test_inference_for_video_classification(self):
-        # TODO update to appropriate organization
-        model = VideoMAEForVideoClassification.from_pretrained("nielsr/videomae-base").to(torch_device)
+        model = VideoMAEForVideoClassification.from_pretrained("MCG-NJU/videomae-base").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         video = prepare_video()
@@ -378,15 +376,14 @@ class VideoMAEModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_for_pretraining(self):
-        # TODO update to appropriate organization
-        model = VideoMAEForPreTraining.from_pretrained("nielsr/videomae-base-short").to(torch_device)
+        model = VideoMAEForPreTraining.from_pretrained("MCG-NJU/videomae-base-short").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         video = prepare_video()
         inputs = feature_extractor(video, return_tensors="pt").to(torch_device)
 
         # add boolean mask, indicating which patches to mask
-        local_path = hf_hub_download(repo_id="nielsr/bool-masked-pos", filename="bool_masked_pos.pt")
+        local_path = hf_hub_download(repo_id="hf-internal-testing/bool-masked-pos", filename="bool_masked_pos.pt")
         inputs["bool_masked_pos"] = torch.load(local_path)
 
         # forward pass
@@ -404,7 +401,7 @@ class VideoMAEModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.loss, expected_loss, atol=1e-4))
 
         # verify the loss (`config.norm_pix_loss` = `False`)
-        model = VideoMAEForPreTraining.from_pretrained("nielsr/videomae-base-short", norm_pix_loss=False).to(
+        model = VideoMAEForPreTraining.from_pretrained("MCG-NJU/videomae-base-short", norm_pix_loss=False).to(
             torch_device
         )
 

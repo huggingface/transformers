@@ -45,11 +45,10 @@ from .configuration_videomae import VideoMAEConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "VideoMAEConfig"
-_CHECKPOINT_FOR_DOC = "nanjing/videomae-base"
+_CHECKPOINT_FOR_DOC = "MCG-NJU/videomae-base"
 
 VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    # TODO rename to organization
-    "nielsr/videomae-base",
+    "MCG-NJU/videomae-base",
     # See all VideoMAE models at https://huggingface.co/models?filter=videomae
 ]
 
@@ -605,8 +604,8 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
         >>> # create a list of NumPy arrays
         >>> video = [buffer[i] for i in range(buffer.shape[0])]
 
-        >>> feature_extractor = VideoMAEFeatureExtractor.from_pretrained("nielsr/videomae-base")
-        >>> model = VideoMAEModel.from_pretrained("nielsr/videomae-base")
+        >>> feature_extractor = VideoMAEFeatureExtractor.from_pretrained("MCG-NJU/videomae-base")
+        >>> model = VideoMAEModel.from_pretrained("MCG-NJU/videomae-base")
 
         >>> # prepare video for the model
         >>> inputs = feature_extractor(video, return_tensors="pt")
@@ -770,8 +769,8 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
         >>> num_frames = 16
         >>> video = list(np.random.randn(16, 3, 224, 224))
 
-        >>> feature_extractor = VideoMAEFeatureExtractor.from_pretrained("nielsr/videomae-base")
-        >>> model = VideoMAEForPreTraining.from_pretrained("nielsr/videomae-base")
+        >>> feature_extractor = VideoMAEFeatureExtractor.from_pretrained("MCG-NJU/videomae-base")
+        >>> model = VideoMAEForPreTraining.from_pretrained("MCG-NJU/videomae-base")
 
         >>> pixel_values = feature_extractor(video, return_tensors="pt").pixel_values
 
@@ -941,8 +940,8 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
 
         >>> video = list(np.random.randn(16, 3, 224, 224))
 
-        >>> feature_extractor = VideoMAEFeatureExtractor.from_pretrained("nielsr/videomae-base")
-        >>> model = VideoMAEForVideoClassification.from_pretrained("nielsr/videomae-base")
+        >>> feature_extractor = VideoMAEFeatureExtractor.from_pretrained("MCG-NJU/videomae-base")
+        >>> model = VideoMAEForVideoClassification.from_pretrained("MCG-NJU/videomae-base")
 
         >>> inputs = feature_extractor(video, return_tensors="pt")
         >>> outputs = model(**inputs)
