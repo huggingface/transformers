@@ -25,7 +25,6 @@ from transformers.testing_utils import (
 )
 
 
-
 @require_bitsandbytes
 @require_accelerate
 @require_torch
