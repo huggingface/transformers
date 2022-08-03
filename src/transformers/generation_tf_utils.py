@@ -453,8 +453,8 @@ class TFGenerationMixin:
                 The id of the *beginning-of-sequence* token.
             eos_token_id (`int`, *optional*, defaults to `model.config.eos_token_id`):
                 The id of the *end-of-sequence* token.
-            length_penalty (`float`, *optional*, defaults to `model.config.length_penalty` or 1.0 if the config does
-                not set any value): Exponential penalty to the length. 1.0 means no penalty.
+            length_penalty (`float`, *optional*, defaults to `model.config.length_penalty` or 1.0 if the config does not set any value):
+                Exponential penalty to the length. 1.0 means no penalty.
 
                 Set to values < 1.0 in order to encourage the model to generate shorter sequences, to a value > 1.0 in
                 order to encourage the model to produce longer sequences.
