@@ -463,8 +463,8 @@ class TFGenerationMixin:
             bad_words_ids(`List[int]`, *optional*, defaults to `model.config.bad_words_ids`):
                 List of token ids that are not allowed to be generated. In order to get the tokens of the words that
                 should not appear in the generated text, use `tokenizer.encode(bad_word, add_prefix_space=True)`.
-            num_return_sequences(`int`, *optional*, defaults to `model.config.num_return_sequences` or 1 if the config
-                does not set any value): The number of independently computed returned sequences for each element in
+            num_return_sequences(`int`, *optional*, defaults to `model.config.num_return_sequences` or 1 if the config does not set any value):
+                The number of independently computed returned sequences for each element in
                 the batch.
             attention_mask (`tf.Tensor` of `dtype=tf.int32` and shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values are in `[0, 1]`, 1 for tokens
