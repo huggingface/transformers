@@ -484,8 +484,8 @@ class TFGenerationMixin:
             output_hidden_states (`bool`, *optional*, defaults to `model.config.output_hidden_states` or `False` if the config does not set any value):
                 Whether or not to return the hidden states of all layers. See
                 `hidden_states` under returned tensors for more details.
-            output_scores (`bool`, *optional*, defaults to `model.config.output_scores` or `False` if the config does
-                not set any value): Whether or not to return the prediction scores. See `scores` under returned tensors
+            output_scores (`bool`, *optional*, defaults to `model.config.output_scores` or `False` if the config does not set any value):
+                Whether or not to return the prediction scores. See `scores` under returned tensors
                 for more details.
             return_dict_in_generate (`bool`, *optional*, defaults to `model.config.return_dict_in_generate` or `False` if the config does not set any value):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a
