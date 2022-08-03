@@ -430,10 +430,10 @@ class TFGenerationMixin:
                 the prompt.
             max_new_tokens (`int`, *optional*):
                 The maximum numbers of tokens to generate, ignoring the number of tokens in the prompt.
-            min_length (`int`, *optional*, defaults to `model.config.min_length` or 10 if the config does not set any
-                value): The minimum length of the sequence to be generated.
-            do_sample (`bool`, *optional*, defaults to `model.config.do_sample` or `False` if the config does not set
-                any value): Whether or not to use sampling ; use greedy decoding otherwise.
+            min_length (`int`, *optional*, defaults to `model.config.min_length` or 10 if the config does not set any value):
+                The minimum length of the sequence to be generated.
+            do_sample (`bool`, *optional*, defaults to `model.config.do_sample` or `False` if the config does not set any value):
+                Whether or not to use sampling ; use greedy decoding otherwise.
             early_stopping (`bool`, *optional*, defaults to `False`):
                 Whether to stop the beam search when at least `num_beams` sentences are finished per batch or not.
             num_beams (`int`, *optional*, defaults to `model.config.num_beams` or 1 if the config does not set any
