@@ -658,6 +658,7 @@ LOCAL_FILES_ONLY_HF_ERROR = (
     "look-ups and downloads online, set 'local_files_only' to False."
 )
 
+
 # In the future, this ugly contextmanager can be removed when huggingface_hub as a released version where we can
 # activate/deactivate progress bars.
 @contextmanager
