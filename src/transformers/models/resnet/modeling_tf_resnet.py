@@ -263,10 +263,7 @@ class TFResNetEncoder(tf.keras.layers.Layer):
         if not return_dict:
             return tuple(v for v in [hidden_state, hidden_states] if v is not None)
 
-        return TFBaseModelOutputWithNoAttention(
-            last_hidden_state=hidden_state,
-            hidden_states=hidden_states,
-        )
+        return TFBaseModelOutputWithNoAttention(last_hidden_state=hidden_state, hidden_states=hidden_states)
 
 
 class TFResNetPreTrainedModel(TFPreTrainedModel):
@@ -287,6 +284,17 @@ class TFResNetPreTrainedModel(TFPreTrainedModel):
         """
         VISION_DUMMY_INPUTS = tf.random.uniform(shape=(3, self.config.num_channels, 224, 224), dtype=tf.float32)
         return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
+
+    @tf.function(
+        input_signature=[
+            {
+                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        output = self.call(inputs)
+        return self.serving_output(output)
 
 
 RESNET_START_DOCSTRING = r"""
@@ -413,6 +421,16 @@ class TFResNetModel(TFResNetPreTrainedModel):
         )
         return resnet_outputs
 
+    def serving_output(
+        self, output: TFBaseModelOutputWithPoolingAndNoAttention
+    ) -> TFBaseModelOutputWithPoolingAndNoAttention:
+        # hidden_states not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
+        return TFBaseModelOutputWithPoolingAndNoAttention(
+            last_hidden_state=output.last_hidden_state,
+            pooler_output=output.pooler_output,
+            hidden_states=output.hidden_states,
+        )
+
 
 @add_start_docstrings(
     """
@@ -477,3 +495,7 @@ class TFResNetForImageClassification(TFResNetPreTrainedModel, TFSequenceClassifi
             return (loss,) + output if loss is not None else output
 
         return TFImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+
+    def serving_output(self, output: TFImageClassifierOutputWithNoAttention) -> TFImageClassifierOutputWithNoAttention:
+        # hidden_states not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
+        return TFImageClassifierOutputWithNoAttention(logits=output.logits, hidden_states=output.hidden_states)

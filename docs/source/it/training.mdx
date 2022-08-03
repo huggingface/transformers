@@ -10,15 +10,15 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# Mettere a punto un modello pre-addestrato
+# Fine-tuning di un modello pre-addestrato
 
 [[open-in-colab]]
 
-Ci sono benefici significativi nell'usare un modello pre-allenato. Riduce i costi computazionali, la tua impronta di carbonio, e ti consente di usare lo stato dell'arte dei modelli senza doverli addestrare da zero. 🤗 Transformers consente l'accesso a migliaia di modelli pre-addestrati per un'ampia gamma di compiti. Quando usi un modello pre-addestrato, lo alleni su un dataset specifico per il tuo compito. Questo è conosciuto come messa a punto (in inglese *fine-tuning*),una tecnica di addestramento incredibilmente potente. In questa esercitazione, potrai mettere a punto un modello pre-addestrato con un framework di deep learning a tua scelta:
+Ci sono benefici significativi nell'usare un modello pre-addestrato. Si riducono i costi computazionali, l'impronta di carbonio e ti consente di usare modelli stato dell'arte senza doverli addestrare da zero. 🤗 Transformers consente l'accesso a migliaia di modelli pre-addestrati per un'ampia gamma di compiti. Quando usi un modello pre-addestrato, lo alleni su un dataset specifico per il tuo compito. Questo è conosciuto come fine-tuning, una tecnica di addestramento incredibilmente potente. In questa esercitazione, potrai fare il fine-tuning di un modello pre-addestrato, con un framework di deep learning a tua scelta:
 
-* Messa a punto di un modello pre-addestrato con 🤗 Transformers [`Trainer`].
-* Messa a punto di un modello pre-addestrato in TensorFlow con Keras.
-* Messa a punto di un modello pre-addestrato con PyTorch.
+* Fine-tuning di un modello pre-addestrato con 🤗 Transformers [`Trainer`].
+* Fine-tuning di un modello pre-addestrato in TensorFlow con Keras.
+* Fine-tuning di un modello pre-addestrato con PyTorch.
 
 <a id='data-processing'></a>
 
@@ -26,7 +26,7 @@ Ci sono benefici significativi nell'usare un modello pre-allenato. Riduce i cost
 
 <Youtube id="_BZearw7f0w"/>
 
-Prima di poter mettere a punto un modello pre-addestrato, scarica un dataset e preparalo per l'addestramento. La precedente esercitazione ti mostra come processare i dati per l'addestramento, e adesso hai l'opportunità di provare queste capacità sul test!
+Prima di poter fare il fine-tuning di un modello pre-addestrato, scarica un dataset e preparalo per l'addestramento. La precedente esercitazione ti ha mostrato come processare i dati per l'addestramento e adesso hai l'opportunità di metterti alla prova!
 
 Inizia caricando il dataset [Yelp Reviews](https://huggingface.co/datasets/yelp_review_full):
 
@@ -39,7 +39,7 @@ Inizia caricando il dataset [Yelp Reviews](https://huggingface.co/datasets/yelp_
  'text': 'My expectations for McDonalds are t rarely high. But for one to still fail so spectacularly...that takes something special!\\nThe cashier took my friends\'s order, then promptly ignored me. I had to force myself in front of a cashier who opened his register to wait on the person BEHIND me. I waited over five minutes for a gigantic order that included precisely one kid\'s meal. After watching two people who ordered after me be handed their food, I asked where mine was. The manager started yelling at the cashiers for \\"serving off their orders\\" when they didn\'t have their food. But neither cashier was anywhere near those controls, and the manager was the one serving food to customers and clearing the boards.\\nThe manager was rude when giving me my order. She didn\'t make sure that I had everything ON MY RECEIPT, and never even had the decency to apologize that I felt I was getting poor service.\\nI\'ve eaten at various McDonalds restaurants for over 30 years. I\'ve worked at more than one location. I expect bad days, bad moods, and the occasional mistake. But I have yet to have a decent experience at this store. It will remain a place I avoid unless someone in my party needs to avoid illness from low blood sugar. Perhaps I should go back to the racially biased service of Steak n Shake instead!'}
 ```
 
-Come già sai, hai bisogno di un tokenizer per processare il testo e includere una strategia di padding e truncation per gestire sequenze di lunghezza variabile. Per processare il dataset in un unico passo, usa il metodo [`map`](https://huggingface.co/docs/datasets/process.html#map) di 🤗 Datasets che applica la funzione di preprocessamento all'intero dataset:
+Come già sai, hai bisogno di un tokenizer per processare il testo e includere una strategia di padding e truncation per gestire sequenze di lunghezza variabile. Per processare il dataset in un unico passo, usa il metodo [`map`](https://huggingface.co/docs/datasets/process.html#map) di 🤗 Datasets che applica la funzione di preprocessing all'intero dataset:
 
 ```py
 >>> from transformers import AutoTokenizer
@@ -54,7 +54,7 @@ Come già sai, hai bisogno di un tokenizer per processare il testo e includere u
 >>> tokenized_datasets = dataset.map(tokenize_function, batched=True)
 ```
 
-If you like, you can create a smaller subset of the full dataset to fine-tune on to reduce the time it takes:
+Se vuoi, puoi creare un sottoinsieme più piccolo del dataset per il fine-tuning così da ridurre il tempo necessario:
 
 ```py
 >>> small_train_dataset = tokenized_datasets["train"].shuffle(seed=42).select(range(1000))
@@ -69,9 +69,9 @@ If you like, you can create a smaller subset of the full dataset to fine-tune on
 <pt>
 <Youtube id="nvBXf7s7vTI"/>
 
-🤗 Transformers mette a disposizione la classe [`Trainer`] ottimizzata per addestrare modelli 🤗 Transformers, rendendo semplice iniziare l'addestramento senza scrivere manualmente il tuo ciclo di allenamento. L'API [`Trainer`] supporta un'ampia gamma di opzioni e funzionalità di addestramento come logging, gradient accumulation, e mixed precision.
+🤗 Transformers mette a disposizione la classe [`Trainer`] ottimizzata per addestrare modelli 🤗 Transformers, rendendo semplice iniziare l'addestramento senza scrivere manualmente il tuo ciclo di addestramento. L'API [`Trainer`] supporta un'ampia gamma di opzioni e funzionalità di addestramento come logging, gradient accumulation e mixed precision.
 
-Inizia caricando il tuo modello e specificando il numero di etichette attese. Nel dataset Yelp Review [dataset card](https://huggingface.co/datasets/yelp_review_full#data-fields), sai che ci sono cinque etichette:
+Inizia caricando il tuo modello e specificando il numero di etichette (labels) attese. Nel dataset Yelp Review [dataset card](https://huggingface.co/datasets/yelp_review_full#data-fields), sai che ci sono cinque etichette:
 
 ```py
 >>> from transformers import AutoModelForSequenceClassification
@@ -81,13 +81,13 @@ Inizia caricando il tuo modello e specificando il numero di etichette attese. Ne
 
 <Tip>
 
-Potresti vedere un'allerta dato che alcuni dei pesi pre-addestrati non sono stati utilizzati e altri pesi sono stati inizializzati casualmente. Non preoccuparti, è completamente normale! La testa pre-allenata del modello BERT viene scartata, e rimpiazzata da una testa per la classificazione inizializzata casualmente. Tu metterai a punto la nuova testa del modello sulla tua sequenza per il compito di classificazione, trasferendogli la conoscenza del modello pre-allenato.
+Potresti vedere un warning dato che alcuni dei pesi pre-addestrati non sono stati utilizzati e altri pesi sono stati inizializzati casualmente. Non preoccuparti, è completamente normale! L'head pre-addestrata del modello BERT viene scartata e rimpiazzata da una classification head inizializzata casualmente. Farai il fine-tuning di questa nuova head del modello sul tuo compito di classificazione, trasferendogli la conoscenza del modello pre-addestrato.
 
 </Tip>
 
-### Addestrare gli iperparametri
+### Iperparametri per il training
 
-Successivamente, crea una classe [`TrainingArguments`] contenente tutti gli iperparametri che si possono calibrare nonché le variabili per attivare le differenti opzioni di addestramento. Per questa esercitazione puoi iniziare con gli [iperparametri](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments) di allenamento predefiniti, ma sentiti libero di sperimentare per trovare la configurazione ottimale per te.
+Successivamente, crea una classe [`TrainingArguments`] contenente tutti gli iperparametri che si possono regore nonché le variabili per attivare le differenti opzioni di addestramento. Per questa esercitazione puoi iniziare con gli [iperparametri](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments) di ddestramento predefiniti, ma sentiti libero di sperimentare per trovare la configurazione ottimale per te.
 
 Specifica dove salvare i checkpoints del tuo addestramento:
 
@@ -168,7 +168,7 @@ Il [`DefaultDataCollator`] assembla tensori in lotti su cui il modello si addest
 
 </Tip>
 
-Successivamente, converti i datasets tokenizzati in TensorFlow datasets con il metodo [`to_tf_dataset`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.to_tf_dataset). Specifica il tuo input in `columns`, e le tue etichette in `label_cols`:
+Successivamente, converti i datasets tokenizzati in TensorFlow datasets con il metodo [`to_tf_dataset`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.to_tf_dataset). Specifica il tuo input in `columns` e le tue etichette in `label_cols`:
 
 ```py
 >>> tf_train_dataset = small_train_dataset.to_tf_dataset(
@@ -199,7 +199,7 @@ Carica un modello TensorFlow col numero atteso di etichette:
 >>> model = TFAutoModelForSequenceClassification.from_pretrained("bert-base-cased", num_labels=5)
 ```
 
-Poi compila e metti a punto il tuo modello usando [`fit`](https://keras.io/api/models/model_training_apis/) come si farebbe con qualsiasi altro modello di Keras:
+Poi compila e fai il fine-tuning del tuo modello usando [`fit`](https://keras.io/api/models/model_training_apis/) come faresti con qualsiasi altro modello di Keras:
 
 ```py
 >>> model.compile(
@@ -221,7 +221,7 @@ Poi compila e metti a punto il tuo modello usando [`fit`](https://keras.io/api/m
 <pt>
 <Youtube id="Dh9CL8fyG80"/>
 
-[`Trainer`] si occupa del ciclo di addestramento e ti consente di mettere a punto un modello con una sola riga di codice. Per chi preferisse scrivere un proprio ciclo di addestramento personale, puoi anche mettere a punto un modello 🤗 Transformers in PyTorch nativo.
+[`Trainer`] si occupa del ciclo di addestramento e ti consente di mettere a punto un modello con una sola riga di codice. Per chi preferisse scrivere un proprio ciclo di addestramento personale, puoi anche fare il fine-tuning di un modello 🤗 Transformers in PyTorch nativo.
 
 A questo punto, potresti avere bisogno di riavviare il tuo notebook o eseguire il seguente codice per liberare un po' di memoria:
 
@@ -278,9 +278,9 @@ Carica il tuo modello con il numero atteso di etichette:
 >>> model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", num_labels=5)
 ```
 
-### Ottimizzatore e pianificatore del tasso di apprendimento
+### Ottimizzatore e learning rate scheduler
 
-Crea un ottimizzatore e pianificatore del tasso di apprendimento per mettere a punto il modello. Usa l'ottimizzatore [`AdamW`](https://pytorch.org/docs/stable/generated/torch.optim.AdamW.html) di PyTorch:
+Crea un ottimizzatore e il learning rate scheduler per fare il fine-tuning del modello. Usa l'ottimizzatore [`AdamW`](https://pytorch.org/docs/stable/generated/torch.optim.AdamW.html) di PyTorch:
 
 ```py
 >>> from torch.optim import AdamW
@@ -288,7 +288,7 @@ Crea un ottimizzatore e pianificatore del tasso di apprendimento per mettere a p
 >>> optimizer = AdamW(model.parameters(), lr=5e-5)
 ```
 
-Crea il pianificatore del tasso di apprendimento predefinito da [`Trainer`]:
+Crea il learning rate scheduler predefinito da [`Trainer`]:
 
 ```py
 >>> from transformers import get_scheduler
@@ -300,7 +300,7 @@ Crea il pianificatore del tasso di apprendimento predefinito da [`Trainer`]:
 ... )
 ```
 
-Infine, specifica come `device` da usare una GPU se ne hai una. Altrimenti, l'addestramento su una CPU può richiedere diverse ore invece di un paio di minuti.
+Infine specifica come `device` da usare una GPU se ne hai una. Altrimenti, l'addestramento su una CPU può richiedere diverse ore invece di un paio di minuti.
 
 ```py
 >>> import torch
@@ -342,7 +342,7 @@ Per tenere traccia dei tuoi progressi durante l'addestramento, usa la libreria [
 
 ### Metriche
 
-Proprio come è necessario aggiungere una funzione di valutazione del [`Trainer`], è necessario fare lo stesso quando si scrive il proprio ciclo di allenamento. Ma invece di calcolare e riportare la metrica alla fine di ogni epoca, questa volta accumulerai tutti i batch con [`add_batch`](https://huggingface.co/docs/datasets/package_reference/main_classes.html?highlight=add_batch#datasets.Metric.add_batch) e calcolerai la metrica alla fine.
+Proprio come è necessario aggiungere una funzione di valutazione del [`Trainer`], è necessario fare lo stesso quando si scrive il proprio ciclo di addestramento. Ma invece di calcolare e riportare la metrica alla fine di ogni epoca, questa volta accumulerai tutti i batch con [`add_batch`](https://huggingface.co/docs/datasets/package_reference/main_classes.html?highlight=add_batch#datasets.Metric.add_batch) e calcolerai la metrica alla fine.
 
 ```py
 >>> metric = load_metric("accuracy")

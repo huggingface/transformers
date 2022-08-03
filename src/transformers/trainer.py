@@ -565,9 +565,11 @@ class Trainer:
                     self.scaler = ShardedGradScaler()
                 elif self.fsdp is not None:
                     if self.amp_dtype == torch.float16:
-                        from torch.distributed.fsdp.sharded_grad_scaler import ShardedGradScaler
+                        from torch.distributed.fsdp.sharded_grad_scaler import (
+                            ShardedGradScaler as FSDPShardedGradScaler,
+                        )
 
-                        self.scaler = ShardedGradScaler()
+                        self.scaler = FSDPShardedGradScaler()
                     else:
                         self.do_grad_scaling = False
                         self.use_cuda_amp = False
@@ -1342,9 +1344,8 @@ class Trainer:
                     reshard_after_forward=zero_3,
                     cpu_offload=cpu_offload,
                 ).to(self.args.device)
-
         # Distributed training using PyTorch FSDP
-        if self.fsdp is not None:
+        elif self.fsdp is not None:
             # PyTorch FSDP!
             from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload
             from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
@@ -1366,6 +1367,8 @@ class Trainer:
                     transformer_cls_to_wrap = get_module_class_from_name(
                         model, self.args.fsdp_transformer_layer_cls_to_wrap
                     )
+                    if transformer_cls_to_wrap is None:
+                        raise Exception("Could not find the transformer layer class to wrap in the model.")
                     auto_wrap_policy = functools.partial(
                         transformer_auto_wrap_policy,
                         # Transformer layer class to wrap
@@ -1390,7 +1393,6 @@ class Trainer:
                 )
                 if FSDPOption.OFFLOAD not in self.args.fsdp:
                     model.to(self.args.device)
-
         elif is_sagemaker_dp_enabled():
             model = nn.parallel.DistributedDataParallel(
                 model, device_ids=[int(os.getenv("SMDATAPARALLEL_LOCAL_RANK"))]
