@@ -651,6 +651,13 @@ def try_to_load_from_cache(cache_dir, repo_id, filename, revision=None):
     return cached_file if os.path.isfile(cached_file) else None
 
 
+# If huggingface_hub changes the class of error for this to FileNotFoundError, we will be able to avoid that in the
+# future.
+LOCAL_FILES_ONLY_HF_ERROR = (
+    "Cannot find the requested files in the disk cache and outgoing traffic has been disabled. To enable hf.co "
+    "look-ups and downloads online, set 'local_files_only' to False."
+)
+
 # In the future, this ugly contextmanager can be removed when huggingface_hub as a released version where we can
 # activate/deactivate progress bars.
 @contextmanager
@@ -798,8 +805,13 @@ def cached_file(
             return None
 
         raise EnvironmentError(f"There was a specific connection error when trying to load {path_or_repo_id}:\n{err}")
-    except ValueError:
-        # First we try to see if we have a cached version (not up to date):
+    except ValueError as err:
+        # HuggingFace Hub returns a ValueError for a missing file when local_files_only=True we need to catch it here
+        # This could be caught above along in `EntryNotFoundError` if hf_hub sent a different error message here
+        if LOCAL_FILES_ONLY_HF_ERROR in err.args[0] and local_files_only and not _raise_exceptions_for_missing_entries:
+            return None
+
+        # Otherwise we try to see if we have a cached version (not up to date):
         resolved_file = try_to_load_from_cache(cache_dir, path_or_repo_id, full_filename, revision=revision)
         if resolved_file is not None:
             return resolved_file
