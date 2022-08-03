@@ -256,8 +256,6 @@
         title: LongT5
       - local: model_doc/luke
         title: LUKE
-      - local: model_doc/lxmert
-        title: LXMERT
       - local: model_doc/m2m_100
         title: M2M100
       - local: model_doc/marian
@@ -359,8 +357,6 @@
         title: DPT
       - local: model_doc/glpn
         title: GLPN
-      - local: model_doc/groupvit
-        title: GroupViT
       - local: model_doc/imagegpt
         title: ImageGPT
       - local: model_doc/levit
@@ -431,12 +427,16 @@
         title: Data2Vec
       - local: model_doc/flava
         title: FLAVA
+      - local: model_doc/groupvit
+        title: GroupViT
       - local: model_doc/layoutlmv2
         title: LayoutLMV2
       - local: model_doc/layoutlmv3
         title: LayoutLMV3
       - local: model_doc/layoutxlm
         title: LayoutXLM
+      - local: model_doc/lxmert
+        title: LXMERT
       - local: model_doc/perceiver
         title: Perceiver
       - local: model_doc/speech-encoder-decoder
