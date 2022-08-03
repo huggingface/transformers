@@ -834,6 +834,7 @@ class HFTracer(Tracer):
                 raise ValueError("Don't support composite output yet")
             rv.install_metadata(meta_out)
         except Exception as e:
+            # import pdb; pdb.set_trace()
             warnings.warn(f"Could not compute metadata for {kind} target {target}: {e}")
 
         return rv
@@ -882,11 +883,21 @@ class HFTracer(Tracer):
     def proxy(self, node):
         return HFProxy(node, self)
 
-    def trace(self, root: PreTrainedModel, concrete_args: Optional[Dict[str, Any]] = None) -> Graph:
+    def trace(
+        self,
+        root: PreTrainedModel,
+        concrete_args: Optional[Dict[str, Any]] = None,
+        dummy_inputs: Optional[Dict[str, Any]] = None,
+        infer_concrete_args_from_dummy_inputs: bool = True,
+    ) -> Graph:
+        sig = inspect.signature(root.forward)
+
         if concrete_args is None:
             concrete_args = {}
 
-        sig = inspect.signature(root.forward)
+        if dummy_inputs is not None and infer_concrete_args_from_dummy_inputs:
+            concrete_args.update({p.name: p.default for p in sig.parameters.values() if p.name not in dummy_inputs})
+
         input_names = sig.parameters.keys() - concrete_args.keys()
 
         # Creating a random input shape to generate dummy inputs.
@@ -898,8 +909,10 @@ class HFTracer(Tracer):
             num_choices = _generate_random_int(low=2, high=5)
             shape.insert(1, num_choices)
 
-        inputs = {}
+        inputs = dict(dummy_inputs) if dummy_inputs is not None else {}
         for input_name in input_names:
+            if input_name in inputs:
+                continue
             inputs.update(self._generate_dummy_input(root, input_name, shape))
 
         concrete_metas = {input_name: input_.to("meta") for input_name, input_ in inputs.items()}
