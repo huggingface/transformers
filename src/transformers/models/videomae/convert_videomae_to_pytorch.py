@@ -172,7 +172,7 @@ def convert_videomae_checkpoint(checkpoint_url, pytorch_dump_folder_path, model_
     model.eval()
 
     # verify model on basic input
-    feature_extractor = VideoMAEFeatureExtractor()
+    feature_extractor = VideoMAEFeatureExtractor(image_mean=[0.5, 0.5, 0.5], image_std=[0.5, 0.5, 0.5])
     video = prepare_video()
     inputs = feature_extractor(video, return_tensors="pt")
 
@@ -198,6 +198,7 @@ def convert_videomae_checkpoint(checkpoint_url, pytorch_dump_folder_path, model_
         "videomae-base-finetuned-ssv2",
     ]
 
+    # NOTE: logits were tested with image_mean and image_std equal to [0.5, 0.5, 0.5] and [0.5, 0.5, 0.5]
     if model_name == "videomae-base":
         expected_shape = torch.Size([1, 1408, 1536])
         expected_slice = torch.tensor([[0.7739, 0.7968, 0.7089], [0.6701, 0.7487, 0.6209], [0.4287, 0.5158, 0.4773]])

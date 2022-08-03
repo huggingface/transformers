@@ -20,14 +20,8 @@ import numpy as np
 from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
-    ImageFeatureExtractionMixin,
-    ImageInput,
-    is_torch_tensor,
-)
-from ...utils import TensorType, logging
+from ...image_utils import ImageFeatureExtractionMixin, ImageInput, is_torch_tensor
+from ...utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, TensorType, logging
 
 
 logger = logging.get_logger(__name__)
@@ -53,9 +47,9 @@ class VideoMAEFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
             Whether to center crop the input to a certain `size`.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to normalize the input with mean and standard deviation.
-        image_mean (`List[int]`, defaults to `[0.5, 0.5, 0.5]`):
+        image_mean (`List[int]`, defaults to `[0.485, 0.456, 0.406]`):
             The sequence of means for each channel, to be used when normalizing images.
-        image_std (`List[int]`, defaults to `[0.5, 0.5, 0.5]`):
+        image_std (`List[int]`, defaults to `[0.229, 0.224, 0.225]`):
             The sequence of standard deviations for each channel, to be used when normalizing images.
     """
 
@@ -78,8 +72,8 @@ class VideoMAEFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
         self.resample = resample
         self.do_center_crop = do_center_crop
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
-        self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
+        self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
+        self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
 
     def resize_video(self, video, size, resample="bilinear"):
         return [self.resize(frame, size, resample, default_to_square=False) for frame in video]

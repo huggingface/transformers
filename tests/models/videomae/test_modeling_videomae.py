@@ -352,11 +352,18 @@ def prepare_video():
 class VideoMAEModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return VideoMAEFeatureExtractor.from_pretrained("MCG-NJU/videomae-base") if is_vision_available() else None
+        # logits were tested with a different mean and std, so we use the same here
+        return (
+            VideoMAEFeatureExtractor(image_mean=[0.5, 0.5, 0.5], image_std=[0.5, 0.5, 0.5])
+            if is_vision_available()
+            else None
+        )
 
     @slow
     def test_inference_for_video_classification(self):
-        model = VideoMAEForVideoClassification.from_pretrained("MCG-NJU/videomae-base").to(torch_device)
+        model = VideoMAEForVideoClassification.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics").to(
+            torch_device
+        )
 
         feature_extractor = self.default_feature_extractor
         video = prepare_video()
