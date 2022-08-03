@@ -115,7 +115,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_tf_clip import (
+        from .modeling_tf_owlvit import (
             TF_OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFOwlViTForObjectDetection,
             TFOwlViTModel,
