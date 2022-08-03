@@ -945,7 +945,7 @@ def has_file(
 
     r = requests.head(url, headers=headers, allow_redirects=False, proxies=proxies, timeout=10)
     try:
-        _raise_for_status(r)
+        huggingface_hub.utils._errors._raise_for_status(r)
         return True
     except RepositoryNotFoundError as e:
         logger.error(e)
