@@ -647,7 +647,7 @@ class DisentangledSelfAttention(nn.Module):
         rel_att = None
         # Take the dot product between "query" and "key" to get the raw attention scores.
         scale_factor = 1 + len(self.pos_att_type)
-        scale = torch.sqrt(query_layer.size(-1) * scale_factor)
+        scale = torch.sqrt(torch.tensor(query_layer.size(-1) * scale_factor, dtype=torch.float))
         query_layer = query_layer / scale
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
         if self.relative_attention:
@@ -708,7 +708,7 @@ class DisentangledSelfAttention(nn.Module):
         if "p2c" in self.pos_att_type:
             pos_query_layer = self.pos_q_proj(rel_embeddings)
             pos_query_layer = self.transpose_for_scores(pos_query_layer)
-            pos_query_layer /= torch.sqrt(pos_query_layer.size(-1) * scale_factor)
+            pos_query_layer /= torch.sqrt(torch.tensor(pos_query_layer.size(-1) * scale_factor, dtype=torch.float))
             if query_layer.size(-2) != key_layer.size(-2):
                 r_pos = build_relative_position(key_layer.size(-2), key_layer.size(-2), query_layer.device)
             else:
