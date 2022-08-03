@@ -487,8 +487,8 @@ class TFGenerationMixin:
             output_scores (`bool`, *optional*, defaults to `model.config.output_scores` or `False` if the config does
                 not set any value): Whether or not to return the prediction scores. See `scores` under returned tensors
                 for more details.
-            return_dict_in_generate (`bool`, *optional*, defaults to `model.config.return_dict_in_generate` or `False`
-                if the config does not set any value): Whether or not to return a [`~utils.ModelOutput`] instead of a
+            return_dict_in_generate (`bool`, *optional*, defaults to `model.config.return_dict_in_generate` or `False` if the config does not set any value):
+                Whether or not to return a [`~utils.ModelOutput`] instead of a
                 plain tuple.
             forced_bos_token_id (`int`, *optional*, defaults to `model.config.forced_bos_token_id`):
                 The id of the token to force as the first generated token after the `decoder_start_token_id`. Useful
