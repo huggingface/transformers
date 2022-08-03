@@ -34,6 +34,7 @@ from urllib.parse import urlparse
 from uuid import uuid4
 from zipfile import ZipFile, is_zipfile
 
+import huggingface_hub
 import requests
 from filelock import FileLock
 from huggingface_hub import (
@@ -622,6 +623,20 @@ def get_from_cache(
     return cache_path
 
 
+# In the future, this ugly contextmanager can be removed when huggingface_hub as a released version where we can
+# activate/deactivate progress bars.
+@contextmanager
+def _patch_hf_hub_tqdm():
+    """
+    A context manager to make huggingface hub use the tqdm version of Transformers (which is controlled by some utils)
+    in logging.
+    """
+    old_tqdm = huggingface_hub.file_download.tqdm
+    huggingface_hub.file_download.tqdm = tqdm
+    yield
+    huggingface_hub.file_download.tqdm = old_tqdm
+
+
 def cached_file(
     path_or_repo_id: Union[str, os.PathLike],
     filename: str,
@@ -697,7 +712,7 @@ def cached_file(
         resolved_file = os.path.join(os.path.join(path_or_repo_id, subfolder), filename)
         if not os.path.isfile(resolved_file):
             if _raise_exceptions_for_missing_entries:
-                raise FileNotFoundError(f"Could not locate {full_filename} inside {path_or_repo_id}.")
+                raise EnvironmentError(f"Could not locate {full_filename} inside {path_or_repo_id}.")
             else:
                 return None
         return resolved_file
@@ -709,19 +724,20 @@ def cached_file(
     user_agent = http_user_agent(user_agent)
     try:
         # Load from URL or cache if already cached
-        resolved_file = hf_hub_download(
-            path_or_repo_id,
-            filename,
-            subfolder=None if len(subfolder) == 0 else subfolder,
-            revision=revision,
-            cache_dir=cache_dir,
-            user_agent=user_agent,
-            force_download=force_download,
-            proxies=proxies,
-            resume_download=resume_download,
-            use_auth_token=use_auth_token,
-            local_files_only=local_files_only,
-        )
+        with _patch_hf_hub_tqdm():
+            resolved_file = hf_hub_download(
+                path_or_repo_id,
+                filename,
+                subfolder=None if len(subfolder) == 0 else subfolder,
+                revision=revision,
+                cache_dir=cache_dir,
+                user_agent=user_agent,
+                force_download=force_download,
+                proxies=proxies,
+                resume_download=resume_download,
+                use_auth_token=use_auth_token,
+                local_files_only=local_files_only,
+            )
 
     except RepositoryNotFoundError:
         raise EnvironmentError(
@@ -742,7 +758,7 @@ def cached_file(
         if revision is None:
             revision = "main"
         raise EnvironmentError(
-            f"{path_or_repo_id} exists, but it doesn't look like it contains a file named {full_filename}. Checkout "
+            f"{path_or_repo_id} does not appear to have a file named {full_filename}. Checkout "
             f"'https://huggingface.co/{path_or_repo_id}/{revision}' for available files."
         )
     except HTTPError as err:

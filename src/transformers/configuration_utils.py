@@ -569,13 +569,17 @@ class PretrainedConfig(PushToHubMixin):
             user_agent["using_pipeline"] = from_pipeline
 
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
+
+        is_local = os.path.isdir(pretrained_model_name_or_path)
         if os.path.isfile(os.path.join(subfolder, pretrained_model_name_or_path)):
+            # Soecial case when pretrained_model_name_or_path is a local file
             resolved_config_file = pretrained_model_name_or_path
+            is_local = True
         else:
             configuration_file = kwargs.pop("_configuration_file", CONFIG_NAME)
 
             try:
-                # Load from URL or cache if already cached
+                # Load from local folder or from cache or download from model Hub and cache
                 resolved_config_file = cached_file(
                     pretrained_model_name_or_path,
                     configuration_file,
@@ -607,7 +611,7 @@ class PretrainedConfig(PushToHubMixin):
                 f"It looks like the config file at '{resolved_config_file}' is not a valid JSON file."
             )
 
-        if os.path.isdir(os.path.join(pretrained_model_name_or_path, subfolder)):
+        if is_local:
             logger.info(f"loading configuration file {resolved_config_file}")
         else:
             logger.info(f"loading configuration file {configuration_file} from cache at {resolved_config_file}")
