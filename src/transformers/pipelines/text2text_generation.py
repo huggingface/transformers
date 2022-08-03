@@ -1,9 +1,9 @@
 import enum
+import warnings
 
 from ..tokenization_utils import TruncationStrategy
 from ..utils import add_end_docstrings, is_tf_available, is_torch_available, logging
 from .base import PIPELINE_INIT_ARGS, Pipeline
-
 
 if is_tf_available():
     import tensorflow as tf
@@ -59,6 +59,7 @@ class Text2TextGenerationPipeline(Pipeline):
         return_type=None,
         clean_up_tokenization_spaces=None,
         truncation=None,
+        stop_sequence=None,
         **generate_kwargs
     ):
         preprocess_params = {}
@@ -75,7 +76,14 @@ class Text2TextGenerationPipeline(Pipeline):
 
         if clean_up_tokenization_spaces is not None:
             postprocess_params["clean_up_tokenization_spaces"] = clean_up_tokenization_spaces
-
+        
+        if stop_sequence is not None:
+            stop_sequence_ids = self.tokenizer.encode(
+                stop_sequence
+            )
+            if len(stop_sequence_ids) > 1:
+                warnings.warn(f"Stopping on a multiple token sequence is not yet supported on transformers. The first token of the stop sequence will be used as the stop sequence string in the interim.")
+            generate_kwargs["eos_token_id"] = stop_sequence_ids[1]
         return preprocess_params, forward_params, postprocess_params
 
     def check_inputs(self, input_length: int, min_length: int, max_length: int):
@@ -148,6 +156,7 @@ class Text2TextGenerationPipeline(Pipeline):
         return inputs
 
     def _forward(self, model_inputs, **generate_kwargs):
+        breakpoint()
         if self.framework == "pt":
             in_b, input_length = model_inputs["input_ids"].shape
         elif self.framework == "tf":
