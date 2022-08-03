@@ -107,7 +107,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_tf_layoutlm import (  # TODO LayoutLMForQuestionAnswering,
+        from .modeling_tf_layoutlm import (
             TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFLayoutLMForMaskedLM,
             TFLayoutLMForSequenceClassification,

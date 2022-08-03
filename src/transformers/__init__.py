@@ -2339,7 +2339,6 @@ else:
             "TFLayoutLMForMaskedLM",
             "TFLayoutLMForSequenceClassification",
             "TFLayoutLMForTokenClassification",
-            # XXX "TFLayoutLMForQuestionAnswering",
             "TFLayoutLMMainLayer",
             "TFLayoutLMModel",
             "TFLayoutLMPreTrainedModel",
@@ -4583,7 +4582,7 @@ if TYPE_CHECKING:
         )
         from .generation_tf_utils import tf_top_k_top_p_filtering
         from .keras_callbacks import KerasMetricCallback, PushToHubCallback
-        from .modeling_tf_layoutlm import (  # TODO TFLayoutLMForQuestionAnswering,
+        from .modeling_tf_layoutlm import (
             TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFLayoutLMForMaskedLM,
             TFLayoutLMForSequenceClassification,

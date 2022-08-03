@@ -1226,7 +1226,6 @@ class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
 
 
 # TODO:
-#   - Add support for TF
 #   - Write documentation
 class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
     def __init__(self, config, has_visual_segment_embedding=True):
