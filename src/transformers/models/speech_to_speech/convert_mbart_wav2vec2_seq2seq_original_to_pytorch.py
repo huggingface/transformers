@@ -27,9 +27,9 @@ from transformers import (
     MBartForCausalLM,
     SpeechToSpeechConfig,
     SpeechToSpeechModel,
-    Wav2Vec2Config,
+    Wav2Vec2ConformerConfig,
     Wav2Vec2FeatureExtractor,
-    Wav2Vec2Model,
+    Wav2Vec2ConformerModel,
     logging,
 )
 
@@ -40,13 +40,26 @@ logger = logging.get_logger(__name__)
 MAPPING = {
     "post_extract_proj": "feature_projection.projection",
     "encoder.pos_conv.0": "encoder.pos_conv_embed.conv",
-    "self_attn.k_proj": "encoder.layers.*.attention.k_proj",
-    "self_attn.v_proj": "encoder.layers.*.attention.v_proj",
-    "self_attn.q_proj": "encoder.layers.*.attention.q_proj",
-    "self_attn.out_proj": "encoder.layers.*.attention.out_proj",
-    "self_attn_layer_norm": "encoder.layers.*.layer_norm",
-    "fc1": "encoder.layers.*.feed_forward.intermediate_dense",
-    "fc2": "encoder.layers.*.feed_forward.output_dense",
+    "self_attn.linear_k": "encoder.layers.*.self_attn.linear_k",
+    "self_attn.linear_v": "encoder.layers.*.self_attn.linear_v",
+    "self_attn.linear_q": "encoder.layers.*.self_attn.linear_q",
+    "self_attn.pos_bias_u": "encoder.layers.*.self_attn.pos_bias_u",
+    "self_attn.pos_bias_v": "encoder.layers.*.self_attn.pos_bias_v",
+    "self_attn.linear_out": "encoder.layers.*.self_attn.linear_out",
+    "self_attn.linear_pos": "encoder.layers.*.self_attn.linear_pos",
+    "self_attn.rotary_emb": "encoder.embed_positions",
+    "self_attn_layer_norm": "encoder.layers.*.self_attn_layer_norm",
+    "conv_module.pointwise_conv1": "encoder.layers.*.conv_module.pointwise_conv1",
+    "conv_module.pointwise_conv2": "encoder.layers.*.conv_module.pointwise_conv2",
+    "conv_module.depthwise_conv": "encoder.layers.*.conv_module.depthwise_conv",
+    "conv_module.batch_norm": "encoder.layers.*.conv_module.batch_norm",
+    "conv_module.layer_norm": "encoder.layers.*.conv_module.layer_norm",
+    "ffn1.w_1": "encoder.layers.*.ffn1.intermediate_dense",
+    "ffn1.w_2": "encoder.layers.*.ffn1.output_dense",
+    "ffn1.layer_norm": "encoder.layers.*.ffn1_layer_norm",
+    "ffn2.w_1": "encoder.layers.*.ffn2.intermediate_dense",
+    "ffn2.w_2": "encoder.layers.*.ffn2.output_dense",
+    "ffn2.layer_norm": "encoder.layers.*.ffn2_layer_norm",
     "final_layer_norm": "encoder.layers.*.final_layer_norm",
     "encoder.layer_norm": "encoder.layer_norm",
     "w2v_model.layer_norm": "feature_projection.layer_norm",
@@ -65,7 +78,7 @@ TOP_LEVEL_KEYS = [
     "project_hid",
 ]
 
-
+# Copied from transformers.models.wav2vec2_conformer.convert_wav2vec2_conformer_original_pytorch_checkpoint_to_pytorch.set_recursively
 def set_recursively(hf_pointer, key, value, full_name, weight_type):
     for attribute in key.split("."):
         hf_pointer = getattr(hf_pointer, attribute)
@@ -75,10 +88,11 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
     else:
         hf_shape = hf_pointer.shape
 
-    assert hf_shape == value.shape, (
-        f"Shape of hf {key + '.' + weight_type if weight_type is not None else ''} is {hf_shape}, but should be"
-        f" {value.shape} for {full_name}"
-    )
+    if hf_shape != value.shape:
+        raise ValueError(
+            f"Shape of hf {key + '.' + weight_type if weight_type is not None else ''} is {hf_shape}, but should be"
+            f" {value.shape} for {full_name}"
+        )
 
     if weight_type == "weight":
         hf_pointer.weight.data = value
@@ -88,13 +102,21 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
         hf_pointer.weight_v.data = value
     elif weight_type == "bias":
         hf_pointer.bias.data = value
+    elif weight_type == "running_mean":
+        hf_pointer.running_mean.data = value
+    elif weight_type == "running_var":
+        hf_pointer.running_var.data = value
+    elif weight_type == "num_batches_tracked":
+        hf_pointer.num_batches_tracked.data = value
+    elif weight_type == "inv_freq":
+        hf_pointer.inv_freq.data = value
     else:
         hf_pointer.data = value
 
     logger.info(f"{key + '.' + weight_type if weight_type is not None else ''} was initialized from {full_name}.")
 
-
-def recursively_load_weights_wav2vec2(fairseq_model, hf_model):
+# Adapted from transformers.models.wav2vec2_conformer.convert_wav2vec2_conformer_original_pytorch_checkpoint_to_pytorch.recursively_load_weights
+def recursively_load_weights(fairseq_model, hf_model):
     unused_weights = []
     fairseq_dict = fairseq_model.state_dict()
 
@@ -122,14 +144,27 @@ def recursively_load_weights_wav2vec2(fairseq_model, hf_model):
                     if "*" in mapped_key:
                         layer_index = name.split(key)[0].split(".")[-2]
                         mapped_key = mapped_key.replace("*", layer_index)
-                    if "weight_g" in name:
+                    if "pos_bias_u" in name:
+                        weight_type = None
+                    elif "pos_bias_v" in name:
+                        weight_type = None
+                    elif "weight_g" in name:
                         weight_type = "weight_g"
                     elif "weight_v" in name:
                         weight_type = "weight_v"
                     elif "bias" in name:
                         weight_type = "bias"
                     elif "weight" in name:
+                        # TODO: don't match quantizer.weight_proj
                         weight_type = "weight"
+                    elif "running_mean" in name:
+                        weight_type = "running_mean"
+                    elif "inv_freq" in name:
+                        weight_type = "inv_freq"
+                    elif "running_var" in name:
+                        weight_type = "running_var"
+                    elif "num_batches_tracked" in name:
+                        weight_type = "num_batches_tracked"
                     else:
                         weight_type = None
                     set_recursively(hf_model, mapped_key, value, name, weight_type)
@@ -139,7 +174,7 @@ def recursively_load_weights_wav2vec2(fairseq_model, hf_model):
 
     logger.warning(f"Unused weights: {unused_weights}")
 
-
+# Copied from transformers.models.wav2vec2_conformer.convert_wav2vec2_conformer_original_pytorch_checkpoint_to_pytorch.recursively_load_conv_layer
 def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_group_norm):
     name = full_name.split("conv_layers.")[-1]
     items = name.split(".")
@@ -179,7 +214,7 @@ def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_gro
     else:
         unused_weights.append(full_name)
 
-
+# Copied from transformers.models.speech_encoder_decoder.convert_mbart_wav2vec2_seq2seq_original_to_pytorch.load_adapter
 def load_adapter(full_name, value, adapter, unused_weights):
     name = full_name.split("adaptor.")[-1]
     items = name.split(".")
@@ -233,7 +268,7 @@ def load_adapter(full_name, value, adapter, unused_weights):
     else:
         unused_weights.append(full_name)
 
-
+# Copied from transformers.models.speech_encoder_decoder.convert_mbart_wav2vec2_seq2seq_original_to_pytorch.make_linear_from_emb
 def make_linear_from_emb(emb):
     vocab_size, emb_size = emb.weight.shape
     lin_layer = nn.Linear(vocab_size, emb_size, bias=False)
@@ -249,25 +284,26 @@ def convert_wav2vec2_checkpoint(
     config_yaml_path,
     encoder_config_path,
     decoder_config_path,
-    add_adapter,
+    num_adapter_layers,
     adapter_kernel_size,
     adapter_stride,
-    decoder_start_token_id,
     encoder_output_dim,
+    decoder_output_dim,
 ):
     """
     Copy/paste/tweak model's weights to transformers design.
     """
     # load configs
-    encoder_config = Wav2Vec2Config.from_pretrained(
+    encoder_config = Wav2Vec2ConformerConfig.from_pretrained(
         encoder_config_path,
         add_adapter=True,
+        num_adapter_layers=num_adapter_layers,
         adapter_stride=adapter_stride,
         adapter_kernel_size=adapter_kernel_size,
         use_auth_token=True,
         output_hidden_size=encoder_output_dim,
     )
-    decoder_config = MBartConfig.from_pretrained(decoder_config_path)
+    decoder_config = MBartConfig.from_pretrained(decoder_config_path, vocab_size=decoder_output_dim)
 
     # load model
     model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task(
@@ -275,8 +311,7 @@ def convert_wav2vec2_checkpoint(
         arg_overrides={
             "config_yaml": config_yaml_path,
             "data": "/".join(dict_path.split("/")[:-1]),
-            "w2v_path": checkpoint_path,
-            "load_pretrained_decoder_from": None,
+            "task": "speech_to_text",
         },
     )
     model = model[0].eval()
@@ -285,9 +320,9 @@ def convert_wav2vec2_checkpoint(
     feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(encoder_config_path, use_auth_token=True)
 
     # set weights for wav2vec2 encoder
-    hf_encoder = Wav2Vec2Model(encoder_config)
+    hf_encoder = Wav2Vec2ConformerModel(encoder_config)
 
-    recursively_load_weights_wav2vec2(model.encoder, hf_encoder)
+    recursively_load_weights(model.encoder, hf_encoder)
 
     # load decoder weights
     hf_decoder = MBartForCausalLM(decoder_config)
@@ -298,19 +333,12 @@ def convert_wav2vec2_checkpoint(
     hf_wav2vec = SpeechToSpeechModel(encoder=hf_encoder, decoder=hf_decoder)
     hf_wav2vec.config.tie_word_embeddings = False
 
-    tokenizer = MBart50Tokenizer(dict_path)
-    tokenizer.save_pretrained(pytorch_dump_folder_path)
+    #tokenizer = MBart50Tokenizer(dict_path)
+    #tokenizer.save_pretrained(pytorch_dump_folder_path)
 
     config = hf_wav2vec.config.to_dict()
-    config["pad_token_id"] = tokenizer.pad_token_id
-    config["bos_token_id"] = tokenizer.bos_token_id
-    config["eos_token_id"] = tokenizer.eos_token_id
-    config["tokenizer_class"] = "mbart50"
+    # config["tokenizer_class"] = "mbart50"
     config["feature_extractor_type"] = "wav2vec2"
-
-    config["decoder_start_token_id"] = tokenizer.eos_token_id
-    config["forced_bos_token_id"] = 250004
-    config["forced_eos_token_id"] = tokenizer.eos_token_id
 
     hf_wav2vec.config = SpeechToSpeechConfig.from_dict(config)
 
@@ -326,9 +354,9 @@ if __name__ == "__main__":
     parser.add_argument("--config_yaml_path", default=None, type=str, help="Path to yaml file of fine-tuned model")
     parser.add_argument(
         "--encoder_config_path",
-        default="facebook/wav2vec2-xls-r-1b",
+        default="facebook/wav2vec2-conformer-rel-pos-large",
         type=str,
-        help="Path to hf encoder wav2vec2 checkpoint config",
+        help="Path to hf encoder wav2vec2 conformer checkpoint config",
     )
     parser.add_argument(
         "--decoder_config_path",
@@ -336,11 +364,11 @@ if __name__ == "__main__":
         type=str,
         help="Path to hf decoder checkpoint config",
     )
-    parser.add_argument("--add_adapter", default=True, type=bool, help="whethere to add model adapter layers")
+    parser.add_argument("--num_adapter_layers", default=1, type=int, help="number of enc-dec adapter layers")
     parser.add_argument("--adapter_stride", default=2, type=int, help="stride of adapter layers")
     parser.add_argument("--adapter_kernel_size", default=3, type=int, help="kernel size of adapter layers")
     parser.add_argument("--encoder_output_dim", default=1024, type=int, help="encoder output dim")
-    parser.add_argument("--start_token_id", default=250004, type=int, help="`decoder_start_token_id` of model config")
+    parser.add_argument("--decoder_output_dim", default=1007, type=int, help="decoder output dim (=vocab size)")
 
     args = parser.parse_args()
     convert_wav2vec2_checkpoint(
@@ -350,9 +378,9 @@ if __name__ == "__main__":
         args.config_yaml_path,
         encoder_config_path=args.encoder_config_path,
         decoder_config_path=args.decoder_config_path,
-        add_adapter=args.add_adapter,
+        num_adapter_layers=args.num_adapter_layers,
         adapter_kernel_size=args.adapter_kernel_size,
         adapter_stride=args.adapter_stride,
-        decoder_start_token_id=args.start_token_id,
         encoder_output_dim=args.encoder_output_dim,
+        decoder_output_dim=args.decoder_output_dim,
     )
