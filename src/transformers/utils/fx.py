@@ -834,7 +834,6 @@ class HFTracer(Tracer):
                 raise ValueError("Don't support composite output yet")
             rv.install_metadata(meta_out)
         except Exception as e:
-            # import pdb; pdb.set_trace()
             warnings.warn(f"Could not compute metadata for {kind} target {target}: {e}")
 
         return rv
