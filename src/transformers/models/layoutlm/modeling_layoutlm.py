@@ -1273,14 +1273,7 @@ class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
             return_dict=return_dict,
         )
 
-        if input_ids is not None:
-            input_shape = input_ids.size()
-        else:
-            input_shape = inputs_embeds.size()[:-1]
-
-        seq_length = input_shape[1]
-        # only take the text part of the output representations
-        sequence_output = outputs[0][:, :seq_length]
+        sequence_output = outputs[0]
 
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
