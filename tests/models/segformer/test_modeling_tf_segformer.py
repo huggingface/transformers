@@ -18,8 +18,6 @@ import inspect
 import unittest
 from typing import List, Tuple
 
-import numpy as np
-
 from transformers import SegformerConfig
 from transformers.file_utils import is_tf_available, is_vision_available
 from transformers.testing_utils import require_tf, slow
