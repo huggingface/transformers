@@ -101,19 +101,20 @@ def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int, dtype: torc
             dtype of the output tensor
     """
     batch_size, seq_length = attention_mask.shape
+    device = attention_mask.device
     closest_power_of_2 = 2 ** math.floor(math.log2(num_heads))
     base = torch.tensor(
-        2 ** (-(2 ** -(math.log2(closest_power_of_2) - 3))), device=attention_mask.device, dtype=torch.float32
+        2 ** (-(2 ** -(math.log2(closest_power_of_2) - 3))), device=device, dtype=torch.float32
     )
-    powers = torch.arange(1, 1 + closest_power_of_2, device=attention_mask.device, dtype=torch.int32)
+    powers = torch.arange(1, 1 + closest_power_of_2, device=device, dtype=torch.int32)
     slopes = torch.pow(base, powers)
 
     if closest_power_of_2 != num_heads:
         extra_base = torch.tensor(
-            2 ** (-(2 ** -(math.log2(2 * closest_power_of_2) - 3))), device=attention_mask.device, dtype=torch.float32
+            2 ** (-(2 ** -(math.log2(2 * closest_power_of_2) - 3))), device=device, dtype=torch.float32
         )
         num_remaining_heads = min(closest_power_of_2, num_heads - closest_power_of_2)
-        extra_powers = torch.arange(1, 1 + 2 * num_remaining_heads, 2, device=attention_mask.device, dtype=torch.int32)
+        extra_powers = torch.arange(1, 1 + 2 * num_remaining_heads, 2, device=device, dtype=torch.int32)
         slopes = torch.cat([slopes, torch.pow(extra_base, extra_powers)], dim=0)
 
     # Note: alibi will added to the attention bias that will be applied to the query, key product of attention
@@ -214,6 +215,8 @@ class BloomAttention(nn.Module):
 
         self.pretraining_tp = config.pretraining_tp
         self.slow_but_exact = config.slow_but_exact
+        if self.slow_but_exact and self.pretraining_tp > 1:
+            self.slice_size = config.hidden_size / self.pretraining_tp
 
         self.hidden_size = config.hidden_size
         num_heads = config.n_head
@@ -348,12 +351,11 @@ class BloomAttention(nn.Module):
 
         # aggregate results across tp ranks. See here: https://github.com/pytorch/pytorch/issues/76232
         if self.pretraining_tp > 1 and self.slow_but_exact:
-            slices = self.hidden_size / self.pretraining_tp
             output_tensor = torch.zeros_like(context_layer)
             for i in range(self.pretraining_tp):
                 output_tensor = output_tensor + F.linear(
-                    context_layer[:, :, int(i * slices) : int((i + 1) * slices)],
-                    self.dense.weight[:, int(i * slices) : int((i + 1) * slices)],
+                    context_layer[:, :, i * self.slice_size : (i + 1) * self.slice_size],
+                    self.dense.weight[:, i * self.slice_size : (i + 1) * self.slice_size],
                 )
         else:
             output_tensor = self.dense(context_layer)
@@ -378,17 +380,18 @@ class BloomMLP(nn.Module):
         self.gelu_impl = BloomGelu()
         self.dense_4h_to_h = nn.Linear(4 * hidden_size, hidden_size)
         self.hidden_dropout = config.hidden_dropout
+        if self.slow_but_exact and self.pretraining_tp > 1:
+            self.slice_size = hidden_size / self.pretraining_tp
 
     def forward(self, hidden_states: torch.Tensor, residual: torch.Tensor) -> torch.Tensor:
         hidden_states = self.gelu_impl(self.dense_h_to_4h(hidden_states))
 
         if self.pretraining_tp > 1 and self.slow_but_exact:
             intermediate_output = torch.zeros_like(residual)
-            slices = self.dense_4h_to_h.weight.shape[-1] / self.pretraining_tp
             for i in range(self.pretraining_tp):
                 intermediate_output = intermediate_output + F.linear(
-                    hidden_states[:, :, int(i * slices) : int((i + 1) * slices)],
-                    self.dense_4h_to_h.weight[:, int(i * slices) : int((i + 1) * slices)],
+                    hidden_states[:, :, int(i * self.slice_size) : int((i + 1) * self.slice_size)],
+                    self.dense_4h_to_h.weight[:, int(i * self.slice_size) : int((i + 1) * self.slice_size)],
                 )
         else:
             intermediate_output = self.dense_4h_to_h(hidden_states)
