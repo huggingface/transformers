@@ -807,16 +807,17 @@ def main():
         grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
         (loss, num_labels), grad = grad_fn(state.params)
         num_labels = jax.lax.psum(num_labels, "batch")
+
         # true loss = total loss / total samples
         loss = jax.lax.psum(loss, "batch")
         loss = jax.tree_map(lambda x: x / num_labels, loss)
+
         # true grad = total grad / total samples
         grad = jax.lax.psum(grad, "batch")
         grad = jax.tree_map(lambda x: x / num_labels, grad)
         new_state = state.apply_gradients(grads=grad)
 
         metrics = {"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(state.step)}
-
         return new_state, metrics, new_dropout_rng
 
     # Create parallel version of the train step
