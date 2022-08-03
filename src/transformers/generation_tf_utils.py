@@ -458,8 +458,8 @@ class TFGenerationMixin:
 
                 Set to values < 1.0 in order to encourage the model to generate shorter sequences, to a value > 1.0 in
                 order to encourage the model to produce longer sequences.
-            no_repeat_ngram_size (`int`, *optional*, defaults to `model.config.no_repeat_ngram_size` or 0 if the config:
-                does not set any value): If set to int > 0, all ngrams of that size can only occur once.
+            no_repeat_ngram_size (`int`, *optional*, defaults to `model.config.no_repeat_ngram_size` or 0 if the config does not set any value):
+                If set to int > 0, all ngrams of that size can only occur once.
             bad_words_ids(`List[int]`, *optional*, defaults to `model.config.bad_words_ids`):
                 List of token ids that are not allowed to be generated. In order to get the tokens of the words that
                 should not appear in the generated text, use `tokenizer.encode(bad_word, add_prefix_space=True)`.
