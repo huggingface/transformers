@@ -741,6 +741,8 @@ def cached_file(
     if is_offline_mode() and not local_files_only:
         logger.info("Offline mode: forcing local_files_only=True")
         local_files_only = True
+    if subfolder is None:
+        subfolder = ""
 
     path_or_repo_id = str(path_or_repo_id)
     full_filename = os.path.join(subfolder, filename)
@@ -838,6 +840,7 @@ def get_file_from_repo(
     use_auth_token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
     local_files_only: bool = False,
+    subfolder: str = "",
 ):
     """
     Tries to locate a file in a local folder and repo, downloads and cache it if necessary.
@@ -871,8 +874,8 @@ def get_file_from_repo(
         local_files_only (`bool`, *optional*, defaults to `False`):
             If `True`, will only try to load the tokenizer configuration from local files.
         subfolder (`str`, *optional*, defaults to `""`):
-                In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
-                specify the folder name here.
+            In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
+            specify the folder name here.
 
     <Tip>
 
@@ -902,6 +905,7 @@ def get_file_from_repo(
         use_auth_token=use_auth_token,
         revision=revision,
         local_files_only=local_files_only,
+        subfolder=subfolder,
         _raise_exceptions_for_missing_entries=False,
         _raise_exceptions_for_connection_errors=False,
     )
