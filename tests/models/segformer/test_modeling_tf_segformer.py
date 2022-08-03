@@ -345,54 +345,12 @@ class TFSegformerModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_keras_fit(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
-        def apply(model):
-            model(model.dummy_inputs)
-            model_weights = model.get_weights()
-
-            model.compile(optimizer=tf.keras.optimizers.SGD(0.0), run_eagerly=True)
-
-            # Test that model correctly compute the loss with kwargs
-            for_segmentation = True if model_class.__name__ == "TFSegformerForSemanticSegmentation" else False
-            _, input_for_model_fit = self.model_tester.prepare_config_and_inputs_for_keras_fit(
-                for_segmentation=for_segmentation
-            )
-
-            label_names = {"labels"}
-            self.assertGreater(len(label_names), 0, msg="No matching label names found!")
-            labels = {key: val for key, val in input_for_model_fit.items() if key in label_names}
-            inputs_minus_labels = {key: val for key, val in input_for_model_fit.items() if key not in label_names}
-            self.assertGreater(len(inputs_minus_labels), 0)
-
-            # Make sure the model fits without crashing regardless of where we pass the labels
-            history1 = model.fit(
-                input_for_model_fit,
-                validation_data=input_for_model_fit,
-                steps_per_epoch=1,
-                validation_steps=1,
-                shuffle=False,
-            )
-            val_loss1 = history1.history["val_loss"][0]
-
-            # We reinitialize the model here even though our learning rate was zero
-            # because BatchNorm updates weights by means other than gradient descent.
-            model.set_weights(model_weights)
-            history2 = model.fit(
-                inputs_minus_labels,
-                labels,
-                validation_data=(inputs_minus_labels, labels),
-                steps_per_epoch=1,
-                validation_steps=1,
-                shuffle=False,
-            )
-            val_loss2 = history2.history["val_loss"][0]
-            self.assertTrue(np.allclose(val_loss1, val_loss2, atol=1e-2, rtol=1e-3))
-
         for model_class in self.all_model_classes:
             # Since `TFSegformerModel` cannot operate with the default `fit()` method.
             if model_class.__name__ != "TFSegformerModel":
                 model = model_class(config)
                 if getattr(model, "hf_compute_loss", None):
-                    apply(model)
+                    super().test_keras_fit()
 
     def test_loss_computation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
