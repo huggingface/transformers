@@ -71,7 +71,12 @@ from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
 from .models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES, MODEL_MAPPING_NAMES
 from .optimization import Adafactor, get_scheduler
-from .pytorch_utils import ALL_LAYERNORM_LAYERS
+from .pytorch_utils import (
+    ALL_LAYERNORM_LAYERS,
+    is_torch_greater_or_equal_than_1_6,
+    is_torch_greater_or_equal_than_1_10,
+    is_torch_less_than_1_11,
+)
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
@@ -165,11 +170,11 @@ if is_in_notebook():
 if is_apex_available():
     from apex import amp
 
-if version.parse(torch.__version__) >= version.parse("1.6"):
+if is_torch_greater_or_equal_than_1_6:
     _is_torch_generator_available = True
     _is_native_cuda_amp_available = True
 
-if version.parse(torch.__version__) >= version.parse("1.10"):
+if is_torch_greater_or_equal_than_1_10:
     _is_native_cpu_amp_available = True
 
 if is_datasets_available():
@@ -405,7 +410,7 @@ class Trainer:
             # Would have to update setup.py with torch>=1.12.0
             # which isn't ideally given that it will force people not using FSDP to also use torch>=1.12.0
             # below is the current alternative.
-            if version.parse(torch.__version__) < version.parse("1.12.0"):
+            if version.parse(version.parse(torch.__version__).base_version) < version.parse("1.12.0"):
                 raise ValueError("FSDP requires PyTorch >= 1.12.0")
 
             from torch.distributed.fsdp.fully_sharded_data_parallel import ShardingStrategy
@@ -1676,7 +1681,7 @@ class Trainer:
                 is_random_sampler = hasattr(train_dataloader, "sampler") and isinstance(
                     train_dataloader.sampler, RandomSampler
                 )
-                if version.parse(torch.__version__) < version.parse("1.11") or not is_random_sampler:
+                if is_torch_less_than_1_11 or not is_random_sampler:
                     # We just need to begin an iteration to create the randomization of the sampler.
                     # That was before PyTorch 1.11 however...
                     for _ in train_dataloader:
@@ -2430,7 +2435,7 @@ class Trainer:
         arguments, depending on the situation.
         """
         if self.use_cuda_amp or self.use_cpu_amp:
-            if version.parse(torch.__version__) >= version.parse("1.10"):
+            if is_torch_greater_or_equal_than_1_10:
                 ctx_manager = (
                     torch.cpu.amp.autocast(dtype=self.amp_dtype)
                     if self.use_cpu_amp
