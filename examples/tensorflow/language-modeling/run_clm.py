@@ -46,7 +46,6 @@ from transformers import (
     TF_MODEL_FOR_CAUSAL_LM_MAPPING,
     AutoConfig,
     AutoTokenizer,
-    DefaultDataCollator,
     HfArgumentParser,
     TFAutoModelForCausalLM,
     TFTrainingArguments,
@@ -206,22 +205,6 @@ class DataTrainingArguments:
 
 
 # endregion
-
-# region Helper classes
-class SavePretrainedCallback(tf.keras.callbacks.Callback):
-    # Hugging Face models have a save_pretrained() method that saves both the weights and the necessary
-    # metadata to allow them to be loaded as a pretrained model in future. This is a simple Keras callback
-    # that saves the model with this method after each epoch.
-    def __init__(self, output_dir, **kwargs):
-        super().__init__()
-        self.output_dir = output_dir
-
-    def on_epoch_end(self, epoch, logs=None):
-        self.model.save_pretrained(self.output_dir)
-
-
-# endregion
-
 
 def main():
     # region Argument Parsing
@@ -465,44 +448,46 @@ def main():
 
         # region TF Dataset preparation
         num_replicas = training_args.strategy.num_replicas_in_sync
-        data_collator = DefaultDataCollator(return_tensors="tf")
         options = tf.data.Options()
         options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
 
-        tf_train_dataset = train_dataset.to_tf_dataset(
-            # labels are passed as input, as we will use the model's internal loss
-            columns=[col for col in train_dataset.features if col != "special_tokens_mask"],
+        tf_train_dataset = model.prepare_tf_dataset(
+            train_dataset,
             shuffle=True,
             batch_size=num_replicas * training_args.per_device_train_batch_size,
-            collate_fn=data_collator,
-            drop_remainder=True,
         ).with_options(options)
 
-        tf_eval_dataset = eval_dataset.to_tf_dataset(
-            # labels are passed as input, as we will use the model's internal loss
-            columns=[col for col in eval_dataset.features if col != "special_tokens_mask"],
+        tf_eval_dataset = model.prepare_tf_dataset(
+            eval_dataset,
             shuffle=False,
             batch_size=num_replicas * training_args.per_device_train_batch_size,
-            collate_fn=data_collator,
             drop_remainder=True,
         ).with_options(options)
         # endregion
 
         # region Optimizer and loss
-        batches_per_epoch = len(train_dataset) // (num_replicas * training_args.per_device_train_batch_size)
+        num_train_steps = len(tf_train_dataset) * int(training_args.num_train_epochs)
+        if training_args.warmup_steps > 0:
+            num_warmup_steps = training_args.warmup_steps
+        elif training_args.warmup_ratio > 0:
+            num_warmup_steps = int(num_train_steps * training_args.warmup_ratio)
+        else:
+            num_warmup_steps = 0
+
         # Bias and layernorm weights are automatically excluded from the decay
         optimizer, lr_schedule = create_optimizer(
             init_lr=training_args.learning_rate,
-            num_train_steps=int(training_args.num_train_epochs * batches_per_epoch),
-            num_warmup_steps=training_args.warmup_steps,
+            num_train_steps=num_train_steps,
+            num_warmup_steps=num_warmup_steps,
             adam_beta1=training_args.adam_beta1,
             adam_beta2=training_args.adam_beta2,
             adam_epsilon=training_args.adam_epsilon,
             weight_decay_rate=training_args.weight_decay,
+            adam_global_clipnorm=training_args.max_grad_norm,
         )
 
         # no user-specified loss = will use the model internal loss
-        model.compile(optimizer=optimizer)
+        model.compile(optimizer=optimizer, jit_compile=training_args.xla)
         # endregion
 
         # region Training and validation
@@ -512,12 +497,14 @@ def main():
         logger.info(f"  Instantaneous batch size per device = {training_args.per_device_train_batch_size}")
         logger.info(f"  Total train batch size = {training_args.per_device_train_batch_size * num_replicas}")
 
+        # For long training runs, you may wish to use the PushToHub() callback here to save intermediate checkpoints
+        # to the Hugging Face Hub rather than just pushing the finished model.
+        # See https://huggingface.co/docs/transformers/main_classes/keras_callbacks#transformers.PushToHubCallback
+
         history = model.fit(
             tf_train_dataset,
             validation_data=tf_eval_dataset,
             epochs=int(training_args.num_train_epochs),
-            steps_per_epoch=len(train_dataset) // (training_args.per_device_train_batch_size * num_replicas),
-            callbacks=[SavePretrainedCallback(output_dir=training_args.output_dir)],
         )
         try:
             train_perplexity = math.exp(history.history["loss"][-1])
@@ -538,6 +525,7 @@ def main():
 
     if training_args.push_to_hub:
         # You'll probably want to include some of your own metadata here!
+        # See https://huggingface.co/docs/transformers/main_classes/model#transformers.TFPreTrainedModel.push_to_hub
         model.push_to_hub()
 
 

@@ -29,13 +29,12 @@ from datasets import load_dataset
 from transformers import (
     AutoConfig,
     AutoTokenizer,
-    DataCollatorWithPadding,
-    DefaultDataCollator,
     HfArgumentParser,
     PretrainedConfig,
     TFAutoModelForSequenceClassification,
     TFTrainingArguments,
     set_seed,
+    create_optimizer,
 )
 from transformers.utils import CONFIG_NAME, TF2_WEIGHTS_NAME, send_example_telemetry
 
@@ -383,10 +382,6 @@ def main():
 
     datasets = datasets.map(preprocess_function, batched=True, load_from_cache_file=not data_args.overwrite_cache)
 
-    if data_args.pad_to_max_length:
-        data_collator = DefaultDataCollator(return_tensors="tf")
-    else:
-        data_collator = DataCollatorWithPadding(tokenizer, return_tensors="tf")
     # endregion
 
     with training_args.strategy.scope():
@@ -409,24 +404,9 @@ def main():
         )
         # endregion
 
-        # region Optimizer, loss and compilation
-        optimizer = tf.keras.optimizers.Adam(
-            learning_rate=training_args.learning_rate,
-            beta_1=training_args.adam_beta1,
-            beta_2=training_args.adam_beta2,
-            epsilon=training_args.adam_epsilon,
-            clipnorm=training_args.max_grad_norm,
-        )
-        if is_regression:
-            loss_fn = tf.keras.losses.MeanSquaredError()
-            metrics = []
-        else:
-            loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-            metrics = ["accuracy"]
-        model.compile(optimizer=optimizer, loss=loss_fn, metrics=metrics)
-        # endregion
-
         # region Convert data to a tf.data.Dataset
+        dataset_options = tf.data.Options()
+        dataset_options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
 
         tf_data = dict()
         max_samples = {
@@ -443,25 +423,52 @@ def main():
             if key == "train":
                 shuffle = True
                 batch_size = training_args.per_device_train_batch_size
-                drop_remainder = True  # Saves us worrying about scaling gradients for the last batch
             else:
                 shuffle = False
                 batch_size = training_args.per_device_eval_batch_size
-                drop_remainder = False
             samples_limit = max_samples[key]
             dataset = datasets[key]
             if samples_limit is not None:
                 dataset = dataset.select(range(samples_limit))
-            data = dataset.to_tf_dataset(
-                columns=[col for col in dataset.column_names if col not in set(non_label_column_names + ["label"])],
+
+            data = model.prepare_tf_dataset(
+                dataset,
                 shuffle=shuffle,
                 batch_size=batch_size,
-                collate_fn=data_collator,
-                drop_remainder=drop_remainder,
-                # `label_cols` is needed for user-defined losses, such as in this example
-                label_cols="label" if "label" in dataset.column_names else None,
+                tokenizer=tokenizer,
             )
+            data = data.with_options(dataset_options)
             tf_data[key] = data
+        # endregion
+
+        # region Optimizer, loss and compilation
+
+        if training_args.do_train:
+            num_train_steps = len(tf_data["train"]) * training_args.num_train_epochs
+            if training_args.warmup_steps > 0:
+                num_warmup_steps = training_args.warmup_steps
+            elif training_args.warmup_ratio > 0:
+                num_warmup_steps = int(num_train_steps * training_args.warmup_ratio)
+            else:
+                num_warmup_steps = 0
+
+            optimizer, schedule = create_optimizer(
+                init_lr=training_args.learning_rate,
+                num_train_steps=num_train_steps,
+                num_warmup_steps=num_warmup_steps,
+                adam_beta1=training_args.adam_beta1,
+                adam_beta2=training_args.adam_beta2,
+                adam_epsilon=training_args.adam_epsilon,
+                weight_decay_rate=training_args.weight_decay,
+                adam_global_clipnorm=training_args.max_grad_norm,
+            )
+        else:
+            optimizer = schedule = None
+        if is_regression:
+            metrics = []
+        else:
+            metrics = ["accuracy"]
+        model.compile(optimizer=optimizer, metrics=metrics)
         # endregion
 
         # region Training and validation
@@ -500,15 +507,6 @@ def main():
                         writer.write(f"{index}\t{item}\n")
             logger.info(f"Wrote predictions to {output_test_file}!")
         # endregion
-
-    # region Prediction losses
-    # This section is outside the scope() because it's very quick to compute, but behaves badly inside it
-    if "test" in datasets and "label" in datasets["test"].features:
-        print("Computing prediction loss on test labels...")
-        labels = datasets["test"]["label"]
-        loss = float(loss_fn(labels, predictions).numpy())
-        print(f"Test loss: {loss:.4f}")
-    # endregion
 
 
 if __name__ == "__main__":

@@ -38,6 +38,7 @@ from transformers import (
     TFAutoModelForSequenceClassification,
     TFTrainingArguments,
     set_seed,
+    create_optimizer
 )
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
 from transformers.utils import check_min_version, send_example_telemetry
@@ -394,24 +395,10 @@ def main():
         )
         # endregion
 
-        # region Optimizer, loss and compilation
-        optimizer = tf.keras.optimizers.Adam(
-            learning_rate=training_args.learning_rate,
-            beta_1=training_args.adam_beta1,
-            beta_2=training_args.adam_beta2,
-            epsilon=training_args.adam_epsilon,
-            clipnorm=training_args.max_grad_norm,
-        )
-        if is_regression:
-            loss_fn = tf.keras.losses.MeanSquaredError()
-            metrics = []
-        else:
-            loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-            metrics = ["accuracy"]
-        model.compile(optimizer=optimizer, loss=loss_fn, metrics=metrics)
-        # endregion
-
         # region Convert data to a tf.data.Dataset
+        dataset_options = tf.data.Options()
+        dataset_options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
+
         tf_data = dict()
         max_samples = {
             "train": data_args.max_train_samples,
@@ -429,25 +416,51 @@ def main():
             if key == "train":
                 shuffle = True
                 batch_size = training_args.per_device_train_batch_size
-                drop_remainder = True  # Saves us worrying about scaling gradients for the last batch
             else:
                 shuffle = False
                 batch_size = training_args.per_device_eval_batch_size
-                drop_remainder = False
             samples_limit = max_samples[key]
             dataset = datasets[key]
             if samples_limit is not None:
                 dataset = dataset.select(range(samples_limit))
-            data = dataset.to_tf_dataset(
-                columns=[col for col in dataset.column_names if col not in set(non_label_column_names + ["label"])],
+            data = model.prepare_tf_dataset(
+                dataset,
                 shuffle=shuffle,
                 batch_size=batch_size,
                 collate_fn=data_collator,
-                drop_remainder=drop_remainder,
-                # `label_cols` is needed for user-defined losses, such as in this example
-                label_cols="label" if "label" in dataset.column_names else None,
+                tokenizer=tokenizer,
             )
+            data = data.with_options(dataset_options)
             tf_data[key] = data
+        # endregion
+
+        # region Optimizer, loss and compilation
+        if training_args.do_train:
+            num_train_steps = len(tf_data["train"]) * training_args.num_train_epochs
+            if training_args.warmup_steps > 0:
+                num_warmup_steps = training_args.warmup_steps
+            elif training_args.warmup_ratio > 0:
+                num_warmup_steps = int(num_train_steps * training_args.warmup_ratio)
+            else:
+                num_warmup_steps = 0
+
+            optimizer, schedule = create_optimizer(
+                init_lr=training_args.learning_rate,
+                num_train_steps=num_train_steps,
+                num_warmup_steps=num_warmup_steps,
+                adam_beta1=training_args.adam_beta1,
+                adam_beta2=training_args.adam_beta2,
+                adam_epsilon=training_args.adam_epsilon,
+                weight_decay_rate=training_args.weight_decay,
+                adam_global_clipnorm=training_args.max_grad_norm,
+            )
+        else:
+            optimizer = schedule = None
+        if is_regression:
+            metrics = []
+        else:
+            metrics = ["accuracy"]
+        model.compile(optimizer=optimizer, metrics=metrics, jit_compile=training_args.xla)
         # endregion
 
         # region Training and validation
@@ -472,6 +485,12 @@ def main():
             # We normally do validation as part of the Keras fit loop, but we run it independently
             # if there was no fit() step (because we didn't train the model) or if the task is MNLI,
             # because MNLI has a separate validation-mismatched validation set
+
+            # In this example, we compute advanced metrics only at the end of training, and only compute
+            # loss and accuracy on the validation set each epoch, but
+            # if you'd like to compute metrics every epoch that are too complex to be written as
+            # standard Keras metrics, you can use our KerasMetricCallback. See
+            # https://huggingface.co/docs/transformers/main/en/main_classes/keras_callbacks
             logger.info("*** Evaluate ***")
 
             # Loop to handle MNLI double evaluation (matched, mis-matched)
