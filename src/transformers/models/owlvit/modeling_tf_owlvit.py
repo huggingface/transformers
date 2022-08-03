@@ -103,7 +103,8 @@ class TFOwlViTOutput(ModelOutput):
             The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
             similarity scores.
         text_embeds(`tf.Tensor` of shape `(batch_size * num_max_text_queries, output_dim`):
-            The text embeddings obtained by applying the projection layer to the pooled output of [`TFOwlViTTextModel`].
+            The text embeddings obtained by applying the projection layer to the pooled output of
+            [`TFOwlViTTextModel`].
         image_embeds(`tf.Tensor` of shape `(batch_size, output_dim`):
             The image embeddings obtained by applying the projection layer to the pooled output of
             [`TFOwlViTVisionModel`].
@@ -148,7 +149,8 @@ class TFOwlViTObjectDetectionOutput(ModelOutput):
             possible padding). You can use [`~OwlViTFeatureExtractor.post_process`] to retrieve the unnormalized
             bounding boxes.
         text_embeds (`tf.Tensor`` of shape `(batch_size, num_max_text_queries, output_dim)`):
-            The text embeddings obtained by applying the projection layer to the pooled output of [`TFOwlViTTextModel`].
+            The text embeddings obtained by applying the projection layer to the pooled output of
+            [`TFOwlViTTextModel`].
         image_embeds (`tf.Tensor` of shape `(batch_size, patch_size, patch_size, output_dim)`):
             Pooled output of [`TFOwlViTVisionModel`]. OWL-ViT represents images as a set of image patches and computes
             image embeddings for each patch.
@@ -275,8 +277,7 @@ class TFOwlViTTextEmbeddings(tf.keras.layers.Layer):
         inputs_embeds: tf.Tensor = None,
     ) -> tf.Tensor:
         """
-        Applies embedding based on inputs tensor.
-        Returns:
+        Applies embedding based on inputs tensor. Returns:
             final_embeddings (`tf.Tensor`): output embedding tensor.
         """
         if input_ids is None and inputs_embeds is None:
@@ -297,8 +298,6 @@ class TFOwlViTTextEmbeddings(tf.keras.layers.Layer):
         return final_embeddings
 
 
-
-# Copied from transformers.models.clip.modeling_tf_clip.TFCLIPAttention with CLIP->OwlViT
 class TFOwlViTAttention(tf.keras.layers.Layer):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -422,7 +421,6 @@ class TFOwlViTMLP(tf.keras.layers.Layer):
         return hidden_states
 
 
-# Copied from transformers.models.clip.modeling_tf_clip.TFCLIPEncoderLayer with CLIP->OwlViT
 class TFOwlViTEncoderLayer(tf.keras.layers.Layer):
     def __init__(self, config: OwlViTConfig, **kwargs):
         super().__init__(**kwargs)
@@ -475,12 +473,11 @@ class TFOwlViTEncoderLayer(tf.keras.layers.Layer):
         return outputs
 
 
-# Copied from transformers.models.clip.modeling_tf_clip.TFCLIPEncoder with CLIP->OwlViT
 class TFOwlViTEncoder(tf.keras.layers.Layer):
     """
+    Args:
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
     [`TFOwlViTEncoderLayer`].
-    Args:
         config: OwlViTConfig
     """
 
@@ -557,7 +554,9 @@ class TFOwlViTTextTransformer(tf.keras.layers.Layer):
         num_samples, seq_length = input_shape  # num_samples = batch_size * num_max_text_queries
         # OwlViT's (alias for CLIP) text model uses causal mask, prepare it here.
         # https://github.com/openai/CLIP/blob/cfcffb90e69f37bf2ff1e988237a0fbe41f33c04/clip/model.py#L324
-        causal_attention_mask = self._build_causal_attention_mask(num_samples, seq_length, dtype=embedding_output.dtype)
+        causal_attention_mask = self._build_causal_attention_mask(
+            num_samples, seq_length, dtype=embedding_output.dtype
+        )
 
         # check attention mask and invert
         # [num_samples, seq_len] -> [num_samples, 1, tgt_seq_len, src_seq_len]
@@ -958,24 +957,26 @@ class TFOwlViTPreTrainedModel(TFPreTrainedModel):
 OWLVIT_START_DOCSTRING = r"""
     This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
-    as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
-    behavior.
+    etc.) This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass.
+    Use it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general
+    usage and behavior.
+
     <Tip>
+
     TF 2.0 models accepts two formats as inputs:
     - having all inputs as keyword arguments (like PyTorch models), or
     - having all inputs as a list, tuple or dict in the first positional arguments.
     This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all the
-    tensors in the first argument of the model call function: `model(inputs)`.
-    If you choose this second option, there are three possibilities you can use to gather all the input Tensors in the
-    first positional argument :
+    tensors in the first argument of the model call function: `model(inputs)`. If you choose this second option, there
+    are three possibilities you can use to gather all the input Tensors in the first positional argument :
     - a single Tensor with `input_ids` only and nothing else: `model(input_ids)`
     - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
       `model([input_ids, attention_mask])` or `model([input_ids, attention_mask, token_type_ids])`
     - a dictionary with one or several input Tensors associated to the input names given in the docstring:
       `model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+
     </Tip>
+
     Args:
         config ([`OwlViTConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
@@ -985,10 +986,9 @@ OWLVIT_START_DOCSTRING = r"""
 OWLVIT_TEXT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `({0})`):
-            Indices of input sequence tokens in the vocabulary.
-            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
-            [`PreTrainedTokenizer.encode`] for details.
-            [What are input IDs?](../glossary#input-ids)
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`BertTokenizer`]. See
+            [`PreTrainedTokenizer.__call__`] and [`PreTrainedTokenizer.encode`] for details. [What are input
+            IDs?](../glossary#input-ids)
         attention_mask (`np.ndarray` or `tf.Tensor` of shape `({0})`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
             - 1 for tokens that are **not masked**,
@@ -996,8 +996,7 @@ OWLVIT_TEXT_INPUTS_DOCSTRING = r"""
             [What are attention masks?](../glossary#attention-mask)
         position_ids (`np.ndarray` or `tf.Tensor` of shape `({0})`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-            [What are position IDs?](../glossary#position-ids)
+            config.max_position_embeddings - 1]`. [What are position IDs?](../glossary#position-ids)
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
@@ -1037,10 +1036,9 @@ OWLVIT_VISION_INPUTS_DOCSTRING = r"""
 OWLVIT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `({0})`):
-            Indices of input sequence tokens in the vocabulary.
-            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
-            [`PreTrainedTokenizer.encode`] for details.
-            [What are input IDs?](../glossary#input-ids)
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`BertTokenizer`]. See
+            [`PreTrainedTokenizer.__call__`] and [`PreTrainedTokenizer.encode`] for details. [What are input
+            IDs?](../glossary#input-ids)
         pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` `Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`OwlViTFeatureExtractor`]. See
             [`OwlViTFeatureExtractor.__call__`] for details.
@@ -1051,8 +1049,7 @@ OWLVIT_INPUTS_DOCSTRING = r"""
             [What are attention masks?](../glossary#attention-mask)
         position_ids (`np.ndarray` or `tf.Tensor` of shape `({0})`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-            [What are position IDs?](../glossary#position-ids)
+            config.max_position_embeddings - 1]`. [What are position IDs?](../glossary#position-ids)
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
         output_attentions (`bool`, *optional*):
@@ -1069,6 +1066,21 @@ OWLVIT_INPUTS_DOCSTRING = r"""
         training (`bool`, *optional*, defaults to `False``):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
+"""
+
+OWLVIT_OBJECT_DETECTION_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`tf.Tensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values.
+        input_ids (`tf.Tensor` of shape `(batch_size * num_max_text_queries, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`CLIPTokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
+            IDs?](../glossary#input-ids)
+        attention_mask (`tf.Tensor` of shape `(batch_size, num_max_text_queries, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+            [What are attention masks?](../glossary#attention-mask)
 """
 
 
@@ -1157,8 +1169,7 @@ class TFOwlViTVisionModel(TFOwlViTPreTrainedModel):
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
         """
-        Dummy inputs to build the network.
-        Returns:
+        Dummy inputs to build the network. Returns:
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
         VISION_DUMMY_INPUTS = tf.random.uniform(
@@ -1175,8 +1186,8 @@ class TFOwlViTVisionModel(TFOwlViTPreTrainedModel):
     )
     def serving(self, inputs: Dict[str, tf.Tensor]) -> TFBaseModelOutputWithPooling:
         """
-        Method used for serving the model.
         Args:
+        Method used for serving the model.
             inputs (`Dict[str, tf.Tensor]`):
                 The input of the saved model as a dictionary of tensors.
         """
@@ -1185,7 +1196,7 @@ class TFOwlViTVisionModel(TFOwlViTPreTrainedModel):
         return self.serving_output(output)
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(OwlViT_VISION_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(OWLVIT_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFBaseModelOutputWithPooling, config_class=OwlViTVisionConfig)
     def call(
         self,
@@ -1240,7 +1251,7 @@ class TFOwlViTVisionModel(TFOwlViTPreTrainedModel):
 
 @add_start_docstrings(OWLVIT_START_DOCSTRING)
 class TFOwlViTModel(TFOwlViTPreTrainedModel):
-    config_class = OWLViTConfig
+    config_class = OwlViTConfig
 
     def __init__(self, config: OwlViTConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1250,8 +1261,7 @@ class TFOwlViTModel(TFOwlViTPreTrainedModel):
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
         """
-        Dummy inputs to build the network.
-        Returns:
+        Dummy inputs to build the network. Returns:
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
         VISION_DUMMY_INPUTS = tf.random.uniform(
@@ -1274,8 +1284,8 @@ class TFOwlViTModel(TFOwlViTPreTrainedModel):
     )
     def serving(self, inputs: Dict[str, tf.Tensor]) -> TFOwlViTOutput:
         """
-        Method used for serving the model.
         Args:
+        Method used for serving the model.
             inputs (`Dict[str, tf.Tensor]`):
                 The input of the saved model as a dictionary of tensors.
         """
@@ -1379,14 +1389,15 @@ class TFOwlViTModel(TFOwlViTPreTrainedModel):
     ) -> Union[TFOwlViTOutput, Tuple[tf.Tensor]]:
         r"""
         Returns:
+
         Examples:
         ```python
-        >>> import tensorflow as tf
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPProcessor, TFCLIPModel
-        >>> model = TFCLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-        >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+        >>> from transformers import OwlViTProcessor, TFOwlViTPModel
+
+        >>> model = TFOwlViTModel.from_pretrained("google/owlvit-base-patch32")
+        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> inputs = processor(
@@ -1441,7 +1452,6 @@ class TFOwlViTClassPredictionHead(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         out_dim = config.text_config.hidden_size
-        query_dim = config.vision_config.hidden_size
 
         self.dense0 = tf.keras.layers.Dense(units=out_dim, name="dense0")
         self.logit_shift = tf.keras.layers.Dense(units=1, name="logit_shift")
@@ -1458,11 +1468,13 @@ class TFOwlViTClassPredictionHead(tf.keras.layers.Layer):
         image_class_embeds = self.dense0(image_embeds)
 
         # Normalize image and text features
-        image_class_embeds = image_class_embeds / tf.norm(tensor=image_class_embeds, ord="euclidean", axis=-1, keepdims=True) + 1e-6
+        image_class_embeds = (
+            image_class_embeds / tf.norm(tensor=image_class_embeds, ord="euclidean", axis=-1, keepdims=True) + 1e-6
+        )
         query_embeds = query_embeds / tf.norm(tensor=query_embeds, ord="euclidean", axis=-1, keepdims=True) + 1e-6
 
         # Get class predictions
-        pred_logits = torch.einsum("...pd,...qd->...pq", image_class_embeds, query_embeds)
+        pred_logits = tf.einsum("...pd,...qd->...pq", image_class_embeds, query_embeds)
 
         # Apply a learnable shift and scale to logits
         logit_shift = self.logit_shift(image_embeds)
@@ -1486,16 +1498,16 @@ class TFOwlViTForObjectDetection(TFOwlViTPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
 
         self.owlvit = TFOwlViTMainLayer(config, name="owlvit")
-        self.class_head = OwlViTClassPredictionHead(config, name="class_head")
-        self.box_head = OwlViTBoxPredictionHead(config, name="box_head")
-        self.layer_norm = nn.LayerNorm(config.vision_config.hidden_size)
+        self.class_head = TFOwlViTClassPredictionHead(config, name="class_head")
+        self.box_head = TFOwlViTBoxPredictionHead(config, name="box_head")
+        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
 
     def normalize_grid_corner_coordinates(self, feature_map: tf.Tensor):
         # Computes normalized xy corner coordinates from feature_map.
         if not len(feature_map.shape) == 4:
             raise ValueError("Expected input shape is [batch_size, num_channels, height, width]")
 
-        height, width = feature_map.shape[1], feature_map.shape[2] 
+        height, width = feature_map.shape[1], feature_map.shape[2]
 
         box_coordinates = np.stack(np.meshgrid(np.arange(1, width + 1), np.arange(1, height + 1)), axis=-1).astype(
             np.float32

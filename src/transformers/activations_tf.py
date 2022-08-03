@@ -108,7 +108,7 @@ if version.parse(tf.version.VERSION) >= version.parse("2.4"):
 
     def approximate_gelu_wrap(x):
         return tf.keras.activations.gelu(x, approximate=True)
-    
+
     def elu_wrap(x):
         return tf.keras.activations.elu(x, alpha=1.0)
 
