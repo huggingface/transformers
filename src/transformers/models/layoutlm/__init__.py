@@ -67,7 +67,7 @@ else:
         "TFLayoutLMForMaskedLM",
         "TFLayoutLMForSequenceClassification",
         "TFLayoutLMForTokenClassification",
-        "LayoutLMForQuestionAnswering",
+        "TFLayoutLMForQuestionAnswering",
         "TFLayoutLMMainLayer",
         "TFLayoutLMModel",
         "TFLayoutLMPreTrainedModel",
@@ -110,6 +110,7 @@ if TYPE_CHECKING:
         from .modeling_tf_layoutlm import (
             TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFLayoutLMForMaskedLM,
+            TFLayoutLMForQuestionAnswering,
             TFLayoutLMForSequenceClassification,
             TFLayoutLMForTokenClassification,
             TFLayoutLMMainLayer,
