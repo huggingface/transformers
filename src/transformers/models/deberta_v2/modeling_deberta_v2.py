@@ -587,7 +587,7 @@ def build_relative_position(query_size, key_size, bucket_size=-1, max_position=-
     rel_pos_ids = q_ids[:, None] - k_ids[None, :]
     if bucket_size > 0 and max_position > 0:
         rel_pos_ids = make_log_bucket_position(rel_pos_ids, bucket_size, max_position)
-    rel_pos_ids = torch.tensor(rel_pos_ids, dtype=torch.long)
+    rel_pos_ids = rel_pos_ids.type(torch.long)
     rel_pos_ids = rel_pos_ids[:query_size, :]
     rel_pos_ids = rel_pos_ids.unsqueeze(0)
     return rel_pos_ids
@@ -793,7 +793,7 @@ class DisentangledSelfAttention(nn.Module):
         score = 0
         # content->position
         if "c2p" in self.pos_att_type:
-            scale = torch.sqrt(pos_key_layer.size(-1) * scale_factor)
+            scale = torch.sqrt(torch.tensor(pos_key_layer.size(-1) * scale_factor, dtype=torch.float))
             c2p_att = torch.bmm(query_layer, pos_key_layer.transpose(-1, -2))
             c2p_pos = torch.clamp(relative_pos + att_span, 0, att_span * 2 - 1)
             c2p_att = torch.gather(
@@ -805,7 +805,7 @@ class DisentangledSelfAttention(nn.Module):
 
         # position->content
         if "p2c" in self.pos_att_type:
-            scale = torch.sqrt(pos_query_layer.size(-1) * scale_factor)
+            scale = torch.sqrt(torch.tensor(pos_query_layer.size(-1) * scale_factor, dtype=torch.float))
             if key_layer.size(-2) != query_layer.size(-2):
                 r_pos = build_relative_position(
                     key_layer.size(-2),
