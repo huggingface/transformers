@@ -80,8 +80,8 @@ def rescale(
         data_format (`ChannelDimension`, *optional*):
             The channel dimension format of the image. If not provided, it will be the same as the input image.
         dtype (`np.dtype`, *optional*):
-            The dtype of the output image. Defaults to `np.float32`.Used for backwards compatibility
-            with feature extractors
+            The dtype of the output image. Defaults to `np.float32`.Used for backwards compatibility with feature
+            extractors
 
     Returns:
         image: A rescaled np.ndarray image.

@@ -91,7 +91,7 @@ class GLPNImageProcessor(BaseImageProcessor):
             images = [self.resize(image, size_divisor=size_divisor, resample=resample) for image in images]
 
         if do_rescale:
-            images = [self.rescale(image, scale=1/255) for image in images]
+            images = [self.rescale(image, scale=1 / 255) for image in images]
 
         images = [to_channel_dimension_format(image, data_format) for image in images]
 

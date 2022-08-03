@@ -313,8 +313,7 @@ class ImageProcessorMixin(PushToHubMixin):
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
         """
-        Instantiates a type of [`~image_processing_utils.ImageProcessorMixin`] from a Python dictionary of
-        parameters.
+        Instantiates a type of [`~image_processing_utils.ImageProcessorMixin`] from a Python dictionary of parameters.
 
         Args:
             image_processor_dict (`Dict[str, Any]`):
