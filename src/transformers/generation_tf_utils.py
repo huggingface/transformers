@@ -481,8 +481,8 @@ class TFGenerationMixin:
             output_attentions (`bool`, *optional*, defaults to `model.config.output_attentions` or `False` if the
                 config does not set any value): Whether or not to return the attentions tensors of all attention
                 layers. See `attentions` under returned tensors for more details.
-            output_hidden_states (`bool`, *optional*, defaults to `model.config.output_hidden_states` or `False` if the:
-                config does not set any value): Whether or not to return the hidden states of all layers. See
+            output_hidden_states (`bool`, *optional*, defaults to `model.config.output_hidden_states` or `False` if the config does not set any value):
+                Whether or not to return the hidden states of all layers. See
                 `hidden_states` under returned tensors for more details.
             output_scores (`bool`, *optional*, defaults to `model.config.output_scores` or `False` if the config does
                 not set any value): Whether or not to return the prediction scores. See `scores` under returned tensors
