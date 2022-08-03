@@ -1854,7 +1854,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if pretrained_model_name_or_path is not None:
             pretrained_model_name_or_path = str(pretrained_model_name_or_path)
-            if os.path.isdir(pretrained_model_name_or_path):
+            is_local = os.path.isdir(pretrained_model_name_or_path)
+            if is_local:
                 if from_tf and os.path.isfile(
                     os.path.join(pretrained_model_name_or_path, subfolder, TF_WEIGHTS_NAME + ".index")
                 ):
@@ -1899,6 +1900,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     )
             elif os.path.isfile(os.path.join(subfolder, pretrained_model_name_or_path)):
                 archive_file = pretrained_model_name_or_path
+                is_local = True
             elif os.path.isfile(os.path.join(subfolder, pretrained_model_name_or_path + ".index")):
                 if not from_tf:
                     raise ValueError(
@@ -1906,6 +1908,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         "from_tf to True to load from this checkpoint."
                     )
                 archive_file = os.path.join(subfolder, pretrained_model_name_or_path + ".index")
+                is_local = True
             else:
                 # set correct filename
                 if from_tf:
@@ -1930,16 +1933,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         subfolder=subfolder,
                         _raise_exceptions_for_missing_entries=False,
                     )
-                    archive_file = cached_file(pretrained_model_name_or_path, filename, **cached_file_kwargs)
+                    resolved_archive_file = cached_file(pretrained_model_name_or_path, filename, **cached_file_kwargs)
 
-                    if archive_file is None and filename == WEIGHTS_NAME:
+                    if resolved_archive_file is None and filename == WEIGHTS_NAME:
                         # Maybe the checkpoint is sharded, we try to grab the index name in this case.
-                        archive_file = cached_file(
+                        resolved_archive_file = cached_file(
                             pretrained_model_name_or_path, WEIGHTS_INDEX_NAME, **cached_file_kwargs
                         )
-                        if archive_file is not None:
+                        if resolved_archive_file is not None:
                             is_sharded = True
-                    if archive_file is None:
+                    if resolved_archive_file is None:
                         # Otherwise, maybe there is a TF or Flax model file.  We try those to give a helpful error
                         # message.
                         has_file_kwargs = {
@@ -1976,19 +1979,20 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         f" {FLAX_WEIGHTS_NAME}."
                     )
 
-            if os.path.isdir(pretrained_model_name_or_path):
+            if is_local:
                 logger.info(f"loading weights file {archive_file}")
+                resolved_archive_file = archive_file
             else:
-                logger.info(f"loading weights file {filename} from cache at {archive_file}")
+                logger.info(f"loading weights file {filename} from cache at {resolved_archive_file}")
         else:
-            archive_file = None
+            resolved_archive_file = None
 
         # We'll need to download and cache each checkpoint shard if the checkpoint is sharded.
         if is_sharded:
             # archive_file becomes a list of files that point to the different checkpoint shards in this case.
-            archive_file, sharded_metadata = get_checkpoint_shard_files(
+            resolved_archive_file, sharded_metadata = get_checkpoint_shard_files(
                 pretrained_model_name_or_path,
-                archive_file,
+                resolved_archive_file,
                 cache_dir=cache_dir,
                 force_download=force_download,
                 proxies=proxies,
@@ -2005,7 +2009,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if from_pt:
             if not is_sharded and state_dict is None:
                 # Time to load the checkpoint
-                state_dict = load_state_dict(archive_file)
+                state_dict = load_state_dict(resolved_archive_file)
 
             # set dtype to instantiate the model under:
             # 1. If torch_dtype is not None, we use that dtype
@@ -2021,7 +2025,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         elif not is_sharded:
                             torch_dtype = get_state_dict_dtype(state_dict)
                         else:
-                            one_state_dict = load_state_dict(archive_file[0])
+                            one_state_dict = load_state_dict(resolved_archive_file[0])
                             torch_dtype = get_state_dict_dtype(one_state_dict)
                             del one_state_dict  # free CPU memory
                     else:
@@ -2079,16 +2083,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
 
         if from_tf:
-            if archive_file.endswith(".index"):
+            if resolved_archive_file.endswith(".index"):
                 # Load from a TensorFlow 1.X checkpoint - provided by original authors
-                model = cls.load_tf_weights(model, config, archive_file[:-6])  # Remove the '.index'
+                model = cls.load_tf_weights(model, config, resolved_archive_file[:-6])  # Remove the '.index'
             else:
                 # Load from our TensorFlow 2.0 checkpoints
                 try:
                     from .modeling_tf_pytorch_utils import load_tf2_checkpoint_in_pytorch_model
 
                     model, loading_info = load_tf2_checkpoint_in_pytorch_model(
-                        model, archive_file, allow_missing_keys=True, output_loading_info=True
+                        model, resolved_archive_file, allow_missing_keys=True, output_loading_info=True
                     )
                 except ImportError:
                     logger.error(
@@ -2101,7 +2105,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             try:
                 from .modeling_flax_pytorch_utils import load_flax_checkpoint_in_pytorch_model
 
-                model = load_flax_checkpoint_in_pytorch_model(model, archive_file)
+                model = load_flax_checkpoint_in_pytorch_model(model, resolved_archive_file)
             except ImportError:
                 logger.error(
                     "Loading a Flax model in PyTorch, requires both PyTorch and Flax to be installed. Please see"
@@ -2119,7 +2123,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 model,
                 state_dict,
                 loaded_state_dict_keys,  # XXX: rename?
-                archive_file,
+                resolved_archive_file,
                 pretrained_model_name_or_path,
                 ignore_mismatched_sizes=ignore_mismatched_sizes,
                 sharded_metadata=sharded_metadata,
