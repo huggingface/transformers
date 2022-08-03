@@ -885,12 +885,37 @@ class HFTracer(Tracer):
 
     def trace(
         self,
-        root: PreTrainedModel,
+        root: Union[torch.nn.Module, Callable[..., Any]],
         concrete_args: Optional[Dict[str, Any]] = None,
         dummy_inputs: Optional[Dict[str, Any]] = None,
         infer_concrete_args_from_dummy_inputs: bool = True,
     ) -> Graph:
-        sig = inspect.signature(root.forward)
+        """
+        Traces `root` and returns the corresponding FX `torch.fx.Graph` representation. `root` can either be a
+        `torch.nn.Module` instance or a Python callable. Note that after this call, `self.root` may be different from
+        the `root` passed in here. For example, when a free function is passed to `trace()`, we will create a
+        `torch.nn.Module` instance to use as the root and add embedded constants to.
+
+        Args:
+            root (`torch.nn.Module` or  `Callable`):
+                Either a `torch.nn.Module`` or a function to be traced through. If root is not a
+                [`~transformers.PreTrainedModel`], then `dummy_inputs` must be passed, otherwise tracing will fail.
+            concrete_args (`Dict[str, Any], *optional*):
+                Concrete arguments that should not be treated as Proxies
+            dummy_inputs (`Dict[str, Any]`, *optional*):
+                The dummy inputs needed to handle data-dependent control-flow if `root` is not a
+                [`~transformers.PreTrainedModel`]. It can also be used when `root` is a
+                [`~transformers.PreTrainedModel`] to specify custom dummy inputs for a subset or all the model inputs.
+            infer_concrete_args_from_dummy_inputs (`bool`, *optional*, defaults to `True`):
+                If `True`, and `dummy_inputs` is specified, every argument that `root` can take that is not in
+                `dummy_inputs` and not in `concrete_args` will be added to `concrete_args`, otherwise does nothing.
+
+        Returns:
+            `torch.fx.Graph`:
+                A FX `torch.fx.Graph` representing the semantics of the passed-in `root`.
+
+        """
+        sig = inspect.signature(root.forward if isinstance(root, torch.nn.Module) else root)
 
         if concrete_args is None:
             concrete_args = {}
@@ -915,7 +940,10 @@ class HFTracer(Tracer):
                 continue
             inputs.update(self._generate_dummy_input(root, input_name, shape))
 
-        concrete_metas = {input_name: input_.to("meta") for input_name, input_ in inputs.items()}
+        concrete_metas = {
+            input_name: input_.to("meta") if isinstance(input_, torch.Tensor) else input_
+            for input_name, input_ in inputs.items()
+        }
         for param in sig.parameters.values():
             if param.kind == inspect.Parameter.VAR_KEYWORD and param.name not in input_names:
                 concrete_metas[f"**{param.name}"] = {}
