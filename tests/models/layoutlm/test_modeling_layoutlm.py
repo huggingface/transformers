@@ -28,12 +28,12 @@ if is_torch_available():
 
     from transformers import (
         LayoutLMForMaskedLM,
+        LayoutLMForQuestionAnswering,
         LayoutLMForSequenceClassification,
         LayoutLMForTokenClassification,
         LayoutLMModel,
     )
 
-# TODO: Add tests for LayoutLMForQuestionAnswering
 
 class LayoutLMModelTester:
     """You can also import this e.g from .test_modeling_layoutlm import LayoutLMModelTester"""
@@ -182,6 +182,23 @@ class LayoutLMModelTester:
         result = model(input_ids, bbox, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
+    def create_and_check_for_question_answering(
+        self, config, input_ids, bbox, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        model = LayoutLMForQuestionAnswering(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids,
+            bbox=bbox,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            start_positions=sequence_labels,
+            end_positions=sequence_labels,
+        )
+        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -212,6 +229,7 @@ class LayoutLMModelTest(ModelTesterMixin, unittest.TestCase):
             LayoutLMForMaskedLM,
             LayoutLMForSequenceClassification,
             LayoutLMForTokenClassification,
+            LayoutLMForQuestionAnswering,
         )
         if is_torch_available()
         else None
@@ -246,6 +264,10 @@ class LayoutLMModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
+
+    def test_for_question_answering(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
 
 
 def prepare_layoutlm_batch_inputs():
@@ -338,3 +360,18 @@ class LayoutLMModelIntegrationTest(unittest.TestCase):
         logits = outputs.logits
         expected_shape = torch.Size((2, 25, 13))
         self.assertEqual(logits.shape, expected_shape)
+
+    @slow
+    def test_forward_pass_question_answering(self):
+        # initialize model with randomly initialized token classification head
+        model = LayoutLMForQuestionAnswering.from_pretrained("microsoft/layoutlm-base-uncased").to(torch_device)
+
+        input_ids, attention_mask, bbox, token_type_ids, labels = prepare_layoutlm_batch_inputs()
+
+        # forward pass
+        outputs = model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids)
+
+        # test the shape of the logits
+        expected_shape = torch.Size((2, 25))
+        self.assertEqual(outputs.start_logits.shape, expected_shape)
+        self.assertEqual(outputs.end_logits.shape, expected_shape)
