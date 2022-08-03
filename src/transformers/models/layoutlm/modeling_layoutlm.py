@@ -1225,8 +1225,14 @@ class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
         )
 
 
-# TODO:
-#   - Write documentation
+@add_start_docstrings(
+    """
+    LayoutLM Model with a span classification head on top for extractive question-answering tasks such as
+    [DocVQA](https://rrc.cvc.uab.es/?ch=17) (a linear layer on top of the text part of the hidden-states output to
+    compute `span start logits` and `span end logits`).
+    """,
+    LAYOUTLM_START_DOCSTRING,
+)
 class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
     def __init__(self, config, has_visual_segment_embedding=True):
         super().__init__(config)
@@ -1241,6 +1247,7 @@ class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
     def get_input_embeddings(self):
         return self.layoutlm.embeddings.word_embeddings
 
+    @replace_return_docstrings(output_type=QuestionAnsweringModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1256,6 +1263,56 @@ class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, QuestionAnsweringModelOutput]:
+        r"""
+        start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for position (index) of the start of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
+        end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for position (index) of the end of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
+
+        Returns:
+
+        Example:
+
+        In this example below, we give the LayoutLMv2 model an image (of texts) and ask it a question. It will give us
+        a prediction of what it thinks the answer is (the span of the answer within the texts parsed from the image).
+
+        ```python
+        >>> from transformers import LayoutLMTokenizer, LayoutLMForQuestionAnswering
+        >>> from datasets import load_dataset
+        >>> import torch
+
+        >>> tokenizer = LayoutLMTokenizer.from_pretrained("microsoft/layoutlm-base-uncased", add_prefix_space=True)
+        >>> model = AutoModelForQuestionAnswering.from_pretrained("microsoft/layoutlm-base-uncased")
+
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> example = dataset[0]
+        >>> question = "what's his name?"
+        >>> words = example["tokens"]
+        >>> boxes = example["bboxes"]
+
+        >>> encoding = tokenizer(
+        ...     question.split(), words, is_split_into_words=True, return_token_type_ids=True, return_tensors="pt"
+        ... )
+        >>> bbox = []
+        >>> for i, s, w in zip(encoding.input_ids[0], encoding.sequence_ids(0), encoding.word_ids(0)):
+        ...     if s == 1:
+        ...         bbox.append(boxes[w])
+        ...     elif i == tokenizer.sep_token_id:
+        ...         bbox.append([1000] * 4)
+        ...     else:
+        ...         bbox.append([0] * 4)
+        >>> encoding["bbox"] = torch.tensor([bbox])
+
+        >>> outputs = model(**encoding)
+        >>> loss = outputs.loss
+        >>> start_scores = outputs.start_logits
+        >>> end_scores = outputs.end_logits
+        ```
+        """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
