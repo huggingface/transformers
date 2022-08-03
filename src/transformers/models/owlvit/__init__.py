@@ -62,6 +62,21 @@ else:
         "OwlViTForObjectDetection",
     ]
 
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["modeling_tf_owlvit"] = [
+        "TF_OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TFOwlViTModel",
+        "TFOwlViTPreTrainedModel",
+        "TFOwlViTTextModel",
+        "TFOwlViTVisionModel",
+        "TFOwlViTForObjectDetection",
+    ]
+
 if TYPE_CHECKING:
     from .configuration_owlvit import (
         OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -94,6 +109,20 @@ if TYPE_CHECKING:
             OwlViTVisionModel,
         )
 
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .modeling_tf_clip import (
+            TF_OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFOwlViTForObjectDetection,
+            TFOwlViTModel,
+            TFOwlViTPreTrainedModel,
+            TFOwlViTTextModel,
+            TFOwlViTVisionModel,
+        )
 else:
     import sys
 
