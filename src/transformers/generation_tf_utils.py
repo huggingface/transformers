@@ -444,8 +444,8 @@ class TFGenerationMixin:
             top_p (`float`, *optional*, defaults to `model.config.top_p` or 1.0 if the config does not set any value):
                 If set to float < 1, only the most probable tokens with probabilities that add up to `top_p` or higher
                 are kept for generation.
-            repetition_penalty (`float`, *optional*, defaults to `model.config.repetition_penalty` or 1.0 if the config:
-                does not set any value): The parameter for repetition penalty. 1.0 means no penalty. See [this
+            repetition_penalty (`float`, *optional*, defaults to `model.config.repetition_penalty` or 1.0 if the config does not set any value):
+                The parameter for repetition penalty. 1.0 means no penalty. See [this
                 paper](https://arxiv.org/pdf/1909.05858.pdf) for more details.
             pad_token_id (`int`, *optional*, defaults to `model.config.pad_token_id`):
                 The id of the *padding* token.
