@@ -718,7 +718,7 @@ def main():
 
             logits = state.apply_fn(**batch, params=params, dropout_rng=dropout_rng, train=True)[0]
 
-            # compute loss, ignore padded input tokens and special tokens
+            # compute loss, ignore padded input tokens
             label_mask = jnp.where(labels > 0, 1.0, 0.0)
             loss = optax.softmax_cross_entropy(logits, onehot(labels, logits.shape[-1])) * label_mask
 
@@ -731,9 +731,11 @@ def main():
         grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
         (loss, num_labels), grad = grad_fn(state.params)
         num_labels = jax.lax.psum(num_labels, "batch")
+
         # true loss = total loss / total samples
         loss = jax.lax.psum(loss, "batch")
         loss = jax.tree_map(lambda x: x / num_labels, loss)
+
         # true grad = total grad / total samples
         grad = jax.lax.psum(grad, "batch")
         grad = jax.tree_map(lambda x: x / num_labels, grad)
