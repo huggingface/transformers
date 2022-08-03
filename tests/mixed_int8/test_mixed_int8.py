@@ -25,6 +25,7 @@ from transformers.testing_utils import (
 )
 
 
+
 @require_bitsandbytes
 @require_accelerate
 @require_torch
@@ -66,6 +67,9 @@ class MixedInt8Test(unittest.TestCase):
         self.assertAlmostEqual(mem_fp16 / mem_8bit, self.EXPECTED_RELATIVE_DIFFERENCE)
         self.assertTrue(model_8bit.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
 
+        del model_8bit
+        del model_fp16
+
     def test_generate_quality(self):
         r"""
         Test the generation quality of the quantized model and see that we are matching the expected output.
@@ -79,6 +83,8 @@ class MixedInt8Test(unittest.TestCase):
 
         self.assertEqual(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
+        del model_8bit
+
     def test_pipeline(self):
         r"""
         The aim of this test is to verify that the mixed int8 is compatible with `pipeline` from transformers. Since
@@ -86,10 +92,15 @@ class MixedInt8Test(unittest.TestCase):
         on pipline.
         """
         pipe = pipeline(
+            "text-generation",
             model=self.model_name,
             model_kwargs={"device_map": "auto", "load_in_8bit": True},
             max_new_tokens=self.MAX_NEW_TOKENS,
         )
+        # Needs a first forward pass to get the statistics
+        _ = pipe(self.input_text)
+
+        # Real second forward pass
         pipeline_output = pipe(self.input_text)
         self.assertEqual(pipeline_output[0]["generated_text"], self.EXPECTED_OUTPUT)
 
@@ -124,4 +135,10 @@ class MixedInt8Test(unittest.TestCase):
 
         # Check that inference pass works on the model
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
+
+        # First dummy batch to get the statistics
         _ = model_parallel.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
+
+        # Second real batch
+        output_parallel = model_parallel.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
+        self.assertEqual(self.tokenizer.decode(output_parallel[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
