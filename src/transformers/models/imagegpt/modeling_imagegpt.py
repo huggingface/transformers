@@ -21,12 +21,18 @@ from typing import Any, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
-from packaging import version
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ...pytorch_utils import (
+    Conv1D,
+    find_pruneable_heads_and_indices,
+    is_torch_greater_or_equal_than_1_6,
+    prune_conv1d_layer,
+)
 
-if version.parse(torch.__version__) >= version.parse("1.6"):
+
+if is_torch_greater_or_equal_than_1_6:
     is_amp_available = True
     from torch.cuda.amp import autocast
 else:
@@ -39,7 +45,6 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_imagegpt import ImageGPTConfig
 
