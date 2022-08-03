@@ -192,14 +192,14 @@ jobs:
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
-        run: cat /transformers/reports/examples_gpu/failures_short.txt
+        run: cat /transformers/reports/single-gpu_examples_gpu/failures_short.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@v2
         with:
           name: run_examples_gpu
-          path: /transformers/reports/examples_gpu
+          path: /transformers/reports/single-gpu_examples_gpu
 
   run_pipelines_torch_gpu:
     name: PyTorch pipelines
