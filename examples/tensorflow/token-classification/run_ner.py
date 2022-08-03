@@ -195,61 +195,6 @@ class DataTrainingArguments:
 # endregion
 
 
-# region Data generator
-def sample_generator(dataset, tokenizer, shuffle, pad_to_multiple_of=None):
-    # Trim off the last partial batch if present
-    if shuffle:
-        sample_ordering = np.random.permutation(len(dataset))
-    else:
-        sample_ordering = np.arange(len(dataset))
-    for sample_idx in sample_ordering:
-        example = dataset[int(sample_idx)]
-        # Handle dicts with proper padding and conversion to tensor.
-        example = tokenizer.pad(example, return_tensors="np", pad_to_multiple_of=pad_to_multiple_of)
-        if tokenizer.pad_token_id is not None:
-            example["labels"][example["attention_mask"] == 0] = -100
-        example = {key: tf.convert_to_tensor(arr) for key, arr in example.items()}
-
-        yield example, example["labels"]  # TF needs some kind of labels, even if we don't use them
-    return
-
-
-# endregion
-
-
-# region Helper functions
-def dataset_to_tf(dataset, tokenizer, total_batch_size, num_epochs, shuffle):
-    train_generator = partial(sample_generator, dataset, tokenizer, shuffle=shuffle)
-    train_signature = {
-        feature: tf.TensorSpec(shape=(None,), dtype=tf.int64)
-        for feature in dataset.features
-        if feature != "special_tokens_mask"
-    }
-    # This may need to be changed depending on your particular model or tokenizer!
-    padding_values = {key: tf.convert_to_tensor(0, dtype=tf.int64) for key in dataset.features}
-    padding_values["labels"] = tf.convert_to_tensor(-100, dtype=tf.int64)
-    if tokenizer.pad_token_id is not None:
-        padding_values["input_ids"] = tf.convert_to_tensor(tokenizer.pad_token_id, dtype=tf.int64)
-    train_signature["labels"] = train_signature["input_ids"]
-    train_signature = (train_signature, train_signature["labels"])
-    options = tf.data.Options()
-    options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
-    tf_dataset = (
-        tf.data.Dataset.from_generator(train_generator, output_signature=train_signature)
-        .with_options(options)
-        .padded_batch(
-            batch_size=total_batch_size,
-            drop_remainder=True,
-            padding_values=(padding_values, np.array(0, dtype=np.int64)),
-        )
-        .repeat(int(num_epochs))
-    )
-    return tf_dataset
-
-
-# endregion
-
-
 def main():
     # region Argument Parsing
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TFTrainingArguments))
@@ -441,41 +386,43 @@ def main():
         # region Create TF datasets
         num_replicas = training_args.strategy.num_replicas_in_sync
         total_train_batch_size = training_args.per_device_train_batch_size * num_replicas
-        train_batches_per_epoch = len(train_dataset) // total_train_batch_size
-        tf_train_dataset = dataset_to_tf(
+        tf_train_dataset = model.prepare_tf_dataset(
             train_dataset,
-            tokenizer,
-            total_batch_size=total_train_batch_size,
-            num_epochs=training_args.num_train_epochs,
+            tokenizer=tokenizer,
+            batch_size=total_train_batch_size,
             shuffle=True,
         )
         total_eval_batch_size = training_args.per_device_eval_batch_size * num_replicas
-        eval_batches_per_epoch = len(eval_dataset) // total_eval_batch_size
-        tf_eval_dataset = dataset_to_tf(
+        tf_eval_dataset = model.prepare_tf_dataset(
             eval_dataset,
-            tokenizer,
-            total_batch_size=total_eval_batch_size,
-            num_epochs=training_args.num_train_epochs,
+            tokenizer=tokenizer,
+            batch_size=total_eval_batch_size,
             shuffle=False,
         )
 
         # endregion
 
         # region Optimizer, loss and compilation
+        num_train_steps = int(len(tf_train_dataset) * training_args.num_train_epochs)
+        if training_args.warmup_steps > 0:
+            num_warmup_steps = training_args.warmup_steps
+        elif training_args.warmup_ratio > 0:
+            num_warmup_steps = int(num_train_steps * training_args.warmup_ratio)
+        else:
+            num_warmup_steps = 0
+
         optimizer, lr_schedule = create_optimizer(
             init_lr=training_args.learning_rate,
-            num_train_steps=int(training_args.num_train_epochs * train_batches_per_epoch),
-            num_warmup_steps=training_args.warmup_steps,
+            num_train_steps=num_train_steps,
+            num_warmup_steps=num_warmup_steps,
             adam_beta1=training_args.adam_beta1,
             adam_beta2=training_args.adam_beta2,
             adam_epsilon=training_args.adam_epsilon,
             weight_decay_rate=training_args.weight_decay,
+            adam_global_clipnorm=training_args.max_grad_norm,
         )
 
-        def dummy_loss(y_true, y_pred):
-            return tf.reduce_mean(y_pred)
-
-        model.compile(loss={"loss": dummy_loss}, optimizer=optimizer)
+        model.compile(optimizer=optimizer, jit_compile=training_args.xla)
         # endregion
 
         # Metrics
@@ -528,19 +475,17 @@ def main():
             tf_train_dataset,
             validation_data=tf_eval_dataset,
             epochs=int(training_args.num_train_epochs),
-            steps_per_epoch=train_batches_per_epoch,
-            validation_steps=eval_batches_per_epoch,
         )
         # endregion
 
         # region Predictions
-        # For predictions, we preload the entire validation set - note that if you have a really giant validation
-        # set, you might need to change this!
-        eval_inputs = {key: tf.ragged.constant(eval_dataset[key]).to_tensor() for key in eval_dataset.features}
-        predictions = model.predict(eval_inputs, batch_size=training_args.per_device_eval_batch_size)["logits"]
-        predictions = tf.math.argmax(predictions, axis=-1)
-        labels = np.array(eval_inputs["labels"])
-        labels[np.array(eval_inputs["attention_mask"]) == 0] = -100
+        # If you have variable batch sizes (i.e. not using pad_to_max_length), then
+        # this bit might fail on TF < 2.8 because TF can't concatenate outputs of varying seq
+        # length from predict().
+        predictions = model.predict(tf_eval_dataset, batch_size=training_args.per_device_eval_batch_size)["logits"]
+        predictions = tf.math.argmax(predictions, axis=-1)  # Should work for tf.ragged outputs too
+        labels = np.array(eval_dataset["label"])
+        labels[np.array(eval_dataset["attention_mask"]) == 0] = -100
         preds, refs = get_labels(predictions, labels)
         metric.add_batch(
             predictions=preds,
@@ -551,9 +496,6 @@ def main():
         for key, val in eval_metric.items():
             logger.info(f"{key}: {val:.4f}")
         # endregion
-
-    # We don't do predictions in the strategy scope because there are some issues in there right now.
-    # They'll get fixed eventually, promise!
 
     if training_args.output_dir is not None:
         model.save_pretrained(training_args.output_dir)
