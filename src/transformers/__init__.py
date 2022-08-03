@@ -2394,6 +2394,16 @@ else:
             "TFOPTPreTrainedModel",
         ]
     )
+    _import_structure["models.opt"].extend(
+        [
+            "TF_OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFOwlViTForObjectDetection",
+            "TFOwlViTModel",
+            "TFOwlViTPreTrainedModel",
+            "TFOwlViTTextModel",
+            "TFOwlViTVisionModel",
+        ]
+    )
     _import_structure["models.pegasus"].extend(
         ["TFPegasusForConditionalGeneration", "TFPegasusModel", "TFPegasusPreTrainedModel"]
     )
@@ -4811,6 +4821,14 @@ if TYPE_CHECKING:
             TFOpenAIGPTPreTrainedModel,
         )
         from .models.opt import TFOPTForCausalLM, TFOPTModel, TFOPTPreTrainedModel
+        from .models.owlvit import (
+            TF_OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFOwlViTForObjectDetection,
+            TFOwlViTModel,
+            TFOwlViTPreTrainedModel,
+            TFOwlViTTextModel,
+            TFOwlViTVisionModel,
+        )
         from .models.pegasus import TFPegasusForConditionalGeneration, TFPegasusModel, TFPegasusPreTrainedModel
         from .models.rag import TFRagModel, TFRagPreTrainedModel, TFRagSequenceForGeneration, TFRagTokenForGeneration
         from .models.regnet import (

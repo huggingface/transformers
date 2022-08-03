@@ -62,6 +62,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("mt5", "TFMT5Model"),
         ("openai-gpt", "TFOpenAIGPTModel"),
         ("opt", "TFOPTModel"),
+        ("owlvit", "TFOwlViTModel"),
         ("pegasus", "TFPegasusModel"),
         ("regnet", "TFRegNetModel"),
         ("rembert", "TFRemBertModel"),
