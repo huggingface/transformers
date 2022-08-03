@@ -597,10 +597,9 @@ def main():
                 outputs = model(**batch)
 
             loss = outputs.loss
-            losses.append(accelerator.gather(loss.repeat(args.per_device_eval_batch_size)))
+            losses.append(accelerator.gather_for_metrics(loss.repeat(args.per_device_eval_batch_size)))
 
         losses = torch.cat(losses)
-        losses = losses[: len(eval_dataset)]
         try:
             eval_loss = torch.mean(losses)
             perplexity = math.exp(eval_loss)
