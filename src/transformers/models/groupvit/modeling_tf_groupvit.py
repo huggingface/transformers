@@ -407,7 +407,7 @@ class TFGroupViTTokenAssign(tf.keras.layers.Layer):
         return new_image_tokens, attention
 
 
-# Copied from transformers.vit.modeling_tf_vit.TFViTPatchEmbeddings with ViT->GroupViT
+# Copied from transformers.models.vit.modeling_tf_vit.TFViTPatchEmbeddings with ViT->GroupViT
 class TFGroupViTPatchEmbeddings(tf.keras.layers.Layer):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
@@ -1182,7 +1182,7 @@ class TFGroupViTTextMainLayer(tf.keras.layers.Layer):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
+        training: bool = False,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
         if input_ids is None:
             raise ValueError("You have to specify input_ids")
@@ -1199,6 +1199,7 @@ class TFGroupViTTextMainLayer(tf.keras.layers.Layer):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            training=training,
         )
 
         return text_model_outputs
@@ -1500,7 +1501,6 @@ class TFGroupViTPreTrainedModel(TFPreTrainedModel):
 
 
 GROUPVIT_START_DOCSTRING = r"""
-    
     This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
