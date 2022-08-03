@@ -189,21 +189,6 @@ class XDropout(torch.autograd.Function):
         else:
             return grad_output, None
 
-    @staticmethod
-    def symbolic(g: torch._C.Graph, input: torch._C.Value, local_ctx: Union[float, DropoutContext]) -> torch._C.Value:
-        dropout_p = local_ctx
-        if isinstance(local_ctx, DropoutContext):
-            dropout_p = local_ctx.dropout
-        # StableDropout only calls this function when training.
-        train = True
-        # TODO: We should check if the opset_version being used to export
-        # is > 12 here, but there's no good way to do that. As-is, if the
-        # opset_version < 12, export will fail with a CheckerError.
-        # Once https://github.com/pytorch/pytorch/issues/78391 is fixed, do something like:
-        # if opset_version < 12:
-        #   return torch.onnx.symbolic_opset9.dropout(g, input, dropout_p, train)
-        return torch.onnx.symbolic_opset12.dropout(g, input, dropout_p, train)
-
 
 # Copied from transformers.models.deberta.modeling_deberta.StableDropout
 class StableDropout(nn.Module):
@@ -585,7 +570,7 @@ def build_relative_position(query_size, key_size, bucket_size=-1, max_position=-
     rel_pos_ids = q_ids[:, None] - k_ids.repeat(query_size, 1)
     if bucket_size > 0 and max_position > 0:
         rel_pos_ids = make_log_bucket_position(rel_pos_ids, bucket_size, max_position)
-    rel_pos_ids = rel_pos_ids.type(torch.long)
+    rel_pos_ids = rel_pos_ids.to(torch.long)
     rel_pos_ids = rel_pos_ids[:query_size, :]
     rel_pos_ids = rel_pos_ids.unsqueeze(0)
     return rel_pos_ids
@@ -939,7 +924,7 @@ DEBERTA_START_DOCSTRING = r"""
 
     This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
     Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
+    and behavior.```
 
 
     Parameters:
