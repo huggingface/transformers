@@ -214,15 +214,16 @@ class BloomOnnxConfig(OnnxConfigWithPast):
                 batch, seqlen = common_inputs["input_ids"].shape
                 # Not using the same length for past_key_values
                 past_key_values_length = seqlen + 2
+                head_dim = self._config.hidden_size // self.num_attention_heads
                 past_key_shape = (
                     batch * self.num_attention_heads,
-                    self._config.hidden_size // self.num_attention_heads,
+                    head_dim,
                     past_key_values_length,
                 )
                 past_value_shape = (
                     batch * self.num_attention_heads,
                     past_key_values_length,
-                    self._config.hidden_size // self.num_attention_heads,
+                    head_dim,
                 )
                 ordered_inputs["past_key_values"] = [
                     (torch.zeros(past_key_shape), torch.zeros(past_value_shape)) for _ in range(self.num_layers)
