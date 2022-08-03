@@ -20,7 +20,7 @@ from packaging import version
 
 def _elu(x):
     x = tf.convert_to_tensor(x)
-    return x if x > 0 else tf.exp(x) - 1
+    return x if x > 0 else tf.math.exp(x) - 1
 
 
 def _gelu(x):

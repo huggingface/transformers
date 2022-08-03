@@ -1417,7 +1417,7 @@ class TFOwlViTModel(TFOwlViTPreTrainedModel):
         return output
 
 
-class OwlViTBoxPredictionHead(tf.keras.layers.Layer):
+class TFOwlViTBoxPredictionHead(tf.keras.layers.Layer):
     def __init__(self, config: OwlViTConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -1436,7 +1436,7 @@ class OwlViTBoxPredictionHead(tf.keras.layers.Layer):
         return output
 
 
-class OwlViTClassPredictionHead(tf.keras.layers.Layer):
+class TFOwlViTClassPredictionHead(tf.keras.layers.Layer):
     def __init__(self, config: OwlViTConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -1471,9 +1471,235 @@ class OwlViTClassPredictionHead(tf.keras.layers.Layer):
         pred_logits = (pred_logits + logit_shift) * logit_scale
 
         if query_mask is not None:
-            if len(tf.shape(query_mask).shape)> 1:
+            if len(query_mask.shape) > 1:
                 query_mask = tf.expand_dims(query_mask, axis=-2)
 
             pred_logits = tf.where(query_mask == 0, -1e6, pred_logits)
 
         return (pred_logits, image_class_embeds)
+
+
+class TFOwlViTForObjectDetection(TFOwlViTPreTrainedModel):
+    config_class = OwlViTConfig
+
+    def __init__(self, config: OwlViTConfig, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+
+        self.owlvit = TFOwlViTMainLayer(config, name="owlvit")
+        self.class_head = OwlViTClassPredictionHead(config, name="class_head")
+        self.box_head = OwlViTBoxPredictionHead(config, name="box_head")
+        self.layer_norm = nn.LayerNorm(config.vision_config.hidden_size)
+
+    def normalize_grid_corner_coordinates(self, feature_map: tf.Tensor):
+        # Computes normalized xy corner coordinates from feature_map.
+        if not len(feature_map.shape) == 4:
+            raise ValueError("Expected input shape is [batch_size, num_channels, height, width]")
+
+        height, width = feature_map.shape[1], feature_map.shape[2] 
+
+        box_coordinates = np.stack(np.meshgrid(np.arange(1, width + 1), np.arange(1, height + 1)), axis=-1).astype(
+            np.float32
+        )
+        box_coordinates /= np.array([width, height], np.float32)
+
+        # Flatten (h, w, 2) -> (h*w, 2)
+        box_coordinates = box_coordinates.reshape(
+            box_coordinates.shape[0] * box_coordinates.shape[1], box_coordinates.shape[2]
+        )
+        box_coordinates = tf.convert_to_tensor(box_coordinates)
+
+        return box_coordinates
+
+    def compute_box_bias(self, feature_map: tf.Tensor) -> tf.Tensor:
+        # The box center is biased to its position on the feature grid
+        box_coordinates = self.normalize_grid_corner_coordinates(feature_map)
+        box_coordinates = tf.clip_by_value(box_coordinates, 0.0, 1.0)
+
+        # Unnormalize xy
+        box_coord_bias = tf.math.log(box_coordinates + 1e-4) - tf.math.log1p(-box_coordinates + 1e-4)
+
+        # The box size is biased to the patch size
+        box_size = tf.experimental.numpy.full_like(box_coord_bias, 1.0 / feature_map.shape[-2])
+        box_size_bias = tf.math.log(box_size + 1e-4) - tf.math.log1p(-box_size + 1e-4)
+
+        # Compute box bias
+        box_bias = tf.concat([box_coord_bias, box_size_bias], axis=-1)
+        return box_bias
+
+    def box_predictor(
+        self,
+        image_feats: tf.Tensor,
+        feature_map: tf.Tensor,
+    ) -> tf.Tensor:
+        """
+        Args:
+            image_feats:
+                Features extracted from the image, returned by the `image_text_embedder` method.
+            feature_map:
+                A spatial re-arrangement of image_features, also returned by the `image_text_embedder` method.
+        Returns:
+            pred_boxes:
+                List of predicted boxes (cxcywh normalized to 0, 1) nested within a dictionary.
+        """
+        # Bounding box detection head [batch_size, num_boxes, 4].
+        pred_boxes = self.box_head(image_feats)
+
+        # Compute the location of each token on the grid and use it to compute a bias for the bbox prediction
+        pred_boxes += self.compute_box_bias(feature_map)
+        pred_boxes = tf.keras.activations.sigmoid(pred_boxes)
+        return pred_boxes
+
+    def class_predictor(
+        self,
+        image_feats: tf.Tensor,
+        query_embeds: tf.Tensor,
+        query_mask: tf.Tensor,
+    ) -> Tuple[tf.Tensor, tf.Tensor]:
+        """
+        Args:
+            image_feats:
+                Features extracted from the `image_text_embedder`.
+            query_embeds:
+                Text query embeddings.
+            query_mask:
+                Must be provided with query_embeddings. A mask indicating which query embeddings are valid.
+        """
+        (pred_logits, image_class_embeds) = self.class_head(image_feats, query_embeds, query_mask)
+
+        return (pred_logits, image_class_embeds)
+
+    def image_text_embedder(
+        self,
+        input_ids: tf.Tensor,
+        pixel_values: tf.Tensor,
+        attention_mask: tf.Tensor,
+        output_attentions: Optional[bool] = None,
+    ) -> tf.Tensor:
+        # Encode text
+        text_embeds = self.owlvit.get_text_features(
+            input_ids=input_ids, attention_mask=attention_mask, output_attentions=output_attentions
+        )
+
+        # Encode image
+        image_embeds = self.owlvit.get_image_features(
+            pixel_values, return_projected=False, output_attentions=output_attentions
+        )
+
+        # Resize class token
+        new_size = tuple(np.array(image_embeds.shape) - np.array((0, 1, 0)))
+        class_token_out = tf.broadcast_to(image_embeds[:, :1, :], new_size)
+
+        # Merge image embedding with class tokens
+        image_embeds = image_embeds[:, 1:, :] * class_token_out
+        image_embeds = self.layer_norm(image_embeds)
+
+        # Resize to [batch_size, num_patches, num_patches, hidden_size]
+        new_size = (
+            image_embeds.shape[0],
+            int(np.sqrt(image_embeds.shape[1])),
+            int(np.sqrt(image_embeds.shape[1])),
+            image_embeds.shape[-1],
+        )
+        image_embeds = tf.reshape(image_embeds, new_size)
+
+        return (image_embeds, text_embeds)
+
+    @unpack_inputs
+    @add_start_docstrings_to_model_forward(OWLVIT_OBJECT_DETECTION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=TFOwlViTObjectDetectionOutput, config_class=OwlViTConfig)
+    def forward(
+        self,
+        input_ids: tf.Tensor,
+        pixel_values: tf.Tensor,
+        attention_mask: Optional[tf.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> TFOwlViTObjectDetectionOutput:
+        r"""
+        Returns:
+
+        Examples:
+        ```python
+        >>> import requests
+        >>> from PIL import Image
+        >>> import tensorflow as tf
+        >>> from transformers import OwlViTProcessor, TFOwlViTForObjectDetection
+
+        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
+        >>> model = OwlViTForObjectDetection.from_pretrained("google/owlvit-base-patch32")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> texts = [["a photo of a cat", "a photo of a dog"]]
+        >>> inputs = processor(text=texts, images=image, return_tensors="tf")
+        >>> outputs = model(**inputs)
+        ```"""
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
+        # Return last hidden states of text and vision transformers
+        text_model_last_hidden_states = None
+        vision_model_last_hidden_states = None
+
+        if output_hidden_states:
+            outputs = self.owlvit(
+                input_ids=input_ids,
+                pixel_values=pixel_values,
+                attention_mask=attention_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+            )
+
+            text_model_last_hidden_states = outputs[-2][0]
+            vision_model_last_hidden_states = outputs[-1][0]
+
+        # Embed images and text queries
+        feature_map, query_embeds = self.image_text_embedder(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+        )
+
+        batch_size, height, width, hidden_dim = feature_map.shape
+        image_feats = tf.reshape(feature_map, (batch_size, height * width, hidden_dim))
+
+        # Reshape from [batch_size * max_text_queries, hidden_dim] -> [batch_size, max_text_queries, hidden_dim]
+        max_text_queries = input_ids.shape[0] // batch_size
+        query_embeds = tf.reshape(query_embeds, (batch_size, max_text_queries, query_embeds.shape[-1]))
+
+        # If first token is 0, then this is a padded query [batch_size, num_queries].
+        input_ids = tf.reshape(input_ids, (batch_size, max_text_queries, input_ids.shape[-1]))
+        query_mask = input_ids[..., 0] > 0
+
+        # Predict object classes [batch_size, num_patches, num_queries+1]
+        (pred_logits, class_embeds) = self.class_predictor(image_feats, query_embeds, query_mask)
+
+        # Predict object boxes
+        pred_boxes = self.box_predictor(image_feats, feature_map)
+
+        if not return_dict:
+            output = (
+                pred_logits,
+                pred_boxes,
+                query_embeds,
+                feature_map,
+                class_embeds,
+                text_model_last_hidden_states,
+                vision_model_last_hidden_states,
+            )
+            output = tuple(x for x in output if x is not None)
+            return output
+
+        return TFOwlViTObjectDetectionOutput(
+            image_embeds=feature_map,
+            text_embeds=query_embeds,
+            pred_boxes=pred_boxes,
+            logits=pred_logits,
+            class_embeds=class_embeds,
+            text_model_last_hidden_states=text_model_last_hidden_states,
+            vision_model_last_hidden_states=vision_model_last_hidden_states,
+        )
