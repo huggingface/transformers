@@ -176,8 +176,6 @@ class VideoMAEFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.T
             self.assertIsInstance(video[0], torch.Tensor)
 
         # Test not batched input
-        for video in video_inputs:
-            print(video[0].shape)
         encoded_videos = feature_extractor(video_inputs[0], return_tensors="pt").pixel_values
         self.assertEqual(
             encoded_videos.shape,
