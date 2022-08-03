@@ -18,6 +18,11 @@ import tensorflow as tf
 from packaging import version
 
 
+def _elu(x):
+    x = tf.convert_to_tensor(x)
+    return x if x > 0 else tf.exp(x) - 1
+
+
 def _gelu(x):
     """
     Gaussian Error Linear Unit. Original Implementation of the gelu activation function in Google Bert repo when
@@ -103,15 +108,21 @@ if version.parse(tf.version.VERSION) >= version.parse("2.4"):
 
     def approximate_gelu_wrap(x):
         return tf.keras.activations.gelu(x, approximate=True)
+    
+    def elu_wrap(x):
+        return tf.keras.activations.elu(x, alpha=1.0)
 
     gelu = tf.keras.activations.gelu
     gelu_new = approximate_gelu_wrap
+    elu = tf.keras.activations.elu
 else:
     gelu = _gelu
     gelu_new = _gelu_new
+    elu = _elu
 
 
 ACT2FN = {
+    "elu": elu,
     "gelu": gelu,
     "gelu_10": gelu_10,
     "gelu_fast": gelu_fast,

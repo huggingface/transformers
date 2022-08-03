@@ -1415,3 +1415,65 @@ class TFOwlViTModel(TFOwlViTPreTrainedModel):
         # TensorFlow cannot trace through nested dataclasses. Reference:
         # https://github.com/huggingface/transformers/pull/16886
         return output
+
+
+class OwlViTBoxPredictionHead(tf.keras.layers.Layer):
+    def __init__(self, config: OwlViTConfig, **kwargs):
+        super().__init__(**kwargs)
+
+        width = config.vision_config.hidden_size
+        self.dense0 = tf.keras.layers.Dense(units=width, name="dense0")
+        self.dense1 = tf.keras.layers.Dense(units=width, name="dense1")
+        self.gelu = get_tf_activation("quick_gelu")
+        self.dense2 = tf.keras.layers.Dense(units=4, name="dense2")
+
+    def call(self, image_features: tf.Tensor) -> tf.Tensor:
+        output = self.dense0(image_features)
+        output = self.gelu(output)
+        output = self.dense1(output)
+        output = self.gelu(output)
+        output = self.dense2(output)
+        return output
+
+
+class OwlViTClassPredictionHead(tf.keras.layers.Layer):
+    def __init__(self, config: OwlViTConfig, **kwargs):
+        super().__init__(**kwargs)
+
+        out_dim = config.text_config.hidden_size
+        query_dim = config.vision_config.hidden_size
+
+        self.dense0 = tf.keras.layers.Dense(units=out_dim, name="dense0")
+        self.logit_shift = tf.keras.layers.Dense(units=1, name="logit_shift")
+        self.logit_scale = tf.keras.layers.Dense(units=1, name="logit_scale")
+        self.elu = get_tf_activation("elu")
+
+    def call(
+        self,
+        image_embeds: tf.Tensor,
+        query_embeds: tf.Tensor,
+        query_mask: tf.Tensor,
+    ) -> Tuple[tf.Tensor]:
+
+        image_class_embeds = self.dense0(image_embeds)
+
+        # Normalize image and text features
+        image_class_embeds = image_class_embeds / tf.norm(tensor=image_class_embeds, ord="euclidean", axis=-1, keepdims=True) + 1e-6
+        query_embeds = query_embeds / tf.norm(tensor=query_embeds, ord="euclidean", axis=-1, keepdims=True) + 1e-6
+
+        # Get class predictions
+        pred_logits = torch.einsum("...pd,...qd->...pq", image_class_embeds, query_embeds)
+
+        # Apply a learnable shift and scale to logits
+        logit_shift = self.logit_shift(image_embeds)
+        logit_scale = self.logit_scale(image_embeds)
+        logit_scale = self.elu(logit_scale) + 1
+        pred_logits = (pred_logits + logit_shift) * logit_scale
+
+        if query_mask is not None:
+            if len(tf.shape(query_mask).shape)> 1:
+                query_mask = tf.expand_dims(query_mask, axis=-2)
+
+            pred_logits = tf.where(query_mask == 0, -1e6, pred_logits)
+
+        return (pred_logits, image_class_embeds)
