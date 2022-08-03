@@ -580,25 +580,29 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
         ```python
         >>> from decord import VideoReader, cpu
         >>> import numpy as np
+
         >>> from transformers import VideoMAEFeatureExtractor, VideoMAEModel
+        >>> from huggingface_hub import hf_hub_download
 
 
-        >>> def sample_frame_indices(clip_len, frame_sample_rate):
+        >>> def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
         ...     converted_len = int(clip_len * frame_sample_rate)
         ...     end_idx = np.random.randint(converted_len, seg_len)
         ...     start_idx = end_idx - converted_len
         ...     indices = np.linspace(start_idx, end_idx, num=clip_len)
-        ...     indices = np.clip(index, start_idx, end_idx - 1).astype(np.int64)
+        ...     indices = np.clip(indices, start_idx, end_idx - 1).astype(np.int64)
         ...     return indices
 
 
         >>> # video clip consists of 300 frames (10 seconds at 30 FPS)
-        >>> video_url = "https://huggingface.co/datasets/nielsr/video-demo/resolve/main/eating_spaghetti.mp4"
-        >>> vr = VideoReader(video_url, num_threads=1, ctx=cpu(0))
+        >>> file_path = hf_hub_download(
+        ...     repo_id="nielsr/video-demo", filename="eating_spaghetti.mp4", repo_type="dataset"
+        ... )
+        >>> vr = VideoReader(file_path, num_threads=1, ctx=cpu(0))
 
         >>> # sample 16 frames
         >>> vr.seek(0)
-        >>> indices = sample_frame_indices(clip_len=16, frame_sample_rate=4)
+        >>> indices = sample_frame_indices(clip_len=16, frame_sample_rate=4, seg_len=len(vr))
         >>> buffer = vr.get_batch(indices).asnumpy()
 
         >>> # create a list of NumPy arrays
@@ -613,6 +617,8 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
         >>> # forward pass
         >>> outputs = model(**inputs)
         >>> last_hidden_states = outputs.last_hidden_state
+        >>> list(last_hidden_states.shape)
+        [1, 1568, 768]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -935,17 +941,49 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
         Examples:
 
         ```python
+        >>> from decord import VideoReader, cpu
+        >>> import torch
+
         >>> from transformers import VideoMAEFeatureExtractor, VideoMAEForVideoClassification
-        >>> import numpy as np
+        >>> from huggingface_hub import hf_hub_download
 
-        >>> video = list(np.random.randn(16, 3, 224, 224))
 
-        >>> feature_extractor = VideoMAEFeatureExtractor.from_pretrained("MCG-NJU/videomae-base")
-        >>> model = VideoMAEForVideoClassification.from_pretrained("MCG-NJU/videomae-base")
+        >>> def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
+        ...     converted_len = int(clip_len * frame_sample_rate)
+        ...     end_idx = np.random.randint(converted_len, seg_len)
+        ...     start_idx = end_idx - converted_len
+        ...     indices = np.linspace(start_idx, end_idx, num=clip_len)
+        ...     indices = np.clip(indices, start_idx, end_idx - 1).astype(np.int64)
+        ...     return indices
+
+
+        >>> # video clip consists of 300 frames (10 seconds at 30 FPS)
+        >>> file_path = hf_hub_download(
+        ...     repo_id="nielsr/video-demo", filename="eating_spaghetti.mp4", repo_type="dataset"
+        ... )
+        >>> vr = VideoReader(file_path, num_threads=1, ctx=cpu(0))
+
+        >>> # sample 16 frames
+        >>> vr.seek(0)
+        >>> indices = sample_frame_indices(clip_len=16, frame_sample_rate=4, seg_len=len(vr))
+        >>> buffer = vr.get_batch(indices).asnumpy()
+
+        >>> # create a list of NumPy arrays
+        >>> video = [buffer[i] for i in range(buffer.shape[0])]
+
+        >>> feature_extractor = VideoMAEFeatureExtractor.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics")
+        >>> model = VideoMAEForVideoClassification.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics")
 
         >>> inputs = feature_extractor(video, return_tensors="pt")
-        >>> outputs = model(**inputs)
-        >>> logits = outputs.logits
+
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+        ...     logits = outputs.logits
+
+        >>> # model predicts one of the 400 Kinetics-400 classes
+        >>> predicted_label = logits.argmax(-1).item()
+        >>> print(model.config.id2label[predicted_label])
+        eating spaghetti
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

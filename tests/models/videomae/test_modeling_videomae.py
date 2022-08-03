@@ -399,12 +399,14 @@ class VideoMAEModelIntegrationTest(unittest.TestCase):
 
         # verify the logits
         expected_shape = torch.Size([1, 1408, 1536])
-        expected_slice = torch.tensor([[0.7994, 0.9612, 0.8508], [0.7401, 0.8958, 0.8302], [0.5862, 0.7468, 0.7325]])
+        expected_slice = torch.tensor(
+            [[0.7994, 0.9612, 0.8508], [0.7401, 0.8958, 0.8302], [0.5862, 0.7468, 0.7325]], device=torch_device
+        )
         self.assertEqual(outputs.logits.shape, expected_shape)
         self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice, atol=1e-4))
 
         # verify the loss (`config.norm_pix_loss` = `True`)
-        expected_loss = torch.tensor([0.5142])
+        expected_loss = torch.tensor([0.5142], device=torch_device)
         self.assertTrue(torch.allclose(outputs.loss, expected_loss, atol=1e-4))
 
         # verify the loss (`config.norm_pix_loss` = `False`)
@@ -415,5 +417,5 @@ class VideoMAEModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
 
-        expected_loss = torch.tensor(torch.tensor([0.6469]))
+        expected_loss = torch.tensor(torch.tensor([0.6469]), device=torch_device)
         self.assertTrue(torch.allclose(outputs.loss, expected_loss, atol=1e-4))
