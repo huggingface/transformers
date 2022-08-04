@@ -198,7 +198,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@v2
         with:
-          name: run_examples_gpu
+          name: single-gpu_run_examples_gpu
           path: /transformers/reports/single-gpu_examples_gpu
 
   run_pipelines_torch_gpu:
