@@ -1935,7 +1935,7 @@ class Trainer:
             else:
                 # We load the model state dict on the CPU to avoid an OOM error.
                 state_dict = torch.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME), map_location="cpu")
-                load_result = model.load_state_dict(state_dict)
+                load_result = model.load_state_dict(state_dict, strict=False)
                 # release memory
                 del state_dict
                 self._issue_warnings_after_load(load_result)
@@ -1989,7 +1989,7 @@ class Trainer:
                     # We load the model state dict on the CPU to avoid an OOM error.
                     state_dict = torch.load(best_model_path, map_location="cpu")
                     # If the model is on the GPU, it still works!
-                    load_result = model.load_state_dict(state_dict)
+                    load_result = model.load_state_dict(state_dict, strict=False)
                 if not is_sagemaker_mp_enabled():
                     self._issue_warnings_after_load(load_result)
         elif os.path.exists(os.path.join(self.state.best_model_checkpoint, WEIGHTS_INDEX_NAME)):
