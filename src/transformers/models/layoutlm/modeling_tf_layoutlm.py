@@ -1397,13 +1397,12 @@ class TFLayoutLMForQuestionAnswering(TFLayoutLMPreTrainedModel, TFTokenClassific
         r"cls.predictions",
         r"cls.seq_relationship",
     ]
-    _keys_to_ignore_on_load_missing = [r"dropout"]
 
     def __init__(self, config: LayoutLMConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
-        self.layoutlm = TFLayoutLMMainLayer(config, add_pooling_layer=False, name="layoutlm")
+        self.layoutlm = TFLayoutLMMainLayer(config, add_pooling_layer=True, name="layoutlm")
         self.qa_outputs = tf.keras.layers.Dense(
             units=config.num_labels,
             kernel_initializer=get_initializer(config.initializer_range),
