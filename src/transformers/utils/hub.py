@@ -38,7 +38,6 @@ from zipfile import ZipFile, is_zipfile
 import huggingface_hub
 import requests
 from filelock import FileLock
-from genericpath import isfile
 from huggingface_hub import (
     CommitOperationAdd,
     HfFolder,
@@ -1380,7 +1379,7 @@ def get_checkpoint_shard_files(
     return cached_filenames, sharded_metadata
 
 
-### All what is below is for conversion between old cache format and new cache format.
+# All what is below is for conversion between old cache format and new cache format.
 
 
 def get_all_cached_files(cache_dir=None):
