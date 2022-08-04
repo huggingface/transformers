@@ -61,8 +61,9 @@ def _make_causal_mask(
     """
     batch_size, target_length = input_ids_shape
     mask = torch.empty((target_length, target_length + past_key_values_length), dtype=torch.bool, device=device)
-    mask[:, past_key_values_length:] = True
-    mask[:, past_key_values_length:].triu_(diagonal=1)
+    # ONNX doesn't support `torch.Tensor.triu` properly, thus we use this workaround
+    seq_ids = torch.arange(target_length, device=device)
+    mask[:, past_key_values_length:] = seq_ids[:, None] < seq_ids[None, :]
 
     if past_key_values_length > 0:
         mask[:, :past_key_values_length] = False
@@ -698,8 +699,7 @@ class BloomModel(BloomPreTrainedModel):
         past_key_values_length = 0
         if past_key_values[0] is not None:
             past_key_values_length = past_key_values[0][0].shape[2]
-            seq_length_with_past += past_key_values_length
-
+            seq_length_with_past = seq_length_with_past + past_key_values_length
         if attention_mask is None:
             attention_mask = torch.ones((batch_size, seq_length_with_past), device=hidden_states.device)
         else:
