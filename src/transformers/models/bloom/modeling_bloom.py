@@ -103,9 +103,7 @@ def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int, dtype: torc
     batch_size, seq_length = attention_mask.shape
     device = attention_mask.device
     closest_power_of_2 = 2 ** math.floor(math.log2(num_heads))
-    base = torch.tensor(
-        2 ** (-(2 ** -(math.log2(closest_power_of_2) - 3))), device=device, dtype=torch.float32
-    )
+    base = torch.tensor(2 ** (-(2 ** -(math.log2(closest_power_of_2) - 3))), device=device, dtype=torch.float32)
     powers = torch.arange(1, 1 + closest_power_of_2, device=device, dtype=torch.int32)
     slopes = torch.pow(base, powers)
 
@@ -390,8 +388,8 @@ class BloomMLP(nn.Module):
             intermediate_output = torch.zeros_like(residual)
             for i in range(self.pretraining_tp):
                 intermediate_output = intermediate_output + F.linear(
-                    hidden_states[:, :, int(i * self.slice_size) : int((i + 1) * self.slice_size)],
-                    self.dense_4h_to_h.weight[:, int(i * self.slice_size) : int((i + 1) * self.slice_size)],
+                    hidden_states[:, :, i * self.slice_size : (i + 1) * self.slice_size],
+                    self.dense_4h_to_h.weight[:, i * self.slice_size : (i + 1) * self.slice_size],
                 )
         else:
             intermediate_output = self.dense_4h_to_h(hidden_states)
