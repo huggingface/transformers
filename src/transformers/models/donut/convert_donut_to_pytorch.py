@@ -125,7 +125,8 @@ def convert_state_dict(orig_state_dict, model):
                     f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.bias"
                 ] = val[-dim:]
         elif "attn_mask" in key or key in ["encoder.model.norm.weight", "encoder.model.norm.bias"]:
-            # TODO check attn_mask buffers
+            # HuggingFace implementation doesn't use attn_mask buffer
+            # and model doesn't use final LayerNorms for the encoder
             pass
         else:
             orig_state_dict[rename_key(key)] = val
@@ -151,9 +152,6 @@ def convert_donut_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
     # verify results on scanned document
     dataset = load_dataset("hf-internal-testing/fixtures_docvqa")
     image = Image.open(dataset["test"][0]["file"]).convert("RGB")
-
-    # TODO maybe verify pixel values against original implementation
-    # original_pixel_values = original_model.encoder.prepare_input(image).unsqueeze(0)
 
     tokenizer = XLMRobertaTokenizerFast.from_pretrained(model_name, from_slow=True)
     feature_extractor = DonutFeatureExtractor(
