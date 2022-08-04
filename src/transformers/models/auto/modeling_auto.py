@@ -600,10 +600,15 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
+        ("vilt", "ViltForQuestionAnswering"),
+    ]
+)
+
+MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
+    [
         ("layoutlm", "LayoutLMForQuestionAnswering"),
         ("layoutlmv2", "LayoutLMv2ForQuestionAnswering"),
         ("layoutlmv3", "LayoutLMv3ForQuestionAnswering"),
-        ("vilt", "ViltForQuestionAnswering"),
     ]
 )
 
@@ -777,6 +782,9 @@ MODEL_FOR_VISION_2_SEQ_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FO
 MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES
 )
+MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES
+)
 MODEL_FOR_MASKED_LM_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_MASKED_LM_MAPPING_NAMES)
 MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES
@@ -892,6 +900,17 @@ AutoModelForVisualQuestionAnswering = auto_class_update(
     AutoModelForVisualQuestionAnswering,
     head_doc="visual question answering",
     checkpoint_for_example="dandelin/vilt-b32-finetuned-vqa",
+)
+
+
+class AutoModelForDocumentQuestionAnswering(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING
+
+
+AutoModelForDocumentQuestionAnswering = auto_class_update(
+    AutoModelForDocumentQuestionAnswering,
+    head_doc="document question answering",
+    checkpoint_for_example="impira/layoutlm-doc-qa",
 )
 
 

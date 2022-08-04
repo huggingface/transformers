@@ -68,6 +68,7 @@ from .token_classification import (
     TokenClassificationPipeline,
 )
 from .visual_question_answering import VisualQuestionAnsweringPipeline
+from .document_question_answering import DocumentQuestionAnsweringPipeline
 from .zero_shot_classification import ZeroShotClassificationArgumentHandler, ZeroShotClassificationPipeline
 from .zero_shot_image_classification import ZeroShotImageClassificationPipeline
 
@@ -119,6 +120,7 @@ if is_torch_available():
         AutoModelForTableQuestionAnswering,
         AutoModelForTokenClassification,
         AutoModelForVisualQuestionAnswering,
+        AutoModelForDocumentQuestionAnswering,
     )
 if TYPE_CHECKING:
     from ..modeling_tf_utils import TFPreTrainedModel
@@ -209,6 +211,15 @@ SUPPORTED_TASKS = {
         "tf": (),
         "default": {
             "model": {"pt": ("dandelin/vilt-b32-finetuned-vqa", "4355f59")},
+        },
+        "type": "multimodal",
+    },
+    "document-question-answering": {
+        "impl": DocumentQuestionAnsweringPipeline,
+        "pt": (AutoModelForDocumentQuestionAnswering,) if is_torch_available() else (),
+        "tf": (),
+        "default": {
+            "model": {"pt": ("dandelin/vilt-b32-finetuned-vqa", "4355f59")},  # TODO
         },
         "type": "multimodal",
     },
@@ -428,7 +439,7 @@ def pipeline(
     trust_remote_code: Optional[bool] = None,
     model_kwargs: Dict[str, Any] = None,
     pipeline_class: Optional[Any] = None,
-    **kwargs
+    **kwargs,
 ) -> Pipeline:
     """
     Utility factory method to build a [`Pipeline`].
