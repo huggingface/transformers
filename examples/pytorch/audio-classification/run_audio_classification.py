@@ -26,6 +26,7 @@ import datasets
 import numpy as np
 from datasets import DatasetDict, load_dataset
 
+import evaluate
 import transformers
 from transformers import (
     AutoConfig,
@@ -315,7 +316,7 @@ def main():
         id2label[str(i)] = label
 
     # Load the accuracy metric from the datasets package
-    metric = datasets.load_metric("accuracy")
+    metric = evaluate.load("accuracy")
 
     # Define our compute_metrics function. It takes an `EvalPrediction` object (a namedtuple with
     # `predictions` and `label_ids` fields) and has to return a dictionary string to float.
