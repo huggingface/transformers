@@ -31,3 +31,7 @@ nvcc --version
 ```
 ls -l $CONDA_PREFIX/lib/libcudart.so
 ```
+
+### Recurrent bugs
+
+Sometimes you have to run a "dummy" inference pass when dealing with a multi-GPU setup. Checkout the ```test_multi_gpu_loading``` and the ```test_pipeline``` functions.

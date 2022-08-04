@@ -12,7 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import gc
 import unittest
+
+import torch
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 from transformers.testing_utils import (
@@ -30,7 +33,7 @@ from transformers.testing_utils import (
 @require_torch
 @require_torch_gpu
 @slow
-class MixedInt8Test(unittest.TestCase):
+class BaseMixedInt8Test(unittest.TestCase):
     # We keep the constants inside the init function and model loading inside setUp function
 
     # We need to test on relatively large models (aka >1b parameters otherwise the quantiztion may not work as expected)
@@ -50,6 +53,26 @@ class MixedInt8Test(unittest.TestCase):
         # Models and tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
+
+class MixedInt8Test(BaseMixedInt8Test):
+    def setUp(self):
+        super().setUp()
+
+        # Models and tokenizer
+        self.model_fp16 = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype="auto", device_map="auto")
+        self.model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
+
+    def tearDown(self):
+        r"""
+        TearDown function needs to be called at the end of each test to free the GPU memory and cache, also to
+        avoid unexpected behaviors. Please see: https://discuss.pytorch.org/t/how-can-we-release-gpu-memory-cache/14530/27
+        """
+        del self.model_fp16
+        del self.model_8bit
+
+        gc.collect()
+        torch.cuda.empty_cache()
+
     def test_memory_footprint(self):
         r"""
         A simple test to check if the model conversion has been done correctly by checking on the
@@ -57,17 +80,11 @@ class MixedInt8Test(unittest.TestCase):
         """
         from bitsandbytes.nn import Int8Params
 
-        model_fp16 = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype="auto", device_map="auto")
-        model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
-
-        mem_fp16 = model_fp16.get_memory_footprint()
-        mem_8bit = model_8bit.get_memory_footprint()
+        mem_fp16 = self.model_fp16.get_memory_footprint()
+        mem_8bit = self.model_8bit.get_memory_footprint()
 
         self.assertAlmostEqual(mem_fp16 / mem_8bit, self.EXPECTED_RELATIVE_DIFFERENCE)
-        self.assertTrue(model_8bit.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
-
-        del model_8bit
-        del model_fp16
+        self.assertTrue(self.model_8bit.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
 
     def test_generate_quality(self):
         r"""
@@ -75,14 +92,25 @@ class MixedInt8Test(unittest.TestCase):
         Given that we are operating on small numbers + the testing model is relatively small, we might not get
         the same output across GPUs. So we'll generate few tokens (5-10) and check their output.
         """
-        model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
-
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
-        output_sequences = model_8bit.generate(input_ids=encoded_input["input_ids"].cuda(), max_new_tokens=10)
+        output_sequences = self.model_8bit.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
 
         self.assertEqual(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
-        del model_8bit
+
+class MixedInt8TestPipeline(BaseMixedInt8Test):
+    def setUp(self):
+        super().setUp()
+
+    def tearDown(self):
+        r"""
+        TearDown function needs to be called at the end of each test to free the GPU memory and cache, also to
+        avoid unexpected behaviors. Please see: https://discuss.pytorch.org/t/how-can-we-release-gpu-memory-cache/14530/27
+        """
+        del self.pipe
+
+        gc.collect()
+        torch.cuda.empty_cache()
 
     def test_pipeline(self):
         r"""
@@ -90,25 +118,32 @@ class MixedInt8Test(unittest.TestCase):
         we used pipline for inference speed benchmarking we want to make sure that this feature does not break anything
         on pipline.
         """
-        pipe = pipeline(
+        # self._clear_cuda_cache()
+        self.pipe = pipeline(
             "text-generation",
             model=self.model_name,
             model_kwargs={"device_map": "auto", "load_in_8bit": True},
             max_new_tokens=self.MAX_NEW_TOKENS,
         )
         # Needs a first forward pass to get the statistics
-        _ = pipe(self.input_text)
+        _ = self.pipe(self.input_text)
 
         # Real second forward pass
-        pipeline_output = pipe(self.input_text)
+        pipeline_output = self.pipe(self.input_text)
         self.assertEqual(pipeline_output[0]["generated_text"], self.EXPECTED_OUTPUT)
 
-    @require_torch_multi_gpu
+
+@require_torch_multi_gpu
+class MixedInt8TestMultiGpu(BaseMixedInt8Test):
+    def setUp(self):
+        super().setUp()
+
     def test_multi_gpu_loading(self):
         r"""
         This tests that the model has been loaded and can be used correctly on a multi-GPU setup.
         Let's just try to load a model on 2 GPUs and see if it works. The model we test has ~2GB of total, 3GB should suffice
         """
+
         memory_mapping = {0: "1GB", 1: "2GB"}
         model_parallel = AutoModelForCausalLM.from_pretrained(
             self.model_name, load_in_8bit=True, max_memory=memory_mapping, device_map="auto"
