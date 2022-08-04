@@ -213,8 +213,11 @@ def main():
     # If we're using tracking, we also need to initialize it here and it will by default pick up all supported trackers
     # in the environment
     accelerator = (
-        Accelerator(log_with=args.report_to, logging_dir=args.output_dir,
-                    gradient_accumulation_steps=args.gradient_accumulation_steps)
+        Accelerator(
+            log_with=args.report_to,
+            logging_dir=args.output_dir,
+            gradient_accumulation_steps=args.gradient_accumulation_steps,
+        )
         if args.with_tracking
         else Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps)
     )
@@ -388,7 +391,7 @@ def main():
         name=args.lr_scheduler_type,
         optimizer=optimizer,
         num_warmup_steps=args.num_warmup_steps,
-        num_training_steps=math.ceil(len(train_dataloader)) * args.num_train_epochs
+        num_training_steps=math.ceil(len(train_dataloader)) * args.num_train_epochs,
     )
 
     # Prepare everything with our `accelerator`.
