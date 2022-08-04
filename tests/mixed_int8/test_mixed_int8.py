@@ -15,10 +15,9 @@
 import gc
 import unittest
 
-import torch
-
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 from transformers.testing_utils import (
+    is_torch_available,
     require_accelerate,
     require_bitsandbytes,
     require_torch,
@@ -26,6 +25,10 @@ from transformers.testing_utils import (
     require_torch_multi_gpu,
     slow,
 )
+
+
+if is_torch_available():
+    import torch
 
 
 @require_bitsandbytes
