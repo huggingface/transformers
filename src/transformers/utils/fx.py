@@ -887,7 +887,7 @@ class HFTracer(Tracer):
         root: Union[torch.nn.Module, Callable[..., Any]],
         concrete_args: Optional[Dict[str, Any]] = None,
         dummy_inputs: Optional[Dict[str, Any]] = None,
-        infer_concrete_args_from_dummy_inputs: bool = True,
+        complete_concrete_args_with_inputs_not_in_dummy_inputs: bool = True,
     ) -> Graph:
         """
         Traces `root` and returns the corresponding FX `torch.fx.Graph` representation. `root` can either be a
@@ -905,7 +905,7 @@ class HFTracer(Tracer):
                 The dummy inputs needed to handle data-dependent control-flow if `root` is not a
                 [`~transformers.PreTrainedModel`]. It can also be used when `root` is a
                 [`~transformers.PreTrainedModel`] to specify custom dummy inputs for a subset or all the model inputs.
-            infer_concrete_args_from_dummy_inputs (`bool`, *optional*, defaults to `True`):
+            complete_concrete_args_with_inputs_not_in_dummy_inputs (`bool`, *optional*, defaults to `True`):
                 If `True`, and `dummy_inputs` is specified, every argument that `root` can take that is not in
                 `dummy_inputs` and not in `concrete_args` will be added to `concrete_args`, otherwise does nothing.
 
@@ -919,7 +919,12 @@ class HFTracer(Tracer):
         if concrete_args is None:
             concrete_args = {}
 
-        if dummy_inputs is not None and infer_concrete_args_from_dummy_inputs:
+        if dummy_inputs is not None and complete_concrete_args_with_inputs_not_in_dummy_inputs:
+            for param in sig.parameters.values():
+                if param.name in dummy_inputs:
+                    continue
+                if param.default is inspect.Parameter.empty:
+                    raise ValueError(f"You need to specify a default value for the parameter {param.name}.")
             concrete_args.update({p.name: p.default for p in sig.parameters.values() if p.name not in dummy_inputs})
 
         input_names = sig.parameters.keys() - concrete_args.keys()
@@ -937,7 +942,15 @@ class HFTracer(Tracer):
         for input_name in input_names:
             if input_name in inputs:
                 continue
-            inputs.update(self._generate_dummy_input(root, input_name, shape))
+            # We enforce that root must either be a PreTrainedModel or deserialized from a serialized traced model to
+            # be able to use HFTracer._generate_dummy_input.
+            if isinstance(root, PreTrainedModel) or type(root).__qualname__.startswith("_deserialize_graph_module"):
+                inputs.update(self._generate_dummy_input(root, input_name, shape))
+            else:
+                raise RuntimeError(
+                    f"Could not generate input named {input_name} for because root is not a"
+                    " transformers.PreTrainedModel."
+                )
 
         concrete_metas = {
             input_name: input_.to("meta") if isinstance(input_, torch.Tensor) else input_
