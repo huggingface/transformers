@@ -19,6 +19,7 @@ import fnmatch
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -37,6 +38,7 @@ from zipfile import ZipFile, is_zipfile
 import huggingface_hub
 import requests
 from filelock import FileLock
+from genericpath import isfile
 from huggingface_hub import (
     CommitOperationAdd,
     HfFolder,
@@ -46,6 +48,7 @@ from huggingface_hub import (
     list_repo_files,
     whoami,
 )
+from huggingface_hub.constants import HUGGINGFACE_HEADER_X_LINKED_ETAG, HUGGINGFACE_HEADER_X_REPO_COMMIT
 from huggingface_hub.utils import EntryNotFoundError, RepositoryNotFoundError, RevisionNotFoundError
 from requests.exceptions import HTTPError
 from requests.models import Response
@@ -1375,3 +1378,177 @@ def get_checkpoint_shard_files(
         cached_filenames.append(cached_filename)
 
     return cached_filenames, sharded_metadata
+
+
+### All what is below is for conversion between old cache format and new cache format.
+
+
+def get_all_cached_files(cache_dir=None):
+    """
+    Returns a list for all files cached with appropriate metadata.
+    """
+    if cache_dir is None:
+        cache_dir = TRANSFORMERS_CACHE
+    else:
+        cache_dir = str(cache_dir)
+
+    cached_files = []
+    for file in os.listdir(cache_dir):
+        meta_path = os.path.join(cache_dir, f"{file}.json")
+        if not os.path.isfile(meta_path):
+            continue
+
+        with open(meta_path, encoding="utf-8") as meta_file:
+            metadata = json.load(meta_file)
+            url = metadata["url"]
+            etag = metadata["etag"].replace('"', "")
+            cached_files.append({"file": file, "url": url, "etag": etag})
+
+    return cached_files
+
+
+def get_hub_metadata(url, token=None):
+    """
+    Returns the commit hash and associated etag for a given url.
+    """
+    if token is None:
+        token = HfFolder.get_token()
+    headers = {"user-agent": http_user_agent()}
+    headers["authorization"] = f"Bearer {token}"
+
+    r = huggingface_hub.file_download._request_with_retry(
+        method="HEAD", url=url, headers=headers, allow_redirects=False
+    )
+    huggingface_hub.file_download._raise_for_status(r)
+    commit_hash = r.headers[HUGGINGFACE_HEADER_X_REPO_COMMIT]
+    etag = r.headers.get(HUGGINGFACE_HEADER_X_LINKED_ETAG) or r.headers.get("ETag")
+    etag = huggingface_hub.file_download._normalize_etag(etag)
+    return etag, commit_hash
+
+
+def extract_info_from_url(url):
+    """
+    Extract repo_name, revision and filename from an url.
+    """
+    search = re.search(r"^https://huggingface\.co/(.*)/resolve/([^/]*)/(.*)$", url)
+    if search is None:
+        return None
+    repo, revision, filename = search.groups()
+    cache_repo = "--".join(["models"] + repo.split("/"))
+    return {"repo": cache_repo, "revision": revision, "filename": filename}
+
+
+def clean_files_for(file):
+    """
+    Remove, if they exist, file, file.json and file.lock
+    """
+    for f in [file, f"{file}.json", f"{file}.lock"]:
+        if os.path.isfile(f):
+            os.remove(f)
+
+
+def move_to_new_cache(file, repo, filename, revision, etag, commit_hash):
+    """
+    Move file to repo following the new huggingface hub cache organization.
+    """
+    os.makedirs(repo, exist_ok=True)
+
+    # refs
+    os.makedirs(os.path.join(repo, "refs"), exist_ok=True)
+    if revision != commit_hash:
+        ref_path = os.path.join(repo, "refs", revision)
+        with open(ref_path, "w") as f:
+            f.write(commit_hash)
+
+    # blobs
+    os.makedirs(os.path.join(repo, "blobs"), exist_ok=True)
+    # TODO: replace copy by move when all works well.
+    blob_path = os.path.join(repo, "blobs", etag)
+    shutil.move(file, blob_path)
+
+    # snapshots
+    os.makedirs(os.path.join(repo, "snapshots"), exist_ok=True)
+    os.makedirs(os.path.join(repo, "snapshots", commit_hash), exist_ok=True)
+    pointer_path = os.path.join(repo, "snapshots", commit_hash, filename)
+    huggingface_hub.file_download._create_relative_symlink(blob_path, pointer_path)
+    clean_files_for(file)
+
+
+def move_cache(cache_dir=None, token=None):
+    if cache_dir is None:
+        cache_dir = TRANSFORMERS_CACHE
+    if token is None:
+        token = HfFolder.get_token()
+    cached_files = get_all_cached_files(cache_dir=cache_dir)
+    print(f"Moving {len(cached_files)} to the new cache system")
+
+    hub_metadata = {}
+    for file_info in tqdm(cached_files):
+        url = file_info.pop("url")
+        if url not in hub_metadata:
+            try:
+                hub_metadata[url] = get_hub_metadata(url, token=token)
+            except requests.HTTPError:
+                continue
+
+        etag, commit_hash = hub_metadata[url]
+        if file_info["etag"] != etag:
+            # Cached file is not up to date, we just throw it as a new version will be downloaded anyway.
+            clean_files_for(os.path.join(cache_dir, file_info["file"]))
+            continue
+
+        url_info = extract_info_from_url(url)
+        if url_info is None:
+            # Not a file from huggingface.co
+            continue
+
+        repo = os.path.join(cache_dir, url_info["repo"])
+        move_to_new_cache(
+            file=os.path.join(cache_dir, file_info["file"]),
+            repo=repo,
+            filename=url_info["filename"],
+            revision=url_info["revision"],
+            etag=etag,
+            commit_hash=commit_hash,
+        )
+
+
+cache_version_file = os.path.join(TRANSFORMERS_CACHE, "version.txt")
+if not os.path.isfile(cache_version_file):
+    cache_version = 0
+else:
+    with open(cache_version_file) as f:
+        cache_version = int(f.read())
+
+
+if cache_version < 1:
+    if is_offline_mode():
+        logger.warn(
+            "You are offline and the cache for model files in Transformers v4.22.0 has been updated while your local "
+            "cache seems to be the one of a previous version. It is very likely that all your calls to any "
+            "`from_pretrained()` method will fail. Remove the offline mode and enable internet connection to have "
+            "your cache be updated automatically, then you can go back to offline mode."
+        )
+    else:
+        logger.warn(
+            "The cache for model files in Transformers v4.22.0 has been udpated. Migrating your old cache. This is a "
+            "one-time only operation. You can interrupt this and resume the migration later on by calling "
+            "`transformers.utils.move_cache()`."
+        )
+    try:
+        move_cache()
+    except Exception as e:
+        logger.error(
+            "There was a problem when trying to move your cache. You can do this later on by calling "
+            f"`transformers.utils.move_cache()`.\n{e}."
+        )
+
+    try:
+        os.makedirs(TRANSFORMERS_CACHE, exist_ok=True)
+        with open(cache_version_file, "w") as f:
+            f.write("1")
+    except Exception:
+        logger.warn(
+            f"There was a problem when trying to write in your cache folder ({TRANSFORMERS_CACHE}). You should set "
+            "the environment variable TRANSFORMERS_CACHE to a writable directory."
+        )
