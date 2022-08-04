@@ -187,7 +187,7 @@ jobs:
         working-directory: /transformers
         run: |
           pip install -r examples/pytorch/_tests_requirements.txt
-          python3 -m pytest -v --make-reports=examples_gpu examples/pytorch
+          python3 -m pytest -v --make-reports=single-gpu_examples_gpu examples/pytorch
 
       - name: Failure short reports
         if: ${{ failure() }}
