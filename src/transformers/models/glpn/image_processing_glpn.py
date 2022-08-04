@@ -31,6 +31,25 @@ logger = logging.get_logger(__name__)
 
 
 class GLPNImageProcessor(BaseImageProcessor):
+    r"""
+    Constructs a GLPN image processor.
+
+    Args:
+        do_resize (`bool`, *optional*, defaults to `True`):
+            Whether to resize the input based on certain `size_divisor`.
+        size_divisor (`int` or `Tuple(int)`, *optional*, defaults to 32):
+            Make sure the input is divisible by this value. Only has an effect if `do_resize` is set to `True`.
+        resample (`int`, *optional*, defaults to `PIL.Image.Resampling.BILINEAR`):
+            An optional resampling filter. This can be one of `PIL.Image.Resampling.NEAREST`,
+            `PIL.Image.Resampling.BOX`, `PIL.Image.Resampling.BILINEAR`, `PIL.Image.Resampling.HAMMING`,
+            `PIL.Image.Resampling.BICUBIC` or `PIL.Image.Resampling.LANCZOS`. Only has an effect if `do_resize` is set
+            to `True`.
+        do_rescale (`bool`, *optional*, defaults to `True`):
+            Whether or not to apply the scaling factor (to make pixel values floats between 0. and 1.).
+    """
+
+    model_input_names = ["pixel_values"]
+
     def __init__(
         self, do_resize=True, do_rescale=True, size_divisor=32, resample=PIL.Image.Resampling.BILINEAR, **kwargs
     ) -> None:
