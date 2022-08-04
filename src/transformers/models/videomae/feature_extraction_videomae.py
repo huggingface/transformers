@@ -98,7 +98,7 @@ class VideoMAEFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
         return (video - mean[None, :, None, None]) / std[None, :, None, None]
 
     def __call__(
-        self, videos: ImageInput, return_tensors: Optional[Union[str, TensorType]] = "np", **kwargs
+        self, videos: ImageInput, return_tensors: Optional[Union[str, TensorType]] = None, **kwargs
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several video(s).
