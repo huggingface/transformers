@@ -156,7 +156,7 @@ FLAX_WEIGHTS_NAME = "flax_model.msgpack"
 FLAX_WEIGHTS_INDEX_NAME = "flax_model.msgpack.index.json"
 CONFIG_NAME = "config.json"
 FEATURE_EXTRACTOR_NAME = "preprocessor_config.json"
-IMAGE_PROCESSOR_NAME = "image_processor_config.json"
+IMAGE_PROCESSOR_NAME = FEATURE_EXTRACTOR_NAME
 MODEL_CARD_NAME = "modelcard.json"
 
 SENTENCEPIECE_UNDERLINE = "▁"
