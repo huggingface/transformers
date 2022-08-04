@@ -337,7 +337,7 @@ class TFSegformerModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_dataset_conversion(self):
         super().test_dataset_conversion()
 
-    def check_keras_fit_results(self, val_loss1, val_loss2, atol=2e-1, rtol=1e-2):
+    def check_keras_fit_results(self, val_loss1, val_loss2, atol=2e-1, rtol=2e-1):
         self.assertTrue(np.allclose(val_loss1, val_loss2, atol=atol, rtol=rtol))
 
     @unittest.skipIf(
