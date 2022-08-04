@@ -485,11 +485,11 @@ class GenerationMixin:
         if self.config.is_encoder_decoder and encoder_outputs is not None:
             # make dummy input_ids with value -100, as a sanity check ensuring that they won't be used for encoding
             shape = encoder_outputs.last_hidden_state.size()[:-1]
-            return torch.ones(shape, dtype=torch.long, device=self.device) * -100
+            return torch.full(shape, fill_value=-100, dtype=torch.long, device=self.device)
 
         if bos_token_id is None:
             raise ValueError("`bos_token_id` has to be defined when no `input_ids` are provided.")
-        return torch.ones((1, 1), dtype=torch.long, device=self.device) * bos_token_id
+        return torch.full((1, 1), fill_value=bos_token_id, dtype=torch.long, device=self.device)
 
     def _prepare_attention_mask_for_generation(
         self,
@@ -543,7 +543,7 @@ class GenerationMixin:
             decoder_start_token_id = self._get_decoder_start_token_id(decoder_start_token_id, bos_token_id)
             if device is None:
                 device = self.device
-            return torch.ones((batch_size, 1), dtype=torch.long, device=device) * decoder_start_token_id
+            return torch.full((batch_size, 1), fill_value=decoder_start_token_id, dtype=torch.long, device=device)
 
     def _get_decoder_start_token_id(self, decoder_start_token_id: int = None, bos_token_id: int = None) -> int:
         decoder_start_token_id = (
@@ -1776,6 +1776,9 @@ class GenerationMixin:
 
         # keep track of which sequences are already finished
         unfinished_sequences = input_ids.new(input_ids.shape[0]).fill_(1)
+        # XXX: rebase artefact trying to gauge if needed or not.
+        # unfinished_sequences = input_ids.new_full((input_ids.shape[0],), fill_value=True, dtype=torch.bool)
+        # cur_len = input_ids.shape[-1]
 
         this_peer_finished = False  # used by synced_gpus only
         while True:
@@ -1833,7 +1836,7 @@ class GenerationMixin:
             if eos_token_id is not None:
                 if pad_token_id is None:
                     raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
-                next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
+                next_tokens.masked_fill_(~unfinished_sequences, pad_token_id)
 
             # update generated ids, model inputs, and length for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
@@ -1843,10 +1846,10 @@ class GenerationMixin:
 
             # if eos_token was found in one sentence, set sentence to finished
             if eos_token_id is not None:
-                unfinished_sequences = unfinished_sequences.mul((next_tokens != eos_token_id).long())
+                unfinished_sequences &= next_tokens != eos_token_id
 
             # stop when each sentence is finished, or if we exceed the maximum length
-            if unfinished_sequences.max() == 0 or stopping_criteria(input_ids, scores):
+            if not (torch.any(unfinished_sequences) and not stopping_criteria(input_ids, scores)):
                 if not synced_gpus:
                     break
                 else:

@@ -128,6 +128,7 @@ class BloomConfig(PretrainedConfig):
         attention_dropout=0.0,
         pretraining_tp=1,  # TP rank used when training with megatron
         slow_but_exact=False,
+        tp_parallel=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -147,6 +148,7 @@ class BloomConfig(PretrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.slow_but_exact = slow_but_exact
+        self.tp_parallel = tp_parallel
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 

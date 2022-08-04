@@ -75,8 +75,10 @@ from pathlib import Path
 
 from setuptools import find_packages, setup
 
+from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 
 # Remove stale transformers.egg-info directory to avoid https://github.com/pypa/pip/issues/5466
+
 stale_egg_info = Path(__file__).parent / "transformers.egg-info"
 if stale_egg_info.exists():
     print(
@@ -405,6 +407,31 @@ install_requires = [
     deps["tokenizers"],
     deps["tqdm"],  # progress bars in model download and training scripts
 ]
+def get_extensions():
+    # TODO @thomasw21 add cpp versions
+    extensions = []
+
+    # TODO @thomasw21 build cuda kernels only on some conditions
+    if True:
+        extensions += [
+            CUDAExtension(
+                name="transformers.models.bloom.custom_kernels.fused_bloom_attention_cuda",
+                sources=["src/transformers/models/bloom/custom_kernels/fused_bloom_attention_cuda.cu"],
+                # TODO: understand what that is, probably defines the target architecture
+                #  https://docs.nvidia.com/cuda/cuda-compiler-driver-nvcc/index.html#options-for-steering-gpu-code-generation-gpu-architecture
+                # Build for A100
+                extra_compile_args=["-arch=compute_80", "-std=c++17"],
+            ),
+            CUDAExtension(
+                name="transformers.models.bloom.custom_kernels.fused_bloom_gelu_cuda",
+                sources=["src/transformers/models/bloom/custom_kernels/fused_bloom_gelu_cuda.cu"],
+                # TODO: understand what that is, probably defines the target architecture
+                #  https://docs.nvidia.com/cuda/cuda-compiler-driver-nvcc/index.html#options-for-steering-gpu-code-generation-gpu-architecture
+                # Build for A100
+                extra_compile_args=["-arch=compute_80", "-std=c++17"],
+            ),
+        ]
+    return extensions
 
 setup(
     name="transformers",
@@ -438,5 +465,9 @@ setup(
         "Programming Language :: Python :: 3.9",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
     ],
-    cmdclass={"deps_table_update": DepsTableUpdateCommand},
+    ext_modules=get_extensions(),
+    cmdclass={
+        "deps_table_update": DepsTableUpdateCommand,
+        "build_ext": BuildExtension
+    },
 )
