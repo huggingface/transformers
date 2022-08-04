@@ -41,6 +41,7 @@ from transformers import (
     TFTrainingArguments,
     create_optimizer,
     set_seed,
+    DataCollatorForTokenClassification
 )
 from transformers.utils import send_example_telemetry
 from transformers.utils.versions import require_version
@@ -49,10 +50,6 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/token-classification/requirements.txt")
-
-# You should update this to your particular problem to have better documentation of `model_type`
-MODEL_CONFIG_CLASSES = list(MODEL_MAPPING.keys())
-MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 
 # region Command-line arguments
@@ -364,6 +361,14 @@ def main():
     train_dataset = processed_raw_datasets["train"]
     eval_dataset = processed_raw_datasets["validation"]
 
+    if data_args.max_train_samples is not None:
+        max_train_samples = min(len(train_dataset), data_args.max_train_samples)
+        train_dataset = train_dataset.select(range(max_train_samples))
+
+    if data_args.max_eval_samples is not None:
+        max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
+        eval_dataset = eval_dataset.select(range(max_eval_samples))
+
     # Log a few random samples from the training set:
     for index in random.sample(range(len(train_dataset)), 3):
         logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
@@ -384,21 +389,29 @@ def main():
         # endregion
 
         # region Create TF datasets
+
+        # We need the DataCollatorForTokenClassification here, as we need to correctly pad labels as
+        # well as inputs.
+        collate_fn = DataCollatorForTokenClassification(tokenizer=tokenizer, return_tensors='tf')
         num_replicas = training_args.strategy.num_replicas_in_sync
         total_train_batch_size = training_args.per_device_train_batch_size * num_replicas
+
+        dataset_options = tf.data.Options()
+        dataset_options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
+
         tf_train_dataset = model.prepare_tf_dataset(
             train_dataset,
-            tokenizer=tokenizer,
+            collate_fn=collate_fn,
             batch_size=total_train_batch_size,
             shuffle=True,
-        )
+        ).with_options(dataset_options)
         total_eval_batch_size = training_args.per_device_eval_batch_size * num_replicas
         tf_eval_dataset = model.prepare_tf_dataset(
             eval_dataset,
-            tokenizer=tokenizer,
+            collate_fn=collate_fn,
             batch_size=total_eval_batch_size,
             shuffle=False,
-        )
+        ).with_options(dataset_options)
 
         # endregion
 
@@ -471,6 +484,7 @@ def main():
         logger.info(f"  Instantaneous batch size per device = {training_args.per_device_train_batch_size}")
         logger.info(f"  Total train batch size = {total_train_batch_size}")
         # Only show the progress bar once on each machine.
+
         model.fit(
             tf_train_dataset,
             validation_data=tf_eval_dataset,
@@ -482,7 +496,12 @@ def main():
         # If you have variable batch sizes (i.e. not using pad_to_max_length), then
         # this bit might fail on TF < 2.8 because TF can't concatenate outputs of varying seq
         # length from predict().
-        predictions = model.predict(tf_eval_dataset, batch_size=training_args.per_device_eval_batch_size)["logits"]
+        try:
+            predictions = model.predict(tf_eval_dataset, batch_size=training_args.per_device_eval_batch_size)["logits"]
+        except tf.python.framework.errors_impl.InvalidArgumentError:
+            raise ValueError("Concatenating predictions failed! If your version of TensorFlow is 2.8.0 or older "
+                             "then you will need to use --pad_to_max_length to generate predictions, as older "
+                             "versions of TensorFlow cannot concatenate variable-length predictions as RaggedTensor.")
         predictions = tf.math.argmax(predictions, axis=-1)  # Should work for tf.ragged outputs too
         labels = np.array(eval_dataset["label"])
         labels[np.array(eval_dataset["attention_mask"]) == 0] = -100
