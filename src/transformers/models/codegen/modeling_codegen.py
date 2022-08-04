@@ -151,6 +151,10 @@ class CodeGenAttention(nn.Module):
 
         # compute causal mask from causal mask buffer
         query_length, key_length = query.size(-2), key.size(-2)
+
+        # Here we force cast the causal mask to uint8 to avoid errors related to torch.where
+        # combined with torch_dtype="auto" where it casts all variables including buffers to
+        # fp16. See the related issue here: https://github.com/huggingface/transformers/pull/18467
         causal_mask = self.causal_mask[:, :, key_length - query_length : key_length, :key_length].to(torch.uint8)
 
         # Keep the attention weights computation in fp32 to avoid overflow issues
