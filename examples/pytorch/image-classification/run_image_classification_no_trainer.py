@@ -212,15 +212,16 @@ def main():
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
     # If we're using tracking, we also need to initialize it here and it will by default pick up all supported trackers
     # in the environment
-    accelerator = (
-        Accelerator(
-            log_with=args.report_to,
-            logging_dir=args.output_dir,
-            gradient_accumulation_steps=args.gradient_accumulation_steps,
-        )
-        if args.with_tracking
-        else Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps)
-    )
+    accelerator_kwargs = {
+        "gradient_accumulation_steps": args.gradient_accumulation_steps
+    }
+
+    if args.with_tracking:
+        accelerator_kwargs["log_with"] = args.report_to
+        accelerator_kwargs["logging_dir"] = args.output_dir
+
+    accelerator = Accelerator(**accelerator_kwargs)
+
     logger.info(accelerator.state)
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
@@ -383,15 +384,17 @@ def main():
     # Scheduler and math around the number of training steps.
     overrode_max_train_steps = False
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
+    lr_num_training_steps = len(train_dataloader) * num_update_steps_per_epoch
     if args.max_train_steps is None:
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
         overrode_max_train_steps = True
+        lr_num_training_steps = args.max_train_steps * args.gradient_accumulation_steps
 
     lr_scheduler = get_scheduler(
         name=args.lr_scheduler_type,
         optimizer=optimizer,
         num_warmup_steps=args.num_warmup_steps,
-        num_training_steps=math.ceil(len(train_dataloader)) * args.num_train_epochs,
+        num_training_steps=lr_num_training_steps
     )
 
     # Prepare everything with our `accelerator`.
