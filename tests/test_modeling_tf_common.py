@@ -1399,6 +1399,9 @@ class TFModelTesterMixin:
 
                 self.assertTrue(loss.shape.as_list() == expected_loss_size or loss.shape.as_list() == [1])
 
+    def check_keras_fit_results(self, val_loss1, val_loss2, atol=1e-2, rtol=1e-3):
+        self.assertTrue(np.allclose(val_loss1, val_loss2, atol=atol, rtol=rtol))
+
     def test_keras_fit(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
@@ -1478,7 +1481,7 @@ class TFModelTesterMixin:
                 val_loss2 = history2.history["val_loss"][0]
                 self.assertTrue(not isnan(val_loss2))
                 accuracy2 = {key: val[0] for key, val in history2.history.items() if key.endswith("accuracy")}
-                self.assertTrue(np.allclose(val_loss1, val_loss2, atol=1e-2, rtol=1e-3))
+                self.check_keras_fit_results(val_loss1, val_loss2)
                 self.assertEqual(history1.history.keys(), history2.history.keys())
                 for key in history1.history.keys():
                     if not key.startswith("val_"):
@@ -1504,7 +1507,7 @@ class TFModelTesterMixin:
                 val_loss3 = history3.history["val_loss"][0]
                 self.assertTrue(not isnan(val_loss3))
                 accuracy3 = {key: val[0] for key, val in history3.history.items() if key.endswith("accuracy")}
-                self.assertTrue(np.allclose(val_loss1, val_loss3, atol=1e-2, rtol=1e-3))
+                self.check_keras_fit_results(val_loss1, val_loss3)
                 self.assertEqual(history1.history.keys(), history3.history.keys())
                 if metrics:
                     self.assertTrue(len(accuracy1) == len(accuracy3) > 0, "Missing metrics!")
