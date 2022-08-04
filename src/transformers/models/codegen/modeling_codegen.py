@@ -151,7 +151,7 @@ class CodeGenAttention(nn.Module):
 
         # compute causal mask from causal mask buffer
         query_length, key_length = query.size(-2), key.size(-2)
-        causal_mask = self.causal_mask[:, :, key_length - query_length : key_length, :key_length]
+        causal_mask = self.causal_mask[:, :, key_length - query_length : key_length, :key_length].to(torch.uint8)
 
         # Keep the attention weights computation in fp32 to avoid overflow issues
         query = query.to(torch.float32)
