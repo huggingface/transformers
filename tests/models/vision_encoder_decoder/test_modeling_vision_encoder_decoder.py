@@ -807,7 +807,7 @@ class DonutModelIntegrationTest(unittest.TestCase):
             logits = outputs.logits
 
         # verify the logits
-        expected_shape = torch.Size([1, 3, 57532])
+        expected_shape = torch.Size([1, 1, 57532])
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_slice = torch.tensor([24.2731, -6.4522, 32.4130]).to(torch_device)
@@ -831,6 +831,7 @@ class DonutModelIntegrationTest(unittest.TestCase):
             num_beams=1,
             bad_words_ids=[[processor.tokenizer.unk_token_id]],
             output_scores=True,
+            return_dict_in_generate=True,
         )
         sequence = processor.batch_decode(outputs.sequences)[0]
         sequence = sequence.replace(processor.tokenizer.eos_token, "").replace(processor.tokenizer.pad_token, "")
@@ -838,7 +839,7 @@ class DonutModelIntegrationTest(unittest.TestCase):
 
         # verify generated sequence
         self.assertEqual(
-            sequence, ["<s_question> When is the coffee break?</s_question><s_answer> 11-14 to 11:39 a.m.</s_answer>"]
+            sequence, "<s_question> When is the coffee break?</s_question><s_answer> 11-14 to 11:39 a.m.</s_answer>"
         )
 
         # verify scores
@@ -855,7 +856,7 @@ class DonutModelIntegrationTest(unittest.TestCase):
         model = VisionEncoderDecoderModel.from_pretrained("nielsr/donut-base-finetuned-cord-v2").to(torch_device)
 
         dataset = load_dataset("hf-internal-testing/example-documents", split="test")
-        image = dataset[1]["image"]
+        image = dataset[2]["image"]
 
         pixel_values = processor(images=image, return_tensors="pt").pixel_values.to(torch_device)
         decoder_input_ids = processor.tokenizer(
@@ -871,7 +872,7 @@ class DonutModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1, model.decoder.config.vocab_size))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-24.4937, -2.8204, -15.3401], device=torch_device)
+        expected_slice = torch.tensor([-27.4344, -3.2686, -19.3524], device=torch_device)
         self.assertTrue(torch.allclose(logits[0, 0, :3], expected_slice, atol=1e-4))
 
         # step 2: generation
@@ -890,6 +891,7 @@ class DonutModelIntegrationTest(unittest.TestCase):
             num_beams=1,
             bad_words_ids=[[processor.tokenizer.unk_token_id]],
             output_scores=True,
+            return_dict_in_generate=True,
         )
 
         sequence = processor.batch_decode(outputs.sequences)[0]
@@ -951,6 +953,7 @@ class DonutModelIntegrationTest(unittest.TestCase):
             num_beams=1,
             bad_words_ids=[[processor.tokenizer.unk_token_id]],
             output_scores=True,
+            return_dict_in_generate=True,
         )
 
         sequence = processor.batch_decode(outputs.sequences)[0]
@@ -958,7 +961,7 @@ class DonutModelIntegrationTest(unittest.TestCase):
         sequence = re.sub(r"<.*?>", "", sequence, count=1).strip()  # remove first task start token
 
         # verify generated sequence
-        self.assertEqual(sequence, ["<s_class><advertisement/></s_class>"])
+        self.assertEqual(sequence, "<s_class><advertisement/></s_class>")
 
         # verify scores
         self.assertEqual(len(outputs.scores), 4)

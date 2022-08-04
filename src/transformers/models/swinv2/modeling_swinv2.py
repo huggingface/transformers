@@ -1002,7 +1002,9 @@ class Swinv2Model(Swinv2PreTrainedModel):
         self.embeddings = Swinv2Embeddings(config, use_mask_token=use_mask_token)
         self.encoder = Swinv2Encoder(config, self.embeddings.patch_grid)
 
-        self.layernorm = nn.LayerNorm(self.num_features, eps=config.layer_norm_eps)
+        self.layernorm = (
+            nn.LayerNorm(self.num_features, eps=config.layer_norm_eps) if config.add_final_layer_norm else None
+        )
         self.pooler = nn.AdaptiveAvgPool1d(1) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
@@ -1065,7 +1067,8 @@ class Swinv2Model(Swinv2PreTrainedModel):
         )
 
         sequence_output = encoder_outputs[0]
-        sequence_output = self.layernorm(sequence_output)
+        if self.layernorm is not None:
+            sequence_output = self.layernorm(sequence_output)
 
         pooled_output = None
         if self.pooler is not None:

@@ -304,6 +304,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("dialogpt", "DialoGPT"),
         ("distilbert", "DistilBERT"),
         ("dit", "DiT"),
+        ("donut", "Donut"),
         ("dpr", "DPR"),
         ("dpt", "DPT"),
         ("electra", "ELECTRA"),
